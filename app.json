@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "siastarterreactnative",
+    "slug": "siastarterreactnative",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tools.sia.siastarterreactnative",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "tools.sia.siastarterreactnative"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sqlite",
+      ["./plugins/ios-target-16"]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d8d65f03-3dce-47e1-819f-15f592c49da3"
+      }
+    },
+    "owner": "alexsia",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d8d65f03-3dce-47e1-819f-15f592c49da3"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "copypasta",
+  "main": "index.ts",
+  "scripts": {
+    "build": "expo prebuild",
+    "build:clean": "expo prebuild --clean",
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@azure/core-asynciterator-polyfill": "^1.0.2",
+    "@bacons/text-decoder": "^0.0.0",
+    "@react-native-community/netinfo": "11.4.1",
+    "expo": "54.0.0-preview.4",
+    "expo-clipboard": "8.0.2",
+    "expo-secure-store": "15.0.2",
+    "expo-sqlite": "16.0.3",
+    "expo-updates": "~29.0.6",
+    "react": "19.1.0",
+    "react-native": "0.81.0",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-nitro-modules": "0.26.4",
+    "react-native-safe-area-context": "^5.6.1",
+    "react-native-sia": "^0.0.5",
+    "readable-stream": "^4.7.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "19.1.10",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
