@@ -7,8 +7,10 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  Linking,
 } from 'react-native'
 import { getHostSettings, setLogger, clearLogger } from 'react-native-sia'
+import useLinkedURL from './hooks/useLinkedURL'
 
 export default function HostSettings() {
   const [hostSettings, setHostSettings] = useState<string | null>(null)
@@ -17,6 +19,8 @@ export default function HostSettings() {
   )
   const [port, setPort] = useState('9984')
   const [logs, setLogs] = useState<string[]>([])
+
+  useLinkedURL((url) => console.log('from useLinkedURL', url))
 
   useEffect(() => {
     const logger = {
@@ -112,6 +116,15 @@ export default function HostSettings() {
           ))}
         </ScrollView>
       </View>
+      {/* Demonstrates how to navigate to a URL */}
+      <Pressable
+        style={styles.button}
+        onPress={() => {
+          Linking.openURL('https://www.google.com') // To go wherever.
+        }}
+      >
+        <Text style={styles.buttonText}>ACCOUNT CONNECT</Text>
+      </Pressable>
     </View>
   )
 }

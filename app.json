@@ -2,6 +2,7 @@
   "expo": {
     "name": "siastarterreactnative",
     "slug": "siastarterreactnative",
+    "scheme": "siastorage",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
