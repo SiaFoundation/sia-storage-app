@@ -57,7 +57,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0b0f19', paddingTop: 0 },
+  container: { flex: 1, backgroundColor: '#517891', paddingTop: 0 },
   content: { flex: 1 },
   tabBar: {
     flexDirection: 'row',

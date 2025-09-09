@@ -7,7 +7,6 @@ import {
   ScrollView,
   Pressable,
   Platform,
-  Linking,
 } from 'react-native'
 import { getHostSettings, setLogger, clearLogger } from 'react-native-sia'
 import useLinkedURL from './hooks/useLinkedURL'
@@ -116,36 +115,27 @@ export default function HostSettings() {
           ))}
         </ScrollView>
       </View>
-      {/* Demonstrates how to navigate to a URL */}
-      <Pressable
-        style={styles.button}
-        onPress={() => {
-          Linking.openURL('https://www.google.com') // To go wherever.
-        }}
-      >
-        <Text style={styles.buttonText}>ACCOUNT CONNECT</Text>
-      </Pressable>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0b0f19' },
+  safe: { flex: 1, backgroundColor: '#77B1D4' },
   container: {
     flex: 1,
     padding: 16,
     gap: 16,
+    backgroundColor: '#77B1D4',
   },
   heading: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#e6edf3',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#e6edf3',
     marginBottom: 8,
+    color: '#9da7b3',
   },
   subheading: {
     fontSize: 12,
@@ -155,7 +145,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   card: {
-    backgroundColor: '#111827',
+    backgroundColor: '#517891',
     borderColor: '#1f2937',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
@@ -167,29 +157,28 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   input: {
-    backgroundColor: '#0b1220',
+    backgroundColor: 'white',
     borderColor: '#334155',
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#e6edf3',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
   },
   button: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#77B1D4',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   buttonText: {
-    color: '#001019',
+    color: '#454545',
     fontWeight: '700',
   },
   resultBox: {
     maxHeight: 140,
-    backgroundColor: '#0b1220',
+    backgroundColor: 'white',
     borderColor: '#334155',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
@@ -203,20 +192,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   mono: {
-    color: '#cbd5e1',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     fontSize: 12,
   },
   logBox: {
     flex: 1,
     minHeight: 0,
-    backgroundColor: '#0b1220',
+    backgroundColor: 'white',
     borderColor: '#334155',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
   },
   logLine: {
-    color: '#9da7b3',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     fontSize: 12,
     marginBottom: 4,
