@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ConnectScreen from './ConnectScreen'
 import useLinkedURL from './hooks/useLinkedURL'
 import LoadingScreen from './LoadingScreen'
+import FileScreen from './FileScreen'
 
 export default function App() {
   const [appStatus, setAppStatus] = useState<'loading' | 'needAuth' | 'ready'>(
@@ -15,8 +16,8 @@ export default function App() {
   // Sets our key, I suppose, to further interface with
   // indexd
   useLinkedURL((url) => {
-    console.log('from useLinkedURL', url)
     if (url.includes('siastorage://')) {
+      console.log('from useLinkedURL', url)
       setIndexDKey('some-key-that-works')
       setAppStatus('ready')
     }
@@ -44,9 +45,11 @@ export default function App() {
           />
         )}
         {appStatus === 'ready' && (
-          <View style={styles.content}>
-            <HostSettings />
-          </View>
+          <FileScreen />
+          // <View style={styles.content}>
+
+          //   <HostSettings />
+          // </View>
         )}
       </SafeAreaView>
     </StrictMode>
