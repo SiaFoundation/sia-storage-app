@@ -1,15 +1,56 @@
-import React, { StrictMode } from 'react'
+import React, { StrictMode, useEffect, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import HostSettings from './settings'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ConnectScreen from './ConnectScreen'
+import useLinkedURL from './hooks/useLinkedURL'
+import LoadingScreen from './LoadingScreen'
+import FileScreen from './FileScreen'
 
 export default function App() {
+  const [appStatus, setAppStatus] = useState<'loading' | 'needAuth' | 'ready'>(
+    'loading'
+  )
+  const [indexDKey, setIndexDKey] = useState<string>()
+
+  // Sets our key, I suppose, to further interface with
+  // indexd
+  useLinkedURL((url) => {
+    if (url.includes('siastorage://')) {
+      console.log('from useLinkedURL', url)
+      setIndexDKey('some-key-that-works')
+      setAppStatus('ready')
+    }
+  })
+
+  useEffect(() => {
+    // Simulate actual network traffic, getting a 400
+    // level error, ending in needing auth.
+    const fakeLoading = setTimeout(() => {
+      setAppStatus('needAuth')
+    }, 3000)
+    return () => clearTimeout(fakeLoading)
+  }, [])
+
   return (
     <StrictMode>
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <HostSettings />
-        </View>
+        {appStatus === 'loading' && <LoadingScreen />}
+        {appStatus === 'needAuth' && (
+          <ConnectScreen
+            bypassAuth={() => {
+              setIndexDKey('some-key-that-works')
+              setAppStatus('ready')
+            }}
+          />
+        )}
+        {appStatus === 'ready' && (
+          <FileScreen />
+          // <View style={styles.content}>
+
+          //   <HostSettings />
+          // </View>
+        )}
       </SafeAreaView>
     </StrictMode>
   )
