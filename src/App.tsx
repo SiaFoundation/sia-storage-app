@@ -74,19 +74,18 @@ function SettingsStackNavigator() {
 }
 
 function AuthStackNavigator() {
-  const { setIsOnboarding } = useSettings()
   return (
     <AuthStack.Navigator>
       <AuthStack.Screen name="Connect" options={{ headerShown: false }}>
-        {() => <ConnectScreen bypassAuth={() => setIsOnboarding(true)} />}
+        {() => <ConnectScreen />}
       </AuthStack.Screen>
     </AuthStack.Navigator>
   )
 }
 
 function RootNavigator() {
-  const { isOnboarding } = useSettings()
-  if (!isOnboarding) {
+  const { isConnected } = useSettings()
+  if (!isConnected) {
     return <AuthStackNavigator />
   }
   return (

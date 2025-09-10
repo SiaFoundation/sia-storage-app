@@ -10,10 +10,10 @@ import {
 import { Sdk } from 'react-native-sia'
 import { initFileDB } from '../functions/fileDB'
 import * as SecureStore from 'expo-secure-store'
-import { Linking } from 'react-native'
 import { UploadedItem } from '../Upload'
+import authApp from '../functions/authApp'
 
-const appSeed = new Uint8Array(32).fill(1)
+const appSeed = new Uint8Array(32).fill(11)
 
 type SettingsContextValue = {
   sdk: Sdk | null
@@ -27,6 +27,7 @@ type SettingsContextValue = {
   setIsOnboarding: (value: boolean) => void
   uploads: UploadedItem[]
   setUploads: React.Dispatch<React.SetStateAction<UploadedItem[]>>
+  doAuthentication: () => void
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -47,37 +48,41 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const sdk = useMemo<Sdk>(() => new Sdk(indexerUrl, appSeed.buffer), [])
 
-  useEffect(() => {
-    ;(async () => {
-      try {
-        log('Connecting to app...')
-        const isConnected = await sdk.connect()
+  const doAuthentication = useCallback(async () => {
+    try {
+      log('Connecting to app...')
+      const isConnected = await sdk.connect()
+
+      if (isConnected) {
         setIsConnected(isConnected)
-        if (!isConnected) {
-          const url = await sdk.requestAppConnection({
-            name: 'Test',
-            description: 'Test',
-            serviceUrl: 'https://sia.storage',
-            callbackUrl: 'siamobile://callback',
-            logoUrl: 'https://sia.storage/logo.png',
-          })
-
-          // open url in browser
-          Linking.openURL(url.responseUrl)
-
-          const isAuthorized = await sdk.waitForConnect(url)
-          if (!isAuthorized) {
-            throw new Error('App not authorized')
-          }
-        }
-        log('App connected')
-      } catch (error) {
-        log('Error creating app')
-        log(error as string)
+        return
       }
-    })()
 
-    return () => {}
+      if (!isConnected) {
+        const url = await sdk.requestAppConnection({
+          name: 'Test',
+          description: 'Test',
+          serviceUrl: 'https://sia.storage',
+          callbackUrl: 'siamobile://callback',
+          logoUrl: 'https://sia.storage/logo.png',
+        })
+
+        log('before authApp')
+        authApp(url.responseUrl)
+        log('after authApp')
+
+        const isAuthorized = await sdk.waitForConnect(url)
+        log('after isAuthorized')
+        if (!isAuthorized) {
+          throw new Error('App not authorized')
+        }
+      }
+      log('App connected')
+      setIsConnected(true)
+    } catch (error) {
+      log('Error creating app')
+      log(error as string)
+    }
   }, [log, sdk])
 
   // Load persistent onboarding state once.
@@ -86,7 +91,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try {
         const stored = await SecureStore.getItemAsync('isOnboarding')
         if (stored == null) {
-          setIsOnboardingState(false)
+          setIsOnboardingState(true)
           return
         }
         setIsOnboardingState(stored === 'true')
@@ -122,6 +127,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setIsOnboarding,
       uploads,
       setUploads,
+      doAuthentication,
     }),
     [
       sdk,
