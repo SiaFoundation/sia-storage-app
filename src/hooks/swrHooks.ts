@@ -5,7 +5,7 @@ import {
   updateFileRecord,
   deleteFileRecord,
   deleteAllFileRecords,
-  FileRecord,
+  type FileRecord,
   seedDB,
 } from '../functions/fileDB'
 
@@ -21,7 +21,7 @@ export function useFileRecords() {
 export function useFileRecordActions() {
   const { mutate } = useSWR(KEY, fetcher)
   return {
-    create: async (fr: Omit<FileRecord, 'id'>) => {
+    create: async (fr: FileRecord) => {
       await createFileRecord(fr)
       await mutate()
     },
@@ -29,7 +29,7 @@ export function useFileRecordActions() {
       await updateFileRecord(fr)
       await mutate()
     },
-    deleteOne: async (id: number) => {
+    deleteOne: async (id: string) => {
       await deleteFileRecord(id)
       await mutate()
     },

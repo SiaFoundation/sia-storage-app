@@ -1,62 +1,85 @@
 import * as SQLite from 'expo-sqlite'
 
 export type FileRecord = {
-  id: number
-  slabID: string
-  name: string
-  length: number
-  offset: number
+  id: string
+  uri: string
+  fileName: string | null
+  fileSize: number | null
+  createdAt: number
+  status: 'done' | 'error'
 }
 
 let db: SQLite.SQLiteDatabase
 
 export async function initFileDB(): Promise<void> {
   db = await SQLite.openDatabaseAsync('app.db')
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS fileRecords (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      slabID TEXT NOT NULL,
-      name TEXT NOT NULL,
-      length INTEGER NOT NULL,
-      offset INTEGER NOT NULL
-    );
-  `)
+  // Ensure schema matches expected columns; drop legacy table if incompatible.
+  try {
+    const cols = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info('fileRecords')"
+    )
+    const colNames = new Set(cols.map((c) => c.name))
+    const expected = [
+      'id',
+      'uri',
+      'fileName',
+      'fileSize',
+      'createdAt',
+      'status',
+    ]
+    const matches =
+      expected.every((e) => colNames.has(e)) &&
+      colNames.size === expected.length
+    if (!matches && colNames.size > 0) {
+      await db.execAsync('DROP TABLE IF EXISTS fileRecords')
+    }
+  } catch {}
+  // Create new schema for uploaded items (no in-progress fields persisted).
+  await db.execAsync(
+    `CREATE TABLE IF NOT EXISTS fileRecords (
+      id TEXT PRIMARY KEY,
+      uri TEXT NOT NULL,
+      fileName TEXT,
+      fileSize INTEGER,
+      createdAt INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('done','error'))
+    );`
+  )
 }
 
-export async function createFileRecord(
-  fileRecord: Omit<FileRecord, 'id'>
-): Promise<number> {
-  const { slabID, name, length, offset } = fileRecord
-
-  const res = await db.runAsync(
-    'INSERT INTO fileRecords (slabID, name, length, offset) VALUES (?, ?, ?, ?)',
-    slabID,
-    name,
-    length,
-    offset
+export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
+  const { id, uri, fileName, fileSize, createdAt, status } = fileRecord
+  await db.runAsync(
+    'INSERT OR REPLACE INTO fileRecords (id, uri, fileName, fileSize, createdAt, status) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    uri,
+    fileName,
+    fileSize,
+    createdAt,
+    status
   )
-  return res.lastInsertRowId ?? 0
 }
 
 export async function readAllFileRecords(): Promise<FileRecord[]> {
   return db.getAllAsync<FileRecord>(
-    'SELECT id, slabID, name, length, offset FROM fileRecords ORDER BY id DESC'
+    'SELECT id, uri, fileName, fileSize, createdAt, status FROM fileRecords ORDER BY createdAt DESC'
   )
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, slabID, name, length, offset } = fileRecord
+  const { id, uri, fileName, fileSize, createdAt, status } = fileRecord
   await db.runAsync(
-    'UPDATE fileRecords SET slabID = ?, name = ?, length = ?, offset = ? WHERE id = ?',
-    slabID,
-    name,
-    length,
-    offset,
+    'UPDATE fileRecords SET uri = ?, fileName = ?, fileSize = ?, createdAt = ?, status = ? WHERE id = ?',
+    uri,
+    fileName,
+    fileSize,
+    createdAt,
+    status,
     id
   )
 }
 
-export async function deleteFileRecord(id: number): Promise<void> {
+export async function deleteFileRecord(id: string): Promise<void> {
   await db.runAsync('DELETE FROM fileRecords WHERE id = ?', id)
 }
 
@@ -64,21 +87,24 @@ export async function deleteAllFileRecords(): Promise<void> {
   await db.runAsync('DELETE FROM fileRecords')
 }
 
-export async function readFileRecord(id: number): Promise<FileRecord | null> {
+export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db.getFirstAsync<FileRecord>(
-    'SELECT id, slabID, name, length, offset FROM fileRecords WHERE id = ?',
+    'SELECT id, uri, fileName, fileSize, createdAt, status FROM fileRecords WHERE id = ?',
     id
   )
   return row ?? null
 }
 
 export async function seedDB(numberOfEntires = 10) {
+  const now = Date.now()
   for (let i = 0; i < numberOfEntires; i++) {
     await createFileRecord({
-      name: 'file' + i,
-      slabID: 'slab' + i,
-      length: i + 1,
-      offset: i + 2,
+      id: `seed-${now}-${i}`,
+      uri: `https://picsum.photos/seed/${i}/300/300`,
+      fileName: `file-${i}.jpg`,
+      fileSize: 1024 * (i + 1),
+      createdAt: now - i * 1000,
+      status: 'done',
     })
   }
 }

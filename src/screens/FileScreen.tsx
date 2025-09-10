@@ -6,8 +6,8 @@ import {
   Text,
   View,
 } from 'react-native'
-import FileItem from './components/FileItem'
-import { useFileRecordActions, useFileRecords } from './hooks/swrHooks'
+import FileItem from '../components/FileItem'
+import { useFileRecordActions, useFileRecords } from '../hooks/swrHooks'
 
 export default function FileScreen() {
   const { data: fileRecords, isLoading } = useFileRecords()

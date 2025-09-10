@@ -8,13 +8,15 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import authApp from './functions/authApp'
+import authApp from '../functions/authApp'
+import { useSettings } from '../lib/settingsContext'
 
 type Props = {
   bypassAuth: () => void
 }
 
 export default function ConnectScreen({ bypassAuth }: Props) {
+  const { setIsOnboarding } = useSettings()
   const [indexDServer, setIndexDServer] = useState(
     'https://app.indexd.zeus.sia.dev/auth/connect/979f2461e24bf04ffc549b033791e609'
   )
@@ -34,6 +36,7 @@ export default function ConnectScreen({ bypassAuth }: Props) {
           onPress={async () => {
             // This blocks the app
             await authApp(indexDServer)
+            setIsOnboarding(true)
           }}
         >
           <Text>Authorize</Text>
