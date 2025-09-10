@@ -1,4 +1,10 @@
 import { Sdk } from 'react-native-sia'
+import { updateUploadProgress, setUploadState } from './uploadState'
+import {
+  type FileRecord,
+  updateFileMetadata,
+  updateFileStatus,
+} from '../db/files'
 
 export type UploadProgress = {
   bytesWritten: number
@@ -12,6 +18,8 @@ export async function uploadToSia(params: {
   dataShards?: number
   parityShards?: number
   data: ArrayBuffer
+  // Persisted file record details; the record should already exist in DB.
+  file: Pick<FileRecord, 'id'>
   signal?: AbortSignal
   onProgress?: (p: UploadProgress) => void
 }): Promise<void> {
@@ -21,6 +29,7 @@ export async function uploadToSia(params: {
     dataShards = 10,
     parityShards = 30,
     data,
+    file,
     signal,
     onProgress,
   } = params
@@ -30,6 +39,9 @@ export async function uploadToSia(params: {
   const chunkSize = 1 * 1024 * 1024 // 1 MiB
   let offset = 0
   const total = data.byteLength
+
+  // Initialize runtime state.
+  setUploadState(file.id, { status: 'uploading', progress: 0 })
 
   while (offset < total) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
@@ -41,16 +53,31 @@ export async function uploadToSia(params: {
       await upload.write(chunk)
     }
     offset = end
-    onProgress?.({
+    const progress = {
       bytesWritten: offset,
       totalBytes: total,
       percent: offset / total,
-    })
+    }
+    updateUploadProgress(file.id, progress.percent)
+    onProgress?.(progress)
   }
 
-  if (signal) {
-    await upload.finalize({ signal })
-  } else {
-    await upload.finalize()
+  try {
+    if (signal) {
+      await upload.finalize({ signal })
+    } else {
+      await upload.finalize()
+    }
+    // Mark as completed in runtime state and update DB metadata to denote cloud presence.
+    setUploadState(file.id, { status: 'done', progress: 1 })
+    await updateFileMetadata(file.id, { uploaded: true })
+    await updateFileStatus(file.id, 'done')
+  } catch (e) {
+    setUploadState(file.id, { status: 'error', progress: 0 })
+    await updateFileStatus(file.id, 'error')
+    throw e
+  } finally {
+    // Optionally keep runtime entry for UI to read final status; do not clear immediately.
+    // clearUploadState(file.id)
   }
 }

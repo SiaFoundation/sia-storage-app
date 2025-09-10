@@ -3,27 +3,23 @@ import { View, Image, FlatList, Pressable, StyleSheet } from 'react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
 import UploadStatusIcon from './UploadStatusIcon'
-import { type UploadedItem } from '../Upload'
-import { useFileRecords } from '../hooks/swrHooks'
+import { useFileList } from '../lib/filesContext'
+import { type FileRecord } from '../db/files'
+import { useAllUploadStates as useUploadStatusMap } from '../lib/uploadState'
 
 type Props = {
-  items: UploadedItem[]
-  onPressItem: (item: UploadedItem) => void
+  onPressItem: (item: FileRecord) => void
   setItemRef?: (id: string, ref: any) => void
   numColumns?: number
 }
 
-function GalleryComponent({
-  items,
-  onPressItem,
-  setItemRef,
-  numColumns = 3,
-}: Props) {
-  const { data: photos } = useFileRecords()
+export function Gallery({ onPressItem, setItemRef, numColumns = 3 }: Props) {
+  const { data: files } = useFileList()
   const toast = useToast()
+  const uploadStatusMap = useUploadStatusMap()
   return (
     <FlatList
-      data={items}
+      data={files}
       keyExtractor={(item) => `${item.createdAt}-${item.uri}`}
       numColumns={numColumns}
       contentContainerStyle={styles.galleryContent}
@@ -47,27 +43,38 @@ function GalleryComponent({
               style={styles.thumbImage}
               resizeMode="cover"
             />
-            {item.status === 'uploading' ? (
-              <View style={styles.thumbProgressTrack}>
-                <View
-                  style={[
-                    styles.thumbProgressFill,
-                    { width: `${Math.round((item.progress ?? 0) * 100)}%` },
-                  ]}
-                />
-              </View>
-            ) : null}
-            <View style={styles.thumbBadge}>
-              <UploadStatusIcon status={item.status} size={16} />
-            </View>
+            {(() => {
+              const r = uploadStatusMap[item.id]
+              const effectiveStatus = (r?.status ??
+                (item.metadata ? 'done' : 'error')) as
+                | 'uploading'
+                | 'done'
+                | 'error'
+              const progress = r?.progress ?? 0
+              return (
+                <>
+                  {effectiveStatus === 'uploading' ? (
+                    <View style={styles.thumbProgressTrack}>
+                      <View
+                        style={[
+                          styles.thumbProgressFill,
+                          { width: `${Math.round(progress * 100)}%` },
+                        ]}
+                      />
+                    </View>
+                  ) : null}
+                  <View style={styles.thumbBadge}>
+                    <UploadStatusIcon status={effectiveStatus} size={16} />
+                  </View>
+                </>
+              )
+            })()}
           </Pressable>
         </View>
       )}
     />
   )
 }
-
-export const Gallery = memo(GalleryComponent)
 
 const styles = StyleSheet.create({
   galleryContent: { padding: 0 },

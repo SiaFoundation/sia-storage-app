@@ -1,8 +1,13 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import shareLink from '../functions/shareLink'
-import { type FileRecord } from '../functions/fileDB'
+import { type FileRecord } from '../db/files'
 
-export default function FileItem({ id, fileName, fileSize, status }: FileRecord) {
+export default function FileItem({
+  id,
+  fileName,
+  fileSize,
+  status,
+}: FileRecord) {
   return (
     <View style={styles.container}>
       <View style={styles.row}>

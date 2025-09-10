@@ -2,65 +2,74 @@ import { useCallback, useRef, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { PlusIcon } from 'lucide-react-native'
 import { pickAndUploadImages, UploadedItem } from '../Upload'
+import {
+  useAllUploadStates as useUploadStatusMap,
+  setUploadState,
+} from '../lib/uploadState'
 import { Gallery } from '../components/Gallery'
 import { useSettings } from '../lib/settingsContext'
-import { useFileRecordActions } from '../hooks/swrHooks'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
+import { useFiles, useFileList } from '../lib/filesContext'
+import { type FileRecord } from '../db/files'
 
 export default function HomeScreen() {
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
-  const { sdk, log, uploads, setUploads } = useSettings()
+  const { sdk, log } = useSettings()
   const navigation =
     useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
-  const { create } = useFileRecordActions()
+  const { createFile } = useFiles()
+  const uploadStatusMap = useUploadStatusMap()
+  const { data: files } = useFileList()
 
   const handleUpload = useCallback(async () => {
     if (!sdk) return
     try {
-      const finalItems = await pickAndUploadImages({
+      pickAndUploadImages({
         sdk,
         log,
         onPicked: (temps) => {
-          setUploads((prev) => [...temps, ...prev])
-        },
-        onProgress: (id, progress) => {
-          setUploads((prev) =>
-            prev.map((u) => (u.id === id ? { ...u, progress } : u))
-          )
-        },
-      })
-      if (finalItems.length > 0) {
-        setUploads((prev) =>
-          prev.map((it) => finalItems.find((fi) => fi.id === it.id) ?? it)
-        )
-        // Persist only completed/error items to SQLite; do not save in-progress states.
-        await Promise.all(
-          finalItems
-            .filter((fi) => fi.status !== 'uploading')
-            .map((fi) =>
-              create({
-                id: fi.id,
-                uri: fi.uri,
-                fileName: fi.fileName,
-                fileSize: fi.fileSize,
-                createdAt: fi.createdAt,
-                status: fi.status === 'done' ? 'done' : 'error',
+          void Promise.all(
+            temps.map((t) =>
+              createFile({
+                id: t.id,
+                uri: t.uri,
+                fileName: t.fileName,
+                fileSize: t.fileSize,
+                createdAt: t.createdAt,
+                status: 'done',
+                metadata: null,
               })
             )
-        )
-      }
+          )
+          temps.forEach((t) =>
+            setUploadState(t.id, { status: 'uploading', progress: 0 })
+          )
+        },
+        onProgress: () => {},
+      })
     } catch (e) {
       log(`Upload flow error: ${String(e)}`)
     }
-  }, [sdk, log, setUploads])
+  }, [sdk, log, createFile])
 
   const handleOpenDetail = useCallback(
-    (item: UploadedItem) => {
+    (record: FileRecord) => {
+      const r = uploadStatusMap[record.id]
+      const status: UploadedItem['status'] = r?.status ?? 'done'
+      const item: UploadedItem = {
+        id: record.id,
+        uri: record.uri,
+        fileName: record.fileName,
+        fileSize: record.fileSize,
+        createdAt: record.createdAt,
+        status,
+        progress: r?.progress ?? (status === 'done' ? 1 : 0),
+      }
       navigation.navigate('PhotoDetail', { item })
     },
-    [navigation]
+    [navigation, uploadStatusMap]
   )
 
   return (
@@ -75,7 +84,7 @@ export default function HomeScreen() {
           <PlusIcon color="#0969da" size={22} />
         </Pressable>
       </View>
-      {uploads.length === 0 ? (
+      {(files?.length ?? 0) === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No uploads yet</Text>
           <Text style={styles.emptyText}>
@@ -90,7 +99,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       ) : (
-        <Gallery items={uploads} onPressItem={handleOpenDetail} />
+        <Gallery onPressItem={handleOpenDetail} />
       )}
     </View>
   )
