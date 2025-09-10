@@ -8,10 +8,11 @@ import {
   Platform,
   Pressable,
 } from 'react-native'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { ChevronRightIcon } from 'lucide-react-native'
 import useSWR from 'swr'
 import { useSettings } from '../lib/settingsContext'
+import { type Host } from 'react-native-sia'
 
 function Separator() {
   return <View style={styles.separator} />
@@ -38,13 +39,14 @@ export function Hosts({
     data: hosts,
     error,
     isLoading,
-    isValidating,
     mutate,
   } = useSWR(sdk ? ['hosts', sdk] : null, async () => sdk.hosts())
 
-  const refreshing = Boolean(hosts) && Boolean(isValidating)
-  const handleRefresh = useCallback(() => {
-    mutate()
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await mutate()
+    setRefreshing(false)
   }, [mutate])
 
   return (
@@ -69,14 +71,14 @@ export function Hosts({
           <ActivityIndicator color="#0ea5e9" />
         </View>
       ) : (
-        <FlatList<string>
+        <FlatList<Host>
           data={hosts ?? []}
-          keyExtractor={(item) => item}
+          keyExtractor={(item) => item.publicKey}
           renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
               android_ripple={{ color: 'rgba(240,246,252,0.08)' }}
-              onPress={() => onSelectHost?.(item)}
+              onPress={() => onSelectHost?.(item.publicKey)}
               style={({ pressed }) => [
                 styles.row,
                 pressed && styles.rowPressed,
@@ -84,12 +86,12 @@ export function Hosts({
             >
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {(item?.[0]?.toUpperCase() ?? '?') as string}
+                  {(item.publicKey?.toUpperCase() ?? '?') as string}
                 </Text>
               </View>
               <View style={styles.rowBody}>
                 <Text style={styles.host} numberOfLines={1}>
-                  {item}
+                  {item.publicKey}
                 </Text>
               </View>
               <ChevronRightIcon color="#57606a" size={18} />

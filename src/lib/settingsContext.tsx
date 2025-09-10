@@ -8,15 +8,13 @@ import {
   type ReactNode,
 } from 'react'
 import { Sdk } from 'react-native-sia'
-import { initFileDB } from '../functions/fileDB'
 import * as SecureStore from 'expo-secure-store'
-import { UploadedItem } from '../Upload'
 import authApp from '../functions/authApp'
 
 const appSeed = new Uint8Array(32).fill(11)
 
 type SettingsContextValue = {
-  sdk: Sdk | null
+  sdk: Sdk
   isConnected: boolean
   log: (message: string) => void
   indexerName: string
@@ -25,8 +23,6 @@ type SettingsContextValue = {
   setIndexerUrl: (value: string) => void
   isOnboarding: boolean
   setIsOnboarding: (value: boolean) => void
-  uploads: UploadedItem[]
-  setUploads: React.Dispatch<React.SetStateAction<UploadedItem[]>>
   doAuthentication: () => void
 }
 
@@ -106,14 +102,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     void SecureStore.setItemAsync('isOnboarding', value ? 'true' : 'false')
   }, [])
 
-  useEffect(() => {
-    ;(async () => {
-      await initFileDB()
-    })()
-  }, [])
-
-  const [uploads, setUploads] = useState<UploadedItem[]>([])
-
   const value = useMemo<SettingsContextValue>(
     () => ({
       sdk: sdk ?? null,
@@ -125,8 +113,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setIndexerUrl,
       isOnboarding,
       setIsOnboarding,
-      uploads,
-      setUploads,
       doAuthentication,
     }),
     [
@@ -137,8 +123,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       indexerUrl,
       isOnboarding,
       setIsOnboarding,
-      uploads,
-      setUploads,
+      doAuthentication,
     ]
   )
 

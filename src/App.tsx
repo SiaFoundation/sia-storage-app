@@ -17,6 +17,7 @@ import IndexerScreen from './screens/IndexerScreen'
 import { HomeIcon, SettingsIcon } from 'lucide-react-native'
 import { SettingsProvider, useSettings } from './lib/settingsContext'
 import ConnectScreen from './screens/ConnectScreen'
+import { FilesProvider } from './lib/filesContext'
 
 const FeedStack = createNativeStackNavigator<FeedStackParamList>()
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>()
@@ -135,11 +136,13 @@ export default function AppComponent() {
           })}
         />
         <SettingsProvider>
-          <ToastProvider>
-            <NavigationContainer>
-              <RootNavigator />
-            </NavigationContainer>
-          </ToastProvider>
+          <FilesProvider>
+            <ToastProvider>
+              <NavigationContainer>
+                <RootNavigator />
+              </NavigationContainer>
+            </ToastProvider>
+          </FilesProvider>
         </SettingsProvider>
       </SafeAreaView>
     </SafeAreaProvider>

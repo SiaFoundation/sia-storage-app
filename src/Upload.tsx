@@ -103,6 +103,7 @@ export async function pickAndUploadImages({
             sdk,
             encryptionKey: appSeed.buffer,
             data: buffer,
+            file: { id: tempItem.id },
             onProgress: (p) => onProgress?.(tempItem.id, p.percent),
           })
           const done: UploadedItem = {
