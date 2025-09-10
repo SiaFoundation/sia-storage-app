@@ -1,11 +1,23 @@
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
 import { useSettings } from '../lib/settingsContext'
+import { DotIcon } from 'lucide-react-native'
+import { useState } from 'react'
 
 export default function IndexerScreen() {
-  const { indexerName, setIndexerName, indexerUrl, setIndexerUrl } =
+  const { authIndexer, isConnected, indexerName, setIndexerName, indexerURL } =
     useSettings()
+  const [currentIndexerURL, setCurrentIndexerURL] = useState(indexerURL)
+
   return (
     <View style={styles.container}>
+      <View style={styles.statusContainer}>
+        <DotIcon size={20} color={isConnected ? 'green' : 'red'} />
+        <Text
+          style={[styles.statusText, { color: isConnected ? 'green' : 'red' }]}
+        >
+          {isConnected ? 'Online' : 'Offline'}
+        </Text>
+      </View>
       <View style={styles.groupHeader}>
         <Text style={styles.groupTitle}>Configuration</Text>
       </View>
@@ -27,8 +39,8 @@ export default function IndexerScreen() {
         <View style={styles.cellRowBottom}>
           <Text style={styles.cellLabel}>URL</Text>
           <TextInput
-            value={indexerUrl}
-            onChangeText={setIndexerUrl}
+            value={currentIndexerURL}
+            onChangeText={setCurrentIndexerURL}
             placeholder="https://example.com"
             placeholderTextColor="#9ca3af"
             style={styles.cellInput}
@@ -40,8 +52,23 @@ export default function IndexerScreen() {
         </View>
       </View>
       <View style={styles.footer}>
-        <Pressable accessibilityRole="button" style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Save</Text>
+        <Pressable
+          accessibilityRole="button"
+          style={[
+            styles.primaryButton,
+            indexerURL === currentIndexerURL && {
+              backgroundColor: 'lightgrey',
+            },
+          ]}
+          onPress={() => {}}
+          // disabled={indexerURL === currentIndexerURL}
+        >
+          <Text
+            style={styles.primaryButtonText}
+            onPress={() => authIndexer(currentIndexerURL)}
+          >
+            Authorize New Indexer
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -92,4 +119,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
+  statusContainer: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    position: 'absolute',
+    top: 5,
+    right: 20,
+  },
+  statusText: {
+    fontSize: 8,
+  },
 })

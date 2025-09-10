@@ -12,7 +12,7 @@ import { useState } from 'react'
 
 export default function ConnectScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const { doAuthentication, indexerUrl, setIndexerUrl } = useSettings()
+  const { authIndexer, indexerURL, setIndexerURL } = useSettings()
 
   return (
     <View>
@@ -32,14 +32,14 @@ export default function ConnectScreen() {
         {isUsingCustomURL ? (
           <TextInput
             style={styles.input}
-            value={indexerUrl}
-            onChangeText={setIndexerUrl}
+            value={indexerURL}
+            onChangeText={setIndexerURL}
           />
         ) : null}
         <Pressable
           style={styles.button}
           onPress={async () => {
-            doAuthentication()
+            authIndexer()
           }}
         >
           <Text style={styles.buttonText}>Authorize connection</Text>
