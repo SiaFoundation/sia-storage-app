@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "siastarterreactnative",
-    "slug": "siastarterreactnative",
-    "scheme": "siastorage",
+    "name": "siamobile",
+    "slug": "siamobile",
+    "scheme": "siamobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "tools.sia.siastarterreactnative",
+      "bundleIdentifier": "tools.sia.siamobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,7 +26,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "tools.sia.siastarterreactnative"
+      "package": "tools.sia.siamobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"

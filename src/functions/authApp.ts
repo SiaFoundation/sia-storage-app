@@ -4,7 +4,7 @@ import InAppBrowser from 'react-native-inappbrowser-reborn'
 export default async function authApp(url: string) {
   if (await InAppBrowser.isAvailable()) {
     const sub = Linking.addEventListener('url', ({ url: recievedURL }) => {
-      if (recievedURL.includes('siastorage://')) {
+      if (recievedURL.includes('siamobile://')) {
         console.log(recievedURL)
         InAppBrowser.close()
         sub.remove()
