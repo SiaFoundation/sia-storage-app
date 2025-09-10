@@ -17,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "tools.sia.siastarterreactnative",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photo library to select and upload photos.",
+        "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save images to your photo library.",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use the camera to take photos."
       }
     },
     "android": {
