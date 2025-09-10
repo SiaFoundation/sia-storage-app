@@ -1,20 +1,23 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import shareLink from '../functions/shareLink'
+import { FileRecord } from '../functions/fileDB'
 
-type Props = {
-  id: string
-  length: number
-  offset: number
-}
-
-export default function FileItem({ id, length, offset }: Props) {
+export default function FileItem({
+  id,
+  length,
+  offset,
+  name,
+  slabID,
+}: FileRecord) {
   return (
     <View style={styles.container}>
       <View style={styles.row}>
+        <Text>name: {name}</Text>
         <Text>id: {id}</Text>
-        <Text>length: {length}</Text>
+        <Text>slabID: {slabID}</Text>
       </View>
       <View style={styles.row}>
+        <Text>length: {length}</Text>
         <Text>offset: {offset}</Text>
         <Pressable style={styles.button}>
           <Text

@@ -16,7 +16,7 @@
     "expo": "54.0.0-preview.4",
     "expo-clipboard": "8.0.2",
     "expo-secure-store": "15.0.2",
-    "expo-sqlite": "16.0.3",
+    "expo-sqlite": "^15.2.14",
     "expo-updates": "~29.0.6",
     "react": "19.1.0",
     "react-native": "0.81.0",
@@ -25,7 +25,8 @@
     "react-native-nitro-modules": "0.26.4",
     "react-native-safe-area-context": "^5.6.1",
     "react-native-sia": "^0.0.5",
-    "readable-stream": "^4.7.0"
+    "readable-stream": "^4.7.0",
+    "swr": "^2.3.6"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

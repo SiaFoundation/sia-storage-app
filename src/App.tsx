@@ -1,11 +1,14 @@
 import React, { StrictMode, useEffect, useState } from 'react'
-import { View, StyleSheet } from 'react-native'
-import HostSettings from './settings'
+import { StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ConnectScreen from './ConnectScreen'
 import useLinkedURL from './hooks/useLinkedURL'
 import LoadingScreen from './LoadingScreen'
 import FileScreen from './FileScreen'
+import { initFileDB } from './functions/fileDB'
+
+// Setup
+initFileDB()
 
 export default function App() {
   const [appStatus, setAppStatus] = useState<'loading' | 'needAuth' | 'ready'>(
@@ -44,13 +47,7 @@ export default function App() {
             }}
           />
         )}
-        {appStatus === 'ready' && (
-          <FileScreen />
-          // <View style={styles.content}>
-
-          //   <HostSettings />
-          // </View>
-        )}
+        {appStatus === 'ready' && <FileScreen />}
       </SafeAreaView>
     </StrictMode>
   )
