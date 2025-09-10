@@ -1,20 +1,41 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { useSettings } from '../lib/settingsContext'
+import { SettingsIcon } from 'lucide-react-native'
+import { useState } from 'react'
 
 export default function ConnectScreen() {
-  const { doAuthentication } = useSettings()
+  const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
+  const { doAuthentication, indexerUrl, setIndexerUrl } = useSettings()
 
   return (
-    <SafeAreaView>
+    <View>
+      <View style={styles.header}>
+        <Image
+          style={styles.image}
+          source={require('../../assets/icon-bleed.png')}
+        />
+        <Pressable onPress={() => setIsUsingCustomURL((current) => !current)}>
+          <SettingsIcon size={20} color="gray" />
+        </Pressable>
+      </View>
       <View style={styles.container}>
-        <View style={styles.row}>
-          <Image
-            style={styles.image}
-            source={require('../../assets/icon.png')}
+        <Text style={styles.text}>
+          Authorize the indexer. Click the gear to supply your own.
+        </Text>
+        {isUsingCustomURL ? (
+          <TextInput
+            style={styles.input}
+            value={indexerUrl}
+            onChangeText={setIndexerUrl}
           />
-          <Text style={styles.heading}>Sia Mobile</Text>
-        </View>
+        ) : null}
         <Pressable
           style={styles.button}
           onPress={async () => {
@@ -24,7 +45,7 @@ export default function ConnectScreen() {
           <Text style={styles.buttonText}>Authorize connection</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -39,7 +60,12 @@ const styles = StyleSheet.create({
 
     paddingTop: 150,
   },
-  heading: { color: '#24292f', fontSize: 32, fontWeight: '600' },
+  text: {
+    color: '#24292f',
+    fontSize: 16,
+    marginHorizontal: 60,
+    textAlign: 'center',
+  },
   button: {
     backgroundColor: '#0969da',
     borderRadius: 8,
@@ -47,20 +73,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   buttonText: { color: '#ffffff', fontWeight: '700' },
+  image: {
+    width: 15,
+    height: 15,
+  },
+  header: {
+    height: 44,
+    paddingHorizontal: 16,
+    borderBottomColor: '#d0d7de',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   input: {
     backgroundColor: 'white',
-    width: '80%',
-    height: 25,
-    borderRadius: 4,
-    padding: 5,
-  },
-  image: {
-    width: 50,
-    height: 50,
-  },
-  row: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 3,
   },
 })
