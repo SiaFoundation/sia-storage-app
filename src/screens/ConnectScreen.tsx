@@ -1,4 +1,4 @@
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useSettings } from '../lib/settingsContext'
 
@@ -8,15 +8,20 @@ export default function ConnectScreen() {
   return (
     <SafeAreaView>
       <View style={styles.container}>
-        <Text style={styles.header}>Storage App</Text>
-        <Text style={styles.text}>Please auth TK TK</Text>
+        <View style={styles.row}>
+          <Image
+            style={styles.image}
+            source={require('../../assets/icon.png')}
+          />
+          <Text style={styles.heading}>Sia Mobile</Text>
+        </View>
         <Pressable
           style={styles.button}
           onPress={async () => {
             doAuthentication()
           }}
         >
-          <Text>Authorize</Text>
+          <Text style={styles.buttonText}>Authorize connection</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -25,39 +30,37 @@ export default function ConnectScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#517891',
     height: '100%',
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 15,
+    gap: 20,
 
-    paddingTop: 100,
+    paddingTop: 150,
   },
-  text: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-    fontSize: 18,
-    color: '#cbd5e1',
-  },
-  header: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-    fontSize: 36,
-    color: '#cbd5e1',
-  },
+  heading: { color: '#24292f', fontSize: 32, fontWeight: '600' },
   button: {
-    backgroundColor: '#90D5FF',
+    backgroundColor: '#0969da',
     borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 4,
-    width: '80%',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
+  buttonText: { color: '#ffffff', fontWeight: '700' },
   input: {
     backgroundColor: 'white',
     width: '80%',
     height: 25,
     borderRadius: 4,
     padding: 5,
+  },
+  image: {
+    width: 50,
+    height: 50,
+  },
+  row: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 })
