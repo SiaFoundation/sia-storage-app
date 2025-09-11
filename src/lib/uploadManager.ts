@@ -18,7 +18,7 @@ export type PickerAsset = {
 }
 
 export function usePickAndUploadMedia() {
-  const { sdk, log, appSeed } = useSettings()
+  const { sdk, log, appSeed, indexerURL } = useSettings()
   const { createFile } = useFiles()
   return useCallback(async () => {
     try {
@@ -70,8 +70,7 @@ export function usePickAndUploadMedia() {
           fileSize: asset.fileSize,
           createdAt: asset.createdAt,
           fileType: asset.fileType,
-          metadata: null,
-          slabs: null,
+          pinnedObjects: null,
         })
         setUploadState(asset.id, { status: 'uploading', progress: 0 })
       }
@@ -125,6 +124,7 @@ export function usePickAndUploadMedia() {
             const fileBytes = await new FileSystem.File(cacheUri).bytes()
             await uploadToSia({
               fileId: asset.id,
+              indexerURL,
               log,
               sdk,
               encryptionKey: appSeed.buffer,

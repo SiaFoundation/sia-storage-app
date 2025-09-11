@@ -1,6 +1,6 @@
-import { Sdk, type Slab } from 'react-native-sia'
+import { PinnedObject, Sdk } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from './uploadState'
-import { updateFileMetadata, updateFileSlabs } from '../db/files'
+import { updateFilePinnedObject } from '../db/files'
 import { Logger } from './settingsContext'
 
 export type UploadProgress = {
@@ -13,6 +13,7 @@ export async function uploadToSia(params: {
   fileId: string
   log: Logger
   sdk: Sdk
+  indexerURL: string
   encryptionKey: ArrayBuffer
   dataShards?: number
   parityShards?: number
@@ -22,6 +23,7 @@ export async function uploadToSia(params: {
   const {
     log,
     sdk,
+    indexerURL,
     encryptionKey,
     dataShards = 10,
     parityShards = 30,
@@ -30,7 +32,12 @@ export async function uploadToSia(params: {
     signal,
   } = params
 
-  const upload = await sdk.upload(encryptionKey, dataShards, parityShards)
+  const upload = await sdk.upload(
+    encryptionKey,
+    dataShards,
+    parityShards,
+    undefined
+  )
 
   const chunkSize = 1 * 1024 * 1024 // 1 MiB
   let offset = 0
@@ -60,15 +67,14 @@ export async function uploadToSia(params: {
   }
 
   try {
-    let slabs: Slab[]
+    let pinnedObject: PinnedObject
     if (signal) {
-      slabs = await upload.finalize({ signal })
+      pinnedObject = await upload.finalize({ signal })
     } else {
-      slabs = await upload.finalize()
+      pinnedObject = await upload.finalize()
     }
     setUploadState(fileId, { status: 'done', progress: 1 })
-    await updateFileMetadata(fileId, { uploaded: true })
-    await updateFileSlabs(fileId, slabs)
+    await updateFilePinnedObject(fileId, indexerURL, pinnedObject)
   } catch (e) {
     setUploadState(fileId, { status: 'error', progress: 0 })
     throw e

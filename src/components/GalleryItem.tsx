@@ -15,6 +15,7 @@ type Props = {
 export function GalleryItem({ file, onPressItem, setItemRef }: Props) {
   const toast = useToast()
   const status = useFileStatus(file)
+  console.log('GalleryItem', JSON.stringify(status, null, 2))
   return (
     <View
       collapsable={false}

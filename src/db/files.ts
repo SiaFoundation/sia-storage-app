@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite'
-import { type Slab } from 'react-native-sia'
+import { PinnedObject } from 'react-native-sia'
 
 export type FileRecord = {
   id: string
@@ -7,8 +7,7 @@ export type FileRecord = {
   fileSize: number | null
   createdAt: number
   fileType: string | null
-  metadata: unknown | null
-  slabs: Slab[] | null
+  pinnedObjects: Record<string, PinnedObject> | null
 }
 
 let db: SQLite.SQLiteDatabase
@@ -27,8 +26,7 @@ export async function initFileDB(): Promise<void> {
       'fileSize',
       'createdAt',
       'fileType',
-      'metadata',
-      'slabs',
+      'pinnedObjects',
     ]
     const matches =
       expected.every((e) => colNames.has(e)) &&
@@ -36,10 +34,12 @@ export async function initFileDB(): Promise<void> {
 
     if (colNames.size > 0) {
       const missing = expected.filter((e) => !colNames.has(e))
-      if (missing.length === 1 && missing[0] === 'slabs') {
-        // Non-destructive migration to add slabs column.
-        await db.execAsync('ALTER TABLE fileRecords ADD COLUMN slabs TEXT')
-        colNames.add('slabs')
+      if (missing.length === 1 && missing[0] === 'pinnedObjects') {
+        // Non-destructive migration to add pinnedObjects column.
+        await db.execAsync(
+          'ALTER TABLE fileRecords ADD COLUMN pinnedObjects TEXT'
+        )
+        colNames.add('pinnedObjects')
       } else if (missing.length === 1 && missing[0] === 'fileType') {
         await db.execAsync(
           "ALTER TABLE fileRecords ADD COLUMN fileType TEXT NOT NULL DEFAULT 'application/octet-stream'"
@@ -58,24 +58,22 @@ export async function initFileDB(): Promise<void> {
       fileSize INTEGER,
       createdAt INTEGER NOT NULL,
       fileType TEXT NOT NULL DEFAULT 'application/octet-stream',
-      metadata TEXT,
-      slabs TEXT
+      pinnedObjects TEXT
     );`
   )
 }
 
 export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, metadata, slabs } =
+  const { id, fileName, fileSize, createdAt, fileType, pinnedObjects } =
     fileRecord
   await db.runAsync(
-    'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, metadata, slabs) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, pinnedObjects) VALUES (?, ?, ?, ?, ?, ?)',
     id,
     fileName,
     fileSize,
     createdAt,
     fileType,
-    metadata == null ? null : JSON.stringify(metadata),
-    slabs == null ? null : JSON.stringify(slabs)
+    pinnedObjects == null ? null : JSON.stringify(pinnedObjects)
   )
 }
 
@@ -85,14 +83,13 @@ export async function createManyFileRecords(
   await db.withTransactionAsync(async () => {
     for (const fr of fileRecords) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, metadata, slabs) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, pinnedObjects) VALUES (?, ?, ?, ?, ?, ?)',
         fr.id,
         fr.fileName,
         fr.fileSize,
         fr.createdAt,
         fr.fileType,
-        fr.metadata == null ? null : JSON.stringify(fr.metadata),
-        fr.slabs == null ? null : JSON.stringify(fr.slabs)
+        fr.pinnedObjects == null ? null : JSON.stringify(fr.pinnedObjects)
       )
     }
   })
@@ -105,10 +102,9 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     fileSize: number | null
     createdAt: number
     fileType: string
-    metadata: string | null
-    slabs: string | null
+    pinnedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, metadata, slabs FROM fileRecords ORDER BY createdAt DESC'
+    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects FROM fileRecords ORDER BY createdAt DESC'
   )
 
   return rows.map((r) => ({
@@ -117,22 +113,20 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     fileSize: r.fileSize,
     createdAt: r.createdAt,
     fileType: r.fileType,
-    metadata: parseJson(r.metadata),
-    slabs: parseSlabs(r.slabs),
+    pinnedObjects: parsePinnedObjects(r.pinnedObjects),
   }))
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, metadata, slabs } =
+  const { id, fileName, fileSize, createdAt, fileType, pinnedObjects } =
     fileRecord
   await db.runAsync(
-    'UPDATE fileRecords SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, metadata = ?, slabs = ? WHERE id = ?',
+    'UPDATE fileRecords SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, pinnedObjects = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
     fileType,
-    metadata == null ? null : JSON.stringify(metadata),
-    slabs == null ? null : JSON.stringify(slabs),
+    pinnedObjects == null ? null : JSON.stringify(pinnedObjects),
     id
   )
 }
@@ -152,10 +146,9 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     fileSize: number | null
     createdAt: number
     fileType: string
-    metadata: string | null
-    slabs: string | null
+    pinnedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, metadata, slabs FROM fileRecords WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects FROM fileRecords WHERE id = ?',
     id
   )
   if (!row) return null
@@ -165,48 +158,33 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     fileSize: row.fileSize,
     createdAt: row.createdAt,
     fileType: row.fileType,
-    metadata: parseJson(row.metadata),
-    slabs: parseSlabs(row.slabs),
+    pinnedObjects: parsePinnedObjects(row.pinnedObjects),
   }
 }
 
-function parseJson(value: string | null): unknown | null {
+function parsePinnedObjects(
+  value: string | null
+): Record<string, PinnedObject> | null {
   if (value == null) return null
   try {
-    return JSON.parse(value)
+    return JSON.parse(value) as Record<string, PinnedObject>
   } catch {
     return null
   }
 }
 
-export async function updateFileMetadata(
+export async function updateFilePinnedObject(
   id: string,
-  metadata: unknown | null
+  indexerURL: string,
+  pinnedObject: PinnedObject
 ): Promise<void> {
+  const file = await readFileRecord(id)
+  if (file == null) return
+  const pos = file.pinnedObjects ?? {}
+  pos[indexerURL] = pinnedObject
   await db.runAsync(
-    'UPDATE fileRecords SET metadata = ? WHERE id = ?',
-    metadata == null ? null : JSON.stringify(metadata),
+    'UPDATE fileRecords SET pinnedObjects = ? WHERE id = ?',
+    JSON.stringify(pos),
     id
   )
-}
-
-export async function updateFileSlabs(
-  id: string,
-  slabs: Slab[] | null
-): Promise<void> {
-  await db.runAsync(
-    'UPDATE fileRecords SET slabs = ? WHERE id = ?',
-    slabs == null ? null : JSON.stringify(slabs),
-    id
-  )
-}
-
-function parseSlabs(value: string | null): Slab[] | null {
-  if (value == null) return null
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? (parsed as Slab[]) : null
-  } catch {
-    return null
-  }
 }
