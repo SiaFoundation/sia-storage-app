@@ -2,11 +2,13 @@ import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
 import { useSettings } from '../lib/settingsContext'
 import { DotIcon } from 'lucide-react-native'
 import { useState } from 'react'
+import { useToast } from '../lib/toastContext'
 
 export default function IndexerScreen() {
   const { authIndexer, isConnected, indexerName, setIndexerName, indexerURL } =
     useSettings()
   const [currentIndexerURL, setCurrentIndexerURL] = useState(indexerURL)
+  const toast = useToast()
 
   return (
     <View style={styles.container}>
@@ -60,15 +62,17 @@ export default function IndexerScreen() {
               backgroundColor: 'lightgrey',
             },
           ]}
-          onPress={() => {}}
-          // disabled={indexerURL === currentIndexerURL}
+          disabled={indexerURL === currentIndexerURL}
+          onPress={() => {
+            const success = authIndexer(currentIndexerURL)
+            if (!success) {
+              toast.show('New Indexer auth failed. Using previous indexer.')
+              return
+            }
+            toast.show('New Indexer auth successful.')
+          }}
         >
-          <Text
-            style={styles.primaryButtonText}
-            onPress={() => authIndexer(currentIndexerURL)}
-          >
-            Authorize New Indexer
-          </Text>
+          <Text style={styles.primaryButtonText}>Authorize New Indexer</Text>
         </Pressable>
       </View>
     </View>
@@ -125,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     position: 'absolute',
-    top: 5,
+    top: 10,
     right: 20,
   },
   statusText: {
