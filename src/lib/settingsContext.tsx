@@ -10,6 +10,7 @@ import {
 import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
+import * as SplashScreen from 'expo-splash-screen'
 
 export type Logger = (...args: any[]) => void
 
@@ -28,7 +29,7 @@ type SettingsContextValue = {
   setIndexerName: (value: string) => void
   indexerURL: string
   setIndexerURL: (value: string) => void
-  isOnboarding: boolean
+  isOnboarding: boolean | null
   setIsOnboarding: (value: boolean) => void
   authIndexer: (nextIndexerURL?: string) => Promise<boolean>
   appSeed: Uint8Array<ArrayBuffer>
@@ -41,18 +42,19 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [appSeed, setAppSeed] = useState<Uint8Array<ArrayBuffer>>(
-    new Uint8Array(32).fill(16)
+    new Uint8Array(32).fill(30)
   )
   const [indexerName, setIndexerName] = useState<string>('Test')
   const [indexerURL, setIndexerURL] = useState<string>(
     'https://app.indexd.zeus.sia.dev'
   )
   const [sdk, setSdk] = useState<Sdk>(() => new Sdk(indexerURL, appSeed.buffer))
-  const [isOnboarding, setIsOnboardingState] = useState<boolean>(true)
+  const [isOnboarding, setIsOnboardingState] = useState<boolean | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
 
   const [logs, setLogs] = useState<string[]>([])
   const log = useCallback((...args: any[]) => {
+    console.log(args.join(' '))
     setLogs((prev) => [
       ...prev,
       `${new Date().toLocaleTimeString()} ${args.join(' ')}`,
@@ -69,23 +71,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [log, clearLogs])
 
   useEffect(() => {
-    let cancelled = false
-
+    let splashTimeout: NodeJS.Timeout
     async function setOnboardingStatus() {
       try {
-        const isOnboarding = await SecureStore.getItemAsync('isOnboarding') // "true" | "false" | null
-        if (cancelled) return
-        setIsOnboardingState(isOnboarding !== 'true')
+        const foundOnboarding = await SecureStore.getItemAsync('isOnboarding') // "true" | "false" | null
+        if (foundOnboarding === 'true' || foundOnboarding === null) {
+          setIsOnboardingState(true)
+        } else {
+          setIsOnboardingState(false)
+        }
       } catch {
-        if (!cancelled) setIsOnboardingState(true)
+        setIsOnboardingState(true)
       }
+      // Waiting on state update to unhide splashscreen.
+      splashTimeout = setTimeout(() => {
+        SplashScreen.hideAsync()
+      }, 200)
     }
 
     setOnboardingStatus()
 
-    return () => {
-      cancelled = true
-    }
+    return () => clearTimeout(splashTimeout)
   }, [])
 
   const setIsOnboarding = useCallback((value: boolean) => {
@@ -98,10 +104,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const connectSdk = async () => {
       const connected = await sdk.connect()
-      if (connected) {
-        setIsOnboarding(false)
-        setIsConnected(true)
-      }
+      if (connected) setIsConnected(true)
     }
 
     connectSdk()

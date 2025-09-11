@@ -20,6 +20,9 @@ import { SettingsProvider, useSettings } from './lib/settingsContext'
 import OnboardingScreen from './screens/OnboardingScreen'
 import { FilesProvider } from './lib/filesContext'
 import ConnectionBanner from './components/ConnectionBanner'
+import * as SplashScreen from 'expo-splash-screen'
+
+SplashScreen.preventAutoHideAsync()
 
 const FeedStack = createNativeStackNavigator<FeedStackParamList>()
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>()
