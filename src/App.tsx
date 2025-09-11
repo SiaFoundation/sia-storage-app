@@ -19,6 +19,7 @@ import LogScreen from './screens/LogScreen'
 import { SettingsProvider, useSettings } from './lib/settingsContext'
 import OnboardingScreen from './screens/OnboardingScreen'
 import { FilesProvider } from './lib/filesContext'
+import ConnectionBanner from './components/ConnectionBanner'
 
 const FeedStack = createNativeStackNavigator<FeedStackParamList>()
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>()
@@ -153,6 +154,7 @@ export default function AppComponent() {
           <FilesProvider>
             <ToastProvider>
               <NavigationContainer>
+                <ConnectionBanner />
                 <RootNavigator />
               </NavigationContainer>
             </ToastProvider>
