@@ -1,48 +1,30 @@
-import { StyleSheet, View, Pressable } from 'react-native'
-import { Video } from 'expo-av'
-import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { CircularProgress } from '../CircularProgress'
+import { StyleSheet, View } from 'react-native'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { FileStatus } from '../../lib/file'
 
-export default function VideoViewer({
-  uri,
-  status,
-  onDownload,
-}: {
-  uri: string
-  status: FileStatus
-  onDownload?: () => void
-}) {
+export function VideoViewer({ status }: { status: FileStatus }) {
+  const player = useVideoPlayer(status.cachedUri, (player) => {
+    player.loop = true
+    player.play()
+  })
+
   return (
     <View style={styles.container}>
-      {status.isDownloading ? (
-        <View style={styles.centerDownload} pointerEvents="none">
-          <CircularProgress progress={status.downloadProgress ?? 0} size={44} />
-        </View>
-      ) : status.isDownloading && !uri && onDownload ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onDownload}
-          style={styles.centerDownload}
-        >
-          <ArrowDownToLineIcon color="#0969da" size={28} />
-        </Pressable>
-      ) : null}
-      <Video source={{ uri: uri }} style={styles.video} />
+      <VideoView
+        style={styles.video}
+        player={player}
+        allowsFullscreen
+        allowsPictureInPicture
+        contentFit="contain"
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { width: '100%', height: '100%' },
-  centerDownload: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+  container: { width: '100%', height: 400 },
+  video: {
+    width: '100%',
+    height: '100%',
   },
-  video: { width: '100%', height: '100%' },
 })

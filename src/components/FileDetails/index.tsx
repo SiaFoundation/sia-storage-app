@@ -1,29 +1,19 @@
-import { useMemo } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native'
-import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { CircularProgress } from '../CircularProgress'
+import { View, StyleSheet, ScrollView } from 'react-native'
 import { type FileRecord } from '../../db/files'
 import { useFileStatus } from '../../lib/file'
 import { FileMap } from './FileMap'
 import { FileViewer } from '../FileViewer'
 import { FileMeta } from './FileMeta'
 
-export function FileDetails({
-  file,
-  onDownload,
-}: {
-  file: FileRecord
-  onDownload?: () => void
-}) {
+export function FileDetails({ file }: { file: FileRecord }) {
   const status = useFileStatus(file)
-
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator
       >
-        <FileViewer file={file} onDownload={onDownload} />
+        <FileViewer file={file} />
         <FileMeta file={file} status={status} />
         <FileMap />
       </ScrollView>
