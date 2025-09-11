@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from 'react'
 import {
@@ -30,9 +31,11 @@ type FilesContextValue = {
 const FilesContext = createContext<FilesContextValue | undefined>(undefined)
 
 export function FilesProvider({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false)
   useEffect(() => {
     ;(async () => {
       await initFileDB()
+      setReady(true)
     })()
   }, [])
 
@@ -86,6 +89,7 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  if (!ready) return null
   return <FilesContext.Provider value={value}>{children}</FilesContext.Provider>
 }
 

@@ -36,7 +36,7 @@ export function LogView({ logs }: { logs: string[] }) {
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 12, paddingBottom: 12 },
+  content: { padding: 12 },
   line: {
     color: '#57606a',
     fontFamily: Platform.select({

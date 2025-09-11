@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { StyleSheet, Platform, StatusBar } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -7,14 +7,15 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
 import { type FeedStackParamList } from './navigation/types'
 import HomeScreen from './screens/HomeScreen'
-import PhotoDetailScreen from './screens/PhotoDetailScreen'
+import FileDetailScreen from './screens/FileDetailScreen'
 import SettingsHomeScreen, {
   type SettingsStackParamList,
 } from './screens/SettingsHomeScreen'
 import HostsScreen from './screens/HostsScreen'
 import HostDetailScreen from './screens/HostDetailScreen'
 import IndexerScreen from './screens/IndexerScreen'
-import { HomeIcon, SettingsIcon } from 'lucide-react-native'
+import { HomeIcon, SettingsIcon, TerminalIcon } from 'lucide-react-native'
+import LogScreen from './screens/LogScreen'
 import { SettingsProvider, useSettings } from './lib/settingsContext'
 import ConnectScreen from './screens/ConnectScreen'
 import { FilesProvider } from './lib/filesContext'
@@ -32,6 +33,10 @@ function SettingsTabIcon({ color, size }: { color: string; size: number }) {
   return <SettingsIcon color={color} size={size} />
 }
 
+function LogsTabIcon({ color, size }: { color: string; size: number }) {
+  return <TerminalIcon color={color} size={size} />
+}
+
 function FeedStackNavigator() {
   return (
     <FeedStack.Navigator>
@@ -39,9 +44,9 @@ function FeedStackNavigator() {
         {() => <HomeScreen />}
       </FeedStack.Screen>
       <FeedStack.Screen
-        name="PhotoDetail"
-        component={PhotoDetailScreen}
-        options={{ title: 'Photo' }}
+        name="FileDetail"
+        component={FileDetailScreen}
+        options={{ title: 'Media' }}
       />
     </FeedStack.Navigator>
   )
@@ -119,6 +124,15 @@ function RootNavigator() {
         }}
       >
         {() => <SettingsStackNavigator />}
+      </Tab.Screen>
+      <Tab.Screen
+        name="LogsTab"
+        options={{
+          tabBarLabel: 'Logs',
+          tabBarIcon: LogsTabIcon,
+        }}
+      >
+        {() => <LogScreen />}
       </Tab.Screen>
     </Tab.Navigator>
   )

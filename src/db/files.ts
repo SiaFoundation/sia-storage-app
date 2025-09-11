@@ -1,13 +1,14 @@
 import * as SQLite from 'expo-sqlite'
+import { type Slab } from 'react-native-sia'
 
 export type FileRecord = {
   id: string
-  uri: string
   fileName: string | null
   fileSize: number | null
   createdAt: number
-  status: 'done' | 'error'
+  fileType: string | null
   metadata: unknown | null
+  slabs: Slab[] | null
 }
 
 let db: SQLite.SQLiteDatabase
@@ -22,46 +23,59 @@ export async function initFileDB(): Promise<void> {
     const colNames = new Set(cols.map((c) => c.name))
     const expected = [
       'id',
-      'uri',
       'fileName',
       'fileSize',
       'createdAt',
-      'status',
+      'fileType',
       'metadata',
+      'slabs',
     ]
     const matches =
       expected.every((e) => colNames.has(e)) &&
       colNames.size === expected.length
-    if (!matches && colNames.size > 0) {
-      await db.execAsync('DROP TABLE IF EXISTS fileRecords')
+
+    if (colNames.size > 0) {
+      const missing = expected.filter((e) => !colNames.has(e))
+      if (missing.length === 1 && missing[0] === 'slabs') {
+        // Non-destructive migration to add slabs column.
+        await db.execAsync('ALTER TABLE fileRecords ADD COLUMN slabs TEXT')
+        colNames.add('slabs')
+      } else if (missing.length === 1 && missing[0] === 'fileType') {
+        await db.execAsync(
+          "ALTER TABLE fileRecords ADD COLUMN fileType TEXT NOT NULL DEFAULT 'application/octet-stream'"
+        )
+        colNames.add('fileType')
+      } else if (!matches) {
+        await db.execAsync('DROP TABLE IF EXISTS fileRecords')
+      }
     }
   } catch {}
   // Create new schema for uploaded items (no in-progress fields persisted).
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS fileRecords (
       id TEXT PRIMARY KEY,
-      uri TEXT NOT NULL,
       fileName TEXT,
       fileSize INTEGER,
       createdAt INTEGER NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('done','error')),
-      metadata TEXT
+      fileType TEXT NOT NULL DEFAULT 'application/octet-stream',
+      metadata TEXT,
+      slabs TEXT
     );`
   )
 }
 
 export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, uri, fileName, fileSize, createdAt, status, metadata } =
+  const { id, fileName, fileSize, createdAt, fileType, metadata, slabs } =
     fileRecord
   await db.runAsync(
-    'INSERT OR REPLACE INTO fileRecords (id, uri, fileName, fileSize, createdAt, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, metadata, slabs) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
-    uri,
     fileName,
     fileSize,
     createdAt,
-    status,
-    metadata == null ? null : JSON.stringify(metadata)
+    fileType,
+    metadata == null ? null : JSON.stringify(metadata),
+    slabs == null ? null : JSON.stringify(slabs)
   )
 }
 
@@ -71,14 +85,14 @@ export async function createManyFileRecords(
   await db.withTransactionAsync(async () => {
     for (const fr of fileRecords) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO fileRecords (id, uri, fileName, fileSize, createdAt, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, metadata, slabs) VALUES (?, ?, ?, ?, ?, ?, ?)',
         fr.id,
-        fr.uri,
         fr.fileName,
         fr.fileSize,
         fr.createdAt,
-        fr.status,
-        fr.metadata == null ? null : JSON.stringify(fr.metadata)
+        fr.fileType,
+        fr.metadata == null ? null : JSON.stringify(fr.metadata),
+        fr.slabs == null ? null : JSON.stringify(fr.slabs)
       )
     }
   })
@@ -87,38 +101,38 @@ export async function createManyFileRecords(
 export async function readAllFileRecords(): Promise<FileRecord[]> {
   const rows = await db.getAllAsync<{
     id: string
-    uri: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
-    status: 'done' | 'error'
+    fileType: string
     metadata: string | null
+    slabs: string | null
   }>(
-    'SELECT id, uri, fileName, fileSize, createdAt, status, metadata FROM fileRecords ORDER BY createdAt DESC'
+    'SELECT id, fileName, fileSize, createdAt, fileType, metadata, slabs FROM fileRecords ORDER BY createdAt DESC'
   )
 
   return rows.map((r) => ({
     id: r.id,
-    uri: r.uri,
     fileName: r.fileName,
     fileSize: r.fileSize,
     createdAt: r.createdAt,
-    status: r.status,
+    fileType: r.fileType,
     metadata: parseJson(r.metadata),
+    slabs: parseSlabs(r.slabs),
   }))
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, uri, fileName, fileSize, createdAt, status, metadata } =
+  const { id, fileName, fileSize, createdAt, fileType, metadata, slabs } =
     fileRecord
   await db.runAsync(
-    'UPDATE fileRecords SET uri = ?, fileName = ?, fileSize = ?, createdAt = ?, status = ?, metadata = ? WHERE id = ?',
-    uri,
+    'UPDATE fileRecords SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, metadata = ?, slabs = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
-    status,
+    fileType,
     metadata == null ? null : JSON.stringify(metadata),
+    slabs == null ? null : JSON.stringify(slabs),
     id
   )
 }
@@ -134,40 +148,25 @@ export async function deleteAllFileRecords(): Promise<void> {
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db.getFirstAsync<{
     id: string
-    uri: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
-    status: 'done' | 'error'
+    fileType: string
     metadata: string | null
+    slabs: string | null
   }>(
-    'SELECT id, uri, fileName, fileSize, createdAt, status, metadata FROM fileRecords WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, fileType, metadata, slabs FROM fileRecords WHERE id = ?',
     id
   )
   if (!row) return null
   return {
     id: row.id,
-    uri: row.uri,
     fileName: row.fileName,
     fileSize: row.fileSize,
     createdAt: row.createdAt,
-    status: row.status,
+    fileType: row.fileType,
     metadata: parseJson(row.metadata),
-  }
-}
-
-export async function seedDB(numberOfEntires = 10) {
-  const now = Date.now()
-  for (let i = 0; i < numberOfEntires; i++) {
-    await createFileRecord({
-      id: `seed-${now}-${i}`,
-      uri: `https://picsum.photos/seed/${i}/300/300`,
-      fileName: `file-${i}.jpg`,
-      fileSize: 1024 * (i + 1),
-      createdAt: now - i * 1000,
-      status: 'done',
-      metadata: { seeded: true },
-    })
+    slabs: parseSlabs(row.slabs),
   }
 }
 
@@ -191,13 +190,23 @@ export async function updateFileMetadata(
   )
 }
 
-export async function updateFileStatus(
+export async function updateFileSlabs(
   id: string,
-  status: 'done' | 'error'
+  slabs: Slab[] | null
 ): Promise<void> {
   await db.runAsync(
-    'UPDATE fileRecords SET status = ? WHERE id = ?',
-    status,
+    'UPDATE fileRecords SET slabs = ? WHERE id = ?',
+    slabs == null ? null : JSON.stringify(slabs),
     id
   )
+}
+
+function parseSlabs(value: string | null): Slab[] | null {
+  if (value == null) return null
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? (parsed as Slab[]) : null
+  } catch {
+    return null
+  }
 }
