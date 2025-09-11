@@ -17,7 +17,7 @@ import IndexerScreen from './screens/IndexerScreen'
 import { HomeIcon, SettingsIcon, TerminalIcon } from 'lucide-react-native'
 import LogScreen from './screens/LogScreen'
 import { SettingsProvider, useSettings } from './lib/settingsContext'
-import ConnectScreen from './screens/ConnectScreen'
+import OnboardingScreen from './screens/OnboardingScreen'
 import { FilesProvider } from './lib/filesContext'
 
 const FeedStack = createNativeStackNavigator<FeedStackParamList>()
@@ -83,15 +83,15 @@ function AuthStackNavigator() {
   return (
     <AuthStack.Navigator>
       <AuthStack.Screen name="Connect" options={{ headerShown: false }}>
-        {() => <ConnectScreen />}
+        {() => <OnboardingScreen />}
       </AuthStack.Screen>
     </AuthStack.Navigator>
   )
 }
 
 function RootNavigator() {
-  const { isConnected } = useSettings()
-  if (!isConnected) {
+  const { isOnboarding } = useSettings()
+  if (isOnboarding) {
     return <AuthStackNavigator />
   }
   return (
