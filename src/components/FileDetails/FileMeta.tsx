@@ -25,8 +25,6 @@ export function FileMeta({
     return `${s.toFixed(1)} ${units[u]}`
   }, [file.fileSize])
 
-  console.log('FileMeta', status.cachedUri)
-
   return (
     <View style={styles.container}>
       {file.fileName ? (
@@ -42,6 +40,8 @@ export function FileMeta({
         <Text style={styles.photoMetaText}>
           {new Date(file.createdAt).toLocaleString()}
         </Text>
+        <View style={styles.photoDot} />
+        <Text style={styles.photoMetaText}>{file.fileType}</Text>
       </View>
       <View style={styles.separator} />
       <Pressable

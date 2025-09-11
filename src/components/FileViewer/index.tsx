@@ -1,48 +1,45 @@
 import { View, StyleSheet, Pressable } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { CircularProgress } from '../CircularProgress'
-import VideoViewer from './VideoViewer'
 import { type FileRecord } from '../../db/files'
 import { useFileStatus } from '../../lib/file'
 import { FileIndicators } from '../FileIndicators'
 import ImageViewer from './ImageViewer'
+import { useDownload } from '../../lib/downloadManager'
+import { VideoViewer } from './VideoViewer'
+import { CircularProgress } from '../CircularProgress'
 
-export function FileViewer({
-  file,
-  onDownload,
-}: {
-  file: FileRecord
-  onDownload?: () => void
-}) {
+export function FileViewer({ file }: { file: FileRecord }) {
   const status = useFileStatus(file)
+  const handleDownload = useDownload(file)
 
-  console.log(JSON.stringify(file, null, 2), JSON.stringify(status, null, 2))
+  const isVideo = file.fileType?.startsWith('video')
 
   return (
     <View style={[styles.container]}>
-      <View style={styles.asset}>
-        {file.fileType?.startsWith('image') ? (
-          <ImageViewer uri={status.cachedUri!} status={status} />
-        ) : (
-          <VideoViewer uri={status.cachedUri!} status={status} />
-        )}
+      <View style={[styles.asset, !status.cachedUri && { height: 300 }]}>
+        {status.cachedUri ? (
+          isVideo ? (
+            <VideoViewer status={status} />
+          ) : (
+            <ImageViewer status={status} />
+          )
+        ) : null}
       </View>
       <FileIndicators file={file} />
-      {file.fileType?.startsWith('video') && status.isDownloading ? (
-        <View style={styles.centerDownload} pointerEvents="none">
-          <CircularProgress progress={status.downloadProgress} size={44} />
+      {status.isDownloading ? (
+        <View style={styles.centerDownload}>
+          <CircularProgress progress={status.downloadProgress ?? 0} size={44} />
         </View>
-      ) : file.fileType?.startsWith('video') &&
-        !status.cachedUri &&
-        onDownload ? (
+      ) : status.cachedUri ? null : (
         <Pressable
           accessibilityRole="button"
-          onPress={onDownload}
+          disabled={status.isDownloading}
+          onPress={() => handleDownload(false)}
           style={styles.centerDownload}
         >
           <ArrowDownToLineIcon color="#0969da" size={28} />
         </Pressable>
-      ) : null}
+      )}
     </View>
   )
 }
@@ -52,7 +49,7 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#ffffff',
   },
-  asset: { width: '100%', height: '100%' },
+  asset: {},
   centerDownload: {
     position: 'absolute',
     left: 0,

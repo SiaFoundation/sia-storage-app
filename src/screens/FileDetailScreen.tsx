@@ -88,17 +88,16 @@ export default function FileDetailScreen({ route, navigation }: Props) {
     }
   }, [file?.id, file?.fileType, toast])
 
-  const handleDownload = useDownload(file)
-
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: createHeaderRight(handleShare, handleOpenMenu),
     })
   }, [navigation, handleShare, handleOpenMenu])
 
+  const handleDownload = useDownload(file)
   return (
     <>
-      {file && <FileDetails file={file} onDownload={handleDownload} />}
+      {file && <FileDetails file={file} />}
       <Modal
         visible={isMenuOpen}
         transparent

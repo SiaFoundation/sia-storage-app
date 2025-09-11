@@ -37,7 +37,10 @@
     "plugins": [
       "expo-secure-store",
       "expo-sqlite",
-      ["./plugins/ios-target-16"]
+      [
+        "./plugins/ios-target-16"
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {

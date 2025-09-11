@@ -27,8 +27,8 @@ export async function getFileStatus(file: FileRecord): Promise<FileStatus> {
   return {
     isUploading: uploadState?.status === 'uploading',
     isDownloading: downloadState?.status === 'downloading',
-    isUploaded: uploadState?.status === 'done' || isFileOnSiaNetwork(file),
-    isDownloaded: downloadState?.status === 'done',
+    isUploaded: isFileOnSiaNetwork(file),
+    isDownloaded: !!cachedUri,
     isErrored:
       uploadState?.status === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
@@ -44,8 +44,8 @@ export function useFileStatus(file: FileRecord): FileStatus {
     () => ({
       isUploading: uploadState?.status === 'uploading',
       isDownloading: downloadState?.status === 'downloading',
-      isUploaded: uploadState?.status === 'done' || isFileOnSiaNetwork(file),
-      isDownloaded: downloadState?.status === 'done',
+      isUploaded: isFileOnSiaNetwork(file),
+      isDownloaded: !!cachedUri.data,
       isErrored:
         uploadState?.status === 'error' || downloadState?.status === 'error',
       uploadProgress: uploadState?.progress ?? 0,
