@@ -92,9 +92,7 @@ function AuthStackNavigator() {
 
 function RootNavigator() {
   const { isOnboarding } = useSettings()
-  if (isOnboarding) {
-    return <AuthStackNavigator />
-  }
+  if (isOnboarding) return <AuthStackNavigator />
   return (
     <Tab.Navigator
       screenOptions={{

@@ -48,7 +48,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     'https://app.indexd.zeus.sia.dev'
   )
   const [sdk, setSdk] = useState<Sdk>(() => new Sdk(indexerURL, appSeed.buffer))
-  const [isOnboarding, setIsOnboardingState] = useState<boolean>(false)
+  const [isOnboarding, setIsOnboardingState] = useState<boolean>(true)
   const [isConnected, setIsConnected] = useState<boolean>(false)
 
   const [logs, setLogs] = useState<string[]>([])
@@ -73,9 +73,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     async function setOnboardingStatus() {
       try {
-        const hasOnboarded = await SecureStore.getItemAsync('hasOnboarded') // "true" | "false" | null
+        const isOnboarding = await SecureStore.getItemAsync('isOnboarding') // "true" | "false" | null
         if (cancelled) return
-        setIsOnboardingState(hasOnboarded !== 'true')
+        setIsOnboardingState(isOnboarding !== 'true')
       } catch {
         if (!cancelled) setIsOnboardingState(true)
       }
@@ -98,7 +98,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const connectSdk = async () => {
       const connected = await sdk.connect()
-      if (connected) setIsConnected(true)
+      if (connected) {
+        setIsOnboarding(false)
+        setIsConnected(true)
+      }
     }
 
     connectSdk()
