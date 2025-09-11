@@ -30,7 +30,7 @@ type SettingsContextValue = {
   setIndexerURL: (value: string) => void
   isOnboarding: boolean
   setIsOnboarding: (value: boolean) => void
-  authIndexer: (nextIndexerURL?: string) => Promise<void>
+  authIndexer: (nextIndexerURL?: string) => Promise<boolean>
   appSeed: Uint8Array<ArrayBuffer>
   setAppSeed: (value: Uint8Array<ArrayBuffer>) => void
 }
@@ -41,7 +41,7 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [appSeed, setAppSeed] = useState<Uint8Array<ArrayBuffer>>(
-    new Uint8Array(32).fill(15)
+    new Uint8Array(32).fill(16)
   )
   const [indexerName, setIndexerName] = useState<string>('Test')
   const [indexerURL, setIndexerURL] = useState<string>(
@@ -69,18 +69,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [log, clearLogs])
 
   useEffect(() => {
-    ;(async () => {
+    let cancelled = false
+
+    async function setOnboardingStatus() {
       try {
-        const stored = await SecureStore.getItemAsync('isOnboarding')
-        if (stored == null) {
-          setIsOnboardingState(true)
-          return
-        }
-        setIsOnboardingState(stored === 'true')
+        const hasOnboarded = await SecureStore.getItemAsync('hasOnboarded') // "true" | "false" | null
+        if (cancelled) return
+        setIsOnboardingState(hasOnboarded !== 'true')
       } catch {
-        setIsOnboardingState(false)
+        if (!cancelled) setIsOnboardingState(true)
       }
-    })()
+    }
+
+    setOnboardingStatus()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const setIsOnboarding = useCallback((value: boolean) => {
@@ -106,7 +111,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         log(`Creating candidate SDK for ${targetUrl} ...`)
         const candidate = new Sdk(targetUrl, appSeed.buffer)
 
-        log('Connecting to app with candidate...')
+        log('Calling connect...')
         const connected = await candidate.connect()
 
         if (!connected) {
@@ -130,9 +135,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setIsConnected(true)
         if (nextIndexerURL && nextIndexerURL !== indexerURL)
           setIndexerURL(nextIndexerURL)
+        return true
       } catch (err) {
         log('Error connecting candidate SDK')
         log(String(err))
+        return false
       }
     },
     [indexerURL, log]

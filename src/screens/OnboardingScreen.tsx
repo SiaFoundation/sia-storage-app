@@ -10,9 +10,11 @@ import { useSettings } from '../lib/settingsContext'
 import { SettingsIcon } from 'lucide-react-native'
 import { useState } from 'react'
 
-export default function ConnectScreen() {
+export default function OnboardingScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const { authIndexer, indexerURL, setIndexerURL } = useSettings()
+  const [hasErrored, setHasErrored] = useState(false)
+  const { authIndexer, indexerURL, setIndexerURL, setIsOnboarding } =
+    useSettings()
 
   return (
     <View>
@@ -26,8 +28,10 @@ export default function ConnectScreen() {
         </Pressable>
       </View>
       <View style={styles.container}>
+        <Text style={styles.title}>Welcome!</Text>
         <Text style={styles.text}>
-          Authorize the indexer. Click the gear to supply your own.
+          To begin using the app, press below to begin indexer authorization. To
+          use your own indexer, press the gear in the upper right.
         </Text>
         {isUsingCustomURL ? (
           <TextInput
@@ -39,11 +43,21 @@ export default function ConnectScreen() {
         <Pressable
           style={styles.button}
           onPress={async () => {
-            authIndexer()
+            const success = await authIndexer()
+            if (!success) {
+              setHasErrored(true)
+              return
+            }
+            setIsOnboarding(false)
           }}
         >
-          <Text style={styles.buttonText}>Authorize connection</Text>
+          <Text style={styles.buttonText}>Authorize Indexer</Text>
         </Pressable>
+        {hasErrored ? (
+          <Text style={[styles.text, { fontSize: 12, color: 'red' }]}>
+            Something went wrong. Please check your password and try again.
+          </Text>
+        ) : null}
       </View>
     </View>
   )
@@ -55,24 +69,22 @@ const styles = StyleSheet.create({
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    gap: 20,
+    gap: 16,
+    paddingHorizontal: 16,
 
-    paddingTop: 150,
+    paddingTop: 40,
   },
   text: {
     color: '#24292f',
     fontSize: 16,
-    marginHorizontal: 60,
-    textAlign: 'center',
   },
   button: {
+    width: '100%',
     backgroundColor: '#0969da',
     borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  buttonText: { color: '#ffffff', fontWeight: '700' },
+  buttonText: { color: '#ffffff', fontWeight: '700', textAlign: 'center' },
   image: {
     width: 15,
     height: 15,
@@ -89,9 +101,10 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'white',
-    paddingVertical: 7,
-    paddingHorizontal: 30,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 3,
   },
+  title: { color: '#24292f', fontSize: 16, fontWeight: '600' },
 })
