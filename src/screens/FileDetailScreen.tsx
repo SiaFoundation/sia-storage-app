@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../lib/fileCache'
 import { useDownload } from '../lib/downloadManager'
+import { extFromMime } from '../lib/fileTypes'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
@@ -78,14 +79,14 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   const handleRemoveCache = useCallback(async () => {
     if (!file) return
     try {
-      await removeFromCache(file.id)
+      await removeFromCache(file.id, extFromMime(file.fileType))
       toast.show('Removed from cache')
       setIsMenuOpen(false)
     } catch (e) {
       toast.show('Failed to remove cache')
       setIsMenuOpen(false)
     }
-  }, [file?.id, toast])
+  }, [file?.id, file?.fileType, toast])
 
   const handleDownload = useDownload(file)
 
