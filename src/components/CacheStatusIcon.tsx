@@ -1,34 +1,18 @@
 import { View, StyleSheet } from 'react-native'
-import { ArrowUpIcon, CloudCheckIcon, XIcon } from 'lucide-react-native'
+import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { FileStatus } from '../lib/file'
 
-export function UploadStatusIcon({
+export function CacheStatusIcon({
   status,
   size = 16,
 }: {
   status: FileStatus
   size?: number
 }) {
-  if (status.isErrored) {
+  if (status.cachedUri) {
     return (
       <View style={styles.badge}>
-        <XIcon color="#cf222e" size={size} />
-      </View>
-    )
-  }
-
-  if (status.isUploaded) {
-    return (
-      <View style={styles.badge}>
-        <CloudCheckIcon color="#57606a" size={size} />
-      </View>
-    )
-  }
-
-  if (status.isUploading) {
-    return (
-      <View style={styles.badge}>
-        <ArrowUpIcon color="#57606a" size={size} />
+        <ArrowDownToLineIcon color="#0f6bff" size={size} />
       </View>
     )
   }

@@ -1,15 +1,15 @@
 import { useSyncExternalStore } from 'react'
 
-export type UploadStatus = 'uploading' | 'done' | 'error'
+export type DownloadStatus = 'downloading' | 'done' | 'error'
 
-export type UploadState = {
-  status: UploadStatus
+export type DownloadState = {
+  status: DownloadStatus
   progress: number // 0..1
 }
 
-type Snapshot = Record<string, UploadState>
+type Snapshot = Record<string, DownloadState>
 
-const store = new Map<string, UploadState>()
+const store = new Map<string, DownloadState>()
 const listeners = new Set<() => void>()
 let snapshot: Snapshot = {}
 
@@ -18,19 +18,19 @@ function emit(): void {
   listeners.forEach((l) => l())
 }
 
-export function setUploadState(id: string, next: UploadState): void {
+export function setDownloadState(id: string, next: DownloadState): void {
   store.set(id, next)
   emit()
 }
 
-export function updateUploadProgress(id: string, progress: number): void {
+export function updateDownloadProgress(id: string, progress: number): void {
   const prev = store.get(id)
-  const status: UploadStatus = prev?.status ?? 'uploading'
+  const status: DownloadStatus = prev?.status ?? 'downloading'
   store.set(id, { status, progress })
   emit()
 }
 
-export function clearUploadState(id: string): void {
+export function clearDownloadState(id: string): void {
   if (store.delete(id)) emit()
 }
 
@@ -41,7 +41,7 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-export function useUploadState(id: string): UploadState | undefined {
+export function useDownloadState(id: string): DownloadState | undefined {
   return useSyncExternalStore(
     subscribe,
     () => snapshot[id],
@@ -49,7 +49,7 @@ export function useUploadState(id: string): UploadState | undefined {
   )
 }
 
-export function useAllUploadStates(): Snapshot {
+export function useAllDownloadStates(): Snapshot {
   return useSyncExternalStore(
     subscribe,
     () => snapshot,
@@ -57,6 +57,6 @@ export function useAllUploadStates(): Snapshot {
   )
 }
 
-export function getUploadState(id: string): UploadState | undefined {
+export function getDownloadState(id: string): DownloadState | undefined {
   return snapshot[id]
 }

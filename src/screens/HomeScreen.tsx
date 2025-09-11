@@ -1,11 +1,7 @@
 import { useCallback, useRef, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { PlusIcon } from 'lucide-react-native'
-import { pickAndUploadImages, UploadedItem } from '../Upload'
-import {
-  useAllUploadStates as useUploadStatusMap,
-  setUploadState,
-} from '../lib/uploadState'
+import { usePickAndUploadMedia } from '../lib/uploadManager'
 import { Gallery } from '../components/Gallery'
 import { useSettings } from '../lib/settingsContext'
 import { useNavigation } from '@react-navigation/native'
@@ -20,56 +16,24 @@ export default function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
   const { createFile } = useFiles()
-  const uploadStatusMap = useUploadStatusMap()
   const { data: files } = useFileList()
+
+  const pickAndUploadMedia = usePickAndUploadMedia()
 
   const handleUpload = useCallback(async () => {
     if (!sdk) return
     try {
-      pickAndUploadImages({
-        sdk,
-        log,
-        onPicked: (temps) => {
-          void Promise.all(
-            temps.map((t) =>
-              createFile({
-                id: t.id,
-                uri: t.uri,
-                fileName: t.fileName,
-                fileSize: t.fileSize,
-                createdAt: t.createdAt,
-                status: 'done',
-                metadata: null,
-              })
-            )
-          )
-          temps.forEach((t) =>
-            setUploadState(t.id, { status: 'uploading', progress: 0 })
-          )
-        },
-        onProgress: () => {},
-      })
+      pickAndUploadMedia()
     } catch (e) {
       log(`Upload flow error: ${String(e)}`)
     }
   }, [sdk, log, createFile])
 
   const handleOpenDetail = useCallback(
-    (record: FileRecord) => {
-      const r = uploadStatusMap[record.id]
-      const status: UploadedItem['status'] = r?.status ?? 'done'
-      const item: UploadedItem = {
-        id: record.id,
-        uri: record.uri,
-        fileName: record.fileName,
-        fileSize: record.fileSize,
-        createdAt: record.createdAt,
-        status,
-        progress: r?.progress ?? (status === 'done' ? 1 : 0),
-      }
-      navigation.navigate('PhotoDetail', { item })
+    (file: FileRecord) => {
+      navigation.navigate('FileDetail', { id: file.id })
     },
-    [navigation, uploadStatusMap]
+    [navigation]
   )
 
   return (
@@ -88,14 +52,14 @@ export default function HomeScreen() {
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No uploads yet</Text>
           <Text style={styles.emptyText}>
-            Tap the plus to upload a photo from your library.
+            Tap the plus to upload media from your library.
           </Text>
           <Pressable
             accessibilityRole="button"
             onPress={handleUpload}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Upload photo</Text>
+            <Text style={styles.primaryButtonText}>Upload media</Text>
           </Pressable>
         </View>
       ) : (

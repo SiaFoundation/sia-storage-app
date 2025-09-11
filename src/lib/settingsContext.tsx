@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react'
@@ -10,19 +11,28 @@ import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
 
-const appSeed = new Uint8Array(32).fill(15)
+export type Logger = (...args: any[]) => void
+
+export const logger = {
+  log: (...args: any[]) => {},
+  clear: () => {},
+}
 
 type SettingsContextValue = {
   sdk: Sdk
   isConnected: boolean
-  log: (message: string) => void
+  log: Logger
+  logs: string[]
+  clearLogs: () => void
   indexerName: string
   setIndexerName: (value: string) => void
   indexerURL: string
   setIndexerURL: (value: string) => void
   isOnboarding: boolean
   setIsOnboarding: (value: boolean) => void
-  authIndexer: (nextIndexerURL?: string) => void
+  authIndexer: (nextIndexerURL?: string) => Promise<void>
+  appSeed: Uint8Array<ArrayBuffer>
+  setAppSeed: (value: Uint8Array<ArrayBuffer>) => void
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -30,6 +40,9 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 )
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const [appSeed, setAppSeed] = useState<Uint8Array<ArrayBuffer>>(
+    new Uint8Array(32).fill(15)
+  )
   const [indexerName, setIndexerName] = useState<string>('Test')
   const [indexerURL, setIndexerURL] = useState<string>(
     'https://app.indexd.zeus.sia.dev'
@@ -38,7 +51,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isOnboarding, setIsOnboardingState] = useState<boolean>(false)
   const [isConnected, setIsConnected] = useState<boolean>(false)
 
-  const log = useCallback((message: string) => console.log(message), [])
+  const [logs, setLogs] = useState<string[]>([])
+  const log = useCallback((...args: any[]) => {
+    setLogs((prev) => [
+      ...prev,
+      `${new Date().toLocaleTimeString()} ${args.join(' ')}`,
+    ])
+  }, [])
+
+  const clearLogs = useCallback(() => {
+    setLogs([])
+  }, [])
+
+  useEffect(() => {
+    logger.log = log
+    logger.clear = clearLogs
+  }, [log, clearLogs])
 
   useEffect(() => {
     ;(async () => {
@@ -110,18 +138,40 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [indexerURL, log]
   )
 
-  const value: SettingsContextValue = {
-    sdk,
-    isConnected,
-    log,
-    indexerName,
-    setIndexerName,
-    indexerURL,
-    setIndexerURL,
-    isOnboarding,
-    setIsOnboarding,
-    authIndexer,
-  }
+  const value: SettingsContextValue = useMemo(
+    () => ({
+      sdk,
+      isConnected,
+      log,
+      indexerName,
+      setIndexerName,
+      indexerURL,
+      setIndexerURL,
+      isOnboarding,
+      setIsOnboarding,
+      authIndexer,
+      logs,
+      clearLogs,
+      appSeed,
+      setAppSeed,
+    }),
+    [
+      sdk,
+      isConnected,
+      log,
+      indexerName,
+      setIndexerName,
+      indexerURL,
+      setIndexerURL,
+      isOnboarding,
+      setIsOnboarding,
+      authIndexer,
+      logs,
+      clearLogs,
+      appSeed,
+      setAppSeed,
+    ]
+  )
 
   return (
     <SettingsContext.Provider value={value}>

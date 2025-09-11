@@ -1,5 +1,6 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
+import { deleteAllFileRecords } from '../db/files'
 
 export type SettingsStackParamList = {
   SettingsHome: undefined
@@ -33,6 +34,33 @@ export default function SettingsHomeScreen({ navigation }: Props) {
           </View>
         </Pressable>
       </View>
+      <View style={styles.footerGroup}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            Alert.alert(
+              'Wipe database',
+              'This will delete all local records. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAllFileRecords()
+                    } catch {}
+                  },
+                },
+              ]
+            )
+          }}
+        >
+          <View style={styles.dangerRow}>
+            <Text style={styles.dangerText}>Wipe database</Text>
+          </View>
+        </Pressable>
+      </View>
     </View>
   )
 }
@@ -55,4 +83,15 @@ const styles = StyleSheet.create({
   },
   rowLabel: { flex: 1, color: '#24292f', fontSize: 16 },
   rowChevron: { color: '#57606a', fontSize: 18 },
+  footerGroup: { marginTop: 24 },
+  dangerRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    borderTopColor: '#d0d7de',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d0d7de',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dangerText: { color: '#c83532', fontSize: 16, fontWeight: '600' },
 })

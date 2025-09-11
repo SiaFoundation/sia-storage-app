@@ -19,7 +19,9 @@
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.26",
     "expo": "54.0.0-preview.4",
+    "expo-av": "~16.0.6",
     "expo-clipboard": "8.0.2",
+    "expo-file-system": "~19.0.11",
     "expo-secure-store": "15.0.2",
     "expo-sqlite": "^15.2.14",
     "expo-updates": "~29.0.6",
@@ -33,7 +35,7 @@
     "react-native-nitro-modules": "0.26.4",
     "react-native-safe-area-context": "^5.6.1",
     "react-native-screens": "^4.16.0",
-    "react-native-sia": "0.2.0",
+    "react-native-sia": "0.4.0",
     "react-native-svg": "^15.2.0",
     "readable-stream": "^4.7.0",
     "swr": "^2.3.6"

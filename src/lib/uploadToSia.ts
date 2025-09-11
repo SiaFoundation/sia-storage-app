@@ -1,10 +1,7 @@
-import { Sdk } from 'react-native-sia'
+import { Sdk, type Slab } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from './uploadState'
-import {
-  type FileRecord,
-  updateFileMetadata,
-  updateFileStatus,
-} from '../db/files'
+import { updateFileMetadata, updateFileSlabs } from '../db/files'
+import { Logger } from './settingsContext'
 
 export type UploadProgress = {
   bytesWritten: number
@@ -13,25 +10,24 @@ export type UploadProgress = {
 }
 
 export async function uploadToSia(params: {
+  fileId: string
+  log: Logger
   sdk: Sdk
   encryptionKey: ArrayBuffer
   dataShards?: number
   parityShards?: number
   data: ArrayBuffer
-  // Persisted file record details; the record should already exist in DB.
-  file: Pick<FileRecord, 'id'>
   signal?: AbortSignal
-  onProgress?: (p: UploadProgress) => void
 }): Promise<void> {
   const {
+    log,
     sdk,
     encryptionKey,
     dataShards = 10,
     parityShards = 30,
     data,
-    file,
+    fileId,
     signal,
-    onProgress,
   } = params
 
   const upload = await sdk.upload(encryptionKey, dataShards, parityShards)
@@ -41,9 +37,10 @@ export async function uploadToSia(params: {
   const total = data.byteLength
 
   // Initialize runtime state.
-  setUploadState(file.id, { status: 'uploading', progress: 0 })
+  setUploadState(fileId, { status: 'uploading', progress: 0 })
 
   while (offset < total) {
+    log(`Uploading chunk ${offset} of ${total}...`)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const end = Math.min(offset + chunkSize, total)
     const chunk = data.slice(offset, end)
@@ -52,32 +49,28 @@ export async function uploadToSia(params: {
     } else {
       await upload.write(chunk)
     }
+    log(`Uploaded chunk ${offset} of ${total}`)
     offset = end
     const progress = {
       bytesWritten: offset,
       totalBytes: total,
       percent: offset / total,
     }
-    updateUploadProgress(file.id, progress.percent)
-    onProgress?.(progress)
+    updateUploadProgress(fileId, progress.percent)
   }
 
   try {
+    let slabs: Slab[]
     if (signal) {
-      await upload.finalize({ signal })
+      slabs = await upload.finalize({ signal })
     } else {
-      await upload.finalize()
+      slabs = await upload.finalize()
     }
-    // Mark as completed in runtime state and update DB metadata to denote cloud presence.
-    setUploadState(file.id, { status: 'done', progress: 1 })
-    await updateFileMetadata(file.id, { uploaded: true })
-    await updateFileStatus(file.id, 'done')
+    setUploadState(fileId, { status: 'done', progress: 1 })
+    await updateFileMetadata(fileId, { uploaded: true })
+    await updateFileSlabs(fileId, slabs)
   } catch (e) {
-    setUploadState(file.id, { status: 'error', progress: 0 })
-    await updateFileStatus(file.id, 'error')
+    setUploadState(fileId, { status: 'error', progress: 0 })
     throw e
-  } finally {
-    // Optionally keep runtime entry for UI to read final status; do not clear immediately.
-    // clearUploadState(file.id)
   }
 }
