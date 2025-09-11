@@ -8,8 +8,6 @@ import { useSettings } from './settingsContext'
 import { useFiles } from './filesContext'
 import { extFromMime, mimeFromAssetUri } from './fileTypes'
 
-const appSeed = new Uint8Array(32).fill(1)
-
 export type PickerAsset = {
   id: string
   uri: string
@@ -20,7 +18,7 @@ export type PickerAsset = {
 }
 
 export function usePickAndUploadMedia() {
-  const { sdk, log } = useSettings()
+  const { sdk, log, appSeed } = useSettings()
   const { createFile } = useFiles()
   return useCallback(async () => {
     try {

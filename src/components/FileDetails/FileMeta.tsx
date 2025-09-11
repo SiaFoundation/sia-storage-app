@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { View, Text, StyleSheet, Clipboard } from 'react-native'
+import Clipboard from '@react-native-clipboard/clipboard'
+import { View, Text, StyleSheet, Pressable } from 'react-native'
 import { type FileRecord } from '../../db/files'
 import { FileStatus } from '../../lib/file'
 import { useToast } from '../../lib/toastContext'
@@ -43,21 +44,20 @@ export function FileMeta({
         </Text>
       </View>
       <View style={styles.separator} />
-      <Text
-        style={styles.sectionTitle}
+      <Pressable
         onPress={() => {
           if (!status.cachedUri) return
-          Clipboard.setString(status.cachedUri)
+          Clipboard.setString(status.cachedUri!)
           toast.show('Copied cached URI')
         }}
       >
-        Cached URI
-      </Text>
-      {file.fileName ? (
-        <Text style={styles.sectionValue} numberOfLines={2}>
-          {status.cachedUri || 'No cached URI'}
-        </Text>
-      ) : null}
+        <Text style={styles.sectionTitle}>Cached URI</Text>
+        {file.fileName ? (
+          <Text style={styles.sectionValue} numberOfLines={2}>
+            {status.cachedUri || 'No cached URI'}
+          </Text>
+        ) : null}
+      </Pressable>
       <View style={styles.separator} />
       <Text style={styles.sectionTitle}>Slabs ({file.slabs?.length})</Text>
       {file.slabs?.map((s) => (
