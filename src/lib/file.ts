@@ -6,7 +6,7 @@ import { readCachedUri, useCachedUri } from './fileCache'
 import { extFromMime } from './fileTypes'
 
 export function isFileOnSiaNetwork(file: FileRecord): boolean {
-  return !!file.slabs
+  return !!file.pinnedObjects
 }
 
 export type FileStatus = {

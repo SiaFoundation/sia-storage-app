@@ -12,6 +12,7 @@ import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../lib/fileCache'
 import { useDownload } from '../lib/downloadManager'
 import { extFromMime } from '../lib/fileTypes'
+import { useSettings } from '../lib/settingsContext'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
@@ -40,9 +41,15 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   const { deleteFile } = useFiles()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const insets = useSafeAreaInsets()
+  const { sdk, appSeed } = useSettings()
 
   const handleShare = useCallback(() => {
     if (!file) return
+    if (!sdk) return
+    // 1 day from now
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 1)
+    sdk.objectShareUrl(file.id, appSeed.buffer, expiresAt)
     Clipboard.setString(file.id)
     toast.show('Copied item id')
   }, [file?.id, toast])

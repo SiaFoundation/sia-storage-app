@@ -25,6 +25,9 @@ export function FileMeta({
     return `${s.toFixed(1)} ${units[u]}`
   }, [file.fileSize])
 
+  const pinnedObjectsList = Object.keys(file.pinnedObjects ?? {}).map(
+    (key) => file.pinnedObjects?.[key]
+  )
   return (
     <View style={styles.container}>
       {file.fileName ? (
@@ -58,13 +61,22 @@ export function FileMeta({
           </Text>
         ) : null}
       </Pressable>
-      <View style={styles.separator} />
-      <Text style={styles.sectionTitle}>Slabs ({file.slabs?.length})</Text>
-      {file.slabs?.map((s) => (
-        <Text key={s.id} style={styles.sectionValue} numberOfLines={2}>
-          {s.id}
-        </Text>
-      ))}
+      {pinnedObjectsList.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitleLarge}>
+            Pinned Objects ({pinnedObjectsList.length})
+          </Text>
+          <View style={styles.separator} />
+          <Text style={styles.sectionTitle}>
+            Slabs ({pinnedObjectsList[0]?.slabs.length})
+          </Text>
+          {pinnedObjectsList[0]?.slabs.map((s) => (
+            <Text key={s.id} style={styles.sectionValue} numberOfLines={2}>
+              {s.id}
+            </Text>
+          ))}
+        </>
+      ) : null}
     </View>
   )
 }
@@ -81,6 +93,12 @@ const styles = StyleSheet.create({
   photoFileName: {
     color: '#111827',
     marginBottom: 6,
+  },
+  sectionTitleLarge: {
+    color: '#111827',
+    fontWeight: '700',
+    marginBottom: 6,
+    fontSize: 16,
   },
   sectionTitle: {
     color: '#111827',
