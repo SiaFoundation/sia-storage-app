@@ -1,6 +1,7 @@
 import { View, StyleSheet } from 'react-native'
-import { ArrowUpIcon, CloudCheckIcon, XIcon } from 'lucide-react-native'
+import { CloudCheckIcon, XIcon } from 'lucide-react-native'
 import { FileStatus } from '../lib/file'
+import { SpinnerIcon } from './SpinnerIcon'
 
 export function UploadStatusIcon({
   status,
@@ -28,7 +29,7 @@ export function UploadStatusIcon({
   if (status.isUploading) {
     return (
       <View style={styles.badge}>
-        <ArrowUpIcon color="#57606a" size={size} />
+        <SpinnerIcon size={size} />
       </View>
     )
   }
