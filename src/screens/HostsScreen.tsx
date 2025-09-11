@@ -5,7 +5,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native'
-import MapView, { Marker, type Region } from 'react-native-maps'
+import { type Region } from 'react-native-maps'
 import useSWR from 'swr'
 import { ListIcon, MapIcon } from 'lucide-react-native'
 import { Hosts } from '../components/Hosts'
@@ -14,6 +14,9 @@ import { type SettingsStackParamList } from './SettingsHomeScreen'
 import { useMemo, useState, useLayoutEffect } from 'react'
 import { useSettings } from '../lib/settingsContext'
 import { type Host } from 'react-native-sia'
+import Map from '../components/Map/Map'
+import { MapMarker } from '../components/Map/MapMarker'
+import { determineBestRegion } from '../components/Map/mapHelpers'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Hosts'>
 
@@ -107,29 +110,22 @@ export default function HostsScreen({ navigation }: Props) {
           <ActivityIndicator color="#0ea5e9" />
         </View>
       ) : (
-        <MapView
-          style={styles.flex1}
-          initialRegion={
-            region ?? {
-              latitude: 0,
-              longitude: 0,
-              latitudeDelta: 80,
-              longitudeDelta: 180,
-            }
-          }
-        >
-          {hosts.map((h) => (
-            <Marker
-              key={h.publicKey}
-              coordinate={{ latitude: h.latitude, longitude: h.longitude }}
-              title={h.publicKey}
-              description={h.countryCode}
-              onCalloutPress={() =>
-                navigation.navigate('HostDetail', { host: h.publicKey })
-              }
-            />
-          ))}
-        </MapView>
+        <Map region={determineBestRegion(hosts)}>
+          {hosts.map((h) => {
+            return (
+              <MapMarker
+                size={10}
+                key={h.publicKey}
+                coordinate={{ latitude: h.latitude, longitude: h.longitude }}
+                title={h.publicKey}
+                description={h.countryCode}
+                onPress={() =>
+                  navigation.navigate('HostDetail', { host: h.publicKey })
+                }
+              />
+            )
+          })}
+        </Map>
       )}
     </View>
   )
