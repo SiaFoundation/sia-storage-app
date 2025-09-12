@@ -7,7 +7,14 @@ import { useCallback } from 'react'
 import { useSettings } from './settingsContext'
 import { useFiles } from './filesContext'
 import { extFromMime, mimeFromAssetUri } from './fileTypes'
-import { generateEncryptionKey } from './encryptionKey'
+import {
+  encryptionKeyArrayBufferToHex,
+  encryptionKeyHexToBuffer,
+  encryptionKeyUint8ToHex,
+  generateEncryptionKey,
+  generateEncryptionKeyHex,
+} from './encryptionKey'
+import { uniqueId } from './uniqueId'
 
 export type PickerAsset = {
   id: string
@@ -16,10 +23,11 @@ export type PickerAsset = {
   fileSize: number | null
   createdAt: number
   fileType: string | null
+  encryptionKey?: Uint8Array
 }
 
 export function usePickAndUploadMedia() {
-  const { sdk, log, appSeed, indexerURL } = useSettings()
+  const { sdk, log, indexerURL } = useSettings()
   const { createFile } = useFiles()
   return useCallback(async () => {
     try {
@@ -44,7 +52,7 @@ export function usePickAndUploadMedia() {
         .filter((a): a is ImagePicker.Asset => Boolean(a && a.uri && a.id))
         .map((a) => ({
           ...a,
-          id: Math.random().toString(36).substring(2, 15),
+          id: uniqueId(),
           uri: a.uri as string,
           fileType: mimeFromAssetUri(a),
           createdAt: Date.now(),
@@ -64,7 +72,9 @@ export function usePickAndUploadMedia() {
           asset.fileName,
           asset.fileType
         )
+        setUploadState(asset.id, { status: 'uploading', progress: 0 })
         // Emit incrementally so the gallery can show thumbnails from cache immediately.
+        asset.encryptionKey = generateEncryptionKey()
         await createFile({
           id: asset.id,
           fileName: asset.fileName,
@@ -72,9 +82,8 @@ export function usePickAndUploadMedia() {
           createdAt: asset.createdAt,
           fileType: asset.fileType,
           pinnedObjects: null,
-          encryptionKey: generateEncryptionKey(),
+          encryptionKey: encryptionKeyUint8ToHex(asset.encryptionKey),
         })
-        setUploadState(asset.id, { status: 'uploading', progress: 0 })
       }
 
       const readArrayBuffer = async (
@@ -103,7 +112,7 @@ export function usePickAndUploadMedia() {
           if (currentIndex >= assets.length) return
 
           const asset = assets[currentIndex]
-          if (!asset) {
+          if (!asset || !asset.encryptionKey) {
             continue
           }
           try {
@@ -129,7 +138,7 @@ export function usePickAndUploadMedia() {
               indexerURL,
               log,
               sdk,
-              encryptionKey: appSeed.buffer,
+              encryptionKey: asset.encryptionKey,
               data: fileBytes.buffer as ArrayBuffer,
             })
             log(`Upload complete ${asset.id}`)

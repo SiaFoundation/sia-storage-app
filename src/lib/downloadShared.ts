@@ -27,7 +27,11 @@ export function useDownloadShared() {
         try {
           console.log('sharedUrl', sharedUrl)
           const sharedObject = await sdk.sharedObject(sharedUrl)
-          const downloader = await sdk.downloadShared(sharedUrl)
+          const downloader = await sdk.downloadShared(sharedUrl, {
+            maxInflight: 15,
+            offset: BigInt(0),
+            length: undefined,
+          })
           const targetFile = await getOrCreateCachedFile(id, '.tmp')
           log('Writing to cache path:', targetFile.uri)
           const writer = targetFile.writableStream().getWriter()

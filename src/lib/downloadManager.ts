@@ -15,22 +15,29 @@ import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
 import { getOnePinnedObject } from './file'
+import {
+  encryptionKeyHexToBuffer,
+  encryptionKeyHexToUint8,
+} from './encryptionKey'
 
 export function useDownload(
   file?: {
     id: string
     fileType: string | null
+    fileSize: number | null
+    encryptionKey: string | null
     pinnedObjects: Record<string, PinnedObject> | null
   } | null
 ) {
   const toast = useToast()
-  const { sdk, log, appSeed } = useSettings()
+  const { sdk, log } = useSettings()
   const { updateFile } = useFiles()
   return useCallback(
     async (streamDirectlyToCache?: boolean) => {
       if (!file) return
       try {
         if (!sdk) throw new Error('SDK unavailable')
+        if (!file.encryptionKey) throw new Error('Encryption key is required')
         const pinnedObject = getOnePinnedObject(file)
         if (!pinnedObject) {
           toast.show('No slabs available for this file')
@@ -41,8 +48,23 @@ export function useDownload(
         log('Starting download for', file.id)
         log('Slabs type:', JSON.stringify(pinnedObject.slabs, null, 2))
         try {
-          console.log('pinnedObject', JSON.stringify(pinnedObject, null, 2))
-          const downloader = await sdk.download(pinnedObject, appSeed.buffer)
+          console.log('encryptionKey', file.encryptionKey)
+          console.log(
+            'encryptionKeyBuffer',
+            encryptionKeyHexToUint8(file.encryptionKey)
+          )
+          console.log('file.fileSize', file.fileSize)
+
+          const downloader = await sdk.download(
+            encryptionKeyHexToBuffer(file.encryptionKey),
+            pinnedObject,
+            {
+              maxInflight: 15,
+              offset: 0n,
+              length: file.fileSize ? BigInt(file.fileSize) : undefined,
+            }
+          )
+          console.log('downloader after')
           const targetFile = await getOrCreateCachedFile(
             file.id,
             streamDirectlyToCache ? extFromMime(file.fileType) : '.tmp'

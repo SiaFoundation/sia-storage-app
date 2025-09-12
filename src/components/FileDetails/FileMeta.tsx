@@ -1,12 +1,11 @@
 import { useMemo } from 'react'
-import Clipboard from '@react-native-clipboard/clipboard'
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native'
+import { View, Text, StyleSheet } from 'react-native'
 import { type FileRecord } from '../../db/files'
 import { FileStatus } from '../../lib/file'
-import { useToast } from '../../lib/toastContext'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 import { FileMap } from './FileMap'
+import { arrayBufferToHex } from '../../lib/hex'
 
 export function FileMeta({
   file,
@@ -15,7 +14,6 @@ export function FileMeta({
   file: FileRecord
   status: FileStatus
 }) {
-  const toast = useToast()
   const humanSize = useMemo(() => {
     if (file.fileSize == null) return null
     const units = ['B', 'KB', 'MB', 'GB']
@@ -64,6 +62,12 @@ export function FileMeta({
             value={file.fileType ?? '—'}
             showDividerTop
           />
+          <LabeledValueRow
+            label="Encryption Key"
+            value={file.encryptionKey}
+            isMonospace
+            showDividerTop
+          />
         </InfoCard>
       </View>
       {pinnedObjectsList.length > 1 && (
@@ -99,7 +103,7 @@ export function FileMeta({
             />
             <LabeledValueRow
               label="Metadata"
-              value={JSON.stringify(po.metadata)}
+              value={arrayBufferToHex(po.metadata)}
               isMonospace
               showDividerTop
             />
