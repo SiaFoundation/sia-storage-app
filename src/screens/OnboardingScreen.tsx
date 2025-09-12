@@ -28,10 +28,12 @@ export default function OnboardingScreen() {
         </Pressable>
       </View>
       <View style={styles.container}>
-        <Text style={styles.title}>Welcome!</Text>
+        <Text style={styles.title}>Welcome to Sia Mobile!</Text>
         <Text style={styles.text}>
-          To begin using the app, press below to begin indexer authorization. To
-          use your own indexer, press the gear in the upper right.
+          To begin using the app, press below and authorize the indexer. A
+          password should have been provided to you by the indexer admin. To use
+          your own indexer, press the gear in the upper right and enter the base
+          URL.
         </Text>
         {isUsingCustomURL ? (
           <TextInput
@@ -43,7 +45,7 @@ export default function OnboardingScreen() {
         <Pressable
           style={styles.button}
           onPress={async () => {
-            const success = await authIndexer()
+            const success = await authIndexer(indexerURL)
             if (!success) {
               setHasErrored(true)
               return
