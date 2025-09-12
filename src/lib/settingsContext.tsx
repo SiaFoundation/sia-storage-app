@@ -53,6 +53,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [sdk, setSdk] = useState<Sdk>(() => new Sdk(indexerURL, appSeed.buffer))
   const [isOnboarding, setIsOnboardingState] = useState<boolean | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
+  const [isAuthing, setIsAuthing] = useState(false)
 
   const [logs, setLogs] = useState<string[]>([])
   const log = useCallback((...args: any[]) => {
@@ -109,7 +110,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!sdk) return
+    // Don't run if we are in the middle of replacing the SDK.
+    if (!sdk || isAuthing) return
+
+    console.log('sdk useEffect ran')
 
     const connectSdk = async () => {
       const connected = await sdk.connect()
@@ -122,9 +126,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const authIndexer = useCallback(
     async (nextIndexerURL?: string) => {
+      setIsAuthing(true)
       const targetUrl = nextIndexerURL ?? indexerURL
       try {
-        log(`Creating candidate SDK for ${targetUrl} ...`)
+        log(
+          `Creating candidate SDK for ${targetUrl} with ${appSeed.toString()} ...`
+        )
         const candidate = new Sdk(targetUrl, appSeed.buffer)
 
         log('Calling connect...')
@@ -151,14 +158,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setIsConnected(true)
         if (nextIndexerURL && nextIndexerURL !== indexerURL)
           setIndexerURL(nextIndexerURL)
+        setIsAuthing(false)
         return true
       } catch (err) {
         log('Error connecting candidate SDK')
         log(String(err))
+        setIsAuthing(false)
         return false
       }
     },
-    [indexerURL, log]
+    // Be careful about this dep array. Is it complete?
+    [indexerURL, log, appSeed]
   )
 
   const value: SettingsContextValue = useMemo(
