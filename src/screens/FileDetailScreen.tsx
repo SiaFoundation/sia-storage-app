@@ -6,7 +6,6 @@ import {
   MoreVerticalIcon,
   Share2Icon,
   Trash2Icon,
-  ExternalLinkIcon,
   CloudOffIcon,
   EraserIcon,
   CloudUploadIcon,
@@ -30,20 +29,15 @@ type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 function HeaderActions({
   isUploaded,
   onShare,
-  onDeepLink,
   onMenu,
 }: {
   isUploaded: boolean
   onShare: () => void
-  onDeepLink: () => void
   onMenu: () => void
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: 14 }}>
       {isUploaded && <Share2Icon color="#0969da" size={20} onPress={onShare} />}
-      {isUploaded && (
-        <ExternalLinkIcon color="#0969da" size={20} onPress={onDeepLink} />
-      )}
       <MoreVerticalIcon color="#0969da" size={20} onPress={onMenu} />
     </View>
   )
@@ -56,12 +50,7 @@ function createHeaderRight(
   onMenu: () => void
 ) {
   return () => (
-    <HeaderActions
-      isUploaded={isUploaded}
-      onShare={onShare}
-      onDeepLink={onDeepLink}
-      onMenu={onMenu}
-    />
+    <HeaderActions isUploaded={isUploaded} onShare={onShare} onMenu={onMenu} />
   )
 }
 
