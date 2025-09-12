@@ -7,6 +7,7 @@ import { LabeledValueRow } from '../LabeledValueRow'
 import { FileMap } from './FileMap'
 import { arrayBufferToHex } from '../../lib/hex'
 import { RowGroup, RowSubGroup } from '../Group'
+import { humanSize } from '../../functions/humanSize'
 
 export function FileMeta({
   file,
@@ -15,16 +16,8 @@ export function FileMeta({
   file: FileRecord
   status: FileStatus
 }) {
-  const humanSize = useMemo(() => {
-    if (file.fileSize == null) return null
-    const units = ['B', 'KB', 'MB', 'GB']
-    let s = file.fileSize
-    let u = 0
-    while (s >= 1024 && u < units.length - 1) {
-      s /= 1024
-      u += 1
-    }
-    return `${s.toFixed(1)} ${units[u]}`
+  const fileSize = useMemo(() => {
+    return humanSize(file.fileSize)
   }, [file.fileSize])
 
   const pinnedObjectsList = Object.entries(file.pinnedObjects ?? {})
@@ -49,7 +42,7 @@ export function FileMeta({
           />
           <LabeledValueRow
             label="Size"
-            value={humanSize ?? '—'}
+            value={fileSize ?? '—'}
             showDividerTop
           />
           <LabeledValueRow
