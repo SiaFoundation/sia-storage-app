@@ -27,6 +27,7 @@ export function FileMeta({
   }, [file.fileSize])
 
   const pinnedObjectsList = Object.entries(file.pinnedObjects ?? {})
+  console.log('pinnedObjectsList', file.pinnedObjects)
   return (
     <View style={styles.container}>
       <View style={styles.group}>

@@ -82,29 +82,43 @@ type SerializedPinnedObject = {
   key: string
   slabs: { id: string; offset: number; length: number }[]
   metadata: string
-  createdAt: number
-  updatedAt: number
+  createdAt: Date
+  updatedAt: Date
 }
 
 export function serializePinnedObjects(
   pinnedObjects: Record<string, PinnedObject>
 ): string {
-  return JSON.stringify(
-    Object.values(pinnedObjects).map((po) => ({
-      ...po,
+  const updated: Record<string, SerializedPinnedObject> = {}
+  Object.entries(pinnedObjects).forEach(([key, po]) => {
+    updated[key] = {
+      key: po.key,
+      slabs: po.slabs,
+      createdAt: po.createdAt,
+      updatedAt: po.updatedAt,
       metadata: arrayBufferToHex(po.metadata),
-    }))
-  )
+    }
+  })
+  return JSON.stringify(updated)
 }
 
 export function deserializePinnedObjects(
   pinnedObjects: string | null
 ): Record<string, PinnedObject> {
   if (pinnedObjects == null) return {}
-  return JSON.parse(pinnedObjects).map((po: SerializedPinnedObject) => ({
-    ...po,
-    metadata: hexToUint8(po.metadata),
-  }))
+  const serializedParsed: Record<string, SerializedPinnedObject> =
+    JSON.parse(pinnedObjects)
+  const deserialized = {} as Record<string, PinnedObject>
+  Object.entries(serializedParsed).forEach(([key, po]) => {
+    deserialized[key] = {
+      key: po.key,
+      slabs: po.slabs,
+      createdAt: new Date(po.createdAt),
+      updatedAt: new Date(po.updatedAt),
+      metadata: hexToUint8(po.metadata).slice().buffer,
+    }
+  })
+  return deserialized
 }
 
 export async function createManyFileRecords(
@@ -143,7 +157,7 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
 
   console.log('readAllFileRecords rows', rows)
 
-  return rows.map((r) => ({
+  const files = rows.map((r) => ({
     id: r.id,
     fileName: r.fileName,
     fileSize: r.fileSize,
@@ -152,6 +166,8 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     pinnedObjects: deserializePinnedObjects(r.pinnedObjects),
     encryptionKey: r.encryptionKey,
   }))
+  console.log('readAllFileRecords files', files)
+  return files
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {

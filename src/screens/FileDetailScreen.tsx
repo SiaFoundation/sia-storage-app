@@ -87,6 +87,7 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   const handleOpenDeepLink = useCallback(() => {
     if (!file) return
     if (!sdk) return
+
     const pinnedObject = getOnePinnedObject(file)
     if (!pinnedObject) return
     const key = pinnedObject.key
