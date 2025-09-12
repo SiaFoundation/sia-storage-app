@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { deleteAllFileRecords } from '../db/files'
+import { useSettings } from '../lib/settingsContext'
 
 export type SettingsStackParamList = {
   SettingsHome: undefined
@@ -12,6 +13,8 @@ export type SettingsStackParamList = {
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
 export default function SettingsHomeScreen({ navigation }: Props) {
+  const { resetApp } = useSettings()
+
   return (
     <View style={styles.panel}>
       <View style={styles.listGroup}>
@@ -39,8 +42,8 @@ export default function SettingsHomeScreen({ navigation }: Props) {
           accessibilityRole="button"
           onPress={() => {
             Alert.alert(
-              'Wipe database',
-              'This will delete all local records. This cannot be undone.',
+              'Reset App',
+              'This will delete all local records and reset your app seed. This cannot be undone.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -49,6 +52,7 @@ export default function SettingsHomeScreen({ navigation }: Props) {
                   onPress: async () => {
                     try {
                       await deleteAllFileRecords()
+                      resetApp()
                     } catch {}
                   },
                 },
@@ -57,7 +61,7 @@ export default function SettingsHomeScreen({ navigation }: Props) {
           }}
         >
           <View style={styles.dangerRow}>
-            <Text style={styles.dangerText}>Wipe database</Text>
+            <Text style={styles.dangerText}>Reset app</Text>
           </View>
         </Pressable>
       </View>

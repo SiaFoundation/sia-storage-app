@@ -11,6 +11,7 @@ import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
 import * as SplashScreen from 'expo-splash-screen'
+import { createAppSeed } from './createAppSeed'
 
 export type Logger = (...args: any[]) => void
 
@@ -34,6 +35,7 @@ type SettingsContextValue = {
   authIndexer: (nextIndexerURL?: string) => Promise<boolean>
   appSeed: Uint8Array<ArrayBuffer>
   setAppSeed: (value: Uint8Array<ArrayBuffer>) => void
+  resetApp: () => void
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -42,7 +44,7 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [appSeed, setAppSeed] = useState<Uint8Array<ArrayBuffer>>(
-    new Uint8Array(32).fill(30)
+    new Uint8Array(32).fill(35)
   )
   const [indexerName, setIndexerName] = useState<string>('Test')
   const [indexerURL, setIndexerURL] = useState<string>(
@@ -99,12 +101,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     void SecureStore.setItemAsync('isOnboarding', value ? 'true' : 'false')
   }, [])
 
+  const resetApp = () => {
+    const newSeed = createAppSeed()
+    setAppSeed(newSeed)
+    setIsOnboarding(true)
+    setIsConnected(false)
+  }
+
   useEffect(() => {
     if (!sdk) return
 
     const connectSdk = async () => {
       const connected = await sdk.connect()
-      if (connected) setIsConnected(true)
+      if (!connected) setIsConnected(false)
+      setIsConnected(true)
     }
 
     connectSdk()
@@ -167,6 +177,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       clearLogs,
       appSeed,
       setAppSeed,
+      resetApp,
     }),
     [
       sdk,
@@ -183,6 +194,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       clearLogs,
       appSeed,
       setAppSeed,
+      resetApp,
     ]
   )
 
