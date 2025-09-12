@@ -52,8 +52,10 @@ export default function SettingsHomeScreen({ navigation }: Props) {
                   onPress: async () => {
                     try {
                       await deleteAllFileRecords()
-                      resetApp()
-                    } catch {}
+                      await resetApp()
+                    } catch {
+                      // Not sure.
+                    }
                   },
                 },
               ]

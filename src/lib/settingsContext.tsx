@@ -11,7 +11,7 @@ import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
 import * as SplashScreen from 'expo-splash-screen'
-import { createAppSeed } from './createAppSeed'
+import { createSeed, loadSeed, storeSeed } from './seed'
 
 export type Logger = (...args: any[]) => void
 
@@ -35,7 +35,7 @@ type SettingsContextValue = {
   authIndexer: (nextIndexerURL?: string) => Promise<boolean>
   appSeed: Uint8Array<ArrayBuffer>
   setAppSeed: (value: Uint8Array<ArrayBuffer>) => void
-  resetApp: () => void
+  resetApp: () => Promise<void>
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -43,7 +43,7 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 )
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [appSeed, setAppSeed] = useState<Uint8Array<ArrayBuffer>>(
+  const [appSeed, setAppSeedState] = useState<Uint8Array<ArrayBuffer>>(
     new Uint8Array(32).fill(35)
   )
   const [indexerName, setIndexerName] = useState<string>('Test')
@@ -76,6 +76,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let splashTimeout: NodeJS.Timeout
     async function setOnboardingStatus() {
+      // Do we have an app seed?
+      try {
+        let foundSeed = await loadSeed()
+        if (!foundSeed) {
+          // Something bigger needed here around
+          // notification to user.
+          foundSeed = createSeed()
+        }
+        setAppSeed(foundSeed)
+      } catch {
+        const newSeed = createSeed()
+        await setAppSeed(newSeed)
+      }
+
+      // Are we onboarding?
       try {
         const foundOnboarding = await SecureStore.getItemAsync('isOnboarding') // "true" | "false" | null
         if (foundOnboarding === 'true' || foundOnboarding === null) {
@@ -97,14 +112,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(splashTimeout)
   }, [])
 
+  const setAppSeed = async (seed: Uint8Array<ArrayBuffer>) => {
+    setAppSeedState(seed)
+    await storeSeed(seed)
+  }
+
   const setIsOnboarding = useCallback((value: boolean) => {
     setIsOnboardingState(value)
     void SecureStore.setItemAsync('isOnboarding', value ? 'true' : 'false')
   }, [])
 
-  const resetApp = () => {
-    const newSeed = createAppSeed()
-    setAppSeed(newSeed)
+  const resetApp = async () => {
+    const newSeed = createSeed()
+    await setAppSeed(newSeed)
     setIsOnboarding(true)
     setIsConnected(false)
   }
@@ -112,8 +132,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Don't run if we are in the middle of replacing the SDK.
     if (!sdk || isAuthing) return
-
-    console.log('sdk useEffect ran')
 
     const connectSdk = async () => {
       const connected = await sdk.connect()
