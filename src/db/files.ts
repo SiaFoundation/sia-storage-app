@@ -1,7 +1,6 @@
 import * as SQLite from 'expo-sqlite'
 import { PinnedObject } from 'react-native-sia'
-import { hexToUint8 } from '../lib/hex'
-import { arrayBufferToHex } from '../lib/hex'
+import { deserializePinnedObjects, serializePinnedObjects } from './encoding'
 
 export type FileRecord = {
   id: string
@@ -76,49 +75,6 @@ export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
     pinnedObjects == null ? null : serializePinnedObjects(pinnedObjects),
     encryptionKey
   )
-}
-
-type SerializedPinnedObject = {
-  key: string
-  slabs: { id: string; offset: number; length: number }[]
-  metadata: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export function serializePinnedObjects(
-  pinnedObjects: Record<string, PinnedObject>
-): string {
-  const updated: Record<string, SerializedPinnedObject> = {}
-  Object.entries(pinnedObjects).forEach(([key, po]) => {
-    updated[key] = {
-      key: po.key,
-      slabs: po.slabs,
-      createdAt: po.createdAt,
-      updatedAt: po.updatedAt,
-      metadata: arrayBufferToHex(po.metadata),
-    }
-  })
-  return JSON.stringify(updated)
-}
-
-export function deserializePinnedObjects(
-  pinnedObjects: string | null
-): Record<string, PinnedObject> {
-  if (pinnedObjects == null) return {}
-  const serializedParsed: Record<string, SerializedPinnedObject> =
-    JSON.parse(pinnedObjects)
-  const deserialized = {} as Record<string, PinnedObject>
-  Object.entries(serializedParsed).forEach(([key, po]) => {
-    deserialized[key] = {
-      key: po.key,
-      slabs: po.slabs,
-      createdAt: new Date(po.createdAt),
-      updatedAt: new Date(po.updatedAt),
-      metadata: hexToUint8(po.metadata).slice().buffer,
-    }
-  })
-  return deserialized
 }
 
 export async function createManyFileRecords(
