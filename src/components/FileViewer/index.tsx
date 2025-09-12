@@ -16,6 +16,8 @@ export function FileViewer({
     id: string
     fileType: string | null
     pinnedObjects: Record<string, PinnedObject> | null
+    encryptionKey: string | null
+    fileSize: number | null
   }
 }) {
   const status = useFileStatus(file)

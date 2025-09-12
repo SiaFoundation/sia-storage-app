@@ -60,8 +60,8 @@ export function useDownload(
             pinnedObject,
             {
               maxInflight: 15,
-              offset: 0n,
-              length: file.fileSize ? BigInt(file.fileSize) : undefined,
+              offset: BigInt(0),
+              length: undefined,
             }
           )
           console.log('downloader after')
