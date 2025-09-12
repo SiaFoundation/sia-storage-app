@@ -1,6 +1,5 @@
-import { View, StyleSheet, Pressable } from 'react-native'
-import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { type FileRecord } from '../../db/files'
+import { View, StyleSheet, Pressable, Text } from 'react-native'
+import { ArrowDownToLineIcon, XIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
 import { FileIndicators } from '../FileIndicators'
 import ImageViewer from './ImageViewer'
@@ -37,7 +36,12 @@ export function FileViewer({
         ) : null}
       </View>
       <FileIndicators file={file} />
-      {status.isDownloading ? (
+      {status.fileIsGone ? (
+        <View style={styles.centerDownload}>
+          <XIcon color="red" size={28} />
+          <Text style={styles.centerDownloadText}>File is gone</Text>
+        </View>
+      ) : status.isDownloading ? (
         <View style={styles.centerDownload}>
           <CircularProgress progress={status.downloadProgress ?? 0} size={44} />
         </View>
@@ -69,6 +73,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
     zIndex: 2,
+  },
+  centerDownloadText: {
+    color: 'red',
+    fontSize: 16,
   },
 })

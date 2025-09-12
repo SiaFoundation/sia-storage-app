@@ -1,5 +1,10 @@
 import { View, StyleSheet } from 'react-native'
-import { CloudCheckIcon, XIcon } from 'lucide-react-native'
+import {
+  CloudAlertIcon,
+  CloudCheckIcon,
+  CloudDownloadIcon,
+  XIcon,
+} from 'lucide-react-native'
 import { FileStatus } from '../lib/file'
 import { SpinnerIcon } from './SpinnerIcon'
 
@@ -18,14 +23,6 @@ export function UploadStatusIcon({
     )
   }
 
-  if (status.isUploaded) {
-    return (
-      <View style={styles.badge}>
-        <CloudCheckIcon color="#57606a" size={size} />
-      </View>
-    )
-  }
-
   if (status.isUploading) {
     return (
       <View style={styles.badge}>
@@ -33,6 +30,27 @@ export function UploadStatusIcon({
       </View>
     )
   }
+
+  if (status.isUploaded) {
+    if (status.isDownloaded) {
+      return (
+        <View style={styles.badge}>
+          <CloudCheckIcon color="#57606a" size={size} />
+        </View>
+      )
+    }
+    return (
+      <View style={styles.badge}>
+        <CloudDownloadIcon color="#57606a" size={size} />
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.badge}>
+      <CloudAlertIcon color="#57606a" size={size} />
+    </View>
+  )
 
   return null
 }

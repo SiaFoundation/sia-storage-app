@@ -10,21 +10,20 @@ import {
   StyleSheet,
   Text,
   View,
-  Pressable,
-  Linking,
   Platform,
-  Button,
 } from 'react-native'
 import { type FeedStackParamList } from '../navigation/types'
 import { useToast } from '../lib/toastContext'
 import { useSettings } from '../lib/settingsContext'
-import { FileViewerShared } from '../components/FileViewer/FileViewerShared'
+import { FileViewerImport } from '../components/FileViewerImport'
 import { parseFileMetadata } from '../lib/file'
 import { createFileRecord } from '../db/files'
 import { PinnedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
 import { uniqueId } from '../lib/uniqueId'
 import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
+import { Button } from '../components/Button'
+import { FileDetailsImport } from '../components/FileDetailsImport'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'ImportFile'>
 
@@ -53,6 +52,9 @@ export default function ImportFileScreen({ route }: Props) {
     () => ({
       id,
       fileType: meta.data?.fileType ?? '',
+      fileSize: meta.data?.size ?? 0,
+      fileName: '',
+      createdAt: new Date().getTime(),
       pinnedObjects: true,
     }),
     [id, meta.data, sharedObject.data]
@@ -72,8 +74,6 @@ export default function ImportFileScreen({ route }: Props) {
       createdAt: new Date(),
       updatedAt: new Date(),
     }
-
-    console.log('handleAddToDatabase pinnedObject', pinnedObject)
 
     const size = pinnedObject.slabs.reduce((acc, slab) => acc + slab.length, 0)
     await sdk.saveObject(pinnedObject)
@@ -95,19 +95,6 @@ export default function ImportFileScreen({ route }: Props) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Shared File Data</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            if (!shareUrl) return
-            Linking.openURL(shareUrl).catch(() => {
-              toast.show('Unable to open share URL')
-            })
-          }}
-          style={styles.linkRow}
-        >
-          <Text style={styles.link}>Open share URL in browser</Text>
-        </Pressable>
         {sharedObject.isValidating ? (
           <View style={styles.center}>
             <ActivityIndicator color="#0969da" />
@@ -117,23 +104,24 @@ export default function ImportFileScreen({ route }: Props) {
           <Text style={styles.errorText}>{sharedObject.error.message}</Text>
         ) : (
           <>
-            {shareUrl && <FileViewerShared file={file} shareUrl={shareUrl} />}
-            <View style={styles.card}>
-              <Text selectable style={styles.mono}>
-                {JSON.stringify(sharedObject.data, null, 2)}
-              </Text>
-            </View>
-            <Button title="Add to library" onPress={handleAddToDatabase} />
+            {shareUrl && <FileDetailsImport file={file} shareUrl={shareUrl} />}
           </>
         )}
       </ScrollView>
+      <View style={styles.footer}>
+        <Button onPress={handleAddToDatabase}>Add to library</Button>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: '#f2f2f7',
+  },
+  content: { padding: 0 },
+  footer: { padding: 16 },
   title: {
     color: '#111827',
     fontWeight: '700',

@@ -6,7 +6,6 @@ import { memo } from 'react'
 type Props = {
   size?: number
   color?: string
-  strokeWidth?: number
   arcLength?: number // 0..1 of circumference to show.
 }
 
@@ -14,8 +13,7 @@ export const SpinnerIcon = memo(SpinnerIconInner)
 
 function SpinnerIconInner({
   size = 14,
-  color = '#0969da',
-  strokeWidth = 1,
+  color = '#57606a',
   arcLength = 0.5,
 }: Props) {
   const clampedArc = Math.max(0.1, Math.min(0.95, arcLength))
@@ -55,7 +53,8 @@ function SpinnerIconInner({
             cy={size / 2}
             r={radius}
             stroke={color}
-            strokeWidth={strokeWidth}
+            opacity={0.8}
+            strokeWidth={size * 0.05}
             strokeLinecap="round"
             strokeDasharray={`${dash} ${circumference}`}
             fill="none"

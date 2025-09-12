@@ -4,6 +4,7 @@ import { DotIcon } from 'lucide-react-native'
 import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { RowGroup } from '../components/Group'
+import { Button } from '../components/Button'
 
 export default function IndexerScreen() {
   const { authIndexer, isConnected, indexerName, setIndexerName, indexerURL } =
@@ -59,10 +60,8 @@ export default function IndexerScreen() {
         </View>
       </RowGroup>
       <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
+        <Button
           style={[
-            styles.primaryButton,
             indexerURL === currentIndexerURL && {
               backgroundColor: 'lightgrey',
             },
@@ -77,8 +76,8 @@ export default function IndexerScreen() {
             toast.show('New Indexer auth successful.')
           }}
         >
-          <Text style={styles.primaryButtonText}>Authorize New Indexer</Text>
-        </Pressable>
+          Authorize New Indexer
+        </Button>
       </View>
     </View>
   )
