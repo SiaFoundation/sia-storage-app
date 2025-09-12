@@ -20,9 +20,8 @@ export function FileDetails({ file }: { file: FileRecord }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f2f2f7',
   },
-  scrollContent: { paddingBottom: 16 },
   centerDownload: {
     position: 'absolute',
     left: 0,

@@ -3,6 +3,7 @@ import { useSettings } from '../lib/settingsContext'
 import { DotIcon } from 'lucide-react-native'
 import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
+import { RowGroup } from '../components/Group'
 
 export default function IndexerScreen() {
   const { authIndexer, isConnected, indexerName, setIndexerName, indexerURL } =
@@ -12,18 +13,22 @@ export default function IndexerScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.statusContainer}>
-        <DotIcon size={20} color={isConnected ? 'green' : 'red'} />
-        <Text
-          style={[styles.statusText, { color: isConnected ? 'green' : 'red' }]}
-        >
-          {isConnected ? 'Online' : 'Offline'}
-        </Text>
-      </View>
-      <View style={styles.groupHeader}>
-        <Text style={styles.groupTitle}>Configuration</Text>
-      </View>
-      <View style={styles.group}>
+      <RowGroup
+        title="Configuration"
+        indicator={
+          <View style={styles.statusContainer}>
+            <DotIcon color={isConnected ? 'green' : 'red'} />
+            <Text
+              style={[
+                styles.statusText,
+                { color: isConnected ? 'green' : 'red' },
+              ]}
+            >
+              {isConnected ? 'Online' : 'Offline'}
+            </Text>
+          </View>
+        }
+      >
         <View style={styles.cellRowTop}>
           <Text style={styles.cellLabel}>Name</Text>
           <TextInput
@@ -52,7 +57,7 @@ export default function IndexerScreen() {
             returnKeyType="done"
           />
         </View>
-      </View>
+      </RowGroup>
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
@@ -80,11 +85,14 @@ export default function IndexerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7' },
-  groupHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  groupTitle: { color: '#6d6d72', fontSize: 13, fontWeight: '600' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f2f2f7',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
   group: {
-    marginHorizontal: 16,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     overflow: 'hidden',
@@ -115,7 +123,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 6,
   },
-  footer: { paddingHorizontal: 16, paddingTop: 16 },
+  footer: { paddingTop: 16 },
   primaryButton: {
     backgroundColor: '#0a84ff',
     borderRadius: 10,
@@ -127,12 +135,9 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-
-    position: 'absolute',
-    top: 10,
-    right: 20,
+    justifyContent: 'flex-end',
   },
   statusText: {
-    fontSize: 8,
+    fontSize: 12,
   },
 })
