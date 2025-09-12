@@ -22,7 +22,7 @@ export function VideoViewer({ status }: { status: FileStatus }) {
 }
 
 const styles = StyleSheet.create({
-  container: { width: '100%', height: 400 },
+  container: { width: '100%', height: 300 },
   video: {
     width: '100%',
     height: '100%',

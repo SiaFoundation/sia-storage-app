@@ -11,11 +11,18 @@ import {
   clearDownloadState,
 } from './downloadState'
 import { useSettings } from './settingsContext'
-import { FileRecord } from '../db/files'
+import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
+import { getOnePinnedObject } from './file'
 
-export function useDownload(file?: FileRecord | null) {
+export function useDownload(
+  file?: {
+    id: string
+    fileType: string | null
+    pinnedObjects: Record<string, PinnedObject> | null
+  } | null
+) {
   const toast = useToast()
   const { sdk, log, appSeed } = useSettings()
   const { updateFile } = useFiles()
@@ -24,16 +31,18 @@ export function useDownload(file?: FileRecord | null) {
       if (!file) return
       try {
         if (!sdk) throw new Error('SDK unavailable')
-        if (!file?.slabs) {
+        const pinnedObject = getOnePinnedObject(file)
+        if (!pinnedObject) {
           toast.show('No slabs available for this file')
           log('Download aborted: no slabs for', file.id)
           return
         }
         toast.show('Starting download...')
         log('Starting download for', file.id)
-        log('Slabs type:', JSON.stringify(file.slabs, null, 2))
+        log('Slabs type:', JSON.stringify(pinnedObject.slabs, null, 2))
         try {
-          const downloader = await sdk.download(file.slabs, appSeed.buffer)
+          console.log('pinnedObject', JSON.stringify(pinnedObject, null, 2))
+          const downloader = await sdk.download(pinnedObject, appSeed.buffer)
           const targetFile = await getOrCreateCachedFile(
             file.id,
             streamDirectlyToCache ? extFromMime(file.fileType) : '.tmp'
@@ -46,10 +55,11 @@ export function useDownload(file?: FileRecord | null) {
           let total = 0
           let chunks = 0
           setDownloadState(file.id, { status: 'downloading', progress: 0 })
-          const totalLen = Array.isArray(file.slabs)
-            ? file.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
+          const totalLen = Array.isArray(pinnedObject.slabs)
+            ? pinnedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
             : undefined
           while (true) {
+            console.log('downloading chunk', chunks, total)
             const chunk = await downloader.readChunk()
             if (!chunk || chunk.byteLength === 0) {
               log('Download stream ended. chunks=', chunks, 'bytes=', total)
@@ -92,7 +102,7 @@ export function useDownload(file?: FileRecord | null) {
         toast.show('Downloaded to cache')
       } catch (e) {
         log(
-          'Download failed for',
+          'XXX Download failed for',
           file.id,
           '-',
           e instanceof Error ? e.message : String(e)

@@ -9,13 +9,9 @@ export function FileDetails({ file }: { file: FileRecord }) {
   const status = useFileStatus(file)
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator
-      >
+      <ScrollView>
         <FileViewer file={file} />
         <FileMeta file={file} status={status} />
-        <FileMap />
       </ScrollView>
     </View>
   )

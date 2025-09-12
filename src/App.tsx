@@ -1,6 +1,9 @@
 import React from 'react'
 import { StyleSheet, Platform, StatusBar } from 'react-native'
-import { NavigationContainer } from '@react-navigation/native'
+import {
+  NavigationContainer,
+  useNavigationContainerRef,
+} from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -21,12 +24,19 @@ import OnboardingScreen from './screens/OnboardingScreen'
 import { FilesProvider } from './lib/filesContext'
 import ConnectionBanner from './components/ConnectionBanner'
 import * as SplashScreen from 'expo-splash-screen'
+import ImportFileScreen from './screens/ImportFileScreen'
+import useLinkedURL from './hooks/useLinkedURL'
 
 SplashScreen.preventAutoHideAsync()
 
 const FeedStack = createNativeStackNavigator<FeedStackParamList>()
+type RootTabParamList = {
+  FeedTab: undefined
+  SettingsTab: undefined
+  LogsTab: undefined
+}
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>()
-const Tab = createBottomTabNavigator()
+const Tab = createBottomTabNavigator<RootTabParamList>()
 const AuthStack = createNativeStackNavigator()
 
 function HomeTabIcon({ color, size }: { color: string; size: number }) {
@@ -51,6 +61,11 @@ function FeedStackNavigator() {
         name="FileDetail"
         component={FileDetailScreen}
         options={{ title: 'Media' }}
+      />
+      <FeedStack.Screen
+        name="ImportFile"
+        component={ImportFileScreen}
+        options={{ title: 'Import File' }}
       />
     </FeedStack.Navigator>
   )
@@ -141,6 +156,27 @@ function RootNavigator() {
 }
 
 export default function AppComponent() {
+  const navigationRef = useNavigationContainerRef<any>()
+
+  useLinkedURL((incomingUrl) => {
+    try {
+      const url = new URL(incomingUrl)
+      const path = url.pathname.replace(/^\//, '')
+      const host = url.host
+      if (host === 'new-file' || path === 'new-file') {
+        const shareUrl = url.searchParams.get('shareUrl') ?? undefined
+        if (shareUrl && navigationRef.isReady()) {
+          navigationRef.navigate('FeedTab', {
+            screen: 'ImportFile',
+            params: { shareUrl },
+          })
+        }
+      }
+    } catch (_) {
+      // Ignore invalid URLs.
+    }
+  })
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
@@ -154,7 +190,7 @@ export default function AppComponent() {
         <SettingsProvider>
           <FilesProvider>
             <ToastProvider>
-              <NavigationContainer>
+              <NavigationContainer ref={navigationRef}>
                 <ConnectionBanner />
                 <RootNavigator />
               </NavigationContainer>

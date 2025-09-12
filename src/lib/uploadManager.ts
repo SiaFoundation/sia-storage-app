@@ -7,6 +7,7 @@ import { useCallback } from 'react'
 import { useSettings } from './settingsContext'
 import { useFiles } from './filesContext'
 import { extFromMime, mimeFromAssetUri } from './fileTypes'
+import { generateEncryptionKey } from './encryptionKey'
 
 export type PickerAsset = {
   id: string
@@ -71,6 +72,7 @@ export function usePickAndUploadMedia() {
           createdAt: asset.createdAt,
           fileType: asset.fileType,
           pinnedObjects: null,
+          encryptionKey: generateEncryptionKey(),
         })
         setUploadState(asset.id, { status: 'uploading', progress: 0 })
       }
@@ -123,7 +125,7 @@ export function usePickAndUploadMedia() {
             // Stream from cached file to keep memory low.
             const fileBytes = await new FileSystem.File(cacheUri).bytes()
             await uploadToSia({
-              fileId: asset.id,
+              asset,
               indexerURL,
               log,
               sdk,

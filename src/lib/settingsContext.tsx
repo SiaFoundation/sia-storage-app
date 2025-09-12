@@ -57,7 +57,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const [logs, setLogs] = useState<string[]>([])
   const log = useCallback((...args: any[]) => {
-    console.log(args.join(' '))
+    console.log(...args)
     setLogs((prev) => [
       ...prev,
       `${new Date().toLocaleTimeString()} ${args.join(' ')}`,

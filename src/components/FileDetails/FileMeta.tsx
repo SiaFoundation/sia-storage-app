@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { View, Text, StyleSheet, Pressable } from 'react-native'
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native'
 import { type FileRecord } from '../../db/files'
 import { FileStatus } from '../../lib/file'
 import { useToast } from '../../lib/toastContext'
+import { InfoCard } from '../InfoCard'
+import { LabeledValueRow } from '../LabeledValueRow'
+import { FileMap } from './FileMap'
 
 export function FileMeta({
   file,
@@ -25,58 +28,100 @@ export function FileMeta({
     return `${s.toFixed(1)} ${units[u]}`
   }, [file.fileSize])
 
-  const pinnedObjectsList = Object.keys(file.pinnedObjects ?? {}).map(
-    (key) => file.pinnedObjects?.[key]
-  )
+  const pinnedObjectsList = Object.entries(file.pinnedObjects ?? {})
   return (
     <View style={styles.container}>
-      {file.fileName ? (
-        <Text style={styles.photoFileName} numberOfLines={2}>
-          {file.fileName}
-        </Text>
-      ) : null}
-      <View style={styles.photoMetaRow}>
-        {humanSize ? (
-          <Text style={styles.photoMetaText}>{humanSize}</Text>
-        ) : null}
-        <View style={styles.photoDot} />
-        <Text style={styles.photoMetaText}>
-          {new Date(file.createdAt).toLocaleString()}
-        </Text>
-        <View style={styles.photoDot} />
-        <Text style={styles.photoMetaText}>{file.fileType}</Text>
+      <View style={styles.group}>
+        <Text style={styles.groupTitle}>Details</Text>
+        <InfoCard>
+          <LabeledValueRow
+            label="ID"
+            value={file.id}
+            isMonospace
+            numberOfLines={1}
+          />
+          <LabeledValueRow
+            label="Cached URL"
+            value={status.cachedUri ?? 'Not available'}
+            isMonospace
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            canCopy={!!status.cachedUri}
+            showDividerTop
+          />
+          <LabeledValueRow
+            label="Size"
+            value={humanSize ?? '—'}
+            showDividerTop
+          />
+          <LabeledValueRow
+            label="Created"
+            value={new Date(file.createdAt).toLocaleString()}
+            showDividerTop
+          />
+          <LabeledValueRow
+            label="Type"
+            value={file.fileType ?? '—'}
+            showDividerTop
+          />
+        </InfoCard>
       </View>
-      <View style={styles.separator} />
-      <Pressable
-        onPress={() => {
-          if (!status.cachedUri) return
-          Clipboard.setString(status.cachedUri!)
-          toast.show('Copied cached URI')
-        }}
-      >
-        <Text style={styles.sectionTitle}>Cached URI</Text>
-        {file.fileName ? (
-          <Text style={styles.sectionValue} numberOfLines={2}>
-            {status.cachedUri || 'No cached URI'}
-          </Text>
-        ) : null}
-      </Pressable>
-      {pinnedObjectsList.length > 0 ? (
-        <>
-          <Text style={styles.sectionTitleLarge}>
-            Pinned Objects ({pinnedObjectsList.length})
-          </Text>
-          <View style={styles.separator} />
-          <Text style={styles.sectionTitle}>
-            Slabs ({pinnedObjectsList[0]?.slabs.length})
-          </Text>
-          {pinnedObjectsList[0]?.slabs.map((s) => (
-            <Text key={s.id} style={styles.sectionValue} numberOfLines={2}>
-              {s.id}
-            </Text>
-          ))}
-        </>
-      ) : null}
+      {pinnedObjectsList.length > 1 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Pinned Objects</Text>
+        </View>
+      )}
+      {pinnedObjectsList.map(([indexerURL, po]) => (
+        <View key={indexerURL} style={styles.group}>
+          <Text style={styles.groupTitle}>Pinned Object</Text>
+          <InfoCard>
+            <LabeledValueRow
+              label="Indexer URL"
+              value={indexerURL}
+              isMonospace
+              numberOfLines={1}
+            />
+            <LabeledValueRow
+              label="Created"
+              value={new Date(po.createdAt).toLocaleString()}
+            />
+            <LabeledValueRow
+              label="Updated"
+              value={new Date(po.updatedAt).toLocaleString()}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Key"
+              value={po.key}
+              isMonospace
+              numberOfLines={1}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Metadata"
+              value={JSON.stringify(po.metadata)}
+              isMonospace
+              showDividerTop
+            />
+          </InfoCard>
+          <Text style={styles.groupSubtitle}>Slabs ({po.slabs.length})</Text>
+          <InfoCard>
+            {po.slabs.map((s, i) => (
+              <LabeledValueRow
+                key={s.id}
+                label="Slab"
+                value={s.id}
+                isMonospace
+                numberOfLines={1}
+                showDividerTop={i > 0}
+              />
+            ))}
+          </InfoCard>
+          <InfoCard>
+            <FileMap />
+          </InfoCard>
+        </View>
+      ))}
     </View>
   )
 }
@@ -94,41 +139,30 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 6,
   },
-  sectionTitleLarge: {
+  section: { marginTop: 30, marginBottom: 6 },
+  sectionTitle: {
+    color: '#aaa',
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  group: { marginTop: 18 },
+  groupTitle: {
     color: '#111827',
     fontWeight: '700',
-    marginBottom: 6,
     fontSize: 16,
   },
-  sectionTitle: {
-    color: '#111827',
-    fontWeight: '700',
+  groupSubtitle: {
+    color: '#222',
+    marginTop: 16,
+    fontWeight: '600',
     marginBottom: 6,
   },
-  sectionValue: {
-    color: '#57606a',
-    fontWeight: '400',
-    marginBottom: 6,
+  groupCard: {
+    marginTop: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderColor: '#d0d7de',
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-  },
-  photoMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  photoMetaText: { color: '#374151', fontSize: 12 },
-  photoDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#9ca3af',
-  },
-  photoStatus: { color: '#6b7280', fontSize: 12 },
-  separator: {
-    height: 1,
-    backgroundColor: '#d0d7de',
-    opacity: 0.2,
-    marginVertical: 12,
   },
 })

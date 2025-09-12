@@ -2,10 +2,15 @@ import { FileDetails } from '../components/FileDetails'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
 import { useCallback, useLayoutEffect, useState } from 'react'
-import { Share2Icon, MoreVerticalIcon, Trash2Icon } from 'lucide-react-native'
+import {
+  Share2Icon,
+  MoreVerticalIcon,
+  Trash2Icon,
+  ExternalLinkIcon,
+} from 'lucide-react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, Text, View, Linking } from 'react-native'
 import { useFiles, useFileDetails } from '../lib/filesContext'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
@@ -13,26 +18,36 @@ import { removeFromCache } from '../lib/fileCache'
 import { useDownload } from '../lib/downloadManager'
 import { extFromMime } from '../lib/fileTypes'
 import { useSettings } from '../lib/settingsContext'
+import { getOnePinnedObject } from '../lib/file'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
 function HeaderActions({
   onShare,
+  onDeepLink,
   onMenu,
 }: {
   onShare: () => void
+  onDeepLink: () => void
   onMenu: () => void
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: 14 }}>
       <Share2Icon color="#0969da" size={20} onPress={onShare} />
+      <ExternalLinkIcon color="#0969da" size={20} onPress={onDeepLink} />
       <MoreVerticalIcon color="#0969da" size={20} onPress={onMenu} />
     </View>
   )
 }
 
-function createHeaderRight(onShare: () => void, onMenu: () => void) {
-  return () => <HeaderActions onShare={onShare} onMenu={onMenu} />
+function createHeaderRight(
+  onShare: () => void,
+  onDeepLink: () => void,
+  onMenu: () => void
+) {
+  return () => (
+    <HeaderActions onShare={onShare} onDeepLink={onDeepLink} onMenu={onMenu} />
+  )
 }
 
 export default function FileDetailScreen({ route, navigation }: Props) {
@@ -46,17 +61,43 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   const handleShare = useCallback(() => {
     if (!file) return
     if (!sdk) return
+    const pinnedObject = getOnePinnedObject(file)
+    if (!pinnedObject) return
+    const key = pinnedObject.key
+    if (!key) return
+    console.log('sharing XXX', JSON.stringify(pinnedObject, null, 2))
     // 1 day from now
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    sdk.objectShareUrl(file.id, appSeed.buffer, expiresAt)
-    Clipboard.setString(file.id)
-    toast.show('Copied item id')
-  }, [file?.id, toast])
+    const shareUrl = sdk.objectShareUrl(key, appSeed.buffer, expiresAt)
+    Clipboard.setString(shareUrl)
+    toast.show('Copied share URL')
+  }, [file, toast])
 
   const handleOpenMenu = useCallback(() => {
     setIsMenuOpen(true)
   }, [])
+
+  const handleOpenDeepLink = useCallback(() => {
+    console.log('HANDLE SHARE LINK')
+    if (!file) return
+    if (!sdk) return
+    const pinnedObject = getOnePinnedObject(file)
+    if (!pinnedObject) return
+    const key = pinnedObject.key
+    if (!key) return
+    console.log('sharing XXX', JSON.stringify(pinnedObject, null, 2))
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 1)
+    const shareUrl = sdk.objectShareUrl(key, appSeed.buffer, expiresAt)
+    const deepLink = `siamobile://new-file?shareUrl=${encodeURIComponent(
+      shareUrl
+    )}`
+    Linking.openURL(deepLink).catch(() => {
+      Clipboard.setString(deepLink)
+      toast.show('Deep link copied to clipboard')
+    })
+  }, [file, sdk, appSeed, toast])
 
   const closeMenu = useCallback(() => {
     setIsMenuOpen(false)
@@ -97,9 +138,13 @@ export default function FileDetailScreen({ route, navigation }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: createHeaderRight(handleShare, handleOpenMenu),
+      headerRight: createHeaderRight(
+        handleShare,
+        handleOpenDeepLink,
+        handleOpenMenu
+      ),
     })
-  }, [navigation, handleShare, handleOpenMenu])
+  }, [navigation, handleShare, handleOpenDeepLink, handleOpenMenu])
 
   const handleDownload = useDownload(file)
   return (
