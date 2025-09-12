@@ -4,8 +4,9 @@ import { getDownloadState, useDownloadState } from './downloadState'
 import { getUploadState, useUploadState } from './uploadState'
 import { readCachedUri, useCachedUri } from './fileCache'
 import { extFromMime } from './fileTypes'
+import { PinnedObject, Slab } from 'react-native-sia'
 
-export function isFileOnSiaNetwork(file: FileRecord): boolean {
+export function isFileOnSiaNetwork(file: { pinnedObjects: unknown }): boolean {
   return !!file.pinnedObjects
 }
 
@@ -20,7 +21,11 @@ export type FileStatus = {
   cachedUri: string | null
 }
 
-export async function getFileStatus(file: FileRecord): Promise<FileStatus> {
+export async function getFileStatus(file: {
+  id: string
+  fileType: string
+  pinnedObjects: unknown
+}): Promise<FileStatus> {
   const uploadState = getUploadState(file.id)
   const downloadState = getDownloadState(file.id)
   const cachedUri = await readCachedUri(file.id, extFromMime(file.fileType))
@@ -36,7 +41,11 @@ export async function getFileStatus(file: FileRecord): Promise<FileStatus> {
     cachedUri,
   }
 }
-export function useFileStatus(file: FileRecord): FileStatus {
+export function useFileStatus(file: {
+  id: string
+  fileType: string | null
+  pinnedObjects: unknown
+}): FileStatus {
   const uploadState = useUploadState(file.id)
   const downloadState = useDownloadState(file.id)
   const cachedUri = useCachedUri(file.id, extFromMime(file.fileType))
@@ -68,4 +77,38 @@ export function getFileTypeName(
     : file.fileType?.startsWith('application')
     ? 'document'
     : 'other'
+}
+
+export function getOnePinnedObject(file: {
+  pinnedObjects: Record<string, PinnedObject> | null
+}): PinnedObject | null {
+  const pinnedObjects = Object.values(file.pinnedObjects ?? {})
+  return pinnedObjects[0] ?? null
+}
+
+export function parseFileMetadata(metadata?: ArrayBuffer): {
+  size?: number
+  fileType?: string
+} {
+  if (!metadata) {
+    return {}
+  }
+  return JSON.parse(new TextDecoder().decode(metadata)) as {
+    size?: number
+    fileType?: string
+  }
+}
+
+export function createFileMetadata(params: {
+  name: string
+  fileType: string
+  size: number
+}): ArrayBuffer {
+  return new TextEncoder().encode(
+    JSON.stringify({
+      name: params.name,
+      fileType: params.fileType,
+      size: params.size,
+    })
+  ).buffer as ArrayBuffer
 }

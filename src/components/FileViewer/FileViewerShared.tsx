@@ -1,27 +1,29 @@
 import { View, StyleSheet, Pressable } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { type FileRecord } from '../../db/files'
 import { useFileStatus } from '../../lib/file'
 import { FileIndicators } from '../FileIndicators'
 import ImageViewer from './ImageViewer'
-import { useDownload } from '../../lib/downloadManager'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
-import { PinnedObject } from 'react-native-sia'
+import { useDownloadShared } from '../../lib/downloadShared'
 
-export function FileViewer({
+export function FileViewerShared({
   file,
+  shareUrl,
 }: {
   file: {
     id: string
     fileType: string | null
-    pinnedObjects: Record<string, PinnedObject> | null
+    pinnedObjects: unknown
   }
+  shareUrl: string
 }) {
   const status = useFileStatus(file)
-  const handleDownload = useDownload(file)
+  const handleDownload = useDownloadShared()
 
   const isVideo = file.fileType?.startsWith('video')
+
+  console.log('SHAReD status', JSON.stringify(status, null, 2))
 
   return (
     <View style={[styles.container]}>
@@ -43,7 +45,7 @@ export function FileViewer({
         <Pressable
           accessibilityRole="button"
           disabled={status.isDownloading}
-          onPress={() => handleDownload(false)}
+          onPress={() => handleDownload(file.id, shareUrl)}
           style={styles.centerDownload}
         >
           <ArrowDownToLineIcon color="#0969da" size={28} />

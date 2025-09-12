@@ -2,6 +2,8 @@ import { PinnedObject, Sdk } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from './uploadState'
 import { updateFilePinnedObject } from '../db/files'
 import { Logger } from './settingsContext'
+import { PickerAsset } from './uploadManager'
+import { createFileMetadata } from './file'
 
 export type UploadProgress = {
   bytesWritten: number
@@ -10,7 +12,7 @@ export type UploadProgress = {
 }
 
 export async function uploadToSia(params: {
-  fileId: string
+  asset: PickerAsset
   log: Logger
   sdk: Sdk
   indexerURL: string
@@ -28,7 +30,7 @@ export async function uploadToSia(params: {
     dataShards = 10,
     parityShards = 30,
     data,
-    fileId,
+    asset,
     signal,
   } = params
 
@@ -36,7 +38,11 @@ export async function uploadToSia(params: {
     encryptionKey,
     dataShards,
     parityShards,
-    undefined
+    createFileMetadata({
+      name: asset.fileName ?? '',
+      fileType: asset.fileType ?? '',
+      size: data.byteLength,
+    })
   )
 
   const chunkSize = 1 * 1024 * 1024 // 1 MiB
@@ -44,7 +50,7 @@ export async function uploadToSia(params: {
   const total = data.byteLength
 
   // Initialize runtime state.
-  setUploadState(fileId, { status: 'uploading', progress: 0 })
+  setUploadState(asset.id, { status: 'uploading', progress: 0 })
 
   while (offset < total) {
     log(`Uploading chunk ${offset} of ${total}...`)
@@ -63,7 +69,7 @@ export async function uploadToSia(params: {
       totalBytes: total,
       percent: offset / total,
     }
-    updateUploadProgress(fileId, progress.percent)
+    updateUploadProgress(asset.id, progress.percent)
   }
 
   try {
@@ -73,10 +79,10 @@ export async function uploadToSia(params: {
     } else {
       pinnedObject = await upload.finalize()
     }
-    setUploadState(fileId, { status: 'done', progress: 1 })
-    await updateFilePinnedObject(fileId, indexerURL, pinnedObject)
+    setUploadState(asset.id, { status: 'done', progress: 1 })
+    await updateFilePinnedObject(asset.id, indexerURL, pinnedObject)
   } catch (e) {
-    setUploadState(fileId, { status: 'error', progress: 0 })
+    setUploadState(asset.id, { status: 'error', progress: 0 })
     throw e
   }
 }

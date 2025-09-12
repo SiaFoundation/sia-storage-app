@@ -8,16 +8,18 @@ export type FileRecord = {
   createdAt: number
   fileType: string | null
   pinnedObjects: Record<string, PinnedObject> | null
+  encryptionKey: string | null
 }
 
 let db: SQLite.SQLiteDatabase
+const dbName = 'siamobile.db'
 
 export async function initFileDB(): Promise<void> {
-  db = await SQLite.openDatabaseAsync('app.db')
+  db = await SQLite.openDatabaseAsync(dbName)
   // Ensure schema matches expected columns; drop legacy table if incompatible.
   try {
     const cols = await db.getAllAsync<{ name: string }>(
-      "PRAGMA table_info('fileRecords')"
+      "PRAGMA table_info('files')"
     )
     const colNames = new Set(cols.map((c) => c.name))
     const expected = [
@@ -26,6 +28,7 @@ export async function initFileDB(): Promise<void> {
       'fileSize',
       'createdAt',
       'fileType',
+      'encryptionKey',
       'pinnedObjects',
     ]
     const matches =
@@ -36,60 +39,68 @@ export async function initFileDB(): Promise<void> {
       const missing = expected.filter((e) => !colNames.has(e))
       if (missing.length === 1 && missing[0] === 'pinnedObjects') {
         // Non-destructive migration to add pinnedObjects column.
-        await db.execAsync(
-          'ALTER TABLE fileRecords ADD COLUMN pinnedObjects TEXT'
-        )
+        await db.execAsync('ALTER TABLE files ADD COLUMN pinnedObjects TEXT')
         colNames.add('pinnedObjects')
       } else if (missing.length === 1 && missing[0] === 'fileType') {
         await db.execAsync(
-          "ALTER TABLE fileRecords ADD COLUMN fileType TEXT NOT NULL DEFAULT 'application/octet-stream'"
+          "ALTER TABLE files ADD COLUMN fileType TEXT NOT NULL DEFAULT 'application/octet-stream'"
         )
         colNames.add('fileType')
       } else if (!matches) {
-        await db.execAsync('DROP TABLE IF EXISTS fileRecords')
+        await db.execAsync('DROP TABLE IF EXISTS files')
       }
     }
   } catch {}
   // Create new schema for uploaded items (no in-progress fields persisted).
   await db.execAsync(
-    `CREATE TABLE IF NOT EXISTS fileRecords (
+    `CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
       fileName TEXT,
       fileSize INTEGER,
       createdAt INTEGER NOT NULL,
       fileType TEXT NOT NULL DEFAULT 'application/octet-stream',
-      pinnedObjects TEXT
+      pinnedObjects TEXT,
+      encryptionKey TEXT
     );`
   )
 }
 
 export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, pinnedObjects } =
-    fileRecord
-  await db.runAsync(
-    'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, pinnedObjects) VALUES (?, ?, ?, ?, ?, ?)',
+  const {
     id,
     fileName,
     fileSize,
     createdAt,
     fileType,
-    pinnedObjects == null ? null : JSON.stringify(pinnedObjects)
+    pinnedObjects,
+    encryptionKey,
+  } = fileRecord
+  await db.runAsync(
+    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    id,
+    fileName,
+    fileSize,
+    createdAt,
+    fileType,
+    pinnedObjects == null ? null : JSON.stringify(pinnedObjects),
+    encryptionKey
   )
 }
 
 export async function createManyFileRecords(
-  fileRecords: FileRecord[]
+  files: FileRecord[]
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
-    for (const fr of fileRecords) {
+    for (const fr of files) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO fileRecords (id, fileName, fileSize, createdAt, fileType, pinnedObjects) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey) VALUES (?, ?, ?, ?, ?, ?, ?)',
         fr.id,
         fr.fileName,
         fr.fileSize,
         fr.createdAt,
         fr.fileType,
-        fr.pinnedObjects == null ? null : JSON.stringify(fr.pinnedObjects)
+        fr.pinnedObjects == null ? null : JSON.stringify(fr.pinnedObjects),
+        fr.encryptionKey
       )
     }
   })
@@ -103,8 +114,9 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     createdAt: number
     fileType: string
     pinnedObjects: string | null
+    encryptionKey: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects FROM fileRecords ORDER BY createdAt DESC'
+    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
   )
 
   return rows.map((r) => ({
@@ -114,29 +126,38 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     createdAt: r.createdAt,
     fileType: r.fileType,
     pinnedObjects: parsePinnedObjects(r.pinnedObjects),
+    encryptionKey: r.encryptionKey,
   }))
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, pinnedObjects } =
-    fileRecord
+  const {
+    id,
+    fileName,
+    fileSize,
+    createdAt,
+    fileType,
+    pinnedObjects,
+    encryptionKey,
+  } = fileRecord
   await db.runAsync(
-    'UPDATE fileRecords SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, pinnedObjects = ? WHERE id = ?',
+    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, pinnedObjects = ?, encryptionKey = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
     fileType,
     pinnedObjects == null ? null : JSON.stringify(pinnedObjects),
+    encryptionKey,
     id
   )
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
-  await db.runAsync('DELETE FROM fileRecords WHERE id = ?', id)
+  await db.runAsync('DELETE FROM files WHERE id = ?', id)
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
-  await db.runAsync('DELETE FROM fileRecords')
+  await db.runAsync('DELETE FROM files')
 }
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
@@ -147,8 +168,9 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     createdAt: number
     fileType: string
     pinnedObjects: string | null
+    encryptionKey: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects FROM fileRecords WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files WHERE id = ?',
     id
   )
   if (!row) return null
@@ -159,6 +181,7 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     createdAt: row.createdAt,
     fileType: row.fileType,
     pinnedObjects: parsePinnedObjects(row.pinnedObjects),
+    encryptionKey: row.encryptionKey,
   }
 }
 
@@ -183,7 +206,7 @@ export async function updateFilePinnedObject(
   const pos = file.pinnedObjects ?? {}
   pos[indexerURL] = pinnedObject
   await db.runAsync(
-    'UPDATE fileRecords SET pinnedObjects = ? WHERE id = ?',
+    'UPDATE files SET pinnedObjects = ? WHERE id = ?',
     JSON.stringify(pos),
     id
   )
