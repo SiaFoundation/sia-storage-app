@@ -3,6 +3,7 @@ import { FileRecord } from '../db/files'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../functions/humanSize'
 import { CloudIcon, DotIcon, PlayIcon } from 'lucide-react-native'
+import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = {
   file: FileRecord
@@ -42,7 +43,7 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
           </View>
         </View>
         <View>
-          <CloudIcon size={16} color="grey" />
+          <UploadStatusIcon size={16} status={status} />
         </View>
       </View>
     </Pressable>
