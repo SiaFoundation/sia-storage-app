@@ -55,6 +55,15 @@ export function useDownload(
           )
           console.log('file.fileSize', file.fileSize)
 
+          console.log('pinnedObject metadata', pinnedObject)
+          console.log(
+            'pinnedObject metadata type',
+            typeof pinnedObject.metadata
+          )
+          console.log(
+            'pinnedObject metadata json',
+            JSON.stringify(pinnedObject, null, 2)
+          )
           const downloader = await sdk.download(
             encryptionKeyHexToBuffer(file.encryptionKey),
             pinnedObject,
