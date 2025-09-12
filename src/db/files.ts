@@ -1,5 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 import { PinnedObject } from 'react-native-sia'
+import { hexToUint8 } from '../lib/hex'
+import { arrayBufferToHex } from '../lib/hex'
 
 export type FileRecord = {
   id: string
@@ -8,7 +10,7 @@ export type FileRecord = {
   createdAt: number
   fileType: string | null
   pinnedObjects: Record<string, PinnedObject> | null
-  encryptionKey: string | null
+  encryptionKey: string
 }
 
 let db: SQLite.SQLiteDatabase
@@ -34,24 +36,13 @@ export async function initFileDB(): Promise<void> {
     const matches =
       expected.every((e) => colNames.has(e)) &&
       colNames.size === expected.length
-
-    if (colNames.size > 0) {
-      const missing = expected.filter((e) => !colNames.has(e))
-      if (missing.length === 1 && missing[0] === 'pinnedObjects') {
-        // Non-destructive migration to add pinnedObjects column.
-        await db.execAsync('ALTER TABLE files ADD COLUMN pinnedObjects TEXT')
-        colNames.add('pinnedObjects')
-      } else if (missing.length === 1 && missing[0] === 'fileType') {
-        await db.execAsync(
-          "ALTER TABLE files ADD COLUMN fileType TEXT NOT NULL DEFAULT 'application/octet-stream'"
-        )
-        colNames.add('fileType')
-      } else if (!matches) {
-        await db.execAsync('DROP TABLE IF EXISTS files')
-      }
+    if (!matches) {
+      console.warn('Incompatible schema found, dropping table')
+      await db.execAsync('DROP TABLE IF EXISTS files')
+    } else {
+      console.log('Schema matches expected columns')
     }
   } catch {}
-  // Create new schema for uploaded items (no in-progress fields persisted).
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
@@ -82,9 +73,38 @@ export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
     fileSize,
     createdAt,
     fileType,
-    pinnedObjects == null ? null : JSON.stringify(pinnedObjects),
+    pinnedObjects == null ? null : serializePinnedObjects(pinnedObjects),
     encryptionKey
   )
+}
+
+type SerializedPinnedObject = {
+  key: string
+  slabs: { id: string; offset: number; length: number }[]
+  metadata: string
+  createdAt: number
+  updatedAt: number
+}
+
+export function serializePinnedObjects(
+  pinnedObjects: Record<string, PinnedObject>
+): string {
+  return JSON.stringify(
+    Object.values(pinnedObjects).map((po) => ({
+      ...po,
+      metadata: arrayBufferToHex(po.metadata),
+    }))
+  )
+}
+
+export function deserializePinnedObjects(
+  pinnedObjects: string | null
+): Record<string, PinnedObject> {
+  if (pinnedObjects == null) return {}
+  return JSON.parse(pinnedObjects).map((po: SerializedPinnedObject) => ({
+    ...po,
+    metadata: hexToUint8(po.metadata),
+  }))
 }
 
 export async function createManyFileRecords(
@@ -99,7 +119,9 @@ export async function createManyFileRecords(
         fr.fileSize,
         fr.createdAt,
         fr.fileType,
-        fr.pinnedObjects == null ? null : JSON.stringify(fr.pinnedObjects),
+        fr.pinnedObjects == null
+          ? null
+          : serializePinnedObjects(fr.pinnedObjects),
         fr.encryptionKey
       )
     }
@@ -114,10 +136,12 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     createdAt: number
     fileType: string
     pinnedObjects: string | null
-    encryptionKey: string | null
+    encryptionKey: string
   }>(
     'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
   )
+
+  console.log('readAllFileRecords rows', rows)
 
   return rows.map((r) => ({
     id: r.id,
@@ -125,7 +149,7 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     fileSize: r.fileSize,
     createdAt: r.createdAt,
     fileType: r.fileType,
-    pinnedObjects: parsePinnedObjects(r.pinnedObjects),
+    pinnedObjects: deserializePinnedObjects(r.pinnedObjects),
     encryptionKey: r.encryptionKey,
   }))
 }
@@ -146,7 +170,7 @@ export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
     fileSize,
     createdAt,
     fileType,
-    pinnedObjects == null ? null : JSON.stringify(pinnedObjects),
+    pinnedObjects == null ? null : serializePinnedObjects(pinnedObjects),
     encryptionKey,
     id
   )
@@ -168,7 +192,7 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     createdAt: number
     fileType: string
     pinnedObjects: string | null
-    encryptionKey: string | null
+    encryptionKey: string
   }>(
     'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files WHERE id = ?',
     id
@@ -180,19 +204,8 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     fileSize: row.fileSize,
     createdAt: row.createdAt,
     fileType: row.fileType,
-    pinnedObjects: parsePinnedObjects(row.pinnedObjects),
+    pinnedObjects: deserializePinnedObjects(row.pinnedObjects),
     encryptionKey: row.encryptionKey,
-  }
-}
-
-function parsePinnedObjects(
-  value: string | null
-): Record<string, PinnedObject> | null {
-  if (value == null) return null
-  try {
-    return JSON.parse(value) as Record<string, PinnedObject>
-  } catch {
-    return null
   }
 }
 
@@ -207,7 +220,7 @@ export async function updateFilePinnedObject(
   pos[indexerURL] = pinnedObject
   await db.runAsync(
     'UPDATE files SET pinnedObjects = ? WHERE id = ?',
-    JSON.stringify(pos),
+    serializePinnedObjects(pos),
     id
   )
 }

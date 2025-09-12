@@ -16,7 +16,7 @@ export async function uploadToSia(params: {
   log: Logger
   sdk: Sdk
   indexerURL: string
-  encryptionKey: ArrayBuffer
+  encryptionKey: Uint8Array
   dataShards?: number
   parityShards?: number
   data: ArrayBuffer
@@ -34,15 +34,27 @@ export async function uploadToSia(params: {
     signal,
   } = params
 
+  console.log('uploadToSia encryptionKey', encryptionKey)
   const upload = await sdk.upload(
-    encryptionKey,
-    dataShards,
-    parityShards,
+    encryptionKey.slice().buffer,
     createFileMetadata({
       name: asset.fileName ?? '',
       fileType: asset.fileType ?? '',
       size: data.byteLength,
-    })
+    }),
+    {
+      maxInflight: 15,
+      dataShards,
+      parityShards,
+      progressCallback: {
+        progress: (uploaded, encodedSize) => {
+          console.log('uploaded', uploaded, 'encodedSize', encodedSize)
+          const percent = (uploaded * 1000n) / encodedSize
+          console.log('percent', percent)
+          updateUploadProgress(asset.id, Number(percent) / 1000)
+        },
+      },
+    }
   )
 
   const chunkSize = 1 * 1024 * 1024 // 1 MiB
@@ -64,12 +76,6 @@ export async function uploadToSia(params: {
     }
     log(`Uploaded chunk ${offset} of ${total}`)
     offset = end
-    const progress = {
-      bytesWritten: offset,
-      totalBytes: total,
-      percent: offset / total,
-    }
-    updateUploadProgress(asset.id, progress.percent)
   }
 
   try {

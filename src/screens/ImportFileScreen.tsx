@@ -23,7 +23,8 @@ import { parseFileMetadata } from '../lib/file'
 import { createFileRecord } from '../db/files'
 import { PinnedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
-import { encryptionKeyToHex } from '../lib/encryptionKey'
+import { uniqueId } from '../lib/uniqueId'
+import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'ImportFile'>
 
@@ -33,13 +34,21 @@ export default function ImportFileScreen({ route }: Props) {
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
   const { sdk, indexerURL } = useSettings()
-  const sharedObject = useSWR([shareUrl], async () =>
-    sdk.sharedObject(shareUrl ?? '')
-  )
+  const sharedObject = useSWR([shareUrl], async () => {
+    console.log('getting shared object', shareUrl)
+    try {
+      const sharedObject = await sdk.sharedObject(shareUrl ?? '')
+      console.log('sharedObject', sharedObject)
+      return sharedObject
+    } catch (e) {
+      console.error('Error getting shared object', e)
+      return null
+    }
+  })
   const meta = useSWR(['meta', sharedObject.data?.key], () =>
     parseFileMetadata(sharedObject.data?.meta)
   )
-  const id = useMemo(() => Math.random().toString(36).substring(2, 15), [])
+  const id = useMemo(() => uniqueId(), [])
   const file = useMemo(
     () => ({
       id,
@@ -51,6 +60,7 @@ export default function ImportFileScreen({ route }: Props) {
 
   const handleAddToDatabase = useCallback(async () => {
     if (!sharedObject.data) return
+    console.log('handleAddToDatabase', sharedObject.data)
     const pinnedObject: PinnedObject = {
       key: sharedObject.data.key,
       slabs: sharedObject.data.slabs.map((sharedSlab) => ({
@@ -62,6 +72,9 @@ export default function ImportFileScreen({ route }: Props) {
       createdAt: new Date(),
       updatedAt: new Date(),
     }
+
+    console.log('handleAddToDatabase pinnedObject', pinnedObject)
+
     const size = pinnedObject.slabs.reduce((acc, slab) => acc + slab.length, 0)
     await sdk.saveObject(pinnedObject)
     await createFileRecord({
@@ -71,7 +84,9 @@ export default function ImportFileScreen({ route }: Props) {
       fileName: '',
       fileType: meta.data?.fileType ?? '',
       pinnedObjects: { [indexerURL]: pinnedObject },
-      encryptionKey: encryptionKeyToHex(sharedObject.data.encryptionKey),
+      encryptionKey: encryptionKeyArrayBufferToHex(
+        sharedObject.data.encryptionKey
+      ),
     })
     toast.show('File added')
     navigation.navigate('FileDetail', { id })

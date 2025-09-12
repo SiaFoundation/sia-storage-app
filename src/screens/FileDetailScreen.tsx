@@ -19,6 +19,8 @@ import { useDownload } from '../lib/downloadManager'
 import { extFromMime } from '../lib/fileTypes'
 import { useSettings } from '../lib/settingsContext'
 import { getOnePinnedObject } from '../lib/file'
+import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
+import { encryptionKeyHexToUint8 } from '../lib/encryptionKey'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
@@ -56,7 +58,7 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   const { deleteFile } = useFiles()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const insets = useSafeAreaInsets()
-  const { sdk, appSeed } = useSettings()
+  const { sdk } = useSettings()
 
   const handleShare = useCallback(() => {
     if (!file) return
@@ -65,11 +67,15 @@ export default function FileDetailScreen({ route, navigation }: Props) {
     if (!pinnedObject) return
     const key = pinnedObject.key
     if (!key) return
-    console.log('sharing XXX', JSON.stringify(pinnedObject, null, 2))
+    console.log('handleShare', pinnedObject)
     // 1 day from now
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.objectShareUrl(key, appSeed.buffer, expiresAt)
+    const shareUrl = sdk.objectShareUrl(
+      key,
+      encryptionKeyHexToBuffer(file.encryptionKey),
+      expiresAt
+    )
     Clipboard.setString(shareUrl)
     toast.show('Copied share URL')
   }, [file, toast])
@@ -79,17 +85,29 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   }, [])
 
   const handleOpenDeepLink = useCallback(() => {
-    console.log('HANDLE SHARE LINK')
     if (!file) return
     if (!sdk) return
     const pinnedObject = getOnePinnedObject(file)
     if (!pinnedObject) return
     const key = pinnedObject.key
     if (!key) return
-    console.log('sharing XXX', JSON.stringify(pinnedObject, null, 2))
+    console.log('handleOpenDeepLink pinnedObject', pinnedObject)
+    console.log('handleOpenDeepLink encryptionKey hex', file.encryptionKey)
+    console.log(
+      'handleOpenDeepLink encryptionKey uint8',
+      encryptionKeyHexToUint8(file.encryptionKey)
+    )
+    console.log(
+      'handleOpenDeepLink encryptionKey buffer',
+      encryptionKeyHexToBuffer(file.encryptionKey)
+    )
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.objectShareUrl(key, appSeed.buffer, expiresAt)
+    const shareUrl = sdk.objectShareUrl(
+      key,
+      encryptionKeyHexToBuffer(file.encryptionKey),
+      expiresAt
+    )
     const deepLink = `siamobile://new-file?shareUrl=${encodeURIComponent(
       shareUrl
     )}`
@@ -97,7 +115,7 @@ export default function FileDetailScreen({ route, navigation }: Props) {
       Clipboard.setString(deepLink)
       toast.show('Deep link copied to clipboard')
     })
-  }, [file, sdk, appSeed, toast])
+  }, [file, sdk, toast])
 
   const closeMenu = useCallback(() => {
     setIsMenuOpen(false)
