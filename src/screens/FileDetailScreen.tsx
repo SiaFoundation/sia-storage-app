@@ -84,7 +84,7 @@ export default function FileDetailScreen({ route, navigation }: Props) {
     setIsMenuOpen(true)
   }, [])
 
-  const handleOpenDeepLink = useCallback(() => {
+  const getShareUrl = useCallback(() => {
     if (!file) return
     if (!sdk) return
 
@@ -92,16 +92,6 @@ export default function FileDetailScreen({ route, navigation }: Props) {
     if (!pinnedObject) return
     const key = pinnedObject.key
     if (!key) return
-    console.log('handleOpenDeepLink pinnedObject', pinnedObject)
-    console.log('handleOpenDeepLink encryptionKey hex', file.encryptionKey)
-    console.log(
-      'handleOpenDeepLink encryptionKey uint8',
-      encryptionKeyHexToUint8(file.encryptionKey)
-    )
-    console.log(
-      'handleOpenDeepLink encryptionKey buffer',
-      encryptionKeyHexToBuffer(file.encryptionKey)
-    )
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
     const shareUrl = sdk.objectShareUrl(
@@ -109,14 +99,29 @@ export default function FileDetailScreen({ route, navigation }: Props) {
       encryptionKeyHexToBuffer(file.encryptionKey),
       expiresAt
     )
-    const deepLink = `siamobile://new-file?shareUrl=${encodeURIComponent(
-      shareUrl
-    )}`
-    Linking.openURL(deepLink).catch(() => {
-      Clipboard.setString(deepLink)
+    return `siamobile://new-file?shareUrl=${encodeURIComponent(shareUrl)}`
+  }, [file, sdk])
+
+  const handleCopyShareUrl = useCallback(() => {
+    if (!file) return
+    if (!sdk) return
+    const shareUrl = getShareUrl()
+    if (!shareUrl) return
+    Clipboard.setString(shareUrl)
+    toast.show('Share URL copied to clipboard')
+  }, [file, sdk, getShareUrl, toast])
+
+  const handleOpenDeepLink = useCallback(() => {
+    if (!file) return
+    if (!sdk) return
+
+    const shareUrl = getShareUrl()
+    if (!shareUrl) return
+    Linking.openURL(shareUrl).catch(() => {
+      Clipboard.setString(shareUrl)
       toast.show('Deep link copied to clipboard')
     })
-  }, [file, sdk, toast])
+  }, [file, sdk, toast, getShareUrl])
 
   const closeMenu = useCallback(() => {
     setIsMenuOpen(false)
@@ -158,12 +163,12 @@ export default function FileDetailScreen({ route, navigation }: Props) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: createHeaderRight(
-        handleShare,
+        handleCopyShareUrl,
         handleOpenDeepLink,
         handleOpenMenu
       ),
     })
-  }, [navigation, handleShare, handleOpenDeepLink, handleOpenMenu])
+  }, [navigation, handleCopyShareUrl, handleOpenDeepLink, handleOpenMenu])
 
   const handleDownload = useDownload(file)
   return (
