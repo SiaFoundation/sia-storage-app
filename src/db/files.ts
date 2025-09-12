@@ -110,10 +110,7 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
   }>(
     'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
   )
-
-  console.log('readAllFileRecords rows', rows)
-
-  const files = rows.map((r) => ({
+  return rows.map((r) => ({
     id: r.id,
     fileName: r.fileName,
     fileSize: r.fileSize,
@@ -122,8 +119,6 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     pinnedObjects: deserializePinnedObjects(r.pinnedObjects),
     encryptionKey: r.encryptionKey,
   }))
-  console.log('readAllFileRecords files', files)
-  return files
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {

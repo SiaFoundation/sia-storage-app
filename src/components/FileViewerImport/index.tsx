@@ -7,7 +7,7 @@ import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
 import { useDownloadShared } from '../../lib/downloadShared'
 
-export function FileViewerShared({
+export function FileViewerImport({
   file,
   shareUrl,
 }: {
@@ -23,8 +23,6 @@ export function FileViewerShared({
 
   const isVideo = file.fileType?.startsWith('video')
 
-  console.log('SHAReD status', JSON.stringify(status, null, 2))
-
   return (
     <View style={[styles.container]}>
       <View style={[styles.asset, !status.cachedUri && { height: 300 }]}>
@@ -36,7 +34,6 @@ export function FileViewerShared({
           )
         ) : null}
       </View>
-      <FileIndicators file={file} />
       {status.isDownloading ? (
         <View style={styles.centerDownload}>
           <CircularProgress progress={status.downloadProgress ?? 0} size={44} />

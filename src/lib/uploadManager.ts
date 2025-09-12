@@ -1,6 +1,6 @@
 import * as ImagePicker from 'react-native-image-picker'
 import { uploadToSia } from './uploadToSia'
-import { writeToCache, copyUriToCache } from './fileCache'
+import { writeToCache, copyUriToCache, readCachedUri } from './fileCache'
 import * as FileSystem from 'expo-file-system'
 import { setUploadState } from './uploadState'
 import { useCallback } from 'react'
@@ -10,11 +10,13 @@ import { extFromMime, mimeFromAssetUri } from './fileTypes'
 import {
   encryptionKeyArrayBufferToHex,
   encryptionKeyHexToBuffer,
+  encryptionKeyHexToUint8,
   encryptionKeyUint8ToHex,
   generateEncryptionKey,
   generateEncryptionKeyHex,
 } from './encryptionKey'
 import { uniqueId } from './uniqueId'
+import { FileRecord, readFileRecord } from '../db/files'
 
 export type PickerAsset = {
   id: string
@@ -164,4 +166,59 @@ export function usePickAndUploadMedia() {
       return []
     }
   }, [sdk, log])
+}
+
+export function useReuploadFile() {
+  const { sdk, log, indexerURL } = useSettings()
+  const { createFile } = useFiles()
+  return useCallback(
+    async (fileId: string) => {
+      try {
+        const file = await readFileRecord(fileId)
+        if (!file) {
+          throw new Error('File not found')
+        }
+        const cachedUri = await readCachedUri(
+          fileId,
+          extFromMime(file.fileType)
+        )
+        if (!cachedUri) {
+          throw new Error('File not cached')
+        }
+        setUploadState(fileId, { status: 'uploading', progress: 0 })
+        // Emit incrementally so the gallery can show thumbnails from cache immediately.
+        await createFile({
+          id: fileId,
+          fileName: file.fileName,
+          fileSize: file.fileSize,
+          createdAt: file.createdAt,
+          fileType: file.fileType,
+          pinnedObjects: null,
+          encryptionKey: file.encryptionKey,
+        })
+        log(`Processing media ${fileId}...`)
+        log(`Cached file ${fileId} -> ${cachedUri}`)
+        const cachedItem: PickerAsset = {
+          ...file,
+          uri: cachedUri,
+          encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
+        }
+        log(`Uploading ${fileId} to Sia...`)
+        // Stream from cached file to keep memory low.
+        const fileBytes = await new FileSystem.File(cachedUri).bytes()
+        await uploadToSia({
+          asset: cachedItem,
+          indexerURL,
+          log,
+          sdk,
+          encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
+          data: fileBytes.buffer as ArrayBuffer,
+        })
+        log(`Upload complete ${fileId}`)
+      } catch (e) {
+        log(`Upload flow error: ${String(e)}`)
+      }
+    },
+    [sdk, log]
+  )
 }

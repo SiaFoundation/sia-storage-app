@@ -26,6 +26,7 @@ type FilesContextValue = {
   updateFile: (fr: FileRecord) => Promise<void>
   deleteFile: (id: string) => Promise<void>
   deleteAllFiles: () => Promise<void>
+  removeFromNetwork: (id: string) => Promise<void>
 }
 
 const FilesContext = createContext<FilesContextValue | undefined>(undefined)
@@ -78,6 +79,16 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     refetch()
   }, [refetch])
 
+  const removeFromNetwork = useCallback(
+    async (id: string) => {
+      const file = await readFileRecord(id)
+      if (file == null) return
+      await updateFileRecord({ ...file, pinnedObjects: null })
+      refetch()
+    },
+    [refetch]
+  )
+
   const value = useMemo<FilesContextValue>(
     () => ({
       createFile,
@@ -85,6 +96,7 @@ export function FilesProvider({ children }: { children: ReactNode }) {
       updateFile,
       deleteFile,
       deleteAllFiles,
+      removeFromNetwork,
     }),
     []
   )

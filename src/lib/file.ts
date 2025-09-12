@@ -1,13 +1,19 @@
 import { useMemo } from 'react'
 import { FileRecord } from '../db/files'
-import { getDownloadState, useDownloadState } from './downloadState'
-import { getUploadState, useUploadState } from './uploadState'
+import {
+  DownloadState,
+  getDownloadState,
+  useDownloadState,
+} from './downloadState'
+import { getUploadState, UploadState, useUploadState } from './uploadState'
 import { readCachedUri, useCachedUri } from './fileCache'
 import { extFromMime } from './fileTypes'
-import { PinnedObject, Slab } from 'react-native-sia'
+import { PinnedObject } from 'react-native-sia'
 
-export function isFileOnSiaNetwork(file: { pinnedObjects: unknown }): boolean {
-  return !!file.pinnedObjects
+export function fileHasAPinnnedObject(file: {
+  pinnedObjects: unknown
+}): boolean {
+  return !!Object.keys(file.pinnedObjects ?? {}).length
 }
 
 export type FileStatus = {
@@ -19,6 +25,38 @@ export type FileStatus = {
   uploadProgress: number
   downloadProgress: number
   cachedUri: string | null
+  fileIsGone: boolean
+}
+
+function computeFileStatus({
+  file,
+  uploadState,
+  downloadState,
+  cachedUri,
+}: {
+  file: {
+    pinnedObjects: unknown | null
+  }
+  uploadState: UploadState | undefined
+  downloadState: DownloadState | undefined
+  cachedUri: string | null
+}) {
+  const isUploading = uploadState?.status === 'uploading'
+  const isDownloading = downloadState?.status === 'downloading'
+  const hasPinnedObject = fileHasAPinnnedObject(file)
+  return {
+    isUploading,
+    isDownloading,
+    isUploaded: hasPinnedObject,
+    isDownloaded: !!cachedUri,
+    isErrored:
+      uploadState?.status === 'error' || downloadState?.status === 'error',
+    uploadProgress: uploadState?.progress ?? 0,
+    downloadProgress: downloadState?.progress ?? 0,
+    cachedUri,
+    fileIsGone:
+      !isUploading && !isDownloading && !hasPinnedObject && !cachedUri,
+  }
 }
 
 export async function getFileStatus(file: {
@@ -29,38 +67,28 @@ export async function getFileStatus(file: {
   const uploadState = getUploadState(file.id)
   const downloadState = getDownloadState(file.id)
   const cachedUri = await readCachedUri(file.id, extFromMime(file.fileType))
-  return {
-    isUploading: uploadState?.status === 'uploading',
-    isDownloading: downloadState?.status === 'downloading',
-    isUploaded: isFileOnSiaNetwork(file),
-    isDownloaded: !!cachedUri,
-    isErrored:
-      uploadState?.status === 'error' || downloadState?.status === 'error',
-    uploadProgress: uploadState?.progress ?? 0,
-    downloadProgress: downloadState?.progress ?? 0,
-    cachedUri,
-  }
+  return computeFileStatus({ file, uploadState, downloadState, cachedUri })
 }
-export function useFileStatus(file: {
+
+export function useFileStatus(file?: {
   id: string
   fileType: string | null
-  pinnedObjects: unknown
+  pinnedObjects: unknown | null
 }): FileStatus {
-  const uploadState = useUploadState(file.id)
-  const downloadState = useDownloadState(file.id)
-  const cachedUri = useCachedUri(file.id, extFromMime(file.fileType))
+  const uploadState = useUploadState(file?.id || '')
+  const downloadState = useDownloadState(file?.id || '')
+  const cachedUri = useCachedUri(
+    file?.id || '',
+    file?.fileType ? extFromMime(file.fileType) : '.bin'
+  )
   return useMemo(
-    () => ({
-      isUploading: uploadState?.status === 'uploading',
-      isDownloading: downloadState?.status === 'downloading',
-      isUploaded: isFileOnSiaNetwork(file),
-      isDownloaded: !!cachedUri.data,
-      isErrored:
-        uploadState?.status === 'error' || downloadState?.status === 'error',
-      uploadProgress: uploadState?.progress ?? 0,
-      downloadProgress: downloadState?.progress ?? 0,
-      cachedUri: cachedUri.data ?? null,
-    }),
+    () =>
+      computeFileStatus({
+        file: file ?? { pinnedObjects: null },
+        uploadState,
+        downloadState,
+        cachedUri: cachedUri.data ?? null,
+      }),
     [uploadState, downloadState, cachedUri, file]
   )
 }

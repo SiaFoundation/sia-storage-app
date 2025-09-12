@@ -1,6 +1,5 @@
 import { View, StyleSheet } from 'react-native'
 import { UploadStatusIcon } from './UploadStatusIcon'
-import { CacheStatusIcon } from './CacheStatusIcon'
 import { FileStatus } from '../lib/file'
 
 export function StatusBadges({
@@ -14,7 +13,6 @@ export function StatusBadges({
     <View style={styles.container}>
       <View style={styles.row}>
         <UploadStatusIcon status={status} size={size} />
-        <CacheStatusIcon status={status} size={size} />
       </View>
     </View>
   )

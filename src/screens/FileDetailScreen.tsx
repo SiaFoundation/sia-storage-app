@@ -3,14 +3,17 @@ import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
 import { useCallback, useLayoutEffect, useState } from 'react'
 import {
-  Share2Icon,
   MoreVerticalIcon,
+  Share2Icon,
   Trash2Icon,
   ExternalLinkIcon,
+  CloudOffIcon,
+  EraserIcon,
+  CloudUploadIcon,
 } from 'lucide-react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
-import { Modal, Pressable, StyleSheet, Text, View, Linking } from 'react-native'
+import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFiles, useFileDetails } from '../lib/filesContext'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
@@ -18,67 +21,58 @@ import { removeFromCache } from '../lib/fileCache'
 import { useDownload } from '../lib/downloadManager'
 import { extFromMime } from '../lib/fileTypes'
 import { useSettings } from '../lib/settingsContext'
-import { getOnePinnedObject } from '../lib/file'
+import { getOnePinnedObject, useFileStatus } from '../lib/file'
 import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
-import { encryptionKeyHexToUint8 } from '../lib/encryptionKey'
+import { useReuploadFile } from '../lib/uploadManager'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
 function HeaderActions({
+  isUploaded,
   onShare,
   onDeepLink,
   onMenu,
 }: {
+  isUploaded: boolean
   onShare: () => void
   onDeepLink: () => void
   onMenu: () => void
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: 14 }}>
-      <Share2Icon color="#0969da" size={20} onPress={onShare} />
-      <ExternalLinkIcon color="#0969da" size={20} onPress={onDeepLink} />
+      {isUploaded && <Share2Icon color="#0969da" size={20} onPress={onShare} />}
+      {isUploaded && (
+        <ExternalLinkIcon color="#0969da" size={20} onPress={onDeepLink} />
+      )}
       <MoreVerticalIcon color="#0969da" size={20} onPress={onMenu} />
     </View>
   )
 }
 
 function createHeaderRight(
+  isUploaded: boolean,
   onShare: () => void,
   onDeepLink: () => void,
   onMenu: () => void
 ) {
   return () => (
-    <HeaderActions onShare={onShare} onDeepLink={onDeepLink} onMenu={onMenu} />
+    <HeaderActions
+      isUploaded={isUploaded}
+      onShare={onShare}
+      onDeepLink={onDeepLink}
+      onMenu={onMenu}
+    />
   )
 }
 
 export default function FileDetailScreen({ route, navigation }: Props) {
   const toast = useToast()
   const { data: file } = useFileDetails(route.params.id)
-  const { deleteFile } = useFiles()
+  const status = useFileStatus(file ?? undefined)
+  const { deleteFile, removeFromNetwork } = useFiles()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const insets = useSafeAreaInsets()
   const { sdk } = useSettings()
-
-  const handleShare = useCallback(() => {
-    if (!file) return
-    if (!sdk) return
-    const pinnedObject = getOnePinnedObject(file)
-    if (!pinnedObject) return
-    const key = pinnedObject.key
-    if (!key) return
-    console.log('handleShare', pinnedObject)
-    // 1 day from now
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.objectShareUrl(
-      key,
-      encryptionKeyHexToBuffer(file.encryptionKey),
-      expiresAt
-    )
-    Clipboard.setString(shareUrl)
-    toast.show('Copied share URL')
-  }, [file, toast])
 
   const handleOpenMenu = useCallback(() => {
     setIsMenuOpen(true)
@@ -160,15 +154,48 @@ export default function FileDetailScreen({ route, navigation }: Props) {
     }
   }, [file?.id, file?.fileType, toast])
 
+  const reupload = useReuploadFile()
+  const handleReupload = useCallback(async () => {
+    if (!file) return
+    try {
+      await reupload(file.id)
+      toast.show('Reuploaded file')
+      setIsMenuOpen(false)
+    } catch (e) {
+      toast.show('Failed to reupload file')
+      setIsMenuOpen(false)
+    }
+  }, [file?.id, toast])
+
+  const handleRemoveFromNetwork = useCallback(async () => {
+    if (!file) return
+    try {
+      await removeFromNetwork(file.id)
+      toast.show('Removed from network')
+      setIsMenuOpen(false)
+    } catch (e) {
+      toast.show('Failed to remove from network')
+      setIsMenuOpen(false)
+    }
+  }, [file?.id, toast])
+
+  const isUploaded = status.isUploaded
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: createHeaderRight(
+        isUploaded,
         handleCopyShareUrl,
         handleOpenDeepLink,
         handleOpenMenu
       ),
     })
-  }, [navigation, handleCopyShareUrl, handleOpenDeepLink, handleOpenMenu])
+  }, [
+    navigation,
+    handleCopyShareUrl,
+    handleOpenDeepLink,
+    handleOpenMenu,
+    isUploaded,
+  ])
 
   const handleDownload = useDownload(file)
   return (
@@ -198,10 +225,28 @@ export default function FileDetailScreen({ route, navigation }: Props) {
             <Pressable
               accessibilityRole="button"
               style={styles.sheetRow}
+              onPress={handlePressAndClose(handleReupload)}
+            >
+              <CloudUploadIcon color="#0969da" size={18} />
+              <Text style={styles.sheetRowPrimaryText}>Reupload file</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.sheetRow}
               onPress={handlePressAndClose(handleRemoveCache)}
             >
-              <ArrowDownToLineIcon color="#0969da" size={18} />
+              <EraserIcon color="#0969da" size={18} />
               <Text style={styles.sheetRowPrimaryText}>Remove from cache</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.sheetRow}
+              onPress={handlePressAndClose(handleRemoveFromNetwork)}
+            >
+              <CloudOffIcon color="#0969da" size={18} />
+              <Text style={styles.sheetRowPrimaryText}>
+                Remove from network
+              </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
