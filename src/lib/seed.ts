@@ -1,18 +1,20 @@
 import * as SecureStore from 'expo-secure-store'
-import { Buffer } from 'buffer'
-import 'react-native-get-random-values'
+import {
+  encryptionKeyHexToUint8,
+  encryptionKeyUint8ToHex,
+  generateEncryptionKey,
+} from './encryptionKey'
 
 const seedKey = 'siamobile-seed'
 
 export function createSeed() {
-  const newSeed = new Uint8Array(32)
-  crypto.getRandomValues(newSeed)
-  if (newSeed.length !== 32) throw new Error('createseed seed length error')
-  return newSeed
+  return generateEncryptionKey()
 }
 
-export async function storeSeed(seed: Uint8Array) {
-  const seedString = Buffer.from(seed).toString('base64')
+export async function storeSeed(
+  seed: Uint8Array<ArrayBuffer>
+): Promise<boolean> {
+  const seedString = encryptionKeyUint8ToHex(seed)
   try {
     await SecureStore.setItemAsync(seedKey, seedString)
     return true
@@ -21,8 +23,8 @@ export async function storeSeed(seed: Uint8Array) {
   }
 }
 
-export async function loadSeed() {
+export async function loadSeed(): Promise<Uint8Array<ArrayBuffer> | null> {
   const seedString = await SecureStore.getItemAsync(seedKey)
   if (!seedString) return null
-  return new Uint8Array(Buffer.from(seedString, 'base64'))
+  return encryptionKeyHexToUint8(seedString)
 }
