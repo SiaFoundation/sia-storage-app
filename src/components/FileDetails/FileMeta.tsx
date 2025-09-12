@@ -4,7 +4,6 @@ import { type FileRecord } from '../../db/files'
 import { FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
-import { FileMap } from './FileMap'
 import { arrayBufferToHex } from '../../lib/hex'
 import { RowGroup, RowSubGroup } from '../Group'
 import { humanSize } from '../../functions/humanSize'
@@ -117,9 +116,9 @@ export function FileMeta({
                 ))}
               </InfoCard>
             </RowSubGroup>
-            <InfoCard>
+            {/* <InfoCard>
               <FileMap />
-            </InfoCard>
+            </InfoCard> */}
           </View>
         </Fragment>
       ))}
