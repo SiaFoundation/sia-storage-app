@@ -4,10 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
-import { Sdk } from 'react-native-sia'
+import { Sdk, setLogger } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
 import * as SplashScreen from 'expo-splash-screen'
@@ -54,6 +55,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isOnboarding, setIsOnboardingState] = useState<boolean | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [isAuthing, setIsAuthing] = useState(false)
+  const ref = useRef({
+    hasInitializedLogger: false,
+  })
 
   const [logs, setLogs] = useState<string[]>([])
   const log = useCallback((...args: any[]) => {
@@ -72,6 +76,29 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     logger.log = log
     logger.clear = clearLogs
   }, [log, clearLogs])
+
+  useEffect(() => {
+    if (ref.current.hasInitializedLogger) return
+    ref.current.hasInitializedLogger = true
+    console.log('Setting logger')
+    setLogger(
+      {
+        debug: (...args: any[]) => {
+          log('[rust][debug]', ...args)
+        },
+        info: (...args: any[]) => {
+          log('[rust][info]', ...args)
+        },
+        warn: (...args: any[]) => {
+          log('[rust][warn]', ...args)
+        },
+        error: (...args: any[]) => {
+          log('[rust][error]', ...args)
+        },
+      },
+      'debug'
+    )
+  }, [])
 
   useEffect(() => {
     let splashTimeout: NodeJS.Timeout
