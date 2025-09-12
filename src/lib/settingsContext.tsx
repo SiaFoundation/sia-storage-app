@@ -48,7 +48,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   )
   const [indexerName, setIndexerName] = useState<string>('Test')
   const [indexerURL, setIndexerURL] = useState<string>(
-    'https://app.indexd.zeus.sia.dev'
+    'https://app.sia.storage'
   )
   const [sdk, setSdk] = useState<Sdk>(() => new Sdk(indexerURL, appSeed.buffer))
   const [isOnboarding, setIsOnboardingState] = useState<boolean | null>(null)
