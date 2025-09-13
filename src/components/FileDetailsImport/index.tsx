@@ -1,5 +1,4 @@
 import { View, StyleSheet, ScrollView } from 'react-native'
-import { type FileRecord } from '../../db/files'
 import { useFileStatus } from '../../lib/file'
 import { FileViewerImport } from '../FileViewerImport'
 import { FileMetaImport } from './FileMetaImport'
@@ -12,7 +11,6 @@ export function FileDetailsImport({
     id: string
     fileName: string | null
     fileSize: number | null
-    createdAt: number
     fileType: string | null
     pinnedObjects: unknown
   }

@@ -15,7 +15,6 @@ import {
 import { type FeedStackParamList } from '../navigation/types'
 import { useToast } from '../lib/toastContext'
 import { useSettings } from '../lib/settingsContext'
-import { FileViewerImport } from '../components/FileViewerImport'
 import { parseFileMetadata } from '../lib/file'
 import { createFileRecord } from '../db/files'
 import { PinnedObject } from 'react-native-sia'
@@ -53,7 +52,6 @@ export default function ImportFileScreen({ route }: Props) {
       fileType: meta.data?.fileType ?? '',
       fileSize: meta.data?.size ?? 0,
       fileName: '',
-      createdAt: new Date().getTime(),
       pinnedObjects: true,
     }),
     [id, meta.data, sharedObject.data]
