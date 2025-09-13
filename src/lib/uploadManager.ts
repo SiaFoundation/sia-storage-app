@@ -83,7 +83,7 @@ export function usePickAndUploadMedia() {
           fileSize: asset.fileSize,
           createdAt: asset.createdAt,
           fileType: asset.fileType,
-          pinnedObjects: null,
+          pinnedObjects: {},
           encryptionKey: encryptionKeyUint8ToHex(asset.encryptionKey),
         })
       }
@@ -194,7 +194,7 @@ export function useReuploadFile() {
           fileSize: file.fileSize,
           createdAt: file.createdAt,
           fileType: file.fileType,
-          pinnedObjects: null,
+          pinnedObjects: {},
           encryptionKey: file.encryptionKey,
         })
         logger.log(`Processing media ${fileId}...`)

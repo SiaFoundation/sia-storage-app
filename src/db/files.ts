@@ -1,7 +1,11 @@
-import * as SQLite from 'expo-sqlite'
-import { PinnedObject } from 'react-native-sia'
-import { deserializePinnedObjects, serializePinnedObjects } from './encoding'
+import { type PinnedObject } from 'react-native-sia'
+import {
+  deserializePinnedObjects,
+  PinnedObjectsMap,
+  serializePinnedObjects,
+} from './encoding'
 import { logger } from '../lib/logger'
+import { db } from '.'
 
 export type FileRecord = {
   id: string
@@ -9,51 +13,8 @@ export type FileRecord = {
   fileSize: number | null
   createdAt: number
   fileType: string | null
-  pinnedObjects: Record<string, PinnedObject> | null
+  pinnedObjects: Record<string, PinnedObject>
   encryptionKey: string
-}
-
-let db: SQLite.SQLiteDatabase
-const dbName = 'siamobile.db'
-
-export async function initFileDB(): Promise<void> {
-  db = await SQLite.openDatabaseAsync(dbName)
-  // Ensure schema matches expected columns; drop legacy table if incompatible.
-  try {
-    const cols = await db.getAllAsync<{ name: string }>(
-      "PRAGMA table_info('files')"
-    )
-    const colNames = new Set(cols.map((c) => c.name))
-    const expected = [
-      'id',
-      'fileName',
-      'fileSize',
-      'createdAt',
-      'fileType',
-      'encryptionKey',
-      'pinnedObjects',
-    ]
-    const matches =
-      expected.every((e) => colNames.has(e)) &&
-      colNames.size === expected.length
-    if (!matches) {
-      logger.log('Incompatible schema found, dropping table')
-      await db.execAsync('DROP TABLE IF EXISTS files')
-    } else {
-      logger.log('Schema matches expected columns')
-    }
-  } catch {}
-  await db.execAsync(
-    `CREATE TABLE IF NOT EXISTS files (
-      id TEXT PRIMARY KEY,
-      fileName TEXT,
-      fileSize INTEGER,
-      createdAt INTEGER NOT NULL,
-      fileType TEXT NOT NULL DEFAULT 'application/octet-stream',
-      pinnedObjects TEXT,
-      encryptionKey TEXT
-    );`
-  )
 }
 
 export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
@@ -66,41 +27,30 @@ export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
     pinnedObjects,
     encryptionKey,
   } = fileRecord
-  await db.runAsync(
-    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  await db().runAsync(
+    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, encryptionKey) VALUES (?, ?, ?, ?, ?, ?)',
     id,
     fileName,
     fileSize,
     createdAt,
     fileType,
-    pinnedObjects == null ? null : serializePinnedObjects(pinnedObjects),
     encryptionKey
   )
+  await updateFilePinnedObjects(id, pinnedObjects)
 }
 
 export async function createManyFileRecords(
   files: FileRecord[]
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await db().withTransactionAsync(async () => {
     for (const fr of files) {
-      await db.runAsync(
-        'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        fr.id,
-        fr.fileName,
-        fr.fileSize,
-        fr.createdAt,
-        fr.fileType,
-        fr.pinnedObjects == null
-          ? null
-          : serializePinnedObjects(fr.pinnedObjects),
-        fr.encryptionKey
-      )
+      await createFileRecord(fr)
     }
   })
 }
 
 export async function readAllFileRecords(): Promise<FileRecord[]> {
-  const rows = await db.getAllAsync<{
+  const rows = await db().getAllAsync<{
     id: string
     fileName: string | null
     fileSize: number | null
@@ -111,15 +61,48 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
   }>(
     'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
   )
-  return rows.map((r) => ({
-    id: r.id,
-    fileName: r.fileName,
-    fileSize: r.fileSize,
-    createdAt: r.createdAt,
-    fileType: r.fileType,
-    pinnedObjects: deserializePinnedObjects(r.pinnedObjects),
-    encryptionKey: r.encryptionKey,
-  }))
+  return rows.map(transformRow)
+}
+
+export async function readFileRecord(id: string): Promise<FileRecord | null> {
+  const row = await db().getFirstAsync<{
+    id: string
+    fileName: string | null
+    fileSize: number | null
+    createdAt: number
+    fileType: string
+    pinnedObjects: string | null
+    encryptionKey: string
+  }>(
+    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files WHERE id = ?',
+    id
+  )
+  if (!row) {
+    logger.log('[db] file not found', id)
+    return null
+  }
+  return transformRow(row)
+}
+
+function transformRow(row: {
+  id: string
+  fileName: string | null
+  fileSize: number | null
+  createdAt: number
+  fileType: string
+  pinnedObjects: string | null
+  encryptionKey: string
+}): FileRecord {
+  const [pinnedObjects] = deserializePinnedObjects(row.id, row.pinnedObjects)
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    createdAt: row.createdAt,
+    fileType: row.fileType,
+    pinnedObjects: pinnedObjects ?? {},
+    encryptionKey: row.encryptionKey,
+  }
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
@@ -132,49 +115,40 @@ export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
     pinnedObjects,
     encryptionKey,
   } = fileRecord
-  await db.runAsync(
-    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, pinnedObjects = ?, encryptionKey = ? WHERE id = ?',
+  await db().runAsync(
+    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, encryptionKey = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
     fileType,
-    pinnedObjects == null ? null : serializePinnedObjects(pinnedObjects),
     encryptionKey,
     id
   )
+  await updateFilePinnedObjects(id, pinnedObjects)
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
-  await db.runAsync('DELETE FROM files WHERE id = ?', id)
+  await db().runAsync('DELETE FROM files WHERE id = ?', id)
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
-  await db.runAsync('DELETE FROM files')
+  await db().runAsync('DELETE FROM files')
 }
 
-export async function readFileRecord(id: string): Promise<FileRecord | null> {
-  const row = await db.getFirstAsync<{
-    id: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    fileType: string
-    pinnedObjects: string | null
-    encryptionKey: string
-  }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files WHERE id = ?',
+export async function updateFilePinnedObjects(
+  id: string,
+  pinnedObjects: PinnedObjectsMap
+): Promise<void> {
+  const [serializedPinnedObjects, error] = serializePinnedObjects(pinnedObjects)
+  if (error) {
+    logger.log('[db] error serializing pinned objects, skipping update', error)
+    return
+  }
+  await db().runAsync(
+    'UPDATE files SET pinnedObjects = ? WHERE id = ?',
+    serializedPinnedObjects,
     id
   )
-  if (!row) return null
-  return {
-    id: row.id,
-    fileName: row.fileName,
-    fileSize: row.fileSize,
-    createdAt: row.createdAt,
-    fileType: row.fileType,
-    pinnedObjects: deserializePinnedObjects(row.pinnedObjects),
-    encryptionKey: row.encryptionKey,
-  }
 }
 
 export async function updateFilePinnedObject(
@@ -183,12 +157,20 @@ export async function updateFilePinnedObject(
   pinnedObject: PinnedObject
 ): Promise<void> {
   const file = await readFileRecord(id)
-  if (file == null) return
+  if (file == null) {
+    logger.log('[db] file not found', id)
+    return
+  }
   const pos = file.pinnedObjects ?? {}
   pos[indexerURL] = pinnedObject
-  await db.runAsync(
+  const [serializedPinnedObjects, error] = serializePinnedObjects(pos)
+  if (error) {
+    logger.log('[db] error serializing pinned objects, skipping update', error)
+    return
+  }
+  await db().runAsync(
     'UPDATE files SET pinnedObjects = ? WHERE id = ?',
-    serializePinnedObjects(pos),
+    serializedPinnedObjects,
     id
   )
 }
