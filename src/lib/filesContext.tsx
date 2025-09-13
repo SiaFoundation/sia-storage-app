@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  initFileDB,
   readAllFileRecords,
   readFileRecord,
   createFileRecord,
@@ -33,12 +32,6 @@ const FilesContext = createContext<FilesContextValue | undefined>(undefined)
 
 export function FilesProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
-  useEffect(() => {
-    ;(async () => {
-      await initFileDB()
-      setReady(true)
-    })()
-  }, [])
 
   const refetch = useCallback(() => {
     mutate((key: string) => {
@@ -83,7 +76,7 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const file = await readFileRecord(id)
       if (file == null) return
-      await updateFileRecord({ ...file, pinnedObjects: null })
+      await updateFileRecord({ ...file, pinnedObjects: {} })
       refetch()
     },
     [refetch]
@@ -101,7 +94,6 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  if (!ready) return null
   return <FilesContext.Provider value={value}>{children}</FilesContext.Provider>
 }
 
