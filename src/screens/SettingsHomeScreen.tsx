@@ -6,7 +6,7 @@ import { useSettings } from '../lib/settingsContext'
 export type SettingsStackParamList = {
   SettingsHome: undefined
   Hosts: undefined
-  HostDetail: { host: string }
+  HostDetail: { publicKey: string }
   Indexer: undefined
 }
 
