@@ -10,6 +10,7 @@ import { type FeedStackParamList } from '../navigation/types'
 import { useFiles, useFileList } from '../lib/filesContext'
 import { type FileRecord } from '../db/files'
 import { FileList } from '../components/FileList'
+import { logger } from '../lib/logger'
 
 export default function HomeScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
@@ -27,7 +28,7 @@ export default function HomeScreen() {
     try {
       pickAndUploadMedia()
     } catch (e) {
-      log(`Upload flow error: ${String(e)}`)
+      logger.log(`Upload flow error: ${String(e)}`)
     }
   }, [sdk, log, createFile])
 

@@ -1,4 +1,5 @@
 import { Alert, Share } from 'react-native'
+import { logger } from '../lib/logger'
 
 export default async function shareLink({ url }: { url: string }) {
   try {
@@ -7,7 +8,7 @@ export default async function shareLink({ url }: { url: string }) {
     })
     if (result.action === Share.sharedAction) {
       if (result.activityType) {
-        console.log(result.activityType)
+        logger.log(result.activityType)
         // shared with activity type of result.activityType
       } else {
         // shared

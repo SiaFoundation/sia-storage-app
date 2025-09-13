@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 import { PinnedObject } from 'react-native-sia'
 import { deserializePinnedObjects, serializePinnedObjects } from './encoding'
+import { logger } from '../lib/logger'
 
 export type FileRecord = {
   id: string
@@ -36,10 +37,10 @@ export async function initFileDB(): Promise<void> {
       expected.every((e) => colNames.has(e)) &&
       colNames.size === expected.length
     if (!matches) {
-      console.warn('Incompatible schema found, dropping table')
+      logger.log('Incompatible schema found, dropping table')
       await db.execAsync('DROP TABLE IF EXISTS files')
     } else {
-      console.log('Schema matches expected columns')
+      logger.log('Schema matches expected columns')
     }
   } catch {}
   await db.execAsync(

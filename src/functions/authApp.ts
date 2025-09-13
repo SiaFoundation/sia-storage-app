@@ -5,7 +5,6 @@ export default async function authApp(url: string) {
   if (await InAppBrowser.isAvailable()) {
     const sub = Linking.addEventListener('url', ({ url: recievedURL }) => {
       if (recievedURL.includes('siamobile://')) {
-        console.log(recievedURL)
         InAppBrowser.close()
         sub.remove()
       }

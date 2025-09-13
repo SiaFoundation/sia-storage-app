@@ -1,9 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import useSWR, { mutate } from 'swr'
-import { logger } from './settingsContext'
 import { Ext } from './fileTypes'
-import { FileRecord, readFileRecord, updateFileRecord } from '../db/files'
-import { updateDownloadProgress } from './downloadState'
+import { logger } from './logger'
 
 const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 

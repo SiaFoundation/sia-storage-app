@@ -1,14 +1,7 @@
 import { PinnedObject } from 'react-native-sia'
 import { hexToUint8, arrayBufferToHex } from '../lib/hex'
 import { z } from 'zod'
-
-type SerializedPinnedObject = {
-  key: string
-  slabs: { id: string; offset: number; length: number }[]
-  metadata: string
-  createdAt: string
-  updatedAt: string
-}
+import { logger } from '../lib/logger'
 
 const hexArrayBuffer = z.codec(z.hex(), z.instanceof(ArrayBuffer), {
   decode: (hex) => hexToUint8(hex).slice().buffer as ArrayBuffer,
@@ -63,37 +56,52 @@ const pinnedObjectStorageCodec = z.codec(
   }
 )
 
+type SerializedPinnedObject = ReturnType<typeof pinnedObjectStorageCodec.encode>
+
 export function serializePinnedObjects(
   pinnedObjects: Record<string, PinnedObject>
 ): string {
-  const encoded: Record<string, SerializedPinnedObject> = Object.fromEntries(
-    Object.entries(pinnedObjects).map(([k, v]) => {
-      const e = pinnedObjectStorageCodec.encode(v)
-      return [
-        k,
-        {
-          key: e.key,
-          slabs: e.slabs,
-          metadata: e.metadata,
-          createdAt: String(e.createdAt),
-          updatedAt: String(e.updatedAt),
-        } satisfies SerializedPinnedObject,
-      ]
-    })
-  )
-  return JSON.stringify(encoded)
+  try {
+    const encoded: Record<string, SerializedPinnedObject> = Object.fromEntries(
+      Object.entries(pinnedObjects).map(([k, v]) => {
+        const e = pinnedObjectStorageCodec.encode(v)
+        return [
+          k,
+          {
+            key: e.key,
+            slabs: e.slabs,
+            metadata: e.metadata,
+            createdAt: String(e.createdAt),
+            updatedAt: String(e.updatedAt),
+          } satisfies SerializedPinnedObject,
+        ]
+      })
+    )
+    return JSON.stringify(encoded)
+  } catch (e) {
+    logger.log('Error serializing pinned objects', e)
+    throw e
+  }
 }
 
 export function deserializePinnedObjects(
   pinnedObjects: string | null
 ): Record<string, PinnedObject> {
-  if (pinnedObjects == null) return {}
-  const parsed = JSON.parse(pinnedObjects) as Record<string, unknown>
-  const decoded: Record<string, PinnedObject> = Object.fromEntries(
-    Object.entries(parsed).map(([k, v]) => [
-      k,
-      pinnedObjectStorageCodec.decode(v as any),
-    ])
-  )
-  return decoded
+  try {
+    if (pinnedObjects == null) return {}
+    const parsed = JSON.parse(pinnedObjects) as Record<
+      string,
+      SerializedPinnedObject
+    >
+    const decoded: Record<string, PinnedObject> = Object.fromEntries(
+      Object.entries(parsed).map(([k, v]) => [
+        k,
+        pinnedObjectStorageCodec.decode(v),
+      ])
+    )
+    return decoded
+  } catch (e) {
+    logger.log('Error deserializing pinned objects', e)
+    throw e
+  }
 }
