@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { View, StyleSheet } from 'react-native'
-import { FileStatus } from '../../lib/file'
+import { type FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 import { RowGroup } from '../Group'
@@ -13,7 +13,6 @@ export function FileMetaImport({
     id: string
     fileName: string | null
     fileSize: number | null
-    createdAt: number
     fileType: string | null
   }
   status: FileStatus
@@ -37,11 +36,6 @@ export function FileMetaImport({
           <LabeledValueRow
             label="Size"
             value={humanSize ?? '—'}
-            showDividerTop
-          />
-          <LabeledValueRow
-            label="Created"
-            value={new Date(file.createdAt).toLocaleString()}
             showDividerTop
           />
           <LabeledValueRow

@@ -89,7 +89,7 @@ export function deserializePinnedObjects(
 ): Record<string, PinnedObject> {
   try {
     if (pinnedObjects == null) return {}
-    const parsed = JSON.parse(pinnedObjects) as Record<
+    const parsed = (JSON.parse(pinnedObjects) || {}) as Record<
       string,
       SerializedPinnedObject
     >
