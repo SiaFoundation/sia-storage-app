@@ -26,7 +26,6 @@ import ConnectionBanner from './components/ConnectionBanner'
 import * as SplashScreen from 'expo-splash-screen'
 import ImportFileScreen from './screens/ImportFileScreen'
 import useLinkedURL from './hooks/useLinkedURL'
-import { logger } from './lib/logger'
 
 SplashScreen.preventAutoHideAsync()
 
