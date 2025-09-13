@@ -24,6 +24,7 @@ import { uniqueId } from '../lib/uniqueId'
 import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
+import { logger } from '../lib/logger'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'ImportFile'>
 
@@ -34,13 +35,11 @@ export default function ImportFileScreen({ route }: Props) {
   const shareUrl = route.params?.shareUrl
   const { sdk, indexerURL } = useSettings()
   const sharedObject = useSWR([shareUrl], async () => {
-    console.log('getting shared object', shareUrl)
     try {
       const sharedObject = await sdk.sharedObject(shareUrl ?? '')
-      console.log('sharedObject', sharedObject)
       return sharedObject
     } catch (e) {
-      console.error('Error getting shared object', e)
+      logger.log('Error getting shared object', e)
       return null
     }
   })
@@ -62,7 +61,6 @@ export default function ImportFileScreen({ route }: Props) {
 
   const handleAddToDatabase = useCallback(async () => {
     if (!sharedObject.data) return
-    console.log('handleAddToDatabase', sharedObject.data)
     const pinnedObject: PinnedObject = {
       key: sharedObject.data.key,
       slabs: sharedObject.data.slabs.map((sharedSlab) => ({

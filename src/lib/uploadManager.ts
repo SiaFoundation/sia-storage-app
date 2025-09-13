@@ -8,15 +8,13 @@ import { useSettings } from './settingsContext'
 import { useFiles } from './filesContext'
 import { extFromMime, mimeFromAssetUri } from './fileTypes'
 import {
-  encryptionKeyArrayBufferToHex,
-  encryptionKeyHexToBuffer,
   encryptionKeyHexToUint8,
   encryptionKeyUint8ToHex,
   generateEncryptionKey,
-  generateEncryptionKeyHex,
 } from './encryptionKey'
 import { uniqueId } from './uniqueId'
-import { FileRecord, readFileRecord } from '../db/files'
+import { readFileRecord } from '../db/files'
+import { logger } from './logger'
 
 export type PickerAsset = {
   id: string
@@ -25,15 +23,15 @@ export type PickerAsset = {
   fileSize: number | null
   createdAt: number
   fileType: string | null
-  encryptionKey?: Uint8Array
+  encryptionKey?: Uint8Array<ArrayBuffer>
 }
 
 export function usePickAndUploadMedia() {
-  const { sdk, log, indexerURL } = useSettings()
+  const { sdk, indexerURL } = useSettings()
   const { createFile } = useFiles()
   return useCallback(async () => {
     try {
-      log('Opening media picker...')
+      logger.log('Opening media picker...')
       const result = await ImagePicker.launchImageLibrary({
         mediaType: 'mixed',
         selectionLimit: 0, // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
@@ -42,11 +40,13 @@ export function usePickAndUploadMedia() {
       })
 
       if (result.didCancel) {
-        log('Media selection canceled.')
+        logger.log('Media selection canceled.')
         return []
       }
       if (result.errorCode) {
-        log(`Media picker error: ${result.errorMessage ?? result.errorCode}`)
+        logger.log(
+          `Media picker error: ${result.errorMessage ?? result.errorCode}`
+        )
         return []
       }
 
@@ -63,12 +63,12 @@ export function usePickAndUploadMedia() {
         }))
 
       if (assets.length === 0) {
-        log('No media selected.')
+        logger.log('No media selected.')
         return []
       }
 
       for (const asset of assets) {
-        log(
+        logger.log(
           'Creating file record for asset',
           asset.id,
           asset.fileName,
@@ -118,7 +118,9 @@ export function usePickAndUploadMedia() {
             continue
           }
           try {
-            log(`Processing media ${currentIndex + 1}/${assets.length}...`)
+            logger.log(
+              `Processing media ${currentIndex + 1}/${assets.length}...`
+            )
             const cacheUri = asset.uri
               ? await copyUriToCache(
                   asset.id,
@@ -130,26 +132,25 @@ export function usePickAndUploadMedia() {
                   await readArrayBuffer(asset),
                   extFromMime(asset.fileType)
                 )
-            log(`Cached file ${asset.id} -> ${cacheUri}`)
+            logger.log(`Cached file ${asset.id} -> ${cacheUri}`)
             const cachedItem: PickerAsset = { ...asset, uri: cacheUri }
-            log(`Uploading ${asset.id} to Sia...`)
+            logger.log(`Uploading ${asset.id} to Sia...`)
             // Stream from cached file to keep memory low.
             const fileBytes = await new FileSystem.File(cacheUri).bytes()
             await uploadToSia({
               asset,
               indexerURL,
-              log,
               sdk,
               encryptionKey: asset.encryptionKey,
               data: fileBytes.buffer as ArrayBuffer,
             })
-            log(`Upload complete ${asset.id}`)
+            logger.log(`Upload complete ${asset.id}`)
             const done: PickerAsset = {
               ...cachedItem,
             }
             assets[currentIndex] = done
           } catch (e) {
-            log(`Upload flow error: ${String(e)}`)
+            logger.log(`Upload flow error: ${String(e)}`)
             const errored: PickerAsset = { ...asset }
             assets[currentIndex] = errored
           }
@@ -159,17 +160,17 @@ export function usePickAndUploadMedia() {
       const workerCount = Math.min(CONCURRENCY_LIMIT, assets.length)
       await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
-      log('All selected assets processed.')
+      logger.log('All selected assets processed.')
       return assets
     } catch (e) {
-      log(`Upload flow error: ${String(e)}`)
+      logger.log(`Upload flow error: ${String(e)}`)
       return []
     }
-  }, [sdk, log])
+  }, [sdk])
 }
 
 export function useReuploadFile() {
-  const { sdk, log, indexerURL } = useSettings()
+  const { sdk, indexerURL } = useSettings()
   const { createFile } = useFiles()
   return useCallback(
     async (fileId: string) => {
@@ -196,29 +197,28 @@ export function useReuploadFile() {
           pinnedObjects: null,
           encryptionKey: file.encryptionKey,
         })
-        log(`Processing media ${fileId}...`)
-        log(`Cached file ${fileId} -> ${cachedUri}`)
+        logger.log(`Processing media ${fileId}...`)
+        logger.log(`Cached file ${fileId} -> ${cachedUri}`)
         const cachedItem: PickerAsset = {
           ...file,
           uri: cachedUri,
           encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
         }
-        log(`Uploading ${fileId} to Sia...`)
+        logger.log(`Uploading ${fileId}...`)
         // Stream from cached file to keep memory low.
         const fileBytes = await new FileSystem.File(cachedUri).bytes()
         await uploadToSia({
           asset: cachedItem,
           indexerURL,
-          log,
           sdk,
           encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
           data: fileBytes.buffer as ArrayBuffer,
         })
-        log(`Upload complete ${fileId}`)
+        logger.log(`Upload complete ${fileId}`)
       } catch (e) {
-        log(`Upload flow error: ${String(e)}`)
+        logger.log(`Upload flow error: ${String(e)}`)
       }
     },
-    [sdk, log]
+    [sdk]
   )
 }

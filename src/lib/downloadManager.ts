@@ -15,10 +15,8 @@ import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
 import { getOnePinnedObject } from './file'
-import {
-  encryptionKeyHexToBuffer,
-  encryptionKeyHexToUint8,
-} from './encryptionKey'
+import { encryptionKeyHexToBuffer } from './encryptionKey'
+import { logger } from './logger'
 
 export function useDownload(
   file?: {
@@ -41,29 +39,11 @@ export function useDownload(
         const pinnedObject = getOnePinnedObject(file)
         if (!pinnedObject) {
           toast.show('No slabs available for this file')
-          log('Download aborted: no slabs for', file.id)
+          logger.log('Download aborted: no slabs for', file.id)
           return
         }
         toast.show('Starting download...')
-        log('Starting download for', file.id)
-        log('Slabs type:', JSON.stringify(pinnedObject.slabs, null, 2))
         try {
-          console.log('encryptionKey', file.encryptionKey)
-          console.log(
-            'encryptionKeyBuffer',
-            encryptionKeyHexToUint8(file.encryptionKey)
-          )
-          console.log('file.fileSize', file.fileSize)
-
-          console.log('pinnedObject metadata', pinnedObject)
-          console.log(
-            'pinnedObject metadata type',
-            typeof pinnedObject.metadata
-          )
-          console.log(
-            'pinnedObject metadata json',
-            JSON.stringify(pinnedObject, null, 2)
-          )
           const downloader = await sdk.download(
             encryptionKeyHexToBuffer(file.encryptionKey),
             pinnedObject,
@@ -73,7 +53,6 @@ export function useDownload(
               length: undefined,
             }
           )
-          console.log('downloader after')
           const targetFile = await getOrCreateCachedFile(
             file.id,
             streamDirectlyToCache ? extFromMime(file.fileType) : '.tmp'
@@ -81,7 +60,7 @@ export function useDownload(
           if (streamDirectlyToCache) {
             refreshCache(file.id)
           }
-          log('Writing to cache path:', targetFile.uri)
+          logger.log('Writing to cache path:', targetFile.uri)
           const writer = targetFile.writableStream().getWriter()
           let total = 0
           let chunks = 0
@@ -90,10 +69,14 @@ export function useDownload(
             ? pinnedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
             : undefined
           while (true) {
-            console.log('downloading chunk', chunks, total)
             const chunk = await downloader.readChunk()
             if (!chunk || chunk.byteLength === 0) {
-              log('Download stream ended. chunks=', chunks, 'bytes=', total)
+              logger.log(
+                'Download stream ended. chunks=',
+                chunks,
+                'bytes=',
+                total
+              )
               break
             }
             total += chunk.byteLength
@@ -109,10 +92,11 @@ export function useDownload(
                 Math.min(0.99, (chunks % 20) / 20)
               )
             }
-            if (chunks % 10 === 0) log('Downloaded', total, 'bytes so far')
+            if (chunks % 10 === 0)
+              logger.log('Downloaded', total, 'bytes so far')
           }
           await writer.close()
-          log('Writer closed. Total bytes:', total)
+          logger.log('Writer closed. Total bytes:', total)
 
           if (!streamDirectlyToCache) {
             await copyFileToCache(
@@ -126,14 +110,14 @@ export function useDownload(
 
           clearDownloadState(file.id)
         } catch (inner) {
-          log('Download stream error:', String(inner))
+          logger.log('Download stream error:', String(inner))
           clearDownloadState(file.id)
           throw inner
         }
         toast.show('Downloaded to cache')
       } catch (e) {
-        log(
-          'XXX Download failed for',
+        logger.log(
+          'Download failed for',
           file.id,
           '-',
           e instanceof Error ? e.message : String(e)

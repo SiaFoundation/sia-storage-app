@@ -14,10 +14,11 @@ import { useSettings } from './settingsContext'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
 import { parseFileMetadata } from './file'
+import { logger } from './logger'
 
 export function useDownloadShared() {
   const toast = useToast()
-  const { sdk, log } = useSettings()
+  const { sdk } = useSettings()
   const { updateFile } = useFiles()
   return useCallback(
     async (id: string, sharedUrl: string) => {
@@ -25,7 +26,6 @@ export function useDownloadShared() {
         if (!sdk) throw new Error('SDK unavailable')
         toast.show('Starting download...')
         try {
-          console.log('sharedUrl', sharedUrl)
           const sharedObject = await sdk.sharedObject(sharedUrl)
           const downloader = await sdk.downloadShared(sharedUrl, {
             maxInflight: 15,
@@ -33,7 +33,7 @@ export function useDownloadShared() {
             length: undefined,
           })
           const targetFile = await getOrCreateCachedFile(id, '.tmp')
-          log('Writing to cache path:', targetFile.uri)
+          logger.log('Writing to cache path:', targetFile.uri)
           const writer = targetFile.writableStream().getWriter()
           let total = 0
           let chunks = 0
@@ -42,7 +42,12 @@ export function useDownloadShared() {
           while (true) {
             const chunk = await downloader.readChunk()
             if (!chunk || chunk.byteLength === 0) {
-              log('Download stream ended. chunks=', chunks, 'bytes=', total)
+              logger.log(
+                'Download stream ended. chunks=',
+                chunks,
+                'bytes=',
+                total
+              )
               break
             }
             total += chunk.byteLength
@@ -55,10 +60,11 @@ export function useDownloadShared() {
               // Coarse updates when size unknown.
               updateDownloadProgress(id, Math.min(0.99, (chunks % 20) / 20))
             }
-            if (chunks % 10 === 0) log('Downloaded', total, 'bytes so far')
+            if (chunks % 10 === 0)
+              logger.log('Downloaded', total, 'bytes so far')
           }
           await writer.close()
-          log('Writer closed. Total bytes:', total)
+          logger.log('Writer closed. Total bytes:', total)
 
           await copyFileToCache(id, targetFile, extFromMime(meta.fileType))
 
@@ -66,14 +72,14 @@ export function useDownloadShared() {
 
           clearDownloadState(id)
         } catch (inner) {
-          log('Download stream error:', String(inner))
+          logger.log('Download stream error:', String(inner))
           clearDownloadState(id)
           throw inner
         }
         toast.show('Downloaded to cache')
         return id
       } catch (e) {
-        log(
+        logger.log(
           'Download failed for',
           id,
           '-',
@@ -82,6 +88,6 @@ export function useDownloadShared() {
         toast.show('Download failed')
       }
     },
-    [sdk, updateFile, toast, log]
+    [sdk, updateFile, toast, logger.log]
   )
 }

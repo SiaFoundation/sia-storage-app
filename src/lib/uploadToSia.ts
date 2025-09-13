@@ -1,9 +1,9 @@
 import { PinnedObject, Sdk } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from './uploadState'
 import { updateFilePinnedObject } from '../db/files'
-import { Logger } from './settingsContext'
 import { PickerAsset } from './uploadManager'
 import { createFileMetadata } from './file'
+import { logger } from './logger'
 
 export type UploadProgress = {
   bytesWritten: number
@@ -13,7 +13,6 @@ export type UploadProgress = {
 
 export async function uploadToSia(params: {
   asset: PickerAsset
-  log: Logger
   sdk: Sdk
   indexerURL: string
   encryptionKey: Uint8Array
@@ -23,7 +22,6 @@ export async function uploadToSia(params: {
   signal?: AbortSignal
 }): Promise<void> {
   const {
-    log,
     sdk,
     indexerURL,
     encryptionKey,
@@ -34,7 +32,6 @@ export async function uploadToSia(params: {
     signal,
   } = params
 
-  console.log('uploadToSia encryptionKey', encryptionKey)
   const upload = await sdk.upload(
     encryptionKey.slice().buffer,
     createFileMetadata({
@@ -48,9 +45,9 @@ export async function uploadToSia(params: {
       parityShards,
       progressCallback: {
         progress: (uploaded, encodedSize) => {
-          console.log('uploaded', uploaded, 'encodedSize', encodedSize)
+          logger.log('uploaded', uploaded, 'encodedSize', encodedSize)
           const percent = (uploaded * 1000n) / encodedSize
-          console.log('percent', percent)
+          logger.log('percent', percent)
           updateUploadProgress(asset.id, Number(percent) / 1000)
         },
       },
@@ -65,7 +62,7 @@ export async function uploadToSia(params: {
   setUploadState(asset.id, { status: 'uploading', progress: 0 })
 
   while (offset < total) {
-    log(`Uploading chunk ${offset} of ${total}...`)
+    logger.log(`Uploading chunk ${offset} of ${total}...`)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const end = Math.min(offset + chunkSize, total)
     const chunk = data.slice(offset, end)
@@ -74,7 +71,7 @@ export async function uploadToSia(params: {
     } else {
       await upload.write(chunk)
     }
-    log(`Uploaded chunk ${offset} of ${total}`)
+    logger.log(`Uploaded chunk ${offset} of ${total}`)
     offset = end
   }
 

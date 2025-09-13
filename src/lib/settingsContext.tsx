@@ -8,18 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Sdk, setLogger } from 'react-native-sia'
+import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
 import authApp from '../functions/authApp'
 import * as SplashScreen from 'expo-splash-screen'
 import { createSeed, loadSeed, storeSeed } from './seed'
+import { logger } from './logger'
 
 export type Logger = (...args: any[]) => void
-
-export const logger = {
-  log: (...args: any[]) => {},
-  clear: () => {},
-}
 
 type SettingsContextValue = {
   sdk: Sdk
@@ -55,15 +51,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isOnboarding, setIsOnboardingState] = useState<boolean | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [isAuthing, setIsAuthing] = useState(false)
-  const ref = useRef({
-    hasInitializedLogger: false,
-  })
 
   const [logs, setLogs] = useState<string[]>([])
   const log = useCallback((...args: any[]) => {
     console.log(...args)
     setLogs((prev) => [
-      ...prev,
+      ...prev.slice(-100),
       `${new Date().toLocaleTimeString()} ${args.join(' ')}`,
     ])
   }, [])
@@ -77,28 +70,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     logger.clear = clearLogs
   }, [log, clearLogs])
 
-  useEffect(() => {
-    if (ref.current.hasInitializedLogger) return
-    ref.current.hasInitializedLogger = true
-    console.log('Setting logger')
-    setLogger(
-      {
-        debug: (...args: any[]) => {
-          log('[rust][debug]', ...args)
-        },
-        info: (...args: any[]) => {
-          log('[rust][info]', ...args)
-        },
-        warn: (...args: any[]) => {
-          log('[rust][warn]', ...args)
-        },
-        error: (...args: any[]) => {
-          log('[rust][error]', ...args)
-        },
-      },
-      'debug'
-    )
-  }, [])
+  useEffect(() => {}, [])
 
   useEffect(() => {
     let splashTimeout: NodeJS.Timeout
@@ -174,16 +146,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setIsAuthing(true)
       const targetUrl = nextIndexerURL ?? indexerURL
       try {
-        log(
+        logger.log(
           `Creating candidate SDK for ${targetUrl} with ${appSeed.toString()} ...`
         )
         const candidate = new Sdk(targetUrl, appSeed.buffer)
 
-        log('Calling connect...')
+        logger.log('Calling connect...')
         const connected = await candidate.connect()
 
         if (!connected) {
-          log('No connection. Requesting app connection...')
+          logger.log('No connection. Requesting app connection...')
           const url = await candidate.requestAppConnection({
             name: 'Test',
             description: 'Test',
@@ -198,7 +170,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           if (!authorized) throw new Error('App not authorized')
         }
 
-        log('Connected. Promoting to active SDK.')
+        logger.log('Connected. Promoting to active SDK.')
         setSdk(candidate)
         setIsConnected(true)
         if (nextIndexerURL && nextIndexerURL !== indexerURL)
@@ -206,8 +178,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setIsAuthing(false)
         return true
       } catch (err) {
-        log('Error connecting candidate SDK')
-        log(String(err))
+        logger.log('Error connecting candidate SDK')
+        logger.log(String(err))
         setIsAuthing(false)
         return false
       }
