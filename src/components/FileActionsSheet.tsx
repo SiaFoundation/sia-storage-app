@@ -171,7 +171,9 @@ export function FileActionsSheet({ route, navigation }: Props) {
   return (
     <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
       <ActionSheetButton
-        disabled={status.isDownloading || status.isDownloaded}
+        disabled={
+          status.isDownloading || status.isDownloaded || status.fileIsGone
+        }
         variant="primary"
         icon={<ArrowDownToLineIcon size={18} />}
         onPress={handlePressAndClose(handleDownload)}
@@ -179,7 +181,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
         Download file
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={status.isUploading}
+        disabled={status.isUploading || !status.isDownloaded}
         variant="primary"
         icon={<CloudUploadIcon size={18} />}
         onPress={handlePressAndClose(handleReupload)}
@@ -187,7 +189,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
         Reupload file
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={!!status.cachedUri}
+        disabled={!status.cachedUri}
         variant="primary"
         icon={<EraserIcon size={18} />}
         onPress={handlePressAndClose(handleRemoveCache)}
@@ -195,7 +197,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
         Remove from cache
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={status.isUploaded}
+        disabled={!status.isUploaded}
         variant="primary"
         icon={<CloudOffIcon size={18} />}
         onPress={handlePressAndClose(handleRemoveFromNetwork)}
@@ -203,7 +205,6 @@ export function FileActionsSheet({ route, navigation }: Props) {
         Remove from network
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={status.isUploaded}
         variant="danger"
         icon={<Trash2Icon size={18} />}
         onPress={handlePressAndClose(handleDelete)}

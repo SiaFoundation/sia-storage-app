@@ -7,7 +7,7 @@ export function ActionSheetButton({
   icon,
   variant = 'primary',
 }: {
-  disabled: boolean
+  disabled?: boolean
   onPress: () => void
   children: React.ReactNode
   variant: 'primary' | 'danger'

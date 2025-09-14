@@ -4,8 +4,12 @@ import {
   DownloadState,
   getDownloadState,
   useDownloadState,
-} from './downloadState'
-import { getUploadState, UploadState, useUploadState } from './uploadState'
+} from '../stores/downloadState'
+import {
+  getUploadState,
+  UploadState,
+  useUploadState,
+} from '../stores/uploadState'
 import { readCachedUri, useCachedUri } from './fileCache'
 import { extFromMime } from './fileTypes'
 import { PinnedObject } from 'react-native-sia'
@@ -57,17 +61,6 @@ function computeFileStatus({
     fileIsGone:
       !isUploading && !isDownloading && !hasPinnedObject && !cachedUri,
   }
-}
-
-export async function getFileStatus(file: {
-  id: string
-  fileType: string
-  pinnedObjects: unknown
-}): Promise<FileStatus> {
-  const uploadState = getUploadState(file.id)
-  const downloadState = getDownloadState(file.id)
-  const cachedUri = await readCachedUri(file.id, extFromMime(file.fileType))
-  return computeFileStatus({ file, uploadState, downloadState, cachedUri })
 }
 
 export function useFileStatus(file?: {

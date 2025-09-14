@@ -1,5 +1,5 @@
 import { PinnedObject, Sdk } from 'react-native-sia'
-import { updateUploadProgress, setUploadState } from './uploadState'
+import { updateUploadProgress, setUploadState } from '../stores/uploadState'
 import { updateFilePinnedObject } from '../db/files'
 import { PickerAsset } from './uploadManager'
 import { createFileMetadata } from './file'

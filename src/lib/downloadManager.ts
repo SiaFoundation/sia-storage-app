@@ -8,7 +8,7 @@ import {
   setDownloadState,
   updateDownloadProgress,
   clearDownloadState,
-} from './downloadState'
+} from '../stores/downloadState'
 import { useSettings } from './settingsContext'
 import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
