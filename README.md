@@ -1,6 +1,6 @@
-# sia-starter-react-native
+# sia-mobile-demo
 
-This repo contains a React Native + Sia starter app. The project demonstrates how to use the `react-native-sia` library to interact directly with the Sia host network.
+This repo contains the Sia Mobile Demo app. The project demonstrates how to use the `react-native-sia` library to interact directly with the Sia host network.
 
 ## Install
 
