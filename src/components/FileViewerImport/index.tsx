@@ -1,11 +1,10 @@
 import { View, StyleSheet, Pressable } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
-import { FileIndicators } from '../FileIndicators'
 import ImageViewer from './ImageViewer'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
-import { useDownloadShared } from '../../lib/downloadShared'
+import { useDownloadFromShareURL } from '../../managers/downloader'
 
 export function FileViewerImport({
   file,
@@ -19,7 +18,7 @@ export function FileViewerImport({
   shareUrl: string
 }) {
   const status = useFileStatus(file)
-  const handleDownload = useDownloadShared()
+  const handleDownload = useDownloadFromShareURL()
 
   const isVideo = file.fileType?.startsWith('video')
 

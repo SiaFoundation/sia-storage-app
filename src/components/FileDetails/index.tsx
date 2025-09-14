@@ -1,7 +1,6 @@
 import { View, StyleSheet, ScrollView } from 'react-native'
 import { type FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
-import { FileMap } from './FileMap'
 import { FileViewer } from '../FileViewer'
 import { FileMeta } from './FileMeta'
 

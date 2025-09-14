@@ -3,7 +3,7 @@ import { ArrowDownToLineIcon, XIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
 import { FileIndicators } from '../FileIndicators'
 import ImageViewer from './ImageViewer'
-import { useDownload } from '../../lib/downloadManager'
+import { useDownload } from '../../managers/downloader'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
 import { PinnedObject } from 'react-native-sia'
@@ -15,7 +15,7 @@ export function FileViewer({
     id: string
     fileType: string | null
     pinnedObjects: Record<string, PinnedObject> | null
-    encryptionKey: string | null
+    encryptionKey: string
     fileSize: number | null
   }
 }) {

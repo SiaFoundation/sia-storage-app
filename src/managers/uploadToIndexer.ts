@@ -1,9 +1,8 @@
 import { PinnedObject, Sdk } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from '../stores/uploadState'
 import { updateFilePinnedObject } from '../stores/files'
-import { PickerAsset } from './uploadManager'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
-import { logger } from './logger'
+import { logger } from '../lib/logger'
 
 export type UploadProgress = {
   bytesWritten: number
@@ -11,11 +10,17 @@ export type UploadProgress = {
   percent: number // 0..1
 }
 
-export async function uploadToSia(params: {
-  asset: PickerAsset
+export async function uploadToIndexer(params: {
+  file: {
+    id: string
+    fileName: string | null
+    fileType: string | null
+    fileSize: number | null
+    encryptionKey: Uint8Array
+    cacheUri?: string
+  }
   sdk: Sdk
   indexerURL: string
-  encryptionKey: Uint8Array
   dataShards?: number
   parityShards?: number
   data: ArrayBuffer
@@ -24,19 +29,18 @@ export async function uploadToSia(params: {
   const {
     sdk,
     indexerURL,
-    encryptionKey,
     dataShards = 10,
     parityShards = 30,
     data,
-    asset,
+    file,
     signal,
   } = params
 
   const upload = await sdk.upload(
-    encryptionKey.slice().buffer,
+    file.encryptionKey.slice().buffer,
     encodeFileMetadata({
-      name: asset.fileName ?? '',
-      fileType: asset.fileType ?? '',
+      name: file.fileName ?? '',
+      fileType: file.fileType ?? '',
       size: data.byteLength,
     }),
     {
@@ -48,7 +52,7 @@ export async function uploadToSia(params: {
           logger.log('uploaded', uploaded, 'encodedSize', encodedSize)
           const percent = (uploaded * 1000n) / encodedSize
           logger.log('percent', percent)
-          updateUploadProgress(asset.id, Number(percent) / 1000)
+          updateUploadProgress(file.id, Number(percent) / 1000)
         },
       },
     }
@@ -58,8 +62,7 @@ export async function uploadToSia(params: {
   let offset = 0
   const total = data.byteLength
 
-  // Initialize runtime state.
-  setUploadState(asset.id, { status: 'uploading', progress: 0 })
+  setUploadState(file.id, { status: 'uploading', progress: 0 })
 
   while (offset < total) {
     logger.log(`Uploading chunk ${offset} of ${total}...`)
@@ -82,10 +85,10 @@ export async function uploadToSia(params: {
     } else {
       pinnedObject = await upload.finalize()
     }
-    setUploadState(asset.id, { status: 'done', progress: 1 })
-    await updateFilePinnedObject(asset.id, indexerURL, pinnedObject)
+    setUploadState(file.id, { status: 'done', progress: 1 })
+    await updateFilePinnedObject(file.id, indexerURL, pinnedObject)
   } catch (e) {
-    setUploadState(asset.id, { status: 'error', progress: 0 })
+    setUploadState(file.id, { status: 'error', progress: 0 })
     throw e
   }
 }
