@@ -6,6 +6,7 @@ import {
 } from './encoding'
 import { logger } from '../lib/logger'
 import { db } from '.'
+import { triggerFileListUpdate } from '../hooks/files'
 
 export type FileRecord = {
   id: string
@@ -17,7 +18,10 @@ export type FileRecord = {
   encryptionKey: string
 }
 
-export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
+export async function createFileRecord(
+  fileRecord: FileRecord,
+  triggerUpdate: boolean = true
+): Promise<void> {
   const {
     id,
     fileName,
@@ -37,6 +41,9 @@ export async function createFileRecord(fileRecord: FileRecord): Promise<void> {
     encryptionKey
   )
   await updateFilePinnedObjects(id, pinnedObjects)
+  if (triggerUpdate) {
+    await triggerFileListUpdate()
+  }
 }
 
 export async function createManyFileRecords(
@@ -44,9 +51,10 @@ export async function createManyFileRecords(
 ): Promise<void> {
   await db().withTransactionAsync(async () => {
     for (const fr of files) {
-      await createFileRecord(fr)
+      await createFileRecord(fr, false)
     }
   })
+  await triggerFileListUpdate()
 }
 
 export async function readAllFileRecords(): Promise<FileRecord[]> {
@@ -84,27 +92,6 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
   return transformRow(row)
 }
 
-function transformRow(row: {
-  id: string
-  fileName: string | null
-  fileSize: number | null
-  createdAt: number
-  fileType: string
-  pinnedObjects: string | null
-  encryptionKey: string
-}): FileRecord {
-  const [pinnedObjects] = deserializePinnedObjects(row.id, row.pinnedObjects)
-  return {
-    id: row.id,
-    fileName: row.fileName,
-    fileSize: row.fileSize,
-    createdAt: row.createdAt,
-    fileType: row.fileType,
-    pinnedObjects: pinnedObjects ?? {},
-    encryptionKey: row.encryptionKey,
-  }
-}
-
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
   const {
     id,
@@ -125,14 +112,17 @@ export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
     id
   )
   await updateFilePinnedObjects(id, pinnedObjects)
+  await triggerFileListUpdate()
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
   await db().runAsync('DELETE FROM files WHERE id = ?', id)
+  await triggerFileListUpdate()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
+  await triggerFileListUpdate()
 }
 
 export async function updateFilePinnedObjects(
@@ -149,6 +139,7 @@ export async function updateFilePinnedObjects(
     serializedPinnedObjects,
     id
   )
+  await triggerFileListUpdate()
 }
 
 export async function updateFilePinnedObject(
@@ -173,4 +164,26 @@ export async function updateFilePinnedObject(
     serializedPinnedObjects,
     id
   )
+  await triggerFileListUpdate()
+}
+
+function transformRow(row: {
+  id: string
+  fileName: string | null
+  fileSize: number | null
+  createdAt: number
+  fileType: string
+  pinnedObjects: string | null
+  encryptionKey: string
+}): FileRecord {
+  const [pinnedObjects] = deserializePinnedObjects(row.id, row.pinnedObjects)
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    createdAt: row.createdAt,
+    fileType: row.fileType,
+    pinnedObjects: pinnedObjects ?? {},
+    encryptionKey: row.encryptionKey,
+  }
 }

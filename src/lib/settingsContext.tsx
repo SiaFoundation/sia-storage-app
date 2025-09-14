@@ -20,7 +20,6 @@ export type Logger = (...args: any[]) => void
 type SettingsContextValue = {
   sdk: Sdk
   isConnected: boolean
-  log: Logger
   logs: string[]
   clearLogs: () => void
   indexerName: string
@@ -192,7 +191,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     () => ({
       sdk,
       isConnected,
-      log,
       indexerName,
       setIndexerName,
       indexerURL,
@@ -209,7 +207,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [
       sdk,
       isConnected,
-      log,
       indexerName,
       setIndexerName,
       indexerURL,

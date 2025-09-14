@@ -1,5 +1,4 @@
 import { useToast } from './toastContext'
-import { useFiles } from './filesContext'
 import {
   copyFileToCache,
   getOrCreateCachedFile,
@@ -28,8 +27,7 @@ export function useDownload(
   } | null
 ) {
   const toast = useToast()
-  const { sdk, log } = useSettings()
-  const { updateFile } = useFiles()
+  const { sdk } = useSettings()
   return useCallback(
     async (streamDirectlyToCache?: boolean) => {
       if (!file) return
@@ -125,6 +123,6 @@ export function useDownload(
         toast.show('Download failed')
       }
     },
-    [sdk, file, updateFile, toast, log]
+    [sdk, file, toast]
   )
 }
