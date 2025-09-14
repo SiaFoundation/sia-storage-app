@@ -2,7 +2,7 @@ import { PinnedObject, Sdk } from 'react-native-sia'
 import { updateUploadProgress, setUploadState } from '../stores/uploadState'
 import { updateFilePinnedObject } from '../db/files'
 import { PickerAsset } from './uploadManager'
-import { createFileMetadata } from './file'
+import { encodeFileMetadata } from './file'
 import { logger } from './logger'
 
 export type UploadProgress = {
@@ -34,7 +34,7 @@ export async function uploadToSia(params: {
 
   const upload = await sdk.upload(
     encryptionKey.slice().buffer,
-    createFileMetadata({
+    encodeFileMetadata({
       name: asset.fileName ?? '',
       fileType: asset.fileType ?? '',
       size: data.byteLength,

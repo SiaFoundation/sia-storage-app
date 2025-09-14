@@ -12,7 +12,7 @@ import {
 import { useSettings } from './settingsContext'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
-import { parseFileMetadata } from './file'
+import { decodeFileMetadata } from './file'
 import { logger } from './logger'
 
 export function useDownloadShared() {
@@ -36,7 +36,7 @@ export function useDownloadShared() {
           let total = 0
           let chunks = 0
           setDownloadState(id, { status: 'downloading', progress: 0 })
-          const meta = parseFileMetadata(sharedObject.meta)
+          const meta = decodeFileMetadata(sharedObject.meta)
           while (true) {
             const chunk = await downloader.readChunk()
             if (!chunk || chunk.byteLength === 0) {

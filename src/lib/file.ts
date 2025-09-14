@@ -1,18 +1,11 @@
 import { useMemo } from 'react'
 import { FileRecord } from '../db/files'
-import {
-  DownloadState,
-  getDownloadState,
-  useDownloadState,
-} from '../stores/downloadState'
-import {
-  getUploadState,
-  UploadState,
-  useUploadState,
-} from '../stores/uploadState'
-import { readCachedUri, useCachedUri } from './fileCache'
+import { DownloadState, useDownloadState } from '../stores/downloadState'
+import { UploadState, useUploadState } from '../stores/uploadState'
+import { useCachedUri } from './fileCache'
 import { extFromMime } from './fileTypes'
 import { PinnedObject } from 'react-native-sia'
+import { logger } from './logger'
 
 export function fileHasAPinnnedObject(file: {
   pinnedObjects: unknown
@@ -107,24 +100,13 @@ export function getOnePinnedObject(file: {
   return pinnedObjects[0] ?? null
 }
 
-export function parseFileMetadata(metadata?: ArrayBuffer): {
-  size?: number
+export type FileMetadata = {
+  name?: string
   fileType?: string
-} {
-  if (!metadata) {
-    return {}
-  }
-  return JSON.parse(new TextDecoder().decode(metadata)) as {
-    size?: number
-    fileType?: string
-  }
+  size?: number
 }
 
-export function createFileMetadata(params: {
-  name: string
-  fileType: string
-  size: number
-}): ArrayBuffer {
+export function encodeFileMetadata(params: FileMetadata): ArrayBuffer {
   return new TextEncoder().encode(
     JSON.stringify({
       name: params.name,
@@ -132,4 +114,13 @@ export function createFileMetadata(params: {
       size: params.size,
     })
   ).buffer as ArrayBuffer
+}
+
+export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
+  try {
+    return JSON.parse(new TextDecoder().decode(buffer)) as FileMetadata
+  } catch (e) {
+    logger.log('Error converting file metadata from buffer', e)
+    return {}
+  }
 }
