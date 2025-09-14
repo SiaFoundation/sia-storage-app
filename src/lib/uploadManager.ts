@@ -5,7 +5,6 @@ import * as FileSystem from 'expo-file-system'
 import { setUploadState } from './uploadState'
 import { useCallback } from 'react'
 import { useSettings } from './settingsContext'
-import { useFiles } from './filesContext'
 import { extFromMime, mimeFromAssetUri } from './fileTypes'
 import {
   encryptionKeyHexToUint8,
@@ -13,7 +12,7 @@ import {
   generateEncryptionKey,
 } from './encryptionKey'
 import { uniqueId } from './uniqueId'
-import { readFileRecord } from '../db/files'
+import { createFileRecord, readFileRecord } from '../db/files'
 import { logger } from './logger'
 
 export type PickerAsset = {
@@ -28,7 +27,6 @@ export type PickerAsset = {
 
 export function usePickAndUploadMedia() {
   const { sdk, indexerURL } = useSettings()
-  const { createFile } = useFiles()
   return useCallback(async () => {
     try {
       logger.log('Opening media picker...')
@@ -77,7 +75,7 @@ export function usePickAndUploadMedia() {
         setUploadState(asset.id, { status: 'uploading', progress: 0 })
         // Emit incrementally so the gallery can show thumbnails from cache immediately.
         asset.encryptionKey = generateEncryptionKey()
-        await createFile({
+        await createFileRecord({
           id: asset.id,
           fileName: asset.fileName,
           fileSize: asset.fileSize,
@@ -171,7 +169,6 @@ export function usePickAndUploadMedia() {
 
 export function useReuploadFile() {
   const { sdk, indexerURL } = useSettings()
-  const { createFile } = useFiles()
   return useCallback(
     async (fileId: string) => {
       try {
@@ -188,7 +185,7 @@ export function useReuploadFile() {
         }
         setUploadState(fileId, { status: 'uploading', progress: 0 })
         // Emit incrementally so the gallery can show thumbnails from cache immediately.
-        await createFile({
+        await createFileRecord({
           id: fileId,
           fileName: file.fileName,
           fileSize: file.fileSize,

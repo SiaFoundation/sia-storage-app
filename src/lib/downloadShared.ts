@@ -1,5 +1,4 @@
 import { useToast } from './toastContext'
-import { useFiles } from './filesContext'
 import {
   copyFileToCache,
   getOrCreateCachedFile,
@@ -19,7 +18,6 @@ import { logger } from './logger'
 export function useDownloadShared() {
   const toast = useToast()
   const { sdk } = useSettings()
-  const { updateFile } = useFiles()
   return useCallback(
     async (id: string, sharedUrl: string) => {
       try {
@@ -88,6 +86,6 @@ export function useDownloadShared() {
         toast.show('Download failed')
       }
     },
-    [sdk, updateFile, toast, logger.log]
+    [sdk, toast, logger.log]
   )
 }

@@ -12,7 +12,6 @@ import {
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
 import { Linking, View } from 'react-native'
-import { useFiles, useFileDetails } from '../lib/filesContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../lib/fileCache'
 import { useDownload } from '../lib/downloadManager'
@@ -23,6 +22,8 @@ import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
 import { useReuploadFile } from '../lib/uploadManager'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
+import { useFileDetails } from '../hooks/files'
+import { deleteFileRecord, updateFilePinnedObjects } from '../db/files'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 
@@ -30,7 +31,6 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const toast = useToast()
   const { data: file } = useFileDetails(route.params.id)
   const status = useFileStatus(file ?? undefined)
-  const { deleteFile, removeFromNetwork } = useFiles()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const { sdk } = useSettings()
 
@@ -92,7 +92,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleDelete = useCallback(async () => {
     if (!file) return
     try {
-      await deleteFile(file.id)
+      await deleteFileRecord(file.id)
       toast.show('Deleted file')
       setIsMenuOpen(false)
       navigation.goBack()
@@ -100,7 +100,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
       toast.show('Failed to delete file')
       setIsMenuOpen(false)
     }
-  }, [deleteFile, file?.id, navigation, toast])
+  }, [file?.id, navigation, toast])
 
   const handleRemoveCache = useCallback(async () => {
     if (!file) return
@@ -130,7 +130,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
     try {
-      await removeFromNetwork(file.id)
+      await updateFilePinnedObjects(file.id, {})
       toast.show('Removed from network')
       setIsMenuOpen(false)
     } catch (e) {

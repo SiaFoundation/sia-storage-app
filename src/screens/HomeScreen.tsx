@@ -7,18 +7,17 @@ import { useSettings } from '../lib/settingsContext'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
-import { useFiles, useFileList } from '../lib/filesContext'
 import { type FileRecord } from '../db/files'
 import { FileList } from '../components/FileList'
 import { logger } from '../lib/logger'
+import { useFileList } from '../hooks/files'
 
 export default function HomeScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
-  const { sdk, log } = useSettings()
+  const { sdk } = useSettings()
   const navigation =
     useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
-  const { createFile } = useFiles()
   const { data: files } = useFileList()
 
   const pickAndUploadMedia = usePickAndUploadMedia()
@@ -30,7 +29,7 @@ export default function HomeScreen() {
     } catch (e) {
       logger.log(`Upload flow error: ${String(e)}`)
     }
-  }, [sdk, log, createFile])
+  }, [sdk])
 
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {

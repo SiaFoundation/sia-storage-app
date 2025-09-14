@@ -21,7 +21,6 @@ import { HomeIcon, SettingsIcon, TerminalIcon } from 'lucide-react-native'
 import LogScreen from './screens/LogScreen'
 import { SettingsProvider, useSettings } from './lib/settingsContext'
 import OnboardingScreen from './screens/OnboardingScreen'
-import { FilesProvider } from './lib/filesContext'
 import ConnectionBanner from './components/ConnectionBanner'
 import * as SplashScreen from 'expo-splash-screen'
 import ImportFileScreen from './screens/ImportFileScreen'
@@ -188,14 +187,12 @@ export function Root() {
           })}
         />
         <SettingsProvider>
-          <FilesProvider>
-            <ToastProvider>
-              <NavigationContainer ref={navigationRef}>
-                <ConnectionBanner />
-                <RootNavigator />
-              </NavigationContainer>
-            </ToastProvider>
-          </FilesProvider>
+          <ToastProvider>
+            <NavigationContainer ref={navigationRef}>
+              <ConnectionBanner />
+              <RootNavigator />
+            </NavigationContainer>
+          </ToastProvider>
         </SettingsProvider>
       </SafeAreaView>
     </SafeAreaProvider>

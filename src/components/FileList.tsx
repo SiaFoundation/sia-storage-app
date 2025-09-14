@@ -1,6 +1,6 @@
 import { FlatList, Text } from 'react-native'
 import { FileRecord } from '../db/files'
-import { useFileList } from '../lib/filesContext'
+import { useFileList } from '../hooks/files'
 import { FileListItem } from './FileListItem'
 
 type Props = {
