@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from './SettingsHomeScreen'
+import { type SettingsStackParamList } from '../stacks/types'
 import { useHost } from '../stores/hosts'
 import { determineBestRegion } from '../components/Map/mapHelpers'
 import { useMemo } from 'react'
@@ -12,7 +12,7 @@ import { LabeledValueRow } from '../components/LabeledValueRow'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'HostDetail'>
 
-export default function HostDetailScreen({ route }: Props) {
+export function HostDetailScreen({ route }: Props) {
   const { publicKey } = route.params
   const host = useHost(publicKey)
   const region = useMemo(

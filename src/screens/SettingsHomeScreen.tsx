@@ -2,18 +2,15 @@ import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { deleteAllFileRecords } from '../stores/files'
 import { useSettings } from '../lib/settingsContext'
+import { cancelAllTransfers, useInflightCounts } from '../stores/transfers'
 
-export type SettingsStackParamList = {
-  SettingsHome: undefined
-  Hosts: undefined
-  HostDetail: { publicKey: string }
-  Indexer: undefined
-}
+import { type SettingsStackParamList } from '../stacks/types'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
-export default function SettingsHomeScreen({ navigation }: Props) {
+export function SettingsHomeScreen({ navigation }: Props) {
   const { resetApp } = useSettings()
+  const inflight = useInflightCounts()
 
   return (
     <View style={styles.panel}>
@@ -34,6 +31,24 @@ export default function SettingsHomeScreen({ navigation }: Props) {
           <View style={styles.rowItem}>
             <Text style={styles.rowLabel}>Hosts</Text>
             <Text style={styles.rowChevron}>›</Text>
+          </View>
+        </Pressable>
+      </View>
+      <View style={styles.listGroup}>
+        <View style={styles.rowItem}>
+          <Text style={styles.rowLabel}>In-flight uploads</Text>
+          <Text style={styles.rowValue}>{inflight.uploads}</Text>
+        </View>
+        <View style={styles.rowItem}>
+          <Text style={styles.rowLabel}>In-flight downloads</Text>
+          <Text style={styles.rowValue}>{inflight.downloads}</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => cancelAllTransfers()}
+        >
+          <View style={styles.rowItemButton}>
+            <Text style={styles.buttonText}>Cancel all transfers</Text>
           </View>
         </Pressable>
       </View>
@@ -88,6 +103,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   rowLabel: { flex: 1, color: '#24292f', fontSize: 16 },
+  rowValue: { color: '#57606a', fontSize: 16 },
+  rowItemButton: {
+    marginHorizontal: 16,
+    marginVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#24292f',
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   rowChevron: { color: '#57606a', fontSize: 18 },
   footerGroup: { marginTop: 24 },
   dangerRow: {
