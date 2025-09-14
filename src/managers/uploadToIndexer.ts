@@ -49,9 +49,14 @@ export async function uploadToIndexer(params: {
       parityShards,
       progressCallback: {
         progress: (uploaded, encodedSize) => {
-          logger.log('uploaded', uploaded, 'encodedSize', encodedSize)
+          logger.log(
+            '[uploadToIndexer] progress',
+            uploaded,
+            'encodedSize',
+            encodedSize
+          )
           const percent = (uploaded * 1000n) / encodedSize
-          logger.log('percent', percent)
+          logger.log('[uploadToIndexer] percent', percent)
           updateUploadProgress(file.id, Number(percent) / 1000)
         },
       },
@@ -62,10 +67,8 @@ export async function uploadToIndexer(params: {
   let offset = 0
   const total = data.byteLength
 
-  setUploadState(file.id, { status: 'uploading', progress: 0 })
-
   while (offset < total) {
-    logger.log(`Uploading chunk ${offset} of ${total}...`)
+    logger.log(`[uploadToIndexer] uploading chunk ${offset} of ${total}...`)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const end = Math.min(offset + chunkSize, total)
     const chunk = data.slice(offset, end)
@@ -74,21 +77,15 @@ export async function uploadToIndexer(params: {
     } else {
       await upload.write(chunk)
     }
-    logger.log(`Uploaded chunk ${offset} of ${total}`)
+    logger.log(`[uploadToIndexer] uploaded chunk ${offset} of ${total}`)
     offset = end
   }
 
-  try {
-    let pinnedObject: PinnedObject
-    if (signal) {
-      pinnedObject = await upload.finalize({ signal })
-    } else {
-      pinnedObject = await upload.finalize()
-    }
-    setUploadState(file.id, { status: 'done', progress: 1 })
-    await updateFilePinnedObject(file.id, indexerURL, pinnedObject)
-  } catch (e) {
-    setUploadState(file.id, { status: 'error', progress: 0 })
-    throw e
+  let pinnedObject: PinnedObject
+  if (signal) {
+    pinnedObject = await upload.finalize({ signal })
+  } else {
+    pinnedObject = await upload.finalize()
   }
+  await updateFilePinnedObject(file.id, indexerURL, pinnedObject)
 }

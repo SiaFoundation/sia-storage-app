@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { logger } from '../lib/logger'
+import { getGlobalSlotPool } from '../managers/slotPool'
 
 export type TransferKind = 'upload' | 'download'
 
-export type TransferStatus = 'running' | 'done' | 'error'
+export type TransferStatus = 'queued' | 'running' | 'done' | 'error'
 
 export type TransferRecord = {
   id: string
@@ -12,6 +13,7 @@ export type TransferRecord = {
   controller?: AbortController
   status: TransferStatus
   progress: number
+  error?: string
 }
 
 type TransfersStore = {
@@ -21,7 +23,8 @@ type TransfersStore = {
     id: string,
     kind: TransferKind,
     status: TransferStatus,
-    progress: number
+    progress: number,
+    error?: string
   ) => void
   updateProgress: (id: string, kind: TransferKind, progress: number) => void
   remove: (id: string) => void
@@ -43,7 +46,7 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
       }
       return { inflight: { ...state.inflight, [key]: next } }
     }),
-  updateState: (id, kind, status, progress) =>
+  updateState: (id, kind, status, progress, err) =>
     set((state) => {
       const key = makeTransferKey(kind, id)
       const prev = state.inflight[key]
@@ -53,6 +56,7 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
         controller: prev?.controller,
         status,
         progress,
+        error: status === 'error' ? err ?? prev?.error ?? '' : undefined,
       }
       return { inflight: { ...state.inflight, [key]: next } }
     }),
@@ -64,8 +68,9 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
         id,
         kind: kind ?? prev?.kind ?? 'upload',
         controller: prev?.controller,
-        status: prev?.status ?? 'running',
+        status: prev?.status ?? 'queued',
         progress,
+        error: prev?.error,
       }
       return { inflight: { ...state.inflight, [key]: next } }
     }),
@@ -111,7 +116,16 @@ export function registerTransfer(
 }
 
 export function unregisterTransfer(id: string): void {
-  useTransfersStore.getState().remove(id)
+  // Detach controller but keep record (for error state visibility).
+  useTransfersStore.setState((state) => {
+    const entries = Object.entries(state.inflight)
+    const next: Record<string, TransferRecord> = {}
+    for (const [k, v] of entries) {
+      if (v.id === id) next[k] = { ...v, controller: undefined }
+      else next[k] = v
+    }
+    return { inflight: next }
+  })
 }
 
 export function cancelAllTransfers(): void {
@@ -122,9 +136,10 @@ export function setTransferState(
   id: string,
   kind: TransferKind,
   status: TransferStatus,
-  progress: number
+  progress: number,
+  error?: string
 ): void {
-  useTransfersStore.getState().updateState(id, kind, status, progress)
+  useTransfersStore.getState().updateState(id, kind, status, progress, error)
 }
 
 export function updateTransferProgress(
@@ -159,4 +174,32 @@ export function useInflightCounts(): {
 
 export function makeTransferKey(kind: TransferKind, id: string): string {
   return `${kind}:${id}`
+}
+
+export async function runTransferWithSlot<T>(params: {
+  id: string
+  kind: TransferKind
+  task: (signal: AbortSignal) => Promise<T>
+}): Promise<T> {
+  const { id, kind, task } = params
+  const controller = registerTransfer(id, kind)
+  setTransferState(id, kind, 'queued', 0)
+  const release = await getGlobalSlotPool().acquire()
+  try {
+    logger.log('transfer running', id, kind)
+    setTransferState(id, kind, 'running', 0)
+    const result = await task(controller.signal)
+    logger.log('transfer success', id, kind)
+    // On success, remove from store entirely.
+    clearTransfer(id)
+    return result
+  } catch (e) {
+    logger.log('transfer error', id, kind, e)
+    const message = e instanceof Error ? e.message : String(e)
+    setTransferState(id, kind, 'error', 0, message)
+    throw e
+  } finally {
+    release()
+    unregisterTransfer(id)
+  }
 }

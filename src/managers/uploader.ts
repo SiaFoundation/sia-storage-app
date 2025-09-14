@@ -5,7 +5,6 @@ import {
   readCachedUri,
 } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
-import { setUploadState } from '../stores/uploadState'
 import { useCallback } from 'react'
 import { useSettings } from '../lib/settingsContext'
 import { extFromMime } from '../lib/fileTypes'
@@ -13,17 +12,22 @@ import {
   encryptionKeyHexToUint8,
   encryptionKeyUint8ToHex,
 } from '../lib/encryptionKey'
-import { createFileRecord, readFileRecord } from '../stores/files'
+import {
+  createFileRecord,
+  createManyFileRecords,
+  FileRecord,
+  readFileRecord,
+} from '../stores/files'
 import { logger } from '../lib/logger'
-import { getGlobalSlotPool } from './slotPool'
-import { registerTransfer, unregisterTransfer } from '../stores/transfers'
 import { PickerAsset } from '../hooks/useFilePicker'
+import { runTransferWithSlot } from '../stores/transfers'
 
 export function useUploader() {
   const { sdk, indexerURL } = useSettings()
   return useCallback(
     async (assets: PickerAsset[]) => {
       try {
+        const fileRecords: FileRecord[] = []
         for (const asset of assets) {
           logger.log(
             '[uploader] creating file record for asset',
@@ -31,8 +35,7 @@ export function useUploader() {
             asset.fileName,
             asset.fileType
           )
-          setUploadState(asset.id, { status: 'uploading', progress: 0 })
-          await createFileRecord({
+          fileRecords.push({
             id: asset.id,
             fileName: asset.fileName,
             fileSize: asset.fileSize,
@@ -42,51 +45,45 @@ export function useUploader() {
             encryptionKey: encryptionKeyUint8ToHex(asset.encryptionKey),
           })
         }
+        await createManyFileRecords(fileRecords)
         await Promise.all(
           assets.map(async (asset: PickerAsset, index: number) => {
-            try {
-              // Ensure progress is visible before entering the slot.
-              setUploadState(asset.id, { status: 'uploading', progress: 0 })
-              await getGlobalSlotPool().withSlot(async () => {
-                logger.log(
-                  `[uploader] processing media ${index + 1}/${assets.length}...`
+            logger.log(
+              `[uploader] processing media ${index + 1}/$${assets.length}...`
+            )
+            const cacheUri = asset.uri
+              ? await copyUriToCache(
+                  asset.id,
+                  asset.uri,
+                  extFromMime(asset.fileType)
                 )
-                const cacheUri = asset.uri
-                  ? await copyUriToCache(
-                      asset.id,
-                      asset.uri,
-                      extFromMime(asset.fileType)
-                    )
-                  : await writeToCache(
-                      asset.id,
-                      await readArrayBuffer(asset),
-                      extFromMime(asset.fileType)
-                    )
-                logger.log(`[uploader] cached file ${asset.id} -> ${cacheUri}`)
+              : await writeToCache(
+                  asset.id,
+                  await readArrayBuffer(asset),
+                  extFromMime(asset.fileType)
+                )
+            logger.log(`[uploader] cached file ${asset.id} -> ${cacheUri}`)
+            runTransferWithSlot({
+              id: asset.id,
+              kind: 'upload',
+              task: async (signal) => {
                 logger.log(`[uploader] uploading ${asset.id} to hosts...`)
                 const fileBytes = await new FileSystem.File(cacheUri).bytes()
-                const controller = registerTransfer(asset.id, 'upload')
-                try {
-                  await uploadToIndexer({
-                    file: asset,
-                    indexerURL,
-                    sdk,
-                    data: fileBytes.buffer as ArrayBuffer,
-                    signal: controller.signal,
-                  })
-                } finally {
-                  unregisterTransfer(asset.id)
-                }
+                await uploadToIndexer({
+                  file: asset,
+                  indexerURL,
+                  sdk,
+                  data: fileBytes.buffer as ArrayBuffer,
+                  signal,
+                })
                 logger.log(`[uploader] upload complete ${asset.id}`)
-              })
-            } catch (e) {
-              logger.log(`[uploader] error for file ${asset.id}: ${String(e)}`)
-            }
+              },
+            })
           })
         )
         logger.log('[uploader] all selected assets processed.')
       } catch (e) {
-        logger.log(`[uploader] error: ${String(e)}`)
+        logger.log(`[uploader] error`, e)
       }
     },
     [sdk]
@@ -96,9 +93,11 @@ export function useUploader() {
 export function useReuploadFile() {
   const { sdk, indexerURL } = useSettings()
   return useCallback(
-    async (fileId: string) => {
-      await getGlobalSlotPool().withSlot(async () => {
-        try {
+    async (fileId: string) =>
+      runTransferWithSlot({
+        id: fileId,
+        kind: 'upload',
+        task: async (signal) => {
           const file = await readFileRecord(fileId)
           if (!file) {
             throw new Error('File not found')
@@ -110,7 +109,6 @@ export function useReuploadFile() {
           if (!cacheUri) {
             throw new Error('File not cached')
           }
-          setUploadState(fileId, { status: 'uploading', progress: 0 })
           logger.log(`[uploader] uploading ${fileId}...`)
           const fileBytes = await new FileSystem.File(cacheUri).bytes()
           await uploadToIndexer({
@@ -124,13 +122,11 @@ export function useReuploadFile() {
             indexerURL,
             sdk,
             data: fileBytes.buffer,
+            signal,
           })
           logger.log(`[uploader] upload complete ${fileId}`)
-        } catch (e) {
-          logger.log(`[uploader] error for file ${fileId}: ${String(e)}`)
-        }
-      })
-    },
+        },
+      }),
     [sdk]
   )
 }

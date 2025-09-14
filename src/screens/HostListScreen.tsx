@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   toggleGroup: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 4,
   },
   toggleButton: {
     width: 28,

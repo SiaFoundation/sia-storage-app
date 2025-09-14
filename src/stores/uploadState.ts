@@ -16,14 +16,16 @@ export type UploadState = {
 
 type UploadMap = Record<string, UploadState>
 
-function toTransferStatus(status: UploadStatus): 'running' | 'done' | 'error' {
+function toTransferStatus(
+  status: UploadStatus
+): 'queued' | 'running' | 'done' | 'error' {
   return status === 'uploading' ? 'running' : status
 }
 
 function fromTransferStatus(
-  status: 'running' | 'done' | 'error'
+  status: 'queued' | 'running' | 'done' | 'error'
 ): UploadStatus {
-  return status === 'running' ? 'uploading' : status
+  return status === 'running' || status === 'queued' ? 'uploading' : status
 }
 
 export function setUploadState(id: string, next: UploadState): void {
