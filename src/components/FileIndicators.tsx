@@ -11,9 +11,14 @@ type Props = {
     pinnedObjects: unknown
   }
   size?: number
+  interactive?: boolean
 }
 
-export function FileIndicators({ file, size = 16 }: Props) {
+export function FileIndicators({
+  file,
+  size = 16,
+  interactive = false,
+}: Props) {
   const status = useFileStatus(file)
   return (
     <>
@@ -27,7 +32,7 @@ export function FileIndicators({ file, size = 16 }: Props) {
           />
         </View>
       ) : null}
-      <StatusBadges status={status} size={size} />
+      <StatusBadges status={status} size={size} interactive={interactive} />
     </>
   )
 }

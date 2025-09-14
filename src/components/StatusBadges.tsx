@@ -5,14 +5,20 @@ import { FileStatus } from '../lib/file'
 export function StatusBadges({
   status,
   size = 10,
+  interactive = false,
 }: {
   status: FileStatus
   size?: number
+  interactive?: boolean
 }) {
   return (
     <View style={styles.container}>
       <View style={styles.row}>
-        <UploadStatusIcon status={status} size={size} />
+        <UploadStatusIcon
+          status={status}
+          size={size}
+          interactive={interactive}
+        />
       </View>
     </View>
   )

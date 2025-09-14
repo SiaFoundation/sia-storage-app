@@ -35,7 +35,7 @@ export function FileViewer({
           )
         ) : null}
       </View>
-      <FileIndicators file={file} />
+      <FileIndicators file={file} interactive />
       {status.fileIsGone ? (
         <View style={styles.centerDownload}>
           <XIcon color="red" size={28} />
