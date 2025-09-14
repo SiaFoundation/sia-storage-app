@@ -43,7 +43,7 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
           </View>
         </View>
         <View pointerEvents="box-none">
-          <UploadStatusIcon size={16} status={status} />
+          <UploadStatusIcon size={16} status={status} interactive={false} />
         </View>
       </View>
     </Pressable>

@@ -41,7 +41,7 @@ export function GalleryItem({ file, onPressItem, setItemRef }: Props) {
             resizeMode="cover"
           />
         )}
-        <FileIndicators file={file} size={10} />
+        <FileIndicators file={file} size={10} interactive={false} />
       </Pressable>
     </View>
   )

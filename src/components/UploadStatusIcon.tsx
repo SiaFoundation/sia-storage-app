@@ -19,9 +19,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 export function UploadStatusIcon({
   status,
   size = 16,
+  interactive = false,
 }: {
   status: FileStatus
   size?: number
+  interactive?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const textOpacity = useRef(new Animated.Value(0)).current
@@ -51,6 +53,45 @@ export function UploadStatusIcon({
     if (!status.isUploaded && status.isDownloaded) return 'File only on device'
     return ''
   }, [status])
+
+  const el = (
+    <View
+      style={[
+        styles.badge,
+        expanded ? styles.badgeExpanded : null,
+        {
+          backgroundColor: pillColor,
+          borderColor: pillColor,
+        },
+      ]}
+    >
+      {expanded && label ? (
+        <Animated.Text
+          style={[styles.pillText, { color: textColor, opacity: textOpacity }]}
+          numberOfLines={1}
+        >
+          {label}
+        </Animated.Text>
+      ) : null}
+      {status.isErrored ? (
+        <CloudAlertIcon color={iconColor} size={size} />
+      ) : status.isUploading ? (
+        <SpinnerIcon size={size} />
+      ) : status.isUploaded ? (
+        status.isDownloaded ? (
+          <CloudCheckIcon color={iconColor} size={size} />
+        ) : (
+          <CloudDownloadIcon color={iconColor} size={size} />
+        )
+      ) : (
+        <CloudAlertIcon color={iconColor} size={size} />
+      )}
+    </View>
+  )
+
+  if (!interactive) {
+    return el
+  }
 
   return (
     <Pressable
@@ -93,38 +134,7 @@ export function UploadStatusIcon({
       accessibilityLabel="Transfer status"
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <View
-        style={[
-          styles.badge,
-          expanded ? styles.badgeExpanded : null,
-          { backgroundColor: pillColor, borderColor: pillColor },
-        ]}
-      >
-        {expanded && label ? (
-          <Animated.Text
-            style={[
-              styles.pillText,
-              { color: textColor, opacity: textOpacity },
-            ]}
-            numberOfLines={1}
-          >
-            {label}
-          </Animated.Text>
-        ) : null}
-        {status.isErrored ? (
-          <CloudAlertIcon color={iconColor} size={size} />
-        ) : status.isUploading ? (
-          <SpinnerIcon size={size} />
-        ) : status.isUploaded ? (
-          status.isDownloaded ? (
-            <CloudCheckIcon color={iconColor} size={size} />
-          ) : (
-            <CloudDownloadIcon color={iconColor} size={size} />
-          )
-        ) : (
-          <CloudAlertIcon color={iconColor} size={size} />
-        )}
-      </View>
+      {el}
     </Pressable>
   )
 }
