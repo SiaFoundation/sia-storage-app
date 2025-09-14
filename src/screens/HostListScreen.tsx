@@ -2,13 +2,13 @@ import { View, StyleSheet, Pressable } from 'react-native'
 import { ListIcon, MapIcon } from 'lucide-react-native'
 import { HostsList } from '../components/HostsList'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from './SettingsHomeScreen'
+import { type SettingsStackParamList } from '../stacks/types'
 import { useState, useLayoutEffect } from 'react'
 import HostsMap from '../components/HostsMap'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Hosts'>
 
-export default function HostsScreen({ navigation }: Props) {
+export function HostListScreen({ navigation }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list')
 
   useLayoutEffect(() => {

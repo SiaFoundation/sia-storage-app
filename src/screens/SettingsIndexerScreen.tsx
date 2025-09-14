@@ -6,7 +6,7 @@ import { useToast } from '../lib/toastContext'
 import { RowGroup } from '../components/Group'
 import { Button } from '../components/Button'
 
-export default function IndexerScreen() {
+export function SettingsIndexerScreen() {
   const { authIndexer, isConnected, indexerName, setIndexerName, indexerURL } =
     useSettings()
   const [currentIndexerURL, setCurrentIndexerURL] = useState(indexerURL)

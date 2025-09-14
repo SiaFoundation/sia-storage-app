@@ -4,16 +4,16 @@ import { Grid2X2Icon, ListIcon, PlusIcon } from 'lucide-react-native'
 import { Gallery } from '../components/Gallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { type FeedStackParamList } from '../navigation/types'
+import { type MainStackParamList } from '../stacks/types'
 import { type FileRecord, useFileList } from '../stores/files'
 import { FileList } from '../components/FileList'
 import { usePickAndUpload } from '../hooks/usePickAndUpload'
 
-export default function HomeScreen() {
+export function FileListScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
   const navigation =
-    useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const { data: files } = useFileList()
 
   const pickAndUpload = usePickAndUpload()

@@ -12,10 +12,9 @@ import {
   View,
   Platform,
 } from 'react-native'
-import { type FeedStackParamList } from '../navigation/types'
+import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
 import { useSettings } from '../lib/settingsContext'
-import { parseFileMetadata } from '../lib/file'
 import { createFileRecord } from '../stores/files'
 import { PinnedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
@@ -24,12 +23,13 @@ import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
+import { decodeFileMetadata } from '../encoding/fileMetadata'
 
-type Props = NativeStackScreenProps<FeedStackParamList, 'ImportFile'>
+type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
 
-export default function ImportFileScreen({ route }: Props) {
+export function ImportFileScreen({ route }: Props) {
   const navigation =
-    useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
   const { sdk, indexerURL } = useSettings()
@@ -43,7 +43,7 @@ export default function ImportFileScreen({ route }: Props) {
     }
   })
   const meta = useSWR(['meta', sharedObject.data?.key], () =>
-    parseFileMetadata(sharedObject.data?.meta)
+    decodeFileMetadata(sharedObject.data?.meta)
   )
   const id = useMemo(() => uniqueId(), [])
   const file = useMemo(
