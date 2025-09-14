@@ -1,9 +1,5 @@
 import { useToast } from './toastContext'
-import {
-  copyFileToCache,
-  getOrCreateCachedFile,
-  refreshCache,
-} from './fileCache'
+import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
 import {
   setDownloadState,
   updateDownloadProgress,
@@ -12,7 +8,7 @@ import {
 import { useSettings } from './settingsContext'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
-import { decodeFileMetadata } from './file'
+import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from './logger'
 
 export function useDownloadShared() {
@@ -65,8 +61,6 @@ export function useDownloadShared() {
           logger.log('Writer closed. Total bytes:', total)
 
           await copyFileToCache(id, targetFile, extFromMime(meta.fileType))
-
-          refreshCache(id)
 
           clearDownloadState(id)
         } catch (inner) {

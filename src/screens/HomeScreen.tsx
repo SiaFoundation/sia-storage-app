@@ -1,16 +1,15 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { Grid2X2Icon, List, ListIcon, PlusIcon } from 'lucide-react-native'
+import { Grid2X2Icon, ListIcon, PlusIcon } from 'lucide-react-native'
 import { usePickAndUploadMedia } from '../lib/uploadManager'
 import { Gallery } from '../components/Gallery'
 import { useSettings } from '../lib/settingsContext'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
-import { type FileRecord } from '../db/files'
+import { type FileRecord, useFileList } from '../stores/files'
 import { FileList } from '../components/FileList'
 import { logger } from '../lib/logger'
-import { useFileList } from '../hooks/files'
 
 export default function HomeScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')

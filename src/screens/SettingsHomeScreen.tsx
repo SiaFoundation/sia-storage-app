@@ -1,6 +1,6 @@
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { deleteAllFileRecords } from '../db/files'
+import { deleteAllFileRecords } from '../stores/files'
 import { useSettings } from '../lib/settingsContext'
 
 export type SettingsStackParamList = {

@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import Map from './Map/Map'
 import { MapMarker } from './Map/MapMarker'
 import { determineBestRegion } from './Map/mapHelpers'
-import { useHosts } from '../hooks/hosts'
+import { useHosts } from '../stores/hosts'
 import { SWROverlay } from './SWROverlay'
 
 export default function HostsMap({

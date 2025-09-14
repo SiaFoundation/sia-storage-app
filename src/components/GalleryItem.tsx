@@ -1,7 +1,7 @@
 import { View, Image, Pressable, StyleSheet } from 'react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
-import { type FileRecord } from '../db/files'
+import { type FileRecord } from '../stores/files'
 import { PlayIcon } from 'lucide-react-native'
 import { useFileStatus } from '../lib/file'
 import { FileIndicators } from './FileIndicators'

@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import useSWR, { mutate } from 'swr'
-import { Ext } from './fileTypes'
-import { logger } from './logger'
+import { Ext } from '../lib/fileTypes'
+import { logger } from '../lib/logger'
 
 const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 
@@ -19,12 +19,16 @@ export async function getCachedFileForId(id: string, ext: Ext): Promise<File> {
 
 export async function getOrCreateCachedFile(
   id: string,
-  ext: Ext
+  ext: Ext,
+  triggerUpdate?: boolean
 ): Promise<File> {
   const f = await getCachedFileForId(id, ext)
   const info = f.info()
   if (!info.exists) {
     f.create({ intermediates: true })
+    if (triggerUpdate) {
+      triggerFileCacheUpdate(id)
+    }
   }
   return f
 }
@@ -49,11 +53,7 @@ export async function removeFromCache(id: string, ext: Ext): Promise<void> {
   if (info.exists) {
     f.delete()
   }
-  mutate(`fileCache/${id}`)
-}
-
-export function refreshCache(id: string): void {
-  mutate(`fileCache/${id}`)
+  triggerFileCacheUpdate(id)
 }
 
 export async function readCachedUri(
@@ -76,7 +76,7 @@ export async function writeToCache(
   const writer = f.writableStream().getWriter()
   await writer.write(new Uint8Array(data))
   await writer.close()
-  mutate(`fileCache/${id}`)
+  triggerFileCacheUpdate(id)
   return f.uri
 }
 
@@ -92,7 +92,7 @@ export async function copyUriToCache(
   if (exists) f.delete()
   const srcFile = new File(sourceUri)
   srcFile.copy(f)
-  mutate(`fileCache/${id}`)
+  triggerFileCacheUpdate(id)
   return f.uri
 }
 
@@ -107,10 +107,22 @@ export async function copyFileToCache(
   const exists = f.info().exists
   if (exists) f.delete()
   sourceFile.copy(f)
-  mutate(`fileCache/${id}`)
+  triggerFileCacheUpdate(id)
   return f.uri
 }
 
+const KEY = 'cache/files'
+
+function getKey(id: string): string {
+  return `${KEY}/${id}`
+}
+
+function triggerFileCacheUpdate(id: string): void {
+  mutate((key: string) => {
+    return typeof key === 'string' && key.startsWith(getKey(id))
+  })
+}
+
 export function useCachedUri(id: string, ext: Ext) {
-  return useSWR(`fileCache/${id}`, () => readCachedUri(id, ext))
+  return useSWR(getKey(id), () => readCachedUri(id, ext))
 }

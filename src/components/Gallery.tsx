@@ -1,6 +1,5 @@
 import { FlatList, StyleSheet } from 'react-native'
-import { useFileList } from '../hooks/files'
-import { type FileRecord } from '../db/files'
+import { useFileList, type FileRecord } from '../stores/files'
 import { GalleryItem } from './GalleryItem'
 
 type Props = {
