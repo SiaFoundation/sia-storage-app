@@ -6,7 +6,7 @@ import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 import { arrayBufferToHex } from '../../lib/hex'
 import { RowGroup, RowSubGroup } from '../Group'
-import { humanSize } from '../../functions/humanSize'
+import { humanSize } from '../../lib/humanSize'
 
 export function FileMeta({
   file,

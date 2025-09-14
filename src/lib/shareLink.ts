@@ -1,5 +1,5 @@
 import { Alert, Share } from 'react-native'
-import { logger } from '../lib/logger'
+import { logger } from './logger'
 
 export default async function shareLink({ url }: { url: string }) {
   try {

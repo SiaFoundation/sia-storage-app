@@ -1,7 +1,7 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
-import { humanSize } from '../functions/humanSize'
+import { humanSize } from '../lib/humanSize'
 import { CloudIcon, DotIcon, PlayIcon } from 'lucide-react-native'
 import { UploadStatusIcon } from './UploadStatusIcon'
 

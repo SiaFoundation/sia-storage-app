@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { Sdk } from 'react-native-sia'
 import * as SecureStore from 'expo-secure-store'
-import authApp from '../functions/authApp'
+import authApp from './authApp'
 import * as SplashScreen from 'expo-splash-screen'
 import { createSeed, loadSeed, storeSeed } from './seed'
 import { logger } from './logger'
