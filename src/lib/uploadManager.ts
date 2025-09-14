@@ -1,6 +1,10 @@
 import * as ImagePicker from 'react-native-image-picker'
 import { uploadToSia } from './uploadToSia'
-import { writeToCache, copyUriToCache, readCachedUri } from './fileCache'
+import {
+  writeToCache,
+  copyUriToCache,
+  readCachedUri,
+} from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { setUploadState } from '../stores/uploadState'
 import { useCallback } from 'react'
@@ -12,7 +16,7 @@ import {
   generateEncryptionKey,
 } from './encryptionKey'
 import { uniqueId } from './uniqueId'
-import { createFileRecord, readFileRecord } from '../db/files'
+import { createFileRecord, readFileRecord } from '../stores/files'
 import { logger } from './logger'
 
 export type PickerAsset = {

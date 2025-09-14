@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native'
-import { type FileRecord } from '../db/files'
+import { type FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { StatusBadges } from './StatusBadges'
 import { PinnedObject } from 'react-native-sia'

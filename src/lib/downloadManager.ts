@@ -1,9 +1,5 @@
 import { useToast } from './toastContext'
-import {
-  copyFileToCache,
-  getOrCreateCachedFile,
-  refreshCache,
-} from './fileCache'
+import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
 import {
   setDownloadState,
   updateDownloadProgress,
@@ -53,11 +49,9 @@ export function useDownload(
           )
           const targetFile = await getOrCreateCachedFile(
             file.id,
-            streamDirectlyToCache ? extFromMime(file.fileType) : '.tmp'
+            streamDirectlyToCache ? extFromMime(file.fileType) : '.tmp',
+            streamDirectlyToCache
           )
-          if (streamDirectlyToCache) {
-            refreshCache(file.id)
-          }
           logger.log('Writing to cache path:', targetFile.uri)
           const writer = targetFile.writableStream().getWriter()
           let total = 0
@@ -103,8 +97,6 @@ export function useDownload(
               extFromMime(file.fileType)
             )
           }
-
-          refreshCache(file.id)
 
           clearDownloadState(file.id)
         } catch (inner) {

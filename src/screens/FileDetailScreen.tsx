@@ -1,7 +1,7 @@
 import { FileDetails } from '../components/FileDetails'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
-import { useFileDetails } from '../hooks/files'
+import { useFileDetails } from '../stores/files'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>

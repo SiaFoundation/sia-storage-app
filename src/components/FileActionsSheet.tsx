@@ -13,7 +13,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
 import { Linking, View } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { removeFromCache } from '../lib/fileCache'
+import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../lib/downloadManager'
 import { extFromMime } from '../lib/fileTypes'
 import { useSettings } from '../lib/settingsContext'
@@ -22,8 +22,11 @@ import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
 import { useReuploadFile } from '../lib/uploadManager'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
-import { useFileDetails } from '../hooks/files'
-import { deleteFileRecord, updateFilePinnedObjects } from '../db/files'
+import {
+  useFileDetails,
+  deleteFileRecord,
+  updateFilePinnedObjects,
+} from '../stores/files'
 
 type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
 

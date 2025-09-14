@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from './SettingsHomeScreen'
-import { useHost } from '../hooks/hosts'
+import { useHost } from '../stores/hosts'
 import { determineBestRegion } from '../components/Map/mapHelpers'
 import { useMemo } from 'react'
 import { MapMarker } from '../components/Map/MapMarker'

@@ -1,6 +1,6 @@
 import { Fragment, useMemo } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
-import { type FileRecord } from '../../db/files'
+import { type FileRecord } from '../../stores/files'
 import { FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
