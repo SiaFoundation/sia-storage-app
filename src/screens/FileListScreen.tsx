@@ -30,7 +30,7 @@ export function FileListScreen() {
       <View style={styles.header} ref={headerRef}>
         <Text style={styles.headerTitle}>Home</Text>
         <View style={styles.buttonRow}>
-          <View style={[styles.toggleGroup, { marginRight: 8 }]}>
+          <View style={styles.toggleGroup}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show gallery view"
@@ -129,11 +129,11 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   toggleGroup: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 4,
   },
   toggleButton: {
     width: 28,

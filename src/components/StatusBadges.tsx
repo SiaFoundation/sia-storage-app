@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
     right: 8,
     bottom: 8,
     zIndex: 2,
-    pointerEvents: 'none',
+    pointerEvents: 'box-none',
   },
   row: {
     flexDirection: 'row',

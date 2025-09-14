@@ -42,7 +42,7 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
             <Text style={[styles.fileText, styles.gray]}>{file.fileType}</Text>
           </View>
         </View>
-        <View>
+        <View pointerEvents="box-none">
           <UploadStatusIcon size={16} status={status} />
         </View>
       </View>

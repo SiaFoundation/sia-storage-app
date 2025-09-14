@@ -18,14 +18,14 @@ type DownloadMap = Record<string, DownloadState>
 
 function toTransferStatus(
   status: DownloadStatus
-): 'running' | 'done' | 'error' {
+): 'queued' | 'running' | 'done' | 'error' {
   return status === 'downloading' ? 'running' : status
 }
 
 function fromTransferStatus(
-  status: 'running' | 'done' | 'error'
+  status: 'queued' | 'running' | 'done' | 'error'
 ): DownloadStatus {
-  return status === 'running' ? 'downloading' : status
+  return status === 'running' || status === 'queued' ? 'downloading' : status
 }
 
 export function setDownloadState(id: string, next: DownloadState): void {

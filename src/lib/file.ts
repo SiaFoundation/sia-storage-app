@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { useTransfersStore, makeTransferKey } from '../stores/transfers'
+import { useShallow } from 'zustand/react/shallow'
 import { FileRecord } from '../stores/files'
 import { DownloadState, useDownloadState } from '../stores/downloadState'
 import { UploadState, useUploadState } from '../stores/uploadState'
@@ -23,6 +25,7 @@ export type FileStatus = {
   downloadProgress: number
   cachedUri: string | null
   fileIsGone: boolean
+  errorText: string | null
 }
 
 function computeFileStatus({
@@ -30,6 +33,7 @@ function computeFileStatus({
   uploadState,
   downloadState,
   cachedUri,
+  errorText,
 }: {
   file: {
     pinnedObjects: unknown | null
@@ -37,6 +41,7 @@ function computeFileStatus({
   uploadState: UploadState | undefined
   downloadState: DownloadState | undefined
   cachedUri: string | null
+  errorText: string | null
 }) {
   const isUploading = uploadState?.status === 'uploading'
   const isDownloading = downloadState?.status === 'downloading'
@@ -53,6 +58,7 @@ function computeFileStatus({
     cachedUri,
     fileIsGone:
       !isUploading && !isDownloading && !hasPinnedObject && !cachedUri,
+    errorText,
   }
 }
 
@@ -67,6 +73,14 @@ export function useFileStatus(file?: {
     file?.id || '',
     file?.fileType ? extFromMime(file.fileType) : '.bin'
   )
+  const [uploadError, downloadError] = useTransfersStore(
+    useShallow((state) => {
+      const id = file?.id || ''
+      const u = id ? state.inflight[makeTransferKey('upload', id)] : undefined
+      const d = id ? state.inflight[makeTransferKey('download', id)] : undefined
+      return [u?.error ?? null, d?.error ?? null] as const
+    })
+  )
   return useMemo(
     () =>
       computeFileStatus({
@@ -74,8 +88,12 @@ export function useFileStatus(file?: {
         uploadState,
         downloadState,
         cachedUri: cachedUri.data ?? null,
+        errorText:
+          (uploadError as string | null) ||
+          (downloadError as string | null) ||
+          null,
       }),
-    [uploadState, downloadState, cachedUri, file]
+    [uploadState, downloadState, cachedUri, file, uploadError, downloadError]
   )
 }
 

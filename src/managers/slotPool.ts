@@ -43,6 +43,11 @@ export class SlotPool {
   /** Acquire a slot. Resolves with a release function to free the slot. */
   async acquire(): Promise<() => void> {
     if (this.inUseCount < this.maxSlots) {
+      logger.log(
+        `[slotPool] acquired: inUse=${this.inUseCount + 1}/${
+          this.maxSlots
+        } queued=${Math.max(0, this.waitQueue.length - 1)}`
+      )
       // Immediate acquisition.
       this.inUseCount += 1
       let released = false
