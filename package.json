@@ -41,7 +41,8 @@
     "react-native-svg": "^15.2.0",
     "readable-stream": "^4.7.0",
     "swr": "^2.3.6",
-    "zod": "^4.1.8"
+    "zod": "^4.1.8",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

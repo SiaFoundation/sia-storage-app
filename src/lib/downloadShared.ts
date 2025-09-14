@@ -8,7 +8,7 @@ import {
   setDownloadState,
   updateDownloadProgress,
   clearDownloadState,
-} from './downloadState'
+} from '../stores/downloadState'
 import { useSettings } from './settingsContext'
 import { useCallback } from 'react'
 import { extFromMime } from './fileTypes'
