@@ -1,34 +1,22 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Grid2X2Icon, ListIcon, PlusIcon } from 'lucide-react-native'
-import { usePickAndUploadMedia } from '../lib/uploadManager'
 import { Gallery } from '../components/Gallery'
-import { useSettings } from '../lib/settingsContext'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type FeedStackParamList } from '../navigation/types'
 import { type FileRecord, useFileList } from '../stores/files'
 import { FileList } from '../components/FileList'
-import { logger } from '../lib/logger'
+import { usePickAndUpload } from '../hooks/usePickAndUpload'
 
 export default function HomeScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
-  const { sdk } = useSettings()
   const navigation =
     useNavigation<NativeStackNavigationProp<FeedStackParamList>>()
   const { data: files } = useFileList()
 
-  const pickAndUploadMedia = usePickAndUploadMedia()
-
-  const handleUpload = useCallback(async () => {
-    if (!sdk) return
-    try {
-      pickAndUploadMedia()
-    } catch (e) {
-      logger.log(`Upload flow error: ${String(e)}`)
-    }
-  }, [sdk])
+  const pickAndUpload = usePickAndUpload()
 
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
@@ -76,7 +64,7 @@ export default function HomeScreen() {
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={handleUpload}
+            onPress={pickAndUpload}
             style={styles.headerIcon}
           >
             <PlusIcon color="#0969da" size={22} />
@@ -91,7 +79,7 @@ export default function HomeScreen() {
           </Text>
           <Pressable
             accessibilityRole="button"
-            onPress={handleUpload}
+            onPress={pickAndUpload}
             style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>Upload media</Text>

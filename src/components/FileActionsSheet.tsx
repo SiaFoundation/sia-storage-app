@@ -1,5 +1,5 @@
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type FeedStackParamList } from '../navigation/types'
+import { type MainStackParamList } from '../stacks/types'
 import { useCallback, useLayoutEffect, useState } from 'react'
 import {
   MoreVerticalIcon,
@@ -14,12 +14,12 @@ import { useToast } from '../lib/toastContext'
 import { Linking, View } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../stores/fileCache'
-import { useDownload } from '../lib/downloadManager'
+import { useDownload } from '../managers/downloader'
 import { extFromMime } from '../lib/fileTypes'
 import { useSettings } from '../lib/settingsContext'
 import { getOnePinnedObject, useFileStatus } from '../lib/file'
 import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
-import { useReuploadFile } from '../lib/uploadManager'
+import { useReuploadFile } from '../managers/uploader'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
 import {
@@ -28,7 +28,7 @@ import {
   updateFilePinnedObjects,
 } from '../stores/files'
 
-type Props = NativeStackScreenProps<FeedStackParamList, 'FileDetail'>
+type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileActionsSheet({ route, navigation }: Props) {
   const toast = useToast()

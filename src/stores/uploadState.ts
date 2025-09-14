@@ -1,4 +1,11 @@
-import { create } from 'zustand'
+import {
+  useTransfersStore,
+  setTransferState,
+  updateTransferProgress,
+  clearTransfer,
+  makeTransferKey,
+} from './transfers'
+import { useShallow } from 'zustand/react/shallow'
 
 export type UploadStatus = 'uploading' | 'done' | 'error'
 
@@ -7,53 +14,63 @@ export type UploadState = {
   progress: number // 0..1
 }
 
-type Snapshot = Record<string, UploadState>
+type UploadMap = Record<string, UploadState>
 
-type UploadStore = {
-  records: Snapshot
-  set: (id: string, next: UploadState) => void
-  updateProgress: (id: string, progress: number) => void
-  clear: (id: string) => void
+function toTransferStatus(status: UploadStatus): 'running' | 'done' | 'error' {
+  return status === 'uploading' ? 'running' : status
 }
 
-const useUploadStore = create<UploadStore>((set, get) => ({
-  records: {},
-  set: (id, next) =>
-    set((state) => ({ records: { ...state.records, [id]: next } })),
-  updateProgress: (id, progress) => {
-    const prev = get().records[id]
-    const status: UploadStatus = prev?.status ?? 'uploading'
-    set((state) => ({
-      records: { ...state.records, [id]: { status, progress } },
-    }))
-  },
-  clear: (id) =>
-    set((state) => {
-      const { [id]: _removed, ...rest } = state.records
-      return { records: rest }
-    }),
-}))
+function fromTransferStatus(
+  status: 'running' | 'done' | 'error'
+): UploadStatus {
+  return status === 'running' ? 'uploading' : status
+}
 
 export function setUploadState(id: string, next: UploadState): void {
-  useUploadStore.getState().set(id, next)
+  setTransferState(id, 'upload', toTransferStatus(next.status), next.progress)
 }
 
 export function updateUploadProgress(id: string, progress: number): void {
-  useUploadStore.getState().updateProgress(id, progress)
+  updateTransferProgress(id, 'upload', progress)
 }
 
 export function clearUploadState(id: string): void {
-  useUploadStore.getState().clear(id)
+  clearTransfer(id)
 }
 
 export function useUploadState(id: string): UploadState | undefined {
-  return useUploadStore((state) => (id ? state.records[id] : undefined))
+  const [status, progress] = useTransfersStore(
+    useShallow((state) => {
+      const key = id ? makeTransferKey('upload', id) : undefined
+      const rec = key ? state.inflight[key] : undefined
+      return rec && rec.kind === 'upload'
+        ? ([rec.status, rec.progress] as const)
+        : ([undefined, undefined] as const)
+    })
+  )
+  if (typeof status === 'undefined' || typeof progress === 'undefined') {
+    return undefined
+  }
+  return { status: fromTransferStatus(status), progress }
 }
 
-export function useAllUploadStates(): Snapshot {
-  return useUploadStore((state) => state.records)
+export function useAllUploadStates(): UploadMap {
+  return useTransfersStore((state) => {
+    const out: UploadMap = {}
+    for (const [key, rec] of Object.entries(state.inflight)) {
+      if (rec.kind !== 'upload') continue
+      out[rec.id] = {
+        status: fromTransferStatus(rec.status),
+        progress: rec.progress,
+      }
+    }
+    return out
+  })
 }
 
 export function getUploadState(id: string): UploadState | undefined {
-  return useUploadStore.getState().records[id]
+  const key = makeTransferKey('upload', id)
+  const rec = useTransfersStore.getState().inflight[key]
+  if (!rec || rec.kind !== 'upload') return undefined
+  return { status: fromTransferStatus(rec.status), progress: rec.progress }
 }
