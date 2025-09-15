@@ -1,6 +1,6 @@
 import { useToast } from '../lib/toastContext'
 import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
-import { updateDownloadProgress } from '../stores/downloadState'
+import { updateDownloadProgress } from '../stores/transfers'
 import { useSettings } from '../lib/settingsContext'
 import { type PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'

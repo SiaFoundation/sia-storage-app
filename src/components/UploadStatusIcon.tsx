@@ -45,6 +45,8 @@ export function UploadStatusIcon({
 
   const label = useMemo(() => {
     if (status.isErrored) return status.errorText || 'Error'
+    if (status.isUploadQueued) return 'Upload queued'
+    if (status.isDownloadQueued) return 'Download queued'
     if (status.isUploading) return 'Uploading'
     if (status.isDownloading) return 'Downloading'
     if (status.isUploaded && status.isDownloaded)

@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
-import { useTransfersStore, makeTransferKey } from '../stores/transfers'
+import {
+  useTransfersStore,
+  makeTransferKey,
+  TransferState,
+} from '../stores/transfers'
 import { useShallow } from 'zustand/react/shallow'
 import { FileRecord } from '../stores/files'
-import { DownloadState, useDownloadState } from '../stores/downloadState'
-import { UploadState, useUploadState } from '../stores/uploadState'
+import { useDownloadState, useUploadState } from '../stores/transfers'
 import { useCachedUri } from '../stores/fileCache'
 import { extFromMime } from './fileTypes'
 import { PinnedObject } from 'react-native-sia'
-import { logger } from './logger'
 
 export function fileHasAPinnnedObject(file: {
   pinnedObjects: unknown
@@ -23,6 +25,8 @@ export type FileStatus = {
   isErrored: boolean
   uploadProgress: number
   downloadProgress: number
+  isUploadQueued: boolean
+  isDownloadQueued: boolean
   cachedUri: string | null
   fileIsGone: boolean
   errorText: string | null
@@ -38,17 +42,21 @@ function computeFileStatus({
   file: {
     pinnedObjects: unknown | null
   }
-  uploadState: UploadState | undefined
-  downloadState: DownloadState | undefined
+  uploadState: TransferState | undefined
+  downloadState: TransferState | undefined
   cachedUri: string | null
   errorText: string | null
 }) {
-  const isUploading = uploadState?.status === 'uploading'
-  const isDownloading = downloadState?.status === 'downloading'
+  const isUploading =
+    uploadState?.status === 'running' || uploadState?.status === 'queued'
+  const isDownloading =
+    downloadState?.status === 'running' || downloadState?.status === 'queued'
   const hasPinnedObject = fileHasAPinnnedObject(file)
   return {
     isUploading,
     isDownloading,
+    isUploadQueued: uploadState?.status === 'queued',
+    isDownloadQueued: downloadState?.status === 'queued',
     isUploaded: hasPinnedObject,
     isDownloaded: !!cachedUri,
     isErrored:
