@@ -1,9 +1,9 @@
 import { View, StyleSheet, Pressable, Text } from 'react-native'
 import { LogView } from '../components/LogView'
-import { useSettings } from '../lib/settingsContext'
+import { useLogs, clearLogs } from '../stores/logs'
 
 export function LogScreen() {
-  const { logs, clearLogs } = useSettings()
+  const logs = useLogs()
   return (
     <View style={styles.container}>
       <View style={styles.header}>

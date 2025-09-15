@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -14,14 +13,13 @@ import authApp from './authApp'
 import * as SplashScreen from 'expo-splash-screen'
 import { createSeed, loadSeed, storeSeed } from './seed'
 import { logger } from './logger'
+import { useInitLogger } from '../stores/logs'
 
 export type Logger = (...args: any[]) => void
 
 type SettingsContextValue = {
   sdk: Sdk
   isConnected: boolean
-  logs: string[]
-  clearLogs: () => void
   indexerName: string
   setIndexerName: (value: string) => void
   indexerURL: string
@@ -51,25 +49,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [isAuthing, setIsAuthing] = useState(false)
 
-  const [logs, setLogs] = useState<string[]>([])
-  const log = useCallback((...args: any[]) => {
-    console.log(...args)
-    setLogs((prev) => [
-      ...prev.slice(-100),
-      `${new Date().toLocaleTimeString()} ${args.join(' ')}`,
-    ])
-  }, [])
-
-  const clearLogs = useCallback(() => {
-    setLogs([])
-  }, [])
-
-  useEffect(() => {
-    logger.log = log
-    logger.clear = clearLogs
-  }, [log, clearLogs])
-
-  useEffect(() => {}, [])
+  useInitLogger()
 
   useEffect(() => {
     let splashTimeout: NodeJS.Timeout
@@ -184,7 +164,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
     },
     // Be careful about this dep array. Is it complete?
-    [indexerURL, log, appSeed]
+    [indexerURL, appSeed]
   )
 
   const value: SettingsContextValue = useMemo(
@@ -198,8 +178,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       isOnboarding,
       setIsOnboarding,
       authIndexer,
-      logs,
-      clearLogs,
       appSeed,
       setAppSeed,
       resetApp,
@@ -214,8 +192,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       isOnboarding,
       setIsOnboarding,
       authIndexer,
-      logs,
-      clearLogs,
       appSeed,
       setAppSeed,
       resetApp,
