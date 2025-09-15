@@ -1,14 +1,8 @@
 import { PinnedObject, Sdk } from 'react-native-sia'
-import { updateUploadProgress, setUploadState } from '../stores/uploadState'
+import { updateUploadProgress } from '../stores/transfers'
 import { updateFilePinnedObject } from '../stores/files'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
-
-export type UploadProgress = {
-  bytesWritten: number
-  totalBytes: number
-  percent: number // 0..1
-}
 
 export async function uploadToIndexer(params: {
   file: {

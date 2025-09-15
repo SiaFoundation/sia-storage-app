@@ -7,7 +7,7 @@ export type TransferKind = 'upload' | 'download'
 
 export type TransferStatus = 'queued' | 'running' | 'done' | 'error'
 
-export type TransferRecord = {
+export type TransferState = {
   id: string
   kind: TransferKind
   controller?: AbortController
@@ -17,8 +17,8 @@ export type TransferRecord = {
 }
 
 type TransfersStore = {
-  inflight: Record<string, TransferRecord>
-  add: (record: Omit<TransferRecord, 'status' | 'progress'>) => void
+  inflight: Record<string, TransferState>
+  add: (record: Omit<TransferState, 'status' | 'progress'>) => void
   updateState: (
     id: string,
     kind: TransferKind,
@@ -37,7 +37,7 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
     set((state) => {
       const key = makeTransferKey(record.kind, record.id)
       const prev = state.inflight[key]
-      const next: TransferRecord = {
+      const next: TransferState = {
         id: record.id,
         kind: record.kind,
         controller: record.controller ?? prev?.controller,
@@ -50,7 +50,7 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
     set((state) => {
       const key = makeTransferKey(kind, id)
       const prev = state.inflight[key]
-      const next: TransferRecord = {
+      const next: TransferState = {
         id,
         kind: kind ?? prev?.kind ?? 'upload',
         controller: prev?.controller,
@@ -64,7 +64,7 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
     set((state) => {
       const key = makeTransferKey(kind, id)
       const prev = state.inflight[key]
-      const next: TransferRecord = {
+      const next: TransferState = {
         id,
         kind: kind ?? prev?.kind ?? 'upload',
         controller: prev?.controller,
@@ -77,8 +77,8 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
   remove: (id) =>
     set((state) => {
       const entries = Object.entries(state.inflight)
-      let removed: TransferRecord | undefined
-      const rest: Record<string, TransferRecord> = {}
+      let removed: TransferState | undefined
+      const rest: Record<string, TransferState> = {}
       for (const [k, v] of entries) {
         if (!removed && v.id === id) {
           removed = v
@@ -119,7 +119,7 @@ export function unregisterTransfer(id: string): void {
   // Detach controller but keep record (for error state visibility).
   useTransfersStore.setState((state) => {
     const entries = Object.entries(state.inflight)
-    const next: Record<string, TransferRecord> = {}
+    const next: Record<string, TransferState> = {}
     for (const [k, v] of entries) {
       if (v.id === id) next[k] = { ...v, controller: undefined }
       else next[k] = v
@@ -148,10 +148,6 @@ export function updateTransferProgress(
   progress: number
 ): void {
   useTransfersStore.getState().updateProgress(id, kind, progress)
-}
-
-export function clearTransfer(id: string): void {
-  useTransfersStore.getState().remove(id)
 }
 
 export function useInflightCounts(): {
@@ -191,7 +187,8 @@ export async function runTransferWithSlot<T>(params: {
     const result = await task(controller.signal)
     logger.log('transfer success', id, kind)
     // On success, remove from store entirely.
-    clearTransfer(id)
+    const key = makeTransferKey(kind, id)
+    useTransfersStore.getState().remove(key)
     return result
   } catch (e) {
     logger.log('transfer error', id, kind, e)
@@ -200,6 +197,47 @@ export async function runTransferWithSlot<T>(params: {
     throw e
   } finally {
     release()
-    unregisterTransfer(id)
+    const key = makeTransferKey(kind, id)
+    useTransfersStore.getState().remove(key)
   }
+}
+
+export function setUploadState(id: string, next: TransferState): void {
+  setTransferState(id, 'upload', next.status, next.progress)
+}
+
+export function updateUploadProgress(id: string, progress: number): void {
+  updateTransferProgress(id, 'upload', progress)
+}
+
+export function clearUploadState(id: string): void {
+  const key = makeTransferKey('upload', id)
+  useTransfersStore.getState().remove(key)
+}
+
+export function useUploadState(id: string): TransferState | undefined {
+  const key = id ? makeTransferKey('upload', id) : undefined
+  return useTransfersStore(
+    useShallow((state) => (key ? state.inflight[key] : undefined))
+  )
+}
+
+export function setDownloadState(id: string, next: TransferState): void {
+  setTransferState(id, 'download', next.status, next.progress)
+}
+
+export function updateDownloadProgress(id: string, progress: number): void {
+  updateTransferProgress(id, 'download', progress)
+}
+
+export function clearDownloadState(id: string): void {
+  const key = makeTransferKey('download', id)
+  useTransfersStore.getState().remove(key)
+}
+
+export function useDownloadState(id: string): TransferState | undefined {
+  const key = id ? makeTransferKey('download', id) : undefined
+  return useTransfersStore(
+    useShallow((state) => (key ? state.inflight[key] : undefined))
+  )
 }
