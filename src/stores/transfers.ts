@@ -27,7 +27,7 @@ type TransfersStore = {
     error?: string
   ) => void
   updateProgress: (id: string, kind: TransferKind, progress: number) => void
-  remove: (id: string) => void
+  remove: (id: string, kind: TransferKind) => void
   cancelAll: () => void
 }
 
@@ -74,21 +74,10 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
       }
       return { inflight: { ...state.inflight, [key]: next } }
     }),
-  remove: (id) =>
+  remove: (id, kind) =>
     set((state) => {
-      const entries = Object.entries(state.inflight)
-      let removed: TransferState | undefined
-      const rest: Record<string, TransferState> = {}
-      for (const [k, v] of entries) {
-        if (!removed && v.id === id) {
-          removed = v
-          continue
-        }
-        rest[k] = v
-      }
-      if (removed) {
-        // No action on remove other than dropping reference.
-      }
+      const key = makeTransferKey(kind, id)
+      const { [key]: _, ...rest } = state.inflight
       return { inflight: rest }
     }),
   cancelAll: () => {
@@ -128,8 +117,8 @@ export function unregisterTransfer(id: string): void {
   })
 }
 
-export function cancelAllTransfers(): void {
-  useTransfersStore.getState().cancelAll()
+export function cancelAllTransfers() {
+  return useTransfersStore.getState().cancelAll()
 }
 
 export function setTransferState(
@@ -138,16 +127,18 @@ export function setTransferState(
   status: TransferStatus,
   progress: number,
   error?: string
-): void {
-  useTransfersStore.getState().updateState(id, kind, status, progress, error)
+) {
+  return useTransfersStore
+    .getState()
+    .updateState(id, kind, status, progress, error)
 }
 
 export function updateTransferProgress(
   id: string,
   kind: TransferKind,
   progress: number
-): void {
-  useTransfersStore.getState().updateProgress(id, kind, progress)
+) {
+  return useTransfersStore.getState().updateProgress(id, kind, progress)
 }
 
 export function useInflightCounts(): {
@@ -186,9 +177,7 @@ export async function runTransferWithSlot<T>(params: {
     setTransferState(id, kind, 'running', 0)
     const result = await task(controller.signal)
     logger.log('transfer success', id, kind)
-    // On success, remove from store entirely.
-    const key = makeTransferKey(kind, id)
-    useTransfersStore.getState().remove(key)
+    useTransfersStore.getState().remove(id, kind)
     return result
   } catch (e) {
     logger.log('transfer error', id, kind, e)
@@ -197,22 +186,16 @@ export async function runTransferWithSlot<T>(params: {
     throw e
   } finally {
     release()
-    const key = makeTransferKey(kind, id)
-    useTransfersStore.getState().remove(key)
+    useTransfersStore.getState().remove(id, kind)
   }
 }
 
-export function setUploadState(id: string, next: TransferState): void {
-  setTransferState(id, 'upload', next.status, next.progress)
+export function setUploadState(id: string, next: TransferState) {
+  return setTransferState(id, 'upload', next.status, next.progress)
 }
 
-export function updateUploadProgress(id: string, progress: number): void {
-  updateTransferProgress(id, 'upload', progress)
-}
-
-export function clearUploadState(id: string): void {
-  const key = makeTransferKey('upload', id)
-  useTransfersStore.getState().remove(key)
+export function updateUploadProgress(id: string, progress: number) {
+  return updateTransferProgress(id, 'upload', progress)
 }
 
 export function useUploadState(id: string): TransferState | undefined {
@@ -222,17 +205,12 @@ export function useUploadState(id: string): TransferState | undefined {
   )
 }
 
-export function setDownloadState(id: string, next: TransferState): void {
-  setTransferState(id, 'download', next.status, next.progress)
+export function setDownloadState(id: string, next: TransferState) {
+  return setTransferState(id, 'download', next.status, next.progress)
 }
 
-export function updateDownloadProgress(id: string, progress: number): void {
-  updateTransferProgress(id, 'download', progress)
-}
-
-export function clearDownloadState(id: string): void {
-  const key = makeTransferKey('download', id)
-  useTransfersStore.getState().remove(key)
+export function updateDownloadProgress(id: string, progress: number) {
+  return updateTransferProgress(id, 'download', progress)
 }
 
 export function useDownloadState(id: string): TransferState | undefined {

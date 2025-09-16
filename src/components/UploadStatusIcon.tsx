@@ -69,7 +69,10 @@ export function UploadStatusIcon({
     >
       {expanded && label ? (
         <Animated.Text
-          style={[styles.pillText, { color: textColor, opacity: textOpacity }]}
+          style={[
+            styles.pillText,
+            { fontSize: size * 0.75, color: textColor, opacity: textOpacity },
+          ]}
           numberOfLines={1}
         >
           {label}
@@ -158,7 +161,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   pillText: {
-    fontSize: 12,
     fontWeight: '600',
   },
   iconRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },

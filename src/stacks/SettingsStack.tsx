@@ -4,6 +4,7 @@ import { SettingsHomeScreen } from '../screens/SettingsHomeScreen'
 import { HostListScreen } from '../screens/HostListScreen'
 import { HostDetailScreen } from '../screens/HostDetailScreen'
 import { SettingsIndexerScreen } from '../screens/SettingsIndexerScreen'
+import { SettingsTransfersScreen } from '../screens/SettingsTransfersScreen'
 import { type SettingsStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>()
@@ -30,6 +31,11 @@ export function SettingsStack() {
         name="Indexer"
         component={SettingsIndexerScreen}
         options={{ title: 'Indexer' }}
+      />
+      <Stack.Screen
+        name="Transfers"
+        component={SettingsTransfersScreen}
+        options={{ title: 'Transfers' }}
       />
     </Stack.Navigator>
   )

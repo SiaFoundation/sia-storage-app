@@ -43,6 +43,13 @@ export function FileMetaImport({
             value={file.fileType ?? '—'}
             showDividerTop
           />
+          {status.cachedUri && (
+            <LabeledValueRow
+              label="Cached URL"
+              value={status.cachedUri}
+              showDividerTop
+            />
+          )}
         </InfoCard>
       </RowGroup>
     </View>

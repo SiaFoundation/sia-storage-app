@@ -5,10 +5,16 @@ import { MainStack } from './MainStack'
 import { SettingsStack } from './SettingsStack'
 import { LogScreen } from '../screens/LogScreen'
 import { type RootTabParamList } from './types'
+import { AuthStack } from './AuthStack'
+import { useHasOnboarded } from '../stores/auth'
 
 const Tab = createBottomTabNavigator<RootTabParamList>()
 
 export function RootTabs() {
+  const hasOnboarded = useHasOnboarded()
+  if (!hasOnboarded) {
+    return <AuthStack />
+  }
   return (
     <Tab.Navigator
       screenOptions={{

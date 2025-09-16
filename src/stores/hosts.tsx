@@ -1,11 +1,11 @@
 import useSWR from 'swr'
-import { useSettings } from '../lib/settingsContext'
+import { useSdk } from './auth'
 
 const KEY = 'sdk/hosts'
 
 export function useHosts() {
-  const { sdk } = useSettings()
-  return useSWR(sdk ? [KEY] : null, async () => sdk.hosts(), {
+  const sdk = useSdk()
+  return useSWR(sdk ? [KEY] : null, async () => sdk!.hosts(), {
     revalidateOnFocus: false,
     refreshInterval: 20_000,
   })

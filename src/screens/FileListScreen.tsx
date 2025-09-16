@@ -14,7 +14,7 @@ export function FileListScreen() {
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
   const navigation =
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
-  const { data: files } = useFileList()
+  const files = useFileList()
 
   const pickAndUpload = usePickAndUpload()
 
@@ -71,7 +71,7 @@ export function FileListScreen() {
           </Pressable>
         </View>
       </View>
-      {(files?.length ?? 0) === 0 ? (
+      {!files.isLoading && files.data?.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No uploads yet</Text>
           <Text style={styles.emptyText}>

@@ -1,7 +1,7 @@
 import { Text, View, StyleSheet, Platform, Pressable } from 'react-native'
 import { ChevronRightIcon } from 'lucide-react-native'
 import useSWR from 'swr'
-import { useSettings } from '../lib/settingsContext'
+import { useSdk } from '../stores/auth'
 import { SWRList } from './SWRList'
 
 export function HostsList({
@@ -9,8 +9,8 @@ export function HostsList({
 }: {
   onSelectHost: (host: string) => void
 }) {
-  const { sdk } = useSettings()
-  const response = useSWR(sdk ? ['hosts', sdk] : null, async () => sdk.hosts())
+  const sdk = useSdk()
+  const response = useSWR(sdk ? ['hosts', sdk] : null, async () => sdk!.hosts())
 
   return (
     <SWRList

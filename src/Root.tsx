@@ -6,7 +6,9 @@ import {
 } from '@react-navigation/native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
-import { SettingsProvider } from './lib/settingsContext'
+import { useInitLogger } from './stores/logs'
+import { useEffect } from 'react'
+import { initAuth } from './stores/auth'
 import ConnectionBanner from './components/ConnectionBanner'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
@@ -16,6 +18,17 @@ SplashScreen.preventAutoHideAsync()
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
+  useInitLogger()
+
+  useEffect(() => {
+    const init = async () => {
+      await initAuth()
+      setTimeout(() => {
+        SplashScreen.hideAsync()
+      }, 200)
+    }
+    init()
+  }, [])
 
   useLinkedURL((incomingUrl) => {
     try {
@@ -46,14 +59,12 @@ export function Root() {
             default: 'dark-content',
           })}
         />
-        <SettingsProvider>
-          <ToastProvider>
-            <NavigationContainer ref={navigationRef}>
-              <ConnectionBanner />
-              <RootTabs />
-            </NavigationContainer>
-          </ToastProvider>
-        </SettingsProvider>
+        <ToastProvider>
+          <NavigationContainer ref={navigationRef}>
+            <ConnectionBanner />
+            <RootTabs />
+          </NavigationContainer>
+        </ToastProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   )

@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
-import { useSettings } from '../lib/settingsContext'
+import { useIndexerURL, useSdk } from '../stores/auth'
 import { createFileRecord } from '../stores/files'
 import { PinnedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
@@ -23,7 +23,10 @@ import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
-import { decodeFileMetadata } from '../encoding/fileMetadata'
+import {
+  decodeFileMetadata,
+  encodeFileMetadata,
+} from '../encoding/fileMetadata'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
 
@@ -32,33 +35,40 @@ export function ImportFileScreen({ route }: Props) {
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
-  const { sdk, indexerURL } = useSettings()
-  const sharedObject = useSWR([shareUrl], async () => {
-    try {
-      const sharedObject = await sdk.sharedObject(shareUrl ?? '')
-      return sharedObject
-    } catch (e) {
-      logger.log('Error getting shared object', e)
-      return null
+  const sdk = useSdk()
+  const indexerURL = useIndexerURL()
+  const sharedObject = useSWR(
+    sdk ? ['sharedObject', shareUrl] : null,
+    async () => {
+      try {
+        if (!sdk) return null
+        const sharedObject = await sdk.sharedObject(shareUrl ?? '')
+        return sharedObject
+      } catch (e) {
+        logger.log('Error getting shared object', e)
+        return null
+      }
     }
-  })
-  const meta = useSWR(['meta', sharedObject.data?.key], () =>
-    decodeFileMetadata(sharedObject.data?.meta)
   )
-  const id = useMemo(() => uniqueId(), [])
+  const decodedMetadata = useMemo(() => {
+    if (!sharedObject.data?.meta) return {}
+    return decodeFileMetadata(sharedObject.data?.meta)
+  }, [sharedObject.data?.meta])
+  const id = useMemo(() => uniqueId(), [shareUrl])
   const file = useMemo(
     () => ({
       id,
-      fileType: meta.data?.fileType ?? '',
-      fileSize: meta.data?.size ?? 0,
+      fileType: decodedMetadata?.fileType ?? '',
+      fileSize: decodedMetadata?.size ?? 0,
       fileName: '',
       pinnedObjects: true,
     }),
-    [id, meta.data, sharedObject.data]
+    [id, decodedMetadata, sharedObject.data]
   )
 
   const handleAddToDatabase = useCallback(async () => {
-    if (!sharedObject.data) return
+    if (!sharedObject.data || !sdk) return
+    const decodedMetadata = decodeFileMetadata(sharedObject.data.meta)
     const pinnedObject: PinnedObject = {
       key: sharedObject.data.key,
       slabs: sharedObject.data.slabs.map((sharedSlab) => ({
@@ -73,12 +83,13 @@ export function ImportFileScreen({ route }: Props) {
 
     const size = pinnedObject.slabs.reduce((acc, slab) => acc + slab.length, 0)
     await sdk.saveObject(pinnedObject)
+
     await createFileRecord({
       id,
       fileSize: size,
       createdAt: new Date().getTime(),
       fileName: '',
-      fileType: meta.data?.fileType ?? '',
+      fileType: decodedMetadata?.fileType ?? '',
       pinnedObjects: { [indexerURL]: pinnedObject },
       encryptionKey: encryptionKeyArrayBufferToHex(
         sharedObject.data.encryptionKey
@@ -86,7 +97,15 @@ export function ImportFileScreen({ route }: Props) {
     })
     toast.show('File added')
     navigation.navigate('FileDetail', { id })
-  }, [sharedObject.data, sdk, indexerURL, toast, navigation])
+  }, [
+    sharedObject.data,
+    sdk,
+    indexerURL,
+    toast,
+    navigation,
+    id,
+    decodedMetadata,
+  ])
 
   return (
     <View style={styles.container}>
