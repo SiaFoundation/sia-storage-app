@@ -11,7 +11,6 @@ export async function uploadToIndexer(params: {
     fileType: string | null
     fileSize: number | null
     encryptionKey: Uint8Array
-    cacheUri?: string
   }
   sdk: Sdk
   indexerURL: string

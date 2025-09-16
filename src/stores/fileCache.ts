@@ -19,16 +19,12 @@ export async function getCachedFileForId(id: string, ext: Ext): Promise<File> {
 
 export async function getOrCreateCachedFile(
   id: string,
-  ext: Ext,
-  triggerUpdate?: boolean
+  ext: Ext
 ): Promise<File> {
   const f = await getCachedFileForId(id, ext)
   const info = f.info()
   if (!info.exists) {
     f.create({ intermediates: true })
-    if (triggerUpdate) {
-      triggerFileCacheUpdate(id)
-    }
   }
   return f
 }

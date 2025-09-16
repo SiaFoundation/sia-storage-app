@@ -6,14 +6,13 @@ import {
 } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
-import { useSettings } from '../lib/settingsContext'
+import { useIndexerURL, useSdk } from '../stores/auth'
 import { extFromMime } from '../lib/fileTypes'
 import {
   encryptionKeyHexToUint8,
   encryptionKeyUint8ToHex,
 } from '../lib/encryptionKey'
 import {
-  createFileRecord,
   createManyFileRecords,
   FileRecord,
   readFileRecord,
@@ -23,9 +22,14 @@ import { PickerAsset } from '../hooks/useFilePicker'
 import { runTransferWithSlot } from '../stores/transfers'
 
 export function useUploader() {
-  const { sdk, indexerURL } = useSettings()
+  const sdk = useSdk()
+  const indexerURL = useIndexerURL()
   return useCallback(
     async (assets: PickerAsset[]) => {
+      if (!sdk) {
+        logger.log('[uploader] sdk not initialized')
+        return
+      }
       try {
         const fileRecords: FileRecord[] = []
         for (const asset of assets) {
@@ -70,7 +74,13 @@ export function useUploader() {
                 logger.log(`[uploader] uploading ${asset.id} to hosts...`)
                 const fileBytes = await new FileSystem.File(cacheUri).bytes()
                 await uploadToIndexer({
-                  file: asset,
+                  file: {
+                    id: asset.id,
+                    fileName: asset.fileName,
+                    fileType: asset.fileType,
+                    fileSize: asset.fileSize,
+                    encryptionKey: asset.encryptionKey,
+                  },
                   indexerURL,
                   sdk,
                   data: fileBytes.buffer as ArrayBuffer,
@@ -91,13 +101,15 @@ export function useUploader() {
 }
 
 export function useReuploadFile() {
-  const { sdk, indexerURL } = useSettings()
+  const sdk = useSdk()
+  const indexerURL = useIndexerURL()
   return useCallback(
     async (fileId: string) =>
       runTransferWithSlot({
         id: fileId,
         kind: 'upload',
         task: async (signal) => {
+          if (!sdk) throw new Error('SDK not initialized')
           const file = await readFileRecord(fileId)
           if (!file) {
             throw new Error('File not found')

@@ -4,19 +4,21 @@ import { mimeFromAssetUri } from '../lib/fileTypes'
 import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
 import { generateEncryptionKey } from '../lib/encryptionKey'
+import { useToast } from '../lib/toastContext'
 
 export type PickerAsset = {
   id: string
   uri: string
-  fileName: string | null
-  fileSize: number | null
+  fileName: string
+  fileSize: number
   createdAt: number
-  fileType: string | null
+  fileType: string
   encryptionKey: Uint8Array<ArrayBuffer>
   cacheUri?: string
 }
 
 export function useFilePicker() {
+  const toast = useToast()
   return useCallback(async () => {
     try {
       logger.log('[filePicker] opening media picker...')
@@ -38,18 +40,31 @@ export function useFilePicker() {
         return []
       }
 
-      const assets: PickerAsset[] = (result.assets ?? [])
-        .filter((a): a is ImagePicker.Asset => Boolean(a && a.uri && a.id))
-        .map((a) => ({
+      const assetsWithRequiredFields = (result.assets ?? []).filter(
+        (a) => a.uri && a.id && a.fileName && a.fileSize
+      )
+
+      if (assetsWithRequiredFields.length !== result.assets?.length) {
+        toast.show(
+          `Assets without required fields: ${
+            result.assets?.length
+              ? result.assets.length - assetsWithRequiredFields.length
+              : 0
+          }`
+        )
+      }
+      const assets: PickerAsset[] = (assetsWithRequiredFields ?? []).map(
+        (a) => ({
           ...a,
           id: uniqueId(),
           uri: a.uri as string,
           fileType: mimeFromAssetUri(a),
           createdAt: Date.now(),
-          fileSize: a.fileSize ?? null,
-          fileName: a.fileName ?? null,
+          fileSize: a.fileSize!,
+          fileName: a.fileName!,
           encryptionKey: generateEncryptionKey(),
-        }))
+        })
+      )
 
       if (assets.length === 0) {
         logger.log('[filePicker] no media selected.')

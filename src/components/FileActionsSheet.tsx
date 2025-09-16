@@ -16,7 +16,7 @@ import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
 import { extFromMime } from '../lib/fileTypes'
-import { useSettings } from '../lib/settingsContext'
+import { useSdk } from '../stores/auth'
 import { getOnePinnedObject, useFileStatus } from '../lib/file'
 import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
 import { useReuploadFile } from '../managers/uploader'
@@ -35,7 +35,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const { data: file } = useFileDetails(route.params.id)
   const status = useFileStatus(file ?? undefined)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const { sdk } = useSettings()
+  const sdk = useSdk()
 
   const handleOpenMenu = useCallback(() => {
     setIsMenuOpen(true)

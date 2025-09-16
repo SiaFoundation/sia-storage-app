@@ -5,6 +5,7 @@ import ImageViewer from './ImageViewer'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
 import { useDownloadFromShareURL } from '../../managers/downloader'
+import { useEffect } from 'react'
 
 export function FileViewerImport({
   file,
@@ -21,6 +22,12 @@ export function FileViewerImport({
   const handleDownload = useDownloadFromShareURL()
 
   const isVideo = file.fileType?.startsWith('video')
+
+  useEffect(() => {
+    if (!status.isDownloaded) {
+      handleDownload(file.id, shareUrl)
+    }
+  }, [file.id])
 
   return (
     <View style={[styles.container]}>

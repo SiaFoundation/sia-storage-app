@@ -1,20 +1,37 @@
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native'
-import { useSettings } from '../lib/settingsContext'
+import {
+  useIndexerURL,
+  setIndexerURL,
+  tryToConnectAndSet,
+} from '../stores/auth'
 import { SettingsIcon } from 'lucide-react-native'
 import { useState } from 'react'
+import { useToast } from '../lib/toastContext'
+import { InputRow } from '../components/InputRow'
+import { InfoCard } from '../components/InfoCard'
+
+function validateURL(url: string) {
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export default function OnboardingScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
+  const [isWaiting, setIsWaiting] = useState(false)
   const [hasErrored, setHasErrored] = useState(false)
-  const { authIndexer, indexerURL, setIndexerURL, setIsOnboarding } =
-    useSettings()
+  const indexerURL = useIndexerURL()
+  const toast = useToast()
 
   return (
     <View>
@@ -27,40 +44,58 @@ export default function OnboardingScreen() {
           <SettingsIcon size={20} color="gray" />
         </Pressable>
       </View>
-      <View style={styles.container}>
-        <Text style={styles.title}>Welcome to Sia Mobile!</Text>
-        <Text style={styles.text}>
-          To begin using the app, press below and authorize the indexer. A
-          password should have been provided to you by the indexer admin. To use
-          your own indexer, press the gear in the upper right and enter the base
-          URL.
-        </Text>
-        {isUsingCustomURL ? (
-          <TextInput
-            style={styles.input}
-            value={indexerURL}
-            onChangeText={setIndexerURL}
-          />
-        ) : null}
-        <Pressable
-          style={styles.button}
-          onPress={async () => {
-            const success = await authIndexer(indexerURL)
-            if (!success) {
-              setHasErrored(true)
-              return
-            }
-            setIsOnboarding(false)
-          }}
-        >
-          <Text style={styles.buttonText}>Authorize Indexer</Text>
-        </Pressable>
-        {hasErrored ? (
-          <Text style={[styles.text, { fontSize: 12, color: 'red' }]}>
-            Something went wrong. Please check your password and try again.
+      {isWaiting ? (
+        <View style={styles.center}>
+          <ActivityIndicator color="#0ea5e9" />
+          <Text style={styles.waitingText}>connecting</Text>
+        </View>
+      ) : (
+        <View style={styles.container}>
+          <Text style={styles.title}>Welcome to Sia Mobile!</Text>
+          <Text style={styles.text}>
+            To begin using the app, press below and authorize the indexer. A
+            password should have been provided to you by the indexer admin. To
+            use your own indexer, press the gear in the upper right and enter
+            the base URL.
           </Text>
-        ) : null}
-      </View>
+          <View style={{ gap: 8 }}>
+            <Text style={styles.errorText}>
+              {hasErrored
+                ? 'Something went wrong. Please check your password and try again.'
+                : null}
+            </Text>
+            {isUsingCustomURL ? (
+              <InfoCard>
+                <InputRow
+                  label="Indexer URL"
+                  value={indexerURL}
+                  onChangeText={setIndexerURL}
+                />
+              </InfoCard>
+            ) : null}
+            <Pressable
+              style={styles.button}
+              onPress={async () => {
+                setIsWaiting(true)
+                const isValid = validateURL(indexerURL)
+                if (!isValid) {
+                  toast.show('Invalid URL')
+                  setIsWaiting(false)
+                  return
+                }
+                const success = await tryToConnectAndSet(indexerURL)
+                if (!success) {
+                  toast.show('Failed to connect')
+                  setHasErrored(true)
+                }
+                setIsWaiting(false)
+              }}
+            >
+              <Text style={styles.buttonText}>Authorize & Connect</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -73,12 +108,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 16,
     paddingHorizontal: 16,
-
-    paddingTop: 40,
+    paddingTop: 100,
   },
   text: {
     color: '#24292f',
     fontSize: 16,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 10,
+  },
+  waitingText: {
+    color: '#57606a',
+    fontSize: 12,
   },
   button: {
     width: '100%',
@@ -108,5 +150,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 3,
   },
-  title: { color: '#24292f', fontSize: 16, fontWeight: '600' },
+  title: { color: '#24292f', fontSize: 24, fontWeight: '600' },
+  center: {
+    alignItems: 'center',
+    height: '100%',
+    paddingTop: 250,
+    gap: 16,
+  },
 })

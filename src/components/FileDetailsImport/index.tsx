@@ -2,6 +2,7 @@ import { View, StyleSheet, ScrollView } from 'react-native'
 import { useFileStatus } from '../../lib/file'
 import { FileViewerImport } from '../FileViewerImport'
 import { FileMetaImport } from './FileMetaImport'
+import { useEffect } from 'react'
 
 export function FileDetailsImport({
   file,
@@ -17,6 +18,7 @@ export function FileDetailsImport({
   shareUrl: string
 }) {
   const status = useFileStatus(file)
+
   return (
     <View style={styles.container}>
       <ScrollView>

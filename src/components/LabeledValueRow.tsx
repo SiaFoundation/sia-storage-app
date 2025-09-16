@@ -11,6 +11,7 @@ type Props = {
   showDividerTop?: boolean
   canCopy?: boolean
   ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip'
+  align?: 'left' | 'right'
 }
 
 export function LabeledValueRow({
@@ -21,6 +22,7 @@ export function LabeledValueRow({
   showDividerTop = false,
   canCopy = true,
   ellipsizeMode = 'tail',
+  align = 'right',
 }: Props) {
   const toast = useToast()
 
@@ -35,7 +37,11 @@ export function LabeledValueRow({
       <View style={[styles.row, showDividerTop && styles.rowDivider]}>
         <Text style={styles.rowLabel}>{label}</Text>
         <Text
-          style={[styles.rowValue, isMonospace && styles.rowValueMono]}
+          style={[
+            styles.rowValue,
+            isMonospace && styles.rowValueMono,
+            { textAlign: align },
+          ]}
           numberOfLines={numberOfLines}
           ellipsizeMode={ellipsizeMode}
         >

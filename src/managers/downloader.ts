@@ -1,7 +1,7 @@
 import { useToast } from '../lib/toastContext'
 import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
 import { updateDownloadProgress } from '../stores/transfers'
-import { useSettings } from '../lib/settingsContext'
+import { useSdk } from '../stores/auth'
 import { type PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime, type Ext } from '../lib/fileTypes'
@@ -21,61 +21,55 @@ export function useDownload(
   } | null
 ) {
   const toast = useToast()
-  const { sdk } = useSettings()
-  return useCallback(
-    async (streamDirectlyToCache?: boolean) => {
-      if (!file) return
-      const pinnedObject = getOnePinnedObject(file)
-      if (!pinnedObject) {
-        toast.show('No slabs available for this file')
-        return
-      }
-      toast.show('Starting download...')
-      await runTransferWithSlot({
-        id: file.id,
-        kind: 'download',
-        task: async (signal) => {
-          const downloader = await sdk.download(
-            encryptionKeyHexToBuffer(file.encryptionKey),
-            pinnedObject,
-            {
-              maxInflight: 15,
-              offset: BigInt(0),
-              length: undefined,
-            },
-            { signal }
-          )
-          await streamToCache({
-            id: file.id,
-            targetExt: streamDirectlyToCache
-              ? extFromMime(file.fileType)
-              : '.tmp',
-            directWrite: Boolean(streamDirectlyToCache),
-            getNextChunk: () => downloader.readChunk({ signal }),
-            totalSize: Array.isArray(pinnedObject.slabs)
-              ? pinnedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
-              : undefined,
-            onAfterClose: async (targetFile) => {
-              if (!streamDirectlyToCache) {
-                await copyFileToCache(
-                  file.id,
-                  targetFile,
-                  extFromMime(file.fileType)
-                )
-              }
-            },
-          })
-          toast.show('Downloaded to cache')
-        },
-      })
-    },
-    [sdk, file, toast]
-  )
+  const sdk = useSdk()
+  return useCallback(async () => {
+    if (!file) return
+    if (!sdk) return
+    const pinnedObject = getOnePinnedObject(file)
+    if (!pinnedObject) {
+      toast.show('No slabs available for this file')
+      return
+    }
+    toast.show('Starting download...')
+    await runTransferWithSlot({
+      id: file.id,
+      kind: 'download',
+      task: async (signal) => {
+        if (!sdk) throw new Error('SDK not initialized')
+        const downloader = await sdk.download(
+          encryptionKeyHexToBuffer(file.encryptionKey),
+          pinnedObject,
+          {
+            maxInflight: 15,
+            offset: BigInt(0),
+            length: undefined,
+          },
+          { signal }
+        )
+        await streamToCache({
+          id: file.id,
+          targetExt: '.tmp',
+          getNextChunk: () => downloader.readChunk({ signal }),
+          totalSize: Array.isArray(pinnedObject.slabs)
+            ? pinnedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
+            : undefined,
+          onAfterClose: async (targetFile) => {
+            await copyFileToCache(
+              file.id,
+              targetFile,
+              extFromMime(file.fileType)
+            )
+          },
+        })
+        toast.show('Downloaded to cache')
+      },
+    })
+  }, [sdk, file, toast])
 }
 
 export function useDownloadFromShareURL() {
   const toast = useToast()
-  const { sdk } = useSettings()
+  const sdk = useSdk()
   return useCallback(
     async (id: string, sharedUrl: string) =>
       runTransferWithSlot({
@@ -83,6 +77,7 @@ export function useDownloadFromShareURL() {
         kind: 'download',
         task: async (signal) => {
           toast.show('Starting download...')
+          if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
           const meta = decodeFileMetadata(sharedObject?.meta)
           const downloader = await sdk.downloadShared(sharedUrl, {
@@ -110,16 +105,14 @@ export function useDownloadFromShareURL() {
 async function streamToCache(params: {
   id: string
   targetExt: Ext
-  directWrite?: boolean
   totalSize?: number
   getNextChunk: () => Promise<ArrayBuffer | undefined>
   onAfterClose?: (
     targetFile: Awaited<ReturnType<typeof getOrCreateCachedFile>>
   ) => Promise<void>
 }): Promise<void> {
-  const { id, targetExt, directWrite, totalSize, getNextChunk, onAfterClose } =
-    params
-  const targetFile = await getOrCreateCachedFile(id, targetExt, directWrite)
+  const { id, targetExt, totalSize, getNextChunk, onAfterClose } = params
+  const targetFile = await getOrCreateCachedFile(id, targetExt)
   logger.log('[streamToCache] writing to cache path:', targetFile.uri)
   const writer = targetFile.writableStream().getWriter()
   let total = 0

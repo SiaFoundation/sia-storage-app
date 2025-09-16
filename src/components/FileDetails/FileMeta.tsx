@@ -7,6 +7,7 @@ import { LabeledValueRow } from '../LabeledValueRow'
 import { arrayBufferToHex } from '../../lib/hex'
 import { RowGroup, RowSubGroup } from '../Group'
 import { humanSize } from '../../lib/humanSize'
+import { decodeFileMetadata } from '../../encoding/fileMetadata'
 
 export function FileMeta({
   file,
@@ -95,8 +96,10 @@ export function FileMeta({
               />
               <LabeledValueRow
                 label="Metadata"
-                value={arrayBufferToHex(po.metadata)}
+                value={JSON.stringify(decodeFileMetadata(po.metadata), null, 2)}
+                numberOfLines={10}
                 isMonospace
+                align="left"
                 showDividerTop
               />
             </InfoCard>

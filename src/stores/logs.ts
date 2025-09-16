@@ -22,9 +22,7 @@ export const useLogsStore = create<LogsState>((set) => ({
   clear: () => set({ logs: [] }),
 }))
 
-export function useLogs(): string[] {
-  return useLogsStore(useShallow((s) => s.logs))
-}
+// actions
 
 export function appendLogLine(...args: unknown[]): void {
   useLogsStore.getState().append(...args)
@@ -32,6 +30,12 @@ export function appendLogLine(...args: unknown[]): void {
 
 export function clearLogs(): void {
   useLogsStore.getState().clear()
+}
+
+// selectors
+
+export function useLogs(): string[] {
+  return useLogsStore(useShallow((s) => s.logs))
 }
 
 let hasInit = false

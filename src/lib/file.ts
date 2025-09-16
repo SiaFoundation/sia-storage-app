@@ -77,10 +77,7 @@ export function useFileStatus(file?: {
 }): FileStatus {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
-  const cachedUri = useCachedUri(
-    file?.id || '',
-    file?.fileType ? extFromMime(file.fileType) : '.bin'
-  )
+  const cachedUri = useCachedUri(file?.id || '', extFromMime(file?.fileType))
   const [uploadError, downloadError] = useTransfersStore(
     useShallow((state) => {
       const id = file?.id || ''

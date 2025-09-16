@@ -7,6 +7,7 @@ import { useDownload } from '../../managers/downloader'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
 import { PinnedObject } from 'react-native-sia'
+import { useEffect } from 'react'
 
 export function FileViewer({
   file,
@@ -23,6 +24,12 @@ export function FileViewer({
   const handleDownload = useDownload(file)
 
   const isVideo = file.fileType?.startsWith('video')
+
+  useEffect(() => {
+    if (!status.isDownloaded) {
+      handleDownload()
+    }
+  }, [file.id])
 
   return (
     <View style={[styles.container]}>
@@ -49,7 +56,7 @@ export function FileViewer({
         <Pressable
           accessibilityRole="button"
           disabled={status.isDownloading}
-          onPress={() => handleDownload(false)}
+          onPress={() => handleDownload()}
           style={styles.centerDownload}
         >
           <ArrowDownToLineIcon color="#0969da" size={28} />

@@ -1,17 +1,11 @@
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { deleteAllFileRecords } from '../stores/files'
-import { useSettings } from '../lib/settingsContext'
-import { cancelAllTransfers, useInflightCounts } from '../stores/transfers'
-
 import { type SettingsStackParamList } from '../stacks/types'
+import { resetApp } from '../stores/auth'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
 export function SettingsHomeScreen({ navigation }: Props) {
-  const { resetApp } = useSettings()
-  const inflight = useInflightCounts()
-
   return (
     <View style={styles.panel}>
       <View style={styles.listGroup}>
@@ -33,22 +27,13 @@ export function SettingsHomeScreen({ navigation }: Props) {
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
-      </View>
-      <View style={styles.listGroup}>
-        <View style={styles.rowItem}>
-          <Text style={styles.rowLabel}>In-flight uploads</Text>
-          <Text style={styles.rowValue}>{inflight.uploads}</Text>
-        </View>
-        <View style={styles.rowItem}>
-          <Text style={styles.rowLabel}>In-flight downloads</Text>
-          <Text style={styles.rowValue}>{inflight.downloads}</Text>
-        </View>
         <Pressable
           accessibilityRole="button"
-          onPress={() => cancelAllTransfers()}
+          onPress={() => navigation.navigate('Transfers')}
         >
-          <View style={styles.rowItemButton}>
-            <Text style={styles.buttonText}>Cancel all transfers</Text>
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Transfers</Text>
+            <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
       </View>
@@ -58,20 +43,13 @@ export function SettingsHomeScreen({ navigation }: Props) {
           onPress={() => {
             Alert.alert(
               'Reset App',
-              'This will delete all local records and reset your app seed. This cannot be undone.',
+              'This will delete all local metadata and reset your app seed. This cannot be undone.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Delete',
                   style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteAllFileRecords()
-                      await resetApp()
-                    } catch {
-                      // Not sure.
-                    }
-                  },
+                  onPress: () => resetApp(),
                 },
               ]
             )
@@ -104,16 +82,6 @@ const styles = StyleSheet.create({
   },
   rowLabel: { flex: 1, color: '#24292f', fontSize: 16 },
   rowValue: { color: '#57606a', fontSize: 16 },
-  rowItemButton: {
-    marginHorizontal: 16,
-    marginVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#24292f',
-    borderRadius: 8,
-    paddingVertical: 12,
-  },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   rowChevron: { color: '#57606a', fontSize: 18 },
   footerGroup: { marginTop: 24 },
   dangerRow: {

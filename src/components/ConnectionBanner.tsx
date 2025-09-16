@@ -1,10 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native'
-import { useSettings } from '../lib/settingsContext'
+import { useIsConnected, useIsInitializing } from '../stores/auth'
+import { useHasOnboarded } from '../stores/auth'
 import { TriangleAlertIcon } from 'lucide-react-native'
 
 export default function ConnectionBanner() {
-  const { isConnected, isOnboarding } = useSettings()
-  if (isConnected || isOnboarding) return null
+  const isInitializing = useIsInitializing()
+  const isConnected = useIsConnected()
+  const hasOnboarded = useHasOnboarded()
+  if (isConnected || !hasOnboarded || isInitializing) return null
   return (
     <View style={styles.container}>
       <TriangleAlertIcon size={12} color="#A37A00" />
