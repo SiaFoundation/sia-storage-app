@@ -5,20 +5,34 @@ export function Button({
   disabled,
   onPress,
   children,
+  variant = 'primary',
 }: {
   style?: StyleProp<ViewStyle>
   disabled?: boolean
   onPress: () => void
   children: React.ReactNode
+  variant?: 'primary' | 'secondary'
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      style={[styles.primaryButton, style]}
+      style={[
+        styles.primaryButton,
+        variant === 'secondary' && styles.secondaryButton,
+        style,
+      ]}
       disabled={disabled}
       onPress={onPress}
     >
-      <Text style={styles.primaryButtonText}>{children}</Text>
+      <Text
+        style={
+          variant === 'secondary'
+            ? styles.secondaryButtonText
+            : styles.primaryButtonText
+        }
+      >
+        {children}
+      </Text>
     </Pressable>
   )
 }
@@ -30,5 +44,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  secondaryButton: {
+    backgroundColor: '#fff',
+    boxShadow: '0 0 0 1px rgba(0,0,0,0.02)',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
+  secondaryButtonText: { color: '#0a84ff', fontWeight: '700' },
 })

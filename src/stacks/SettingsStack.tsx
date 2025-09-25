@@ -5,6 +5,7 @@ import { HostListScreen } from '../screens/HostListScreen'
 import { HostDetailScreen } from '../screens/HostDetailScreen'
 import { SettingsIndexerScreen } from '../screens/SettingsIndexerScreen'
 import { SettingsTransfersScreen } from '../screens/SettingsTransfersScreen'
+import { SettingsSeedScreen } from '../screens/SettingsSeedScreen'
 import { type SettingsStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>()
@@ -36,6 +37,11 @@ export function SettingsStack() {
         name="Transfers"
         component={SettingsTransfersScreen}
         options={{ title: 'Transfers' }}
+      />
+      <Stack.Screen
+        name="Seed"
+        component={SettingsSeedScreen}
+        options={{ title: 'Seed' }}
       />
     </Stack.Navigator>
   )

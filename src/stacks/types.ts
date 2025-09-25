@@ -10,6 +10,7 @@ export type SettingsStackParamList = {
   HostDetail: { publicKey: string }
   Indexer: undefined
   Transfers: undefined
+  Seed: undefined
 }
 
 export type AuthStackParamList = {
