@@ -257,3 +257,11 @@ export function useIndexerName(): string {
 export function useHasOnboarded(): boolean {
   return useAuthStore((s) => s.hasOnboarded)
 }
+
+export function getSdk(): Sdk | null {
+  return useAuthStore.getState().sdk
+}
+
+export function getIndexerURL(): string {
+  return useAuthStore.getState().indexerURL
+}

@@ -58,7 +58,6 @@ export function RowSubGroup({
 const styles = StyleSheet.create({
   containerContent: {
     marginTop: 4,
-    backgroundColor: '#ffffff',
     borderRadius: 12,
   },
   titleContainer: {

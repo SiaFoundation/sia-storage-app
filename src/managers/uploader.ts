@@ -6,7 +6,7 @@ import {
 } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
-import { useIndexerURL, useSdk } from '../stores/auth'
+import { useIndexerURL, useSdk, getIndexerURL, getSdk } from '../stores/auth'
 import { extFromMime } from '../lib/fileTypes'
 import {
   encryptionKeyHexToUint8,
@@ -141,6 +141,36 @@ export function useReuploadFile() {
       }),
     [sdk]
   )
+}
+
+export async function queueUploadForFileId(fileId: string): Promise<void> {
+  const file = await readFileRecord(fileId)
+  if (!file) return
+  const cachedUri = await readCachedUri(fileId, extFromMime(file.fileType))
+  if (!cachedUri) return
+  const indexerURL = getIndexerURL()
+  const sdk = getSdk()
+  if (!sdk) return
+  await runTransferWithSlot({
+    id: fileId,
+    kind: 'upload',
+    task: async (signal) => {
+      const fileBytes = await new FileSystem.File(cachedUri).bytes()
+      await uploadToIndexer({
+        file: {
+          id: fileId,
+          fileName: file.fileName,
+          fileType: file.fileType,
+          fileSize: file.fileSize,
+          encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
+        },
+        indexerURL,
+        sdk,
+        data: fileBytes.buffer as ArrayBuffer,
+        signal,
+      })
+    },
+  })
 }
 
 async function readArrayBuffer(asset: PickerAsset): Promise<ArrayBuffer> {
