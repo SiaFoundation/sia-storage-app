@@ -9,7 +9,8 @@ import { ToastProvider } from './lib/toastContext'
 import { useInitLogger } from './stores/logs'
 import { useEffect } from 'react'
 import { initAuth } from './stores/auth'
-import ConnectionBanner from './components/ConnectionBanner'
+import { initUploadScanner } from './stores/uploadScanner'
+import { AppBanner } from './components/AppBanner'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
 import { RootTabs } from './stacks/RootTabs'
@@ -22,7 +23,7 @@ export function Root() {
 
   useEffect(() => {
     const init = async () => {
-      await initAuth()
+      await Promise.all([initAuth(), initUploadScanner()])
       setTimeout(() => {
         SplashScreen.hideAsync()
       }, 200)
@@ -61,7 +62,7 @@ export function Root() {
         />
         <ToastProvider>
           <NavigationContainer ref={navigationRef}>
-            <ConnectionBanner />
+            <AppBanner />
             <RootTabs />
           </NavigationContainer>
         </ToastProvider>

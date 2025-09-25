@@ -14,7 +14,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      style={[styles.primaryButton, style]}
+      style={[styles.primaryButton, disabled && styles.disabledButton, style]}
       disabled={disabled}
       onPress={onPress}
     >
@@ -31,4 +31,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
+  disabledButton: {
+    opacity: 0.5,
+  },
 })

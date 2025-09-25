@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { logger } from '../lib/logger'
 import { getGlobalSlotPool } from '../managers/slotPool'
+import { createGetterAndSelector } from '../lib/selectors'
 
 export type TransferKind = 'upload' | 'download'
 
@@ -141,27 +142,48 @@ export function updateTransferProgress(
   return useTransfersStore.getState().updateProgress(id, kind, progress)
 }
 
-export function useInflightCounts(): {
-  uploads: number
-  downloads: number
-  total: number
-} {
-  return useTransfersStore(
-    useShallow((state) => {
-      let uploads = 0
-      let downloads = 0
-      for (const rec of Object.values(state.inflight)) {
-        if (rec.kind === 'upload') uploads += 1
-        else if (rec.kind === 'download') downloads += 1
-      }
-      return { uploads, downloads, total: uploads + downloads }
-    })
-  )
-}
+export const [getInflightCounts, useInflightCounts] = createGetterAndSelector(
+  useTransfersStore,
+  (
+    state
+  ): {
+    uploads: number
+    downloads: number
+    total: number
+  } => {
+    const s = state ?? useTransfersStore.getState()
+    let uploads = 0
+    let downloads = 0
+    for (const rec of Object.values(s.inflight)) {
+      if (rec.kind === 'upload') uploads += 1
+      else if (rec.kind === 'download') downloads += 1
+    }
+    return { uploads, downloads, total: uploads + downloads }
+  }
+)
 
 export function makeTransferKey(kind: TransferKind, id: string): string {
   return `${kind}:${id}`
 }
+
+export const [getActiveUploads, useActiveUploads] = createGetterAndSelector(
+  useTransfersStore,
+  (state): TransferState[] => {
+    return Object.values(state.inflight).filter((rec) => rec.kind === 'upload')
+  }
+)
+
+export const [getActiveUploadCount, useActiveUploadCount] =
+  createGetterAndSelector(
+    useTransfersStore,
+    (): number => getActiveUploads().length
+  )
+
+export const [getHasActiveUploads, useHasActiveUploads] =
+  createGetterAndSelector(
+    useTransfersStore,
+    (): boolean => getActiveUploads().length > 0
+  )
 
 export async function runTransferWithSlot<T>(params: {
   id: string

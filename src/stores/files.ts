@@ -7,6 +7,8 @@ import {
 import { logger } from '../lib/logger'
 import { db } from '../db'
 import useSWR, { mutate } from 'swr'
+import { fileHasAPinnnedObject } from '../lib/file'
+import { createGetterAndSWRHook } from '../lib/selectors'
 
 export type FileRecord = {
   id: string
@@ -203,6 +205,26 @@ export function triggerFileListUpdate() {
 export function useFileList() {
   return useSWR(getKey(), readAllFileRecords)
 }
+
+export function useFileCountAll() {
+  return useSWR(getKey('count'), () =>
+    readAllFileRecords().then((f) => f.length)
+  )
+}
+
+export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
+  getKey('localOnly'),
+  async () => {
+    const files = await readAllFileRecords()
+    return files.filter((f) => !fileHasAPinnnedObject(f))
+  }
+)
+
+export const [getFileCountLocalOnly, useFileCountLocalOnly] =
+  createGetterAndSWRHook(getKey('localOnlyCount'), async () => {
+    const files = await getFilesLocalOnly()
+    return files.length
+  })
 
 export function useFileDetails(id: string) {
   return useSWR(getKey(id), () => readFileRecord(id))
