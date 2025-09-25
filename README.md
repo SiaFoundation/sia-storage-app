@@ -1,8 +1,6 @@
-# sia-mobile-demo
+# Sia Mobile
 
-This repo contains the Sia Mobile Demo app. The project demonstrates how to use the `react-native-sia` library to interact directly with the Sia host network.
-
-## Install
+Mobile cloud storage app that stores files on the Sia host network.
 
 ```
 bun install
@@ -30,7 +28,7 @@ bun run android
 
 > 🚧 The web target is not yet supported in `react-native-sia`. The library needs a WASM-based entrypoint for browser environments.
 
-React Native can also compile for the web.
+In the future, we may also support the web.
 
 ```
 bun run web
@@ -39,5 +37,5 @@ bun run web
 ## Running the dev client
 
 ```
-bun start
+bun run start
 ```
