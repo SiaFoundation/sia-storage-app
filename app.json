@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Sia Mobile Demo",
+    "name": "Sia Mobile",
     "slug": "siamobile",
     "scheme": "siamobile",
     "version": "1.0.0",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "storage.sia.mobiledemo",
+      "bundleIdentifier": "storage.sia.siamobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photo library to select and upload photos.",
