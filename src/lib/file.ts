@@ -11,7 +11,7 @@ import { useCachedUri } from '../stores/fileCache'
 import { extFromMime } from './fileTypes'
 import { PinnedObject } from 'react-native-sia'
 
-export function fileHasAPinnnedObject(file: {
+export function fileHasAPinnedObject(file: {
   pinnedObjects: unknown
 }): boolean {
   return !!Object.keys(file.pinnedObjects ?? {}).length
@@ -51,7 +51,7 @@ function computeFileStatus({
     uploadState?.status === 'running' || uploadState?.status === 'queued'
   const isDownloading =
     downloadState?.status === 'running' || downloadState?.status === 'queued'
-  const hasPinnedObject = fileHasAPinnnedObject(file)
+  const hasPinnedObject = fileHasAPinnedObject(file)
   return {
     isUploading,
     isDownloading,

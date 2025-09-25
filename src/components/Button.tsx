@@ -19,6 +19,7 @@ export function Button({
       style={[
         styles.primaryButton,
         variant === 'secondary' && styles.secondaryButton,
+        disabled && styles.disabledButton,
         style,
       ]}
       disabled={disabled}
@@ -53,4 +54,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
   secondaryButtonText: { color: '#0a84ff', fontWeight: '700' },
+  disabledButton: {
+    opacity: 0.5,
+  },
 })
