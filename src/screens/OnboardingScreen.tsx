@@ -10,12 +10,19 @@ import {
   useIndexerURL,
   setIndexerURL,
   tryToConnectAndSet,
+  useAppSeed,
+  setAppSeed,
 } from '../stores/auth'
 import { SettingsIcon } from 'lucide-react-native'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
+import { encryptionKeyUint8ToHex } from '../lib/encryptionKey'
+import { createSeed } from '../lib/seed'
+import { Button } from '../components/Button'
+import { hexToUint8 } from '../lib/hex'
+import Clipboard from '@react-native-clipboard/clipboard'
 
 function validateURL(url: string) {
   try {
@@ -31,7 +38,14 @@ export default function OnboardingScreen() {
   const [isWaiting, setIsWaiting] = useState(false)
   const [hasErrored, setHasErrored] = useState(false)
   const indexerURL = useIndexerURL()
+  const appSeed = useAppSeed()
   const toast = useToast()
+  const [inputSeed, setInputSeed] = useState(encryptionKeyUint8ToHex(appSeed))
+
+  // Sync input seed with app seed when app seed changes
+  useEffect(() => {
+    setInputSeed(encryptionKeyUint8ToHex(appSeed))
+  }, [appSeed])
 
   return (
     <View>
@@ -65,16 +79,53 @@ export default function OnboardingScreen() {
                 : null}
             </Text>
             {isUsingCustomURL ? (
-              <InfoCard>
-                <InputRow
-                  label="Indexer URL"
-                  value={indexerURL}
-                  onChangeText={setIndexerURL}
-                />
-              </InfoCard>
+              <>
+                <InfoCard>
+                  <InputRow
+                    label="Indexer URL"
+                    value={indexerURL}
+                    onChangeText={setIndexerURL}
+                  />
+                  <InputRow
+                    showDividerTop
+                    label="Seed"
+                    value={inputSeed}
+                    onChangeText={(text) => {
+                      try {
+                        const seed = hexToUint8(text)
+                        setAppSeed(seed)
+                      } catch {
+                        toast.show('Invalid seed')
+                      }
+                    }}
+                    isMonospace
+                  />
+                </InfoCard>
+                <View style={styles.actions}>
+                  <Button
+                    variant="secondary"
+                    onPress={async () => {
+                      await setAppSeed(createSeed())
+                      toast.show('Seed regenerated')
+                    }}
+                    style={styles.button}
+                  >
+                    Regenerate seed
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onPress={() => {
+                      Clipboard.setString(inputSeed)
+                      toast.show('Copied seed')
+                    }}
+                    style={styles.button}
+                  >
+                    Copy seed
+                  </Button>
+                </View>
+              </>
             ) : null}
-            <Pressable
-              style={styles.button}
+            <Button
               onPress={async () => {
                 setIsWaiting(true)
                 const isValid = validateURL(indexerURL)
@@ -91,8 +142,8 @@ export default function OnboardingScreen() {
                 setIsWaiting(false)
               }}
             >
-              <Text style={styles.buttonText}>Authorize & Connect</Text>
-            </Pressable>
+              Authorize & Connect
+            </Button>
           </View>
         </View>
       )}
@@ -122,17 +173,11 @@ const styles = StyleSheet.create({
     color: '#57606a',
     fontSize: 12,
   },
-  button: {
-    width: '100%',
-    backgroundColor: '#0969da',
-    borderRadius: 8,
-    paddingVertical: 12,
-  },
-  buttonText: { color: '#ffffff', fontWeight: '700', textAlign: 'center' },
   image: {
     width: 15,
     height: 15,
   },
+  actions: { flexDirection: 'row', gap: 8, width: '100%' },
   header: {
     height: 44,
     paddingHorizontal: 16,
@@ -157,4 +202,5 @@ const styles = StyleSheet.create({
     paddingTop: 250,
     gap: 16,
   },
+  button: { flex: 1 },
 })

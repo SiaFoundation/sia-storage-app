@@ -36,6 +36,12 @@ export function SettingsHomeScreen({ navigation }: Props) {
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
+        <Pressable onPress={() => navigation.navigate('Seed')}>
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Seed</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </View>
+        </Pressable>
       </View>
       <View style={styles.footerGroup}>
         <Pressable
