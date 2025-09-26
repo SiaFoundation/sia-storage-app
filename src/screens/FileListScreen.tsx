@@ -1,13 +1,24 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { Grid2X2Icon, ListIcon, PlusIcon } from 'lucide-react-native'
+import {
+  Grid2X2Icon,
+  ListIcon,
+  PlusIcon,
+  ImageIcon,
+  CameraIcon,
+  FileIcon,
+} from 'lucide-react-native'
 import { Gallery } from '../components/Gallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
 import { type FileRecord, useFileList } from '../stores/files'
 import { FileList } from '../components/FileList'
-import { usePickAndUpload } from '../hooks/usePickAndUpload'
+import { useImagePickerAndUpload } from '../hooks/useImagePicker'
+import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
+import { useDocumentPickerAndUpload } from '../hooks/useDocumentPicker'
+import { Menu, MenuItem } from '../components/Menu'
+import { Button } from '../components/Button'
 
 export function FileListScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
@@ -16,7 +27,21 @@ export function FileListScreen() {
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const files = useFileList()
 
-  const pickAndUpload = usePickAndUpload()
+  const imagePickerAndUpload = useImagePickerAndUpload()
+  const captureAndUpload = useCameraCaptureAndUpload()
+  const documentPickerAndUpload = useDocumentPickerAndUpload()
+
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState<boolean>(false)
+  const addButtonRef = useRef<View>(null)
+  const openAddMenu = useCallback(() => setIsAddMenuOpen(true), [])
+  const closeAddMenu = useCallback(() => setIsAddMenuOpen(false), [])
+  const handlePressAndClose = useCallback(
+    (action: () => void | Promise<void>) => () => {
+      action()
+      setIsAddMenuOpen(false)
+    },
+    []
+  )
 
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
@@ -64,8 +89,9 @@ export function FileListScreen() {
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={pickAndUpload}
+            onPress={openAddMenu}
             style={styles.headerIcon}
+            ref={addButtonRef}
           >
             <PlusIcon color="#0969da" size={22} />
           </Pressable>
@@ -77,9 +103,10 @@ export function FileListScreen() {
           <Text style={styles.emptyText}>
             Tap the plus to upload media from your library.
           </Text>
+          <Button onPress={documentPickerAndUpload}>Add from files</Button>
           <Pressable
             accessibilityRole="button"
-            onPress={pickAndUpload}
+            onPress={openAddMenu}
             style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>Upload media</Text>
@@ -90,6 +117,31 @@ export function FileListScreen() {
       ) : (
         <FileList onPressItem={handleOpenDetail} />
       )}
+      <Menu
+        isOpen={isAddMenuOpen}
+        onClose={closeAddMenu}
+        anchorRef={addButtonRef}
+        contentStyle={{ right: 8, top: 52 }}
+      >
+        <MenuItem
+          icon={<CameraIcon color="#ffffff" size={18} />}
+          onPress={handlePressAndClose(captureAndUpload)}
+        >
+          Take Photo or Video
+        </MenuItem>
+        <MenuItem
+          icon={<ImageIcon color="#ffffff" size={18} />}
+          onPress={handlePressAndClose(imagePickerAndUpload)}
+        >
+          Choose from Photos
+        </MenuItem>
+        <MenuItem
+          icon={<FileIcon color="#ffffff" size={18} />}
+          onPress={handlePressAndClose(documentPickerAndUpload)}
+        >
+          Import from Files
+        </MenuItem>
+      </Menu>
     </View>
   )
 }

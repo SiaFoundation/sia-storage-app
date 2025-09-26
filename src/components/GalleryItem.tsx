@@ -5,6 +5,7 @@ import { type FileRecord } from '../stores/files'
 import { PlayIcon } from 'lucide-react-native'
 import { useFileStatus } from '../lib/file'
 import { FileIndicators } from './FileIndicators'
+import { FileThumbnail } from './FileThumbnail'
 
 type Props = {
   file: FileRecord
@@ -30,17 +31,7 @@ export function GalleryItem({ file, onPressItem, setItemRef }: Props) {
           toast.show('Copied item id')
         }}
       >
-        {file.fileType?.startsWith('video') ? (
-          <View style={styles.videoThumb}>
-            <PlayIcon color="#111827" size={18} />
-          </View>
-        ) : (
-          <Image
-            source={{ uri: status.cachedUri! }}
-            style={styles.thumbImage}
-            resizeMode="cover"
-          />
-        )}
+        <FileThumbnail file={file} iconSize={24} />
         <FileIndicators file={file} size={10} interactive={false} />
       </Pressable>
     </View>
