@@ -22,6 +22,7 @@
     "expo": "54.0.0-preview.4",
     "expo-clipboard": "8.0.2",
     "expo-dev-client": "~6.0.12",
+    "expo-document-picker": "~14.0.7",
     "expo-file-system": "~19.0.11",
     "expo-secure-store": "15.0.2",
     "expo-splash-screen": "^31.0.9",

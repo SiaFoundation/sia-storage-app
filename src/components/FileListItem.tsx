@@ -1,9 +1,10 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
-import { CloudIcon, DotIcon, PlayIcon } from 'lucide-react-native'
+import { DotIcon } from 'lucide-react-native'
 import { UploadStatusIcon } from './UploadStatusIcon'
+import { FileThumbnail } from './FileThumbnail'
 
 type Props = {
   file: FileRecord
@@ -17,80 +18,85 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
     <Pressable
       collapsable={false}
       ref={(node) => setItemRef?.(file.id, node)}
-      style={styles.row}
+      style={styles.container}
       onPress={() => onPressItem(file)}
     >
       <View style={styles.thumbnailContainer}>
-        {file.fileType?.includes('image') ? (
-          <Image
-            style={styles.thumbnailImage}
-            source={{ uri: status.cachedUri! }}
-            resizeMode="center"
-          />
-        ) : (
-          <PlayIcon size={16} />
-        )}
+        <FileThumbnail file={file} />
       </View>
-      <View style={styles.infoRow}>
+      <View style={styles.infoContainer}>
         <View style={styles.fileDetails}>
-          <Text style={styles.fileText}>{file.fileName}</Text>
+          <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="tail">
+            {file.fileName}
+          </Text>
           <View style={styles.fileMetaData}>
-            <Text style={[styles.fileText, styles.gray]}>
-              {humanSize(file.fileSize)}
-            </Text>
+            <Text style={styles.fileText}>{humanSize(file.fileSize)}</Text>
             <DotIcon size={16} color="grey" />
-            <Text style={[styles.fileText, styles.gray]}>{file.fileType}</Text>
+            <Text style={styles.fileText}>{file.fileType}</Text>
           </View>
         </View>
-        <View pointerEvents="box-none">
-          <UploadStatusIcon size={16} status={status} interactive={false} />
-        </View>
+      </View>
+      <View pointerEvents="box-none" style={styles.trailing}>
+        <UploadStatusIcon size={16} status={status} interactive={false} />
       </View>
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  row: {
+  container: {
     marginHorizontal: 9,
     display: 'flex',
     flexDirection: 'row',
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'lightgrey',
+    borderColor: 'rgba(0,0,0,0.1)',
     paddingBottom: 8,
+    width: '100%',
+    overflow: 'hidden',
+    paddingRight: 12,
   },
   thumbnailContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
     width: 32,
     height: 32,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.2)',
+    overflow: 'hidden',
   },
-  infoRow: {
+  infoContainer: {
     flexGrow: 1,
-
     display: 'flex',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  thumbnailImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 4,
-  },
-  fileText: {
-    fontSize: 10,
+  fileText: { fontSize: 10, color: 'gray' },
+  fileName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#24292f',
+    overflow: 'hidden',
   },
   fileDetails: {
     display: 'flex',
     gap: 2,
     justifyContent: 'center',
+    overflow: 'hidden',
+    flex: 1,
   },
   fileMetaData: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
   },
-  gray: {
-    color: 'gray',
+  trailing: {
+    paddingLeft: 8,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
 })

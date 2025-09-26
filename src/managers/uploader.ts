@@ -18,7 +18,7 @@ import {
   readFileRecord,
 } from '../stores/files'
 import { logger } from '../lib/logger'
-import { PickerAsset } from '../hooks/useFilePicker'
+import { PickerAsset } from '../hooks/useImagePicker'
 import { runTransferWithSlot } from '../stores/transfers'
 
 export function useUploader() {

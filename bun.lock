@@ -15,6 +15,7 @@
         "expo": "54.0.0-preview.4",
         "expo-clipboard": "8.0.2",
         "expo-dev-client": "~6.0.12",
+        "expo-document-picker": "~14.0.7",
         "expo-file-system": "~19.0.11",
         "expo-secure-store": "15.0.2",
         "expo-splash-screen": "^31.0.9",
@@ -633,6 +634,8 @@
     "expo-dev-menu": ["expo-dev-menu@7.0.11", "", { "dependencies": { "expo-dev-menu-interface": "2.0.0" }, "peerDependencies": { "expo": "*" } }, "sha512-xJ2scPxfHKyANTMgexK9tH7xunhsPEynuwpsssiS2syCWzvo+Mtv3euOLlkUb/IRt1JTKDxTMZBgChkaq5juSQ=="],
 
     "expo-dev-menu-interface": ["expo-dev-menu-interface@2.0.0", "", { "peerDependencies": { "expo": "*" } }, "sha512-BvAMPt6x+vyXpThsyjjOYyjwfjREV4OOpQkZ0tNl+nGpsPfcY9mc6DRACoWnH9KpLzyIt3BOgh3cuy/h/OxQjw=="],
+
+    "expo-document-picker": ["expo-document-picker@14.0.7", "", { "peerDependencies": { "expo": "*" } }, "sha512-81Jh8RDD0GYBUoSTmIBq30hXXjmkDV1ZY2BNIp1+3HR5PDSh2WmdhD/Ezz5YFsv46hIXHsQc+Kh1q8vn6OLT9Q=="],
 
     "expo-eas-client": ["expo-eas-client@1.0.4", "", {}, "sha512-EF63FnMybtmNFUKWg7JLdd5VJsymmTGiiNgavaEjZzReF9/Xbw+4iJu2umTePRfuZ4j1Yk/8UGfR6KMK22xpHQ=="],
 
