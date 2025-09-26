@@ -29,7 +29,6 @@ import {
   updateFilePinnedObjects,
 } from '../stores/files'
 import Share from 'react-native-share'
-
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileActionsSheet({ route, navigation }: Props) {
@@ -168,9 +167,6 @@ export function FileActionsSheet({ route, navigation }: Props) {
     navigation.setOptions({
       headerRight: () => (
         <View style={{ flexDirection: 'row', gap: 14 }}>
-          {isUploaded && (
-            <Link2Icon color="#0969da" size={20} onPress={handleShareURL} />
-          )}
           <MoreVerticalIcon
             color="#0969da"
             size={20}
@@ -190,6 +186,14 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleDownload = useDownload(file)
   return (
     <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
+      <ActionSheetButton
+        disabled={!status.isDownloaded}
+        variant="primary"
+        icon={<Link2Icon size={18} />}
+        onPress={handlePressAndClose(handleShareURL)}
+      >
+        Copy link
+      </ActionSheetButton>
       <ActionSheetButton
         disabled={!status.isDownloaded}
         variant="primary"
