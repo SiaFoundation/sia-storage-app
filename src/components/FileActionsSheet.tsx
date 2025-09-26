@@ -3,11 +3,12 @@ import { type MainStackParamList } from '../stacks/types'
 import { useCallback, useLayoutEffect, useState } from 'react'
 import {
   MoreVerticalIcon,
-  Share2Icon,
   Trash2Icon,
   CloudOffIcon,
   EraserIcon,
   CloudUploadIcon,
+  ShareIcon,
+  Link2Icon,
 } from 'lucide-react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
@@ -27,6 +28,7 @@ import {
   deleteFileRecord,
   updateFilePinnedObjects,
 } from '../stores/files'
+import Share from 'react-native-share'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
@@ -59,14 +61,33 @@ export function FileActionsSheet({ route, navigation }: Props) {
     return `siamobile://new-file?shareUrl=${encodeURIComponent(shareUrl)}`
   }, [file, sdk])
 
-  const handleCopyShareUrl = useCallback(() => {
+  const handleShareURL = useCallback(async () => {
     if (!file) return
     if (!sdk) return
     const shareUrl = getShareUrl()
     if (!shareUrl) return
     Clipboard.setString(shareUrl)
-    toast.show('Share URL copied to clipboard')
+    toast.show('URL Copied')
   }, [file, sdk, getShareUrl, toast])
+
+  const handleShareFile = useCallback(async () => {
+    if (!file) return
+    if (!file.fileType) return
+    if (!status.cachedUri) return
+
+    try {
+      await Share.open({
+        url: status.cachedUri,
+        type: file.fileType,
+        filename: file.fileName ?? undefined,
+        subject: `Sia Mobile - ${file.fileType}`,
+      })
+    } catch (e) {
+      if (typeof e === 'string' && !e.includes('User did not share')) {
+        console.warn('File sharing failed:', e)
+      }
+    }
+  }, [file, status.cachedUri])
 
   const handleOpenDeepLink = useCallback(() => {
     if (!file) return
@@ -148,11 +169,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
       headerRight: () => (
         <View style={{ flexDirection: 'row', gap: 14 }}>
           {isUploaded && (
-            <Share2Icon
-              color="#0969da"
-              size={20}
-              onPress={handleCopyShareUrl}
-            />
+            <Link2Icon color="#0969da" size={20} onPress={handleShareURL} />
           )}
           <MoreVerticalIcon
             color="#0969da"
@@ -164,7 +181,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
     })
   }, [
     navigation,
-    handleCopyShareUrl,
+    handleShareURL,
     handleOpenDeepLink,
     handleOpenMenu,
     isUploaded,
@@ -173,6 +190,14 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleDownload = useDownload(file)
   return (
     <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
+      <ActionSheetButton
+        disabled={!status.isDownloaded}
+        variant="primary"
+        icon={<ShareIcon size={18} />}
+        onPress={handleShareFile}
+      >
+        Share file
+      </ActionSheetButton>
       <ActionSheetButton
         disabled={
           status.isDownloading || status.isDownloaded || status.fileIsGone
