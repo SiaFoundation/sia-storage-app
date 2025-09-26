@@ -1,6 +1,6 @@
 import { Fragment, useMemo } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
-import { type FileRecord } from '../../stores/files'
+import { updateFileRecord, type FileRecord } from '../../stores/files'
 import { FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
@@ -8,6 +8,8 @@ import { RowGroup, RowSubGroup } from '../Group'
 import { humanSize } from '../../lib/humanSize'
 import { decodeFileMetadata } from '../../encoding/fileMetadata'
 import { useShowAdvanced } from '../../stores/settings'
+import { InputRow } from '../InputRow'
+import { useInputValue } from '../../hooks/useInputValue'
 
 export function FileMeta({
   file,
@@ -21,11 +23,23 @@ export function FileMeta({
     return humanSize(file.fileSize)
   }, [file.fileSize])
 
+  const fileNameInputProps = useInputValue({
+    value: file.fileName ?? '',
+    save: (value) => {
+      updateFileRecord({ ...file, fileName: value })
+    },
+  })
+
   const pinnedObjectsList = Object.entries(file.pinnedObjects ?? {})
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
+          <InputRow
+            label="Name"
+            placeholder="Untitled file"
+            {...fileNameInputProps}
+          />
           {showAdvanced.data && (
             <LabeledValueRow
               label="ID"
