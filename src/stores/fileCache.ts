@@ -1,7 +1,10 @@
 import { Directory, File, Paths } from 'expo-file-system'
-import useSWR, { mutate } from 'swr'
+import useSWR from 'swr'
 import { Ext } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
+import { buildSWRHelpers } from '../lib/swr'
+
+const { getKey, triggerChange } = buildSWRHelpers('cache/files')
 
 const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 
@@ -49,7 +52,7 @@ export async function removeFromCache(id: string, ext: Ext): Promise<void> {
   if (info.exists) {
     f.delete()
   }
-  triggerFileCacheUpdate(id)
+  triggerChange(id)
 }
 
 export async function readCachedUri(
@@ -72,7 +75,7 @@ export async function writeToCache(
   const writer = f.writableStream().getWriter()
   await writer.write(new Uint8Array(data))
   await writer.close()
-  triggerFileCacheUpdate(id)
+  triggerChange(id)
   return f.uri
 }
 
@@ -88,7 +91,7 @@ export async function copyUriToCache(
   if (exists) f.delete()
   const srcFile = new File(sourceUri)
   srcFile.copy(f)
-  triggerFileCacheUpdate(id)
+  triggerChange(id)
   return f.uri
 }
 
@@ -103,20 +106,8 @@ export async function copyFileToCache(
   const exists = f.info().exists
   if (exists) f.delete()
   sourceFile.copy(f)
-  triggerFileCacheUpdate(id)
+  triggerChange(id)
   return f.uri
-}
-
-const KEY = 'cache/files'
-
-function getKey(id: string): string {
-  return `${KEY}/${id}`
-}
-
-function triggerFileCacheUpdate(id: string): void {
-  mutate((key: string) => {
-    return typeof key === 'string' && key.startsWith(getKey(id))
-  })
 }
 
 export function useCachedUri(id: string, ext: Ext) {

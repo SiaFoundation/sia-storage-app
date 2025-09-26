@@ -187,56 +187,61 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleDownload = useDownload(file)
   return (
     <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
-      <ActionSheetButton
-        disabled={!status.isDownloaded}
-        variant="primary"
-        icon={<Link2Icon size={18} />}
-        onPress={handlePressAndClose(handleShareURL)}
-      >
-        Copy link
-      </ActionSheetButton>
-      <ActionSheetButton
-        disabled={!status.isDownloaded}
-        variant="primary"
-        icon={<ShareIcon size={18} />}
-        onPress={handleShareFile}
-      >
-        Share file
-      </ActionSheetButton>
-      <ActionSheetButton
-        disabled={
-          status.isDownloading || status.isDownloaded || status.fileIsGone
-        }
-        variant="primary"
-        icon={<ArrowDownToLineIcon size={18} />}
-        onPress={handlePressAndClose(handleDownload)}
-      >
-        Download file
-      </ActionSheetButton>
-      <ActionSheetButton
-        disabled={status.isUploading || !status.isDownloaded}
-        variant="primary"
-        icon={<CloudUploadIcon size={18} />}
-        onPress={handlePressAndClose(handleReupload)}
-      >
-        Reupload file
-      </ActionSheetButton>
-      <ActionSheetButton
-        disabled={!status.cachedUri}
-        variant="primary"
-        icon={<EraserIcon size={18} />}
-        onPress={handlePressAndClose(handleRemoveCache)}
-      >
-        Remove from cache
-      </ActionSheetButton>
-      <ActionSheetButton
-        disabled={!status.isUploaded}
-        variant="primary"
-        icon={<CloudOffIcon size={18} />}
-        onPress={handlePressAndClose(handleRemoveFromNetwork)}
-      >
-        Remove from network
-      </ActionSheetButton>
+      {status.isUploaded && (
+        <>
+          <ActionSheetButton
+            disabled={!status.isDownloaded}
+            variant="primary"
+            icon={<Link2Icon size={18} />}
+            onPress={handlePressAndClose(handleShareURL)}
+          >
+            Copy link
+          </ActionSheetButton>
+          <ActionSheetButton
+            variant="primary"
+            icon={<ShareIcon size={18} />}
+            onPress={handleShareFile}
+          >
+            Share file
+          </ActionSheetButton>
+        </>
+      )}
+      {!status.isDownloaded && !status.isDownloading && !status.fileIsGone && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<ArrowDownToLineIcon size={18} />}
+          onPress={handlePressAndClose(handleDownload)}
+        >
+          Download file
+        </ActionSheetButton>
+      )}
+      {!status.isUploaded && !status.isUploading && !status.fileIsGone && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<CloudUploadIcon size={18} />}
+          onPress={handlePressAndClose(handleReupload)}
+        >
+          Upload file
+        </ActionSheetButton>
+      )}
+      {status.cachedUri && status.isUploaded && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<EraserIcon size={18} />}
+          onPress={handlePressAndClose(handleRemoveCache)}
+        >
+          Remove from device
+        </ActionSheetButton>
+      )}
+      {status.isUploaded && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<CloudOffIcon size={18} />}
+          onPress={handlePressAndClose(handleRemoveFromNetwork)}
+        >
+          Remove from network
+        </ActionSheetButton>
+      )}
       <ActionSheetButton
         variant="danger"
         icon={<Trash2Icon size={18} />}
