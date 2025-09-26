@@ -1,11 +1,13 @@
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Alert, Switch } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { resetApp } from '../stores/auth'
+import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
 export function SettingsHomeScreen({ navigation }: Props) {
+  const showAdvanced = useShowAdvanced()
   return (
     <View style={styles.panel}>
       <View style={styles.listGroup}>
@@ -42,6 +44,13 @@ export function SettingsHomeScreen({ navigation }: Props) {
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
+        <View style={styles.rowItem}>
+          <Text style={styles.rowLabel}>Show advanced information</Text>
+          <Switch
+            value={showAdvanced.data}
+            onValueChange={(val) => setShowAdvanced(val)}
+          />
+        </View>
       </View>
       <View style={styles.footerGroup}>
         <Pressable

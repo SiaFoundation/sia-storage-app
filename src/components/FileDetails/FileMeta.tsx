@@ -4,10 +4,10 @@ import { type FileRecord } from '../../stores/files'
 import { FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
-import { arrayBufferToHex } from '../../lib/hex'
 import { RowGroup, RowSubGroup } from '../Group'
 import { humanSize } from '../../lib/humanSize'
 import { decodeFileMetadata } from '../../encoding/fileMetadata'
+import { useShowAdvanced } from '../../stores/settings'
 
 export function FileMeta({
   file,
@@ -16,6 +16,7 @@ export function FileMeta({
   file: FileRecord
   status: FileStatus
 }) {
+  const showAdvanced = useShowAdvanced()
   const fileSize = useMemo(() => {
     return humanSize(file.fileSize)
   }, [file.fileSize])
@@ -25,25 +26,29 @@ export function FileMeta({
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
-          <LabeledValueRow
-            label="ID"
-            value={file.id}
-            isMonospace
-            numberOfLines={1}
-          />
-          <LabeledValueRow
-            label="Cached URL"
-            value={status.cachedUri ?? 'Not available'}
-            isMonospace
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            canCopy={!!status.cachedUri}
-            showDividerTop
-          />
+          {showAdvanced.data && (
+            <LabeledValueRow
+              label="ID"
+              value={file.id}
+              isMonospace
+              numberOfLines={1}
+            />
+          )}
+          {showAdvanced.data && (
+            <LabeledValueRow
+              label="Cached URL"
+              value={status.cachedUri ?? 'Not available'}
+              isMonospace
+              numberOfLines={1}
+              ellipsizeMode="middle"
+              canCopy={!!status.cachedUri}
+              showDividerTop
+            />
+          )}
           <LabeledValueRow
             label="Size"
             value={fileSize ?? '—'}
-            showDividerTop
+            showDividerTop={showAdvanced.data}
           />
           <LabeledValueRow
             label="Created"
@@ -55,76 +60,86 @@ export function FileMeta({
             value={file.fileType ?? '—'}
             showDividerTop
           />
-          <LabeledValueRow
-            label="Encryption Key"
-            value={file.encryptionKey}
-            isMonospace
-            showDividerTop
-          />
+          {showAdvanced.data && (
+            <LabeledValueRow
+              label="Encryption Key"
+              value={file.encryptionKey}
+              isMonospace
+              showDividerTop
+            />
+          )}
         </InfoCard>
       </RowGroup>
-      {pinnedObjectsList.length > 1 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pinned Objects</Text>
-        </View>
-      )}
-      {pinnedObjectsList.map(([indexerURL, po]) => (
-        <Fragment key={indexerURL}>
-          <RowGroup title="Pinned Object">
-            <InfoCard>
-              <LabeledValueRow
-                label="Indexer URL"
-                value={indexerURL}
-                isMonospace
-                numberOfLines={1}
-              />
-              <LabeledValueRow
-                label="Created"
-                value={new Date(po.createdAt).toLocaleString()}
-              />
-              <LabeledValueRow
-                label="Updated"
-                value={new Date(po.updatedAt).toLocaleString()}
-                showDividerTop
-              />
-              <LabeledValueRow
-                label="Key"
-                value={po.key}
-                isMonospace
-                numberOfLines={1}
-                showDividerTop
-              />
-              <LabeledValueRow
-                label="Metadata"
-                value={JSON.stringify(decodeFileMetadata(po.metadata), null, 2)}
-                numberOfLines={10}
-                isMonospace
-                align="left"
-                showDividerTop
-              />
-            </InfoCard>
-          </RowGroup>
-          <View style={styles.verticalSmallGap}>
-            <RowSubGroup title={`Slabs (${po.slabs.length})`}>
-              <InfoCard>
-                {po.slabs.map((s, i) => (
+      {showAdvanced.data && (
+        <>
+          {pinnedObjectsList.length > 1 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Pinned Objects</Text>
+            </View>
+          )}
+          {pinnedObjectsList.map(([indexerURL, po]) => (
+            <Fragment key={indexerURL}>
+              <RowGroup title="Pinned Object">
+                <InfoCard>
                   <LabeledValueRow
-                    key={s.id}
-                    label="Slab"
-                    value={s.id}
+                    label="Indexer URL"
+                    value={indexerURL}
                     isMonospace
                     numberOfLines={1}
-                    showDividerTop={i > 0}
                   />
-                ))}
-              </InfoCard>
-            </RowSubGroup>
-            {/* <InfoCard>
+                  <LabeledValueRow
+                    label="Created"
+                    value={new Date(po.createdAt).toLocaleString()}
+                  />
+                  <LabeledValueRow
+                    label="Updated"
+                    value={new Date(po.updatedAt).toLocaleString()}
+                    showDividerTop
+                  />
+                  <LabeledValueRow
+                    label="Key"
+                    value={po.key}
+                    isMonospace
+                    numberOfLines={1}
+                    showDividerTop
+                  />
+                  <LabeledValueRow
+                    label="Metadata"
+                    value={JSON.stringify(
+                      decodeFileMetadata(po.metadata),
+                      null,
+                      2
+                    )}
+                    numberOfLines={10}
+                    isMonospace
+                    align="left"
+                    showDividerTop
+                  />
+                </InfoCard>
+              </RowGroup>
+              <View style={styles.verticalSmallGap}>
+                <RowSubGroup title={`Slabs (${po.slabs.length})`}>
+                  <InfoCard>
+                    {po.slabs.map((s, i) => (
+                      <LabeledValueRow
+                        key={s.id}
+                        label="Slab"
+                        value={s.id}
+                        isMonospace
+                        numberOfLines={1}
+                        showDividerTop={i > 0}
+                      />
+                    ))}
+                  </InfoCard>
+                </RowSubGroup>
+                {/* <InfoCard>
               <FileMap />
             </InfoCard> */}
-          </View>
-        </Fragment>
-      ))}
+              </View>
+            </Fragment>
+          ))}
+        </>
+      )}
     </View>
   )
 }

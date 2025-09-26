@@ -6,9 +6,12 @@ import {
 } from '../encoding/pinnedObjects'
 import { logger } from '../lib/logger'
 import { db } from '../db'
-import useSWR, { mutate } from 'swr'
+import useSWR from 'swr'
 import { fileHasAPinnedObject } from '../lib/file'
 import { createGetterAndSWRHook } from '../lib/selectors'
+import { buildSWRHelpers } from '../lib/swr'
+
+const { getKey, triggerChange } = buildSWRHelpers('db/files')
 
 export type FileRecord = {
   id: string
@@ -44,7 +47,7 @@ export async function createFileRecord(
   )
   await updateFilePinnedObjects(id, pinnedObjects)
   if (triggerUpdate) {
-    await triggerFileListUpdate()
+    await triggerChange()
   }
 }
 
@@ -56,7 +59,7 @@ export async function createManyFileRecords(
       await createFileRecord(fr, false)
     }
   })
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 export async function readAllFileRecords(): Promise<FileRecord[]> {
@@ -114,17 +117,17 @@ export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
     id
   )
   await updateFilePinnedObjects(id, pinnedObjects)
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
   await db().runAsync('DELETE FROM files WHERE id = ?', id)
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 export async function updateFilePinnedObjects(
@@ -141,7 +144,7 @@ export async function updateFilePinnedObjects(
     serializedPinnedObjects,
     id
   )
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 export async function updateFilePinnedObject(
@@ -166,7 +169,7 @@ export async function updateFilePinnedObject(
     serializedPinnedObjects,
     id
   )
-  await triggerFileListUpdate()
+  await triggerChange()
 }
 
 function transformRow(row: {
@@ -188,18 +191,6 @@ function transformRow(row: {
     pinnedObjects: pinnedObjects ?? {},
     encryptionKey: row.encryptionKey,
   }
-}
-
-const KEY = 'db/files'
-
-const getKey = (id?: string) => {
-  return id ? `${KEY}/${id}` : `${KEY}`
-}
-
-export function triggerFileListUpdate() {
-  return mutate((key: string) => {
-    return typeof key === 'string' && key.startsWith(getKey())
-  })
 }
 
 export function useFileList() {
