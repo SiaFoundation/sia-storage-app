@@ -18,7 +18,6 @@ import { useImagePickerAndUpload } from '../hooks/useImagePicker'
 import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
 import { useDocumentPickerAndUpload } from '../hooks/useDocumentPicker'
 import { Menu, MenuItem } from '../components/Menu'
-import { Button } from '../components/Button'
 
 export function FileListScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
@@ -103,7 +102,6 @@ export function FileListScreen() {
           <Text style={styles.emptyText}>
             Tap the plus to upload media from your library.
           </Text>
-          <Button onPress={documentPickerAndUpload}>Add from files</Button>
           <Pressable
             accessibilityRole="button"
             onPress={openAddMenu}
