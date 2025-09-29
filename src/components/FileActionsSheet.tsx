@@ -29,6 +29,7 @@ import {
   updateFilePinnedObjects,
 } from '../stores/files'
 import Share from 'react-native-share'
+import { logger } from '../lib/logger'
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileActionsSheet({ route, navigation }: Props) {
@@ -83,7 +84,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
       })
     } catch (e) {
       if (typeof e === 'string' && !e.includes('User did not share')) {
-        console.warn('File sharing failed:', e)
+        logger.log('File sharing failed:', e)
       }
     }
   }, [file, status.cachedUri])
