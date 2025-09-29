@@ -16,7 +16,7 @@ type UploadScannerState = {
 }
 
 const MAX_BACKGROUND_UPLOADS = 5
-const SECURE_STORE_AUTO_SCAN_KEY = 'uploadScanner/autoScan'
+const SECURE_STORE_AUTO_SCAN_KEY = 'uploadScanner.autoScan'
 
 let scanTimer: NodeJS.Timeout | null = null
 
