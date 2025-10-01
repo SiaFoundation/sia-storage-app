@@ -187,25 +187,22 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleDownload = useDownload(file)
   return (
     <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
-      {status.isUploaded && (
-        <>
-          <ActionSheetButton
-            disabled={!status.isDownloaded}
-            variant="primary"
-            icon={<Link2Icon size={18} />}
-            onPress={handlePressAndClose(handleShareURL)}
-          >
-            Copy link
-          </ActionSheetButton>
-          <ActionSheetButton
-            variant="primary"
-            icon={<ShareIcon size={18} />}
-            onPress={handleShareFile}
-          >
-            Share file
-          </ActionSheetButton>
-        </>
-      )}
+      <ActionSheetButton
+        disabled={!status.isUploaded}
+        variant="primary"
+        icon={<Link2Icon size={18} />}
+        onPress={handlePressAndClose(handleShareURL)}
+      >
+        Copy link
+      </ActionSheetButton>
+      <ActionSheetButton
+        disabled={!status.isUploaded}
+        variant="primary"
+        icon={<ShareIcon size={18} />}
+        onPress={handleShareFile}
+      >
+        Share file
+      </ActionSheetButton>
       {!status.isDownloaded && !status.isDownloading && !status.fileIsGone && (
         <ActionSheetButton
           variant="primary"
