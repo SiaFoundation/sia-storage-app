@@ -15,10 +15,8 @@ export function AppBanner() {
   if (!isConnected) {
     return (
       <View style={styles.container}>
-        <TriangleAlertIcon size={12} color="#A37A00" />
-        <Text style={{ fontSize: 12 }}>
-          Indexer connection lost. Offline mode.
-        </Text>
+        <TriangleAlertIcon size={12} />
+        <Text style={{ fontSize: 12 }}>Indexer not connected</Text>
       </View>
     )
   }
