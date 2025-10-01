@@ -10,6 +10,7 @@ import useSWR from 'swr'
 import { fileHasAPinnedObject } from '../lib/file'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
+import { create } from 'zustand'
 
 const { getKey, triggerChange } = buildSWRHelpers('db/files')
 
@@ -74,6 +75,63 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
   }>(
     'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
   )
+  return rows.map(transformRow)
+}
+
+const CATEGORY_TO_PREFIX: Record<Category, string> = {
+  Video: 'video/',
+  Image: 'image/',
+  Audio: 'audio/',
+  Files: 'application/',
+}
+
+export type FileOrderParams = {
+  sortBy?: SortBy
+  sortDir?: SortDir
+  categories?: Category[]
+}
+
+export async function readOrderedFileRecords(
+  opts?: FileOrderParams
+): Promise<FileRecord[]> {
+  const { sortBy = 'DATE', sortDir, categories = [] } = opts ?? {}
+  const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+
+  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c]).filter(Boolean)
+
+  const whereParts: string[] = []
+  const params: any[] = []
+
+  if (prefixes.length) {
+    for (const p of prefixes) {
+      whereParts.push(`fileType LIKE ?`)
+      params.push(`${p}%`)
+    }
+  }
+
+  const where = whereParts.length ? `WHERE (${whereParts.join(' OR ')})` : ''
+
+  const orderExpr =
+    sortBy === 'NAME'
+      ? `fileName IS NULL, fileName COLLATE NOCASE ${dir}`
+      : `createdAt ${dir}`
+
+  const rows = await db().getAllAsync<{
+    id: string
+    fileName: string | null
+    fileSize: number | null
+    createdAt: number
+    fileType: string
+    pinnedObjects: string | null
+    encryptionKey: string
+  }>(
+    `SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey
+     FROM files
+     ${where}
+     ORDER BY ${orderExpr}`,
+    ...params
+  )
+
   return rows.map(transformRow)
 }
 
@@ -197,6 +255,24 @@ export function useFileList() {
   return useSWR(getKey(), readAllFileRecords)
 }
 
+export function useOrderedFileList() {
+  const { sortBy, sortDir, selectedCategories } = useFilesView()
+  const dir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+
+  const cats = Array.from(selectedCategories ?? new Set())
+  const catsKey = cats.length ? cats.slice().sort().join(',') : ''
+
+  const key = getKey(`list:${sortBy}:${dir}:${catsKey}`)
+
+  return useSWR(key, () =>
+    readOrderedFileRecords({
+      sortBy,
+      sortDir: dir,
+      categories: cats.length ? cats : undefined,
+    })
+  )
+}
+
 export function useFileCountAll() {
   return useSWR(getKey('count'), () =>
     readAllFileRecords().then((f) => f.length)
@@ -220,3 +296,32 @@ export const [getFileCountLocalOnly, useFileCountLocalOnly] =
 export function useFileDetails(id: string) {
   return useSWR(getKey(id), () => readFileRecord(id))
 }
+
+export type SortBy = 'NAME' | 'DATE'
+export type SortDir = 'ASC' | 'DESC'
+export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
+
+type FilesViewState = {
+  sortBy: SortBy
+  sortDir: SortDir
+  selectedCategories: Set<Category>
+  setSortCategory: (by: SortBy) => void
+  toggleDir: () => void
+  toggleCategory: (c: Category) => void
+  clearCategories: () => void
+}
+
+export const useFilesView = create<FilesViewState>((set, get) => ({
+  sortBy: 'DATE',
+  sortDir: 'DESC',
+  selectedCategories: new Set<Category>(),
+  setSortCategory: (sortBy) =>
+    set({ sortBy, sortDir: sortBy === 'NAME' ? 'ASC' : 'DESC' }),
+  toggleDir: () => set({ sortDir: get().sortDir === 'ASC' ? 'DESC' : 'ASC' }),
+  toggleCategory: (c) => {
+    const next = new Set(get().selectedCategories)
+    next.has(c) ? next.delete(c) : next.add(c)
+    set({ selectedCategories: next })
+  },
+  clearCategories: () => set({ selectedCategories: new Set() }),
+}))
