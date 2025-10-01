@@ -4,6 +4,7 @@ import { type FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 import { RowGroup } from '../Group'
+import { useShowAdvanced } from '../../stores/settings'
 
 export function FileMetaImport({
   file,
@@ -29,6 +30,8 @@ export function FileMetaImport({
     return `${s.toFixed(1)} ${units[u]}`
   }, [file.fileSize])
 
+  const showAdvanced = useShowAdvanced()
+
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -43,7 +46,7 @@ export function FileMetaImport({
             value={file.fileType ?? '—'}
             showDividerTop
           />
-          {status.cachedUri && (
+          {showAdvanced.data && status.cachedUri && (
             <LabeledValueRow
               label="Cached URL"
               value={status.cachedUri}
