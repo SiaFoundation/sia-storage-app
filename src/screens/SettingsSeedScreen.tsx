@@ -48,6 +48,6 @@ export function SettingsSeedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f8fa', padding: 16 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   button: { flex: 1 },
 })

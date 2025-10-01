@@ -20,7 +20,9 @@ export function SettingsIndexerScreen() {
         title="Current Indexer"
         indicator={
           <View style={styles.statusContainer}>
-            <DotIcon color={isConnected ? 'green' : 'red'} />
+            <View style={styles.statusDot}>
+              <DotIcon color={isConnected ? 'green' : 'red'} />
+            </View>
             <Text
               style={[
                 styles.statusText,
@@ -88,6 +90,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
+  statusDot: { marginHorizontal: -3, transform: [{ scale: 1.5 }] },
   statusText: {
     fontSize: 14,
   },
