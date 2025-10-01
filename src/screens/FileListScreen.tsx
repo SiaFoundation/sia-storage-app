@@ -18,6 +18,8 @@ import { useImagePickerAndUpload } from '../hooks/useImagePicker'
 import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
 import { useDocumentPickerAndUpload } from '../hooks/useDocumentPicker'
 import { Menu, MenuItem } from '../components/Menu'
+import { FileSorter } from '../components/FileSorter'
+import { FileFilter } from '../components/FileFilter'
 
 export function FileListScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
@@ -96,6 +98,12 @@ export function FileListScreen() {
           </Pressable>
         </View>
       </View>
+      {files.data?.length && files.data?.length > 1 && (
+        <View style={styles.sortFilterRow}>
+          <FileFilter />
+          <FileSorter />
+        </View>
+      )}
       {!files.isLoading && files.data?.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No uploads yet</Text>
@@ -200,5 +208,13 @@ const styles = StyleSheet.create({
   },
   togglePressed: {
     opacity: 0.7,
+  },
+  sortFilterRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'flex-end',
+    padding: 8,
+    backgroundColor: '#f2f2f2',
   },
 })

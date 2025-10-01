@@ -1,5 +1,5 @@
 import { FlatList } from 'react-native'
-import { FileRecord, useFileList } from '../stores/files'
+import { FileRecord, useOrderedFileList } from '../stores/files'
 import { FileListItem } from './FileListItem'
 
 type Props = {
@@ -8,7 +8,7 @@ type Props = {
 }
 
 export function FileList({ onPressItem, setItemRef }: Props) {
-  const { data: files } = useFileList()
+  const { data: files } = useOrderedFileList()
   return (
     <FlatList
       data={files}
