@@ -1,0 +1,90 @@
+import { logger } from '../lib/logger'
+import { getActiveUploads, getTransferCounts } from '../stores/transfers'
+import {
+  getFilesLocalOnly,
+  useFileCountAll,
+  useFileCountLocalOnly,
+} from '../stores/files'
+import { queueUploadForFileId } from './uploader'
+import {
+  SCANNER_MAX_TOTAL_UPLOADS_FACTOR,
+  SCANNER_ADD_TO_QUEUE_FACTOR,
+  SCANNER_INTERVAL,
+} from '../config'
+import { useAuthStore } from '../stores/auth'
+import {
+  getAutoScanUploads,
+  getMaxTransfers,
+  setAutoScanUploads,
+  useAutoScanUploads,
+} from '../stores/settings'
+
+let scanTimer: NodeJS.Timeout | null = null
+
+function startScanner(): void {
+  if (scanTimer) return
+  logger.log('[uploadScanner] starting scanner')
+  const scan = async () => {
+    try {
+      const maxTransfers = await getMaxTransfers()
+      const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
+      const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
+      if (!useAuthStore.getState().isConnected) return
+      if (getTransferCounts().total.all >= maxTotalUploads) {
+        return
+      }
+      const localOnly = await getFilesLocalOnly()
+      const activeUploads = getActiveUploads()
+      const localFilesNotYetQueued = localOnly
+        .filter((f) => !activeUploads.some((u) => u.id === f.id))
+        .slice(0, maxToAdd)
+      if (localFilesNotYetQueued.length > 0) {
+        logger.log(
+          `[uploadScanner] queuing ${localFilesNotYetQueued.length} uploads`,
+          localFilesNotYetQueued.map((f) => f.id).join(', ')
+        )
+        localFilesNotYetQueued.forEach((f) => queueUploadForFileId(f.id))
+      }
+    } catch (e) {
+      logger.log('[uploadScanner] scan error', e)
+    }
+  }
+  scanTimer = setInterval(scan, SCANNER_INTERVAL)
+}
+
+function stopScanner(): void {
+  if (!scanTimer) return
+  logger.log('[uploadScanner] stopping scanner')
+  clearInterval(scanTimer)
+  scanTimer = null
+}
+
+export async function setUploadScanner(value: boolean) {
+  await setAutoScanUploads(value)
+  logger.log(`[uploadScanner] autoScanUploads set to ${value}`)
+  if (value) startScanner()
+  else stopScanner()
+}
+
+export async function initUploadScanner() {
+  const autoScanUploads = await getAutoScanUploads()
+  logger.log(`[uploadScanner] init: autoScanUploads=${autoScanUploads}`)
+  if (autoScanUploads) startScanner()
+}
+
+export function useUploadScannerStatus(): {
+  enabled: boolean
+  localOnly: number
+  remaining: number
+  total: number
+} {
+  const total = useFileCountAll()
+  const localOnly = useFileCountLocalOnly()
+  const enabled = useAutoScanUploads()
+  return {
+    enabled: enabled.data ?? false,
+    localOnly: localOnly.data ?? 0,
+    remaining: (total.data ?? 0) - (localOnly.data ?? 0),
+    total: total.data ?? 0,
+  }
+}

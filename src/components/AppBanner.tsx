@@ -1,8 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native'
 import { useIsConnected, useIsInitializing } from '../stores/auth'
-import { useHasOnboarded } from '../stores/auth'
+import { useHasOnboarded } from '../stores/settings'
 import { TriangleAlertIcon, UploadCloudIcon } from 'lucide-react-native'
-import { useUploadScannerStatus } from '../stores/uploadScanner'
+import { useUploadScannerStatus } from '../managers/uploadScanner'
 
 export function AppBanner() {
   const isInitializing = useIsInitializing()

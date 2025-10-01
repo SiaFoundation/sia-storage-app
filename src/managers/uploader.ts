@@ -6,7 +6,8 @@ import {
 } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
-import { useIndexerURL, useSdk, getIndexerURL, getSdk } from '../stores/auth'
+import { useSdk, getSdk } from '../stores/auth'
+import { getIndexerURL, useIndexerURL } from '../stores/settings'
 import { extFromMime } from '../lib/fileTypes'
 import {
   encryptionKeyHexToUint8,
@@ -23,7 +24,6 @@ import { runTransferWithSlot } from '../stores/transfers'
 
 export function useUploader() {
   const sdk = useSdk()
-  const indexerURL = useIndexerURL()
   return useCallback(
     async (assets: PickerAsset[]) => {
       if (!sdk) {
@@ -71,6 +71,7 @@ export function useUploader() {
               id: asset.id,
               kind: 'upload',
               task: async (signal) => {
+                const indexerURL = await getIndexerURL()
                 logger.log(`[uploader] uploading ${asset.id} to hosts...`)
                 const fileBytes = await new FileSystem.File(cacheUri).bytes()
                 await uploadToIndexer({
@@ -101,15 +102,15 @@ export function useUploader() {
 }
 
 export function useReuploadFile() {
-  const sdk = useSdk()
-  const indexerURL = useIndexerURL()
   return useCallback(
     async (fileId: string) =>
       runTransferWithSlot({
         id: fileId,
         kind: 'upload',
         task: async (signal) => {
+          const sdk = getSdk()
           if (!sdk) throw new Error('SDK not initialized')
+          const indexerURL = await getIndexerURL()
           const file = await readFileRecord(fileId)
           if (!file) {
             throw new Error('File not found')
@@ -139,7 +140,7 @@ export function useReuploadFile() {
           logger.log(`[uploader] upload complete ${fileId}`)
         },
       }),
-    [sdk]
+    []
   )
 }
 
@@ -148,7 +149,7 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
   if (!file) return
   const cachedUri = await readCachedUri(fileId, extFromMime(file.fileType))
   if (!cachedUri) return
-  const indexerURL = getIndexerURL()
+  const indexerURL = await getIndexerURL()
   const sdk = getSdk()
   if (!sdk) return
   await runTransferWithSlot({

@@ -3,6 +3,12 @@ import { updateUploadProgress } from '../stores/transfers'
 import { updateFilePinnedObject } from '../stores/files'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
+import {
+  UPLOAD_MAX_INFLIGHT,
+  UPLOAD_DATA_SHARDS,
+  UPLOAD_PARITY_SHARDS,
+  UPLOAD_CHUNK_SIZE,
+} from '../config'
 
 export async function uploadToIndexer(params: {
   file: {
@@ -14,20 +20,10 @@ export async function uploadToIndexer(params: {
   }
   sdk: Sdk
   indexerURL: string
-  dataShards?: number
-  parityShards?: number
   data: ArrayBuffer
   signal?: AbortSignal
 }): Promise<void> {
-  const {
-    sdk,
-    indexerURL,
-    dataShards = 10,
-    parityShards = 30,
-    data,
-    file,
-    signal,
-  } = params
+  const { sdk, indexerURL, data, file, signal } = params
 
   const upload = await sdk.upload(
     file.encryptionKey.slice().buffer,
@@ -37,9 +33,9 @@ export async function uploadToIndexer(params: {
       size: data.byteLength,
     }),
     {
-      maxInflight: 15,
-      dataShards,
-      parityShards,
+      maxInflight: UPLOAD_MAX_INFLIGHT,
+      dataShards: UPLOAD_DATA_SHARDS,
+      parityShards: UPLOAD_PARITY_SHARDS,
       progressCallback: {
         progress: (uploaded, encodedSize) => {
           logger.log(
@@ -56,14 +52,13 @@ export async function uploadToIndexer(params: {
     }
   )
 
-  const chunkSize = 1 * 1024 * 1024 // 1 MiB
   let offset = 0
   const total = data.byteLength
 
   while (offset < total) {
     logger.log(`[uploadToIndexer] uploading chunk ${offset} of ${total}...`)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    const end = Math.min(offset + chunkSize, total)
+    const end = Math.min(offset + UPLOAD_CHUNK_SIZE, total)
     const chunk = data.slice(offset, end)
     if (signal) {
       await upload.write(chunk, { signal })

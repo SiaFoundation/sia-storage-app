@@ -1,27 +1,23 @@
 import { useState } from 'react'
 import { View, StyleSheet } from 'react-native'
-import { RowGroup } from '../components/Group'
 import { InfoCard } from '../components/InfoCard'
 import { InputRow } from '../components/InputRow'
 import { Button } from '../components/Button'
-import { useAppSeed } from '../stores/auth'
-import { encryptionKeyUint8ToHex } from '../lib/encryptionKey'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
+import { useSeedHex } from '../stores/settings'
 
 export function SettingsSeedScreen() {
-  const appSeed = useAppSeed()
+  const seedHex = useSeedHex()
   const [isHidden, setIsHidden] = useState(true)
   const toast = useToast()
-
-  const seedHex = encryptionKeyUint8ToHex(appSeed)
 
   return (
     <View style={styles.container}>
       <InfoCard>
         <InputRow
           label="Seed"
-          value={isHidden ? '••••••••••••••••' : seedHex}
+          value={isHidden ? '••••••••••••••••' : seedHex.data}
           editable={false}
           isMonospace
         />
@@ -37,7 +33,8 @@ export function SettingsSeedScreen() {
         <Button
           variant="secondary"
           onPress={() => {
-            Clipboard.setString(seedHex)
+            if (!seedHex.data) return
+            Clipboard.setString(seedHex.data)
             toast.show('Copied seed')
           }}
           style={styles.button}
