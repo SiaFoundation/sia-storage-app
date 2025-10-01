@@ -33,6 +33,19 @@ export const [getSeed, useSeed] = createGetterAndSWRHook(
   }
 )
 
+export const [getSeedHex, useSeedHex] = createGetterAndSWRHook(
+  getKey('seed'),
+  async (): Promise<string> => {
+    const seedString = await getSecureStoreString('seed')
+    if (!seedString) {
+      const seed = createSeed()
+      await setSeed(seed)
+      return encryptionKeyUint8ToHex(seed)
+    }
+    return seedString
+  }
+)
+
 export async function setSeed(seed: Uint8Array<ArrayBuffer>): Promise<boolean> {
   const seedString = encryptionKeyUint8ToHex(seed)
   try {

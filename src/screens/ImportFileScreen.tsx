@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
-import { useIndexerURL, useSdk } from '../stores/auth'
+import { useSdk } from '../stores/auth'
 import { createFileRecord } from '../stores/files'
 import { PinnedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
@@ -23,10 +23,8 @@ import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
-import {
-  decodeFileMetadata,
-  encodeFileMetadata,
-} from '../encoding/fileMetadata'
+import { decodeFileMetadata } from '../encoding/fileMetadata'
+import { getIndexerURL } from '../stores/settings'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
 
@@ -36,7 +34,6 @@ export function ImportFileScreen({ route }: Props) {
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
   const sdk = useSdk()
-  const indexerURL = useIndexerURL()
   const sharedObject = useSWR(
     sdk ? ['sharedObject', shareUrl] : null,
     async () => {
@@ -68,6 +65,7 @@ export function ImportFileScreen({ route }: Props) {
 
   const handleAddToDatabase = useCallback(async () => {
     if (!sharedObject.data || !sdk) return
+    const indexerURL = await getIndexerURL()
     const decodedMetadata = decodeFileMetadata(sharedObject.data.meta)
     const pinnedObject: PinnedObject = {
       key: sharedObject.data.key,
@@ -97,15 +95,7 @@ export function ImportFileScreen({ route }: Props) {
     })
     toast.show('File added')
     navigation.navigate('FileDetail', { id })
-  }, [
-    sharedObject.data,
-    sdk,
-    indexerURL,
-    toast,
-    navigation,
-    id,
-    decodedMetadata,
-  ])
+  }, [sharedObject.data, sdk, toast, navigation, id, decodedMetadata])
 
   return (
     <View style={styles.container}>

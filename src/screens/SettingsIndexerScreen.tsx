@@ -1,23 +1,18 @@
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
-import {
-  useIsConnected,
-  useIndexerURL,
-  tryToConnectAndSet,
-} from '../stores/auth'
+import { View, Text, StyleSheet } from 'react-native'
+import { useIsConnected } from '../stores/auth'
 import { DotIcon } from 'lucide-react-native'
-import { useState } from 'react'
-import { useToast } from '../lib/toastContext'
 import { RowGroup } from '../components/Group'
 import { Button } from '../components/Button'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { InputRow } from '../components/InputRow'
+import { useIndexerURL } from '../stores/settings'
+import { useChangeIndexer } from '../hooks/useChangeIndexer'
 
 export function SettingsIndexerScreen() {
   const isConnected = useIsConnected()
-  const indexerURL = useIndexerURL()
-  const [currentIndexerURL, setCurrentIndexerURL] = useState(indexerURL)
-  const toast = useToast()
+  const currentIndexerURL = useIndexerURL()
+  const { newIndexerInputProps, saveIndexerURL, isWaiting } = useChangeIndexer()
 
   return (
     <View style={styles.container}>
@@ -38,36 +33,27 @@ export function SettingsIndexerScreen() {
         }
       >
         <InfoCard>
-          <LabeledValueRow
-            label="URL"
-            value={indexerURL}
-            isMonospace
-            numberOfLines={1}
-          />
+          <LabeledValueRow label="URL" value={currentIndexerURL.data} />
         </InfoCard>
       </RowGroup>
-      <View style={{ gap: 16 }}>
+      <View style={{ gap: 10 }}>
         <RowGroup title="Switch Indexers">
           <InfoCard>
             <InputRow
               label="URL"
-              value={currentIndexerURL}
-              onChangeText={setCurrentIndexerURL}
+              {...newIndexerInputProps}
               placeholder="https://example.com"
             />
           </InfoCard>
         </RowGroup>
-        <Button
-          onPress={async () => {
-            const success = await tryToConnectAndSet(currentIndexerURL)
-            if (!success) {
-              toast.show('Indexer connection failed')
-              return
-            }
-            toast.show('Indexer connected')
-          }}
-        >
-          {indexerURL === currentIndexerURL ? 'Reconnect' : 'Connect'}
+        <Button onPress={saveIndexerURL}>
+          {currentIndexerURL.data === newIndexerInputProps.value
+            ? isWaiting
+              ? 'Reconnecting...'
+              : 'Reconnect'
+            : isWaiting
+            ? 'Connecting...'
+            : 'Connect'}
         </Button>
       </View>
     </View>

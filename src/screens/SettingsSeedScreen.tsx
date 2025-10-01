@@ -1,20 +1,23 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { RowGroup } from '../components/Group'
 import { InfoCard } from '../components/InfoCard'
 import { InputRow } from '../components/InputRow'
 import { Button } from '../components/Button'
-import { useAppSeed } from '../stores/auth'
 import { encryptionKeyUint8ToHex } from '../lib/encryptionKey'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
+import { useSeed } from '../stores/settings'
 
 export function SettingsSeedScreen() {
-  const appSeed = useAppSeed()
+  const appSeed = useSeed()
   const [isHidden, setIsHidden] = useState(true)
   const toast = useToast()
 
-  const seedHex = encryptionKeyUint8ToHex(appSeed)
+  const seedHex = useMemo(() => {
+    if (!appSeed.data) return ''
+    return encryptionKeyUint8ToHex(appSeed.data)
+  }, [appSeed])
 
   return (
     <View style={styles.container}>
