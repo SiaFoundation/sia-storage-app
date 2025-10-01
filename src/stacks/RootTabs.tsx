@@ -49,17 +49,6 @@ export function RootTabs() {
       >
         {() => <SettingsStack />}
       </Tab.Screen>
-      <Tab.Screen
-        name="LogsTab"
-        options={{
-          tabBarLabel: 'Logs',
-          tabBarIcon: ({ color, size }) => (
-            <TerminalIcon color={color} size={size} />
-          ),
-        }}
-      >
-        {() => <LogScreen />}
-      </Tab.Screen>
     </Tab.Navigator>
   )
 }

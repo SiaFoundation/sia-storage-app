@@ -10,9 +10,11 @@ const Stack = createNativeStackNavigator<MainStackParamList>()
 export function MainStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="Home" options={{ headerShown: false }}>
-        {() => <FileListScreen />}
-      </Stack.Screen>
+      <Stack.Screen
+        name="Home"
+        options={{ headerShown: false }}
+        component={FileListScreen}
+      />
       <Stack.Screen
         name="FileDetail"
         component={FileDetailScreen}

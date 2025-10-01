@@ -1,13 +1,10 @@
 import { View, Text, Pressable, StyleSheet, Alert, Switch } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
-import { resetApp } from '../stores/auth'
-import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
 export function SettingsHomeScreen({ navigation }: Props) {
-  const showAdvanced = useShowAdvanced()
   return (
     <View style={styles.panel}>
       <View style={styles.listGroup}>
@@ -22,19 +19,10 @@ export function SettingsHomeScreen({ navigation }: Props) {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => navigation.navigate('Hosts')}
+          onPress={() => navigation.navigate('Sync')}
         >
           <View style={styles.rowItem}>
-            <Text style={styles.rowLabel}>Hosts</Text>
-            <Text style={styles.rowChevron}>›</Text>
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('Transfers')}
-        >
-          <View style={styles.rowItem}>
-            <Text style={styles.rowLabel}>Transfers</Text>
+            <Text style={styles.rowLabel}>Sync</Text>
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
@@ -44,34 +32,25 @@ export function SettingsHomeScreen({ navigation }: Props) {
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
-        <View style={styles.rowItem}>
-          <Text style={styles.rowLabel}>Show advanced information</Text>
-          <Switch
-            value={showAdvanced.data}
-            onValueChange={(val) => setShowAdvanced(val)}
-          />
-        </View>
-      </View>
-      <View style={styles.footerGroup}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => {
-            Alert.alert(
-              'Reset App',
-              'This will delete all local metadata and reset your app seed. This cannot be undone.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: () => resetApp(),
-                },
-              ]
-            )
-          }}
+          onPress={() => navigation.navigate('Hosts')}
         >
-          <View style={styles.dangerRow}>
-            <Text style={styles.dangerText}>Reset app</Text>
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Hosts</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </View>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate('Logs')}>
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Logs</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </View>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate('Advanced')}>
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Advanced</Text>
+            <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
       </View>
@@ -96,17 +75,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   rowLabel: { flex: 1, color: '#24292f', fontSize: 16 },
-  rowValue: { color: '#57606a', fontSize: 16 },
   rowChevron: { color: '#57606a', fontSize: 18 },
-  footerGroup: { marginTop: 24 },
-  dangerRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#ffffff',
-    borderTopColor: '#d0d7de',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#d0d7de',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  dangerText: { color: '#c83532', fontSize: 16, fontWeight: '600' },
 })

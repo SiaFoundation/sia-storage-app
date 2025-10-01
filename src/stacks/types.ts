@@ -9,8 +9,10 @@ export type SettingsStackParamList = {
   Hosts: undefined
   HostDetail: { publicKey: string }
   Indexer: undefined
-  Transfers: undefined
+  Sync: undefined
   Seed: undefined
+  Logs: undefined
+  Advanced: undefined
 }
 
 export type AuthStackParamList = {
