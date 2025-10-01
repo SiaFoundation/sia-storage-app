@@ -41,19 +41,13 @@ export function FileMeta({
             {...fileNameInputProps}
           />
           {showAdvanced.data && (
-            <LabeledValueRow
-              label="ID"
-              value={file.id}
-              isMonospace
-              numberOfLines={1}
-            />
+            <LabeledValueRow label="ID" value={file.id} isMonospace />
           )}
           {showAdvanced.data && (
             <LabeledValueRow
               label="Cached URL"
               value={status.cachedUri ?? 'Not available'}
               isMonospace
-              numberOfLines={1}
               ellipsizeMode="middle"
               canCopy={!!status.cachedUri}
               showDividerTop
@@ -99,7 +93,6 @@ export function FileMeta({
                     label="Indexer URL"
                     value={indexerURL}
                     isMonospace
-                    numberOfLines={1}
                   />
                   <LabeledValueRow
                     label="Created"
@@ -114,7 +107,6 @@ export function FileMeta({
                     label="Key"
                     value={po.key}
                     isMonospace
-                    numberOfLines={1}
                     showDividerTop
                   />
                   <LabeledValueRow
@@ -140,7 +132,6 @@ export function FileMeta({
                         label="Slab"
                         value={s.id}
                         isMonospace
-                        numberOfLines={1}
                         showDividerTop={i > 0}
                       />
                     ))}

@@ -5,14 +5,17 @@ import { useToast } from '../lib/toastContext'
 
 type Props = {
   label: string
-  value: string
+  value: string | React.ReactNode
   isMonospace?: boolean
   numberOfLines?: number
   showDividerTop?: boolean
   canCopy?: boolean
   ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip'
   align?: 'left' | 'right'
+  labelWidth?: number
 }
+
+const defaultLabelWidth = 96
 
 export function LabeledValueRow({
   label,
@@ -23,10 +26,14 @@ export function LabeledValueRow({
   canCopy = true,
   ellipsizeMode = 'tail',
   align = 'right',
+  labelWidth,
 }: Props) {
   const toast = useToast()
 
   const handleCopy = useCallback(() => {
+    if (typeof value !== 'string') {
+      return
+    }
     Clipboard.setString(value)
     const lower = label.trim().length > 0 ? label.toLowerCase() : 'value'
     toast.show(`Copied ${lower}`)
@@ -34,24 +41,48 @@ export function LabeledValueRow({
 
   return canCopy ? (
     <Pressable accessibilityRole="button" onPress={handleCopy}>
-      <View style={[styles.row, showDividerTop && styles.rowDivider]}>
-        <Text style={styles.rowLabel}>{label}</Text>
+      <View
+        style={[
+          styles.row,
+          showDividerTop && styles.rowDivider,
+          numberOfLines > 1
+            ? { alignItems: 'flex-start' }
+            : { alignItems: 'center' },
+        ]}
+      >
         <Text
-          style={[
-            styles.rowValue,
-            isMonospace && styles.rowValueMono,
-            { textAlign: align },
-          ]}
-          numberOfLines={numberOfLines}
-          ellipsizeMode={ellipsizeMode}
+          style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
         >
-          {value}
+          {label}
         </Text>
+        {typeof value === 'string' ? (
+          <Text
+            style={[
+              styles.rowValue,
+              isMonospace && styles.rowValueMono,
+              { textAlign: align },
+            ]}
+            numberOfLines={numberOfLines}
+            ellipsizeMode={ellipsizeMode}
+          >
+            {value}
+          </Text>
+        ) : (
+          value
+        )}
       </View>
     </Pressable>
   ) : (
     <View style={[styles.row, showDividerTop && styles.rowDivider]}>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <Text
+        style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {label}
+      </Text>
       <Text
         style={[
           styles.rowValue,
@@ -70,7 +101,7 @@ export function LabeledValueRow({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -79,7 +110,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
-    width: 96,
     color: '#6b7280',
     marginRight: 8,
   },
