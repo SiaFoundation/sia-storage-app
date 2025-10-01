@@ -1,18 +1,17 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { HomeIcon, SettingsIcon, TerminalIcon } from 'lucide-react-native'
+import { HomeIcon, SettingsIcon } from 'lucide-react-native'
 import { MainStack } from './MainStack'
 import { SettingsStack } from './SettingsStack'
-import { LogScreen } from '../screens/LogScreen'
 import { type RootTabParamList } from './types'
 import { AuthStack } from './AuthStack'
-import { useHasOnboarded } from '../stores/auth'
+import { useHasOnboarded } from '../stores/settings'
 
 const Tab = createBottomTabNavigator<RootTabParamList>()
 
 export function RootTabs() {
   const hasOnboarded = useHasOnboarded()
-  if (!hasOnboarded) {
+  if (!hasOnboarded.data) {
     return <AuthStack />
   }
   return (

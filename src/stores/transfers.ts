@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { logger } from '../lib/logger'
-import { getGlobalSlotPool } from '../managers/slotPool'
+import { acquireTransfersSlot } from '../managers/transfersPool'
 import { createGetterAndSelector } from '../lib/selectors'
 
 export type TransferKind = 'upload' | 'download'
@@ -18,7 +18,7 @@ export type TransferState = {
 }
 
 type TransfersStore = {
-  inflight: Record<string, TransferState>
+  transfers: Record<string, TransferState>
   add: (record: Omit<TransferState, 'status' | 'progress'>) => void
   updateState: (
     id: string,
@@ -33,24 +33,24 @@ type TransfersStore = {
 }
 
 export const useTransfersStore = create<TransfersStore>((set, get) => ({
-  inflight: {},
+  transfers: {},
   add: (record) =>
     set((state) => {
       const key = makeTransferKey(record.kind, record.id)
-      const prev = state.inflight[key]
+      const prev = state.transfers[key]
       const next: TransferState = {
         id: record.id,
         kind: record.kind,
         controller: record.controller ?? prev?.controller,
-        status: prev?.status ?? 'running',
+        status: prev?.status ?? 'queued',
         progress: prev?.progress ?? 0,
       }
-      return { inflight: { ...state.inflight, [key]: next } }
+      return { transfers: { ...state.transfers, [key]: next } }
     }),
   updateState: (id, kind, status, progress, err) =>
     set((state) => {
       const key = makeTransferKey(kind, id)
-      const prev = state.inflight[key]
+      const prev = state.transfers[key]
       const next: TransferState = {
         id,
         kind: kind ?? prev?.kind ?? 'upload',
@@ -59,12 +59,12 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
         progress,
         error: status === 'error' ? err ?? prev?.error ?? '' : undefined,
       }
-      return { inflight: { ...state.inflight, [key]: next } }
+      return { transfers: { ...state.transfers, [key]: next } }
     }),
   updateProgress: (id, kind, progress) =>
     set((state) => {
       const key = makeTransferKey(kind, id)
-      const prev = state.inflight[key]
+      const prev = state.transfers[key]
       const next: TransferState = {
         id,
         kind: kind ?? prev?.kind ?? 'upload',
@@ -73,16 +73,16 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
         progress,
         error: prev?.error,
       }
-      return { inflight: { ...state.inflight, [key]: next } }
+      return { transfers: { ...state.transfers, [key]: next } }
     }),
   remove: (id, kind) =>
     set((state) => {
       const key = makeTransferKey(kind, id)
-      const { [key]: _, ...rest } = state.inflight
-      return { inflight: rest }
+      const { [key]: _, ...rest } = state.transfers
+      return { transfers: rest }
     }),
   cancelAll: () => {
-    const current = get().inflight
+    const current = get().transfers
     Object.values(current).forEach((r) => {
       try {
         logger.log('aborting transfer', r.id)
@@ -92,37 +92,21 @@ export const useTransfersStore = create<TransfersStore>((set, get) => ({
         // Ignore.
       }
     })
-    set({ inflight: {} })
+    set({ transfers: {} })
   },
 }))
 
-export function registerTransfer(
-  id: string,
-  kind: TransferKind
-): AbortController {
+function registerTransfer(id: string, kind: TransferKind): AbortController {
   const controller = new AbortController()
   useTransfersStore.getState().add({ id, kind, controller })
   return controller
-}
-
-export function unregisterTransfer(id: string): void {
-  // Detach controller but keep record (for error state visibility).
-  useTransfersStore.setState((state) => {
-    const entries = Object.entries(state.inflight)
-    const next: Record<string, TransferState> = {}
-    for (const [k, v] of entries) {
-      if (v.id === id) next[k] = { ...v, controller: undefined }
-      else next[k] = v
-    }
-    return { inflight: next }
-  })
 }
 
 export function cancelAllTransfers() {
   return useTransfersStore.getState().cancelAll()
 }
 
-export function setTransferState(
+function setTransferState(
   id: string,
   kind: TransferKind,
   status: TransferStatus,
@@ -134,7 +118,7 @@ export function setTransferState(
     .updateState(id, kind, status, progress, error)
 }
 
-export function updateTransferProgress(
+function updateTransferProgress(
   id: string,
   kind: TransferKind,
   progress: number
@@ -142,22 +126,54 @@ export function updateTransferProgress(
   return useTransfersStore.getState().updateProgress(id, kind, progress)
 }
 
-export const [getInflightCounts, useInflightCounts] = createGetterAndSelector(
+export type TransferCounts = {
+  total: number
+  totalActive: number
+  totalQueued: number
+  uploads: number
+  uploadsActive: number
+  uploadsQueued: number
+  downloads: number
+  downloadsActive: number
+  downloadsQueued: number
+}
+
+export const [getTransferCounts, useTransferCounts] = createGetterAndSelector(
   useTransfersStore,
-  (
-    state
-  ): {
-    uploads: number
-    downloads: number
-    total: number
-  } => {
-    let uploads = 0
-    let downloads = 0
-    for (const rec of Object.values(state.inflight)) {
-      if (rec.kind === 'upload') uploads += 1
-      else if (rec.kind === 'download') downloads += 1
+  (state): TransferCounts => {
+    const counts: TransferCounts = {
+      total: 0,
+      totalActive: 0,
+      totalQueued: 0,
+      uploads: 0,
+      uploadsActive: 0,
+      uploadsQueued: 0,
+      downloads: 0,
+      downloadsActive: 0,
+      downloadsQueued: 0,
     }
-    return { uploads, downloads, total: uploads + downloads }
+    for (const rec of Object.values(state.transfers)) {
+      const bucket = rec.kind === 'upload' ? 'uploads' : 'downloads'
+      if (rec.status === 'running') {
+        counts.totalActive += 1
+        if (bucket === 'uploads') {
+          counts.uploadsActive += 1
+        } else {
+          counts.downloadsActive += 1
+        }
+      } else if (rec.status === 'queued') {
+        counts.totalQueued += 1
+        if (bucket === 'uploads') {
+          counts.uploadsQueued += 1
+        } else {
+          counts.downloadsQueued += 1
+        }
+      }
+    }
+    counts.total = counts.totalActive + counts.totalQueued
+    counts.uploads = counts.uploadsActive + counts.uploadsQueued
+    counts.downloads = counts.downloadsActive + counts.downloadsQueued
+    return counts
   }
 )
 
@@ -168,7 +184,7 @@ export function makeTransferKey(kind: TransferKind, id: string): string {
 export const [getActiveUploads, useActiveUploads] = createGetterAndSelector(
   useTransfersStore,
   (state): TransferState[] => {
-    return Object.values(state.inflight).filter((rec) => rec.kind === 'upload')
+    return Object.values(state.transfers).filter((rec) => rec.kind === 'upload')
   }
 )
 
@@ -192,7 +208,7 @@ export async function runTransferWithSlot<T>(params: {
   const { id, kind, task } = params
   const controller = registerTransfer(id, kind)
   setTransferState(id, kind, 'queued', 0)
-  const release = await getGlobalSlotPool().acquire()
+  const release = await acquireTransfersSlot()
   try {
     logger.log('transfer running', id, kind)
     setTransferState(id, kind, 'running', 0)
@@ -211,10 +227,6 @@ export async function runTransferWithSlot<T>(params: {
   }
 }
 
-export function setUploadState(id: string, next: TransferState) {
-  return setTransferState(id, 'upload', next.status, next.progress)
-}
-
 export function updateUploadProgress(id: string, progress: number) {
   return updateTransferProgress(id, 'upload', progress)
 }
@@ -222,12 +234,8 @@ export function updateUploadProgress(id: string, progress: number) {
 export function useUploadState(id: string): TransferState | undefined {
   const key = id ? makeTransferKey('upload', id) : undefined
   return useTransfersStore(
-    useShallow((state) => (key ? state.inflight[key] : undefined))
+    useShallow((state) => (key ? state.transfers[key] : undefined))
   )
-}
-
-export function setDownloadState(id: string, next: TransferState) {
-  return setTransferState(id, 'download', next.status, next.progress)
 }
 
 export function updateDownloadProgress(id: string, progress: number) {
@@ -237,6 +245,6 @@ export function updateDownloadProgress(id: string, progress: number) {
 export function useDownloadState(id: string): TransferState | undefined {
   const key = id ? makeTransferKey('download', id) : undefined
   return useTransfersStore(
-    useShallow((state) => (key ? state.inflight[key] : undefined))
+    useShallow((state) => (key ? state.transfers[key] : undefined))
   )
 }

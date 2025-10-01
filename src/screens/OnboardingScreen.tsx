@@ -6,46 +6,38 @@ import {
   Text,
   View,
 } from 'react-native'
-import {
-  useIndexerURL,
-  setIndexerURL,
-  tryToConnectAndSet,
-  useAppSeed,
-  setAppSeed,
-} from '../stores/auth'
 import { SettingsIcon } from 'lucide-react-native'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
-import { encryptionKeyUint8ToHex } from '../lib/encryptionKey'
 import { createSeed } from '../lib/seed'
 import { Button } from '../components/Button'
 import { hexToUint8 } from '../lib/hex'
 import Clipboard from '@react-native-clipboard/clipboard'
-
-function validateURL(url: string) {
-  try {
-    new URL(url)
-    return true
-  } catch {
-    return false
-  }
-}
+import { getSeedHex, setSeed, useSeedHex } from '../stores/settings'
+import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import { useControlledInputValue } from '../hooks/useInputValue'
 
 export default function OnboardingScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const [isWaiting, setIsWaiting] = useState(false)
-  const [hasErrored, setHasErrored] = useState(false)
-  const indexerURL = useIndexerURL()
-  const appSeed = useAppSeed()
+  const seedHex = useSeedHex()
   const toast = useToast()
-  const [inputSeed, setInputSeed] = useState(encryptionKeyUint8ToHex(appSeed))
 
-  // Sync input seed with app seed when app seed changes
-  useEffect(() => {
-    setInputSeed(encryptionKeyUint8ToHex(appSeed))
-  }, [appSeed])
+  const { newIndexerInputProps, saveIndexerURL, isWaiting, hasErrored } =
+    useChangeIndexer()
+
+  const newSeedInputProps = useControlledInputValue({
+    value: seedHex.data ?? '',
+    save: (text) => {
+      try {
+        const seed = hexToUint8(text)
+        setSeed(seed)
+      } catch {
+        toast.show('Invalid seed')
+      }
+    },
+  })
 
   return (
     <View>
@@ -81,23 +73,11 @@ export default function OnboardingScreen() {
             {isUsingCustomURL ? (
               <>
                 <InfoCard>
-                  <InputRow
-                    label="Indexer URL"
-                    value={indexerURL}
-                    onChangeText={setIndexerURL}
-                  />
+                  <InputRow label="Indexer URL" {...newIndexerInputProps} />
                   <InputRow
                     showDividerTop
                     label="Seed"
-                    value={inputSeed}
-                    onChangeText={(text) => {
-                      try {
-                        const seed = hexToUint8(text)
-                        setAppSeed(seed)
-                      } catch {
-                        toast.show('Invalid seed')
-                      }
-                    }}
+                    {...newSeedInputProps}
                     isMonospace
                   />
                 </InfoCard>
@@ -105,7 +85,7 @@ export default function OnboardingScreen() {
                   <Button
                     variant="secondary"
                     onPress={async () => {
-                      await setAppSeed(createSeed())
+                      await setSeed(createSeed())
                       toast.show('Seed regenerated')
                     }}
                     style={styles.button}
@@ -114,8 +94,9 @@ export default function OnboardingScreen() {
                   </Button>
                   <Button
                     variant="secondary"
-                    onPress={() => {
-                      Clipboard.setString(inputSeed)
+                    onPress={async () => {
+                      const seed = await getSeedHex()
+                      Clipboard.setString(seed)
                       toast.show('Copied seed')
                     }}
                     style={styles.button}
@@ -125,25 +106,7 @@ export default function OnboardingScreen() {
                 </View>
               </>
             ) : null}
-            <Button
-              onPress={async () => {
-                setIsWaiting(true)
-                const isValid = validateURL(indexerURL)
-                if (!isValid) {
-                  toast.show('Invalid URL')
-                  setIsWaiting(false)
-                  return
-                }
-                const success = await tryToConnectAndSet(indexerURL)
-                if (!success) {
-                  toast.show('Failed to connect')
-                  setHasErrored(true)
-                }
-                setIsWaiting(false)
-              }}
-            >
-              Authorize & Connect
-            </Button>
+            <Button onPress={saveIndexerURL}>Authorize & Connect</Button>
           </View>
         </View>
       )}

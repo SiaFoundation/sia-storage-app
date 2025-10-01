@@ -81,8 +81,10 @@ export function useFileStatus(file?: {
   const [uploadError, downloadError] = useTransfersStore(
     useShallow((state) => {
       const id = file?.id || ''
-      const u = id ? state.inflight[makeTransferKey('upload', id)] : undefined
-      const d = id ? state.inflight[makeTransferKey('download', id)] : undefined
+      const u = id ? state.transfers[makeTransferKey('upload', id)] : undefined
+      const d = id
+        ? state.transfers[makeTransferKey('download', id)]
+        : undefined
       return [u?.error ?? null, d?.error ?? null] as const
     })
   )
