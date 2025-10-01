@@ -10,6 +10,7 @@ import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { runTransferWithSlot } from '../stores/transfers'
+import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 
 export function useDownload(
   file?: {
@@ -40,7 +41,7 @@ export function useDownload(
           encryptionKeyHexToBuffer(file.encryptionKey),
           pinnedObject,
           {
-            maxInflight: 15,
+            maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
           },
@@ -81,7 +82,7 @@ export function useDownloadFromShareURL() {
           const sharedObject = await sdk.sharedObject(sharedUrl)
           const meta = decodeFileMetadata(sharedObject?.meta)
           const downloader = await sdk.downloadShared(sharedUrl, {
-            maxInflight: 15,
+            maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
           })
