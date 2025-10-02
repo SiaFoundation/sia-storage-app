@@ -7,6 +7,7 @@ import { GroupTitle, RowGroup } from '../components/Group'
 import { InfoCard } from '../components/InfoCard'
 import { Button } from '../components/Button'
 import { LabeledValueRow } from '../components/LabeledValueRow'
+import { SettingsRecoveryPhrase } from '../components/SettingsRecoveryPhrase'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
 
@@ -15,7 +16,8 @@ export function SettingsAdvancedScreen(_props: Props) {
 
   return (
     <View style={styles.container}>
-      <RowGroup title="Display">
+      <SettingsRecoveryPhrase />
+      <RowGroup title="Developers">
         <InfoCard>
           <LabeledValueRow
             label="Show advanced information"

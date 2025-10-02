@@ -5,7 +5,6 @@ import { HostListScreen } from '../screens/HostListScreen'
 import { HostDetailScreen } from '../screens/HostDetailScreen'
 import { SettingsIndexerScreen } from '../screens/SettingsIndexerScreen'
 import { SettingsSyncScreen } from '../screens/SettingsSyncScreen'
-import { SettingsSeedScreen } from '../screens/SettingsSeedScreen'
 import { type SettingsStackParamList } from './types'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
@@ -34,11 +33,6 @@ export function SettingsStack() {
         name="Sync"
         component={SettingsSyncScreen}
         options={{ title: 'Sync' }}
-      />
-      <Stack.Screen
-        name="Seed"
-        component={SettingsSeedScreen}
-        options={{ title: 'Seed' }}
       />
       <Stack.Screen
         name="Logs"

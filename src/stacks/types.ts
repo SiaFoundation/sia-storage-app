@@ -10,7 +10,6 @@ export type SettingsStackParamList = {
   HostDetail: { publicKey: string }
   Indexer: undefined
   Sync: undefined
-  Seed: undefined
   Logs: undefined
   Advanced: undefined
 }
