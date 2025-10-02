@@ -1,5 +1,5 @@
 import { FlatList, StyleSheet } from 'react-native'
-import { useOrderedFileList, type FileRecord } from '../stores/files'
+import { useFileList, type FileRecord } from '../stores/files'
 import { GalleryItem } from './GalleryItem'
 
 type Props = {
@@ -9,7 +9,7 @@ type Props = {
 }
 
 export function Gallery({ onPressItem, setItemRef, numColumns = 3 }: Props) {
-  const { data: files } = useOrderedFileList()
+  const { data: files } = useFileList()
   return (
     <FlatList
       data={files}

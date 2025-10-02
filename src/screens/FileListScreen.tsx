@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
 import {
   Grid2X2Icon,
   ListIcon,
@@ -12,7 +12,7 @@ import { Gallery } from '../components/Gallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
-import { type FileRecord, useFileList } from '../stores/files'
+import { type FileRecord, useFileCount, useFileList } from '../stores/files'
 import { FileList } from '../components/FileList'
 import { useImagePickerAndUpload } from '../hooks/useImagePicker'
 import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
@@ -27,6 +27,7 @@ export function FileListScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const files = useFileList()
+  const fileCount = useFileCount()
 
   const imagePickerAndUpload = useImagePickerAndUpload()
   const captureAndUpload = useCameraCaptureAndUpload()
@@ -98,30 +99,43 @@ export function FileListScreen() {
           </Pressable>
         </View>
       </View>
-      {files.data?.length && files.data?.length > 1 && (
+      {!!fileCount.data && fileCount.data > 1 && (
         <View style={styles.sortFilterRow}>
           <FileFilter />
           <FileSorter />
         </View>
       )}
-      {!files.isLoading && files.data?.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>No uploads yet</Text>
-          <Text style={styles.emptyText}>
-            Tap the plus to upload media from your library.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={openAddMenu}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Upload media</Text>
-          </Pressable>
-        </View>
-      ) : viewMode == 'gallery' ? (
-        <Gallery onPressItem={handleOpenDetail} />
+      {!!fileCount.data ? (
+        files.data && files.data.length > 0 ? (
+          viewMode == 'gallery' ? (
+            <Gallery onPressItem={handleOpenDetail} />
+          ) : (
+            <FileList onPressItem={handleOpenDetail} />
+          )
+        ) : (
+          <View style={styles.emptyWrap}>
+            <Image
+              style={styles.emptyImage}
+              source={require('../../assets/image-stack.png')}
+            />
+            <Text style={styles.emptyTitle}>No files found</Text>
+            <Text style={styles.emptyText}>
+              No files matching the selected filters.
+            </Text>
+          </View>
+        )
       ) : (
-        <FileList onPressItem={handleOpenDetail} />
+        <View style={styles.emptyWrap}>
+          <Image
+            style={styles.emptyImage}
+            source={require('../../assets/image-stack.png')}
+          />
+          <Text style={styles.emptyTitle}>Add files to get started</Text>
+          <Text style={styles.emptyText}>
+            Files are sharded and encrypted and synced directly to the Sia host
+            network.
+          </Text>
+        </View>
       )}
       <Menu
         isOpen={isAddMenuOpen}
@@ -167,14 +181,19 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: '#24292f', fontSize: 16, fontWeight: '600' },
   headerIcon: { paddingVertical: 6, paddingHorizontal: 8 },
+  emptyImage: { width: 140, height: 140 },
   emptyWrap: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: '35%',
     padding: 24,
-    gap: 8,
   },
-  emptyTitle: { color: '#24292f', fontWeight: '700' },
+  emptyTitle: {
+    color: '#24292f',
+    fontWeight: '700',
+    fontSize: 16,
+    paddingBottom: 8,
+  },
   emptyText: { color: '#57606a', textAlign: 'center', marginBottom: 8 },
   primaryButton: {
     backgroundColor: '#0969da',
