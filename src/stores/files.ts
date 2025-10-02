@@ -241,10 +241,6 @@ export function useFileCount() {
 }
 
 export function useFileList() {
-  return useSWR(getKey(), readAllFileRecords)
-}
-
-export function useOrderedFileList() {
   const { sortBy, sortDir, selectedCategories } = useFilesView()
   const dir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
