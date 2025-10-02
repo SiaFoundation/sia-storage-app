@@ -1,0 +1,86 @@
+import { StyleSheet, TextInput, Platform, View, Text } from 'react-native'
+import {
+  type TextInputProps,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native'
+
+type Props = Omit<TextInputProps, 'style' | 'placeholderTextColor'> & {
+  label: string
+  showDividerTop?: boolean
+  isMonospace?: boolean
+  height?: number
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip'
+  align?: 'left' | 'right'
+  labelWidth?: number
+  inputStyle?: StyleProp<TextStyle>
+  containerStyle?: StyleProp<ViewStyle>
+  placeholderTextColor?: string
+}
+
+const defaultLabelWidth = 200
+
+export function InputArea({
+  label,
+  showDividerTop = false,
+  isMonospace = false,
+  inputStyle,
+  containerStyle,
+  placeholderTextColor,
+  height = 80,
+  ellipsizeMode = 'tail',
+  align = 'right',
+  labelWidth,
+  ...textInputProps
+}: Props) {
+  return (
+    <View
+      style={[
+        styles.container,
+        showDividerTop && styles.rowDivider,
+        { height },
+      ]}
+    >
+      <Text
+        style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+        ellipsizeMode="tail"
+      >
+        {label}
+      </Text>
+      <TextInput
+        style={[styles.input, isMonospace && styles.inputMono, inputStyle]}
+        placeholderTextColor={placeholderTextColor ?? '#9ca3af'}
+        clearButtonMode={textInputProps.clearButtonMode ?? 'while-editing'}
+        autoCapitalize={textInputProps.autoCapitalize ?? 'none'}
+        underlineColorAndroid="transparent"
+        textAlign="left"
+        {...textInputProps}
+      />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  rowDivider: {
+    borderTopColor: '#d0d7de',
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  rowLabel: {
+    color: '#6b7280',
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    color: '#111827',
+    paddingVertical: 0,
+    textAlign: 'right',
+  },
+  inputMono: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+  },
+})

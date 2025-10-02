@@ -11,28 +11,28 @@ import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
-import { createSeed } from '../lib/seed'
 import { Button } from '../components/Button'
-import { hexToUint8 } from '../lib/hex'
-import Clipboard from '@react-native-clipboard/clipboard'
-import { getSeedHex, setSeed, useSeedHex } from '../stores/settings'
+import { setRecoveryPhrase, useRecoveryPhrase } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { useControlledInputValue } from '../hooks/useInputValue'
+import { generateRecoveryPhrase } from 'react-native-sia'
+import { useCopyRecoveryPhrase } from '../hooks/useCopyRecoveryPhrase'
+import { InputArea } from '../components/InputArea'
 
 export default function OnboardingScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const seedHex = useSeedHex()
+  const recoveryPhrase = useRecoveryPhrase()
   const toast = useToast()
+  const copyRecoveryPhrase = useCopyRecoveryPhrase()
 
   const { newIndexerInputProps, saveIndexerURL, isWaiting, hasErrored } =
     useChangeIndexer()
 
-  const newSeedInputProps = useControlledInputValue({
-    value: seedHex.data ?? '',
+  const newRecoveryPhraseInputProps = useControlledInputValue({
+    value: recoveryPhrase.data ?? '',
     save: (text) => {
       try {
-        const seed = hexToUint8(text)
-        setSeed(seed)
+        setRecoveryPhrase(text)
       } catch {
         toast.show('Invalid seed')
       }
@@ -74,10 +74,11 @@ export default function OnboardingScreen() {
               <>
                 <InfoCard>
                   <InputRow label="Indexer URL" {...newIndexerInputProps} />
-                  <InputRow
-                    showDividerTop
-                    label="Seed"
-                    {...newSeedInputProps}
+                </InfoCard>
+                <InfoCard>
+                  <InputArea
+                    label="Recovery phrase"
+                    {...newRecoveryPhraseInputProps}
                     isMonospace
                   />
                 </InfoCard>
@@ -85,23 +86,19 @@ export default function OnboardingScreen() {
                   <Button
                     variant="secondary"
                     onPress={async () => {
-                      await setSeed(createSeed())
-                      toast.show('Seed regenerated')
+                      await setRecoveryPhrase(generateRecoveryPhrase())
+                      toast.show('Recovery phrase regenerated')
                     }}
                     style={styles.button}
                   >
-                    Regenerate seed
+                    Regenerate phrase
                   </Button>
                   <Button
                     variant="secondary"
-                    onPress={async () => {
-                      const seed = await getSeedHex()
-                      Clipboard.setString(seed)
-                      toast.show('Copied seed')
-                    }}
+                    onPress={copyRecoveryPhrase}
                     style={styles.button}
                   >
-                    Copy seed
+                    Copy phrase
                   </Button>
                 </View>
               </>
