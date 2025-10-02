@@ -10,6 +10,7 @@ export type Mime =
   | 'image/png'
   | 'image/webp'
   | 'application/octet-stream'
+  | 'application/pdf'
 
 export function mimeFromAssetUri(a: ImagePicker.Asset): Mime {
   const name = a.fileName ?? ''
@@ -25,6 +26,7 @@ export function mimeFromAssetUri(a: ImagePicker.Asset): Mime {
     jpeg: 'image/jpeg',
     png: 'image/png',
     webp: 'image/webp',
+    pdf: 'application/pdf',
   }
   return map[ext] ?? 'application/octet-stream'
 }
@@ -38,6 +40,7 @@ export type Ext =
   | '.jpg'
   | '.png'
   | '.webp'
+  | '.pdf'
   | '.bin'
   | '.tmp'
 
@@ -50,5 +53,7 @@ export function extFromMime(mime?: string | null): Ext {
   if (mime === 'image/jpeg') return '.jpg'
   if (mime === 'image/png') return '.png'
   if (mime === 'image/webp') return '.webp'
+  if (mime === 'application/pdf') return '.pdf'
+  if (mime === 'application/octet-stream') return '.bin'
   return '.bin'
 }
