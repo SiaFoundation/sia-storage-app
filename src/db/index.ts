@@ -3,7 +3,7 @@ import { runMigrations } from './migrations'
 import { logger } from '../lib/logger'
 
 export let database: SQLite.SQLiteDatabase
-const dbName = 'siamobile.db'
+const dbName = 'temp1.db'
 
 export async function initializeDB(): Promise<void> {
   logger.log('[db] initializing database...')

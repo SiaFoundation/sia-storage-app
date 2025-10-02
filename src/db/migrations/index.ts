@@ -19,9 +19,9 @@
 import * as SQLite from 'expo-sqlite'
 import { logger } from '../../lib/logger'
 import { type Migration } from './types'
-import { migration_0001_enforceNonNullPinnedObjects } from './0001_enforce_nonnull_pinnedObjects'
+import { migration_0001_init_schema } from './0001_init_schema'
 
-const migrations: Migration[] = [migration_0001_enforceNonNullPinnedObjects]
+const migrations: Migration[] = [migration_0001_init_schema]
 
 export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   logger.log('[db] checking migrations...')

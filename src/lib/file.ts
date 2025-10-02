@@ -9,12 +9,18 @@ import { FileRecord } from '../stores/files'
 import { useDownloadState, useUploadState } from '../stores/transfers'
 import { useCachedUri } from '../stores/fileCache'
 import { extFromMime } from './fileTypes'
-import { PinnedObject } from 'react-native-sia'
+import {
+  PinnedObject,
+  PinnedObjectInterface,
+  SealedObject,
+} from 'react-native-sia'
+import { SealedObjectsMap } from '../encoding/sealedObjects'
+import { getAppKey } from './appKey'
 
-export function fileHasAPinnedObject(file: {
-  pinnedObjects: unknown
+export function fileHasASealedObject(file: {
+  sealedObjects?: SealedObjectsMap | null
 }): boolean {
-  return !!Object.keys(file.pinnedObjects ?? {}).length
+  return !!Object.keys(file.sealedObjects ?? {}).length
 }
 
 export type FileStatus = {
@@ -40,7 +46,7 @@ function computeFileStatus({
   errorText,
 }: {
   file: {
-    pinnedObjects: unknown | null
+    sealedObjects?: SealedObjectsMap | null
   }
   uploadState: TransferState | undefined
   downloadState: TransferState | undefined
@@ -51,13 +57,13 @@ function computeFileStatus({
     uploadState?.status === 'running' || uploadState?.status === 'queued'
   const isDownloading =
     downloadState?.status === 'running' || downloadState?.status === 'queued'
-  const hasPinnedObject = fileHasAPinnedObject(file)
+  const hasSealedObject = fileHasASealedObject(file)
   return {
     isUploading,
     isDownloading,
     isUploadQueued: uploadState?.status === 'queued',
     isDownloadQueued: downloadState?.status === 'queued',
-    isUploaded: hasPinnedObject,
+    isUploaded: hasSealedObject,
     isDownloaded: !!cachedUri,
     isErrored:
       uploadState?.status === 'error' || downloadState?.status === 'error',
@@ -65,7 +71,7 @@ function computeFileStatus({
     downloadProgress: downloadState?.progress ?? 0,
     cachedUri,
     fileIsGone:
-      !isUploading && !isDownloading && !hasPinnedObject && !cachedUri,
+      !isUploading && !isDownloading && !hasSealedObject && !cachedUri,
     errorText,
   }
 }
@@ -73,7 +79,7 @@ function computeFileStatus({
 export function useFileStatus(file?: {
   id: string
   fileType: string | null
-  pinnedObjects: unknown | null
+  sealedObjects?: SealedObjectsMap | null
 }): FileStatus {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
@@ -91,7 +97,7 @@ export function useFileStatus(file?: {
   return useMemo(
     () =>
       computeFileStatus({
-        file: file ?? { pinnedObjects: null },
+        file: file ?? { sealedObjects: null },
         uploadState,
         downloadState,
         cachedUri: cachedUri.data ?? null,
@@ -118,9 +124,15 @@ export function getFileTypeName(
     : 'other'
 }
 
-export function getOnePinnedObject(file: {
-  pinnedObjects: Record<string, PinnedObject> | null
-}): PinnedObject | null {
-  const pinnedObjects = Object.values(file.pinnedObjects ?? {})
-  return pinnedObjects[0] ?? null
+export function getOneSealedObject(file: {
+  sealedObjects: Record<string, SealedObject> | null
+}): SealedObject | null {
+  const sealedObjects = Object.values(file.sealedObjects ?? {})
+  return sealedObjects[0] ?? null
+}
+
+export async function getPinnedObject(
+  sealedObject: SealedObject
+): Promise<PinnedObjectInterface> {
+  return PinnedObject.open(await getAppKey(), sealedObject)
 }

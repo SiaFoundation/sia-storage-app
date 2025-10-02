@@ -6,7 +6,7 @@ import ImageViewer from './ImageViewer'
 import { useDownload } from '../../managers/downloader'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
-import { PinnedObject } from 'react-native-sia'
+import { SealedObject } from 'react-native-sia'
 import { useEffect } from 'react'
 
 export function FileViewer({
@@ -15,8 +15,7 @@ export function FileViewer({
   file: {
     id: string
     fileType: string | null
-    pinnedObjects: Record<string, PinnedObject> | null
-    encryptionKey: string
+    sealedObjects: Record<string, SealedObject> | null
     fileSize: number | null
   }
 }) {

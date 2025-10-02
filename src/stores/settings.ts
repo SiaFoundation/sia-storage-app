@@ -10,47 +10,31 @@ import { buildSWRHelpers } from '../lib/swr'
 import { setTransfersMaxSlots } from '../managers/transfersPool'
 import { DEFAULT_INDEXER_URL, DEFAULT_MAX_TRANSFERS } from '../config'
 import { logger } from '../lib/logger'
-import {
-  encryptionKeyHexToUint8,
-  encryptionKeyUint8ToHex,
-} from '../lib/encryptionKey'
-import { createSeed } from '../lib/seed'
+import { generateRecoveryPhrase } from 'react-native-sia'
 
 const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
-// Seed
+// Recovery Phrase
 
-export const [getSeed, useSeed] = createGetterAndSWRHook(
-  getKey('seed'),
-  async (): Promise<Uint8Array<ArrayBuffer>> => {
-    const seedString = await getSecureStoreString('seed')
-    if (!seedString) {
-      const seed = createSeed()
-      await setSeed(seed)
-      return seed
-    }
-    return encryptionKeyHexToUint8(seedString)
-  }
-)
-
-export const [getSeedHex, useSeedHex] = createGetterAndSWRHook(
-  getKey('seed'),
+export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
+  getKey('recoveryPhrase'),
   async (): Promise<string> => {
-    const seedString = await getSecureStoreString('seed')
-    if (!seedString) {
-      const seed = createSeed()
-      await setSeed(seed)
-      return encryptionKeyUint8ToHex(seed)
+    const recoveryPhrase = await getSecureStoreString('recoveryPhrase')
+    if (!recoveryPhrase) {
+      const newRecoveryPhrase = generateRecoveryPhrase()
+      await setRecoveryPhrase(newRecoveryPhrase)
+      return newRecoveryPhrase
     }
-    return seedString
+    return recoveryPhrase
   }
 )
 
-export async function setSeed(seed: Uint8Array<ArrayBuffer>): Promise<boolean> {
-  const seedString = encryptionKeyUint8ToHex(seed)
+export async function setRecoveryPhrase(
+  recoveryPhrase: string
+): Promise<boolean> {
   try {
-    await setSecureStoreString('seed', seedString)
-    triggerChange('seed')
+    await setSecureStoreString('recoveryPhrase', recoveryPhrase)
+    triggerChange('recoveryPhrase')
     return true
   } catch {
     return false

@@ -3,7 +3,6 @@ import { useCallback, useRef } from 'react'
 import { mimeFromAssetUri } from '../lib/fileTypes'
 import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
-import { generateEncryptionKey } from '../lib/encryptionKey'
 import { useToast } from '../lib/toastContext'
 import { type PickerAsset } from './useImagePicker'
 import { useUploader } from '../managers/uploader'
@@ -52,7 +51,6 @@ export function useCameraCapture() {
         fileName:
           first.fileName ??
           (first.type?.startsWith('video') ? 'camera-video' : 'camera-photo'),
-        encryptionKey: generateEncryptionKey(),
       }
 
       return [asset]

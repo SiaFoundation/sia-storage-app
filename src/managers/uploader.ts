@@ -7,12 +7,8 @@ import {
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
 import { useSdk, getSdk } from '../stores/auth'
-import { getIndexerURL, useIndexerURL } from '../stores/settings'
+import { getIndexerURL } from '../stores/settings'
 import { extFromMime } from '../lib/fileTypes'
-import {
-  encryptionKeyHexToUint8,
-  encryptionKeyUint8ToHex,
-} from '../lib/encryptionKey'
 import {
   createManyFileRecords,
   FileRecord,
@@ -45,8 +41,7 @@ export function useUploader() {
             fileSize: asset.fileSize,
             createdAt: asset.createdAt,
             fileType: asset.fileType,
-            pinnedObjects: {},
-            encryptionKey: encryptionKeyUint8ToHex(asset.encryptionKey),
+            sealedObjects: {},
           })
         }
         await createManyFileRecords(fileRecords)
@@ -80,7 +75,6 @@ export function useUploader() {
                     fileName: asset.fileName,
                     fileType: asset.fileType,
                     fileSize: asset.fileSize,
-                    encryptionKey: asset.encryptionKey,
                   },
                   indexerURL,
                   sdk,
@@ -130,7 +124,6 @@ export function useReuploadFile() {
               fileName: file.fileName,
               fileType: file.fileType,
               fileSize: file.fileSize,
-              encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
             },
             indexerURL,
             sdk,
@@ -163,7 +156,6 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
           fileName: file.fileName,
           fileType: file.fileType,
           fileSize: file.fileSize,
-          encryptionKey: encryptionKeyHexToUint8(file.encryptionKey),
         },
         indexerURL,
         sdk,

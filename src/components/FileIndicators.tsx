@@ -1,14 +1,13 @@
 import { View, StyleSheet } from 'react-native'
-import { type FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { StatusBadges } from './StatusBadges'
-import { PinnedObject } from 'react-native-sia'
+import { SealedObject } from 'react-native-sia'
 
 type Props = {
   file: {
     id: string
     fileType: string | null
-    pinnedObjects: unknown
+    sealedObjects: Record<string, SealedObject> | null
   }
   size?: number
   interactive?: boolean

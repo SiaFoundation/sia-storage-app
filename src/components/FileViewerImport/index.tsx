@@ -14,7 +14,6 @@ export function FileViewerImport({
   file: {
     id: string
     fileType: string | null
-    pinnedObjects: unknown
   }
   shareUrl: string
 }) {
