@@ -1,16 +1,15 @@
 import { create } from 'zustand'
-import { Sdk } from 'react-native-sia'
+import { AppKey, generateRecoveryPhrase, Sdk } from 'react-native-sia'
 import authApp from '../lib/authApp'
-import { createSeed } from '../lib/seed'
 import { logger } from '../lib/logger'
 import { deleteAllFileRecords } from './files'
 import {
   getHasOnboarded,
-  setSeed,
-  getSeed,
+  setRecoveryPhrase,
   setHasOnboarded,
   getIndexerURL,
 } from './settings'
+import { getAppKey } from '../lib/appKey'
 
 export type AuthState = {
   sdk: Sdk | null
@@ -56,9 +55,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     initSdk: async () => {
       try {
-        const seed = await getSeed()
         const indexerURL = await getIndexerURL()
-        const sdk = new Sdk(indexerURL, seed.buffer)
+        const appKey = await getAppKey()
+        const sdk = new Sdk(indexerURL, appKey)
         set({ sdk })
         return sdk
       } catch (err) {
@@ -77,15 +76,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     tryToConnectAndSet: async (newIndexerURL: string) => {
-      const appSeed = await getSeed()
       set({
         isAuthing: true,
       })
       try {
-        logger.log(
-          `Creating candidate SDK for ${newIndexerURL} with ${appSeed.toString()}...`
-        )
-        const candidate = new Sdk(newIndexerURL, appSeed.buffer)
+        logger.log(`Creating candidate SDK for ${newIndexerURL}...`)
+        const appKey = await getAppKey()
+        const candidate = new Sdk(newIndexerURL, appKey)
 
         logger.log('Calling connect...')
         const connected = await candidate.connect()
@@ -129,8 +126,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     resetApp: async () => {
       await deleteAllFileRecords()
-      const newSeed = createSeed()
-      await setSeed(newSeed)
+      const newSeed = generateRecoveryPhrase()
+      await setRecoveryPhrase(newSeed)
       await setHasOnboarded(false)
       set({
         isConnected: false,

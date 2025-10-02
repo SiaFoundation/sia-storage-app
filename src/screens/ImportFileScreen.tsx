@@ -16,15 +16,15 @@ import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
 import { useSdk } from '../stores/auth'
 import { createFileRecord } from '../stores/files'
-import { PinnedObject } from 'react-native-sia'
+import { SealedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
 import { uniqueId } from '../lib/uniqueId'
-import { encryptionKeyArrayBufferToHex } from '../lib/encryptionKey'
 import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { getIndexerURL } from '../stores/settings'
+import { getAppKey } from '../lib/appKey'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
 
@@ -38,78 +38,63 @@ export function ImportFileScreen({ route }: Props) {
     sdk ? ['sharedObject', shareUrl] : null,
     async () => {
       try {
-        if (!sdk) return null
-        const sharedObject = await sdk.sharedObject(shareUrl ?? '')
-        return sharedObject
+        if (!sdk || !shareUrl) return null
+        return sdk.sharedObject(shareUrl)
       } catch (e) {
         logger.log('Error getting shared object', e)
         return null
       }
     }
   )
-  const decodedMetadata = useMemo(() => {
-    if (!sharedObject.data?.meta) return {}
-    return decodeFileMetadata(sharedObject.data?.meta)
-  }, [sharedObject.data?.meta])
-  const id = useMemo(() => uniqueId(), [shareUrl])
-  const file = useMemo(
-    () => ({
-      id,
-      fileType: decodedMetadata?.fileType ?? '',
-      fileSize: decodedMetadata?.size ?? 0,
-      fileName: '',
-      pinnedObjects: true,
-    }),
-    [id, decodedMetadata, sharedObject.data]
+  const sharedFile = useSWR(
+    sharedObject.data ? ['sharedFile', shareUrl] : null,
+    async () => {
+      try {
+        if (!sharedObject.data) return null
+        const metadata = decodeFileMetadata(sharedObject.data.metadata())
+        return {
+          id: uniqueId(),
+          size: Number(sharedObject.data.size()),
+          fileSize: metadata.size ?? 0,
+          fileType: metadata.fileType ?? '',
+          fileName: metadata.name ?? '',
+        }
+      } catch (e) {
+        logger.log('Error getting shared file', e)
+        return null
+      }
+    }
   )
 
   const handleAddToDatabase = useCallback(async () => {
-    if (!sharedObject.data || !sdk) return
+    if (!sharedObject.data || !sdk || !sharedFile.data) return
     const indexerURL = await getIndexerURL()
-    const decodedMetadata = decodeFileMetadata(sharedObject.data.meta)
-    const pinnedObject: PinnedObject = {
-      key: sharedObject.data.key,
-      slabs: sharedObject.data.slabs.map((sharedSlab) => ({
-        id: sharedSlab.slabId,
-        offset: sharedSlab.offset,
-        length: sharedSlab.length,
-      })),
-      metadata: sharedObject.data.meta ?? new ArrayBuffer(0),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
-    const size = pinnedObject.slabs.reduce((acc, slab) => acc + slab.length, 0)
-    await sdk.saveObject(pinnedObject)
-
+    const pinnedObject = await sdk.pinShared(sharedObject.data)
+    const sealedObject = pinnedObject.seal(await getAppKey())
     await createFileRecord({
-      id,
-      fileSize: size,
+      ...sharedFile.data,
       createdAt: new Date().getTime(),
-      fileName: '',
-      fileType: decodedMetadata?.fileType ?? '',
-      pinnedObjects: { [indexerURL]: pinnedObject },
-      encryptionKey: encryptionKeyArrayBufferToHex(
-        sharedObject.data.encryptionKey
-      ),
+      sealedObjects: { [indexerURL]: sealedObject },
     })
     toast.show('File added')
-    navigation.navigate('FileDetail', { id })
-  }, [sharedObject.data, sdk, toast, navigation, id, decodedMetadata])
+    navigation.navigate('FileDetail', { id: sharedFile.data.id })
+  }, [sharedFile.data, sdk, toast, navigation])
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {sharedObject.isValidating ? (
+        {sharedFile.isValidating ? (
           <View style={styles.center}>
             <ActivityIndicator color="#0969da" />
             <Text style={styles.loadingText}>Loading…</Text>
           </View>
-        ) : sharedObject.error ? (
-          <Text style={styles.errorText}>{sharedObject.error.message}</Text>
+        ) : sharedFile.error ? (
+          <Text style={styles.errorText}>{sharedFile.error.message}</Text>
         ) : (
           <>
-            {shareUrl && <FileDetailsImport file={file} shareUrl={shareUrl} />}
+            {shareUrl && sharedFile.data && (
+              <FileDetailsImport file={sharedFile.data} shareUrl={shareUrl} />
+            )}
           </>
         )}
       </ScrollView>

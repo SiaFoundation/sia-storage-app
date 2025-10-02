@@ -3,7 +3,6 @@ import { useCallback, useRef } from 'react'
 import { type PickerAsset } from './useImagePicker'
 import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
-import { generateEncryptionKey } from '../lib/encryptionKey'
 import { mimeFromAssetUri } from '../lib/fileTypes'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
@@ -53,7 +52,6 @@ export function useDocumentPicker() {
         fileSize: a.size ?? 0,
         createdAt: Date.now(),
         fileType: a.mimeType ?? mimeFromAssetUri(a),
-        encryptionKey: generateEncryptionKey(),
       }))
 
       if (assets.length === 0) {

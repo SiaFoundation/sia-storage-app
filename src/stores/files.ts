@@ -1,13 +1,13 @@
-import { type PinnedObject } from 'react-native-sia'
+import { SealedObject } from 'react-native-sia'
 import {
-  deserializePinnedObjects,
-  PinnedObjectsMap,
-  serializePinnedObjects,
-} from '../encoding/pinnedObjects'
+  deserializeSealedObjects,
+  SealedObjectsMap,
+  serializeSealedObjects,
+} from '../encoding/sealedObjects'
 import { logger } from '../lib/logger'
 import { db } from '../db'
 import useSWR from 'swr'
-import { fileHasAPinnedObject } from '../lib/file'
+import { fileHasASealedObject } from '../lib/file'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
 import { create } from 'zustand'
@@ -20,33 +20,24 @@ export type FileRecord = {
   fileSize: number | null
   createdAt: number
   fileType: string | null
-  pinnedObjects: Record<string, PinnedObject>
-  encryptionKey: string
+  sealedObjects: Record<string, SealedObject>
 }
 
 export async function createFileRecord(
   fileRecord: FileRecord,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const {
-    id,
-    fileName,
-    fileSize,
-    createdAt,
-    fileType,
-    pinnedObjects,
-    encryptionKey,
-  } = fileRecord
+  const { id, fileName, fileSize, createdAt, fileType, sealedObjects } =
+    fileRecord
   await db().runAsync(
-    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType, encryptionKey) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType) VALUES (?, ?, ?, ?, ?)',
     id,
     fileName,
     fileSize,
     createdAt,
-    fileType,
-    encryptionKey
+    fileType
   )
-  await updateFilePinnedObjects(id, pinnedObjects)
+  await updateFileSealedObjects(id, sealedObjects)
   if (triggerUpdate) {
     await triggerChange()
   }
@@ -70,12 +61,18 @@ export async function readAllFileRecords(): Promise<FileRecord[]> {
     fileSize: number | null
     createdAt: number
     fileType: string
-    pinnedObjects: string | null
-    encryptionKey: string
+    sealedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files ORDER BY createdAt DESC'
+    'SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects FROM files ORDER BY createdAt DESC'
   )
   return rows.map(transformRow)
+}
+
+export async function readAllFileRecordsCount(): Promise<number> {
+  const rows = await db().getFirstAsync<{
+    count: number
+  }>('SELECT COUNT(*) as count FROM files')
+  return rows?.count ?? 0
 }
 
 const CATEGORY_TO_PREFIX: Record<Category, string> = {
@@ -122,10 +119,9 @@ export async function readOrderedFileRecords(
     fileSize: number | null
     createdAt: number
     fileType: string
-    pinnedObjects: string | null
-    encryptionKey: string
+    sealedObjects: string | null
   }>(
-    `SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey
+    `SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects
      FROM files
      ${where}
      ORDER BY ${orderExpr}`,
@@ -142,10 +138,9 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     fileSize: number | null
     createdAt: number
     fileType: string
-    pinnedObjects: string | null
-    encryptionKey: string
+    sealedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, pinnedObjects, encryptionKey FROM files WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE id = ?',
     id
   )
   if (!row) {
@@ -156,25 +151,17 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const {
-    id,
-    fileName,
-    fileSize,
-    createdAt,
-    fileType,
-    pinnedObjects,
-    encryptionKey,
-  } = fileRecord
+  const { id, fileName, fileSize, createdAt, fileType, sealedObjects } =
+    fileRecord
   await db().runAsync(
-    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, encryptionKey = ? WHERE id = ?',
+    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
     fileType,
-    encryptionKey,
     id
   )
-  await updateFilePinnedObjects(id, pinnedObjects)
+  await updateFileSealedObjects(id, sealedObjects)
   await triggerChange()
 }
 
@@ -188,43 +175,43 @@ export async function deleteAllFileRecords(): Promise<void> {
   await triggerChange()
 }
 
-export async function updateFilePinnedObjects(
+export async function updateFileSealedObjects(
   id: string,
-  pinnedObjects: PinnedObjectsMap
+  sealedObjects: SealedObjectsMap
 ): Promise<void> {
-  const [serializedPinnedObjects, error] = serializePinnedObjects(pinnedObjects)
+  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
   if (error) {
-    logger.log('[db] error serializing pinned objects, skipping update', error)
+    logger.log('[db] error serializing sealed objects, skipping update', error)
     return
   }
   await db().runAsync(
-    'UPDATE files SET pinnedObjects = ? WHERE id = ?',
-    serializedPinnedObjects,
+    'UPDATE files SET sealedObjects = ? WHERE id = ?',
+    serializedSealedObjects,
     id
   )
   await triggerChange()
 }
 
-export async function updateFilePinnedObject(
+export async function updateFileSealedObject(
   id: string,
   indexerURL: string,
-  pinnedObject: PinnedObject
+  sealedObject: SealedObject
 ): Promise<void> {
   const file = await readFileRecord(id)
   if (file == null) {
     logger.log('[db] file not found', id)
     return
   }
-  const pos = file.pinnedObjects ?? {}
-  pos[indexerURL] = pinnedObject
-  const [serializedPinnedObjects, error] = serializePinnedObjects(pos)
+  const pos = file.sealedObjects ?? {}
+  pos[indexerURL] = sealedObject
+  const [serializedSealedObjects, error] = serializeSealedObjects(pos)
   if (error) {
-    logger.log('[db] error serializing pinned objects, skipping update', error)
+    logger.log('[db] error serializing sealed objects, skipping update', error)
     return
   }
   await db().runAsync(
-    'UPDATE files SET pinnedObjects = ? WHERE id = ?',
-    serializedPinnedObjects,
+    'UPDATE files SET sealedObjects = ? WHERE id = ?',
+    serializedSealedObjects,
     id
   )
   await triggerChange()
@@ -236,19 +223,21 @@ function transformRow(row: {
   fileSize: number | null
   createdAt: number
   fileType: string
-  pinnedObjects: string | null
-  encryptionKey: string
+  sealedObjects: string | null
 }): FileRecord {
-  const [pinnedObjects] = deserializePinnedObjects(row.id, row.pinnedObjects)
+  const [sealedObjects] = deserializeSealedObjects(row.id, row.sealedObjects)
   return {
     id: row.id,
     fileName: row.fileName,
     fileSize: row.fileSize,
     createdAt: row.createdAt,
     fileType: row.fileType,
-    pinnedObjects: pinnedObjects ?? {},
-    encryptionKey: row.encryptionKey,
+    sealedObjects: sealedObjects ?? {},
   }
+}
+
+export function useFileCount() {
+  return useSWR(getKey('count'), () => readAllFileRecordsCount())
 }
 
 export function useFileList() {
@@ -283,7 +272,7 @@ export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
   getKey('localOnly'),
   async () => {
     const files = await readAllFileRecords()
-    return files.filter((f) => !fileHasAPinnedObject(f))
+    return files.filter((f) => !fileHasASealedObject(f))
   }
 )
 

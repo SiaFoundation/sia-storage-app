@@ -3,7 +3,6 @@ import { useCallback, useRef } from 'react'
 import { mimeFromAssetUri } from '../lib/fileTypes'
 import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
-import { generateEncryptionKey } from '../lib/encryptionKey'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
 
@@ -14,7 +13,6 @@ export type PickerAsset = {
   fileSize: number
   createdAt: number
   fileType: string
-  encryptionKey: Uint8Array<ArrayBuffer>
   cacheUri?: string
 }
 
@@ -67,7 +65,6 @@ export function useImagePicker() {
         createdAt: Date.now(),
         fileSize: a.fileSize!,
         fileName: a.fileName!,
-        encryptionKey: generateEncryptionKey(),
       }))
 
       if (assets.length === 0) {

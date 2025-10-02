@@ -2,23 +2,22 @@ import { useToast } from '../lib/toastContext'
 import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
 import { updateDownloadProgress } from '../stores/transfers'
 import { useSdk } from '../stores/auth'
-import { type PinnedObject } from 'react-native-sia'
+import { PinnedObject, SealedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime, type Ext } from '../lib/fileTypes'
-import { getOnePinnedObject } from '../lib/file'
-import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
+import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { runTransferWithSlot } from '../stores/transfers'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
+import { getAppKey } from '../lib/appKey'
 
 export function useDownload(
   file?: {
     id: string
     fileType: string | null
     fileSize: number | null
-    encryptionKey: string
-    pinnedObjects: Record<string, PinnedObject> | null
+    sealedObjects: Record<string, SealedObject> | null
   } | null
 ) {
   const toast = useToast()
@@ -26,8 +25,8 @@ export function useDownload(
   return useCallback(async () => {
     if (!file) return
     if (!sdk) return
-    const pinnedObject = getOnePinnedObject(file)
-    if (!pinnedObject) {
+    const sealedObject = getOneSealedObject(file)
+    if (!sealedObject) {
       toast.show('No slabs available for this file')
       return
     }
@@ -37,22 +36,21 @@ export function useDownload(
       kind: 'download',
       task: async (signal) => {
         if (!sdk) throw new Error('SDK not initialized')
-        const downloader = await sdk.download(
-          encryptionKeyHexToBuffer(file.encryptionKey),
-          pinnedObject,
+        const appKey = await getAppKey()
+        const downloader = sdk.download(
+          PinnedObject.open(appKey, sealedObject),
           {
             maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
-          },
-          { signal }
+          }
         )
         await streamToCache({
           id: file.id,
           targetExt: '.tmp',
           getNextChunk: () => downloader.readChunk({ signal }),
-          totalSize: Array.isArray(pinnedObject.slabs)
-            ? pinnedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
+          totalSize: Array.isArray(sealedObject.slabs)
+            ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
             : undefined,
           onAfterClose: async (targetFile) => {
             await copyFileToCache(
@@ -80,8 +78,8 @@ export function useDownloadFromShareURL() {
           toast.show('Starting download...')
           if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
-          const meta = decodeFileMetadata(sharedObject?.meta)
-          const downloader = await sdk.downloadShared(sharedUrl, {
+          const metadata = decodeFileMetadata(sharedObject.metadata())
+          const downloader = sdk.downloadShared(sharedObject, {
             maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
@@ -90,9 +88,13 @@ export function useDownloadFromShareURL() {
             id,
             targetExt: '.tmp',
             getNextChunk: () => downloader.readChunk({ signal }),
-            totalSize: meta.size,
+            totalSize: Number(sharedObject.size()),
             onAfterClose: async (targetFile) => {
-              await copyFileToCache(id, targetFile, extFromMime(meta.fileType))
+              await copyFileToCache(
+                id,
+                targetFile,
+                extFromMime(metadata.fileType)
+              )
             },
           })
           toast.show('Downloaded to cache')

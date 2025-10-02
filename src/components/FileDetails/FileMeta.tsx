@@ -10,6 +10,7 @@ import { decodeFileMetadata } from '../../encoding/fileMetadata'
 import { useShowAdvanced } from '../../stores/settings'
 import { InputRow } from '../InputRow'
 import { useInputValue } from '../../hooks/useInputValue'
+import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 
 export function FileMeta({
   file,
@@ -29,8 +30,7 @@ export function FileMeta({
       updateFileRecord({ ...file, fileName: value })
     },
   })
-
-  const pinnedObjectsList = Object.entries(file.pinnedObjects ?? {})
+  const pinnedObjects = usePinnedObjects(file)
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -68,24 +68,16 @@ export function FileMeta({
             value={file.fileType ?? '—'}
             showDividerTop
           />
-          {showAdvanced.data && (
-            <LabeledValueRow
-              label="Encryption Key"
-              value={file.encryptionKey}
-              isMonospace
-              showDividerTop
-            />
-          )}
         </InfoCard>
       </RowGroup>
       {showAdvanced.data && (
         <>
-          {pinnedObjectsList.length > 1 && (
+          {pinnedObjects.data && pinnedObjects.data.length > 1 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Pinned Objects</Text>
             </View>
           )}
-          {pinnedObjectsList.map(([indexerURL, po]) => (
+          {pinnedObjects.data?.map(({ indexerURL, pinnedObject }) => (
             <Fragment key={indexerURL}>
               <RowGroup title="Pinned Object">
                 <InfoCard>
@@ -96,23 +88,23 @@ export function FileMeta({
                   />
                   <LabeledValueRow
                     label="Created"
-                    value={new Date(po.createdAt).toLocaleString()}
+                    value={new Date(pinnedObject.createdAt()).toLocaleString()}
                   />
                   <LabeledValueRow
                     label="Updated"
-                    value={new Date(po.updatedAt).toLocaleString()}
+                    value={new Date(pinnedObject.updatedAt()).toLocaleString()}
                     showDividerTop
                   />
                   <LabeledValueRow
-                    label="Key"
-                    value={po.key}
+                    label="ID"
+                    value={pinnedObject.id()}
                     isMonospace
                     showDividerTop
                   />
                   <LabeledValueRow
                     label="Metadata"
                     value={JSON.stringify(
-                      decodeFileMetadata(po.metadata),
+                      decodeFileMetadata(pinnedObject.metadata()),
                       null,
                       2
                     )}
@@ -124,9 +116,9 @@ export function FileMeta({
                 </InfoCard>
               </RowGroup>
               <View style={styles.verticalSmallGap}>
-                <RowSubGroup title={`Slabs (${po.slabs.length})`}>
+                <RowSubGroup title={`Slabs (${pinnedObject.slabs().length})`}>
                   <InfoCard>
-                    {po.slabs.map((s, i) => (
+                    {pinnedObject.slabs().map((s, i) => (
                       <LabeledValueRow
                         key={s.id}
                         label="Slab"
@@ -137,9 +129,6 @@ export function FileMeta({
                     ))}
                   </InfoCard>
                 </RowSubGroup>
-                {/* <InfoCard>
-              <FileMap />
-            </InfoCard> */}
               </View>
             </Fragment>
           ))}

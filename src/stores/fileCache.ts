@@ -84,7 +84,7 @@ export async function copyUriToCache(
   sourceUri: string,
   ext: Ext
 ): Promise<string> {
-  logger.log('copyUriToCache', id, sourceUri)
+  logger.log('copyUriToCache', id, sourceUri, ext)
   await ensureCacheDir()
   const f = await getOrCreateCachedFile(id, ext)
   const exists = f.info().exists

@@ -18,18 +18,18 @@ import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
 import { extFromMime } from '../lib/fileTypes'
 import { useSdk } from '../stores/auth'
-import { getOnePinnedObject, useFileStatus } from '../lib/file'
-import { encryptionKeyHexToBuffer } from '../lib/encryptionKey'
+import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
 import {
   useFileDetails,
   deleteFileRecord,
-  updateFilePinnedObjects,
+  updateFileSealedObjects,
 } from '../stores/files'
 import Share from 'react-native-share'
 import { logger } from '../lib/logger'
+
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileActionsSheet({ route, navigation }: Props) {
@@ -43,28 +43,23 @@ export function FileActionsSheet({ route, navigation }: Props) {
     setIsMenuOpen(true)
   }, [])
 
-  const getShareUrl = useCallback(() => {
+  const getShareUrl = useCallback(async () => {
     if (!file) return
     if (!sdk) return
 
-    const pinnedObject = getOnePinnedObject(file)
-    if (!pinnedObject) return
-    const key = pinnedObject.key
-    if (!key) return
+    const sealedObject = getOneSealedObject(file)
+    if (!sealedObject) return
+    const pinnedObject = await getPinnedObject(sealedObject)
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.objectShareUrl(
-      key,
-      encryptionKeyHexToBuffer(file.encryptionKey),
-      expiresAt
-    )
+    const shareUrl = sdk.shareObject(pinnedObject, expiresAt)
     return `siamobile://new-file?shareUrl=${encodeURIComponent(shareUrl)}`
   }, [file, sdk])
 
   const handleShareURL = useCallback(async () => {
     if (!file) return
     if (!sdk) return
-    const shareUrl = getShareUrl()
+    const shareUrl = await getShareUrl()
     if (!shareUrl) return
     Clipboard.setString(shareUrl)
     toast.show('URL Copied')
@@ -89,11 +84,11 @@ export function FileActionsSheet({ route, navigation }: Props) {
     }
   }, [file, status.cachedUri])
 
-  const handleOpenDeepLink = useCallback(() => {
+  const handleOpenDeepLink = useCallback(async () => {
     if (!file) return
     if (!sdk) return
 
-    const shareUrl = getShareUrl()
+    const shareUrl = await getShareUrl()
     if (!shareUrl) return
     Linking.openURL(shareUrl).catch(() => {
       Clipboard.setString(shareUrl)
@@ -154,7 +149,10 @@ export function FileActionsSheet({ route, navigation }: Props) {
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
     try {
-      await updateFilePinnedObjects(file.id, {})
+      for (const sealedObject of Object.values(file.sealedObjects ?? {})) {
+        sdk?.deleteObject(sealedObject.id)
+      }
+      await updateFileSealedObjects(file.id, {})
       toast.show('Removed from network')
       setIsMenuOpen(false)
     } catch (e) {
