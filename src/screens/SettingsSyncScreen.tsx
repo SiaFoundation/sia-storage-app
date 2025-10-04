@@ -14,10 +14,14 @@ import {
   useMaxTransfers,
 } from '../stores/settings'
 import { useInputValue } from '../hooks/useInputValue'
+import { SettingsLayout } from '../components/SettingsLayout'
+import { colors } from '../styles/colors'
+import { useSettingsHeader } from '../hooks/useSettingsHeader'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Sync'>
 
 export function SettingsSyncScreen(_props: Props) {
+  useSettingsHeader()
   const counts = useTransferCounts()
   const autoScan = useAutoScanUploads()
   const maxSlots = useMaxTransfers()
@@ -31,7 +35,7 @@ export function SettingsSyncScreen(_props: Props) {
   })
 
   return (
-    <View style={styles.container}>
+    <SettingsLayout style={styles.container}>
       <RowGroup title="Sync">
         <InfoCard>
           <LabeledValueRow
@@ -107,16 +111,14 @@ export function SettingsSyncScreen(_props: Props) {
           />
         </InfoCard>
       </RowGroup>
-    </View>
+    </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f2f2f7',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 24,
     paddingBottom: 24,
     gap: 24,
   },
@@ -128,6 +130,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowLabel: {
-    color: '#111827',
+    color: colors.textTitleDark,
   },
 })

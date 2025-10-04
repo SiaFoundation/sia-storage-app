@@ -1,4 +1,5 @@
 import { View, StyleSheet, Switch, Alert } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
@@ -8,14 +9,17 @@ import { InfoCard } from '../components/InfoCard'
 import { Button } from '../components/Button'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { SettingsRecoveryPhrase } from '../components/SettingsRecoveryPhrase'
+import { SettingsLayout } from '../components/SettingsLayout'
+import { useSettingsHeader } from '../hooks/useSettingsHeader'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
 
-export function SettingsAdvancedScreen(_props: Props) {
+export function SettingsAdvancedScreen({ navigation }: Props) {
   const showAdvanced = useShowAdvanced()
+  useSettingsHeader()
 
   return (
-    <View style={styles.container}>
+    <SettingsLayout style={styles.container}>
       <SettingsRecoveryPhrase />
       <RowGroup title="Developers">
         <InfoCard>
@@ -53,16 +57,14 @@ export function SettingsAdvancedScreen(_props: Props) {
           Reset app
         </Button>
       </View>
-    </View>
+    </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f2f2f7',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 24,
     paddingBottom: 24,
     gap: 24,
   },
@@ -74,16 +76,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowLabel: {
-    color: '#111827',
+    color: colors.textTitleDark,
   },
   dangerRow: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#ffffff',
-    borderTopColor: '#d0d7de',
+    backgroundColor: colors.bgPanel,
+    borderTopColor: colors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#d0d7de',
+    borderBottomColor: colors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  dangerText: { color: '#c83532', fontSize: 16, fontWeight: '600' },
+  dangerText: { color: palette.red[500], fontSize: 16, fontWeight: '600' },
 })

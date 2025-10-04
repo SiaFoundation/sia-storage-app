@@ -8,12 +8,20 @@ import { SettingsSyncScreen } from '../screens/SettingsSyncScreen'
 import { type SettingsStackParamList } from './types'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
+import { StyleSheet } from 'react-native'
+import { palette } from '../styles/colors'
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>()
 
 export function SettingsStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: true,
+        headerStyle: styles.header,
+        headerTintColor: palette.gray[50],
+      }}
+    >
       <Stack.Screen
         name="SettingsHome"
         component={SettingsHomeScreen}
@@ -52,3 +60,9 @@ export function SettingsStack() {
     </Stack.Navigator>
   )
 }
+
+const styles = StyleSheet.create({
+  header: {
+    backgroundColor: palette.gray[950],
+  },
+})
