@@ -2,13 +2,16 @@ import { Image, StyleSheet, View } from 'react-native'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { FileTextIcon, FileVideoIcon, ImageIcon } from 'lucide-react-native'
+import { palette } from '../styles/colors'
 
 export function FileThumbnail({
   file,
   iconSize = 16,
+  iconColor = palette.gray[200],
 }: {
   file: FileRecord
   iconSize?: number
+  iconColor?: string
 }) {
   const status = useFileStatus(file)
   if (file.fileType?.includes('image')) {
@@ -22,7 +25,7 @@ export function FileThumbnail({
     }
     return (
       <View style={styles.thumbnailImage}>
-        <ImageIcon size={iconSize} />
+        <ImageIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
@@ -37,21 +40,21 @@ export function FileThumbnail({
     }
     return (
       <View style={styles.thumbnailImage}>
-        <FileTextIcon size={iconSize} />
+        <FileTextIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
   if (file.fileType?.includes('video')) {
     return (
       <View style={styles.thumbnailImage}>
-        <FileVideoIcon size={iconSize} />
+        <FileVideoIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
   if (file.fileType?.includes('application/pdf')) {
     return (
       <View style={styles.thumbnailImage}>
-        <FileTextIcon size={iconSize} />
+        <FileTextIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
@@ -64,5 +67,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
     height: '100%',
+    backgroundColor: palette.gray[900],
   },
 })

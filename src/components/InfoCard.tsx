@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native'
+import { colors } from '../styles/colors'
 
 export function InfoCard({
   children,
@@ -13,9 +14,9 @@ export function InfoCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgPanel,
     borderRadius: 12,
-    borderColor: '#d0d7de',
+    borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },

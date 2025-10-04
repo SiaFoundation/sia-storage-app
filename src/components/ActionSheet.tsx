@@ -10,6 +10,7 @@ import {
   Easing,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { blackA, palette } from '../styles/colors'
 
 type Props = {
   visible: boolean
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,1)',
+    backgroundColor: blackA.a100,
   },
   sheet: {
     backgroundColor: 'white',
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
-    shadowColor: '#000',
+    shadowColor: palette.gray[950],
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.08,
     shadowRadius: 12,

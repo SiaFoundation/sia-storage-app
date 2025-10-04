@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { View, StyleSheet } from 'react-native'
+import { colors } from '../../styles/colors'
 import { type FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
@@ -36,11 +37,7 @@ export function FileMetaImport({
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
-          <LabeledValueRow
-            label="Size"
-            value={humanSize ?? '—'}
-            showDividerTop
-          />
+          <LabeledValueRow label="Size" value={humanSize ?? '—'} />
           <LabeledValueRow
             label="Type"
             value={file.fileType ?? '—'}
@@ -65,28 +62,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 24,
-    backgroundColor: '#f2f2f7',
-    borderTopColor: '#d0d7de',
+    backgroundColor: colors.bgCanvas,
+    borderTopColor: colors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   verticalSmallGap: {
     gap: 10,
   },
   photoFileName: {
-    color: '#111827',
+    color: colors.textTitleDark,
     marginBottom: 6,
   },
   section: { marginTop: 30, marginBottom: 6 },
   sectionTitle: {
-    color: '#aaa',
+    color: colors.textSecondary,
     fontWeight: '700',
     fontSize: 18,
   },
   groupCard: {
     marginTop: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgCanvas,
     borderRadius: 12,
-    borderColor: '#d0d7de',
+    borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },

@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native'
+import { colors, palette } from '../styles/colors'
 
 export function ActionSheetButton({
   disabled,
@@ -10,7 +11,7 @@ export function ActionSheetButton({
   disabled?: boolean
   onPress: () => void
   children: React.ReactNode
-  variant: 'primary' | 'danger'
+  variant?: 'primary' | 'danger'
   icon: React.ReactNode
 }) {
   const textStyle = disabled
@@ -45,17 +46,17 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     fontSize: 16,
-    color: '#0969da',
+    color: colors.accentPrimary,
   },
   primaryIcon: {
-    color: '#0969da',
+    color: colors.accentPrimary,
   },
   dangerText: {
     fontSize: 16,
-    color: '#c83532',
+    color: palette.red[500],
   },
   dangerIcon: {
-    color: '#c83532',
+    color: palette.red[500],
   },
   disabledText: {
     fontSize: 16,

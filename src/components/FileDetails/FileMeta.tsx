@@ -1,5 +1,6 @@
 import { Fragment, useMemo } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
+import { colors, palette } from '../../styles/colors'
 import { updateFileRecord, type FileRecord } from '../../stores/files'
 import { FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
@@ -41,7 +42,12 @@ export function FileMeta({
             {...fileNameInputProps}
           />
           {showAdvanced.data && (
-            <LabeledValueRow label="ID" value={file.id} isMonospace />
+            <LabeledValueRow
+              label="ID"
+              value={file.id}
+              isMonospace
+              showDividerTop
+            />
           )}
           {showAdvanced.data && (
             <LabeledValueRow
@@ -56,7 +62,7 @@ export function FileMeta({
           <LabeledValueRow
             label="Size"
             value={fileSize ?? '—'}
-            showDividerTop={showAdvanced.data}
+            showDividerTop
           />
           <LabeledValueRow
             label="Created"
@@ -89,6 +95,7 @@ export function FileMeta({
                   <LabeledValueRow
                     label="Created"
                     value={new Date(pinnedObject.createdAt()).toLocaleString()}
+                    showDividerTop
                   />
                   <LabeledValueRow
                     label="Updated"
@@ -140,32 +147,30 @@ export function FileMeta({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 20,
+    gap: 16,
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 16,
     paddingBottom: 24,
-    backgroundColor: '#f2f2f7',
-    borderTopColor: '#d0d7de',
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: palette.gray[950],
   },
   verticalSmallGap: {
     gap: 10,
   },
   photoFileName: {
-    color: '#111827',
+    color: colors.textTitleDark,
     marginBottom: 6,
   },
   section: { marginTop: 30, marginBottom: 6 },
   sectionTitle: {
-    color: '#aaa',
+    color: palette.gray[400],
     fontWeight: '700',
     fontSize: 18,
   },
   groupCard: {
     marginTop: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgPanel,
     borderRadius: 12,
-    borderColor: '#d0d7de',
+    borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },

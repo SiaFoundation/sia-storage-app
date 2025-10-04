@@ -1,5 +1,6 @@
 import { View, StyleSheet } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
+import { colors } from '../styles/colors'
 
 type Props = {
   progress: number // 0..1
@@ -13,8 +14,8 @@ export function CircularProgress({
   progress,
   size = 36,
   strokeWidth = 3,
-  trackColor = '#e5e7eb',
-  progressColor = '#0969da',
+  trackColor = colors.borderSubtle,
+  progressColor = colors.accentPrimary,
 }: Props) {
   const clamped = Math.max(0, Math.min(1, progress))
   const radius = (size - strokeWidth) / 2
@@ -58,8 +59,7 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderColor: '#d0d7de',
+    borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },

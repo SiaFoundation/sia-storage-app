@@ -14,6 +14,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import { colors, whiteA } from '../styles/colors'
 
 type ToastContextValue = {
   show: (message: string) => void
@@ -100,20 +101,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: Platform.select({ ios: 80, android: 64, default: 64 }),
+    bottom: Platform.select({ ios: 100, android: 64, default: 64 }),
     alignItems: 'center',
     zIndex: 999,
   },
   toastCard: {
-    backgroundColor: 'rgba(17,24,39,0.96)',
+    backgroundColor: colors.bgPill,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: whiteA.a08,
     borderWidth: StyleSheet.hairlineWidth,
   },
   toastText: {
-    color: '#f9fafb',
+    color: colors.textPrimary,
     fontWeight: '700',
   },
 })

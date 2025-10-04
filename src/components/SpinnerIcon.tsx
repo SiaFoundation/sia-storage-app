@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, View } from 'react-native'
+import { palette } from '../styles/colors'
 import Svg, { Circle } from 'react-native-svg'
 import { memo } from 'react'
 
@@ -13,7 +14,7 @@ export const SpinnerIcon = memo(SpinnerIconInner)
 
 function SpinnerIconInner({
   size = 14,
-  color = '#57606a',
+  color = palette.gray[300],
   arcLength = 0.5,
 }: Props) {
   const clampedArc = Math.max(0.1, Math.min(0.95, arcLength))

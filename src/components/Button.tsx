@@ -1,4 +1,5 @@
 import { Text, Pressable, StyleSheet, ViewStyle, StyleProp } from 'react-native'
+import { colors, palette, whiteA } from '../styles/colors'
 
 export function Button({
   style,
@@ -43,27 +44,27 @@ export function Button({
 
 const styles = StyleSheet.create({
   primaryButton: {
-    backgroundColor: '#0a84ff',
+    backgroundColor: colors.accentPrimary,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
   secondaryButton: {
-    backgroundColor: '#fff',
-    boxShadow: '0 0 0 1px rgba(0,0,0,0.02)',
+    backgroundColor: colors.bgElevated,
+    boxShadow: `0 0 0 1px ${whiteA.a02}`,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
   dangerButton: {
-    backgroundColor: '#c83532',
+    backgroundColor: palette.red[500],
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  primaryButtonText: { color: '#ffffff', fontWeight: '700' },
-  secondaryButtonText: { color: '#0a84ff', fontWeight: '700' },
-  dangerButtonText: { color: '#ffffff', fontWeight: '700' },
+  primaryButtonText: { color: palette.gray[50], fontWeight: '700' },
+  secondaryButtonText: { color: palette.blue[400], fontWeight: '700' },
+  dangerButtonText: { color: palette.gray[50], fontWeight: '700' },
   disabledButton: {
     opacity: 0.5,
   },

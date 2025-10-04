@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { whiteA, palette } from '../styles/colors'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
@@ -30,31 +31,37 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
             {file.fileName}
           </Text>
           <View style={styles.fileMetaData}>
+            <UploadStatusIcon
+              size={12}
+              status={status}
+              interactive={false}
+              color="gray"
+              variant="icon"
+            />
+            <DotIcon size={16} color="grey" />
             <Text style={styles.fileText}>{humanSize(file.fileSize)}</Text>
             <DotIcon size={16} color="grey" />
             <Text style={styles.fileText}>{file.fileType}</Text>
           </View>
         </View>
       </View>
-      <View pointerEvents="box-none" style={styles.trailing}>
-        <UploadStatusIcon size={16} status={status} interactive={false} />
-      </View>
+      <View pointerEvents="box-none" style={styles.trailing}></View>
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 9,
+    marginHorizontal: 16,
     display: 'flex',
     flexDirection: 'row',
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.1)',
+    borderColor: whiteA.a10,
     paddingBottom: 8,
     width: '100%',
+    paddingRight: 24,
     overflow: 'hidden',
-    paddingRight: 12,
   },
   thumbnailContainer: {
     alignItems: 'center',
@@ -63,7 +70,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.2)',
+    borderColor: palette.gray[700],
     overflow: 'hidden',
   },
   infoContainer: {
@@ -78,7 +85,7 @@ const styles = StyleSheet.create({
   fileName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#24292f',
+    color: palette.gray[50],
     overflow: 'hidden',
   },
   fileDetails: {
