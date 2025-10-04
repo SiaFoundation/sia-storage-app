@@ -1,4 +1,5 @@
 import { StyleSheet, TextInput, Platform, View, Text } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import {
   type TextInputProps,
   type StyleProp,
@@ -50,7 +51,7 @@ export function InputArea({
       </Text>
       <TextInput
         style={[styles.input, isMonospace && styles.inputMono, inputStyle]}
-        placeholderTextColor={placeholderTextColor ?? '#9ca3af'}
+        placeholderTextColor={placeholderTextColor ?? palette.gray[400]}
         clearButtonMode={textInputProps.clearButtonMode ?? 'while-editing'}
         autoCapitalize={textInputProps.autoCapitalize ?? 'none'}
         underlineColorAndroid="transparent"
@@ -67,16 +68,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowDivider: {
-    borderTopColor: '#d0d7de',
+    borderTopColor: colors.borderMutedLight,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
-    color: '#6b7280',
+    color: palette.gray[500],
     marginRight: 8,
   },
   input: {
     flex: 1,
-    color: '#111827',
+    color: colors.textPrimary,
     paddingVertical: 0,
     textAlign: 'right',
   },

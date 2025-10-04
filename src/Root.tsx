@@ -1,5 +1,6 @@
 import React from 'react'
 import { StyleSheet, Platform, StatusBar } from 'react-native'
+import { palette } from './styles/colors'
 import {
   NavigationContainer,
   useNavigationContainerRef,
@@ -52,17 +53,16 @@ export function Root() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['left', 'right']}>
         <StatusBar
           barStyle={Platform.select({
-            ios: 'dark-content',
-            android: 'dark-content',
-            default: 'dark-content',
+            ios: 'light-content',
+            android: 'light-content',
+            default: 'light-content',
           })}
         />
         <ToastProvider>
           <NavigationContainer ref={navigationRef}>
-            <AppBanner />
             <RootTabs />
           </NavigationContainer>
         </ToastProvider>
@@ -72,5 +72,5 @@ export function Root() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#ffffff' },
+  safe: { flex: 1, backgroundColor: palette.gray[950] },
 })

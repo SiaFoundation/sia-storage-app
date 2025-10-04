@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native'
+import { palette } from '../styles/colors'
 
 export function GroupTitle({
   title,
@@ -67,12 +68,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    color: '#111827',
+    color: palette.gray[50],
     fontWeight: '700',
     fontSize: 16,
   },
   subtitle: {
-    color: '#222',
+    color: palette.gray[50],
     fontWeight: '600',
     marginBottom: 6,
   },

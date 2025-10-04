@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ListRenderItem,
 } from 'react-native'
+import { colors, palette, whiteA } from '../styles/colors'
 import { useCallback, useState } from 'react'
 import { SWRResponse } from 'swr'
 
@@ -41,7 +42,7 @@ export function SWRList<T>({
       ) : null}
       {response.isLoading && !response.data ? (
         <View style={styles.loading}>
-          <ActivityIndicator color="#0ea5e9" />
+          <ActivityIndicator color={palette.blue[400]} />
         </View>
       ) : (
         <FlatList<T>
@@ -66,7 +67,7 @@ export function SWRList<T>({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#8b949e"
+              tintColor={palette.gray[300]}
             />
           }
         />
@@ -78,11 +79,11 @@ export function SWRList<T>({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f6f8fa',
+    backgroundColor: colors.bgCanvas,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#d0d7de',
+    backgroundColor: colors.borderSubtle,
   },
   loading: {
     paddingVertical: 24,
@@ -92,10 +93,10 @@ const styles = StyleSheet.create({
   errorBox: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgPanel,
   },
   errorText: {
-    color: '#cf222e',
+    color: palette.red[500],
     fontSize: 12,
   },
   emptyContent: {
@@ -106,11 +107,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   emptyTitle: {
-    color: '#24292f',
+    color: palette.gray[100],
     fontWeight: '600',
   },
   emptyText: {
-    color: '#57606a',
+    color: palette.gray[300],
     fontSize: 12,
   },
 })

@@ -1,4 +1,5 @@
 import { View, StyleSheet, Pressable } from 'react-native'
+import { colors } from '../../styles/colors'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
 import ImageViewer from './ImageViewer'
@@ -50,7 +51,7 @@ export function FileViewerImport({
           onPress={() => handleDownload(file.id, shareUrl)}
           style={styles.centerDownload}
         >
-          <ArrowDownToLineIcon color="#0969da" size={28} />
+          <ArrowDownToLineIcon color={colors.accentPrimary} size={28} />
         </Pressable>
       )}
     </View>
@@ -60,7 +61,7 @@ export function FileViewerImport({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgPanel,
   },
   asset: {},
   centerDownload: {

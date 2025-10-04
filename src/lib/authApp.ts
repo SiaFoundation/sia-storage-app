@@ -1,5 +1,6 @@
 import { Linking } from 'react-native'
 import InAppBrowser from 'react-native-inappbrowser-reborn'
+import { palette } from '../styles/colors'
 
 export default async function authApp(url: string) {
   if (await InAppBrowser.isAvailable()) {
@@ -13,7 +14,7 @@ export default async function authApp(url: string) {
     await InAppBrowser.open(url, {
       // iOS Properties
       dismissButtonStyle: 'cancel',
-      preferredBarTintColor: '#334155',
+      preferredBarTintColor: palette.slate[700],
       preferredControlTintColor: 'white',
       readerMode: false,
       animated: true,
@@ -23,7 +24,7 @@ export default async function authApp(url: string) {
       enableBarCollapsing: false,
       // Android Properties
       showTitle: true,
-      toolbarColor: '#6200EE',
+      toolbarColor: palette.blue[500],
       secondaryToolbarColor: 'black',
       navigationBarColor: 'black',
       navigationBarDividerColor: 'white',

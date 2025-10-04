@@ -1,5 +1,6 @@
 import { Text, View, StyleSheet, Platform, Pressable } from 'react-native'
 import { ChevronRightIcon } from 'lucide-react-native'
+import { colors, palette } from '../styles/colors'
 import useSWR from 'swr'
 import { useSdk } from '../stores/auth'
 import { SWRList } from './SWRList'
@@ -21,21 +22,16 @@ export function HostsList({
       renderItem={({ item }) => (
         <Pressable
           accessibilityRole="button"
-          android_ripple={{ color: 'rgba(240,246,252,0.08)' }}
           onPress={() => onSelectHost(item.publicKey)}
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(item.publicKey?.toUpperCase() ?? '?') as string}
-            </Text>
-          </View>
+          <View style={styles.avatar} />
           <View style={styles.rowBody}>
             <Text style={styles.host} numberOfLines={1}>
               {item.publicKey}
             </Text>
           </View>
-          <ChevronRightIcon color="#57606a" size={18} />
+          <ChevronRightIcon color={palette.gray[300]} size={18} />
         </Pressable>
       )}
     />
@@ -48,10 +44,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgPanel,
   },
   rowPressed: {
-    backgroundColor: '#f6f8fa',
+    backgroundColor: colors.bgPanel,
   },
   avatar: {
     width: 28,
@@ -59,11 +55,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0969da',
+    backgroundColor: colors.accentPrimary,
     marginRight: 10,
   },
   avatarText: {
-    color: '#ffffff',
+    color: palette.gray[50],
     fontWeight: '700',
     fontSize: 12,
   },
@@ -72,7 +68,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   host: {
-    color: '#24292f',
+    color: palette.gray[100],
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     fontSize: 12,
   },

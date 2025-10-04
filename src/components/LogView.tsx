@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native'
+import { palette } from '../styles/colors'
 
 export function LogView({ logs }: { logs: string[] }) {
   const scrollRef = useRef<any>(null)
@@ -38,7 +39,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 12 },
   line: {
-    color: '#57606a',
+    color: palette.gray[50],
     fontFamily: Platform.select({
       ios: 'Menlo',
       android: 'monospace',
@@ -49,8 +50,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   empty: {
-    color: '#6b7280',
+    color: palette.gray[300],
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 40,
   },
 })

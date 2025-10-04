@@ -1,4 +1,5 @@
 import { Text, View, StyleSheet, ActivityIndicator } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { SWRResponse } from 'swr'
 
 export function SWROverlay<T>({
@@ -28,7 +29,7 @@ export function SWROverlay<T>({
       ) : null}
       {response.isLoading && !response.data ? (
         <View style={styles.centeredBox}>
-          <ActivityIndicator color="#0ea5e9" />
+          <ActivityIndicator color={palette.blue[400]} />
         </View>
       ) : null}
       {children}
@@ -39,7 +40,7 @@ export function SWROverlay<T>({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f6f8fa',
+    backgroundColor: palette.light[100],
   },
   loading: {
     paddingVertical: 24,
@@ -50,7 +51,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.bgSurface,
   },
   centeredBox: {
     zIndex: 1,
@@ -65,11 +66,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   errorText: {
-    color: '#cf222e',
+    color: palette.red[500],
     fontSize: 12,
   },
   emptyText: {
-    color: '#24292f',
+    color: palette.gray[975],
     fontWeight: '600',
   },
 })

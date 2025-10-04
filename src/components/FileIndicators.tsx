@@ -1,4 +1,5 @@
 import { View, StyleSheet } from 'react-native'
+import { whiteA, palette } from '../styles/colors'
 import { useFileStatus } from '../lib/file'
 import { StatusBadges } from './StatusBadges'
 import { SealedObject } from 'react-native-sia'
@@ -43,10 +44,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: whiteA.a20,
   },
   thumbProgressFill: {
     height: '100%',
-    backgroundColor: '#22c55e',
+    backgroundColor: palette.green[500],
   },
 })

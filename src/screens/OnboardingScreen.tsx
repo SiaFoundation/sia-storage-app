@@ -6,6 +6,8 @@ import {
   Text,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { colors, palette, whiteA } from '../styles/colors'
 import { SettingsIcon } from 'lucide-react-native'
 import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
@@ -40,19 +42,19 @@ export default function OnboardingScreen() {
   })
 
   return (
-    <View>
+    <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Image
           style={styles.image}
           source={require('../../assets/icon-bleed.png')}
         />
         <Pressable onPress={() => setIsUsingCustomURL((current) => !current)}>
-          <SettingsIcon size={20} color="gray" />
+          <SettingsIcon size={20} color={palette.gray[100]} />
         </Pressable>
       </View>
       {isWaiting ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#0ea5e9" />
+          <ActivityIndicator color={palette.blue[400]} />
           <Text style={styles.waitingText}>connecting</Text>
         </View>
       ) : (
@@ -107,11 +109,12 @@ export default function OnboardingScreen() {
           </View>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bgCanvas },
   container: {
     height: '100%',
     width: '100%',
@@ -119,18 +122,18 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 16,
     paddingHorizontal: 16,
-    paddingTop: 100,
+    paddingTop: 60,
   },
   text: {
-    color: '#24292f',
+    color: whiteA.a85,
     fontSize: 16,
   },
   errorText: {
-    color: 'red',
+    color: palette.red[500],
     fontSize: 10,
   },
   waitingText: {
-    color: '#57606a',
+    color: whiteA.a70,
     fontSize: 12,
   },
   image: {
@@ -141,25 +144,27 @@ const styles = StyleSheet.create({
   header: {
     height: 44,
     paddingHorizontal: 16,
-    borderBottomColor: '#d0d7de',
+    borderBottomColor: whiteA.a08,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgCanvas,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   input: {
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPanel,
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 3,
+    borderColor: colors.borderSubtle,
+    color: palette.gray[100],
+    borderRadius: 6,
   },
-  title: { color: '#24292f', fontSize: 24, fontWeight: '600' },
+  title: { color: palette.gray[100], fontSize: 28, fontWeight: '800' },
   center: {
     alignItems: 'center',
     height: '100%',
-    paddingTop: 250,
+    paddingTop: 220,
     gap: 16,
   },
   button: { flex: 1 },

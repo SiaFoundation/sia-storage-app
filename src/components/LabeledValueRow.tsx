@@ -1,6 +1,7 @@
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useCallback } from 'react'
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { useToast } from '../lib/toastContext'
 
 type Props = {
@@ -106,14 +107,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowDivider: {
-    borderTopColor: '#d0d7de',
+    borderTopColor: colors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
-    color: '#6b7280',
+    color: palette.gray[300],
     marginRight: 8,
   },
-  rowValue: { flex: 1, color: '#111827' },
+  rowValue: { flex: 1, color: palette.gray[100] },
   rowValueMono: {
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
   },

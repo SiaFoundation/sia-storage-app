@@ -1,4 +1,5 @@
 import { View, StyleSheet, Pressable, Text } from 'react-native'
+import { colors, palette } from '../../styles/colors'
 import { ArrowDownToLineIcon, XIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
 import { FileIndicators } from '../FileIndicators'
@@ -58,7 +59,7 @@ export function FileViewer({
           onPress={() => handleDownload()}
           style={styles.centerDownload}
         >
-          <ArrowDownToLineIcon color="#0969da" size={28} />
+          <ArrowDownToLineIcon color={colors.accentPrimary} size={28} />
         </Pressable>
       )}
     </View>
@@ -66,10 +67,7 @@ export function FileViewer({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-  },
+  container: { width: '100%', backgroundColor: colors.bgCanvas, paddingTop: 0 },
   asset: {},
   centerDownload: {
     position: 'absolute',
@@ -83,7 +81,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   centerDownloadText: {
-    color: 'red',
+    color: palette.red[500],
     fontSize: 16,
   },
 })

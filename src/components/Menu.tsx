@@ -7,6 +7,7 @@ import {
   type ViewStyle,
   type StyleProp,
 } from 'react-native'
+import { palette, overlay } from '../styles/colors'
 
 type Props = {
   isOpen: boolean
@@ -130,11 +131,11 @@ const styles = StyleSheet.create({
   menu: {
     position: 'absolute',
     minWidth: 240,
-    backgroundColor: '#121417f0',
+    backgroundColor: overlay.menu,
     borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    shadowColor: '#000',
+    shadowColor: palette.gray[950],
     shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 20,
