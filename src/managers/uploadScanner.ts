@@ -30,7 +30,7 @@ function startScanner(): void {
       const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
       const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
       if (!useAuthStore.getState().isConnected) return
-      if (getTransferCounts().total.all >= maxTotalUploads) {
+      if (getTransferCounts().total >= maxTotalUploads) {
         return
       }
       const localOnly = await getFilesLocalOnly()
@@ -74,17 +74,19 @@ export async function initUploadScanner() {
 
 export function useUploadScannerStatus(): {
   enabled: boolean
-  localOnly: number
   remaining: number
+  percentComplete: string
   total: number
 } {
   const total = useFileCountAll()
   const localOnly = useFileCountLocalOnly()
   const enabled = useAutoScanUploads()
+  const percentComplete =
+    (((total.data ?? 0) - (localOnly.data ?? 0)) / (total.data ?? 0)) * 100
   return {
     enabled: enabled.data ?? false,
-    localOnly: localOnly.data ?? 0,
-    remaining: (total.data ?? 0) - (localOnly.data ?? 0),
+    remaining: localOnly.data ?? 0,
+    percentComplete: `${percentComplete.toFixed(0)}%`,
     total: total.data ?? 0,
   }
 }
