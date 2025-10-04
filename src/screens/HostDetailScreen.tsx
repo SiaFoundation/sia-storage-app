@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
+import { Text, StyleSheet, ActivityIndicator, View } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { useHost } from '../stores/hosts'
@@ -9,6 +10,7 @@ import Map from '../components/Map/Map'
 import { InfoCard } from '../components/InfoCard'
 import { RowGroup } from '../components/Group'
 import { LabeledValueRow } from '../components/LabeledValueRow'
+import { SettingsLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'HostDetail'>
 
@@ -23,7 +25,7 @@ export function HostDetailScreen({ route }: Props) {
     if (host.isValidating) {
       return (
         <View style={styles.loading}>
-          <ActivityIndicator color="#0ea5e9" />
+          <ActivityIndicator color={palette.blue[400]} />
         </View>
       )
     }
@@ -34,7 +36,7 @@ export function HostDetailScreen({ route }: Props) {
     )
   }
   return (
-    <View style={styles.container}>
+    <SettingsLayout>
       <RowGroup title="Details">
         <InfoCard>
           <LabeledValueRow label="Public Key" value={publicKey} />
@@ -63,23 +65,28 @@ export function HostDetailScreen({ route }: Props) {
           />
         </Map>
       </InfoCard>
-    </View>
+    </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 8, backgroundColor: '#f6f8fa' },
+  container: { flex: 1, padding: 16, gap: 8, backgroundColor: colors.bgCanvas },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d0d7de',
+    backgroundColor: colors.bgSurface,
+    borderColor: colors.borderMutedLight,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 12,
     gap: 6,
   },
-  title: { color: '#24292f', fontWeight: '700', fontSize: 16, marginBottom: 4 },
-  meta: { color: '#57606a', fontSize: 12 },
+  title: {
+    color: palette.gray[975],
+    fontWeight: '700',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  meta: { color: palette.gray[300], fontSize: 12 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { color: '#24292f', fontSize: 16 },
+  errorText: { color: palette.gray[100], fontSize: 16 },
 })

@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { useIsConnected } from '../stores/auth'
 import { DotIcon } from 'lucide-react-native'
 import { RowGroup } from '../components/Group'
@@ -8,25 +9,30 @@ import { LabeledValueRow } from '../components/LabeledValueRow'
 import { InputRow } from '../components/InputRow'
 import { useIndexerURL } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import { SettingsLayout } from '../components/SettingsLayout'
+import { useSettingsHeader } from '../hooks/useSettingsHeader'
 
 export function SettingsIndexerScreen() {
   const isConnected = useIsConnected()
   const currentIndexerURL = useIndexerURL()
   const { newIndexerInputProps, saveIndexerURL, isWaiting } = useChangeIndexer()
+  useSettingsHeader()
 
   return (
-    <View style={styles.container}>
+    <SettingsLayout style={styles.container}>
       <RowGroup
         title="Current Indexer"
         indicator={
           <View style={styles.statusContainer}>
             <View style={styles.statusDot}>
-              <DotIcon color={isConnected ? 'green' : 'red'} />
+              <DotIcon
+                color={isConnected ? palette.green[500] : palette.red[500]}
+              />
             </View>
             <Text
               style={[
                 styles.statusText,
-                { color: isConnected ? 'green' : 'red' },
+                { color: isConnected ? palette.green[500] : palette.red[500] },
               ]}
             >
               {isConnected ? 'Connected' : 'Offline'}
@@ -58,16 +64,14 @@ export function SettingsIndexerScreen() {
             : 'Connect'}
         </Button>
       </View>
-    </View>
+    </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f2f2f7',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 24,
     paddingBottom: 24,
     gap: 24,
   },
@@ -77,10 +81,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
-  cellLabel: { width: 72, color: '#3c3c43', opacity: 0.6, fontSize: 16 },
+  cellLabel: {
+    width: 72,
+    color: palette.gray[600],
+    opacity: 0.6,
+    fontSize: 16,
+  },
   cellInput: {
     flex: 1,
-    color: '#1c1c1e',
+    color: palette.gray[800],
     fontSize: 16,
     paddingVertical: 6,
   },

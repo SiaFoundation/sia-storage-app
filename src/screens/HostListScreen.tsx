@@ -1,10 +1,12 @@
 import { View, StyleSheet, Pressable } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { ListIcon, MapIcon } from 'lucide-react-native'
 import { HostsList } from '../components/HostsList'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { useState, useLayoutEffect } from 'react'
 import HostsMap from '../components/HostsMap'
+import { SettingsLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Hosts'>
 
@@ -27,7 +29,7 @@ export function HostListScreen({ navigation }: Props) {
           >
             <ListIcon
               size={16}
-              color={viewMode === 'list' ? '#24292f' : '#57606a'}
+              color={viewMode === 'list' ? palette.gray[50] : palette.gray[700]}
             />
           </Pressable>
           <Pressable
@@ -42,7 +44,7 @@ export function HostListScreen({ navigation }: Props) {
           >
             <MapIcon
               size={16}
-              color={viewMode === 'map' ? '#24292f' : '#57606a'}
+              color={viewMode === 'map' ? palette.gray[50] : palette.gray[700]}
             />
           </Pressable>
         </View>
@@ -55,18 +57,17 @@ export function HostListScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <SettingsLayout>
       {viewMode === 'list' ? (
         <HostsList onSelectHost={handleSelectHost} />
       ) : (
         <HostsMap onSelectHost={handleSelectHost} />
       )}
-    </View>
+    </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
   toggleGroup: {
     flexDirection: 'row',
     gap: 4,
@@ -77,12 +78,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f6f8fa',
-    borderColor: '#d0d7de',
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
   },
   toggleActive: {
-    backgroundColor: '#eaeef2',
+    backgroundColor: colors.bgPanel,
+    color: palette.gray[50],
   },
   togglePressed: {
     opacity: 0.7,
