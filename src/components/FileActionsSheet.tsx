@@ -1,18 +1,16 @@
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
-import { useCallback, useLayoutEffect, useState } from 'react'
+import { useCallback } from 'react'
 import {
-  MoreVerticalIcon,
   Trash2Icon,
   CloudOffIcon,
   EraserIcon,
   CloudUploadIcon,
   ShareIcon,
-  Link2Icon,
+  LinkIcon,
 } from 'lucide-react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
-import { Linking, View } from 'react-native'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
@@ -28,20 +26,23 @@ import {
   updateFileSealedObjects,
 } from '../stores/files'
 import Share from 'react-native-share'
+import { useSheetOpen, closeSheet } from '../stores/sheets'
 import { logger } from '../lib/logger'
 
-type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
+type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
+  sheetName?: string
+}
 
-export function FileActionsSheet({ route, navigation }: Props) {
+export function FileActionsSheet({
+  route,
+  navigation,
+  sheetName = 'fileActions',
+}: Props) {
   const toast = useToast()
   const { data: file } = useFileDetails(route.params.id)
   const status = useFileStatus(file ?? undefined)
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const isOpen = useSheetOpen(sheetName)
   const sdk = useSdk()
-
-  const handleOpenMenu = useCallback(() => {
-    setIsMenuOpen(true)
-  }, [])
 
   const getShareUrl = useCallback(async () => {
     if (!file) return
@@ -84,28 +85,12 @@ export function FileActionsSheet({ route, navigation }: Props) {
     }
   }, [file, status.cachedUri])
 
-  const handleOpenDeepLink = useCallback(async () => {
-    if (!file) return
-    if (!sdk) return
-
-    const shareUrl = await getShareUrl()
-    if (!shareUrl) return
-    Linking.openURL(shareUrl).catch(() => {
-      Clipboard.setString(shareUrl)
-      toast.show('Deep link copied to clipboard')
-    })
-  }, [file, sdk, toast, getShareUrl])
-
-  const closeMenu = useCallback(() => {
-    setIsMenuOpen(false)
-  }, [])
-
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {
-      setIsMenuOpen(false)
+      closeSheet()
       void action()
     },
-    [setIsMenuOpen]
+    []
   )
 
   const handleDelete = useCallback(async () => {
@@ -113,11 +98,11 @@ export function FileActionsSheet({ route, navigation }: Props) {
     try {
       await deleteFileRecord(file.id)
       toast.show('Deleted file')
-      setIsMenuOpen(false)
+      closeSheet()
       navigation.goBack()
     } catch (e) {
       toast.show('Failed to delete file')
-      setIsMenuOpen(false)
+      closeSheet()
     }
   }, [file?.id, navigation, toast])
 
@@ -126,10 +111,10 @@ export function FileActionsSheet({ route, navigation }: Props) {
     try {
       await removeFromCache(file.id, extFromMime(file.fileType))
       toast.show('Removed from cache')
-      setIsMenuOpen(false)
+      closeSheet()
     } catch (e) {
       toast.show('Failed to remove cache')
-      setIsMenuOpen(false)
+      closeSheet()
     }
   }, [file?.id, file?.fileType, toast])
 
@@ -139,10 +124,10 @@ export function FileActionsSheet({ route, navigation }: Props) {
     try {
       await reupload(file.id)
       toast.show('Reuploaded file')
-      setIsMenuOpen(false)
+      closeSheet()
     } catch (e) {
       toast.show('Failed to reupload file')
-      setIsMenuOpen(false)
+      closeSheet()
     }
   }, [file?.id, toast])
 
@@ -154,44 +139,24 @@ export function FileActionsSheet({ route, navigation }: Props) {
       }
       await updateFileSealedObjects(file.id, {})
       toast.show('Removed from network')
-      setIsMenuOpen(false)
+      closeSheet()
     } catch (e) {
       toast.show('Failed to remove from network')
-      setIsMenuOpen(false)
+      closeSheet()
     }
   }, [file?.id, toast])
 
-  const isUploaded = status.isUploaded
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={{ flexDirection: 'row', gap: 14 }}>
-          <MoreVerticalIcon
-            color="#0969da"
-            size={20}
-            onPress={handleOpenMenu}
-          />
-        </View>
-      ),
-    })
-  }, [
-    navigation,
-    handleShareURL,
-    handleOpenDeepLink,
-    handleOpenMenu,
-    isUploaded,
-  ])
-
   const handleDownload = useDownload(file)
+
   return (
-    <ActionSheet visible={isMenuOpen} onRequestClose={closeMenu}>
+    <ActionSheet visible={isOpen} onRequestClose={() => closeSheet()}>
       <ActionSheetButton
         disabled={!status.isUploaded}
         variant="primary"
-        icon={<Link2Icon size={18} />}
+        icon={<LinkIcon size={18} />}
         onPress={handlePressAndClose(handleShareURL)}
       >
-        Copy link
+        Share link
       </ActionSheetButton>
       <ActionSheetButton
         disabled={!status.isUploaded}
@@ -199,7 +164,7 @@ export function FileActionsSheet({ route, navigation }: Props) {
         icon={<ShareIcon size={18} />}
         onPress={handleShareFile}
       >
-        Share file
+        Export file
       </ActionSheetButton>
       {!status.isDownloaded && !status.isDownloading && !status.fileIsGone && (
         <ActionSheetButton
