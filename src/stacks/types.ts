@@ -1,5 +1,5 @@
 export type MainStackParamList = {
-  Home: undefined
+  LibraryHome: undefined
   FileDetail: { id: string }
   ImportFile: { shareUrl?: string }
 }

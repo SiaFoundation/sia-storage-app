@@ -60,7 +60,7 @@ export function useDownload(
             )
           },
         })
-        toast.show('Downloaded to cache')
+        toast.show('Downloaded to device')
       },
     })
   }, [sdk, file, toast])
@@ -97,7 +97,7 @@ export function useDownloadFromShareURL() {
               )
             },
           })
-          toast.show('Downloaded to cache')
+          toast.show('Downloaded to device')
           return id
         },
       }),

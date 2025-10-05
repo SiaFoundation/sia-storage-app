@@ -1,19 +1,16 @@
-import React, { useMemo, useState } from 'react'
+import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { Square, CheckSquare } from 'lucide-react-native'
+import { colors, palette, whiteA } from '../styles/colors'
+import { Square, CheckSquare, Filter as FilterIcon } from 'lucide-react-native'
 import { type Category, useFilesView } from '../stores/files'
 import ActionSheet from '../components/ActionSheet'
+import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 
 const CATEGORIES: Category[] = ['Video', 'Image', 'Audio', 'Files']
 
 export function FileFilter(): React.ReactElement {
-  const [open, setOpen] = useState(false)
+  const isOpen = useSheetOpen('fileFilter')
   const { selectedCategories, toggleCategory, clearCategories } = useFilesView()
-
-  const pressableText = useMemo(() => {
-    const n = selectedCategories.size
-    return n ? `Filter • ${n}` : 'Filter'
-  }, [selectedCategories])
 
   const Row = ({ cat }: { cat: Category }) => {
     const checked = selectedCategories.has(cat)
@@ -34,14 +31,22 @@ export function FileFilter(): React.ReactElement {
   return (
     <>
       <Pressable
-        style={styles.pressable}
-        onPress={() => setOpen(true)}
+        style={styles.iconButton}
+        onPress={() => openSheet('fileFilter')}
         accessibilityRole="button"
+        accessibilityLabel="Open filter"
       >
-        <Text style={styles.pressableText}>{pressableText}</Text>
+        <FilterIcon
+          size={18}
+          color={selectedCategories.size ? palette.blue[400] : whiteA.a70}
+        />
+        {!!selectedCategories.size && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{selectedCategories.size}</Text>
+          </View>
+        )}
       </Pressable>
-
-      <ActionSheet visible={open} onRequestClose={() => setOpen(false)}>
+      <ActionSheet visible={isOpen} onRequestClose={closeSheet}>
         {CATEGORIES.map((c, i) => (
           <View key={c}>
             <Row cat={c} />
@@ -54,7 +59,7 @@ export function FileFilter(): React.ReactElement {
             <Text style={styles.clear}>Clear</Text>
           </Pressable>
 
-          <Pressable onPress={() => setOpen(false)} accessibilityRole="button">
+          <Pressable onPress={closeSheet} accessibilityRole="button">
             <Text style={styles.done}>Done</Text>
           </Pressable>
         </View>
@@ -64,14 +69,26 @@ export function FileFilter(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  pressable: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: 'white',
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pressableText: { fontSize: 14 },
+  badge: {
+    position: 'absolute',
+    right: -4,
+    top: -4,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: colors.accentPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: palette.gray[50], fontSize: 10, fontWeight: '600' },
   modalRow: {
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -82,7 +99,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 16 },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#ddd',
+    backgroundColor: palette.gray[200],
     marginHorizontal: 12,
   },
   footer: {
@@ -92,6 +109,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  clear: { fontSize: 14, color: '#cc0000' },
+  clear: { fontSize: 14, color: palette.red[500] },
   done: { fontSize: 14, fontWeight: '600' },
 })

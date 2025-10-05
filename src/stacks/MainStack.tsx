@@ -11,19 +11,19 @@ export function MainStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen
-        name="Home"
-        options={{ headerShown: false }}
+        name="LibraryHome"
+        options={{ title: 'Library', headerShown: false }}
         component={FileListScreen}
       />
       <Stack.Screen
         name="FileDetail"
         component={FileDetailScreen}
-        options={{ title: 'Media' }}
+        options={{ title: 'Media', headerShown: false }}
       />
       <Stack.Screen
         name="ImportFile"
         component={ImportFileScreen}
-        options={{ title: 'Import File' }}
+        options={{ title: 'Import File', headerShown: false }}
       />
     </Stack.Navigator>
   )
