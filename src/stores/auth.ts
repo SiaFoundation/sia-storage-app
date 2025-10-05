@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AppKey, generateRecoveryPhrase, Sdk } from 'react-native-sia'
+import { generateRecoveryPhrase, Sdk } from 'react-native-sia'
 import authApp from '../lib/authApp'
 import { logger } from '../lib/logger'
 import { deleteAllFileRecords } from './files'

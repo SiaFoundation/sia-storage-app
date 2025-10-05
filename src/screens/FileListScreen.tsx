@@ -1,25 +1,33 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
 import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
+import { colors, overlay, whiteA, palette } from '../styles/colors'
+import { Gradient } from '../components/Gradient'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Grid2X2Icon,
   ListIcon,
   PlusIcon,
-  ImageIcon,
-  CameraIcon,
-  FileIcon,
+  SettingsIcon,
 } from 'lucide-react-native'
 import { Gallery } from '../components/Gallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
-import { type FileRecord, useFileCount, useFileList } from '../stores/files'
+import {
+  type FileRecord,
+  useFileCount,
+  useFileList,
+  useFilesView,
+  type Category,
+} from '../stores/files'
 import { FileList } from '../components/FileList'
-import { useImagePickerAndUpload } from '../hooks/useImagePicker'
-import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
-import { useDocumentPickerAndUpload } from '../hooks/useDocumentPicker'
-import { Menu, MenuItem } from '../components/Menu'
 import { FileSorter } from '../components/FileSorter'
 import { FileFilter } from '../components/FileFilter'
+import { useAppStatus } from '../hooks/useAppStatus'
+import { BottomControlBar, iconColors } from '../components/BottomControlBar'
+import { AddFileActionSheet } from '../components/AddFileActionSheet'
+import { openSheet } from '../stores/sheets'
+import { ExpandableBadge } from '../components/ExpandableBadge'
 
 export function FileListScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
@@ -28,23 +36,10 @@ export function FileListScreen() {
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const files = useFileList()
   const fileCount = useFileCount()
-
-  const imagePickerAndUpload = useImagePickerAndUpload()
-  const captureAndUpload = useCameraCaptureAndUpload()
-  const documentPickerAndUpload = useDocumentPickerAndUpload()
-
-  const [isAddMenuOpen, setIsAddMenuOpen] = useState<boolean>(false)
-  const addButtonRef = useRef<View>(null)
-  const openAddMenu = useCallback(() => setIsAddMenuOpen(true), [])
-  const closeAddMenu = useCallback(() => setIsAddMenuOpen(false), [])
-  const handlePressAndClose = useCallback(
-    (action: () => void | Promise<void>) => () => {
-      action()
-      setIsAddMenuOpen(false)
-    },
-    []
-  )
-
+  const { selectedCategories } = useFilesView()
+  const insets = useSafeAreaInsets()
+  const appStatus = useAppStatus()
+  const openAddMenu = useCallback(() => openSheet('addFile'), [])
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
       navigation.navigate('FileDetail', { id: file.id })
@@ -54,10 +49,61 @@ export function FileListScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header} ref={headerRef}>
-        <Text style={styles.headerTitle}>Home</Text>
+      <Gradient
+        fadeTo="bottom"
+        overlayTopColor={overlay.gradientTop}
+        overlayBottomColor={overlay.gradientBottom}
+        style={styles.topBlur}
+      />
+      <View
+        style={[
+          styles.header,
+          {
+            position: 'absolute',
+            top: insets.top - 4,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+          },
+        ]}
+        pointerEvents="box-none"
+        ref={headerRef}
+      >
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerTitleLarge} pointerEvents="none">
+            {(() => {
+              const n = selectedCategories.size
+              if (n === 1) {
+                const only = Array.from(selectedCategories)[0] as Category
+                switch (only) {
+                  case 'Image':
+                    return 'Photos'
+                  case 'Video':
+                    return 'Videos'
+                  case 'Audio':
+                    return 'Audio'
+                  case 'Files':
+                    return 'Files'
+                  default:
+                    return 'Library'
+                }
+              }
+              return 'Library'
+            })()}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {(() => {
+              const total = fileCount.data ?? 0
+              const filtered = files.data?.length ?? 0
+              if (selectedCategories.size > 0) {
+                return `${filtered} results`
+              }
+              return `${total} ${total === 1 ? 'item' : 'items'}`
+            })()}
+          </Text>
+        </View>
         <View style={styles.buttonRow}>
-          <View style={styles.toggleGroup}>
+          <View style={styles.toggleGroup} pointerEvents="none">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show gallery view"
@@ -70,7 +116,9 @@ export function FileListScreen() {
             >
               <Grid2X2Icon
                 size={16}
-                color={viewMode === 'list' ? '#24292f' : '#57606a'}
+                color={
+                  viewMode === 'list' ? palette.gray[975] : palette.gray[300]
+                }
               />
             </Pressable>
             <Pressable
@@ -85,32 +133,44 @@ export function FileListScreen() {
             >
               <ListIcon
                 size={16}
-                color={viewMode === 'list' ? '#24292f' : '#57606a'}
+                color={
+                  viewMode === 'list' ? palette.gray[975] : palette.gray[300]
+                }
               />
             </Pressable>
           </View>
+          {appStatus.visible && (
+            <View style={styles.statusPillContainer}>
+              <ExpandableBadge
+                label={appStatus.message}
+                hint={appStatus.hint}
+                size={12}
+                interactive={true}
+                backgroundColor={overlay.pill}
+                borderColor={overlay.pill}
+              >
+                {appStatus.icon}
+              </ExpandableBadge>
+            </View>
+          )}
           <Pressable
             accessibilityRole="button"
-            onPress={openAddMenu}
-            style={styles.headerIcon}
-            ref={addButtonRef}
+            onPress={() => navigation.navigate('SettingsTab' as never)}
+            style={[styles.headerIcon, { paddingHorizontal: 4 }]}
           >
-            <PlusIcon color="#0969da" size={22} />
+            <View style={styles.blurPillWrap}>
+              <View style={styles.blurShade} />
+              <SettingsIcon color={palette.gray[50]} size={16} />
+            </View>
           </Pressable>
         </View>
       </View>
-      {!!fileCount.data && fileCount.data > 1 && (
-        <View style={styles.sortFilterRow}>
-          <FileFilter />
-          <FileSorter />
-        </View>
-      )}
       {!!fileCount.data ? (
         files.data && files.data.length > 0 ? (
           viewMode == 'gallery' ? (
-            <Gallery onPressItem={handleOpenDetail} />
+            <Gallery onPressItem={handleOpenDetail} topPadding={130} />
           ) : (
-            <FileList onPressItem={handleOpenDetail} />
+            <FileList onPressItem={handleOpenDetail} topPadding={130} />
           )
         ) : (
           <View style={styles.emptyWrap}>
@@ -137,103 +197,166 @@ export function FileListScreen() {
           </Text>
         </View>
       )}
-      <Menu
-        isOpen={isAddMenuOpen}
-        onClose={closeAddMenu}
-        anchorRef={addButtonRef}
-        contentStyle={{ right: 8, top: 52 }}
-      >
-        <MenuItem
-          icon={<CameraIcon color="#ffffff" size={18} />}
-          onPress={handlePressAndClose(captureAndUpload)}
-        >
-          Take Photo or Video
-        </MenuItem>
-        <MenuItem
-          icon={<ImageIcon color="#ffffff" size={18} />}
-          onPress={handlePressAndClose(imagePickerAndUpload)}
-        >
-          Choose from Photos
-        </MenuItem>
-        <MenuItem
-          icon={<FileIcon color="#ffffff" size={18} />}
-          onPress={handlePressAndClose(documentPickerAndUpload)}
-        >
-          Import from Files
-        </MenuItem>
-      </Menu>
+      <AddFileActionSheet />
+      <BottomControlBar
+        center={{
+          id: 'add',
+          icon: <PlusIcon color={iconColors.white} size={24} />,
+          onPress: openAddMenu,
+        }}
+        left={[
+          {
+            id: 'grid',
+            icon: (
+              <Grid2X2Icon
+                size={18}
+                color={
+                  viewMode === 'gallery'
+                    ? iconColors.active
+                    : iconColors.inactive
+                }
+              />
+            ),
+            onPress: () => setViewMode('gallery'),
+          },
+          {
+            id: 'list',
+            icon: (
+              <ListIcon
+                size={18}
+                color={
+                  viewMode === 'list' ? iconColors.active : iconColors.inactive
+                }
+              />
+            ),
+            onPress: () => setViewMode('list'),
+          },
+        ]}
+        right={[
+          {
+            id: 'filter',
+            icon: (
+              <View>
+                <FileFilter />
+              </View>
+            ),
+            onPress: () => {},
+          },
+          {
+            id: 'sort',
+            icon: (
+              <View>
+                <FileSorter />
+              </View>
+            ),
+            onPress: () => {},
+          },
+        ]}
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: colors.bgCanvas },
   header: {
-    height: 44,
     paddingHorizontal: 16,
-    borderBottomColor: '#d0d7de',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
     display: 'flex',
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  headerTitle: { color: '#24292f', fontSize: 16, fontWeight: '600' },
+  topBlur: {
+    zIndex: 10,
+    pointerEvents: 'none',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 200,
+  },
+  headerTitleLarge: {
+    color: palette.gray[50],
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  headerTitles: { top: 0, flexDirection: 'column' },
+  headerSubtitle: {
+    color: palette.gray[50],
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   headerIcon: { paddingVertical: 6, paddingHorizontal: 8 },
+  blurPillWrap: {
+    position: 'relative',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blurShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: overlay.pill,
+  },
+  statusPillContainer: {
+    position: 'relative',
+  },
+  statusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+    flexDirection: 'row',
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: overlay.pill,
+  },
+  statusPillText: {
+    color: palette.gray[50],
+    fontSize: 10,
+    fontWeight: '600',
+  },
+
   emptyImage: { width: 140, height: 140 },
   emptyWrap: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: '35%',
-    padding: 24,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: '#24292f',
-    fontWeight: '700',
-    fontSize: 16,
-    paddingBottom: 8,
+    color: palette.gray[100],
+    fontWeight: '800',
+    fontSize: 18,
+    paddingTop: 12,
+    paddingBottom: 6,
   },
-  emptyText: { color: '#57606a', textAlign: 'center', marginBottom: 8 },
-  primaryButton: {
-    backgroundColor: '#0969da',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  primaryButtonText: { color: '#ffffff', fontWeight: '700' },
+  emptyText: { color: whiteA.a70, textAlign: 'center' },
+
   buttonRow: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  toggleGroup: {
-    flexDirection: 'row',
-    gap: 4,
-  },
+  toggleGroup: { display: 'none' },
   toggleButton: {
     width: 28,
     height: 28,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f6f8fa',
-    borderColor: '#d0d7de',
+    backgroundColor: palette.light[100],
+    borderColor: palette.gray[200],
     borderWidth: StyleSheet.hairlineWidth,
   },
   toggleActive: {
-    backgroundColor: '#eaeef2',
+    backgroundColor: palette.light[200],
   },
   togglePressed: {
     opacity: 0.7,
-  },
-  sortFilterRow: {
-    display: 'flex',
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'flex-end',
-    padding: 8,
-    backgroundColor: '#f2f2f2',
   },
 })

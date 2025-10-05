@@ -2,7 +2,7 @@ import {
   NativeStackNavigationProp,
   type NativeStackScreenProps,
 } from '@react-navigation/native-stack'
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback } from 'react'
 import useSWR from 'swr'
 import {
   ActivityIndicator,
@@ -16,15 +16,17 @@ import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
 import { useSdk } from '../stores/auth'
 import { createFileRecord } from '../stores/files'
-import { SealedObject } from 'react-native-sia'
 import { useNavigation } from '@react-navigation/native'
 import { uniqueId } from '../lib/uniqueId'
-import { Button } from '../components/Button'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { getIndexerURL } from '../stores/settings'
 import { getAppKey } from '../lib/appKey'
+import { BottomActionButton } from '../components/BottomActionButton'
+import { PlusIcon } from 'lucide-react-native'
+import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
+import { colors } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
 
@@ -82,10 +84,11 @@ export function ImportFileScreen({ route }: Props) {
 
   return (
     <View style={styles.container}>
+      <FileDetailScreenHeader title="Import File" navigation={navigation} />
       <ScrollView contentContainerStyle={styles.content}>
         {sharedFile.isValidating ? (
           <View style={styles.center}>
-            <ActivityIndicator color="#0969da" />
+            <ActivityIndicator color={colors.accentPrimary} />
             <Text style={styles.loadingText}>Loading…</Text>
           </View>
         ) : sharedFile.error ? (
@@ -98,9 +101,11 @@ export function ImportFileScreen({ route }: Props) {
           </>
         )}
       </ScrollView>
-      <View style={styles.footer}>
-        <Button onPress={handleAddToDatabase}>Add to library</Button>
-      </View>
+      <BottomActionButton
+        label="Add to library"
+        icon={<PlusIcon color="white" size={22} />}
+        onPress={handleAddToDatabase}
+      />
     </View>
   )
 }
@@ -108,35 +113,35 @@ export function ImportFileScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2f2f7',
+    backgroundColor: colors.bgCanvas,
   },
   content: { padding: 0 },
   footer: { padding: 16 },
   title: {
-    color: '#111827',
+    color: colors.textTitleDark,
     fontWeight: '700',
     fontSize: 18,
     marginBottom: 12,
   },
   linkRow: { marginBottom: 12 },
-  link: { color: '#0969da' },
+  link: { color: colors.accentPrimary },
   center: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 24,
   },
-  loadingText: { color: '#6b7280', marginTop: 8 },
-  errorText: { color: '#c83532' },
+  loadingText: { color: colors.textSecondary, marginTop: 8 },
+  errorText: { color: colors.textDanger },
   card: {
     maxHeight: 200,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bgSurface,
     borderRadius: 12,
-    borderColor: '#d0d7de',
+    borderColor: colors.borderMutedLight,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 12,
   },
   mono: {
-    color: '#111827',
+    color: colors.textTitleDark,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     fontSize: 12,
   },

@@ -9,14 +9,13 @@ import {
   ShareIcon,
   LinkIcon,
 } from 'lucide-react-native'
-import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
 import { extFromMime } from '../lib/fileTypes'
 import { useSdk } from '../stores/auth'
-import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
+import { useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
@@ -25,9 +24,8 @@ import {
   deleteFileRecord,
   updateFileSealedObjects,
 } from '../stores/files'
-import Share from 'react-native-share'
 import { useSheetOpen, closeSheet } from '../stores/sheets'
-import { logger } from '../lib/logger'
+import { useShareAction } from '../hooks/useShareAction'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
   sheetName?: string
@@ -44,46 +42,9 @@ export function FileActionsSheet({
   const isOpen = useSheetOpen(sheetName)
   const sdk = useSdk()
 
-  const getShareUrl = useCallback(async () => {
-    if (!file) return
-    if (!sdk) return
-
-    const sealedObject = getOneSealedObject(file)
-    if (!sealedObject) return
-    const pinnedObject = await getPinnedObject(sealedObject)
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.shareObject(pinnedObject, expiresAt)
-    return `siamobile://new-file?shareUrl=${encodeURIComponent(shareUrl)}`
-  }, [file, sdk])
-
-  const handleShareURL = useCallback(async () => {
-    if (!file) return
-    if (!sdk) return
-    const shareUrl = await getShareUrl()
-    if (!shareUrl) return
-    Clipboard.setString(shareUrl)
-    toast.show('URL Copied')
-  }, [file, sdk, getShareUrl, toast])
-
-  const handleShareFile = useCallback(async () => {
-    if (!file) return
-    if (!file.fileType) return
-    if (!status.cachedUri) return
-
-    try {
-      await Share.open({
-        url: status.cachedUri,
-        type: file.fileType,
-        filename: file.fileName ?? undefined,
-        subject: `Sia Mobile - ${file.fileType}`,
-      })
-    } catch (e) {
-      if (typeof e === 'string' && !e.includes('User did not share')) {
-        logger.log('File sharing failed:', e)
-      }
-    }
-  }, [file, status.cachedUri])
+  const { handleShareFile, handleShareURL, canShare } = useShareAction({
+    fileId: route.params.id,
+  })
 
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {
@@ -151,7 +112,7 @@ export function FileActionsSheet({
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet()}>
       <ActionSheetButton
-        disabled={!status.isUploaded}
+        disabled={!canShare}
         variant="primary"
         icon={<LinkIcon size={18} />}
         onPress={handlePressAndClose(handleShareURL)}
@@ -159,7 +120,7 @@ export function FileActionsSheet({
         Share link
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={!status.isUploaded}
+        disabled={!canShare}
         variant="primary"
         icon={<ShareIcon size={18} />}
         onPress={handleShareFile}

@@ -1,20 +1,15 @@
-import React, { useMemo, useState } from 'react'
+import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { ArrowUp, ArrowDown } from 'lucide-react-native'
+import { palette } from '../styles/colors'
+import { ArrowUp, ArrowDown, SortAsc, SortDesc } from 'lucide-react-native'
 import { SortBy, useFilesView } from '../stores/files'
 import ActionSheet from '../components/ActionSheet'
+import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { openSheet } from '../stores/sheets'
 
 export function FileSorter(): React.ReactElement {
-  const [open, setOpen] = useState(false)
-
   const { sortBy, sortDir, setSortCategory, toggleDir } = useFilesView()
-
-  const pressableText = useMemo(() => {
-    const label = sortBy === 'NAME' ? 'Name' : 'Date'
-    const showUpArrow =
-      sortBy === 'NAME' ? sortDir === 'ASC' : sortDir === 'DESC'
-    return `${label} ${showUpArrow ? '↑' : '↓'}`
-  }, [sortBy, sortDir])
+  const isOpen = useSheetOpen('fileSorter')
 
   const onPick = (nextSortBy: SortBy) => {
     if (sortBy === nextSortBy) {
@@ -22,7 +17,7 @@ export function FileSorter(): React.ReactElement {
     } else {
       setSortCategory(nextSortBy)
     }
-    setOpen(false)
+    closeSheet()
   }
 
   const ArrowIndicator = ({ row }: { row: SortBy }) => {
@@ -34,14 +29,18 @@ export function FileSorter(): React.ReactElement {
   return (
     <>
       <Pressable
-        style={styles.pressable}
-        onPress={() => setOpen(true)}
+        style={styles.iconButton}
+        onPress={() => openSheet('fileSorter')}
         accessibilityRole="button"
+        accessibilityLabel="Open sort"
       >
-        <Text style={styles.pressableText}>{pressableText}</Text>
+        {(sortBy === 'NAME' ? sortDir === 'ASC' : sortDir === 'DESC') ? (
+          <SortAsc size={18} color={palette.gray[50]} />
+        ) : (
+          <SortDesc size={18} color={palette.gray[50]} />
+        )}
       </Pressable>
-
-      <ActionSheet visible={open} onRequestClose={() => setOpen(false)}>
+      <ActionSheet visible={isOpen} onRequestClose={closeSheet}>
         <Pressable
           style={styles.modalRow}
           onPress={() => onPick('DATE')}
@@ -67,14 +66,13 @@ export function FileSorter(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  pressable: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: 'white',
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pressableText: { fontSize: 14 },
   modalRow: {
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -85,7 +83,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 16 },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#ddd',
+    backgroundColor: palette.gray[200],
     marginHorizontal: 12,
   },
 })
