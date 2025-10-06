@@ -41,7 +41,11 @@ export function useLogs(): string[] {
 let hasInit = false
 
 export function initLogger(): void {
-  if (hasInit) return
+  if (hasInit) {
+    logger.log('[logs] initLogger already called, skipping')
+    return
+  }
+  logger.log('[logs] initLogger called')
   // Wire the global logger to the logs store and console once.
   logger.log = (...args: unknown[]) => {
     console.log(...args)

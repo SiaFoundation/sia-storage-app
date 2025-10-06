@@ -21,10 +21,11 @@ import {
 
 let scanTimer: NodeJS.Timeout | null = null
 
-function startScanner(): void {
+function startUploadScanner(): void {
   if (scanTimer) return
   logger.log('[uploadScanner] starting scanner')
   const scan = async () => {
+    logger.log('[uploadScanner] scanning...')
     try {
       const maxTransfers = await getMaxTransfers()
       const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
@@ -52,24 +53,26 @@ function startScanner(): void {
   scanTimer = setInterval(scan, SCANNER_INTERVAL)
 }
 
-function stopScanner(): void {
+export function stopUploadScanner(): void {
   if (!scanTimer) return
   logger.log('[uploadScanner] stopping scanner')
   clearInterval(scanTimer)
   scanTimer = null
 }
 
-export async function setUploadScanner(value: boolean) {
-  await setAutoScanUploads(value)
-  logger.log(`[uploadScanner] autoScanUploads set to ${value}`)
-  if (value) startScanner()
-  else stopScanner()
+export async function toggleUploadScanner() {
+  const current = await getAutoScanUploads()
+  const next = !current
+  await setAutoScanUploads(next)
+  logger.log(`[uploadScanner] autoScanUploads set to ${next}`)
+  if (next) startUploadScanner()
+  else stopUploadScanner()
 }
 
 export async function initUploadScanner() {
   const autoScanUploads = await getAutoScanUploads()
   logger.log(`[uploadScanner] init: autoScanUploads=${autoScanUploads}`)
-  if (autoScanUploads) startScanner()
+  if (autoScanUploads) startUploadScanner()
 }
 
 export function useUploadScannerStatus(): {

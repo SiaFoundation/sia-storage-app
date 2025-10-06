@@ -59,6 +59,7 @@ export function useDownload(
               extFromMime(file.fileType)
             )
           },
+          signal,
         })
         toast.show('Downloaded to device')
       },
@@ -96,6 +97,7 @@ export function useDownloadFromShareURL() {
                 extFromMime(metadata.fileType)
               )
             },
+            signal,
           })
           toast.show('Downloaded to device')
           return id
@@ -113,8 +115,10 @@ async function streamToCache(params: {
   onAfterClose?: (
     targetFile: Awaited<ReturnType<typeof getOrCreateCachedFile>>
   ) => Promise<void>
+  signal: AbortSignal
 }): Promise<void> {
-  const { id, targetExt, totalSize, getNextChunk, onAfterClose } = params
+  const { id, targetExt, totalSize, getNextChunk, onAfterClose, signal } =
+    params
   const targetFile = await getOrCreateCachedFile(id, targetExt)
   logger.log('[streamToCache] writing to cache path:', targetFile.uri)
   const writer = targetFile.writableStream().getWriter()
@@ -122,6 +126,11 @@ async function streamToCache(params: {
   let chunks = 0
   try {
     while (true) {
+      if (signal.aborted) {
+        logger.log('[streamToCache] abort received, stopping download...')
+        targetFile.delete()
+        break
+      }
       const chunk = await getNextChunk()
       if (!chunk || (chunk as ArrayBuffer).byteLength === 0) {
         logger.log(
