@@ -37,7 +37,7 @@ export async function createFileRecord(
     createdAt,
     fileType
   )
-  await updateFileSealedObjects(id, sealedObjects)
+  await updateFileSealedObjects(id, sealedObjects, triggerUpdate)
   if (triggerUpdate) {
     await triggerChange()
   }
@@ -177,7 +177,8 @@ export async function deleteAllFileRecords(): Promise<void> {
 
 export async function updateFileSealedObjects(
   id: string,
-  sealedObjects: SealedObjectsMap
+  sealedObjects: SealedObjectsMap,
+  triggerUpdate: boolean = true
 ): Promise<void> {
   const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
   if (error) {
@@ -189,7 +190,9 @@ export async function updateFileSealedObjects(
     serializedSealedObjects,
     id
   )
-  await triggerChange()
+  if (triggerUpdate) {
+    await triggerChange()
+  }
 }
 
 export async function updateFileSealedObject(
