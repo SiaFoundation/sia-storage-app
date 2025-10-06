@@ -11,8 +11,16 @@ import { fileHasASealedObject } from '../lib/file'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
 import { create } from 'zustand'
+import useSWRInfinite from 'swr/infinite'
 
-const { getKey, triggerChange } = buildSWRHelpers('db/files')
+let listMutate: () => void = () => {}
+
+const { getKey, triggerChange: _triggerChange } = buildSWRHelpers('db/files')
+
+async function triggerChange() {
+  _triggerChange()
+  listMutate()
+}
 
 export type FileRecord = {
   id: string
@@ -86,32 +94,38 @@ export type FileOrderParams = {
   sortBy?: SortBy
   sortDir?: SortDir
   categories?: Category[]
+  limit?: number
+  offset?: number
 }
 
 export async function readOrderedFileRecords(
   opts?: FileOrderParams
 ): Promise<FileRecord[]> {
-  const { sortBy = 'DATE', sortDir, categories = [] } = opts ?? {}
+  const {
+    sortBy = 'DATE',
+    sortDir,
+    categories = [],
+    limit,
+    offset,
+  } = opts ?? {}
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c]).filter(Boolean)
-
-  const whereParts: string[] = []
-  const params: any[] = []
-
-  if (prefixes.length) {
-    for (const p of prefixes) {
-      whereParts.push(`fileType LIKE ?`)
-      params.push(`${p}%`)
-    }
-  }
-
-  const where = whereParts.length ? `WHERE (${whereParts.join(' OR ')})` : ''
+  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
+  const where =
+    prefixes.length > 0
+      ? `WHERE ${prefixes.map(() => 'fileType LIKE ?').join(' OR ')}`
+      : ''
+  const params = prefixes.length > 0 ? prefixes.map((p) => `${p}%`) : []
 
   const orderExpr =
     sortBy === 'NAME'
-      ? `fileName IS NULL, fileName COLLATE NOCASE ${dir}`
-      : `createdAt ${dir}`
+      ? `(fileName IS NULL) ASC, fileName COLLATE NOCASE ${dir}, id ${dir}`
+      : `createdAt ${dir}, id ${dir}`
+
+  let pageClause = ''
+  if (limit != null && offset != null) {
+    pageClause = ` LIMIT ${limit | 0} OFFSET ${offset | 0}`
+  }
 
   const rows = await db().getAllAsync<{
     id: string
@@ -124,7 +138,7 @@ export async function readOrderedFileRecords(
     `SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects
      FROM files
      ${where}
-     ORDER BY ${orderExpr}`,
+     ORDER BY ${orderExpr}${pageClause}`,
     ...params
   )
 
@@ -172,7 +186,6 @@ export async function deleteFileRecord(id: string): Promise<void> {
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
-  await triggerChange()
 }
 
 export async function updateFileSealedObjects(
@@ -243,22 +256,54 @@ export function useFileCount() {
   return useSWR(getKey('count'), () => readAllFileRecordsCount())
 }
 
+const PAGE_SIZE = 40
+
 export function useFileList() {
   const { sortBy, sortDir, selectedCategories } = useFilesView()
-  const dir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+  const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const cats = Array.from(selectedCategories ?? new Set())
-  const catsKey = cats.length ? cats.slice().sort().join(',') : ''
+  const categories = Array.from(selectedCategories ?? new Set())
+  const categoriesKey = categories.length
+    ? categories.slice().sort().join(',')
+    : ''
 
-  const key = getKey(`list:${sortBy}:${dir}:${catsKey}`)
+  const base = getKey(`list:${sortBy}:${sortingDir}:${categoriesKey}`)
 
-  return useSWR(key, () =>
-    readOrderedFileRecords({
+  const fetcher = async (key: string) => {
+    const pageIndex = Number(key.split('|page=').pop() ?? '0')
+    const items = await readOrderedFileRecords({
       sortBy,
-      sortDir: dir,
-      categories: cats.length ? cats : undefined,
+      sortDir: sortingDir,
+      categories: categories.length ? categories : undefined,
+      limit: PAGE_SIZE,
+      offset: pageIndex * PAGE_SIZE,
     })
+    return items
+  }
+
+  const swr = useSWRInfinite<FileRecord[]>(
+    (pageIndex, prevPage) => {
+      if (pageIndex > 0 && (!prevPage || prevPage.length < PAGE_SIZE))
+        return null
+      return `${base}|page=${pageIndex}`
+    },
+    fetcher,
+    { revalidateOnFocus: false, revalidateAll: true }
   )
+
+  listMutate = swr.mutate
+
+  const pages = swr.data
+  const flat = pages ? pages.flat() : undefined
+
+  const lastPage = pages?.[pages.length - 1]
+  const hasMore = !!lastPage && lastPage.length === PAGE_SIZE
+
+  return {
+    ...swr,
+    data: flat,
+    hasMore,
+  }
 }
 
 export function useFileCountAll() {
@@ -285,6 +330,7 @@ export function useFileDetails(id: string) {
   return useSWR(getKey(id), () => readFileRecord(id))
 }
 
+// File View Store
 export type SortBy = 'NAME' | 'DATE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
