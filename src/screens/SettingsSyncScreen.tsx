@@ -1,11 +1,11 @@
-import { View, StyleSheet, Switch } from 'react-native'
+import { StyleSheet, Switch } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { cancelAllTransfers, useTransferCounts } from '../stores/transfers'
 import { Button } from '../components/Button'
-import { setUploadScanner } from '../managers/uploadScanner'
+import { toggleUploadScanner } from '../managers/uploadScanner'
 import { RowGroup } from '../components/Group'
 import { InputRow } from '../components/InputRow'
 import {
@@ -44,7 +44,7 @@ export function SettingsSyncScreen(_props: Props) {
             value={
               <Switch
                 value={autoScan.data ?? false}
-                onValueChange={(val) => setUploadScanner(val)}
+                onValueChange={toggleUploadScanner}
               />
             }
           />

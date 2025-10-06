@@ -10,10 +10,12 @@ import { ToastProvider } from './lib/toastContext'
 import { useInitLogger } from './stores/logs'
 import { useEffect } from 'react'
 import { initAuth } from './stores/auth'
-import { initUploadScanner } from './managers/uploadScanner'
+import { initUploadScanner, stopUploadScanner } from './managers/uploadScanner'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
 import { RootTabs } from './stacks/RootTabs'
+import { logger } from './lib/logger'
+import { cancelAllTransfers } from './stores/transfers'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -29,6 +31,11 @@ export function Root() {
       }, 200)
     }
     init()
+    return () => {
+      logger.log('[Root] unmounting')
+      cancelAllTransfers()
+      stopUploadScanner()
+    }
   }, [])
 
   useLinkedURL((incomingUrl) => {

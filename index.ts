@@ -5,6 +5,8 @@ import { initSia, setLogger } from 'react-native-sia'
 import { logger, rustLogger } from './src/lib/logger'
 import { initializeDB } from './src/db'
 
+logger.log('initSia and uniffi...')
+
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
 // the environment is set up appropriately
