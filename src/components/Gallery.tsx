@@ -1,6 +1,8 @@
-import { FlatList, StyleSheet } from 'react-native'
+import React, { useCallback } from 'react'
+import { FlatList, StyleSheet, ActivityIndicator } from 'react-native'
 import { useFileList, type FileRecord } from '../stores/files'
 import { GalleryItem } from './GalleryItem'
+import { useFlatListControls } from '../hooks/useFlatListControls'
 
 type Props = {
   onPressItem: (item: FileRecord) => void
@@ -15,10 +17,13 @@ export function Gallery({
   numColumns = 3,
   topPadding = 0,
 }: Props) {
-  const { data: files } = useFileList()
+  const { data: files, size, setSize, isValidating, hasMore } = useFileList()
+  const { isRefreshing, isLoadingMore, handleEndReached, handleRefresh } =
+    useFlatListControls({ data: files, size, setSize, isValidating, hasMore })
+
   return (
     <FlatList
-      data={files}
+      data={files ?? []}
       keyExtractor={(item) => item.id}
       numColumns={numColumns}
       contentInsetAdjustmentBehavior="never"
@@ -37,6 +42,16 @@ export function Gallery({
           setItemRef={setItemRef}
         />
       )}
+      onEndReachedThreshold={0.95}
+      onEndReached={handleEndReached}
+      refreshing={isRefreshing}
+      onRefresh={handleRefresh}
+      initialNumToRender={36}
+      windowSize={9}
+      maxToRenderPerBatch={20}
+      updateCellsBatchingPeriod={20}
+      ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
+      removeClippedSubviews
     />
   )
 }
