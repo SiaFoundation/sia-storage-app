@@ -7,34 +7,21 @@ import {
 } from '@react-navigation/native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
-import { useInitLogger } from './stores/logs'
 import { useEffect } from 'react'
-import { initAuth } from './stores/auth'
-import { initUploadScanner, stopUploadScanner } from './managers/uploadScanner'
+import { initApp, shutdownApp } from './stores/app'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
 import { RootTabs } from './stacks/RootTabs'
-import { logger } from './lib/logger'
-import { cancelAllTransfers } from './stores/transfers'
 
 SplashScreen.preventAutoHideAsync()
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
-  useInitLogger()
 
   useEffect(() => {
-    const init = async () => {
-      await Promise.all([initAuth(), initUploadScanner()])
-      setTimeout(() => {
-        SplashScreen.hideAsync()
-      }, 200)
-    }
-    init()
+    initApp()
     return () => {
-      logger.log('[Root] unmounting')
-      cancelAllTransfers()
-      stopUploadScanner()
+      shutdownApp()
     }
   }, [])
 

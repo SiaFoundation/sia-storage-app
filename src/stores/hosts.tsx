@@ -1,5 +1,5 @@
 import useSWR from 'swr'
-import { useSdk } from './auth'
+import { useSdk } from './sdk'
 
 const KEY = 'sdk/hosts'
 

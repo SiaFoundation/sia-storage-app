@@ -6,7 +6,7 @@ import {
 } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
-import { useSdk, getSdk } from '../stores/auth'
+import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
 import { extFromMime } from '../lib/fileTypes'
 import {

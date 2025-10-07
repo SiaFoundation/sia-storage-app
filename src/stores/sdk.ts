@@ -1,36 +1,28 @@
 import { create } from 'zustand'
-import { generateRecoveryPhrase, Sdk } from 'react-native-sia'
+import { Sdk } from 'react-native-sia'
 import authApp from '../lib/authApp'
 import { logger } from '../lib/logger'
-import { deleteAllFileRecords } from './files'
-import {
-  getHasOnboarded,
-  setRecoveryPhrase,
-  setHasOnboarded,
-  getIndexerURL,
-} from './settings'
+import { setHasOnboarded, getIndexerURL } from './settings'
 import { getAppKey } from '../lib/appKey'
 import { createGetterAndSelector } from '../lib/selectors'
 
-export type AuthState = {
+export type SdkState = {
   sdk: Sdk | null
-  isInitializing: boolean
   isConnected: boolean
   connectionError: string | null
   isAuthing: boolean
 }
 
-const useAuthStore = create<AuthState>(() => {
+const useSdkStore = create<SdkState>(() => {
   return {
     sdk: null,
-    isInitializing: true,
     isConnected: false,
     connectionError: null,
     isAuthing: false,
   }
 })
 
-const { getState, setState } = useAuthStore
+const { getState, setState } = useSdkStore
 
 export async function reconnect() {
   logger.log('Reconnecting...')
@@ -43,12 +35,26 @@ export async function reconnect() {
     setState({ connectionError: 'Failed to initialize SDK' })
     return false
   }
-  const connected = await sdk.connect()
-  setState({
-    isConnected: connected,
-    connectionError: connected ? null : 'Failed to connect to indexer',
-  })
-  return connected
+  const controller = new AbortController()
+  setTimeout(() => {
+    controller.abort()
+  }, 5000)
+  try {
+    const connected = await sdk.connect({
+      signal: controller.signal,
+    })
+    setState({
+      isConnected: connected,
+      connectionError: connected ? null : 'Failed to connect to indexer',
+    })
+    return connected
+  } catch (e) {
+    setState({
+      isConnected: false,
+      connectionError: 'Failed to connect to indexer',
+    })
+    return false
+  }
 }
 
 export async function initSdk() {
@@ -64,21 +70,17 @@ export async function initSdk() {
   }
 }
 
-export function useSdk(): Sdk | null {
-  return useAuthStore((s) => s.sdk)
+export async function resetSdk() {
+  setState({
+    sdk: null,
+    isConnected: false,
+    connectionError: null,
+    isAuthing: false,
+  })
 }
 
-export async function resetApp() {
-  await deleteAllFileRecords()
-  const newSeed = generateRecoveryPhrase()
-  await setRecoveryPhrase(newSeed)
-  await setHasOnboarded(false)
-  setState({
-    isConnected: false,
-    sdk: null,
-    isAuthing: false,
-    connectionError: null,
-  })
+export function useSdk(): Sdk | null {
+  return useSdkStore((s) => s.sdk)
 }
 
 export async function tryToConnectAndSet(newIndexerURL: string) {
@@ -130,30 +132,21 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
   }
 }
 
-export async function initAuth() {
-  const hasOnboarded = await getHasOnboarded()
-  if (hasOnboarded) {
-    await initSdk()
-    await reconnect()
-  }
-  setState({ isInitializing: false })
+export function setIsConnected(connected: boolean) {
+  return useSdkStore.setState({ isConnected: connected })
 }
 
 // selectors
 
-export function useIsInitializing(): boolean {
-  return useAuthStore((s) => s.isInitializing)
-}
-
 export const [getIsConnected, useIsConnected] = createGetterAndSelector(
-  useAuthStore,
+  useSdkStore,
   (s) => s.isConnected
 )
 
 export function useIsAuthing(): boolean {
-  return useAuthStore((s) => s.isAuthing)
+  return useSdkStore((s) => s.isAuthing)
 }
 
 export function getSdk(): Sdk | null {
-  return useAuthStore.getState().sdk
+  return useSdkStore.getState().sdk
 }

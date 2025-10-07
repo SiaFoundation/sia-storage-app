@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { colors, palette } from '../styles/colors'
-import { useIsConnected } from '../stores/auth'
+import { useIsConnected } from '../stores/sdk'
 import { DotIcon } from 'lucide-react-native'
 import { RowGroup } from '../components/Group'
 import { Button } from '../components/Button'

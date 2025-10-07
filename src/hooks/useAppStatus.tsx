@@ -1,7 +1,8 @@
 import React from 'react'
 import { TriangleAlertIcon, UploadCloudIcon } from 'lucide-react-native'
 import { palette } from '../styles/colors'
-import { useIsConnected, useIsInitializing } from '../stores/auth'
+import { useIsConnected } from '../stores/sdk'
+import { useIsInitializing } from '../stores/app'
 import { useHasOnboarded } from '../stores/settings'
 import { useUploadScannerStatus } from '../managers/uploadScanner'
 

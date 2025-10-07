@@ -1,7 +1,5 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { getFocusedRouteNameFromRoute } from '@react-navigation/native'
-import { FolderIcon, SettingsIcon } from 'lucide-react-native'
 import { MainStack } from './MainStack'
 import { SettingsStack } from './SettingsStack'
 import { type RootTabParamList } from './types'
