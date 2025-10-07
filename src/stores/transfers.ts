@@ -178,6 +178,9 @@ export async function runTransferWithSlot<T>(params: {
   } catch (e) {
     logger.log('transfer error', id, kind, e)
     const message = e instanceof Error ? e.message : String(e)
+    if (message.includes('Error connecting to indexer')) {
+      setIsConnected(false)
+    }
     setTransferState(id, kind, 'error', 0, message)
     throw e
   } finally {

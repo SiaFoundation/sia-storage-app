@@ -11,12 +11,14 @@ import { useEffect } from 'react'
 import { initApp, shutdownApp } from './stores/app'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
+import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
 
 SplashScreen.preventAutoHideAsync()
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
+  useReconnectIndexer()
 
   useEffect(() => {
     initApp()
