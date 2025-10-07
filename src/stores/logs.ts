@@ -48,12 +48,6 @@ export function initLogger(): void {
   hasInit = true
 }
 
-export function useInitLogger(): void {
-  useEffect(() => {
-    initLogger()
-  }, [])
-}
-
 // selectors
 
 export function useLogs(): string[] {

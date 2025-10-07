@@ -1,7 +1,7 @@
 import { useToast } from '../lib/toastContext'
 import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
 import { updateDownloadProgress } from '../stores/transfers'
-import { useSdk } from '../stores/auth'
+import { useSdk } from '../stores/sdk'
 import { PinnedObject, SealedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime, type Ext } from '../lib/fileTypes'

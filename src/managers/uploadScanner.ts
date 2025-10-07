@@ -11,7 +11,7 @@ import {
   SCANNER_ADD_TO_QUEUE_FACTOR,
   SCANNER_INTERVAL,
 } from '../config'
-import { getIsConnected } from '../stores/auth'
+import { getIsConnected } from '../stores/sdk'
 import {
   getAutoScanUploads,
   getMaxTransfers,
@@ -25,12 +25,16 @@ function startUploadScanner(): void {
   if (scanTimer) return
   logger.log('[uploadScanner] starting scanner')
   const scan = async () => {
+    const isConnected = getIsConnected()
+    if (!isConnected) {
+      logger.log('[uploadScanner] not connected to indexer, skipping scan')
+      return
+    }
     logger.log('[uploadScanner] scanning...')
     try {
       const maxTransfers = await getMaxTransfers()
       const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
       const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
-      if (!getIsConnected()) return
       if (getTransferCounts().total >= maxTotalUploads) {
         return
       }

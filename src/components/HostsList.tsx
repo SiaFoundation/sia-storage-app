@@ -2,7 +2,7 @@ import { Text, View, StyleSheet, Platform, Pressable } from 'react-native'
 import { ChevronRightIcon } from 'lucide-react-native'
 import { colors, palette } from '../styles/colors'
 import useSWR from 'swr'
-import { useSdk } from '../stores/auth'
+import { useSdk } from '../stores/sdk'
 import { SWRList } from './SWRList'
 
 export function HostsList({

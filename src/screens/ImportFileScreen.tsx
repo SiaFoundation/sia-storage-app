@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { type MainStackParamList } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
-import { useSdk } from '../stores/auth'
+import { useSdk } from '../stores/sdk'
 import { createFileRecord } from '../stores/files'
 import { useNavigation } from '@react-navigation/native'
 import { uniqueId } from '../lib/uniqueId'

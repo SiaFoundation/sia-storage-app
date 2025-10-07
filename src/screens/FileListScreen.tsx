@@ -1,5 +1,12 @@
 import { useCallback, useRef, useState, type ComponentRef } from 'react'
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+} from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from '../components/Gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -165,7 +172,11 @@ export function FileListScreen() {
           </Pressable>
         </View>
       </View>
-      {!!fileCount.data ? (
+      {files.isLoading ? (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator color={palette.blue[400]} />
+        </View>
+      ) : !!fileCount.data ? (
         files.data && files.data.length > 0 ? (
           viewMode == 'gallery' ? (
             <Gallery onPressItem={handleOpenDetail} topPadding={130} />

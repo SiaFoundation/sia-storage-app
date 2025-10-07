@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { logger } from '../lib/logger'
 import { acquireTransfersSlot } from '../managers/transfersPool'
 import { createGetterAndSelector } from '../lib/selectors'
+import { setIsConnected } from './sdk'
 
 export type TransferKind = 'upload' | 'download'
 

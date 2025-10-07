@@ -1,4 +1,4 @@
-import { tryToConnectAndSet } from '../stores/auth'
+import { tryToConnectAndSet } from '../stores/sdk'
 import { useCallback, useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { setIndexerURL, useIndexerURL } from '../stores/settings'

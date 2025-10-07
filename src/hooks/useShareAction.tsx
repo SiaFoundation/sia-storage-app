@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
-import { useSdk } from '../stores/auth'
+import { useSdk } from '../stores/sdk'
 import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
 import { useFileDetails } from '../stores/files'
 import Share from 'react-native-share'
