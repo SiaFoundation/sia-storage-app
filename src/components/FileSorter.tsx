@@ -2,13 +2,18 @@ import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { palette } from '../styles/colors'
 import { ArrowUp, ArrowDown, SortAsc, SortDesc } from 'lucide-react-native'
-import { SortBy, useFilesView } from '../stores/files'
+import {
+  setSortCategory,
+  SortBy,
+  toggleDir,
+  useFilesView,
+} from '../stores/files'
 import ActionSheet from '../components/ActionSheet'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { openSheet } from '../stores/sheets'
 
 export function FileSorter(): React.ReactElement {
-  const { sortBy, sortDir, setSortCategory, toggleDir } = useFilesView()
+  const { sortBy, sortDir } = useFilesView()
   const isOpen = useSheetOpen('fileSorter')
 
   const onPick = (nextSortBy: SortBy) => {

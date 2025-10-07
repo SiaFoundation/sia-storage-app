@@ -2,7 +2,12 @@ import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { colors, palette, whiteA } from '../styles/colors'
 import { Square, CheckSquare, Filter as FilterIcon } from 'lucide-react-native'
-import { type Category, useFilesView } from '../stores/files'
+import {
+  type Category,
+  clearCategories,
+  toggleCategory,
+  useFilesView,
+} from '../stores/files'
 import ActionSheet from '../components/ActionSheet'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 
@@ -10,7 +15,7 @@ const CATEGORIES: Category[] = ['Video', 'Image', 'Audio', 'Files']
 
 export function FileFilter(): React.ReactElement {
   const isOpen = useSheetOpen('fileFilter')
-  const { selectedCategories, toggleCategory, clearCategories } = useFilesView()
+  const { selectedCategories } = useFilesView()
 
   const Row = ({ cat }: { cat: Category }) => {
     const checked = selectedCategories.has(cat)

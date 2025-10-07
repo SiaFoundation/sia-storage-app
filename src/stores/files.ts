@@ -293,23 +293,38 @@ type FilesViewState = {
   sortBy: SortBy
   sortDir: SortDir
   selectedCategories: Set<Category>
-  setSortCategory: (by: SortBy) => void
-  toggleDir: () => void
-  toggleCategory: (c: Category) => void
-  clearCategories: () => void
 }
 
-export const useFilesView = create<FilesViewState>((set, get) => ({
+export const useFilesView = create<FilesViewState>(() => ({
   sortBy: 'DATE',
   sortDir: 'DESC',
   selectedCategories: new Set<Category>(),
-  setSortCategory: (sortBy) =>
-    set({ sortBy, sortDir: sortBy === 'NAME' ? 'ASC' : 'DESC' }),
-  toggleDir: () => set({ sortDir: get().sortDir === 'ASC' ? 'DESC' : 'ASC' }),
-  toggleCategory: (c) => {
-    const next = new Set(get().selectedCategories)
-    next.has(c) ? next.delete(c) : next.add(c)
-    set({ selectedCategories: next })
-  },
-  clearCategories: () => set({ selectedCategories: new Set() }),
 }))
+
+const { setState } = useFilesView
+
+export function setSortCategory(sortBy: SortBy) {
+  setState(() => {
+    return { sortBy, sortDir: sortBy === 'NAME' ? 'ASC' : 'DESC' }
+  })
+}
+
+export function toggleDir() {
+  setState((state) => {
+    return { sortDir: state.sortDir === 'ASC' ? 'DESC' : 'ASC' }
+  })
+}
+
+export function toggleCategory(c: Category) {
+  setState((state) => {
+    const next = new Set(state.selectedCategories)
+    next.has(c) ? next.delete(c) : next.add(c)
+    return { selectedCategories: next }
+  })
+}
+
+export function clearCategories() {
+  setState(() => {
+    return { selectedCategories: new Set() }
+  })
+}
