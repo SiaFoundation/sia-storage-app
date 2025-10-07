@@ -5,6 +5,7 @@ import { useIsConnected } from '../stores/sdk'
 import { useIsInitializing } from '../stores/app'
 import { useHasOnboarded } from '../stores/settings'
 import { useUploadScannerStatus } from '../managers/uploadScanner'
+import { useIsOnline } from './useIsOnline'
 
 export type AppStatus = {
   visible: boolean
@@ -19,9 +20,19 @@ export function useAppStatus(): AppStatus {
   const isConnected = useIsConnected()
   const hasOnboarded = useHasOnboarded()
   const uploadsProgress = useUploadScannerStatus()
+  const isOnline = useIsOnline()
 
   if (!hasOnboarded || isInitializing) {
     return { visible: false, message: '', icon: null, level: 'info' }
+  }
+
+  if (typeof isOnline.data === 'boolean' && !isOnline.data) {
+    return {
+      visible: true,
+      message: 'No internet connection',
+      icon: <TriangleAlertIcon size={14} color={palette.yellow[400]} />,
+      level: 'warning',
+    }
   }
 
   if (!isConnected) {
