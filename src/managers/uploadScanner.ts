@@ -11,7 +11,7 @@ import {
   SCANNER_ADD_TO_QUEUE_FACTOR,
   SCANNER_INTERVAL,
 } from '../config'
-import { useAuthStore } from '../stores/auth'
+import { getIsConnected } from '../stores/auth'
 import {
   getAutoScanUploads,
   getMaxTransfers,
@@ -30,7 +30,7 @@ function startUploadScanner(): void {
       const maxTransfers = await getMaxTransfers()
       const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
       const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
-      if (!useAuthStore.getState().isConnected) return
+      if (!getIsConnected()) return
       if (getTransferCounts().total >= maxTotalUploads) {
         return
       }

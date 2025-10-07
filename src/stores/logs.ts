@@ -5,37 +5,28 @@ import { logger } from '../lib/logger'
 
 export type LogsState = {
   logs: string[]
-  append: (...args: unknown[]) => void
-  clear: () => void
 }
 
-export const useLogsStore = create<LogsState>((set) => ({
+export const useLogsStore = create<LogsState>(() => ({
   logs: [],
-  append: (...args: unknown[]) =>
-    set((state) => {
-      const line = `${new Date().toLocaleTimeString()} ${args
-        .map(String)
-        .join(' ')}`
-      const next = [...state.logs.slice(-100), line]
-      return { logs: next }
-    }),
-  clear: () => set({ logs: [] }),
 }))
 
-// actions
+const { setState } = useLogsStore
 
 export function appendLogLine(...args: unknown[]): void {
-  useLogsStore.getState().append(...args)
+  setState((state) => {
+    const line = `${new Date().toLocaleTimeString()} ${args
+      .map(String)
+      .join(' ')}`
+    const next = [...state.logs.slice(-100), line]
+    return { logs: next }
+  })
 }
 
 export function clearLogs(): void {
-  useLogsStore.getState().clear()
-}
-
-// selectors
-
-export function useLogs(): string[] {
-  return useLogsStore(useShallow((s) => s.logs))
+  setState(() => {
+    return { logs: [] }
+  })
 }
 
 let hasInit = false
@@ -61,4 +52,10 @@ export function useInitLogger(): void {
   useEffect(() => {
     initLogger()
   }, [])
+}
+
+// selectors
+
+export function useLogs(): string[] {
+  return useLogsStore(useShallow((s) => s.logs))
 }
