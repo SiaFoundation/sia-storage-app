@@ -13,7 +13,14 @@ import { buildSWRHelpers } from '../lib/swr'
 import { create } from 'zustand'
 import useSWRInfinite from 'swr/infinite'
 
-const { getKey, triggerChange } = buildSWRHelpers('db/files')
+let listMutate: () => void = () => {}
+
+const { getKey, triggerChange: _triggerChange } = buildSWRHelpers('db/files')
+
+async function triggerChange() {
+  _triggerChange()
+  listMutate()
+}
 
 export type FileRecord = {
   id: string
@@ -41,7 +48,6 @@ export async function createFileRecord(
   await updateFileSealedObjects(id, sealedObjects, triggerUpdate)
   if (triggerUpdate) {
     await triggerChange()
-    filesRev.bump()
   }
 }
 
@@ -54,7 +60,6 @@ export async function createManyFileRecords(
     }
   })
   await triggerChange()
-  filesRev.bump()
 }
 
 export async function readAllFileRecords(): Promise<FileRecord[]> {
@@ -172,18 +177,15 @@ export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
   )
   await updateFileSealedObjects(id, sealedObjects)
   await triggerChange()
-  filesRev.bump()
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
   await db().runAsync('DELETE FROM files WHERE id = ?', id)
   await triggerChange()
-  filesRev.bump()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
-  await triggerChange()
 }
 
 export async function updateFileSealedObjects(
@@ -259,16 +261,13 @@ const PAGE_SIZE = 30
 export function useFileList() {
   const { sortBy, sortDir, selectedCategories } = useFilesView()
   const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-  const revision = useFilesRev ? useFilesRev((s) => s.rev) : 0
 
   const categories = Array.from(selectedCategories ?? new Set())
   const categoriesKey = categories.length
     ? categories.slice().sort().join(',')
     : ''
 
-  const base = getKey(
-    `list:${sortBy}:${sortingDir}:${categoriesKey}:rev=${revision}`
-  )
+  const base = getKey(`list:${sortBy}:${sortingDir}:${categoriesKey}`)
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -289,8 +288,10 @@ export function useFileList() {
       return `${base}|page=${pageIndex}`
     },
     fetcher,
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, revalidateAll: true }
   )
+
+  listMutate = swr.mutate
 
   const pages = swr.data
   const flat = pages ? pages.flat() : undefined
@@ -358,22 +359,3 @@ export const useFilesView = create<FilesViewState>((set, get) => ({
   },
   clearCategories: () => set({ selectedCategories: new Set() }),
 }))
-
-// File List Revision store
-type FilesRevisionState = {
-  rev: number
-  bump: () => void
-  reset: () => void
-}
-
-export const useFilesRev = create<FilesRevisionState>((set) => ({
-  rev: 0,
-  bump: () => set((s) => ({ rev: s.rev + 1 })),
-  reset: () => set({ rev: 0 }),
-}))
-
-export const filesRev = {
-  get: () => useFilesRev.getState().rev,
-  bump: () => useFilesRev.getState().bump(),
-  reset: () => useFilesRev.getState().reset(),
-}
