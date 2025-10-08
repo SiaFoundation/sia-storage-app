@@ -6,6 +6,7 @@ import { humanSize } from '../lib/humanSize'
 import { DotIcon } from 'lucide-react-native'
 import { UploadStatusIcon } from './UploadStatusIcon'
 import { FileThumbnail } from './FileThumbnail'
+import { memo } from 'react'
 
 type Props = {
   file: FileRecord
@@ -13,7 +14,7 @@ type Props = {
   setItemRef?: (id: string, ref: any) => void
 }
 
-export function FileListItem({ file, onPressItem, setItemRef }: Props) {
+function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
   const status = useFileStatus(file)
   return (
     <Pressable
@@ -49,6 +50,14 @@ export function FileListItem({ file, onPressItem, setItemRef }: Props) {
     </Pressable>
   )
 }
+
+export const FileListItem = memo(FileListItemComponent, (prev, next) => {
+  return (
+    prev.file === next.file &&
+    prev.onPressItem === next.onPressItem &&
+    prev.setItemRef === next.setItemRef
+  )
+})
 
 const styles = StyleSheet.create({
   container: {

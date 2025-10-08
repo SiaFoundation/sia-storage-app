@@ -7,6 +7,7 @@ import { initSdk, reconnect, resetSdk } from './sdk'
 import { initUploadScanner, stopUploadScanner } from '../managers/uploadScanner'
 import { cancelAllTransfers } from './transfers'
 import { initLogger } from './logs'
+import { ensureCacheDir } from './fileCache'
 
 export type AppState = {
   isInitializing: boolean
@@ -22,6 +23,7 @@ const { setState } = useAppStore
 
 export async function initApp() {
   initLogger()
+  await ensureCacheDir()
   const hasOnboarded = await getHasOnboarded()
   if (hasOnboarded) {
     await initSdk()
