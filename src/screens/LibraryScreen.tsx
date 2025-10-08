@@ -16,7 +16,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from 'lucide-react-native'
-import { Gallery } from '../components/Gallery'
+import { FileGallery } from '../components/FileGallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
@@ -36,7 +36,7 @@ import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { openSheet } from '../stores/sheets'
 import { ExpandableBadge } from '../components/ExpandableBadge'
 
-export function FileListScreen() {
+export function LibraryScreen() {
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
   const navigation =
@@ -179,7 +179,7 @@ export function FileListScreen() {
       ) : !!fileCount.data ? (
         files.data && files.data.length > 0 ? (
           viewMode == 'gallery' ? (
-            <Gallery onPressItem={handleOpenDetail} topPadding={130} />
+            <FileGallery onPressItem={handleOpenDetail} topPadding={130} />
           ) : (
             <FileList onPressItem={handleOpenDetail} topPadding={130} />
           )

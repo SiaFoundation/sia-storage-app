@@ -13,7 +13,7 @@ type Props = {
   setItemRef?: (id: string, ref: any) => void
 }
 
-function GalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
+function FileGalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
   const toast = useToast()
   return (
     <View
@@ -37,7 +37,7 @@ function GalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
   )
 }
 
-export const GalleryItem = memo(GalleryItemComponent, (prev, next) => {
+export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
   return (
     prev.file === next.file &&
     prev.onPressItem === next.onPressItem &&

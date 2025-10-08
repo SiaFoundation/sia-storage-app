@@ -1,8 +1,8 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { FlatList, StyleSheet, ActivityIndicator } from 'react-native'
 import { useFileList, type FileRecord } from '../stores/files'
-import { GalleryItem } from './GalleryItem'
 import { useFlatListControls } from '../hooks/useFlatListControls'
+import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {
   onPressItem: (item: FileRecord) => void
@@ -11,7 +11,7 @@ type Props = {
   topPadding?: number
 }
 
-export function Gallery({
+export function FileGallery({
   onPressItem,
   setItemRef,
   numColumns = 3,
@@ -36,7 +36,7 @@ export function Gallery({
         { paddingTop: topPadding },
       ]}
       renderItem={({ item }) => (
-        <GalleryItem
+        <FileGalleryItem
           file={item}
           onPressItem={onPressItem}
           setItemRef={setItemRef}

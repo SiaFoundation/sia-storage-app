@@ -1,6 +1,6 @@
 import React from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { FileListScreen } from '../screens/FileListScreen'
+import { LibraryScreen } from '../screens/LibraryScreen'
 import { FileDetailScreen } from '../screens/FileDetailScreen'
 import { ImportFileScreen } from '../screens/ImportFileScreen'
 import { type MainStackParamList } from './types'
@@ -13,7 +13,7 @@ export function MainStack() {
       <Stack.Screen
         name="LibraryHome"
         options={{ title: 'Library', headerShown: false }}
-        component={FileListScreen}
+        component={LibraryScreen}
       />
       <Stack.Screen
         name="FileDetail"
