@@ -11,15 +11,27 @@ import { LabeledValueRow } from '../components/LabeledValueRow'
 import { SettingsRecoveryPhrase } from '../components/SettingsRecoveryPhrase'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { useAccount } from '../hooks/useAccount'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
 
-export function SettingsAdvancedScreen({ navigation }: Props) {
+export function SettingsAdvancedScreen(_props: Props) {
   const showAdvanced = useShowAdvanced()
+  const account = useAccount()
   useSettingsHeader()
 
   return (
     <SettingsLayout style={styles.container}>
+      {account.data ? (
+        <RowGroup title="Account">
+          <InfoCard>
+            <LabeledValueRow
+              label="Account Key"
+              value={account.data.accountKey}
+            />
+          </InfoCard>
+        </RowGroup>
+      ) : null}
       <SettingsRecoveryPhrase />
       <RowGroup title="Developers">
         <InfoCard>

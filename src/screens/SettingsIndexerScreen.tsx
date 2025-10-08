@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native'
-import { colors, palette } from '../styles/colors'
+import { palette } from '../styles/colors'
 import { useIsConnected } from '../stores/sdk'
 import { DotIcon } from 'lucide-react-native'
 import { RowGroup } from '../components/Group'
@@ -11,13 +11,19 @@ import { useIndexerURL } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { humanSize } from '../lib/humanSize'
+import { useAccount } from '../hooks/useAccount'
+import { type NativeStackScreenProps } from '@react-navigation/native-stack'
+import { type SettingsStackParamList } from '../stacks/types'
 
-export function SettingsIndexerScreen() {
+type Props = NativeStackScreenProps<SettingsStackParamList, 'Indexer'>
+
+export function SettingsIndexerScreen(_props: Props) {
   const isConnected = useIsConnected()
   const currentIndexerURL = useIndexerURL()
   const { newIndexerInputProps, saveIndexerURL, isWaiting } = useChangeIndexer()
   useSettingsHeader()
-
+  const account = useAccount()
   return (
     <SettingsLayout style={styles.container}>
       <RowGroup
@@ -42,6 +48,26 @@ export function SettingsIndexerScreen() {
       >
         <InfoCard>
           <LabeledValueRow label="URL" value={currentIndexerURL.data} />
+          {account.data ? (
+            <>
+              <LabeledValueRow
+                label="Account Key"
+                value={account.data.accountKey}
+              />
+              <LabeledValueRow
+                label="Description"
+                value={account.data.description}
+              />
+              <LabeledValueRow
+                label="Used Storage"
+                value={humanSize(Number(account.data.pinnedData))}
+              />
+              <LabeledValueRow
+                label="Storage Limit"
+                value={humanSize(Number(account.data.maxPinnedData))}
+              />
+            </>
+          ) : null}
         </InfoCard>
       </RowGroup>
       <View style={{ gap: 10 }}>
