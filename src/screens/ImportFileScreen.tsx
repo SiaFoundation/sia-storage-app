@@ -1,7 +1,5 @@
-import {
-  NativeStackNavigationProp,
-  type NativeStackScreenProps,
-} from '@react-navigation/native-stack'
+import { type NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useNavigation, type NavigationProp } from '@react-navigation/native'
 import React, { useCallback } from 'react'
 import useSWR from 'swr'
 import {
@@ -12,11 +10,13 @@ import {
   View,
   Platform,
 } from 'react-native'
-import { type MainStackParamList } from '../stacks/types'
+import {
+  type ImportStackParamList,
+  type RootTabParamList,
+} from '../stacks/types'
 import { useToast } from '../lib/toastContext'
 import { useSdk } from '../stores/sdk'
 import { createFileRecord } from '../stores/files'
-import { useNavigation } from '@react-navigation/native'
 import { uniqueId } from '../lib/uniqueId'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
@@ -28,11 +28,10 @@ import { PlusIcon } from 'lucide-react-native'
 import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
 import { colors } from '../styles/colors'
 
-type Props = NativeStackScreenProps<MainStackParamList, 'ImportFile'>
+type Props = NativeStackScreenProps<ImportStackParamList, 'ImportFile'>
 
 export function ImportFileScreen({ route }: Props) {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<MainStackParamList>>()
+  const navigation = useNavigation<NavigationProp<RootTabParamList>>()
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
   const sdk = useSdk()
@@ -79,12 +78,19 @@ export function ImportFileScreen({ route }: Props) {
       sealedObjects: { [indexerURL]: sealedObject },
     })
     toast.show('File added')
-    navigation.navigate('FileDetail', { id: sharedFile.data.id })
+    navigation.navigate('MainTab', {
+      screen: 'FileDetail',
+      params: { id: sharedFile.data.id },
+    })
   }, [sharedFile.data, sdk, toast, navigation])
 
   return (
     <View style={styles.container}>
-      <FileDetailScreenHeader title="Import File" navigation={navigation} />
+      <FileDetailScreenHeader
+        title="Import File"
+        navigation={navigation}
+        icon="close"
+      />
       <ScrollView contentContainerStyle={styles.content}>
         {sharedFile.isValidating ? (
           <View style={styles.center}>

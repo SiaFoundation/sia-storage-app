@@ -1,7 +1,8 @@
+import { type NavigatorScreenParams } from '@react-navigation/native'
+
 export type MainStackParamList = {
   LibraryHome: undefined
   FileDetail: { id: string }
-  ImportFile: { shareUrl?: string }
 }
 
 export type SettingsStackParamList = {
@@ -18,8 +19,12 @@ export type AuthStackParamList = {
   Connect: undefined
 }
 
+export type ImportStackParamList = {
+  ImportFile: { shareUrl?: string }
+}
+
 export type RootTabParamList = {
-  MainTab: undefined
-  SettingsTab: undefined
-  LogsTab: undefined
+  MainTab: NavigatorScreenParams<MainStackParamList> | undefined
+  SettingsTab: NavigatorScreenParams<SettingsStackParamList> | undefined
+  ImportTab: NavigatorScreenParams<ImportStackParamList> | undefined
 }

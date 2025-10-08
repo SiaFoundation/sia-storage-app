@@ -5,6 +5,7 @@ import { SettingsStack } from './SettingsStack'
 import { type RootTabParamList } from './types'
 import { AuthStack } from './AuthStack'
 import { useHasOnboarded } from '../stores/settings'
+import { ImportStack } from './ImportStack'
 
 const Tab = createBottomTabNavigator<RootTabParamList>()
 
@@ -17,6 +18,12 @@ export function RootTabs() {
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen name="MainTab" options={{ tabBarStyle: { display: 'none' } }}>
         {() => <MainStack />}
+      </Tab.Screen>
+      <Tab.Screen
+        name="ImportTab"
+        options={{ tabBarStyle: { display: 'none' } }}
+      >
+        {() => <ImportStack />}
       </Tab.Screen>
       <Tab.Screen
         name="SettingsTab"
