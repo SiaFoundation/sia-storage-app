@@ -8,7 +8,7 @@ const { getKey, triggerChange } = buildSWRHelpers('cache/files')
 
 const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 
-async function ensureCacheDir(): Promise<void> {
+export async function ensureCacheDir(): Promise<void> {
   const info = CACHE_DIR.info()
   if (!info.exists) {
     CACHE_DIR.create({ intermediates: true })
@@ -16,7 +16,6 @@ async function ensureCacheDir(): Promise<void> {
 }
 
 export async function getCachedFileForId(id: string, ext: Ext): Promise<File> {
-  await ensureCacheDir()
   return new File(CACHE_DIR, `${id}${ext}`)
 }
 
@@ -70,7 +69,6 @@ export async function writeToCache(
   ext: Ext
 ): Promise<string> {
   logger.log('writeToCache', id)
-  await ensureCacheDir()
   const f = await getOrCreateCachedFile(id, ext)
   const writer = f.writableStream().getWriter()
   await writer.write(new Uint8Array(data))
@@ -85,7 +83,6 @@ export async function copyUriToCache(
   ext: Ext
 ): Promise<string> {
   logger.log('copyUriToCache', id, sourceUri, ext)
-  await ensureCacheDir()
   const f = await getOrCreateCachedFile(id, ext)
   const exists = f.info().exists
   if (exists) f.delete()
@@ -101,7 +98,6 @@ export async function copyFileToCache(
   ext: Ext
 ): Promise<string> {
   logger.log('copyFileToCache', id, sourceFile.uri)
-  await ensureCacheDir()
   const f = await getOrCreateCachedFile(id, ext)
   const exists = f.info().exists
   if (exists) f.delete()

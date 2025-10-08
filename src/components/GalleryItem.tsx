@@ -5,6 +5,7 @@ import { useToast } from '../lib/toastContext'
 import { type FileRecord } from '../stores/files'
 import { FileIndicators } from './FileIndicators'
 import { FileThumbnail } from './FileThumbnail'
+import { memo } from 'react'
 
 type Props = {
   file: FileRecord
@@ -12,7 +13,7 @@ type Props = {
   setItemRef?: (id: string, ref: any) => void
 }
 
-export function GalleryItem({ file, onPressItem, setItemRef }: Props) {
+function GalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
   const toast = useToast()
   return (
     <View
@@ -36,9 +37,17 @@ export function GalleryItem({ file, onPressItem, setItemRef }: Props) {
   )
 }
 
+export const GalleryItem = memo(GalleryItemComponent, (prev, next) => {
+  return (
+    prev.file === next.file &&
+    prev.onPressItem === next.onPressItem &&
+    prev.setItemRef === next.setItemRef
+  )
+})
+
 const styles = StyleSheet.create({
   thumbCell: {
-    flex: 1,
+    width: '33.33%',
     aspectRatio: 1,
     margin: 0,
     backgroundColor: colors.bgSurface,
