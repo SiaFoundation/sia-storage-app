@@ -1,5 +1,9 @@
 import { logger } from '../lib/logger'
-import { getActiveUploads, getTransferCounts } from '../stores/transfers'
+import {
+  getActiveUploads,
+  getTransferCounts,
+  useActiveUploads,
+} from '../stores/transfers'
 import {
   getFilesLocalOnly,
   useFileCountAll,
@@ -80,6 +84,7 @@ export async function initUploadScanner() {
 }
 
 export function useUploadScannerStatus(): {
+  show: boolean
   enabled: boolean
   remaining: number
   percentComplete: string
@@ -88,11 +93,21 @@ export function useUploadScannerStatus(): {
   const total = useFileCountAll()
   const localOnly = useFileCountLocalOnly()
   const enabled = useAutoScanUploads()
-  const percentComplete =
-    (((total.data ?? 0) - (localOnly.data ?? 0)) / (total.data ?? 0)) * 100
+  const activeUploads = useActiveUploads()
+  const uploadedCount = total.data ?? 0 - (localOnly.data ?? 0)
+  const isEnabled = enabled.data ?? false
+  const localOnlyCount = localOnly.data ?? 0
+  const activeProgress = activeUploads
+    .map((u) => u.progress)
+    .reduce((a, b) => a + b, 0)
+  const percentComplete = localOnlyCount
+    ? (activeProgress + uploadedCount) / localOnlyCount
+    : 0
+
   return {
-    enabled: enabled.data ?? false,
-    remaining: localOnly.data ?? 0,
+    show: isEnabled && !!localOnlyCount,
+    enabled: isEnabled,
+    remaining: localOnlyCount,
     percentComplete: `${percentComplete.toFixed(0)}%`,
     total: total.data ?? 0,
   }
