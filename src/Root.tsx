@@ -35,7 +35,7 @@ export function Root() {
       if (host === 'new-file' || path === 'new-file') {
         const shareUrl = url.searchParams.get('shareUrl') ?? undefined
         if (shareUrl && navigationRef.isReady()) {
-          navigationRef.navigate('MainTab', {
+          navigationRef.navigate('ImportTab', {
             screen: 'ImportFile',
             params: { shareUrl },
           })

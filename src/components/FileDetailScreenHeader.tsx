@@ -1,17 +1,21 @@
 import React from 'react'
 import { View, StyleSheet, Text, Pressable } from 'react-native'
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { type MainStackParamList } from '../stacks/types'
+import { type NavigationProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeftIcon } from 'lucide-react-native'
-import { colors, overlay, palette, whiteA } from '../styles/colors'
+import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
+import { overlay, palette } from '../styles/colors'
 
 type Props = {
   title: string
-  navigation: NativeStackNavigationProp<MainStackParamList>
+  navigation: NavigationProp<Record<string, object | undefined>>
+  icon?: 'back' | 'close'
 }
 
-export function FileDetailScreenHeader({ title, navigation }: Props) {
+export function FileDetailScreenHeader({
+  title,
+  navigation,
+  icon = 'back',
+}: Props) {
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 2 }]}>
@@ -22,7 +26,11 @@ export function FileDetailScreenHeader({ title, navigation }: Props) {
           style={styles.headerIcon}
         >
           <View style={styles.pill}>
-            <ArrowLeftIcon color={palette.gray[50]} size={16} />
+            {icon === 'back' ? (
+              <ArrowLeftIcon color={palette.gray[50]} size={16} />
+            ) : (
+              <XIcon color={palette.gray[50]} size={16} />
+            )}
           </View>
         </Pressable>
         <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
