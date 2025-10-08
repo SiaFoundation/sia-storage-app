@@ -44,7 +44,7 @@ export function useAppStatus(): AppStatus {
     }
   }
 
-  if (uploadsProgress.enabled && uploadsProgress.remaining > 0) {
+  if (uploadsProgress.show) {
     return {
       visible: true,
       message: 'Uploading files to network',

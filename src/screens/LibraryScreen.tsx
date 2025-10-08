@@ -110,42 +110,6 @@ export function LibraryScreen() {
           </Text>
         </View>
         <View style={styles.buttonRow}>
-          <View style={styles.toggleGroup} pointerEvents="none">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show gallery view"
-              onPress={() => setViewMode('gallery')}
-              style={({ pressed }) => [
-                styles.toggleButton,
-                viewMode === 'gallery' && styles.toggleActive,
-                pressed && styles.togglePressed,
-              ]}
-            >
-              <Grid2X2Icon
-                size={16}
-                color={
-                  viewMode === 'list' ? palette.gray[975] : palette.gray[300]
-                }
-              />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show list view"
-              onPress={() => setViewMode('list')}
-              style={({ pressed }) => [
-                styles.toggleButton,
-                viewMode === 'list' && styles.toggleActive,
-                pressed && styles.togglePressed,
-              ]}
-            >
-              <ListIcon
-                size={16}
-                color={
-                  viewMode === 'list' ? palette.gray[975] : palette.gray[300]
-                }
-              />
-            </Pressable>
-          </View>
           {appStatus.visible && (
             <View style={styles.statusPillContainer}>
               <ExpandableBadge
@@ -346,28 +310,10 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   emptyText: { color: whiteA.a70, textAlign: 'center' },
-
   buttonRow: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  toggleGroup: { display: 'none' },
-  toggleButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.light[100],
-    borderColor: palette.gray[200],
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  toggleActive: {
-    backgroundColor: palette.light[200],
-  },
-  togglePressed: {
-    opacity: 0.7,
   },
 })
