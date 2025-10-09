@@ -105,3 +105,9 @@ export async function setAutoScanUploads(value: boolean) {
   await setSecureStoreBoolean('autoScanUploads', value)
   triggerChange('autoScanUploads')
 }
+
+export async function toggleAutoScanUploads() {
+  const current = await getAutoScanUploads()
+  const next = !current
+  await setAutoScanUploads(next)
+}
