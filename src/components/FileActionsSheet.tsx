@@ -111,7 +111,7 @@ export function FileActionsSheet({
       toast.show('Failed to delete file')
       closeSheet()
     }
-  }, [file?.id, navigation, toast])
+  }, [file, sdk, toast, navigation])
 
   const handleDownload = useDownload(file)
 

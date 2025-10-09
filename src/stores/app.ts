@@ -8,6 +8,7 @@ import { initUploadScanner, stopUploadScanner } from '../managers/uploadScanner'
 import { cancelAllTransfers } from './transfers'
 import { initLogger } from './logs'
 import { ensureCacheDir } from './fileCache'
+import { resetDb } from '../db'
 
 export type AppState = {
   isInitializing: boolean
@@ -41,6 +42,7 @@ export function shutdownApp() {
 
 export async function resetApp() {
   await deleteAllFileRecords()
+  await resetDb()
   const newSeed = generateRecoveryPhrase()
   await setRecoveryPhrase(newSeed)
   await setHasOnboarded(false)
