@@ -15,16 +15,11 @@ export function useFlatListControls<T>({
   isValidating,
   hasMore,
 }: Params<T>) {
-  const isRefreshing = !!data && isValidating && size === 1
   const isLoadingMore = !!data && isValidating && hasMore
 
   const handleEndReached = React.useCallback(() => {
     if (!isLoadingMore && hasMore) setSize(size + 1)
   }, [isLoadingMore, hasMore, setSize, size])
 
-  const handleRefresh = React.useCallback(() => {
-    setSize(1)
-  }, [setSize])
-
-  return { isRefreshing, isLoadingMore, handleEndReached, handleRefresh }
+  return { isLoadingMore, handleEndReached }
 }
