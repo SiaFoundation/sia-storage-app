@@ -19,69 +19,47 @@ import { getIsConnected } from '../stores/sdk'
 import {
   getAutoScanUploads,
   getMaxTransfers,
-  setAutoScanUploads,
   useAutoScanUploads,
 } from '../stores/settings'
+import { createServiceInterval } from '../lib/serviceInterval'
 
-let scanTimer: NodeJS.Timeout | null = null
-
-function startUploadScanner(): void {
-  if (scanTimer) return
-  logger.log('[uploadScanner] starting scanner')
-  const scan = async () => {
-    const isConnected = getIsConnected()
-    if (!isConnected) {
-      logger.log('[uploadScanner] not connected to indexer, skipping scan')
+async function startUploadScanner(): Promise<void> {
+  const isConnected = getIsConnected()
+  if (!isConnected) {
+    logger.log('[uploadScanner] not connected to indexer, skipping scan')
+    return
+  }
+  logger.log('[uploadScanner] scanning...')
+  try {
+    const maxTransfers = await getMaxTransfers()
+    const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
+    const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
+    if (getTransferCounts().total >= maxTotalUploads) {
       return
     }
-    logger.log('[uploadScanner] scanning...')
-    try {
-      const maxTransfers = await getMaxTransfers()
-      const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
-      const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
-      if (getTransferCounts().total >= maxTotalUploads) {
-        return
-      }
-      const localOnly = await getFilesLocalOnly()
-      const activeUploads = getActiveUploads()
-      const localFilesNotYetQueued = localOnly
-        .filter((f) => !activeUploads.some((u) => u.id === f.id))
-        .slice(0, maxToAdd)
-      if (localFilesNotYetQueued.length > 0) {
-        logger.log(
-          `[uploadScanner] queuing ${localFilesNotYetQueued.length} uploads`,
-          localFilesNotYetQueued.map((f) => f.id).join(', ')
-        )
-        localFilesNotYetQueued.forEach((f) => queueUploadForFileId(f.id))
-      }
-    } catch (e) {
-      logger.log('[uploadScanner] scan error', e)
+    const localOnly = await getFilesLocalOnly()
+    const activeUploads = getActiveUploads()
+    const localFilesNotYetQueued = localOnly
+      .filter((f) => !activeUploads.some((u) => u.id === f.id))
+      .slice(0, maxToAdd)
+    if (localFilesNotYetQueued.length > 0) {
+      logger.log(
+        `[uploadScanner] queuing ${localFilesNotYetQueued.length} uploads`,
+        localFilesNotYetQueued.map((f) => f.id).join(', ')
+      )
+      localFilesNotYetQueued.forEach((f) => queueUploadForFileId(f.id))
     }
+  } catch (e) {
+    logger.log('[uploadScanner] scan error', e)
   }
-  scanTimer = setInterval(scan, SCANNER_INTERVAL)
 }
 
-export function stopUploadScanner(): void {
-  if (!scanTimer) return
-  logger.log('[uploadScanner] stopping scanner')
-  clearInterval(scanTimer)
-  scanTimer = null
-}
-
-export async function toggleUploadScanner() {
-  const current = await getAutoScanUploads()
-  const next = !current
-  await setAutoScanUploads(next)
-  logger.log(`[uploadScanner] autoScanUploads set to ${next}`)
-  if (next) startUploadScanner()
-  else stopUploadScanner()
-}
-
-export async function initUploadScanner() {
-  const autoScanUploads = await getAutoScanUploads()
-  logger.log(`[uploadScanner] init: autoScanUploads=${autoScanUploads}`)
-  if (autoScanUploads) startUploadScanner()
-}
+export const initUploadScanner = createServiceInterval({
+  name: 'uploadScanner',
+  worker: startUploadScanner,
+  getState: getAutoScanUploads,
+  interval: SCANNER_INTERVAL,
+})
 
 export function useUploadScannerStatus(): {
   show: boolean
