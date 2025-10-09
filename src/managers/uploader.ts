@@ -10,7 +10,7 @@ import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
 import { extFromMime } from '../lib/fileTypes'
 import {
-  createManyFileRecords,
+  insertOrReplaceManyFileRecords,
   FileRecord,
   readFileRecord,
 } from '../stores/files'
@@ -44,7 +44,7 @@ export function useUploader() {
             sealedObjects: {},
           })
         }
-        await createManyFileRecords(fileRecords)
+        await insertOrReplaceManyFileRecords(fileRecords)
         await Promise.all(
           assets.map(async (asset: PickerAsset, index: number) => {
             logger.log(

@@ -31,7 +31,7 @@ export type FileRecord = {
   sealedObjects: Record<string, SealedObject>
 }
 
-export async function createFileRecord(
+export async function insertOrReplaceFileRecord(
   fileRecord: FileRecord,
   triggerUpdate: boolean = true
 ): Promise<void> {
@@ -51,12 +51,12 @@ export async function createFileRecord(
   }
 }
 
-export async function createManyFileRecords(
+export async function insertOrReplaceManyFileRecords(
   files: FileRecord[]
 ): Promise<void> {
   await db().withTransactionAsync(async () => {
     for (const fr of files) {
-      await createFileRecord(fr, false)
+      await insertOrReplaceFileRecord(fr, false)
     }
   })
   await triggerChange()
