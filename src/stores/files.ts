@@ -24,6 +24,7 @@ async function triggerChange() {
 
 export type FileRecord = {
   id: string
+  cid: string | null
   fileName: string | null
   fileSize: number | null
   createdAt: number
@@ -35,11 +36,12 @@ export async function insertOrReplaceFileRecord(
   fileRecord: FileRecord,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, sealedObjects } =
+  const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
     fileRecord
   await db().runAsync(
-    'INSERT OR REPLACE INTO files (id, fileName, fileSize, createdAt, fileType) VALUES (?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO files (id, cid, fileName, fileSize, createdAt, fileType) VALUES (?, ?, ?, ?, ?, ?)',
     id,
+    cid,
     fileName,
     fileSize,
     createdAt,
@@ -65,13 +67,14 @@ export async function insertOrReplaceManyFileRecords(
 export async function readAllFileRecords(): Promise<FileRecord[]> {
   const rows = await db().getAllAsync<{
     id: string
+    cid: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
     fileType: string
     sealedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects FROM files ORDER BY createdAt DESC'
+    'SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files ORDER BY createdAt DESC'
   )
   return rows.map(transformRow)
 }
@@ -129,13 +132,14 @@ export async function readOrderedFileRecords(
 
   const rows = await db().getAllAsync<{
     id: string
+    cid: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
     fileType: string
     sealedObjects: string | null
   }>(
-    `SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects
+    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,
@@ -145,16 +149,54 @@ export async function readOrderedFileRecords(
   return rows.map(transformRow)
 }
 
-export async function readFileRecord(id: string): Promise<FileRecord | null> {
+export async function readFileRecordByCid(
+  cid: string
+): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<{
     id: string
+    cid: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
     fileType: string
     sealedObjects: string | null
   }>(
-    'SELECT id, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE id = ?',
+    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE cid = ?`,
+    cid
+  )
+  return row ? transformRow(row) : null
+}
+
+export async function readFileRecordsByCid(
+  cids: string[]
+): Promise<FileRecord[]> {
+  const rows = await db().getAllAsync<{
+    id: string
+    cid: string
+    fileName: string | null
+    fileSize: number | null
+    createdAt: number
+    fileType: string
+    sealedObjects: string | null
+  }>(
+    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE cid IN (${cids
+      .map(() => '?')
+      .join(',')})`
+  )
+  return rows.map(transformRow)
+}
+
+export async function readFileRecord(id: string): Promise<FileRecord | null> {
+  const row = await db().getFirstAsync<{
+    id: string
+    cid: string
+    fileName: string | null
+    fileSize: number | null
+    createdAt: number
+    fileType: string
+    sealedObjects: string | null
+  }>(
+    'SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE id = ?',
     id
   )
   if (!row) {
@@ -165,10 +207,11 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 }
 
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, fileName, fileSize, createdAt, fileType, sealedObjects } =
+  const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
     fileRecord
   await db().runAsync(
-    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, fileType = ? WHERE id = ?',
+    'UPDATE files SET cid = ?, fileName = ?, fileSize = ?, createdAt = ?, fileType = ? WHERE id = ?',
+    cid,
     fileName,
     fileSize,
     createdAt,
@@ -235,6 +278,7 @@ export async function updateFileSealedObject(
 
 function transformRow(row: {
   id: string
+  cid: string
   fileName: string | null
   fileSize: number | null
   createdAt: number
@@ -244,6 +288,7 @@ function transformRow(row: {
   const [sealedObjects] = deserializeSealedObjects(row.id, row.sealedObjects)
   return {
     id: row.id,
+    cid: row.cid,
     fileName: row.fileName,
     fileSize: row.fileSize,
     createdAt: row.createdAt,

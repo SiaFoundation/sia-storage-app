@@ -37,6 +37,7 @@ export function useUploader() {
           )
           fileRecords.push({
             id: asset.id,
+            cid: null,
             fileName: asset.fileName,
             fileSize: asset.fileSize,
             createdAt: asset.createdAt,

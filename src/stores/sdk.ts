@@ -5,6 +5,7 @@ import { logger } from '../lib/logger'
 import { setHasOnboarded, getIndexerURL } from './settings'
 import { getAppKey } from '../lib/appKey'
 import { createGetterAndSelector } from '../lib/selectors'
+import { onboardIndexer } from './app'
 
 export type SdkState = {
   sdk: Sdk | null
@@ -123,7 +124,6 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
       isConnected: true,
       isAuthing: false,
     })
-    await setHasOnboarded(true)
     return true
   } catch (err) {
     logger.log('Error connecting to indexer', err)

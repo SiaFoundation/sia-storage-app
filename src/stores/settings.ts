@@ -111,3 +111,21 @@ export async function toggleAutoScanUploads() {
   const next = !current
   await setAutoScanUploads(next)
 }
+
+// Auto Sync Down Objects
+
+export const [getAutoSyncDownObjects, useAutoSyncDownObjects] =
+  createGetterAndSWRHook(getKey('autoSyncDownObjects'), () =>
+    getSecureStoreBoolean('autoSyncDownObjects')
+  )
+
+export async function setAutoSyncDownObjects(value: boolean) {
+  await setSecureStoreBoolean('autoSyncDownObjects', value)
+  triggerChange('autoSyncDownObjects')
+}
+
+export async function toggleAutoSyncDownObjects() {
+  const current = await getAutoSyncDownObjects()
+  const next = !current
+  await setAutoSyncDownObjects(next)
+}
