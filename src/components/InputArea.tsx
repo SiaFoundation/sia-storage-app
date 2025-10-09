@@ -31,7 +31,7 @@ export function InputArea({
   placeholderTextColor,
   height = 80,
   ellipsizeMode = 'tail',
-  align = 'right',
+  align = 'left',
   labelWidth,
   ...textInputProps
 }: Props) {
@@ -55,7 +55,9 @@ export function InputArea({
         clearButtonMode={textInputProps.clearButtonMode ?? 'while-editing'}
         autoCapitalize={textInputProps.autoCapitalize ?? 'none'}
         underlineColorAndroid="transparent"
-        textAlign="left"
+        multiline={true}
+        textAlign={align}
+        textAlignVertical="top"
         {...textInputProps}
       />
     </View>
@@ -66,13 +68,14 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 14,
     paddingVertical: 12,
+    gap: 4,
   },
   rowDivider: {
     borderTopColor: colors.borderMutedLight,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
-    color: palette.gray[500],
+    color: palette.gray[300],
     marginRight: 8,
   },
   input: {

@@ -1,20 +1,11 @@
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, palette, whiteA } from '../styles/colors'
-import { SettingsIcon } from 'lucide-react-native'
-import { useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
 import { Button } from '../components/Button'
-import { setRecoveryPhrase, useRecoveryPhrase } from '../stores/settings'
+import { setRecoveryPhrase } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { useControlledInputValue } from '../hooks/useInputValue'
 import { generateRecoveryPhrase } from 'react-native-sia'
@@ -22,8 +13,6 @@ import { useCopyRecoveryPhrase } from '../hooks/useCopyRecoveryPhrase'
 import { InputArea } from '../components/InputArea'
 
 export default function OnboardingScreen() {
-  const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const recoveryPhrase = useRecoveryPhrase()
   const toast = useToast()
   const copyRecoveryPhrase = useCopyRecoveryPhrase()
 
@@ -31,7 +20,7 @@ export default function OnboardingScreen() {
     useChangeIndexer()
 
   const newRecoveryPhraseInputProps = useControlledInputValue({
-    value: recoveryPhrase.data ?? '',
+    value: '',
     save: (text) => {
       try {
         setRecoveryPhrase(text)
@@ -48,9 +37,6 @@ export default function OnboardingScreen() {
           style={styles.image}
           source={require('../../assets/icon-bleed.png')}
         />
-        <Pressable onPress={() => setIsUsingCustomURL((current) => !current)}>
-          <SettingsIcon size={20} color={palette.gray[100]} />
-        </Pressable>
       </View>
       {isWaiting ? (
         <View style={styles.center}>
@@ -72,39 +58,37 @@ export default function OnboardingScreen() {
                 ? 'Something went wrong. Please check your password and try again.'
                 : null}
             </Text>
-            {isUsingCustomURL ? (
-              <>
-                <InfoCard>
-                  <InputRow label="Indexer URL" {...newIndexerInputProps} />
-                </InfoCard>
-                <InfoCard>
-                  <InputArea
-                    label="Recovery phrase"
-                    {...newRecoveryPhraseInputProps}
-                    isMonospace
-                  />
-                </InfoCard>
-                <View style={styles.actions}>
-                  <Button
-                    variant="secondary"
-                    onPress={async () => {
-                      await setRecoveryPhrase(generateRecoveryPhrase())
-                      toast.show('Recovery phrase regenerated')
-                    }}
-                    style={styles.button}
-                  >
-                    Regenerate phrase
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onPress={copyRecoveryPhrase}
-                    style={styles.button}
-                  >
-                    Copy phrase
-                  </Button>
-                </View>
-              </>
-            ) : null}
+            <InfoCard>
+              <InputRow label="Indexer URL" {...newIndexerInputProps} />
+            </InfoCard>
+            <InfoCard>
+              <InputArea
+                placeholder="tiger harvest heart shine code feed monitor maple rug spend lemon trouble"
+                label="Recovery phrase"
+                {...newRecoveryPhraseInputProps}
+                height={80}
+                isMonospace
+              />
+            </InfoCard>
+            <View style={styles.actions}>
+              <Button
+                variant="secondary"
+                onPress={async () => {
+                  await setRecoveryPhrase(generateRecoveryPhrase())
+                  toast.show('Recovery phrase regenerated')
+                }}
+                style={styles.button}
+              >
+                Regenerate phrase
+              </Button>
+              <Button
+                variant="secondary"
+                onPress={copyRecoveryPhrase}
+                style={styles.button}
+              >
+                Copy phrase
+              </Button>
+            </View>
             <Button onPress={saveAndOnboard}>Authorize & Connect</Button>
           </View>
         </View>

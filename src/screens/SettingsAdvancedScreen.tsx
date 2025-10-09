@@ -53,12 +53,12 @@ export function SettingsAdvancedScreen(_props: Props) {
           variant="danger"
           onPress={() => {
             Alert.alert(
-              'Reset App',
-              'This will delete all local metadata and reset your app seed. This cannot be undone.',
+              'Reset Application',
+              'This will delete all local metadata. This cannot be undone.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Delete',
+                  text: 'Permanently reset',
                   style: 'destructive',
                   onPress: () => resetApp(),
                 },
@@ -66,7 +66,7 @@ export function SettingsAdvancedScreen(_props: Props) {
             )
           }}
         >
-          Reset app
+          Reset application
         </Button>
       </View>
     </SettingsLayout>
