@@ -14,7 +14,7 @@ import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
 import { Button } from '../components/Button'
-import { setRecoveryPhrase, useRecoveryPhrase } from '../stores/settings'
+import { setRecoveryPhrase } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { useControlledInputValue } from '../hooks/useInputValue'
 import { generateRecoveryPhrase } from 'react-native-sia'
@@ -23,7 +23,6 @@ import { InputArea } from '../components/InputArea'
 
 export default function OnboardingScreen() {
   const [isUsingCustomURL, setIsUsingCustomURL] = useState(false)
-  const recoveryPhrase = useRecoveryPhrase()
   const toast = useToast()
   const copyRecoveryPhrase = useCopyRecoveryPhrase()
 
@@ -31,7 +30,7 @@ export default function OnboardingScreen() {
     useChangeIndexer()
 
   const newRecoveryPhraseInputProps = useControlledInputValue({
-    value: recoveryPhrase.data ?? '',
+    value: '',
     save: (text) => {
       try {
         setRecoveryPhrase(text)
@@ -81,6 +80,7 @@ export default function OnboardingScreen() {
                   <InputArea
                     label="Recovery phrase"
                     {...newRecoveryPhraseInputProps}
+                    height={80}
                     isMonospace
                   />
                 </InfoCard>

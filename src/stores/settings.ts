@@ -10,7 +10,6 @@ import { buildSWRHelpers } from '../lib/swr'
 import { setTransfersMaxSlots } from '../managers/transfersPool'
 import { DEFAULT_INDEXER_URL, DEFAULT_MAX_TRANSFERS } from '../config'
 import { logger } from '../lib/logger'
-import { generateRecoveryPhrase } from 'react-native-sia'
 
 const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
@@ -18,15 +17,7 @@ const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
 export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
   getKey('recoveryPhrase'),
-  async (): Promise<string> => {
-    const recoveryPhrase = await getSecureStoreString('recoveryPhrase')
-    if (!recoveryPhrase) {
-      const newRecoveryPhrase = generateRecoveryPhrase()
-      await setRecoveryPhrase(newRecoveryPhrase)
-      return newRecoveryPhrase
-    }
-    return recoveryPhrase
-  }
+  async (): Promise<string> => getSecureStoreString('recoveryPhrase')
 )
 
 export async function setRecoveryPhrase(
