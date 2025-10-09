@@ -54,19 +54,6 @@ export function FileActionsSheet({
     []
   )
 
-  const handleDelete = useCallback(async () => {
-    if (!file) return
-    try {
-      await deleteFileRecord(file.id)
-      toast.show('Deleted file')
-      closeSheet()
-      navigation.goBack()
-    } catch (e) {
-      toast.show('Failed to delete file')
-      closeSheet()
-    }
-  }, [file?.id, navigation, toast])
-
   const handleRemoveCache = useCallback(async () => {
     if (!file) return
     try {
@@ -95,8 +82,10 @@ export function FileActionsSheet({
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
     try {
-      for (const sealedObject of Object.values(file.sealedObjects ?? {})) {
-        sdk?.deleteObject(sealedObject.id)
+      // TODO: in the future if a file is synced with multiple indexers,
+      // we will need to delete the object from each indexer.
+      if (file.key) {
+        await sdk?.deleteObject(file.key)
       }
       await updateFileSealedObjects(file.id, {})
       toast.show('Removed from network')
@@ -106,6 +95,23 @@ export function FileActionsSheet({
       closeSheet()
     }
   }, [file?.id, toast])
+
+  const handleDelete = useCallback(async () => {
+    if (!file) return
+    try {
+      await deleteFileRecord(file.id)
+      if (file.key) {
+        await sdk?.deleteObject(file.key)
+      }
+      await removeFromCache(file.id, extFromMime(file.fileType))
+      toast.show('Deleted file')
+      closeSheet()
+      navigation.goBack()
+    } catch (e) {
+      toast.show('Failed to delete file')
+      closeSheet()
+    }
+  }, [file?.id, navigation, toast])
 
   const handleDownload = useDownload(file)
 
