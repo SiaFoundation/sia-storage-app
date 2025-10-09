@@ -65,3 +65,47 @@ export async function getSecureStoreString(key: string, fallback = '') {
     return fallback
   }
 }
+
+export type JsonCodec<TStorage, TDomain> = {
+  encode: (domain: TDomain) => TStorage
+  decode: (storage: TStorage) => TDomain
+}
+
+export async function setSecureStoreJSON<TStorage, TDomain>(
+  key: string,
+  value: TDomain | undefined,
+  codec: JsonCodec<TStorage, TDomain>
+) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
+    throw new Error(
+      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
+    )
+  }
+  if (value == null) {
+    return SecureStore.setItemAsync(key, '')
+  }
+  try {
+    const encoded = codec.encode(value)
+    const json = JSON.stringify(encoded)
+    return SecureStore.setItemAsync(key, json)
+  } catch {
+    return SecureStore.setItemAsync(key, '')
+  }
+}
+
+export async function getSecureStoreJSON<TStorage, TDomain>(
+  key: string,
+  codec: JsonCodec<TStorage, TDomain>,
+  fallback?: TDomain
+): Promise<TDomain | undefined> {
+  try {
+    const found = await SecureStore.getItemAsync(key)
+    if (typeof found !== 'string' || found.trim().length === 0) {
+      return fallback
+    }
+    const parsed = JSON.parse(found) as TStorage
+    return codec.decode(parsed)
+  } catch {
+    return fallback
+  }
+}

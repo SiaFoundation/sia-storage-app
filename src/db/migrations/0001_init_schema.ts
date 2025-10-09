@@ -12,6 +12,7 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
+      cid TEXT UNIQUE,
       fileName TEXT,
       fileSize INTEGER,
       createdAt INTEGER NOT NULL,

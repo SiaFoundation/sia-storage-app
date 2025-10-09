@@ -21,3 +21,5 @@ export const SCANNER_MAX_TOTAL_UPLOADS_FACTOR = 2
 export const SCANNER_ADD_TO_QUEUE_FACTOR = 2
 // Scan interval.
 export const SCANNER_INTERVAL = 5_000 // 5 seconds
+// Sync objects interval.
+export const SYNC_OBJECTS_INTERVAL = 10_000 // 10 seconds

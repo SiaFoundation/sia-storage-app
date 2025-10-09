@@ -27,7 +27,7 @@ export default function OnboardingScreen() {
   const toast = useToast()
   const copyRecoveryPhrase = useCopyRecoveryPhrase()
 
-  const { newIndexerInputProps, saveIndexerURL, isWaiting, hasErrored } =
+  const { newIndexerInputProps, saveAndOnboard, isWaiting, hasErrored } =
     useChangeIndexer()
 
   const newRecoveryPhraseInputProps = useControlledInputValue({
@@ -105,7 +105,7 @@ export default function OnboardingScreen() {
                 </View>
               </>
             ) : null}
-            <Button onPress={saveIndexerURL}>Authorize & Connect</Button>
+            <Button onPress={saveAndOnboard}>Authorize & Connect</Button>
           </View>
         </View>
       )}

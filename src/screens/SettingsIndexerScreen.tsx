@@ -21,7 +21,7 @@ type Props = NativeStackScreenProps<SettingsStackParamList, 'Indexer'>
 export function SettingsIndexerScreen(_props: Props) {
   const isConnected = useIsConnected()
   const currentIndexerURL = useIndexerURL()
-  const { newIndexerInputProps, saveIndexerURL, isWaiting } = useChangeIndexer()
+  const { newIndexerInputProps, saveAndOnboard, isWaiting } = useChangeIndexer()
   useSettingsHeader()
   const account = useAccount()
   return (
@@ -80,7 +80,7 @@ export function SettingsIndexerScreen(_props: Props) {
             />
           </InfoCard>
         </RowGroup>
-        <Button onPress={saveIndexerURL}>
+        <Button onPress={saveAndOnboard}>
           {currentIndexerURL.data === newIndexerInputProps.value
             ? isWaiting
               ? 'Reconnecting...'

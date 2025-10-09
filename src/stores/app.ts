@@ -3,12 +3,13 @@ import { generateRecoveryPhrase } from 'react-native-sia'
 import { deleteAllFileRecords } from './files'
 import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
 import * as SplashScreen from 'expo-splash-screen'
-import { initSdk, reconnect, resetSdk } from './sdk'
+import { initSdk, reconnect, resetSdk, tryToConnectAndSet } from './sdk'
 import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllTransfers } from './transfers'
 import { initLogger } from './logs'
 import { ensureCacheDir } from './fileCache'
 import { resetDb } from '../db'
+import { initSyncDownObjects } from '../managers/syncDownObjects'
 
 export type AppState = {
   isInitializing: boolean
@@ -32,7 +33,18 @@ export async function initApp() {
   }
   setState({ isInitializing: false })
   await SplashScreen.hideAsync()
-  await initUploadScanner()
+  initUploadScanner()
+  initSyncDownObjects()
+}
+
+export async function onboardIndexer(indexerURL: string) {
+  const success = await tryToConnectAndSet(indexerURL)
+  if (!success) {
+    return false
+  }
+
+  await setHasOnboarded(true)
+  return success
 }
 
 export function shutdownApp() {

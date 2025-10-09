@@ -3,15 +3,11 @@ import { hexToUint8, arrayBufferToHex } from '../lib/hex'
 import { z } from 'zod'
 import { logger } from '../lib/logger'
 import { MaybeError } from '../lib/types'
+import { epochOrIsoToDate } from '.'
 
 const hexArrayBuffer = z.codec(z.hex(), z.instanceof(ArrayBuffer), {
   decode: (hex) => hexToUint8(hex).slice().buffer as ArrayBuffer,
   encode: (buf) => arrayBufferToHex(buf),
-})
-
-const epochOrIsoToDate = z.codec(z.union([z.number(), z.string()]), z.date(), {
-  decode: (value) => new Date(value as any),
-  encode: (date) => date.toISOString(),
 })
 
 const slabSchema = z.object({
