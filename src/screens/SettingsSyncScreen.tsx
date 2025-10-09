@@ -5,11 +5,11 @@ import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { cancelAllTransfers, useTransferCounts } from '../stores/transfers'
 import { Button } from '../components/Button'
-import { toggleUploadScanner } from '../managers/uploadScanner'
 import { RowGroup } from '../components/Group'
 import { InputRow } from '../components/InputRow'
 import {
   setMaxTransfers,
+  toggleAutoScanUploads,
   useAutoScanUploads,
   useMaxTransfers,
 } from '../stores/settings'
@@ -44,7 +44,7 @@ export function SettingsSyncScreen(_props: Props) {
             value={
               <Switch
                 value={autoScan.data ?? false}
-                onValueChange={toggleUploadScanner}
+                onValueChange={toggleAutoScanUploads}
               />
             }
           />

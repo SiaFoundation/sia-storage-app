@@ -4,7 +4,7 @@ import { deleteAllFileRecords } from './files'
 import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
 import * as SplashScreen from 'expo-splash-screen'
 import { initSdk, reconnect, resetSdk } from './sdk'
-import { initUploadScanner, stopUploadScanner } from '../managers/uploadScanner'
+import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllTransfers } from './transfers'
 import { initLogger } from './logs'
 import { ensureCacheDir } from './fileCache'
@@ -37,7 +37,6 @@ export async function initApp() {
 
 export function shutdownApp() {
   cancelAllTransfers()
-  stopUploadScanner()
 }
 
 export async function resetApp() {
