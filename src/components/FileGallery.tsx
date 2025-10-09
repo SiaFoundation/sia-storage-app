@@ -18,8 +18,13 @@ export function FileGallery({
   topPadding = 0,
 }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
-  const { isRefreshing, isLoadingMore, handleEndReached, handleRefresh } =
-    useFlatListControls({ data: files, size, setSize, isValidating, hasMore })
+  const { isLoadingMore, handleEndReached } = useFlatListControls({
+    data: files,
+    size,
+    setSize,
+    isValidating,
+    hasMore,
+  })
 
   return (
     <FlatList
@@ -44,8 +49,6 @@ export function FileGallery({
       )}
       onEndReachedThreshold={0.95}
       onEndReached={handleEndReached}
-      refreshing={isRefreshing}
-      onRefresh={handleRefresh}
       initialNumToRender={36}
       windowSize={9}
       maxToRenderPerBatch={20}
