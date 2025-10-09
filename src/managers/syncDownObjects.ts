@@ -48,10 +48,10 @@ async function syncDownObjects(): Promise<void> {
       await setSyncDownCursor(undefined)
       return
     }
-    for (const { object, deleted, key } of objects) {
+    for (const { object, deleted, id: cid } of objects) {
       if (deleted) continue
       if (!object) continue
-      const existingFileRecord = await readFileRecordByCid(key)
+      const existingFileRecord = await readFileRecordByCid(cid)
       const metadata = decodeFileMetadata(object.metadata())
       const sealedObject = object.seal(await getAppKey())
       if (existingFileRecord) {
@@ -67,7 +67,7 @@ async function syncDownObjects(): Promise<void> {
         newCount += 1
         tryToAddFileRecord({
           id: uniqueId(),
-          cid: key,
+          cid,
           fileName: metadata.name ?? null,
           fileSize: metadata.size ?? null,
           createdAt: object.createdAt().getTime(),
@@ -81,7 +81,7 @@ async function syncDownObjects(): Promise<void> {
     logger.log('[syncDownObjects] synced', existingCount, 'existing objects')
     logger.log('[syncDownObjects] synced', newCount, 'new objects')
     await setSyncDownCursor({
-      key: objects[objects.length - 1].key,
+      id: objects[objects.length - 1].id,
       after: objects[objects.length - 1].object?.updatedAt() ?? new Date(),
     })
   } catch (e) {
@@ -108,20 +108,20 @@ function tryToAddFileRecord(fileRecord: FileRecord): void {
 
 const objectsCursorCodec = z.codec(
   z.object({
-    key: z.string(),
+    id: z.string(),
     after: z.union([z.string(), z.number()]),
   }),
   z.object({
-    key: z.string(),
+    id: z.string(),
     after: z.date(),
   }),
   {
     decode: (stored) => ({
-      key: stored.key,
+      id: stored.id,
       after: epochOrIsoToDate.decode(stored.after),
     }),
     encode: (cursor) => ({
-      key: cursor.key,
+      id: cursor.id,
       after: epochOrIsoToDate.encode(cursor.after),
     }),
   }
