@@ -74,6 +74,7 @@ export function ImportFileScreen({ route }: Props) {
     const sealedObject = pinnedObject.seal(await getAppKey())
     await insertOrReplaceFileRecord({
       ...sharedFile.data,
+      cid: sealedObject.id,
       createdAt: new Date().getTime(),
       sealedObjects: { [indexerURL]: sealedObject },
     })

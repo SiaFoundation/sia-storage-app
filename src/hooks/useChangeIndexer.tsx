@@ -1,8 +1,8 @@
-import { tryToConnectAndSet } from '../stores/sdk'
 import { useCallback, useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { setIndexerURL, useIndexerURL } from '../stores/settings'
 import { useInputValue } from './useInputValue'
+import { onboardIndexer } from '../stores/app'
 
 function validateURL(url: string) {
   try {
@@ -23,7 +23,7 @@ export function useChangeIndexer() {
     value: indexerURL.data ?? '',
   })
 
-  const saveIndexerURL = useCallback(async () => {
+  const saveAndOnboard = useCallback(async () => {
     const newUrl = newIndexerInputProps.value
     setIsWaiting(true)
     const isValid = validateURL(newUrl)
@@ -32,7 +32,7 @@ export function useChangeIndexer() {
       setIsWaiting(false)
       return
     }
-    const success = await tryToConnectAndSet(newUrl)
+    const success = await onboardIndexer(newUrl)
     if (!success) {
       toast.show('Failed to connect')
       setHasErrored(true)
@@ -45,7 +45,7 @@ export function useChangeIndexer() {
 
   return {
     newIndexerInputProps,
-    saveIndexerURL,
+    saveAndOnboard,
     isWaiting,
     hasErrored,
   }

@@ -84,8 +84,8 @@ export function FileActionsSheet({
     try {
       // TODO: in the future if a file is synced with multiple indexers,
       // we will need to delete the object from each indexer.
-      if (file.key) {
-        await sdk?.deleteObject(file.key)
+      if (file.cid) {
+        await sdk?.deleteObject(file.cid)
       }
       await updateFileSealedObjects(file.id, {})
       toast.show('Removed from network')
@@ -100,8 +100,8 @@ export function FileActionsSheet({
     if (!file) return
     try {
       await deleteFileRecord(file.id)
-      if (file.key) {
-        await sdk?.deleteObject(file.key)
+      if (file.cid) {
+        await sdk?.deleteObject(file.cid)
       }
       await removeFromCache(file.id, extFromMime(file.fileType))
       toast.show('Deleted file')

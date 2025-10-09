@@ -10,7 +10,9 @@ import { InputRow } from '../components/InputRow'
 import {
   setMaxTransfers,
   toggleAutoScanUploads,
+  toggleAutoSyncDownObjects,
   useAutoScanUploads,
+  useAutoSyncDownObjects,
   useMaxTransfers,
 } from '../stores/settings'
 import { useInputValue } from '../hooks/useInputValue'
@@ -25,6 +27,7 @@ export function SettingsSyncScreen(_props: Props) {
   const counts = useTransferCounts()
   const autoScan = useAutoScanUploads()
   const maxSlots = useMaxTransfers()
+  const autoSync = useAutoSyncDownObjects()
 
   const maxTransfersInputProps = useInputValue({
     value: String(maxSlots.data),
@@ -45,6 +48,16 @@ export function SettingsSyncScreen(_props: Props) {
               <Switch
                 value={autoScan.data ?? false}
                 onValueChange={toggleAutoScanUploads}
+              />
+            }
+          />
+          <LabeledValueRow
+            label="Auto sync down objects"
+            labelWidth={200}
+            value={
+              <Switch
+                value={autoSync.data ?? false}
+                onValueChange={toggleAutoSyncDownObjects}
               />
             }
           />
