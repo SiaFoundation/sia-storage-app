@@ -97,6 +97,7 @@ export type FileOrderParams = {
   sortBy?: SortBy
   sortDir?: SortDir
   categories?: Category[]
+  query?: string
   limit?: number
   offset?: number
 }
@@ -108,17 +109,28 @@ export async function readOrderedFileRecords(
     sortBy = 'DATE',
     sortDir,
     categories = [],
+    query,
     limit,
     offset,
   } = opts ?? {}
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
-  const where =
-    prefixes.length > 0
-      ? `WHERE ${prefixes.map(() => 'fileType LIKE ?').join(' OR ')}`
-      : ''
-  const params = prefixes.length > 0 ? prefixes.map((p) => `${p}%`) : []
+  const hasCategories = prefixes.length > 0
+  const hasQuery = typeof query === 'string' && query.trim().length > 0
+
+  const whereParts: string[] = []
+  const params: (string | number | null)[] = []
+  if (hasCategories) {
+    whereParts.push(prefixes.map(() => 'fileType LIKE ?').join(' OR '))
+    params.push(...prefixes.map((p) => `${p}%`))
+  }
+  if (hasQuery) {
+    whereParts.push('fileName LIKE ? COLLATE NOCASE ESCAPE "\\"')
+    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
+    params.push(`%${escaped}%`)
+  }
+  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
   const orderExpr =
     sortBy === 'NAME'
@@ -304,7 +316,7 @@ export function useFileCount() {
 const PAGE_SIZE = 40
 
 export function useFileList() {
-  const { sortBy, sortDir, selectedCategories } = useFilesView()
+  const { sortBy, sortDir, selectedCategories, searchQuery } = useFilesView()
   const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const categories = Array.from(selectedCategories ?? new Set())
@@ -312,7 +324,9 @@ export function useFileList() {
     ? categories.slice().sort().join(',')
     : ''
 
-  const base = getKey(`list:${sortBy}:${sortingDir}:${categoriesKey}`)
+  const base = getKey(
+    `list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`
+  )
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -320,6 +334,7 @@ export function useFileList() {
       sortBy,
       sortDir: sortingDir,
       categories: categories.length ? categories : undefined,
+      query: searchQuery?.trim().length ? searchQuery : undefined,
       limit: PAGE_SIZE,
       offset: pageIndex * PAGE_SIZE,
     })
@@ -384,19 +399,21 @@ type FilesViewState = {
   sortBy: SortBy
   sortDir: SortDir
   selectedCategories: Set<Category>
+  searchQuery: string
 }
 
 export const useFilesView = create<FilesViewState>(() => ({
   sortBy: 'DATE',
   sortDir: 'DESC',
   selectedCategories: new Set<Category>(),
+  searchQuery: '',
 }))
 
 const { setState } = useFilesView
 
 export function setSortCategory(sortBy: SortBy) {
   setState(() => {
-    return { sortBy, sortDir: sortBy === 'NAME' ? 'ASC' : 'DESC' }
+    return { sortBy }
   })
 }
 
@@ -417,5 +434,17 @@ export function toggleCategory(c: Category) {
 export function clearCategories() {
   setState(() => {
     return { selectedCategories: new Set() }
+  })
+}
+
+export function setSearchQuery(searchQuery: string) {
+  setState(() => {
+    return { searchQuery }
+  })
+}
+
+export function clearSearchQuery() {
+  setState(() => {
+    return { searchQuery: '' }
   })
 }

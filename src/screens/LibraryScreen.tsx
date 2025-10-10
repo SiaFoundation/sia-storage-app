@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ComponentRef } from 'react'
+import { useCallback, useRef, type ComponentRef } from 'react'
 import {
   View,
   Text,
@@ -10,12 +10,7 @@ import {
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from '../components/Gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import {
-  Grid2X2Icon,
-  ListIcon,
-  PlusIcon,
-  SettingsIcon,
-} from 'lucide-react-native'
+import { SettingsIcon } from 'lucide-react-native'
 import { FileGallery } from '../components/FileGallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -25,28 +20,25 @@ import {
   useFileCount,
   useFileList,
   useFilesView,
-  type Category,
 } from '../stores/files'
 import { FileList } from '../components/FileList'
-import { FileSorter } from '../components/FileSorter'
-import { FileFilter } from '../components/FileFilter'
+import { LibraryControls } from '../components/LibraryControls'
+import { type Category } from '../stores/files'
 import { useAppStatus } from '../hooks/useAppStatus'
-import { BottomControlBar, iconColors } from '../components/BottomControlBar'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
-import { openSheet } from '../stores/sheets'
 import { ExpandableBadge } from '../components/ExpandableBadge'
+import { useLibraryViewMode } from '../stores/settings'
 
 export function LibraryScreen() {
-  const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
+  const viewMode = useLibraryViewMode()
+  const { selectedCategories, searchQuery } = useFilesView()
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
   const navigation =
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const files = useFileList()
   const fileCount = useFileCount()
-  const { selectedCategories } = useFilesView()
   const insets = useSafeAreaInsets()
   const appStatus = useAppStatus()
-  const openAddMenu = useCallback(() => openSheet('addFile'), [])
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
       navigation.navigate('FileDetail', { id: file.id })
@@ -58,8 +50,8 @@ export function LibraryScreen() {
     <View style={styles.container}>
       <Gradient
         fadeTo="bottom"
-        overlayTopColor={overlay.gradientTop}
-        overlayBottomColor={overlay.gradientBottom}
+        overlayTopColor={overlay.gradientDark}
+        overlayBottomColor={overlay.gradientLight}
         style={styles.topBlur}
       />
       <View
@@ -102,7 +94,10 @@ export function LibraryScreen() {
             {(() => {
               const total = fileCount.data ?? 0
               const filtered = files.data?.length ?? 0
-              if (selectedCategories.size > 0) {
+              if (
+                searchQuery.trim().length > 0 ||
+                selectedCategories.size > 0
+              ) {
                 return `${filtered} results`
               }
               return `${total} ${total === 1 ? 'item' : 'items'}`
@@ -142,7 +137,7 @@ export function LibraryScreen() {
         </View>
       ) : !!fileCount.data ? (
         files.data && files.data.length > 0 ? (
-          viewMode == 'gallery' ? (
+          viewMode.data == 'gallery' ? (
             <FileGallery onPressItem={handleOpenDetail} topPadding={130} />
           ) : (
             <FileList onPressItem={handleOpenDetail} topPadding={130} />
@@ -173,61 +168,7 @@ export function LibraryScreen() {
         </View>
       )}
       <AddFileActionSheet />
-      <BottomControlBar
-        center={{
-          id: 'add',
-          icon: <PlusIcon color={iconColors.white} size={24} />,
-          onPress: openAddMenu,
-        }}
-        left={[
-          {
-            id: 'grid',
-            icon: (
-              <Grid2X2Icon
-                size={18}
-                color={
-                  viewMode === 'gallery'
-                    ? iconColors.active
-                    : iconColors.inactive
-                }
-              />
-            ),
-            onPress: () => setViewMode('gallery'),
-          },
-          {
-            id: 'list',
-            icon: (
-              <ListIcon
-                size={18}
-                color={
-                  viewMode === 'list' ? iconColors.active : iconColors.inactive
-                }
-              />
-            ),
-            onPress: () => setViewMode('list'),
-          },
-        ]}
-        right={[
-          {
-            id: 'filter',
-            icon: (
-              <View>
-                <FileFilter />
-              </View>
-            ),
-            onPress: () => {},
-          },
-          {
-            id: 'sort',
-            icon: (
-              <View>
-                <FileSorter />
-              </View>
-            ),
-            onPress: () => {},
-          },
-        ]}
-      />
+      <LibraryControls />
     </View>
   )
 }
@@ -249,7 +190,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: 200,
+    height: 180,
   },
   headerTitleLarge: {
     color: palette.gray[50],
