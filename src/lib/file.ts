@@ -1,12 +1,9 @@
 import { useMemo } from 'react'
-import {
-  useTransfersStore,
-  makeTransferKey,
-  TransferState,
-} from '../stores/transfers'
-import { useShallow } from 'zustand/react/shallow'
+import { type UploadState } from '../stores/uploads'
+import { type DownloadState } from '../stores/downloads'
 import { FileRecord } from '../stores/files'
-import { useDownloadState, useUploadState } from '../stores/transfers'
+import { useDownloadState } from '../stores/downloads'
+import { useUploadState } from '../stores/uploads'
 import { useCachedUri } from '../stores/fileCache'
 import { extFromMime } from './fileTypes'
 import {
@@ -48,8 +45,8 @@ function computeFileStatus({
   file: {
     sealedObjects?: SealedObjectsMap | null
   }
-  uploadState: TransferState | undefined
-  downloadState: TransferState | undefined
+  uploadState: UploadState | undefined
+  downloadState: DownloadState | undefined
   cachedUri: string | null
   errorText: string | null
 }) {
@@ -84,16 +81,6 @@ export function useFileStatus(file?: {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const cachedUri = useCachedUri(file?.id || '', extFromMime(file?.fileType))
-  const [uploadError, downloadError] = useTransfersStore(
-    useShallow((state) => {
-      const id = file?.id || ''
-      const u = id ? state.transfers[makeTransferKey('upload', id)] : undefined
-      const d = id
-        ? state.transfers[makeTransferKey('download', id)]
-        : undefined
-      return [u?.error ?? null, d?.error ?? null] as const
-    })
-  )
   return useMemo(
     () =>
       computeFileStatus({
@@ -101,12 +88,9 @@ export function useFileStatus(file?: {
         uploadState,
         downloadState,
         cachedUri: cachedUri.data ?? null,
-        errorText:
-          (uploadError as string | null) ||
-          (downloadError as string | null) ||
-          null,
+        errorText: uploadState?.error || downloadState?.error || null,
       }),
-    [uploadState, downloadState, cachedUri, file, uploadError, downloadError]
+    [uploadState, downloadState, cachedUri, file]
   )
 }
 

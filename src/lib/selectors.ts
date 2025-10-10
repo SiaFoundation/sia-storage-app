@@ -19,13 +19,14 @@ import { useShallow } from 'zustand/react/shallow'
  * )
  * ```
  */
-export function createGetterAndSelector<T, R>(
+export function createGetterAndSelector<T, R, Args extends any[] = []>(
   useStore: UseBoundStore<StoreApi<T>>,
-  transform: (state: T) => R
-): [() => R, () => R] {
+  transform: (state: T, ...args: Args) => R
+): [(...args: Args) => R, (...args: Args) => R] {
   return [
-    () => transform(useStore.getState()),
-    () => useStore(useShallow((state) => transform(state))),
+    (...args: Args) => transform(useStore.getState(), ...args),
+    (...args: Args) =>
+      useStore(useShallow((state) => transform(state, ...args))),
   ]
 }
 

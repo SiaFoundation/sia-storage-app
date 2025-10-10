@@ -1,9 +1,5 @@
 import { logger } from '../lib/logger'
-import {
-  getActiveUploads,
-  getTransferCounts,
-  useActiveUploads,
-} from '../stores/transfers'
+import { getActiveUploads, useActiveUploads } from '../stores/uploads'
 import {
   getFilesLocalOnly,
   useFileCountAll,
@@ -16,11 +12,8 @@ import {
   SCANNER_INTERVAL,
 } from '../config'
 import { getIsConnected } from '../stores/sdk'
-import {
-  getAutoScanUploads,
-  getMaxTransfers,
-  useAutoScanUploads,
-} from '../stores/settings'
+import { getAutoScanUploads, useAutoScanUploads } from '../stores/settings'
+import { getMaxUploads } from '../managers/uploadsPool'
 import { createServiceInterval } from '../lib/serviceInterval'
 
 async function startUploadScanner(): Promise<void> {
@@ -31,10 +24,10 @@ async function startUploadScanner(): Promise<void> {
   }
   logger.log('[uploadScanner] scanning...')
   try {
-    const maxTransfers = await getMaxTransfers()
-    const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxTransfers
-    const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxTransfers
-    if (getTransferCounts().total >= maxTotalUploads) {
+    const maxUploads = await getMaxUploads()
+    const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxUploads
+    const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxUploads
+    if (getActiveUploads().length >= maxTotalUploads) {
       return
     }
     const localOnly = await getFilesLocalOnly()
