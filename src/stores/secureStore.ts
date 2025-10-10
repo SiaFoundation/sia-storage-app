@@ -48,7 +48,10 @@ export async function getSecureStoreNumber(key: string, fallback = 0) {
   }
 }
 
-export async function setSecureStoreString(key: string, value: string) {
+export async function setSecureStoreString<T extends string>(
+  key: string,
+  value: T
+) {
   if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
     throw new Error(
       'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
@@ -57,10 +60,13 @@ export async function setSecureStoreString(key: string, value: string) {
   return SecureStore.setItemAsync(key, value)
 }
 
-export async function getSecureStoreString(key: string, fallback = '') {
+export async function getSecureStoreString<T extends string>(
+  key: string,
+  fallback: T
+): Promise<T> {
   try {
     const found = await SecureStore.getItemAsync(key)
-    return found || fallback
+    return (found as T | null) || fallback
   } catch {
     return fallback
   }

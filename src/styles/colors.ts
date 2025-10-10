@@ -70,8 +70,8 @@ export const overlay = {
   panelLight: 'rgba(18,20,23,0.78)',
   blurTop: 'rgba(16,18,21,0.66)',
   blurBottom: 'rgba(16,18,21,0)',
-  gradientTop: 'rgba(8,9,11,0.5)',
-  gradientBottom: 'rgba(8,9,11,0)',
+  gradientDark: 'rgba(8,9,11,0.8)',
+  gradientLight: 'rgba(8,9,11,0)',
   menu: '#121417f0',
 } as const
 

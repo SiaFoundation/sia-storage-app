@@ -17,7 +17,7 @@ export const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
 export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
   getKey('recoveryPhrase'),
-  async () => getSecureStoreString('recoveryPhrase')
+  async () => getSecureStoreString('recoveryPhrase', '')
 )
 
 export async function setRecoveryPhrase(
@@ -102,4 +102,24 @@ export async function toggleAutoSyncDownObjects() {
   const current = await getAutoSyncDownObjects()
   const next = !current
   await setAutoSyncDownObjects(next)
+}
+
+// Library view mode
+
+export type LibraryViewMode = 'gallery' | 'list'
+
+export const [getLibraryViewMode, useLibraryViewMode] = createGetterAndSWRHook(
+  getKey('libraryViewMode'),
+  () => getSecureStoreString<LibraryViewMode>('libraryViewMode', 'gallery')
+)
+
+export async function setLibraryViewMode(value: LibraryViewMode) {
+  await setSecureStoreString<LibraryViewMode>('libraryViewMode', value)
+  triggerChange('libraryViewMode')
+}
+
+export async function toggleLibraryViewMode() {
+  const current = await getLibraryViewMode()
+  const next = current === 'gallery' ? 'list' : 'gallery'
+  await setLibraryViewMode(next)
 }
