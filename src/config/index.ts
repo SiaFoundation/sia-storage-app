@@ -3,8 +3,10 @@ export const APP_KEY =
   '0000000000000000000000000000000000000000000000000000000000000000'
 // Default indexer.
 export const DEFAULT_INDEXER_URL = 'https://app.sia.storage'
-// Max concurrent transfers across all types.
-export const DEFAULT_MAX_TRANSFERS = 2
+// Max concurrent uploads.
+export const DEFAULT_MAX_UPLOADS = 1
+// Max concurrent downloads.
+export const DEFAULT_MAX_DOWNLOADS = 2
 // Max inflight per download.
 export const DOWNLOAD_MAX_INFLIGHT = 15
 // Max inflight per upload.

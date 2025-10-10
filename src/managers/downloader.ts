@@ -1,6 +1,10 @@
 import { useToast } from '../lib/toastContext'
 import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
-import { updateDownloadProgress } from '../stores/transfers'
+import {
+  getDownloadState,
+  updateDownloadProgress,
+  runDownloadWithSlot,
+} from '../stores/downloads'
 import { useSdk } from '../stores/sdk'
 import { PinnedObject, SealedObject } from 'react-native-sia'
 import { useCallback } from 'react'
@@ -8,7 +12,6 @@ import { extFromMime, type Ext } from '../lib/fileTypes'
 import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
-import { runTransferWithSlot } from '../stores/transfers'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getAppKey } from '../lib/appKey'
 
@@ -30,10 +33,15 @@ export function useDownload(
       toast.show('No slabs available for this file')
       return
     }
-    toast.show('Starting download...')
-    await runTransferWithSlot({
+    const downloadState = getDownloadState(file.id)
+    if (
+      downloadState?.status === 'running' ||
+      downloadState?.status === 'queued'
+    ) {
+      return
+    }
+    await runDownloadWithSlot({
       id: file.id,
-      kind: 'download',
       task: async (signal) => {
         if (!sdk) throw new Error('SDK not initialized')
         const appKey = await getAppKey()
@@ -61,22 +69,18 @@ export function useDownload(
           },
           signal,
         })
-        toast.show('Downloaded to device')
       },
     })
   }, [sdk, file, toast])
 }
 
 export function useDownloadFromShareURL() {
-  const toast = useToast()
   const sdk = useSdk()
   return useCallback(
     async (id: string, sharedUrl: string) =>
-      runTransferWithSlot({
+      runDownloadWithSlot({
         id,
-        kind: 'download',
         task: async (signal) => {
-          toast.show('Starting download...')
           if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
           const metadata = decodeFileMetadata(sharedObject.metadata())
@@ -99,11 +103,10 @@ export function useDownloadFromShareURL() {
             },
             signal,
           })
-          toast.show('Downloaded to device')
           return id
         },
       }),
-    [sdk, toast]
+    [sdk]
   )
 }
 

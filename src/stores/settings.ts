@@ -7,11 +7,11 @@ import {
 import { setSecureStoreNumber, getSecureStoreNumber } from './secureStore'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
-import { setTransfersMaxSlots } from '../managers/transfersPool'
-import { DEFAULT_INDEXER_URL, DEFAULT_MAX_TRANSFERS } from '../config'
+import { setUploadMaxSlots } from '../managers/uploadsPool'
+import { DEFAULT_INDEXER_URL, DEFAULT_MAX_UPLOADS } from '../config'
 import { logger } from '../lib/logger'
 
-const { getKey, triggerChange } = buildSWRHelpers('secureStore')
+export const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
 // Recovery Phrase
 
@@ -66,23 +66,6 @@ export async function setShowAdvanced(value: boolean) {
 export const [getShowAdvanced, useShowAdvanced] = createGetterAndSWRHook(
   getKey('showAdvanced'),
   () => getSecureStoreBoolean('showAdvanced')
-)
-
-// Max Transfers
-
-export async function setMaxTransfers(value: number) {
-  if (!value) {
-    logger.log('[settings] setMaxTransfers: value must be 1 or greater')
-  }
-  const clamped = Math.max(1, Math.floor(Number(value) || 1))
-  await setSecureStoreNumber('maxTransfers', clamped)
-  setTransfersMaxSlots(clamped)
-  triggerChange('maxTransfers')
-}
-
-export const [getMaxTransfers, useMaxTransfers] = createGetterAndSWRHook(
-  getKey('maxTransfers'),
-  () => getSecureStoreNumber('maxTransfers', DEFAULT_MAX_TRANSFERS)
 )
 
 // Auto Scan Uploads

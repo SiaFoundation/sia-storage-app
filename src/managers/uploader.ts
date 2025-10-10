@@ -16,7 +16,7 @@ import {
 } from '../stores/files'
 import { logger } from '../lib/logger'
 import { PickerAsset } from '../hooks/useImagePicker'
-import { runTransferWithSlot } from '../stores/transfers'
+import { runUploadWithSlot } from '../stores/uploads'
 
 export function useUploader() {
   const sdk = useSdk()
@@ -63,9 +63,8 @@ export function useUploader() {
                   extFromMime(asset.fileType)
                 )
             logger.log(`[uploader] cached file ${asset.id} -> ${cacheUri}`)
-            runTransferWithSlot({
+            runUploadWithSlot({
               id: asset.id,
-              kind: 'upload',
               task: async (signal) => {
                 const indexerURL = await getIndexerURL()
                 logger.log(`[uploader] uploading ${asset.id} to hosts...`)
@@ -99,9 +98,8 @@ export function useUploader() {
 export function useReuploadFile() {
   return useCallback(
     async (fileId: string) =>
-      runTransferWithSlot({
+      runUploadWithSlot({
         id: fileId,
-        kind: 'upload',
         task: async (signal) => {
           const sdk = getSdk()
           if (!sdk) throw new Error('SDK not initialized')
@@ -146,9 +144,8 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
   const indexerURL = await getIndexerURL()
   const sdk = getSdk()
   if (!sdk) return
-  await runTransferWithSlot({
+  await runUploadWithSlot({
     id: fileId,
-    kind: 'upload',
     task: async (signal) => {
       const fileBytes = await new FileSystem.File(cachedUri).bytes()
       await uploadToIndexer({

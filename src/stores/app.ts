@@ -5,7 +5,8 @@ import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
 import * as SplashScreen from 'expo-splash-screen'
 import { initSdk, reconnect, resetSdk, tryToConnectAndSet } from './sdk'
 import { initUploadScanner } from '../managers/uploadScanner'
-import { cancelAllTransfers } from './transfers'
+import { cancelAllUploads } from './uploads'
+import { cancelAllDownloads } from './downloads'
 import { initLogger } from './logs'
 import { ensureCacheDir } from './fileCache'
 import { resetDb } from '../db'
@@ -48,7 +49,8 @@ export async function onboardIndexer(indexerURL: string) {
 }
 
 export function shutdownApp() {
-  cancelAllTransfers()
+  cancelAllUploads()
+  cancelAllDownloads()
 }
 
 export async function resetApp() {

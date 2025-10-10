@@ -3,37 +3,48 @@ import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
-import { cancelAllTransfers, useTransferCounts } from '../stores/transfers'
+import { cancelAllUploads, useUploadCounts } from '../stores/uploads'
+import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
 import { Button } from '../components/Button'
 import { RowGroup } from '../components/Group'
 import { InputRow } from '../components/InputRow'
 import {
-  setMaxTransfers,
   toggleAutoScanUploads,
   toggleAutoSyncDownObjects,
   useAutoScanUploads,
   useAutoSyncDownObjects,
-  useMaxTransfers,
 } from '../stores/settings'
 import { useInputValue } from '../hooks/useInputValue'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { colors } from '../styles/colors'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { setMaxUploads, useMaxUploads } from '../managers/uploadsPool'
+import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Sync'>
 
 export function SettingsSyncScreen(_props: Props) {
   useSettingsHeader()
-  const counts = useTransferCounts()
+  const uploadCounts = useUploadCounts()
+  const downloadCounts = useDownloadCounts()
   const autoScan = useAutoScanUploads()
-  const maxSlots = useMaxTransfers()
+  const maxUploads = useMaxUploads()
+  const maxDownloads = useMaxDownloads()
   const autoSync = useAutoSyncDownObjects()
 
-  const maxTransfersInputProps = useInputValue({
-    value: String(maxSlots.data),
+  const maxUploadsInputProps = useInputValue({
+    value: String(maxUploads.data),
     save: (text) => {
       const n = Number(text.replace(/[^0-9]/g, ''))
-      if (Number.isFinite(n) && n > 0) setMaxTransfers(n)
+      if (Number.isFinite(n) && n > 0) setMaxUploads(n)
+    },
+  })
+
+  const maxDownloadsInputProps = useInputValue({
+    value: String(maxDownloads.data),
+    save: (text) => {
+      const n = Number(text.replace(/[^0-9]/g, ''))
+      if (Number.isFinite(n) && n > 0) setMaxDownloads(n)
     },
   })
 
@@ -63,66 +74,68 @@ export function SettingsSyncScreen(_props: Props) {
           />
         </InfoCard>
       </RowGroup>
-      <RowGroup title="Transfers">
+      <RowGroup title="Uploads">
         <InfoCard>
           <InputRow
-            label="Max concurrent"
-            labelWidth={140}
+            label="Max concurrent uploads"
+            labelWidth={200}
             keyboardType="number-pad"
-            {...maxTransfersInputProps}
+            {...maxUploadsInputProps}
           />
           <LabeledValueRow
             label="Queued"
-            value={String(counts.totalQueued)}
+            value={String(uploadCounts.totalQueued)}
             canCopy={false}
-            labelWidth={140}
+            showDividerTop
           />
           <LabeledValueRow
             label="Active"
-            value={String(counts.totalActive)}
+            value={String(uploadCounts.totalActive)}
             canCopy={false}
-            labelWidth={140}
+            showDividerTop
           />
         </InfoCard>
         <Button
           style={{ marginTop: 10 }}
-          disabled={counts.total === 0}
-          onPress={() => cancelAllTransfers()}
+          disabled={uploadCounts.total === 0}
+          onPress={() => {
+            cancelAllUploads()
+          }}
         >
-          Cancel all transfers
+          Cancel uploads
         </Button>
-      </RowGroup>
-
-      <RowGroup title="Uploads">
-        <InfoCard>
-          <LabeledValueRow
-            label="Queued"
-            value={String(counts.uploadsQueued)}
-            canCopy={false}
-          />
-          <LabeledValueRow
-            label="Active"
-            value={String(counts.uploadsActive)}
-            canCopy={false}
-            showDividerTop
-          />
-        </InfoCard>
       </RowGroup>
 
       <RowGroup title="Downloads">
         <InfoCard>
+          <InputRow
+            label="Max concurrent downloads"
+            labelWidth={200}
+            keyboardType="number-pad"
+            {...maxDownloadsInputProps}
+          />
           <LabeledValueRow
             label="Queued"
-            value={String(counts.downloadsQueued)}
+            value={String(downloadCounts.totalQueued)}
             canCopy={false}
+            showDividerTop
           />
           <LabeledValueRow
             label="Active"
-            value={String(counts.downloadsActive)}
+            value={String(downloadCounts.totalActive)}
             canCopy={false}
             showDividerTop
           />
         </InfoCard>
+        <Button
+          style={{ marginTop: 10 }}
+          disabled={downloadCounts.total === 0}
+          onPress={() => {
+            cancelAllDownloads()
+          }}
+        >
+          Cancel downloads
+        </Button>
       </RowGroup>
     </SettingsLayout>
   )

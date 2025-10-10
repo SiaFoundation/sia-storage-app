@@ -1,5 +1,5 @@
 import { Sdk } from 'react-native-sia'
-import { updateUploadProgress } from '../stores/transfers'
+import { updateUploadProgress } from '../stores/uploads'
 import { updateFileSealedObject } from '../stores/files'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
