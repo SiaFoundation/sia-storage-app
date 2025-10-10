@@ -8,7 +8,10 @@ import { useDownload } from '../../managers/downloader'
 import { VideoViewer } from './VideoViewer'
 import { CircularProgress } from '../CircularProgress'
 import { SealedObject } from 'react-native-sia'
-import { useEffect } from 'react'
+import {
+  detailsShouldAutoDownload,
+  useAutoDownload,
+} from '../../hooks/useAutoDownload'
 
 export function FileViewer({
   file,
@@ -25,11 +28,7 @@ export function FileViewer({
 
   const isVideo = file.fileType?.startsWith('video')
 
-  useEffect(() => {
-    if (!status.isDownloaded) {
-      handleDownload()
-    }
-  }, [file.id])
+  useAutoDownload(file, detailsShouldAutoDownload)
 
   return (
     <View style={[styles.container]}>
