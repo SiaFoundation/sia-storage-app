@@ -3,6 +3,10 @@ import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { FileTextIcon, FileVideoIcon, ImageIcon } from 'lucide-react-native'
 import { palette } from '../styles/colors'
+import {
+  thumbnailShouldAutoDownload,
+  useAutoDownload,
+} from '../hooks/useAutoDownload'
 
 export function FileThumbnail({
   file,
@@ -14,6 +18,7 @@ export function FileThumbnail({
   iconColor?: string
 }) {
   const status = useFileStatus(file)
+  useAutoDownload(file, thumbnailShouldAutoDownload)
   if (file.fileType?.includes('image')) {
     if (status.cachedUri) {
       return (
