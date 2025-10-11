@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "sia.mobile",
+      "bundleIdentifier": "sia.storage",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photo library to select and upload photos.",
@@ -29,7 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "sia.mobile"
+      "package": "sia.storage"
     },
     "web": {
       "favicon": "./assets/favicon.png"
