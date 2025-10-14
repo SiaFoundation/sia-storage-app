@@ -20,7 +20,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photo library to select and upload photos.",
         "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save images to your photo library.",
-        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use the camera to take photos."
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use the camera to take photos.",
+        "UIBackgroundModes": ["fetch", "processing"],
+        "BGTaskSchedulerPermittedIdentifiers": ["com.transistorsoft.fetch"]
       }
     },
     "android": {
@@ -38,7 +40,8 @@
       "expo-secure-store",
       "expo-sqlite",
       ["./plugins/ios-target-16"],
-      "expo-video"
+      "expo-video",
+      "react-native-background-fetch"
     ],
     "extra": {
       "eas": {

@@ -21,6 +21,7 @@ import {
   initSyncPhotosArchive,
   resetPhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
+import { initBackgroundTasks } from '../managers/backgroundTasks'
 
 export type AppState = {
   isInitializing: boolean
@@ -48,6 +49,7 @@ export async function initApp() {
   initSyncDownEvents()
   initSyncNewPhotos()
   initSyncPhotosArchive()
+  initBackgroundTasks()
 }
 
 export async function onboardIndexer(indexerURL: string) {
