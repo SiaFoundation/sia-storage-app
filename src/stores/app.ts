@@ -56,8 +56,7 @@ export function shutdownApp() {
 export async function resetApp() {
   await deleteAllFileRecords()
   await resetDb()
-  const newSeed = generateRecoveryPhrase()
-  await setRecoveryPhrase(newSeed)
+  await setRecoveryPhrase('')
   await setHasOnboarded(false)
   await resetSdk()
 }

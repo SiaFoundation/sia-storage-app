@@ -19,7 +19,7 @@ export function SettingsRecoveryPhrase() {
           label="Recovery phrase"
           value={isHidden ? '•'.repeat(80) : recoveryPhrase.data}
           editable={false}
-          height={80}
+          height={100}
           isMonospace
         />
       </InfoCard>
