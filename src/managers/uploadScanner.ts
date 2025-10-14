@@ -15,6 +15,7 @@ import { getIsConnected } from '../stores/sdk'
 import { getAutoScanUploads, useAutoScanUploads } from '../stores/settings'
 import { getMaxUploads } from '../managers/uploadsPool'
 import { createServiceInterval } from '../lib/serviceInterval'
+import { FileRecord } from '../stores/files'
 
 async function startUploadScanner(): Promise<void> {
   const isConnected = getIsConnected()
@@ -30,17 +31,13 @@ async function startUploadScanner(): Promise<void> {
     if (getActiveUploads().length >= maxTotalUploads) {
       return
     }
-    const localOnly = await getFilesLocalOnly({ limit: maxToAdd, order: 'ASC' })
-    const activeUploads = getActiveUploads()
-    const localFilesNotYetQueued = localOnly
-      .filter((f) => !activeUploads.some((u) => u.id === f.id))
-      .slice(0, maxToAdd)
-    if (localFilesNotYetQueued.length > 0) {
+    const files = await getNextUploads(maxToAdd)
+    if (files.length > 0) {
       logger.log(
-        `[uploadScanner] queuing ${localFilesNotYetQueued.length} uploads`,
-        localFilesNotYetQueued.map((f) => f.id).join(', ')
+        `[uploadScanner] queuing ${files.length} uploads`,
+        files.map((f) => f.id).join(', ')
       )
-      localFilesNotYetQueued.forEach((f) => queueUploadForFileId(f.id))
+      files.forEach((f) => queueUploadForFileId(f.id))
     }
   } catch (e) {
     logger.log('[uploadScanner] scan error', e)
@@ -84,4 +81,13 @@ export function useUploadScannerStatus(): {
     percentComplete: `${(percentComplete * 100).toFixed(0)}%`,
     total: total.data ?? 0,
   }
+}
+
+export async function getNextUploads(count: number): Promise<FileRecord[]> {
+  const localOnly = await getFilesLocalOnly({ limit: count, order: 'ASC' })
+  const activeUploads = getActiveUploads()
+  const files = localOnly
+    .filter((f) => !activeUploads.some((u) => u.id === f.id))
+    .slice(0, count)
+  return files
 }
