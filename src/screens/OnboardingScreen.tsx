@@ -5,7 +5,7 @@ import { useToast } from '../lib/toastContext'
 import { InputRow } from '../components/InputRow'
 import { InfoCard } from '../components/InfoCard'
 import { Button } from '../components/Button'
-import { setRecoveryPhrase } from '../stores/settings'
+import { setRecoveryPhrase, useRecoveryPhrase } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { useControlledInputValue } from '../hooks/useInputValue'
 import { generateRecoveryPhrase } from 'react-native-sia'
@@ -19,8 +19,9 @@ export default function OnboardingScreen() {
   const { newIndexerInputProps, saveAndOnboard, isWaiting, hasErrored } =
     useChangeIndexer()
 
+  const recoveryPhrase = useRecoveryPhrase()
   const newRecoveryPhraseInputProps = useControlledInputValue({
-    value: '',
+    value: recoveryPhrase.data ?? '',
     save: (text) => {
       try {
         setRecoveryPhrase(text)
@@ -48,9 +49,7 @@ export default function OnboardingScreen() {
           <Text style={styles.title}>Welcome to Sia Mobile!</Text>
           <Text style={styles.text}>
             To begin using the app, press below and authorize the indexer. A
-            password should have been provided to you by the indexer admin. To
-            use your own indexer, press the gear in the upper right and enter
-            the base URL.
+            password should have been provided to you by the indexer admin.
           </Text>
           <View style={{ gap: 8 }}>
             <Text style={styles.errorText}>
@@ -63,10 +62,10 @@ export default function OnboardingScreen() {
             </InfoCard>
             <InfoCard>
               <InputArea
-                placeholder="tiger harvest heart shine code feed monitor maple rug spend lemon trouble"
+                placeholder="eg: tiger harvest heart shine code feed monitor maple rug spend lemon trouble"
                 label="Recovery phrase"
                 {...newRecoveryPhraseInputProps}
-                height={80}
+                height={100}
                 isMonospace
               />
             </InfoCard>

@@ -51,7 +51,7 @@ export function InputArea({
       </Text>
       <TextInput
         style={[styles.input, isMonospace && styles.inputMono, inputStyle]}
-        placeholderTextColor={placeholderTextColor ?? palette.gray[400]}
+        placeholderTextColor={placeholderTextColor ?? palette.gray[700]}
         clearButtonMode={textInputProps.clearButtonMode ?? 'while-editing'}
         autoCapitalize={textInputProps.autoCapitalize ?? 'none'}
         underlineColorAndroid="transparent"
