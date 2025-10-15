@@ -36,41 +36,48 @@ export function HostDetailScreen({ route }: Props) {
     )
   }
   return (
-    <SettingsLayout>
-      <RowGroup title="Details">
+    <SettingsLayout style={styles.container}>
+      <RowGroup title="Info">
         <InfoCard>
           <LabeledValueRow label="Public Key" value={publicKey} />
-          <LabeledValueRow label="Country" value={host.data.countryCode} />
           <LabeledValueRow
             label="Addresses"
             value={host.data.addresses.map((a) => a.address).join(', ')}
           />
+        </InfoCard>
+      </RowGroup>
+      <RowGroup title="Location">
+        <InfoCard style={{ height: 400 }}>
+          <LabeledValueRow label="Country" value={host.data.countryCode} />
           <LabeledValueRow
             label="Location"
             value={`${host.data.latitude}, ${host.data.longitude}`}
           />
+          <Map region={region}>
+            <MapMarker
+              size={10}
+              key={publicKey}
+              coordinate={{
+                latitude: host.data.latitude,
+                longitude: host.data.longitude,
+              }}
+              title={publicKey}
+              description={host.data.countryCode}
+            />
+          </Map>
         </InfoCard>
       </RowGroup>
-      <InfoCard style={{ height: 400 }}>
-        <Map region={region}>
-          <MapMarker
-            size={10}
-            key={publicKey}
-            coordinate={{
-              latitude: host.data.latitude,
-              longitude: host.data.longitude,
-            }}
-            title={publicKey}
-            description={host.data.countryCode}
-          />
-        </Map>
-      </InfoCard>
     </SettingsLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 8, backgroundColor: colors.bgCanvas },
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 24,
+    gap: 24,
+  },
   card: {
     backgroundColor: colors.bgSurface,
     borderColor: colors.borderMutedLight,
