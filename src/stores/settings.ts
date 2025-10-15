@@ -86,22 +86,22 @@ export async function toggleAutoScanUploads() {
   await setAutoScanUploads(next)
 }
 
-// Auto Sync Down Objects
+// Auto Sync Down Events
 
-export const [getAutoSyncDownObjects, useAutoSyncDownObjects] =
-  createGetterAndSWRHook(getKey('autoSyncDownObjects'), () =>
-    getSecureStoreBoolean('autoSyncDownObjects')
+export const [getAutoSyncDownEvents, useAutoSyncDownEvents] =
+  createGetterAndSWRHook(getKey('autoSyncDownEvents'), () =>
+    getSecureStoreBoolean('autoSyncDownEvents')
   )
 
-export async function setAutoSyncDownObjects(value: boolean) {
-  await setSecureStoreBoolean('autoSyncDownObjects', value)
-  triggerChange('autoSyncDownObjects')
+export async function setAutoSyncDownEvents(value: boolean) {
+  await setSecureStoreBoolean('autoSyncDownEvents', value)
+  triggerChange('autoSyncDownEvents')
 }
 
-export async function toggleAutoSyncDownObjects() {
-  const current = await getAutoSyncDownObjects()
+export async function toggleAutoSyncDownEvents() {
+  const current = await getAutoSyncDownEvents()
   const next = !current
-  await setAutoSyncDownObjects(next)
+  await setAutoSyncDownEvents(next)
 }
 
 // Library view mode

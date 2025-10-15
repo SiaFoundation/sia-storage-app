@@ -9,7 +9,10 @@ import { cancelAllDownloads } from './downloads'
 import { initLogger } from './logs'
 import { ensureCacheDir } from './fileCache'
 import { resetDb } from '../db'
-import { initSyncDownObjects } from '../managers/syncDownObjects'
+import {
+  initSyncDownEvents,
+  setSyncDownCursor,
+} from '../managers/syncDownEvents'
 
 export type AppState = {
   isInitializing: boolean
@@ -34,7 +37,7 @@ export async function initApp() {
   setState({ isInitializing: false })
   await SplashScreen.hideAsync()
   initUploadScanner()
-  initSyncDownObjects()
+  initSyncDownEvents()
 }
 
 export async function onboardIndexer(indexerURL: string) {
@@ -58,6 +61,7 @@ export async function resetApp() {
   await setRecoveryPhrase('')
   await setHasOnboarded(false)
   await resetSdk()
+  await setSyncDownCursor(undefined)
 }
 
 // selectors

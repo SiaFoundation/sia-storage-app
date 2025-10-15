@@ -10,9 +10,9 @@ import { RowGroup } from '../components/Group'
 import { InputRow } from '../components/InputRow'
 import {
   toggleAutoScanUploads,
-  toggleAutoSyncDownObjects,
+  toggleAutoSyncDownEvents,
   useAutoScanUploads,
-  useAutoSyncDownObjects,
+  useAutoSyncDownEvents,
 } from '../stores/settings'
 import { useInputValue } from '../hooks/useInputValue'
 import { SettingsLayout } from '../components/SettingsLayout'
@@ -30,7 +30,7 @@ export function SettingsSyncScreen(_props: Props) {
   const autoScan = useAutoScanUploads()
   const maxUploads = useMaxUploads()
   const maxDownloads = useMaxDownloads()
-  const autoSync = useAutoSyncDownObjects()
+  const autoSync = useAutoSyncDownEvents()
 
   const maxUploadsInputProps = useInputValue({
     value: String(maxUploads.data),
@@ -63,12 +63,12 @@ export function SettingsSyncScreen(_props: Props) {
             }
           />
           <LabeledValueRow
-            label="Auto sync down objects"
+            label="Auto sync with other devices"
             labelWidth={200}
             value={
               <Switch
                 value={autoSync.data ?? false}
-                onValueChange={toggleAutoSyncDownObjects}
+                onValueChange={toggleAutoSyncDownEvents}
               />
             }
           />
