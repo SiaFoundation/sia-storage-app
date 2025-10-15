@@ -394,6 +394,7 @@ export function useFileDetails(id: string) {
 export type SortBy = 'NAME' | 'DATE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
+export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
 
 type FilesViewState = {
   sortBy: SortBy
