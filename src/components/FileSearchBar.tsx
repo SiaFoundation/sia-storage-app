@@ -3,20 +3,17 @@ import {
   View,
   TextInput,
   Pressable,
-  Text,
   StyleSheet,
   Keyboard,
+  Platform,
+  EmitterSubscription,
 } from 'react-native'
 import { SearchIcon, XIcon } from 'lucide-react-native'
 import { palette, whiteA } from '../styles/colors'
 import { clearSearchQuery, setSearchQuery, useFilesView } from '../stores/files'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
-export function FileSearchBar({
-  onExit,
-}: {
-  onExit?: () => void
-}): React.ReactElement {
+export function FileSearchBar({ onExit }: { onExit: () => void }) {
   const { searchQuery } = useFilesView()
   const [text, setText] = useState(searchQuery ?? '')
   const inputRef = useRef<TextInput | null>(null)
@@ -30,6 +27,22 @@ export function FileSearchBar({
     setSearchQuery(debounced)
   }, [debounced])
 
+  useEffect(() => {
+    let sub: EmitterSubscription | null = null
+    // Delay the subscription to avoid race conditions with the keyboard.
+    const timeout = setTimeout(() => {
+      const hideEvent =
+        Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+      sub = Keyboard.addListener(hideEvent, () => {
+        onExit()
+      })
+    }, 200)
+    return () => {
+      if (sub) sub.remove()
+      clearTimeout(timeout)
+    }
+  }, [onExit])
+
   return (
     <View style={styles.wrap}>
       <View style={styles.inputRow}>
@@ -38,11 +51,6 @@ export function FileSearchBar({
           ref={inputRef}
           value={text}
           onChangeText={setText}
-          onBlur={() => {
-            if ((text ?? '').trim().length === 0) {
-              onExit?.()
-            }
-          }}
           placeholder="Search files"
           placeholderTextColor={whiteA.a50}
           style={styles.input}

@@ -1,25 +1,24 @@
 import React from 'react'
-import { View, Pressable, StyleSheet } from 'react-native'
+import { View, StyleSheet } from 'react-native'
 import { SearchIcon } from 'lucide-react-native'
 import { palette, whiteA } from '../styles/colors'
 import { useFilesView } from '../stores/files'
+import { IconButton } from './IconButton'
 
 export function FileSearchControl({
   onOpen,
 }: {
   onOpen?: () => void
 }): React.ReactElement {
-  const { searchQuery } = useFilesView()
-  const applied = (searchQuery?.trim().length ?? 0) > 0
+  const { searchQuery, selectedCategories } = useFilesView()
+  const hasQuery = (searchQuery?.trim().length ?? 0) > 0
+  const hasFilters = (selectedCategories?.size ?? 0) > 0
+  const applied = hasQuery || hasFilters
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onOpen}
-      style={styles.iconButton}
-    >
+    <IconButton onPress={onOpen}>
       <SearchIcon size={18} color={applied ? palette.blue[400] : whiteA.a70} />
       {applied && <View style={styles.dot} />}
-    </Pressable>
+    </IconButton>
   )
 }
 
