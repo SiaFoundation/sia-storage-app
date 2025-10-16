@@ -41,7 +41,7 @@ export async function reconnect() {
     controller.abort()
   }, 5000)
   try {
-    const connected = await sdk.connect({
+    const connected = await sdk.connected({
       signal: controller.signal,
     })
     setState({
@@ -93,8 +93,8 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
     const appKey = await getAppKey()
     const candidate = new Sdk(newIndexerURL, appKey)
 
-    logger.log('Calling connect...')
-    const connected = await candidate.connect()
+    logger.log('Calling connected...')
+    const connected = await candidate.connected()
 
     if (!connected) {
       logger.log('No connection. Requesting app connection...')
