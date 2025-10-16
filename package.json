@@ -20,6 +20,7 @@
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.26",
     "expo": "54.0.0-preview.4",
+    "expo-audio": "^1.0.13",
     "expo-clipboard": "8.0.2",
     "expo-dev-client": "~6.0.12",
     "expo-document-picker": "~14.0.7",
@@ -31,6 +32,7 @@
     "expo-updates": "~29.0.6",
     "expo-video": "~3.0.11",
     "lucide-react-native": "^0.543.0",
+    "markdown-it": "^14.1.0",
     "react": "19.1.0",
     "react-native": "0.81.1",
     "react-native-get-random-values": "^1.11.0",
@@ -43,6 +45,7 @@
     "react-native-share": "^12.2.0",
     "react-native-sia": "0.11.0",
     "react-native-svg": "^15.2.0",
+    "react-native-webview": "^13.16.0",
     "readable-stream": "^4.7.0",
     "swr": "^2.3.6",
     "zod": "^4.1.8",
@@ -50,6 +53,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/markdown-it": "^14.1.2",
     "@types/react": "19.1.10",
     "typescript": "~5.9.2"
   },
