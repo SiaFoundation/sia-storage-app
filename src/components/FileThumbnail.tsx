@@ -13,6 +13,7 @@ import {
   thumbnailShouldAutoDownload,
   useAutoDownload,
 } from '../hooks/useAutoDownload'
+import { CenteredProgress } from './CenteredProgress'
 
 export function FileThumbnail({
   file,
@@ -25,6 +26,15 @@ export function FileThumbnail({
 }) {
   const status = useFileStatus(file)
   useAutoDownload(file, thumbnailShouldAutoDownload)
+
+  if (status.isDownloading) {
+    return (
+      <View style={styles.thumbnailImage}>
+        <CenteredProgress status={status} size={iconSize} />
+      </View>
+    )
+  }
+
   if (file.fileType?.includes('image')) {
     if (status.cachedUri) {
       return (

@@ -23,12 +23,6 @@ export function FileViewer({
   header?: React.ReactNode
   fullscreen?: boolean
   customDownloader?: () => void
-  // file: {
-  //   id: string
-  //   fileType: string | null
-  //   objects: Record<string, LocalObject> | null
-  //   fileSize: number | null
-  // }
 }) {
   const { fileType } = file
   const status = useFileStatus(file)
