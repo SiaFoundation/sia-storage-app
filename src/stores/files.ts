@@ -38,16 +38,20 @@ export async function insertOrReplaceFileRecord(
 ): Promise<void> {
   const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
     fileRecord
+  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
+  if (error) {
+    throw error
+  }
   await db().runAsync(
-    'INSERT OR REPLACE INTO files (id, cid, fileName, fileSize, createdAt, fileType) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO files (id, cid, fileName, fileSize, createdAt, fileType, sealedObjects) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
     cid,
     fileName,
     fileSize,
     createdAt,
-    fileType
+    fileType,
+    serializedSealedObjects
   )
-  await updateFileSealedObjects(id, sealedObjects, triggerUpdate)
   if (triggerUpdate) {
     await triggerChange()
   }
@@ -221,16 +225,20 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
   const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
     fileRecord
+  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
+  if (error) {
+    throw error
+  }
   await db().runAsync(
-    'UPDATE files SET cid = ?, fileName = ?, fileSize = ?, createdAt = ?, fileType = ? WHERE id = ?',
+    'UPDATE files SET cid = ?, fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, sealedObjects = ? WHERE id = ?',
     cid,
     fileName,
     fileSize,
     createdAt,
     fileType,
+    serializedSealedObjects,
     id
   )
-  await updateFileSealedObjects(id, sealedObjects)
   await triggerChange()
 }
 
@@ -250,8 +258,7 @@ export async function updateFileSealedObjects(
 ): Promise<void> {
   const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
   if (error) {
-    logger.log('[db] error serializing sealed objects, skipping update', error)
-    return
+    throw error
   }
   await db().runAsync(
     'UPDATE files SET sealedObjects = ? WHERE id = ?',
@@ -271,14 +278,13 @@ export async function updateFileSealedObject(
   const file = await readFileRecord(id)
   if (file == null) {
     logger.log('[db] file not found', id)
-    return
+    throw new Error('File not found')
   }
   const pos = file.sealedObjects ?? {}
   pos[indexerURL] = sealedObject
   const [serializedSealedObjects, error] = serializeSealedObjects(pos)
   if (error) {
-    logger.log('[db] error serializing sealed objects, skipping update', error)
-    return
+    throw error
   }
   await db().runAsync(
     'UPDATE files SET sealedObjects = ? WHERE id = ?',
