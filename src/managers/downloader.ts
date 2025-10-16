@@ -45,7 +45,7 @@ export function useDownload(
       task: async (signal) => {
         if (!sdk) throw new Error('SDK not initialized')
         const appKey = await getAppKey()
-        const downloader = sdk.download(
+        const downloader = await sdk.download(
           PinnedObject.open(appKey, sealedObject),
           {
             maxInflight: DOWNLOAD_MAX_INFLIGHT,
@@ -84,7 +84,7 @@ export function useDownloadFromShareURL() {
           if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
           const metadata = decodeFileMetadata(sharedObject.metadata())
-          const downloader = sdk.downloadShared(sharedObject, {
+          const downloader = await sdk.downloadShared(sharedObject, {
             maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
