@@ -32,7 +32,7 @@ export type FileRecord = {
   sealedObjects: Record<string, SealedObject>
 }
 
-export async function insertOrReplaceFileRecord(
+export async function createFileRecord(
   fileRecord: FileRecord,
   triggerUpdate: boolean = true
 ): Promise<void> {
@@ -43,7 +43,7 @@ export async function insertOrReplaceFileRecord(
     throw error
   }
   await db().runAsync(
-    'INSERT OR REPLACE INTO files (id, cid, fileName, fileSize, createdAt, fileType, sealedObjects) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO files (id, cid, fileName, fileSize, createdAt, fileType, sealedObjects) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
     cid,
     fileName,
@@ -57,12 +57,12 @@ export async function insertOrReplaceFileRecord(
   }
 }
 
-export async function insertOrReplaceManyFileRecords(
+export async function createManyFileRecords(
   files: FileRecord[]
 ): Promise<void> {
   await db().withTransactionAsync(async () => {
     for (const fr of files) {
-      await insertOrReplaceFileRecord(fr, false)
+      await createFileRecord(fr, false)
     }
   })
   await triggerChange()
@@ -286,11 +286,22 @@ export async function updateFileSealedObject(
   if (error) {
     throw error
   }
-  await db().runAsync(
-    'UPDATE files SET sealedObjects = ? WHERE id = ?',
-    serializedSealedObjects,
-    id
-  )
+
+  // If the file has no cid yet, set it to the new sealed object's id.
+  if (file.cid == null) {
+    await db().runAsync(
+      'UPDATE files SET cid = ?, sealedObjects = ? WHERE id = ?',
+      sealedObject.id,
+      serializedSealedObjects,
+      id
+    )
+  } else {
+    await db().runAsync(
+      'UPDATE files SET sealedObjects = ? WHERE id = ?',
+      serializedSealedObjects,
+      id
+    )
+  }
   await triggerChange()
 }
 

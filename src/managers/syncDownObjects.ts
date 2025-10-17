@@ -4,9 +4,11 @@ import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownObjects, getIndexerURL } from '../stores/settings'
 import { getAppKey } from '../lib/appKey'
 import {
-  insertOrReplaceFileRecord,
+  createFileRecord,
   FileRecord,
+  readFileRecord,
   readFileRecordByCid,
+  updateFileRecord,
 } from '../stores/files'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { uniqueId } from '../lib/uniqueId'
@@ -51,31 +53,48 @@ async function syncDownObjects(): Promise<void> {
     for (const { object, deleted, key } of objects) {
       if (deleted) continue
       if (!object) continue
-      const existingFileRecord = await readFileRecordByCid(key)
       const metadata = decodeFileMetadata(object.metadata())
+      let existingFileRecord: FileRecord | null = null
+      // Try to find the file record by id first.
+      // This should always succeed.
+      if (metadata.id) {
+        existingFileRecord = await readFileRecord(metadata.id)
+      }
+      // If not found, try to find by cid.
+      if (!existingFileRecord) {
+        existingFileRecord = await readFileRecordByCid(key)
+      }
       const sealedObject = object.seal(await getAppKey())
       if (existingFileRecord) {
         existingCount += 1
-        tryToAddFileRecord({
-          ...existingFileRecord,
-          sealedObjects: {
-            ...existingFileRecord?.sealedObjects,
-            [indexerURL]: sealedObject,
-          },
-        })
+        try {
+          updateFileRecord({
+            ...existingFileRecord,
+            sealedObjects: {
+              ...existingFileRecord?.sealedObjects,
+              [indexerURL]: sealedObject,
+            },
+          })
+        } catch (e) {
+          logger.log('[syncDownObjects] error updating file record', key, e)
+        }
       } else {
         newCount += 1
-        tryToAddFileRecord({
-          id: uniqueId(),
-          cid: key,
-          fileName: metadata.name ?? null,
-          fileSize: metadata.size ?? null,
-          createdAt: object.createdAt().getTime(),
-          fileType: metadata.fileType ?? null,
-          sealedObjects: {
-            [indexerURL]: sealedObject,
-          },
-        })
+        try {
+          createFileRecord({
+            id: uniqueId(),
+            cid: key,
+            fileName: metadata.name ?? null,
+            fileSize: metadata.size ?? null,
+            createdAt: object.createdAt().getTime(),
+            fileType: metadata.fileType ?? null,
+            sealedObjects: {
+              [indexerURL]: sealedObject,
+            },
+          })
+        } catch (e) {
+          logger.log('[syncDownObjects] error adding file record', key, e)
+        }
       }
     }
     logger.log('[syncDownObjects] synced', existingCount, 'existing objects')
@@ -95,14 +114,6 @@ export const initSyncDownObjects = createServiceInterval({
   getState: getAutoSyncDownObjects,
   interval: SYNC_OBJECTS_INTERVAL,
 })
-
-function tryToAddFileRecord(fileRecord: FileRecord): void {
-  try {
-    insertOrReplaceFileRecord(fileRecord)
-  } catch (e) {
-    logger.log('[syncDownObjects] error adding file record', fileRecord.cid, e)
-  }
-}
 
 // Persistent cursor saved for next batch.
 
