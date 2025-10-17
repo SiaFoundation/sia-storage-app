@@ -17,7 +17,7 @@ import { palette } from '../styles/colors'
 import { openSheet } from '../stores/sheets'
 import { useShareAction } from '../hooks/useShareAction'
 import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
-import { FileConsumer } from '../components/FileConsumer'
+import { FileViewer } from '../components/FileViewer'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
@@ -30,7 +30,7 @@ export function FileDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       {file && viewStyle === 'consume' ? (
-        <FileConsumer
+        <FileViewer
           file={file}
           header={
             <FileDetailScreenHeader
