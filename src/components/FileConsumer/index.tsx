@@ -12,13 +12,18 @@ import { JSONViewer } from '../MediaConsumers/JSONViewer'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
+import { useEffect } from 'react'
 
 export function FileConsumer({
   file,
   header,
+  fullscreen = true,
+  customDownloader,
 }: {
   file: FileRecord
-  header: React.ReactNode
+  header?: React.ReactNode
+  fullscreen?: boolean
+  customDownloader?: () => void
 }) {
   const { fileType } = file
   const status = useFileStatus(file)
@@ -30,19 +35,19 @@ export function FileConsumer({
     if (!status.isDownloaded || !status.cachedUri) {
       return (
         <View
-          style={{
-            ...styles.mediaWithPadding,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100%',
-            gap: 20,
-          }}
+          style={[
+            fullscreen ? styles.mediaWithPadding : styles.media,
+            { justifyContent: 'center', alignItems: 'center', gap: 20 },
+          ]}
         >
           <TouchableHighlight
             onLongPress={() => {
               if (status.isDownloading) return
-              fileDownload()
+              if (customDownloader) {
+                customDownloader()
+              } else {
+                fileDownload()
+              }
             }}
           >
             <CloudDownloadIcon color={colors.textPrimary} size={40} />
@@ -67,14 +72,17 @@ export function FileConsumer({
 
     if (fileType?.includes('image')) {
       return (
-        <ImageViewer uri={status.cachedUri} style={styles.mediaWithPadding} />
+        <ImageViewer
+          uri={status.cachedUri}
+          style={fullscreen ? styles.mediaWithPadding : styles.media}
+        />
       )
     }
     if (fileType?.includes('video')) {
       return (
         <VideoPlayer
           source={status.cachedUri}
-          style={styles.mediaWithPadding}
+          style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
     }
@@ -83,7 +91,7 @@ export function FileConsumer({
         <AudioPlayer
           source={status.cachedUri}
           filename={file.fileName}
-          style={styles.mediaWithPadding}
+          style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
     }
@@ -107,7 +115,7 @@ export function FileConsumer({
     return (
       <View
         style={[
-          styles.mediaWithPadding,
+          fullscreen ? styles.mediaWithPadding : styles.media,
           { justifyContent: 'center', alignItems: 'center', gap: 10 },
         ]}
       >
