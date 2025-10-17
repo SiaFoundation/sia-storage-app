@@ -3,7 +3,6 @@ import { View, StyleSheet, ScrollView } from 'react-native'
 import { colors, palette } from '../../styles/colors'
 import { type FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
-import { FileViewer } from '../FileViewer'
 import { FileMeta } from './FileMeta'
 
 export function FileDetails({
@@ -19,9 +18,6 @@ export function FileDetails({
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {header}
-        <View style={styles.viewerWrap}>
-          <FileViewer file={file} />
-        </View>
         <View style={styles.metaWrap}>
           <FileMeta file={file} status={status} />
         </View>

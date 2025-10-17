@@ -1,8 +1,15 @@
 import { View, StyleSheet, ScrollView } from 'react-native'
 import { colors } from '../../styles/colors'
 import { useFileStatus } from '../../lib/file'
-import { FileViewerImport } from '../FileViewerImport'
 import { FileMetaImport } from './FileMetaImport'
+import { FileConsumer } from '../FileConsumer'
+import { FileRecord } from '../../stores/files'
+import { useDownloadFromShareURL } from '../../managers/downloader'
+import {
+  detailsShouldAutoDownload,
+  useAutoDownloadFromShareURL,
+} from '../../hooks/useAutoDownload'
+import { useEffect } from 'react'
 
 export function FileDetailsImport({
   file,
@@ -17,11 +24,42 @@ export function FileDetailsImport({
   shareUrl: string
 }) {
   const status = useFileStatus(file)
+  const handleDownload = useDownloadFromShareURL()
+
+  // If the file is less than 4 MB, go ahead and download it to the user
+  // device. We might look at a settings toggle for this or otherwise more
+  // smartly do this depending on whether a user is on wifi, etc.
+  useAutoDownloadFromShareURL(file, detailsShouldAutoDownload, shareUrl)
+
+  const potentialFile: FileRecord = {
+    id: file.id,
+    cid: null,
+    fileName: file.fileName,
+    fileSize: file.fileSize,
+    createdAt: new Date().getTime(),
+    fileType: file.fileType,
+    sealedObjects: {},
+  }
 
   return (
     <View style={styles.container}>
       <ScrollView>
-        <FileViewerImport file={file} shareUrl={shareUrl} />
+        {/* There may be a more clever way to set this height.
+            The big thorn here is images and video. We use a 'contain'
+            resizing, which adds padding at the top and bottom.
+            It matters less on video because those can be full screened.
+            A smaller thorn is content that is less than 500 height.
+            FileConsumer has no intrinsic height, specifically so that
+            it can fit be used wherever. */}
+        <View style={{ height: 500 }}>
+          <FileConsumer
+            file={potentialFile}
+            fullscreen={false}
+            customDownloader={() => {
+              handleDownload(file.id, shareUrl)
+            }}
+          />
+        </View>
         <FileMetaImport file={file} status={status} />
       </ScrollView>
     </View>
