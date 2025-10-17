@@ -1,7 +1,13 @@
 import { Image, StyleSheet, View } from 'react-native'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
-import { FileTextIcon, FileVideoIcon, ImageIcon } from 'lucide-react-native'
+import {
+  FileAudioIcon,
+  FileJsonIcon,
+  FileTextIcon,
+  FileVideoIcon,
+  ImageIcon,
+} from 'lucide-react-native'
 import { palette } from '../styles/colors'
 import {
   thumbnailShouldAutoDownload,
@@ -60,6 +66,34 @@ export function FileThumbnail({
     return (
       <View style={styles.thumbnailImage}>
         <FileTextIcon size={iconSize} color={iconColor} />
+      </View>
+    )
+  }
+  if (file.fileType?.includes('audio')) {
+    return (
+      <View style={styles.thumbnailImage}>
+        <FileAudioIcon size={iconSize} color={iconColor} />
+      </View>
+    )
+  }
+  if (
+    file.fileType?.includes('text/plain') ||
+    file.fileType?.includes('text/markdown') ||
+    file.fileName?.toLowerCase().includes('.md')
+  ) {
+    return (
+      <View style={styles.thumbnailImage}>
+        <FileTextIcon size={iconSize} color={iconColor} />
+      </View>
+    )
+  }
+  if (
+    file.fileType?.includes('application/json') ||
+    file.fileName?.toLowerCase().includes('.json')
+  ) {
+    return (
+      <View style={styles.thumbnailImage}>
+        <FileJsonIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
