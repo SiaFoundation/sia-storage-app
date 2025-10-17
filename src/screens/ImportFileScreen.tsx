@@ -16,7 +16,7 @@ import {
 } from '../stacks/types'
 import { useToast } from '../lib/toastContext'
 import { useSdk } from '../stores/sdk'
-import { insertOrReplaceFileRecord } from '../stores/files'
+import { createFileRecord } from '../stores/files'
 import { uniqueId } from '../lib/uniqueId'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
@@ -72,7 +72,7 @@ export function ImportFileScreen({ route }: Props) {
     const indexerURL = await getIndexerURL()
     const pinnedObject = await sdk.pinShared(sharedObject.data)
     const sealedObject = pinnedObject.seal(await getAppKey())
-    await insertOrReplaceFileRecord({
+    await createFileRecord({
       ...sharedFile.data,
       cid: sealedObject.id,
       createdAt: new Date().getTime(),

@@ -34,6 +34,7 @@ export async function uploadToIndexer(params: {
     dataShards: UPLOAD_DATA_SHARDS,
     parityShards: UPLOAD_PARITY_SHARDS,
     metadata: encodeFileMetadata({
+      id: file.id,
       name: file.fileName ?? '',
       fileType: file.fileType ?? '',
       size: data.byteLength,
