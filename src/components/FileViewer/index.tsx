@@ -12,9 +12,8 @@ import { JSONViewer } from '../MediaConsumers/JSONViewer'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
-import { useEffect } from 'react'
 
-export function FileConsumer({
+export function FileViewer({
   file,
   header,
   fullscreen = true,

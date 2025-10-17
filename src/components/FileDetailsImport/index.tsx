@@ -2,7 +2,7 @@ import { View, StyleSheet, ScrollView } from 'react-native'
 import { colors } from '../../styles/colors'
 import { useFileStatus } from '../../lib/file'
 import { FileMetaImport } from './FileMetaImport'
-import { FileConsumer } from '../FileConsumer'
+import { FileViewer } from '../FileViewer'
 import { FileRecord } from '../../stores/files'
 import { useDownloadFromShareURL } from '../../managers/downloader'
 import {
@@ -49,10 +49,10 @@ export function FileDetailsImport({
             resizing, which adds padding at the top and bottom.
             It matters less on video because those can be full screened.
             A smaller thorn is content that is less than 500 height.
-            FileConsumer has no intrinsic height, specifically so that
-            it can fit be used wherever. */}
+            FileViewer has no intrinsic height, specifically so that
+            it can be used wherever. */}
         <View style={{ height: 500 }}>
-          <FileConsumer
+          <FileViewer
             file={potentialFile}
             fullscreen={false}
             customDownloader={() => {
