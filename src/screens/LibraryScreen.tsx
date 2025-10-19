@@ -133,9 +133,9 @@ export function LibraryScreen() {
       ) : !!fileCount.data ? (
         files.data && files.data.length > 0 ? (
           viewMode.data == 'gallery' ? (
-            <FileGallery onPressItem={handleOpenDetail} topPadding={130} />
+            <FileGallery onPressItem={handleOpenDetail} />
           ) : (
-            <FileList onPressItem={handleOpenDetail} topPadding={130} />
+            <FileList onPressItem={handleOpenDetail} />
           )
         ) : (
           <View style={styles.emptyWrap}>
