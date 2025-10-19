@@ -2,7 +2,7 @@ import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import { SearchIcon } from 'lucide-react-native'
 import { palette, whiteA } from '../styles/colors'
-import { useFilesView } from '../stores/files'
+import { useLibrary } from '../stores/library'
 import { IconButton } from './IconButton'
 
 export function FileSearchControl({
@@ -10,7 +10,7 @@ export function FileSearchControl({
 }: {
   onOpen?: () => void
 }): React.ReactElement {
-  const { searchQuery, selectedCategories } = useFilesView()
+  const { searchQuery, selectedCategories } = useLibrary()
   const hasQuery = (searchQuery?.trim().length ?? 0) > 0
   const hasFilters = (selectedCategories?.size ?? 0) > 0
   const applied = hasQuery || hasFilters

@@ -1,6 +1,7 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { FlatList, ActivityIndicator } from 'react-native'
-import { FileRecord, useFileList } from '../stores/files'
+import { FileRecord } from '../stores/files'
+import { useFileList } from '../stores/library'
 import { FileListItem } from './FileListItem'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 

@@ -4,16 +4,16 @@ import { ArrowUp, ArrowDown, XIcon } from 'lucide-react-native'
 import {
   clearCategories,
   toggleCategory,
-  useFilesView,
+  useLibrary,
   setSortCategory,
   toggleDir,
   categories,
-} from '../stores/files'
+} from '../stores/library'
 import { palette, whiteA } from '../styles/colors'
 import { Pill } from './Pill'
 
 export function LibraryControlsSearchMenus() {
-  const { selectedCategories, sortBy, sortDir } = useFilesView()
+  const { selectedCategories, sortBy, sortDir } = useLibrary()
 
   return (
     <View style={{ width: '90%', alignSelf: 'center', gap: 6 }}>

@@ -10,11 +10,11 @@ import {
 } from 'react-native'
 import { SearchIcon, XIcon } from 'lucide-react-native'
 import { palette, whiteA } from '../styles/colors'
-import { clearSearchQuery, setSearchQuery, useFilesView } from '../stores/files'
+import { clearSearchQuery, setSearchQuery, useLibrary } from '../stores/library'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
 export function FileSearchBar({ onExit }: { onExit: () => void }) {
-  const { searchQuery } = useFilesView()
+  const { searchQuery } = useLibrary()
   const [text, setText] = useState(searchQuery ?? '')
   const inputRef = useRef<TextInput | null>(null)
   const debounced = useDebouncedValue(text, 300)
