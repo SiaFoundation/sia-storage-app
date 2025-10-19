@@ -2,13 +2,13 @@ import { View, StyleSheet } from 'react-native'
 import { whiteA, palette } from '../styles/colors'
 import { useFileStatus } from '../lib/file'
 import { StatusBadges } from './StatusBadges'
-import { SealedObject } from 'react-native-sia'
+import { LocalObject } from '../encoding/localObject'
 
 type Props = {
   file: {
     id: string
     fileType: string | null
-    sealedObjects: Record<string, SealedObject> | null
+    objects: Record<string, LocalObject> | null
   }
   size?: number
   interactive?: boolean

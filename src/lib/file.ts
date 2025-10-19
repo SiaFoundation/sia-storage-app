@@ -11,13 +11,13 @@ import {
   PinnedObjectInterface,
   SealedObject,
 } from 'react-native-sia'
-import { SealedObjectsMap } from '../encoding/sealedObjects'
+import { LocalObject, LocalObjectsMap } from '../encoding/localObject'
 import { getAppKey } from './appKey'
 
 export function fileHasASealedObject(file: {
-  sealedObjects?: SealedObjectsMap | null
+  objects?: LocalObjectsMap | null
 }): boolean {
-  return !!Object.keys(file.sealedObjects ?? {}).length
+  return !!Object.keys(file.objects ?? {}).length
 }
 
 export type FileStatus = {
@@ -43,7 +43,7 @@ function computeFileStatus({
   errorText,
 }: {
   file: {
-    sealedObjects?: SealedObjectsMap | null
+    objects?: LocalObjectsMap | null
   }
   uploadState: UploadState | undefined
   downloadState: DownloadState | undefined
@@ -76,7 +76,7 @@ function computeFileStatus({
 export function useFileStatus(file?: {
   id: string
   fileType: string | null
-  sealedObjects?: SealedObjectsMap | null
+  objects?: LocalObjectsMap | null
 }): FileStatus {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
@@ -84,7 +84,7 @@ export function useFileStatus(file?: {
   return useMemo(
     () =>
       computeFileStatus({
-        file: file ?? { sealedObjects: null },
+        file: file ?? { objects: null },
         uploadState,
         downloadState,
         cachedUri: cachedUri.data ?? null,
@@ -109,10 +109,10 @@ export function getFileTypeName(
 }
 
 export function getOneSealedObject(file: {
-  sealedObjects: Record<string, SealedObject> | null
+  objects: Record<string, LocalObject> | null
 }): SealedObject | null {
-  const sealedObjects = Object.values(file.sealedObjects ?? {})
-  return sealedObjects[0] ?? null
+  const objects = Object.values(file.objects ?? {})
+  return objects[0] ?? null
 }
 
 export async function getPinnedObject(

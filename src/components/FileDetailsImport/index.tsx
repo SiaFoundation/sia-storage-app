@@ -9,7 +9,6 @@ import {
   detailsShouldAutoDownload,
   useAutoDownloadFromShareURL,
 } from '../../hooks/useAutoDownload'
-import { useEffect } from 'react'
 
 export function FileDetailsImport({
   file,

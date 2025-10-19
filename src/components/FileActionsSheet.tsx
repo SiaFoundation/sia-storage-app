@@ -14,18 +14,16 @@ import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
 import { extFromMime } from '../lib/fileTypes'
-import { useSdk } from '../stores/sdk'
+import { getSdk, useSdk } from '../stores/sdk'
 import { useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
-import {
-  useFileDetails,
-  deleteFileRecord,
-  updateFileSealedObjects,
-} from '../stores/files'
+import { useFileDetails, deleteFileRecord, FileRecord } from '../stores/files'
+import { deleteLocalObjects } from '../stores/localObjects'
 import { useSheetOpen, closeSheet } from '../stores/sheets'
 import { useShareAction } from '../hooks/useShareAction'
+import { logger } from '../lib/logger'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
   sheetName?: string
@@ -82,12 +80,8 @@ export function FileActionsSheet({
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
     try {
-      // TODO: in the future if a file is synced with multiple indexers,
-      // we will need to delete the object from each indexer.
-      if (file.cid) {
-        await sdk?.deleteObject(file.cid)
-      }
-      await updateFileSealedObjects(file.id, {})
+      await deleteAllIndexerObjects(file)
+      await deleteLocalObjects(file.id)
       toast.show('Removed from network')
       closeSheet()
     } catch (e) {
@@ -100,14 +94,14 @@ export function FileActionsSheet({
     if (!file) return
     try {
       await deleteFileRecord(file.id)
-      if (file.cid) {
-        await sdk?.deleteObject(file.cid)
-      }
+      await deleteAllIndexerObjects(file)
+      await deleteLocalObjects(file.id)
       await removeFromCache(file.id, extFromMime(file.fileType))
       toast.show('Deleted file')
       closeSheet()
       navigation.goBack()
     } catch (e) {
+      logger.log('[FileActionsSheet] failed to delete file', e)
       toast.show('Failed to delete file')
       closeSheet()
     }
@@ -178,4 +172,16 @@ export function FileActionsSheet({
       </ActionSheetButton>
     </ActionSheet>
   )
+}
+
+// TODO: in the future if a file is synced with multiple indexers,
+// we will need to init and use an sdk for each indexer.
+async function deleteAllIndexerObjects(file: FileRecord) {
+  const sdk = getSdk()
+  if (!sdk) return
+  for (const [_, object] of Object.entries(file.objects)) {
+    if (object.id) {
+      await sdk.deleteObject(object.id)
+    }
+  }
 }

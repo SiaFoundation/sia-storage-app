@@ -22,11 +22,12 @@ import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { getIndexerURL } from '../stores/settings'
-import { getAppKey } from '../lib/appKey'
 import { BottomActionButton } from '../components/BottomActionButton'
 import { PlusIcon } from 'lucide-react-native'
 import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
 import { colors } from '../styles/colors'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
+import { upsertLocalObject } from '../stores/localObjects'
 
 type Props = NativeStackScreenProps<ImportStackParamList, 'ImportFile'>
 
@@ -71,13 +72,17 @@ export function ImportFileScreen({ route }: Props) {
     if (!sharedObject.data || !sdk || !sharedFile.data) return
     const indexerURL = await getIndexerURL()
     const pinnedObject = await sdk.pinShared(sharedObject.data)
-    const sealedObject = pinnedObject.seal(await getAppKey())
+    const localObject = await pinnedObjectToLocalObject(
+      sharedFile.data.id,
+      indexerURL,
+      pinnedObject
+    )
     await createFileRecord({
       ...sharedFile.data,
-      cid: sealedObject.id,
       createdAt: new Date().getTime(),
-      sealedObjects: { [indexerURL]: sealedObject },
+      updatedAt: new Date().getTime(),
     })
+    await upsertLocalObject(localObject)
     toast.show('File added')
     navigation.navigate('MainTab', {
       screen: 'FileDetail',
