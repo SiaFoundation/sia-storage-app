@@ -44,9 +44,15 @@ export function createGetterAndSelector<T, R, Args extends any[] = []>(
  * )
  * ```
  */
-export function createGetterAndSWRHook<T>(
-  key: string,
-  fetcher: () => Promise<T>
-): [() => Promise<T>, () => SWRResponse<T, any, any>] {
-  return [() => fetcher(), () => useSWR(key, () => fetcher())]
+export function createGetterAndSWRHook<T, Args extends any[] = []>(
+  key: string[],
+  fetcher: (...args: Args) => Promise<T>
+): [
+  (...args: Args) => Promise<T>,
+  (...args: Args) => SWRResponse<T, any, any>
+] {
+  return [
+    (...args: Args) => fetcher(...args),
+    (...args: Args) => useSWR([...key, ...args], () => fetcher(...args)),
+  ]
 }
