@@ -30,7 +30,7 @@ async function startUploadScanner(): Promise<void> {
     if (getActiveUploads().length >= maxTotalUploads) {
       return
     }
-    const localOnly = await getFilesLocalOnly()
+    const localOnly = await getFilesLocalOnly({ limit: maxToAdd, order: 'ASC' })
     const activeUploads = getActiveUploads()
     const localFilesNotYetQueued = localOnly
       .filter((f) => !activeUploads.some((u) => u.id === f.id))
@@ -65,21 +65,23 @@ export function useUploadScannerStatus(): {
   const localOnly = useFileCountLocalOnly()
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
-  const uploadedCount = total.data ?? 0 - (localOnly.data ?? 0)
-  const isEnabled = enabled.data ?? false
+  const totalCount = total.data ?? 0
   const localOnlyCount = localOnly.data ?? 0
+  const uploadedCount = totalCount - localOnlyCount
+  const isEnabled = enabled.data ?? false
   const activeProgress = activeUploads
     .map((u) => u.progress)
     .reduce((a, b) => a + b, 0)
-  const percentComplete = localOnlyCount
-    ? (activeProgress + uploadedCount) / localOnlyCount
-    : 0
+  const percentComplete =
+    localOnlyCount && totalCount
+      ? (activeProgress + uploadedCount) / totalCount
+      : 0
 
   return {
     show: isEnabled && !!localOnlyCount,
     enabled: isEnabled,
     remaining: localOnlyCount,
-    percentComplete: `${percentComplete.toFixed(0)}%`,
+    percentComplete: `${(percentComplete * 100).toFixed(0)}%`,
     total: total.data ?? 0,
   }
 }
