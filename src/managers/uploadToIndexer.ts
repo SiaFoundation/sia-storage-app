@@ -1,6 +1,5 @@
 import { Sdk } from 'react-native-sia'
 import { updateUploadProgress } from '../stores/uploads'
-import { updateFileSealedObject } from '../stores/files'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
 import {
@@ -9,7 +8,8 @@ import {
   UPLOAD_PARITY_SHARDS,
   UPLOAD_CHUNK_SIZE,
 } from '../config'
-import { getAppKey } from '../lib/appKey'
+import { upsertLocalObject } from '../stores/localObjects'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
 
 export async function uploadToIndexer(params: {
   file: {
@@ -17,6 +17,8 @@ export async function uploadToIndexer(params: {
     fileName: string | null
     fileType: string | null
     fileSize: number | null
+    updatedAt: number
+    createdAt: number
   }
   sdk: Sdk
   indexerURL: string
@@ -37,6 +39,8 @@ export async function uploadToIndexer(params: {
       id: file.id,
       name: file.fileName ?? '',
       fileType: file.fileType ?? '',
+      updatedAt: file.updatedAt ?? new Date().getTime(),
+      createdAt: file.createdAt ?? new Date().getTime(),
       size: data.byteLength,
     }),
     progressCallback: {
@@ -97,11 +101,16 @@ export async function uploadToIndexer(params: {
     return
   }
 
-  logger.log(`[uploadToIndexer] ${file.id} sealing object...`)
-  const appKey = await getAppKey()
-  const sealedObject = pinnedObject.seal(appKey)
-  logger.log(`[uploadToIndexer] ${file.id} updating file sealed object...`)
-  await updateFileSealedObject(file.id, indexerURL, sealedObject)
+  logger.log(
+    `[uploadToIndexer] ${file.id} converting pinned object to local object...`
+  )
+  const localObject = await pinnedObjectToLocalObject(
+    file.id,
+    indexerURL,
+    pinnedObject
+  )
+  logger.log(`[uploadToIndexer] ${file.id} updating file object...`)
+  await upsertLocalObject(localObject)
 
   signal.removeEventListener('abort', onAbort)
 }

@@ -37,12 +37,12 @@ export function useUploader() {
           )
           fileRecords.push({
             id: asset.id,
-            cid: null,
             fileName: asset.fileName,
             fileSize: asset.fileSize,
+            updatedAt: asset.createdAt,
             createdAt: asset.createdAt,
             fileType: asset.fileType,
-            sealedObjects: {},
+            objects: {},
           })
         }
         await createManyFileRecords(fileRecords)
@@ -75,6 +75,8 @@ export function useUploader() {
                     fileName: asset.fileName,
                     fileType: asset.fileType,
                     fileSize: asset.fileSize,
+                    updatedAt: asset.createdAt,
+                    createdAt: asset.createdAt,
                   },
                   indexerURL,
                   sdk,
@@ -123,6 +125,8 @@ export function useReuploadFile() {
               fileName: file.fileName,
               fileType: file.fileType,
               fileSize: file.fileSize,
+              updatedAt: file.updatedAt,
+              createdAt: file.createdAt,
             },
             indexerURL,
             sdk,
@@ -154,6 +158,8 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
           fileName: file.fileName,
           fileType: file.fileType,
           fileSize: file.fileSize,
+          updatedAt: file.updatedAt,
+          createdAt: file.createdAt,
         },
         indexerURL,
         sdk,

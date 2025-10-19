@@ -1,59 +1,48 @@
-import { SealedObject } from 'react-native-sia'
-import {
-  deserializeSealedObjects,
-  SealedObjectsMap,
-  serializeSealedObjects,
-} from '../encoding/sealedObjects'
+import { LocalObject, localObjectFromStorageRow } from '../encoding/localObject'
+import { readLocalObjectsForFile } from './localObjects'
 import { logger } from '../lib/logger'
 import { db } from '../db'
 import useSWR from 'swr'
-import { fileHasASealedObject } from '../lib/file'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { buildSWRHelpers } from '../lib/swr'
-import { create } from 'zustand'
-import useSWRInfinite from 'swr/infinite'
-
-let listMutate: () => void = () => {}
-
-const { getKey, triggerChange: _triggerChange } = buildSWRHelpers('db/files')
-
-async function triggerChange() {
-  _triggerChange()
-  listMutate()
-}
+import { LocalObjectRow } from '../encoding/localObject'
+import { getIndexerURL } from './settings'
+import { librarySwr } from './library'
 
 export type FileRecord = {
   id: string
-  cid: string | null
   fileName: string | null
   fileSize: number | null
   createdAt: number
+  updatedAt: number
   fileType: string | null
-  sealedObjects: Record<string, SealedObject>
+  objects: Record<string, LocalObject>
+}
+
+export type FileRecordRow = {
+  id: string
+  fileName: string | null
+  fileSize: number | null
+  createdAt: number
+  updatedAt: number
+  fileType: string | null
 }
 
 export async function createFileRecord(
-  fileRecord: FileRecord,
+  fileRecord: Omit<FileRecord, 'objects'>,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
-    fileRecord
-  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
-  if (error) {
-    throw error
-  }
+  const { id, fileName, fileSize, createdAt, updatedAt, fileType } = fileRecord
   await db().runAsync(
-    'INSERT INTO files (id, cid, fileName, fileSize, createdAt, fileType, sealedObjects) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO files (id, fileName, fileSize, createdAt, updatedAt, fileType) VALUES (?, ?, ?, ?, ?, ?)',
     id,
-    cid,
     fileName,
     fileSize,
     createdAt,
-    fileType,
-    serializedSealedObjects
+    updatedAt,
+    fileType
   )
   if (triggerUpdate) {
-    await triggerChange()
+    await librarySwr.triggerChange()
   }
 }
 
@@ -65,404 +54,258 @@ export async function createManyFileRecords(
       await createFileRecord(fr, false)
     }
   })
-  await triggerChange()
+  await librarySwr.triggerChange()
 }
 
-export async function readAllFileRecords(): Promise<FileRecord[]> {
-  const rows = await db().getAllAsync<{
-    id: string
-    cid: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    fileType: string
-    sealedObjects: string | null
-  }>(
-    'SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files ORDER BY createdAt DESC'
-  )
-  return rows.map(transformRow)
+function buildFileRecordsQuery(
+  opts: {
+    limit?: number
+    after?: { createdAt: number; id: string }
+    order: 'ASC' | 'DESC'
+    pinned?: {
+      indexerURL: string
+      isPinned: boolean
+    }
+  },
+  tableAlias: string = 'files'
+): {
+  where: string
+  params: (string | number)[]
+  orderExpr: string
+  limitExpr: string
+} {
+  const { limit, after, order, pinned } = opts
+
+  const params: (string | number)[] = []
+
+  let where = ''
+  if (after) {
+    if (order === 'ASC') {
+      where = `WHERE (${tableAlias}.createdAt > ?) OR (${tableAlias}.createdAt = ? AND ${tableAlias}.id > ?)`
+    } else {
+      where = `WHERE (${tableAlias}.createdAt < ?) OR (${tableAlias}.createdAt = ? AND ${tableAlias}.id < ?)`
+    }
+    params.push(after.createdAt, after.createdAt, after.id)
+  }
+
+  if (pinned) {
+    const existsExpr = pinned.isPinned
+      ? `EXISTS (SELECT 1 FROM objects s WHERE s.fileId = ${tableAlias}.id AND s.indexerURL = ?)`
+      : `NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = ${tableAlias}.id AND s.indexerURL = ?)`
+    where = where ? `${where} AND ${existsExpr}` : `WHERE ${existsExpr}`
+    params.push(pinned.indexerURL)
+  }
+
+  const orderExpr = `${tableAlias}.createdAt ${order}, ${tableAlias}.id ${order}`
+  const limitExpr =
+    limit !== undefined && Number.isFinite(limit) ? ` LIMIT ${limit | 0}` : ''
+
+  return {
+    where,
+    params,
+    orderExpr,
+    limitExpr,
+  }
 }
 
-export async function readAllFileRecordsCount(): Promise<number> {
-  const rows = await db().getFirstAsync<{
-    count: number
-  }>('SELECT COUNT(*) as count FROM files')
-  return rows?.count ?? 0
-}
-
-const CATEGORY_TO_PREFIX: Record<Category, string> = {
-  Video: 'video/',
-  Image: 'image/',
-  Audio: 'audio/',
-  Files: 'application/',
-}
-
-export type FileOrderParams = {
-  sortBy?: SortBy
-  sortDir?: SortDir
-  categories?: Category[]
-  query?: string
+export async function readAllFileRecordsCount(opts: {
   limit?: number
-  offset?: number
+  after?: { createdAt: number; id: string }
+  order: 'ASC' | 'DESC'
+  pinned?: {
+    indexerURL: string
+    isPinned: boolean
+  }
+}): Promise<number> {
+  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
+
+  const row = await db().getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
+    ...params
+  )
+  return row?.count ?? 0
 }
 
-export async function readOrderedFileRecords(
-  opts?: FileOrderParams
-): Promise<FileRecord[]> {
-  const {
-    sortBy = 'DATE',
-    sortDir,
-    categories = [],
-    query,
-    limit,
-    offset,
-  } = opts ?? {}
-  const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-
-  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
-  const hasCategories = prefixes.length > 0
-  const hasQuery = typeof query === 'string' && query.trim().length > 0
-
-  const whereParts: string[] = []
-  const params: (string | number | null)[] = []
-  if (hasCategories) {
-    whereParts.push(prefixes.map(() => 'fileType LIKE ?').join(' OR '))
-    params.push(...prefixes.map((p) => `${p}%`))
+export async function readAllFileRecords(opts: {
+  limit?: number
+  after?: { createdAt: number; id: string }
+  order: 'ASC' | 'DESC'
+  pinned?: {
+    indexerURL: string
+    isPinned: boolean
   }
-  if (hasQuery) {
-    whereParts.push('fileName LIKE ? COLLATE NOCASE ESCAPE "\\"')
-    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
-    params.push(`%${escaped}%`)
-  }
-  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
+}): Promise<FileRecord[]> {
+  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(
+    opts,
+    'f'
+  )
 
-  const orderExpr =
-    sortBy === 'NAME'
-      ? `(fileName IS NULL) ASC, fileName COLLATE NOCASE ${dir}, id ${dir}`
-      : `createdAt ${dir}, id ${dir}`
-
-  let pageClause = ''
-  if (limit != null && offset != null) {
-    pageClause = ` LIMIT ${limit | 0} OFFSET ${offset | 0}`
-  }
-
-  const rows = await db().getAllAsync<{
-    id: string
-    cid: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    fileType: string
-    sealedObjects: string | null
-  }>(
-    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects
-     FROM files
+  const joined = await db().getAllAsync<
+    FileRecordRow &
+      LocalObjectRow & {
+        objectId: string
+        objectCreatedAt: number
+        objectUpdatedAt: number
+      }
+  >(
+    `SELECT f.id, f.fileName, f.fileSize, f.createdAt, f.updatedAt, f.fileType,
+            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
+            o.encryptedMasterKey as encryptedMasterKey, o.encryptedMetadata as encryptedMetadata,
+            o.signature as signature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
+     FROM files f
+     LEFT JOIN objects o ON o.fileId = f.id
      ${where}
-     ORDER BY ${orderExpr}${pageClause}`,
+     ORDER BY ${orderExpr}${limitExpr}`,
     ...params
   )
 
-  return rows.map(transformRow)
+  const byId: Map<string, FileRecordRow> = new Map()
+  const objectsById: Map<string, LocalObject[]> = new Map()
+
+  for (const r of joined) {
+    if (!byId.has(r.id)) {
+      byId.set(r.id, r)
+    }
+    if (r.fileId && r.indexerURL) {
+      const arr = objectsById.get(r.id) || []
+      arr.push(
+        localObjectFromStorageRow({
+          ...r,
+          id: r.objectId,
+          createdAt: r.objectCreatedAt,
+          updatedAt: r.objectUpdatedAt,
+        })
+      )
+      objectsById.set(r.id, arr)
+    }
+  }
+
+  return Array.from(byId.values()).map((row) =>
+    transformRow(row, objectsById.get(row.id))
+  )
 }
 
-export async function readFileRecordByCid(
-  cid: string
+export async function readFileRecordByObjectId(
+  objectId: string
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<{
     id: string
-    cid: string
     fileName: string | null
     fileSize: number | null
     createdAt: number
+    updatedAt: number
     fileType: string
-    sealedObjects: string | null
   }>(
-    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE cid = ?`,
-    cid
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
+    objectId
   )
-  return row ? transformRow(row) : null
-}
-
-export async function readFileRecordsByCid(
-  cids: string[]
-): Promise<FileRecord[]> {
-  const rows = await db().getAllAsync<{
-    id: string
-    cid: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    fileType: string
-    sealedObjects: string | null
-  }>(
-    `SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE cid IN (${cids
-      .map(() => '?')
-      .join(',')})`
-  )
-  return rows.map(transformRow)
+  if (!row) return null
+  const objects = await readLocalObjectsForFile(row.id)
+  return transformRow(row, objects)
 }
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
-  const row = await db().getFirstAsync<{
-    id: string
-    cid: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    fileType: string
-    sealedObjects: string | null
-  }>(
-    'SELECT id, cid, fileName, fileSize, createdAt, fileType, sealedObjects FROM files WHERE id = ?',
+  const row = await db().getFirstAsync<FileRecordRow>(
+    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType FROM files WHERE id = ?',
     id
   )
   if (!row) {
     logger.log('[db] file not found', id)
     return null
   }
-  return transformRow(row)
+  const objects = await readLocalObjectsForFile(id)
+  return transformRow(row, objects)
 }
 
-export async function updateFileRecord(fileRecord: FileRecord): Promise<void> {
-  const { id, cid, fileName, fileSize, createdAt, fileType, sealedObjects } =
-    fileRecord
-  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
-  if (error) {
-    throw error
-  }
+export async function updateFileRecord(
+  fileRecord: Omit<FileRecord, 'objects'>
+): Promise<void> {
+  const { id, fileName, fileSize, createdAt, updatedAt, fileType } = fileRecord
   await db().runAsync(
-    'UPDATE files SET cid = ?, fileName = ?, fileSize = ?, createdAt = ?, fileType = ?, sealedObjects = ? WHERE id = ?',
-    cid,
+    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, updatedAt = ?, fileType = ? WHERE id = ?',
     fileName,
     fileSize,
     createdAt,
+    updatedAt,
     fileType,
-    serializedSealedObjects,
     id
   )
-  await triggerChange()
+  await librarySwr.triggerChange()
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
   await db().runAsync('DELETE FROM files WHERE id = ?', id)
-  await triggerChange()
+  await librarySwr.triggerChange()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
 }
 
-export async function updateFileSealedObjects(
-  id: string,
-  sealedObjects: SealedObjectsMap,
-  triggerUpdate: boolean = true
-): Promise<void> {
-  const [serializedSealedObjects, error] = serializeSealedObjects(sealedObjects)
-  if (error) {
-    throw error
+export function transformRow(
+  row: FileRecordRow,
+  objects?: LocalObject[]
+): FileRecord {
+  const objectsMap: Record<string, LocalObject> = {}
+  for (const o of objects || []) {
+    objectsMap[o.indexerURL] = o
   }
-  await db().runAsync(
-    'UPDATE files SET sealedObjects = ? WHERE id = ?',
-    serializedSealedObjects,
-    id
-  )
-  if (triggerUpdate) {
-    await triggerChange()
-  }
-}
-
-export async function updateFileSealedObject(
-  id: string,
-  indexerURL: string,
-  sealedObject: SealedObject
-): Promise<void> {
-  const file = await readFileRecord(id)
-  if (file == null) {
-    logger.log('[db] file not found', id)
-    throw new Error('File not found')
-  }
-  const pos = file.sealedObjects ?? {}
-  pos[indexerURL] = sealedObject
-  const [serializedSealedObjects, error] = serializeSealedObjects(pos)
-  if (error) {
-    throw error
-  }
-
-  // If the file has no cid yet, set it to the new sealed object's id.
-  if (file.cid == null) {
-    await db().runAsync(
-      'UPDATE files SET cid = ?, sealedObjects = ? WHERE id = ?',
-      sealedObject.id,
-      serializedSealedObjects,
-      id
-    )
-  } else {
-    await db().runAsync(
-      'UPDATE files SET sealedObjects = ? WHERE id = ?',
-      serializedSealedObjects,
-      id
-    )
-  }
-  await triggerChange()
-}
-
-function transformRow(row: {
-  id: string
-  cid: string
-  fileName: string | null
-  fileSize: number | null
-  createdAt: number
-  fileType: string
-  sealedObjects: string | null
-}): FileRecord {
-  const [sealedObjects] = deserializeSealedObjects(row.id, row.sealedObjects)
   return {
     id: row.id,
-    cid: row.cid,
     fileName: row.fileName,
     fileSize: row.fileSize,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     fileType: row.fileType,
-    sealedObjects: sealedObjects ?? {},
+    objects: objectsMap,
   }
 }
 
 export function useFileCount() {
-  return useSWR(getKey('count'), () => readAllFileRecordsCount())
-}
-
-const PAGE_SIZE = 40
-
-export function useFileList() {
-  const { sortBy, sortDir, selectedCategories, searchQuery } = useFilesView()
-  const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-
-  const categories = Array.from(selectedCategories ?? new Set())
-  const categoriesKey = categories.length
-    ? categories.slice().sort().join(',')
-    : ''
-
-  const base = getKey(
-    `list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`
-  )
-
-  const fetcher = async (key: string) => {
-    const pageIndex = Number(key.split('|page=').pop() ?? '0')
-    const items = await readOrderedFileRecords({
-      sortBy,
-      sortDir: sortingDir,
-      categories: categories.length ? categories : undefined,
-      query: searchQuery?.trim().length ? searchQuery : undefined,
-      limit: PAGE_SIZE,
-      offset: pageIndex * PAGE_SIZE,
+  return useSWR(librarySwr.getKey('count'), () =>
+    readAllFileRecordsCount({
+      limit: undefined,
+      after: undefined,
+      order: 'ASC',
     })
-    return items
-  }
-
-  const swr = useSWRInfinite<FileRecord[]>(
-    (pageIndex, prevPage) => {
-      if (pageIndex > 0 && (!prevPage || prevPage.length < PAGE_SIZE))
-        return null
-      return `${base}|page=${pageIndex}`
-    },
-    fetcher,
-    { revalidateOnFocus: false, revalidateAll: true }
   )
-
-  listMutate = swr.mutate
-
-  const pages = swr.data
-  const flat = pages ? pages.flat() : undefined
-
-  const lastPage = pages?.[pages.length - 1]
-  const hasMore = !!lastPage && lastPage.length === PAGE_SIZE
-
-  return {
-    ...swr,
-    data: flat,
-    hasMore,
-  }
 }
 
 export function useFileCountAll() {
-  return useSWR(getKey('count'), () =>
-    readAllFileRecords().then((f) => f.length)
+  return useSWR(librarySwr.getKey('count'), () =>
+    readAllFileRecordsCount({
+      limit: undefined,
+      after: undefined,
+      order: 'ASC',
+    })
   )
 }
 
 export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
-  getKey('localOnly'),
-  async () => {
-    const files = await readAllFileRecords()
-    return files.filter((f) => !fileHasASealedObject(f))
+  librarySwr.getKey('localOnly'),
+  async ({ limit, order }: { limit?: number; order: 'ASC' | 'DESC' }) => {
+    const currentIndexerURL = await getIndexerURL()
+    return readAllFileRecords({
+      limit,
+      after: undefined,
+      order,
+      pinned: {
+        indexerURL: currentIndexerURL,
+        isPinned: false,
+      },
+    })
   }
 )
 
 export const [getFileCountLocalOnly, useFileCountLocalOnly] =
-  createGetterAndSWRHook(getKey('localOnlyCount'), async () => {
-    const files = await getFilesLocalOnly()
-    return files.length
+  createGetterAndSWRHook(librarySwr.getKey('localOnlyCount'), async () => {
+    const currentIndexerURL = await getIndexerURL()
+    return readAllFileRecordsCount({
+      order: 'ASC',
+      pinned: { indexerURL: currentIndexerURL, isPinned: false },
+    })
   })
 
 export function useFileDetails(id: string) {
-  return useSWR(getKey(id), () => readFileRecord(id))
-}
-
-// File View Store
-export type SortBy = 'NAME' | 'DATE'
-export type SortDir = 'ASC' | 'DESC'
-export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
-export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
-
-type FilesViewState = {
-  sortBy: SortBy
-  sortDir: SortDir
-  selectedCategories: Set<Category>
-  searchQuery: string
-}
-
-export const useFilesView = create<FilesViewState>(() => ({
-  sortBy: 'DATE',
-  sortDir: 'DESC',
-  selectedCategories: new Set<Category>(),
-  searchQuery: '',
-}))
-
-const { setState } = useFilesView
-
-export function setSortCategory(sortBy: SortBy) {
-  setState(() => {
-    return { sortBy }
-  })
-}
-
-export function toggleDir() {
-  setState((state) => {
-    return { sortDir: state.sortDir === 'ASC' ? 'DESC' : 'ASC' }
-  })
-}
-
-export function toggleCategory(c: Category) {
-  setState((state) => {
-    const next = new Set(state.selectedCategories)
-    next.has(c) ? next.delete(c) : next.add(c)
-    return { selectedCategories: next }
-  })
-}
-
-export function clearCategories() {
-  setState(() => {
-    return { selectedCategories: new Set() }
-  })
-}
-
-export function setSearchQuery(searchQuery: string) {
-  setState(() => {
-    return { searchQuery }
-  })
-}
-
-export function clearSearchQuery() {
-  setState(() => {
-    return { searchQuery: '' }
-  })
+  return useSWR(librarySwr.getKey(id), () => readFileRecord(id))
 }

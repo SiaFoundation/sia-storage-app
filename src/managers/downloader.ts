@@ -6,7 +6,7 @@ import {
   runDownloadWithSlot,
 } from '../stores/downloads'
 import { useSdk } from '../stores/sdk'
-import { PinnedObject, SealedObject } from 'react-native-sia'
+import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { extFromMime, type Ext } from '../lib/fileTypes'
 import { getOneSealedObject } from '../lib/file'
@@ -14,13 +14,14 @@ import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getAppKey } from '../lib/appKey'
+import { LocalObjectsMap } from '../encoding/localObject'
 
 export function useDownload(
   file?: {
     id: string
     fileType: string | null
     fileSize: number | null
-    sealedObjects: Record<string, SealedObject> | null
+    objects: LocalObjectsMap | null
   } | null
 ) {
   const toast = useToast()

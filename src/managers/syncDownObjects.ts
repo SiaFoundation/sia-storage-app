@@ -2,12 +2,11 @@ import { logger } from '../lib/logger'
 import { SYNC_OBJECTS_INTERVAL } from '../config'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownObjects, getIndexerURL } from '../stores/settings'
-import { getAppKey } from '../lib/appKey'
 import {
   createFileRecord,
   FileRecord,
   readFileRecord,
-  readFileRecordByCid,
+  readFileRecordByObjectId,
   updateFileRecord,
 } from '../stores/files'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
@@ -16,7 +15,9 @@ import { type ObjectsCursor } from 'react-native-sia'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { z } from 'zod'
 import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
-import { epochOrIsoToDate } from '../encoding'
+import { epochOrIsoToDateCodec } from '../encoding/date'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
+import { upsertLocalObject } from '../stores/localObjects'
 
 const batchSize = 30
 
@@ -24,8 +25,8 @@ const batchSize = 30
  * Syncs down objects from the indexer to the local database. The service works by
  * starting with a cursor saved in secure store. The service will sync down the next
  * batch of objects and save the cursor to secure store. If there are no objects to
- * sync, the cursor is reset. The service checks if files are already in the database
- * by cid. The service runs a batch every SYNC_OBJECTS_INTERVAL milliseconds.
+ * sync, the cursor is reset. The service checks if objects are already in the database
+ * by content id. The service runs a batch every SYNC_OBJECTS_INTERVAL milliseconds.
  */
 async function syncDownObjects(): Promise<void> {
   const isConnected = getIsConnected()
@@ -60,38 +61,44 @@ async function syncDownObjects(): Promise<void> {
       if (metadata.id) {
         existingFileRecord = await readFileRecord(metadata.id)
       }
-      // If not found, try to find by cid.
+      // If not found, try to find by object id.
       if (!existingFileRecord) {
-        existingFileRecord = await readFileRecordByCid(key)
+        existingFileRecord = await readFileRecordByObjectId(key)
       }
-      const sealedObject = object.seal(await getAppKey())
       if (existingFileRecord) {
         existingCount += 1
+        const localObject = await pinnedObjectToLocalObject(
+          existingFileRecord.id,
+          indexerURL,
+          object
+        )
         try {
-          updateFileRecord({
+          await updateFileRecord({
             ...existingFileRecord,
-            sealedObjects: {
-              ...existingFileRecord?.sealedObjects,
-              [indexerURL]: sealedObject,
-            },
+            ...decodeFileMetadata(object.metadata()),
           })
+          await upsertLocalObject(localObject)
         } catch (e) {
           logger.log('[syncDownObjects] error updating file record', key, e)
         }
       } else {
         newCount += 1
         try {
-          createFileRecord({
-            id: uniqueId(),
-            cid: key,
+          const fileId = uniqueId()
+          await createFileRecord({
+            id: fileId,
             fileName: metadata.name ?? null,
             fileSize: metadata.size ?? null,
             createdAt: object.createdAt().getTime(),
+            updatedAt: object.updatedAt().getTime(),
             fileType: metadata.fileType ?? null,
-            sealedObjects: {
-              [indexerURL]: sealedObject,
-            },
           })
+          const localObject = await pinnedObjectToLocalObject(
+            fileId,
+            indexerURL,
+            object
+          )
+          await upsertLocalObject(localObject)
         } catch (e) {
           logger.log('[syncDownObjects] error adding file record', key, e)
         }
@@ -99,10 +106,15 @@ async function syncDownObjects(): Promise<void> {
     }
     logger.log('[syncDownObjects] synced', existingCount, 'existing objects')
     logger.log('[syncDownObjects] synced', newCount, 'new objects')
-    await setSyncDownCursor({
-      key: objects[objects.length - 1].key,
-      after: objects[objects.length - 1].object?.updatedAt() ?? new Date(),
-    })
+
+    if (objects.length < batchSize) {
+      await setSyncDownCursor(undefined)
+    } else {
+      await setSyncDownCursor({
+        key: objects[objects.length - 1].key,
+        after: objects[objects.length - 1].object?.updatedAt() ?? new Date(),
+      })
+    }
   } catch (e) {
     logger.log('[syncDownObjects] sync error', e)
   }
@@ -129,11 +141,11 @@ const objectsCursorCodec = z.codec(
   {
     decode: (stored) => ({
       key: stored.key,
-      after: epochOrIsoToDate.decode(stored.after),
+      after: epochOrIsoToDateCodec.decode(stored.after),
     }),
     encode: (cursor) => ({
       key: cursor.key,
-      after: epochOrIsoToDate.encode(cursor.after),
+      after: epochOrIsoToDateCodec.encode(cursor.after),
     }),
   }
 )

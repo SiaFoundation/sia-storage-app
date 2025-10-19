@@ -3,7 +3,7 @@ import { useFileStatus } from '../lib/file'
 import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
 import { useDownload, useDownloadFromShareURL } from '../managers/downloader'
-import { SealedObjectsMap } from '../encoding/sealedObjects'
+import { LocalObjectsMap } from '../encoding/localObject'
 
 /**
  * When a file is rendered in a thumbnail view, auto download it if:
@@ -37,7 +37,7 @@ export function useAutoDownload(
     id: string
     fileType: string | null
     fileSize: number | null
-    sealedObjects: SealedObjectsMap | null
+    objects: LocalObjectsMap | null
   },
   shouldDownload: (file: {
     fileType: string | null

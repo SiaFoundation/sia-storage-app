@@ -7,7 +7,7 @@ export function usePinnedObjects(file: FileRecord) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(
     ['sealedObjects', file.id],
     async () => {
-      const sealedObjects = Object.entries(file.sealedObjects)
+      const sealedObjects = Object.entries(file.objects)
       return await Promise.all(
         sealedObjects.map(async ([indexerURL, so]) => ({
           indexerURL,
