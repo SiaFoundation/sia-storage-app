@@ -1,6 +1,6 @@
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useNavigation, type NavigationProp } from '@react-navigation/native'
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import {
   ActivityIndicator,
@@ -36,6 +36,7 @@ export function ImportFileScreen({ route }: Props) {
   const toast = useToast()
   const shareUrl = route.params?.shareUrl
   const sdk = useSdk()
+  const id = useMemo(() => uniqueId(), [])
   const sharedObject = useSWR(
     sdk ? ['sharedObject', shareUrl] : null,
     async () => {
@@ -55,7 +56,7 @@ export function ImportFileScreen({ route }: Props) {
         if (!sharedObject.data) return null
         const metadata = decodeFileMetadata(sharedObject.data.metadata())
         return {
-          id: uniqueId(),
+          id,
           size: Number(sharedObject.data.size()),
           fileSize: metadata.size ?? 0,
           fileType: metadata.fileType ?? '',
