@@ -15,15 +15,10 @@ import { FileGallery } from '../components/FileGallery'
 import { useNavigation } from '@react-navigation/native'
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
-import {
-  type FileRecord,
-  useFileCount,
-  useFileList,
-  useFilesView,
-} from '../stores/files'
+import { type FileRecord, useFileCount } from '../stores/files'
+import { useFileList, useLibrary, type Category } from '../stores/library'
 import { FileList } from '../components/FileList'
 import { LibraryControls } from '../components/LibraryControls'
-import { type Category } from '../stores/files'
 import { useAppStatus } from '../hooks/useAppStatus'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { ExpandableBadge } from '../components/ExpandableBadge'
@@ -31,7 +26,7 @@ import { useLibraryViewMode } from '../stores/settings'
 
 export function LibraryScreen() {
   const viewMode = useLibraryViewMode()
-  const { selectedCategories, searchQuery } = useFilesView()
+  const { selectedCategories, searchQuery } = useLibrary()
   const headerRef = useRef<ComponentRef<typeof View> | null>(null)
   const navigation =
     useNavigation<NativeStackNavigationProp<MainStackParamList>>()

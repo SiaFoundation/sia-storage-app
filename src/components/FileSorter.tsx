@@ -6,14 +6,14 @@ import {
   setSortCategory,
   SortBy,
   toggleDir,
-  useFilesView,
-} from '../stores/files'
+  useLibrary,
+} from '../stores/library'
 import ActionSheet from '../components/ActionSheet'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { openSheet } from '../stores/sheets'
 
 export function FileSorter(): React.ReactElement {
-  const { sortBy, sortDir } = useFilesView()
+  const { sortBy, sortDir } = useLibrary()
   const isOpen = useSheetOpen('fileSorter')
 
   const onPick = (nextSortBy: SortBy) => {

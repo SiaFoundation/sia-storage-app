@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { generateRecoveryPhrase } from 'react-native-sia'
 import { deleteAllFileRecords } from './files'
 import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
 import * as SplashScreen from 'expo-splash-screen'

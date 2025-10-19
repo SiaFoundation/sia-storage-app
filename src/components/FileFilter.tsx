@@ -6,8 +6,8 @@ import {
   type Category,
   clearCategories,
   toggleCategory,
-  useFilesView,
-} from '../stores/files'
+  useLibrary,
+} from '../stores/library'
 import ActionSheet from '../components/ActionSheet'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 
@@ -15,7 +15,7 @@ const CATEGORIES: Category[] = ['Video', 'Image', 'Audio', 'Files']
 
 export function FileFilter(): React.ReactElement {
   const isOpen = useSheetOpen('fileFilter')
-  const { selectedCategories } = useFilesView()
+  const { selectedCategories } = useLibrary()
 
   const Row = ({ cat }: { cat: Category }) => {
     const checked = selectedCategories.has(cat)
