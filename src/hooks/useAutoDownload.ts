@@ -7,7 +7,7 @@ import { LocalObjectsMap } from '../encoding/localObject'
 
 /**
  * When a file is rendered in a thumbnail view, auto download it if:
- * its an image or PDF.
+ * its an image or PDF, or its less than 4 MB.
  */
 export function thumbnailShouldAutoDownload(file: {
   fileType: string | null
@@ -15,12 +15,13 @@ export function thumbnailShouldAutoDownload(file: {
 }): boolean {
   const isImage = file.fileType?.startsWith('image') ?? false
   const isPdf = (file.fileType ?? '').includes('pdf')
-  return isImage || isPdf
+  const sizeOk = (file.fileSize ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
+  return isImage || isPdf || sizeOk
 }
 
 /**
  * When a file is rendered in a detail view, auto download it if:
- * its an image, PDF, or its less than 4 MB.
+ * its an image, PDF, or its less than 10 MB.
  */
 export function detailsShouldAutoDownload(file: {
   fileType: string | null
@@ -28,7 +29,7 @@ export function detailsShouldAutoDownload(file: {
 }): boolean {
   const isImage = file.fileType?.startsWith('image') ?? false
   const isPdf = (file.fileType ?? '').includes('pdf')
-  const sizeOk = (file.fileSize ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
+  const sizeOk = (file.fileSize ?? Infinity) <= 10 * 1000 * 1000 // 10 MB
   return isImage || isPdf || sizeOk
 }
 
