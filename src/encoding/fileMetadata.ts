@@ -5,15 +5,21 @@ export type FileMetadata = {
   name?: string
   fileType?: string
   size?: number
+  updatedAt?: number
+  createdAt?: number
 }
 
-export function encodeFileMetadata(params: FileMetadata): ArrayBuffer {
+export function encodeFileMetadata(
+  params: Required<FileMetadata>
+): ArrayBuffer {
   return new TextEncoder().encode(
     JSON.stringify({
       id: params.id,
       name: params.name,
       fileType: params.fileType,
       size: params.size,
+      updatedAt: params.updatedAt,
+      createdAt: params.createdAt,
     })
   ).buffer as ArrayBuffer
 }
