@@ -8,10 +8,9 @@ import { useFlatListControls } from '../hooks/useFlatListControls'
 type Props = {
   onPressItem: (item: FileRecord) => void
   setItemRef?: (id: string, ref: any) => void
-  topPadding?: number
 }
 
-export function FileList({ onPressItem, setItemRef, topPadding = 0 }: Props) {
+export function FileList({ onPressItem, setItemRef }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
@@ -31,9 +30,9 @@ export function FileList({ onPressItem, setItemRef, topPadding = 0 }: Props) {
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
-        paddingTop: topPadding,
+        paddingTop: 130,
         gap: 8,
-        paddingBottom: 16,
+        paddingBottom: 130,
       }}
       renderItem={({ item }) => (
         <FileListItem

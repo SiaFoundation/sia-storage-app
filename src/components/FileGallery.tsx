@@ -9,14 +9,12 @@ type Props = {
   onPressItem: (item: FileRecord) => void
   setItemRef?: (id: string, ref: any) => void
   numColumns?: number
-  topPadding?: number
 }
 
 export function FileGallery({
   onPressItem,
   setItemRef,
   numColumns = 3,
-  topPadding = 0,
 }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
@@ -37,10 +35,7 @@ export function FileGallery({
       automaticallyAdjustContentInsets={false}
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
-      contentContainerStyle={[
-        styles.galleryContent,
-        { paddingTop: topPadding },
-      ]}
+      contentContainerStyle={styles.galleryContent}
       renderItem={({ item }) => (
         <FileGalleryItem
           file={item}
@@ -61,5 +56,5 @@ export function FileGallery({
 }
 
 const styles = StyleSheet.create({
-  galleryContent: { padding: 0 },
+  galleryContent: { paddingTop: 130, paddingBottom: 130 },
 })
