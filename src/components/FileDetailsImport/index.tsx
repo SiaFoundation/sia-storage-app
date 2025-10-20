@@ -3,7 +3,6 @@ import { colors } from '../../styles/colors'
 import { useFileStatus } from '../../lib/file'
 import { FileMetaImport } from './FileMetaImport'
 import { FileViewer } from '../FileViewer'
-import { FileRecord } from '../../stores/files'
 import { useDownloadFromShareURL } from '../../managers/downloader'
 import {
   detailsShouldAutoDownload,
@@ -30,14 +29,12 @@ export function FileDetailsImport({
   // smartly do this depending on whether a user is on wifi, etc.
   useAutoDownloadFromShareURL(file, detailsShouldAutoDownload, shareUrl)
 
-  const potentialFile: FileRecord = {
+  const potentialFile = {
     id: file.id,
-    cid: null,
     fileName: file.fileName,
     fileSize: file.fileSize,
-    createdAt: new Date().getTime(),
     fileType: file.fileType,
-    sealedObjects: {},
+    objects: null,
   }
 
   return (
