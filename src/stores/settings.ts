@@ -4,12 +4,9 @@ import {
   setSecureStoreString,
   getSecureStoreString,
 } from './secureStore'
-import { setSecureStoreNumber, getSecureStoreNumber } from './secureStore'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
-import { setUploadMaxSlots } from '../managers/uploadsPool'
-import { DEFAULT_INDEXER_URL, DEFAULT_MAX_UPLOADS } from '../config'
-import { logger } from '../lib/logger'
+import { DEFAULT_INDEXER_URL } from '../config'
 
 export const { getKey, triggerChange } = buildSWRHelpers('secureStore')
 
@@ -72,7 +69,7 @@ export const [getShowAdvanced, useShowAdvanced] = createGetterAndSWRHook(
 
 export const [getAutoScanUploads, useAutoScanUploads] = createGetterAndSWRHook(
   getKey('autoScanUploads'),
-  () => getSecureStoreBoolean('autoScanUploads')
+  () => getSecureStoreBoolean('autoScanUploads', true)
 )
 
 export async function setAutoScanUploads(value: boolean) {
@@ -90,7 +87,7 @@ export async function toggleAutoScanUploads() {
 
 export const [getAutoSyncDownEvents, useAutoSyncDownEvents] =
   createGetterAndSWRHook(getKey('autoSyncDownEvents'), () =>
-    getSecureStoreBoolean('autoSyncDownEvents')
+    getSecureStoreBoolean('autoSyncDownEvents', true)
   )
 
 export async function setAutoSyncDownEvents(value: boolean) {
