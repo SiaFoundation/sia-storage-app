@@ -12,6 +12,7 @@ import { SearchIcon, XIcon } from 'lucide-react-native'
 import { palette, whiteA } from '../styles/colors'
 import { clearSearchQuery, setSearchQuery, useLibrary } from '../stores/library'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { LibraryControlsSearchMenus } from './LibraryControlsSearchMenus'
 
 export function FileSearchBar({ onExit }: { onExit: () => void }) {
   const { searchQuery } = useLibrary()
@@ -46,7 +47,7 @@ export function FileSearchBar({ onExit }: { onExit: () => void }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.inputRow}>
-        <SearchIcon size={18} color={whiteA.a70} />
+        <SearchIcon color={whiteA.a70} />
         <TextInput
           ref={inputRef}
           value={text}

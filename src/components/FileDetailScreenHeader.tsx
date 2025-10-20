@@ -4,6 +4,7 @@ import { type NavigationProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
 import { overlay, palette } from '../styles/colors'
+import { IconButton } from './IconButton'
 
 type Props = {
   title: string
@@ -20,19 +21,13 @@ export function FileDetailScreenHeader({
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 2 }]}>
       <View style={styles.headerRow}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerIcon}
-        >
-          <View style={styles.pill}>
-            {icon === 'back' ? (
-              <ArrowLeftIcon color={palette.gray[50]} size={16} />
-            ) : (
-              <XIcon color={palette.gray[50]} size={16} />
-            )}
-          </View>
-        </Pressable>
+        <IconButton onPress={() => navigation.goBack()}>
+          {icon === 'back' ? (
+            <ArrowLeftIcon color={palette.gray[50]} />
+          ) : (
+            <XIcon color={palette.gray[50]} />
+          )}
+        </IconButton>
         <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {title}
         </Text>

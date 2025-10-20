@@ -1,11 +1,12 @@
 import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import { SearchIcon } from 'lucide-react-native'
-import { palette, whiteA } from '../styles/colors'
+import { palette } from '../styles/colors'
 import { useLibrary } from '../stores/library'
 import { IconButton } from './IconButton'
+import { iconColors } from './BottomControlBar'
 
-export function FileSearchControl({
+export function FileSearchButton({
   onOpen,
 }: {
   onOpen?: () => void
@@ -16,7 +17,7 @@ export function FileSearchControl({
   const applied = hasQuery || hasFilters
   return (
     <IconButton onPress={onOpen}>
-      <SearchIcon size={18} color={applied ? palette.blue[400] : whiteA.a70} />
+      <SearchIcon color={applied ? palette.blue[400] : iconColors.white} />
       {applied && <View style={styles.dot} />}
     </IconButton>
   )

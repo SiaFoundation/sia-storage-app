@@ -1,42 +1,25 @@
 import React from 'react'
 import {
   View,
-  Pressable,
   StyleSheet,
-  type ViewStyle,
-  Text,
   Platform,
   KeyboardAvoidingView,
+  StyleProp,
+  ViewStyle,
 } from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from './Gradient'
 
-export type ControlIconButton = {
-  id: string
-  icon: React.ReactNode
-  onPress?: () => void
-  disabled?: boolean
-  label?: string
-}
-
 type Props = {
-  width?: 'full' | 'dynamic'
-  left?: ControlIconButton[]
-  center?: ControlIconButton
-  right?: ControlIconButton[]
-  style?: ViewStyle
-  content?: React.ReactNode
+  children?: React.ReactNode
   overlayTop?: React.ReactNode
   keyboardAware?: boolean
+  style?: StyleProp<ViewStyle>
 }
 
 export function BottomControlBar({
-  left = [],
-  center,
-  right = [],
   style,
-  width = 'full',
-  content,
+  children,
   overlayTop,
   keyboardAware = false,
 }: Props) {
@@ -45,10 +28,10 @@ export function BottomControlBar({
       <KeyboardAvoidingView
         enabled={keyboardAware}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
+        style={{ flex: 1 }}
         pointerEvents="box-none"
       >
-        <View style={[styles.wrapFlex, style]} pointerEvents="box-none">
+        <View style={styles.wrapFlex} pointerEvents="box-none">
           <Gradient
             fadeTo="bottom"
             overlayTopColor={overlay.gradientLight}
@@ -62,96 +45,13 @@ export function BottomControlBar({
               height: overlayTop ? 320 : 150,
             }}
           />
-          {overlayTop ? (
-            <View
-              style={[
-                styles.overlayTop,
-                { width: width === 'dynamic' ? undefined : '90%' },
-              ]}
-              pointerEvents="box-none"
-            >
-              <View style={styles.overlayInner}>{overlayTop}</View>
-            </View>
-          ) : null}
-          <View
-            style={[
-              styles.bar,
-              { width: width === 'dynamic' ? undefined : '90%' },
-            ]}
-          >
-            {content ? (
-              <View style={styles.fullContent}>{content}</View>
-            ) : (
-              <>
-                <View style={styles.sideRow}>
-                  {left.map((b) => (
-                    <View key={b.id}>
-                      {b.onPress ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={b.onPress}
-                          disabled={b.disabled}
-                          style={[
-                            styles.iconButton,
-                            b.disabled && styles.disabled,
-                          ]}
-                        >
-                          {b.icon}
-                          {b.label ? (
-                            <Text style={styles.label}>{b.label}</Text>
-                          ) : null}
-                        </Pressable>
-                      ) : (
-                        // Render raw content if no onPress is provided.
-                        <View style={styles.raw}>{b.icon}</View>
-                      )}
-                    </View>
-                  ))}
-                </View>
-                <View style={styles.centerWrap}>
-                  {center ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={center.onPress}
-                      disabled={center.disabled}
-                      style={[
-                        styles.iconButton,
-                        center.disabled && styles.disabled,
-                      ]}
-                    >
-                      {center.icon}
-                      {center.label ? (
-                        <Text style={styles.label}>{center.label}</Text>
-                      ) : null}
-                    </Pressable>
-                  ) : null}
-                </View>
-                <View style={styles.sideRow}>
-                  {right.map((b) => (
-                    <View key={b.id}>
-                      {b.onPress ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={b.onPress}
-                          disabled={b.disabled}
-                          style={[
-                            styles.iconButton,
-                            b.disabled && styles.disabled,
-                          ]}
-                        >
-                          {b.icon}
-                          {b.label ? (
-                            <Text style={styles.label}>{b.label}</Text>
-                          ) : null}
-                        </Pressable>
-                      ) : (
-                        <View style={styles.raw}>{b.icon}</View>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
+          <View style={[styles.contents, style]}>
+            {overlayTop ? (
+              <View style={[styles.overlayTop]} pointerEvents="box-none">
+                {overlayTop}
+              </View>
+            ) : null}
+            <View style={styles.bar}>{children}</View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -162,22 +62,29 @@ export function BottomControlBar({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    pointerEvents: 'box-none',
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  kav: { flex: 1 },
+  contents: {
+    flexDirection: 'row',
+    zIndex: 2,
+  },
   wrapFlex: {
     flex: 1,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 30,
+    width: '100%',
   },
   bar: {
-    zIndex: 2,
+    flex: 1,
     height: 56,
-    maxWidth: 600,
     borderRadius: 26,
     backgroundColor: overlay.panelStrong,
     flexDirection: 'row',
@@ -191,36 +98,13 @@ const styles = StyleSheet.create({
     borderColor: whiteA.a08,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  sideRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  centerWrap: { alignItems: 'center', justifyContent: 'center' },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    gap: 4,
-    justifyContent: 'center',
-  },
-  raw: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fullContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   overlayTop: {
     position: 'absolute',
     zIndex: 3,
     left: 0,
     right: 0,
-    bottom: 56 + 12 + 30, // Bar height + gap + base padding.
+    bottom: 56 + 12, // Bar height + gap.
     alignSelf: 'center',
-    maxWidth: 600,
-  },
-  overlayInner: {
-    flex: 1,
   },
   label: { fontSize: 10, color: colors.textMuted },
   disabled: { opacity: 0.3 },
