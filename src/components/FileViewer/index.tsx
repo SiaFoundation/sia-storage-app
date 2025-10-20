@@ -1,5 +1,4 @@
 import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
-import { FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { ImageViewer } from '../MediaConsumers/ImageViewer'
@@ -13,6 +12,7 @@ import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
 import { useCallback, useMemo } from 'react'
+import { LocalObjectsMap } from '../../encoding/localObject'
 
 export function FileViewer({
   file,
@@ -20,7 +20,13 @@ export function FileViewer({
   fullscreen = true,
   customDownloader,
 }: {
-  file: FileRecord
+  file: {
+    id: string
+    fileName: string | null
+    fileType: string | null
+    fileSize: number | null
+    objects: LocalObjectsMap | null
+  }
   header?: React.ReactNode
   fullscreen?: boolean
   customDownloader?: () => void

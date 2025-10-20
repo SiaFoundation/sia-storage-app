@@ -1,7 +1,7 @@
 import { db } from '../db'
 import { create } from 'zustand'
 import useSWRInfinite from 'swr/infinite'
-import { FileRecord, transformRow } from './files'
+import { FileRecord, FileRecordRow, transformRow } from './files'
 import { readLocalObjectsForFiles } from './localObjects'
 import { buildSWRHelpers } from '../lib/swr'
 
@@ -63,15 +63,7 @@ async function readOrderedFileRecords(
     pageClause = ` LIMIT ${limit | 0} OFFSET ${offset | 0}`
   }
 
-  const rows = await db().getAllAsync<{
-    id: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    updatedAt: number
-    fileType: string
-    sealedObjects: string | null
-  }>(
+  const rows = await db().getAllAsync<FileRecordRow>(
     `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType
      FROM files
      ${where}
