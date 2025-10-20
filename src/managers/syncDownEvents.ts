@@ -10,7 +10,11 @@ import {
   deleteFileRecord,
 } from '../stores/files'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
-import { PinnedObjectInterface, type ObjectsCursor } from 'react-native-sia'
+import {
+  ObjectEvent,
+  PinnedObjectInterface,
+  type ObjectsCursor,
+} from 'react-native-sia'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { z } from 'zod'
 import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
@@ -22,12 +26,17 @@ import { extFromMime } from '../lib/fileTypes'
 
 const batchSize = 100
 
+type Counts = {
+  existing: number
+  deleted: number
+  added: number
+}
+
 /**
  * Syncs down events from the indexer to the local database. The service works by
- * starting with a cursor saved in secure store. The service will sync down the next
- * batch of events and save the cursor to secure store. If there are no events to
- * sync, the cursor is reset. The service checks if files are already in the database
- * by object id. The service runs a batch every SYNC_EVENTS_INTERVAL milliseconds.
+ * starting with a cursor saved in secure store. It iterates until there are no
+ * more events to sync and saves the cursor to secure store after each batch.
+ * The service runs again every SYNC_EVENTS_INTERVAL milliseconds.
  */
 async function syncDownEvents(): Promise<void> {
   const isConnected = getIsConnected()
@@ -35,71 +44,78 @@ async function syncDownEvents(): Promise<void> {
     logger.log('[syncDownEvents] not connected to indexer, skipping sync')
     return
   }
-  try {
-    const sdk = getSdk()
-    if (!sdk) {
-      logger.log('[syncDownEvents] no sdk, skipping sync')
-      return
-    }
-    const indexerURL = await getIndexerURL()
-    const cursor = await getSyncDownCursor()
-    logger.log('[syncDownEvents] syncing batch', cursor)
-    let existingCount = 0
-    let newCount = 0
-    let deletedCount = 0
-    const events = await sdk.objects(cursor, batchSize)
-    if (events.length === 0) {
-      logger.log('[syncDownEvents] no events to sync, resetting cursor')
-      await setSyncDownCursor(undefined)
-      return
-    }
-    logger.log(`[syncDownEvents] batch size=${events.length}`)
-    for (const { object, deleted, key } of events) {
-      if (deleted) {
-        try {
-          logger.log(`[syncDownEvents] deleting object key=${key}`)
-          const result = await handleDeleteEvent(key)
-          deletedCount += result.deletedCount
-        } catch (e) {
-          logger.log('[syncDownEvents] error handling deletion for key', key, e)
-        }
-        continue
+  const sdk = getSdk()
+  if (!sdk) {
+    logger.log('[syncDownEvents] no sdk, skipping sync')
+    return
+  }
+
+  const counts = {
+    existing: 0,
+    added: 0,
+    deleted: 0,
+  }
+
+  while (true) {
+    try {
+      const cursor = await getSyncDownCursor()
+      logger.log(
+        `[syncDownEvents] syncing from key=${cursor?.key} after=${cursor?.after}`
+      )
+
+      const events = await sdk.objects(cursor, batchSize)
+
+      logger.log(`[syncDownEvents] batch size=${events.length}`)
+      await processBatch(events, counts)
+
+      // Update the cursor to the last event in the batch.
+      const lastEvent = events[events.length - 1]
+      if (lastEvent) {
+        await setSyncDownCursor({
+          key: lastEvent.key,
+          after: lastEvent.updatedAt,
+        })
       }
 
-      // If the object is not deleted this will always be defined.
-      if (!object) continue
+      // If the batch is not full, we're done for now.
+      if (events.length < batchSize) {
+        break
+      }
+    } catch (e) {
+      logger.log('[syncDownEvents] sync error', e)
+    }
+  }
 
+  logger.log(
+    `[syncDownEvents] synced, existingCount=${counts.existing}, addedCount=${counts.added}, deletedCount=${counts.deleted}`
+  )
+}
+
+async function processBatch(events: ObjectEvent[], counts: Counts) {
+  for (const { object, deleted, key } of events) {
+    if (deleted) {
       try {
-        logger.log(`[syncDownEvents] updating object key=${key}`)
-        const result = await handleUpdateEvent(object, indexerURL)
-        existingCount += result.existingCount
-        newCount += result.newCount
+        logger.log(`[syncDownEvents] deleting object key=${key}`)
+        await handleDeleteEvent(key, counts)
       } catch (e) {
-        logger.log('[syncDownEvents] error handling update for key', key, e)
+        logger.log('[syncDownEvents] error handling deletion for key', key, e)
       }
+      continue
     }
 
-    logger.log(
-      `[syncDownEvents] synced, existingCount=${existingCount}, newCount=${newCount}, deletedCount=${deletedCount}`
-    )
+    // If the object is not deleted this will always be defined.
+    if (!object) continue
 
-    const lastEvent = events.find((event) => event.object?.updatedAt())
-    if (events.length === batchSize && lastEvent) {
-      await setSyncDownCursor({
-        key: lastEvent.key,
-        after: lastEvent.object?.updatedAt() ?? new Date(),
-      })
-    } else {
-      await setSyncDownCursor(undefined)
+    try {
+      logger.log(`[syncDownEvents] updating object key=${key}`)
+      await handleUpdateEvent(object, counts)
+    } catch (e) {
+      logger.log('[syncDownEvents] error handling update for key', key, e)
     }
-  } catch (e) {
-    logger.log('[syncDownEvents] sync error', e)
   }
 }
 
-async function handleDeleteEvent(
-  key: string
-): Promise<{ deletedCount: number }> {
+async function handleDeleteEvent(key: string, counts: Counts): Promise<void> {
   const existingFileRecord = await readFileRecordByObjectId(key)
   if (existingFileRecord) {
     await Promise.all([
@@ -113,20 +129,20 @@ async function handleDeleteEvent(
       // Remove the file from the database.
       deleteFileRecord(existingFileRecord.id),
     ])
-    return { deletedCount: 1 }
+    counts.deleted++
   }
-  return { deletedCount: 0 }
 }
 
 async function handleUpdateEvent(
   object: PinnedObjectInterface,
-  indexerURL: string
-): Promise<{ existingCount: number; newCount: number }> {
+  counts: Counts
+): Promise<void> {
+  const indexerURL = await getIndexerURL()
   const metadata = decodeFileMetadata(object.metadata())
   const fileId = metadata.id
   if (!fileId) {
     logger.log('[syncDownEvents] no file id in metadata, skipping update')
-    return { existingCount: 0, newCount: 0 }
+    return
   }
   const existingFileRecord = await readFileRecord(fileId)
   if (existingFileRecord) {
@@ -140,7 +156,7 @@ async function handleUpdateEvent(
       ...decodeFileMetadata(object.metadata()),
     })
     await upsertLocalObject(localObject)
-    return { existingCount: 1, newCount: 0 }
+    counts.existing++
   } else {
     await createFileRecord({
       id: fileId,
@@ -156,7 +172,7 @@ async function handleUpdateEvent(
       object
     )
     await upsertLocalObject(localObject)
-    return { existingCount: 0, newCount: 1 }
+    counts.added++
   }
 }
 
