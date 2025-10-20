@@ -1,38 +1,29 @@
-import { useCallback, useRef, type ComponentRef } from 'react'
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  Image,
-  ActivityIndicator,
-} from 'react-native'
+import { useCallback } from 'react'
+import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from '../components/Gradient'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { SettingsIcon } from 'lucide-react-native'
+import { ScreenHeader } from '../components/ScreenHeader'
 import { FileGallery } from '../components/FileGallery'
-import { useNavigation } from '@react-navigation/native'
-import { type NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
 import { type FileRecord, useFileCount } from '../stores/files'
 import { useFileList, useLibrary, type Category } from '../stores/library'
 import { FileList } from '../components/FileList'
-import { LibraryControls } from '../components/LibraryControls'
 import { useAppStatus } from '../hooks/useAppStatus'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { ExpandableBadge } from '../components/ExpandableBadge'
 import { useLibraryViewMode } from '../stores/settings'
+import { LibraryControlBar } from '../components/LibraryControlBar'
+import { type NativeStackScreenProps } from '@react-navigation/native-stack'
+import { IconButton } from '../components/IconButton'
+import { SettingsIcon } from 'lucide-react-native'
 
-export function LibraryScreen() {
+type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
+
+export function LibraryScreen({ route, navigation }: Props) {
   const viewMode = useLibraryViewMode()
   const { selectedCategories, searchQuery } = useLibrary()
-  const headerRef = useRef<ComponentRef<typeof View> | null>(null)
-  const navigation =
-    useNavigation<NativeStackNavigationProp<MainStackParamList>>()
   const files = useFileList()
   const fileCount = useFileCount()
-  const insets = useSafeAreaInsets()
   const appStatus = useAppStatus()
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
@@ -49,20 +40,7 @@ export function LibraryScreen() {
         overlayBottomColor={overlay.gradientLight}
         style={styles.topBlur}
       />
-      <View
-        style={[
-          styles.header,
-          {
-            position: 'absolute',
-            top: insets.top - 4,
-            left: 0,
-            right: 0,
-            zIndex: 10,
-          },
-        ]}
-        pointerEvents="box-none"
-        ref={headerRef}
-      >
+      <ScreenHeader>
         <View style={styles.headerTitles}>
           <Text style={styles.headerTitleLarge} pointerEvents="none">
             {(() => {
@@ -114,18 +92,14 @@ export function LibraryScreen() {
               </ExpandableBadge>
             </View>
           )}
-          <Pressable
-            accessibilityRole="button"
+          <IconButton
             onPress={() => navigation.navigate('SettingsTab' as never)}
             style={[styles.headerIcon, { paddingHorizontal: 4 }]}
           >
-            <View style={styles.blurPillWrap}>
-              <View style={styles.blurShade} />
-              <SettingsIcon color={palette.gray[50]} size={16} />
-            </View>
-          </Pressable>
+            <SettingsIcon color={palette.gray[50]} />
+          </IconButton>
         </View>
-      </View>
+      </ScreenHeader>
       {files.isLoading ? (
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
@@ -163,7 +137,7 @@ export function LibraryScreen() {
         </View>
       )}
       <AddFileActionSheet />
-      <LibraryControls />
+      <LibraryControlBar navigation={navigation} route={route} />
     </View>
   )
 }

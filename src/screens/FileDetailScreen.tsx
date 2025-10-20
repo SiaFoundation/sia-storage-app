@@ -5,28 +5,17 @@ import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
 import { useFileDetails } from '../stores/files'
 import { FileActionsSheet } from '../components/FileActionsSheet'
-import {
-  MoreVerticalIcon,
-  ShareIcon,
-  LinkIcon,
-  FullscreenIcon,
-  TextAlignStart,
-} from 'lucide-react-native'
-import { BottomControlBar, iconColors } from '../components/BottomControlBar'
 import { palette } from '../styles/colors'
-import { openSheet } from '../stores/sheets'
-import { useShareAction } from '../hooks/useShareAction'
 import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
 import { FileViewer } from '../components/FileViewer'
+import { FileDetailsControlBar } from '../components/FileDetailsControlBar'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileDetailScreen({ route, navigation }: Props) {
   const [viewStyle, setViewStyle] = useState<'consume' | 'detail'>('consume')
   const { data: file } = useFileDetails(route.params.id)
-  const { handleShareFile, handleShareURL, canShare } = useShareAction({
-    fileId: route.params.id,
-  })
+
   return (
     <View style={styles.container}>
       {file && viewStyle === 'consume' ? (
@@ -52,46 +41,16 @@ export function FileDetailScreen({ route, navigation }: Props) {
           />
         )
       )}
-      <BottomControlBar
-        left={[
-          {
-            id: 'copyLink',
-            disabled: !canShare,
-            icon: <LinkIcon size={22} color={iconColors.white} />,
-            onPress: handleShareURL,
-          },
-          {
-            id: 'shareMenu',
-            disabled: !canShare,
-            icon: <ShareIcon size={22} color={iconColors.white} />,
-            onPress: handleShareFile,
-          },
-        ]}
-        right={[
-          {
-            id: 'viewSwitch',
-            icon:
-              viewStyle === 'consume' ? (
-                <TextAlignStart color={iconColors.white} />
-              ) : (
-                <FullscreenIcon color={iconColors.white} />
-              ),
-            onPress: () =>
-              viewStyle === 'consume'
-                ? setViewStyle('detail')
-                : setViewStyle('consume'),
-          },
-          {
-            id: 'overflow',
-            icon: <MoreVerticalIcon size={22} color={iconColors.white} />,
-            onPress: () => openSheet('fileActions'),
-          },
-        ]}
-      />
       <FileActionsSheet
         route={route}
         navigation={navigation}
         sheetName="fileActions"
+      />
+      <FileDetailsControlBar
+        route={route}
+        viewStyle={viewStyle}
+        setViewStyle={setViewStyle}
+        navigation={navigation}
       />
     </View>
   )

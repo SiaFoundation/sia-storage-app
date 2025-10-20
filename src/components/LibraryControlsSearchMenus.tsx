@@ -16,12 +16,11 @@ export function LibraryControlsSearchMenus() {
   const { selectedCategories, sortBy, sortDir } = useLibrary()
 
   return (
-    <View style={{ width: '90%', alignSelf: 'center', gap: 6 }}>
+    <View style={{ gap: 6 }}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{
-          paddingHorizontal: 12,
           gap: 8,
           alignItems: 'center',
         }}
@@ -78,7 +77,6 @@ export function LibraryControlsSearchMenus() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{
-          paddingHorizontal: 12,
           gap: 8,
           alignItems: 'center',
         }}
