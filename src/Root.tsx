@@ -13,7 +13,6 @@ import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
-import { KeyboardDismissArea } from './components/KeyboardDismissArea'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -58,11 +57,9 @@ export function Root() {
           })}
         />
         <ToastProvider>
-          <KeyboardDismissArea>
-            <NavigationContainer ref={navigationRef}>
-              <RootTabs />
-            </NavigationContainer>
-          </KeyboardDismissArea>
+          <NavigationContainer ref={navigationRef}>
+            <RootTabs />
+          </NavigationContainer>
         </ToastProvider>
       </SafeAreaView>
     </SafeAreaProvider>
