@@ -1,10 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ScrollView, Text, StyleSheet, ViewStyle, Platform } from 'react-native'
+import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'
 
-export function JSONViewer({ uri, style }: { uri: string; style?: ViewStyle }) {
+export function JSONViewer({
+  uri,
+  style,
+  fileSize,
+}: {
+  uri: string
+  style?: ViewStyle
+  fileSize?: number | null
+}) {
   const [text, setText] = useState('')
   const [note, setNote] = useState<string | null>(null)
+
+  const shouldUseWebView = fileSize == null ? true : fileSize > 256 * 1024 // ~256kb
 
   useEffect(() => {
     let cancelled = false
@@ -12,6 +23,15 @@ export function JSONViewer({ uri, style }: { uri: string; style?: ViewStyle }) {
       try {
         const raw = await readFileAsText(uri)
         if (cancelled) return
+
+        if (shouldUseWebView) {
+          if (!cancelled) {
+            setText(raw ?? '')
+            setNote(null)
+          }
+          return
+        }
+
         try {
           const obj = JSON.parse(raw)
           if (!cancelled) {
@@ -35,7 +55,20 @@ export function JSONViewer({ uri, style }: { uri: string; style?: ViewStyle }) {
     return () => {
       cancelled = true
     }
-  }, [uri])
+  }, [uri, shouldUseWebView])
+
+  const html = useMemo(() => buildPreHtml(text), [text])
+
+  if (shouldUseWebView) {
+    return (
+      <WebView
+        style={[{ flex: 1, backgroundColor: 'black' }, style]}
+        originWhitelist={['*']}
+        source={{ html }}
+        onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:')}
+      />
+    )
+  }
 
   return (
     <ScrollView style={style} contentContainerStyle={styles.content}>
@@ -65,3 +98,23 @@ const styles = StyleSheet.create({
   },
   note: { color: 'orange', marginBottom: 8, fontSize: 12 },
 })
+
+function buildPreHtml(s: string) {
+  return `<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{margin:0;padding:0;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
+  pre{white-space:pre-wrap;word-wrap:break-word;margin:0;padding:16px}
+  code,pre,tt{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+</style>
+<pre>${escapeHtml(s ?? '')}</pre>`
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}

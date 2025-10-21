@@ -105,7 +105,13 @@ export function FileViewer({
       fileType?.includes('application/json') ||
       lowerCasedFileName.endsWith('.json')
     ) {
-      return <JSONViewer uri={cachedUri} style={styles.media} />
+      return (
+        <JSONViewer
+          uri={cachedUri}
+          fileSize={file.fileSize}
+          style={styles.media}
+        />
+      )
     }
     if (
       fileType?.includes('text/markdown') ||
@@ -118,7 +124,13 @@ export function FileViewer({
       fileType?.includes('text/plain') ||
       lowerCasedFileName.endsWith('.txt')
     ) {
-      return <TextViewer uri={cachedUri} style={styles.media} />
+      return (
+        <TextViewer
+          uri={cachedUri}
+          fileSize={file.fileSize}
+          style={styles.media}
+        />
+      )
     }
 
     return (
@@ -139,6 +151,7 @@ export function FileViewer({
     lowerCasedFileName,
     fullscreen,
     fileName,
+    file.fileSize,
   ])
 
   return (
