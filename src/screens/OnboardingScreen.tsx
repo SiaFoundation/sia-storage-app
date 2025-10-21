@@ -1,4 +1,11 @@
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, palette, whiteA } from '../styles/colors'
 import { useToast } from '../lib/toastContext'
@@ -65,8 +72,11 @@ export default function OnboardingScreen() {
                 placeholder="eg: tiger harvest heart shine code feed monitor maple rug spend lemon trouble"
                 label="Recovery phrase"
                 {...newRecoveryPhraseInputProps}
-                height={100}
                 isMonospace
+                multiline
+                returnKeyType="done"
+                submitBehavior="blurAndSubmit"
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
             </InfoCard>
             <View style={styles.actions}>
