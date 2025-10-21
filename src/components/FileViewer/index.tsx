@@ -12,6 +12,7 @@ import { JSONViewer } from '../MediaConsumers/JSONViewer'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
+import { useCallback, useMemo } from 'react'
 
 export function FileViewer({
   file,
@@ -24,55 +25,58 @@ export function FileViewer({
   fullscreen?: boolean
   customDownloader?: () => void
 }) {
-  const { fileType } = file
+  const { fileType, fileName } = file
   const status = useFileStatus(file)
+  const { cachedUri, isDownloaded, isDownloading } = status
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
 
-  const MediaDisplayComponent = () => {
-    // First, handle when the file isn't on the local device.
-    if (!status.isDownloaded || !status.cachedUri) {
-      return (
-        <View
-          style={[
-            fullscreen ? styles.mediaWithPadding : styles.media,
-            { justifyContent: 'center', alignItems: 'center', gap: 20 },
-          ]}
-        >
-          <TouchableHighlight
-            onLongPress={() => {
-              if (status.isDownloading) return
-              if (customDownloader) {
-                customDownloader()
-              } else {
-                fileDownload()
-              }
-            }}
-          >
-            <CloudDownloadIcon color={colors.textPrimary} size={40} />
-          </TouchableHighlight>
-          {!status.isDownloading ? (
-            <Text style={{ color: colors.textPrimary }}>
-              Long press to download
-            </Text>
-          ) : null}
-          {status.isDownloading ? (
-            <Text style={{ color: colors.textPrimary }}>
-              Downloading:{' '}
-              {((fileDownloadState?.progress || 0) * 100).toFixed(2)}%
-            </Text>
-          ) : null}
-        </View>
-      )
-    }
+  const handleLongPress = useCallback(() => {
+    if (isDownloading) return
+    if (customDownloader) customDownloader()
+    else fileDownload()
+  }, [isDownloading, customDownloader, fileDownload])
 
-    // Only used for extension reading.
-    const name = file.fileName?.toLowerCase() ?? ''
+  const lowerCasedFileName = useMemo(
+    () => fileName?.toLowerCase() ?? '',
+    [fileName]
+  )
+
+  const DownloadPanel = useMemo(() => {
+    return (
+      <View
+        style={[
+          fullscreen ? styles.mediaWithPadding : styles.media,
+          { justifyContent: 'center', alignItems: 'center', gap: 20 },
+        ]}
+      >
+        <TouchableHighlight onLongPress={handleLongPress}>
+          <CloudDownloadIcon color={colors.textPrimary} size={40} />
+        </TouchableHighlight>
+
+        {!isDownloading ? (
+          <Text style={{ color: colors.textPrimary }}>
+            Long press to download
+          </Text>
+        ) : null}
+
+        {isDownloading ? (
+          <Text style={{ color: colors.textPrimary }}>
+            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(2)}
+            %
+          </Text>
+        ) : null}
+      </View>
+    )
+  }, [fullscreen, handleLongPress, isDownloading, fileDownloadState?.progress])
+
+  const MediaDisplayElement = useMemo(() => {
+    if (!isDownloaded || !cachedUri) return DownloadPanel
 
     if (fileType?.includes('image')) {
       return (
         <ImageViewer
-          uri={status.cachedUri}
+          uri={cachedUri}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
@@ -80,7 +84,7 @@ export function FileViewer({
     if (fileType?.includes('video')) {
       return (
         <VideoPlayer
-          source={status.cachedUri}
+          source={cachedUri}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
@@ -88,27 +92,33 @@ export function FileViewer({
     if (fileType?.includes('audio')) {
       return (
         <AudioPlayer
-          source={status.cachedUri}
-          filename={file.fileName}
+          source={cachedUri}
+          filename={fileName}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
     }
-    if (fileType?.includes('pdf') || name.endsWith('.pdf')) {
-      return <PDFViewer source={status.cachedUri} style={styles.media} />
+    if (fileType?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
+      return <PDFViewer source={cachedUri} style={styles.media} />
     }
-    if (fileType?.includes('application/json') || name.endsWith('.json')) {
-      return <JSONViewer uri={status.cachedUri} style={styles.media} />
+    if (
+      fileType?.includes('application/json') ||
+      lowerCasedFileName.endsWith('.json')
+    ) {
+      return <JSONViewer uri={cachedUri} style={styles.media} />
     }
     if (
       fileType?.includes('text/markdown') ||
-      name.endsWith('.md') ||
-      name.endsWith('.markdown')
+      lowerCasedFileName.endsWith('.md') ||
+      lowerCasedFileName.endsWith('.markdown')
     ) {
-      return <MarkdownViewer uri={status.cachedUri} style={styles.media} />
+      return <MarkdownViewer uri={cachedUri} style={styles.media} />
     }
-    if (fileType?.includes('text/plain') || name.endsWith('.txt')) {
-      return <TextViewer uri={status.cachedUri} style={styles.media} />
+    if (
+      fileType?.includes('text/plain') ||
+      lowerCasedFileName.endsWith('.txt')
+    ) {
+      return <TextViewer uri={cachedUri} style={styles.media} />
     }
 
     return (
@@ -122,12 +132,19 @@ export function FileViewer({
         <Text>Preview not available</Text>
       </View>
     )
-  }
+  }, [
+    cachedUri,
+    isDownloaded,
+    fileType,
+    lowerCasedFileName,
+    fullscreen,
+    fileName,
+  ])
 
   return (
     <View style={styles.container}>
       {header}
-      <MediaDisplayComponent />
+      {MediaDisplayElement}
     </View>
   )
 }
