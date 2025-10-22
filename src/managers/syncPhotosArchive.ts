@@ -1,0 +1,81 @@
+import * as MediaLibrary from 'expo-media-library'
+import { logger } from '../lib/logger'
+import { getKey, triggerChange } from '../stores/settings'
+import { processAssets } from '../lib/processAssets'
+import { librarySwr } from '../stores/library'
+import { createGetterAndSWRHook } from '../lib/selectors'
+import {
+  getSecureStoreNumber,
+  setSecureStoreNumber,
+} from '../stores/secureStore'
+import { createServiceInterval } from '../lib/serviceInterval'
+import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
+import { ensurePhotosPermission } from '../lib/permissions'
+
+const PAGE_SIZE = 200
+
+export async function workBackward(): Promise<void> {
+  if (!(await ensurePhotosPermission())) return
+  const cursor = await getPhotosArchiveCursor()
+
+  try {
+    const page = await MediaLibrary.getAssetsAsync({
+      first: PAGE_SIZE,
+      createdBefore: new Date(cursor),
+      // Descending order.
+      sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
+    })
+    if (page.assets.length === 0) {
+      logger.log('[syncPhotosArchive] archive is fully synced')
+      await setPhotosArchiveCursor(0)
+      return
+    }
+    logger.log('[syncPhotosArchive] batch size', page.assets.length)
+    await setPhotosArchiveCursor(
+      page.assets[page.assets.length - 1].creationTime ?? 0
+    )
+    const { files } = await processAssets(
+      page.assets.map((asset) => ({
+        id: asset.id,
+        sourceUri: undefined,
+        fileName: asset.filename,
+        fileType: undefined,
+        fileSize: undefined,
+        timestamp: new Date(asset.creationTime).toISOString(),
+      }))
+    )
+    if (files.length > 0) await librarySwr.triggerChange()
+  } catch (e) {
+    logger.log('[syncPhotosArchive] batch error', e)
+  }
+}
+
+export const initSyncPhotosArchive = createServiceInterval({
+  name: 'syncPhotosArchive',
+  worker: workBackward,
+  getState: async () => (await getPhotosArchiveCursor()) > 0,
+  interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
+})
+
+const defaultValue = 0
+
+export const [getPhotosArchiveCursor, usePhotosArchiveCursor] =
+  createGetterAndSWRHook(getKey('photosArchiveCursor'), () =>
+    getSecureStoreNumber('photosArchiveCursor', defaultValue)
+  )
+
+export async function setPhotosArchiveCursor(value: number) {
+  await setSecureStoreNumber('photosArchiveCursor', value)
+  triggerChange('photosArchiveCursor')
+}
+
+export async function restartPhotosArchiveCursor() {
+  logger.log('[syncPhotosArchive] restarting photos archive sync cursor')
+  await setPhotosArchiveCursor(Date.now())
+}
+
+export async function resetPhotosArchiveCursor() {
+  logger.log('[syncPhotosArchive] disabling photos archive sync cursor')
+  await setPhotosArchiveCursor(defaultValue)
+}
