@@ -55,7 +55,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
   }, [file, status.data?.fileUri])
 
   return {
-    canShare: status.isUploaded,
+    canShare: status.data?.isUploaded,
     handleShareURL,
     handleShareFile,
   }

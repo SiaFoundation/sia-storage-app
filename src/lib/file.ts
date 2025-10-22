@@ -12,6 +12,8 @@ import {
 } from 'react-native-sia'
 import { LocalObject, LocalObjectsMap } from '../encoding/localObject'
 import { getAppKey } from './appKey'
+import { SWRResponse } from 'swr'
+import useSWR from 'swr'
 
 export function fileHasASealedObject(file: {
   objects?: LocalObjectsMap | null
@@ -76,11 +78,12 @@ export function useFileStatus(file?: {
   fileType: string | null
   localId?: string | null
   objects?: LocalObjectsMap | null
-}): FileStatus {
+}): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFileUri(file)
-  return useMemo(
+  return useSWR(
+    [file?.id, file?.localId || '', file?.objects || '', fileUri.data || ''],
     () =>
       computeFileStatus({
         file: file ?? { objects: null },

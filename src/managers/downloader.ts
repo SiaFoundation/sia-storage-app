@@ -1,5 +1,9 @@
 import { useToast } from '../lib/toastContext'
-import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
+import {
+  copyFileToCache,
+  getOrCreateCacheFile,
+  getOrCreateCacheTmpFile,
+} from '../stores/fileCache'
 import {
   getDownloadState,
   updateDownloadProgress,
@@ -120,7 +124,7 @@ async function streamToCache(params: {
   totalSize?: number
   getNextChunk: () => Promise<ArrayBuffer | undefined>
   onAfterClose?: (
-    targetFile: Awaited<ReturnType<typeof getOrCreateCachedFile>>
+    targetFile: Awaited<ReturnType<typeof getOrCreateCacheFile>>
   ) => Promise<void>
   signal: AbortSignal
 }): Promise<void> {

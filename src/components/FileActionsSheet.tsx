@@ -157,7 +157,7 @@ export function FileActionsSheet({
           Remove from device
         </ActionSheetButton>
       )}
-      {status.isUploaded && (
+      {status.data?.isUploaded && (
         <ActionSheetButton
           variant="primary"
           icon={<CloudOffIcon size={18} />}

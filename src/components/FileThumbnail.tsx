@@ -27,10 +27,10 @@ export function FileThumbnail({
   const status = useFileStatus(file)
   useAutoDownload(file, thumbnailShouldAutoDownload)
 
-  if (status.isDownloading) {
+  if (status.data?.isDownloading) {
     return (
       <View style={styles.thumbnailImage}>
-        <CenteredProgress status={status} size={iconSize} />
+        <CenteredProgress status={status.data} size={iconSize} />
       </View>
     )
   }

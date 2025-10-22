@@ -19,7 +19,7 @@ export function FileDetails({
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {header}
         <View style={styles.metaWrap}>
-          <FileMeta file={file} status={status} />
+          {status.data ? <FileMeta file={file} status={status.data} /> : null}
         </View>
       </ScrollView>
     </View>

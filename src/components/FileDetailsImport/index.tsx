@@ -35,6 +35,7 @@ export function FileDetailsImport({
     fileSize: file.fileSize,
     fileType: file.fileType,
     objects: null,
+    localId: null,
   }
 
   return (
@@ -56,7 +57,9 @@ export function FileDetailsImport({
             }}
           />
         </View>
-        <FileMetaImport file={file} status={status} />
+        {status.data ? (
+          <FileMetaImport file={file} status={status.data} />
+        ) : null}
       </ScrollView>
     </View>
   )
