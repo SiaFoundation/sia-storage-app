@@ -3,6 +3,7 @@ import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import {
   FileAudioIcon,
+  FileIcon,
   FileJsonIcon,
   FileTextIcon,
   FileVideoIcon,
@@ -107,7 +108,11 @@ export function FileThumbnail({
       </View>
     )
   }
-  return null
+  return (
+    <View style={styles.thumbnailImage}>
+      <FileIcon size={iconSize} color={iconColor} />
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
