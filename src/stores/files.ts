@@ -221,14 +221,26 @@ export async function readFileRecordByObjectId(
   return transformRow(row, objects)
 }
 
-export async function readFileRecordsByLocalIds(
-  localIds: string[]
-): Promise<FileRecord[]> {
+export async function readFileRecordsByLocalIds(localIds: string[]) {
   const rows = await db().getAllAsync<FileRecordRow>(
     `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds
+  )
+  return rows.map((row) => transformRow(row)) as (FileRecord & {
+    localId: string
+  })[]
+}
+
+export async function readFileRecordsByFingerprints(
+  fingerprints: string[]
+): Promise<FileRecord[]> {
+  const rows = await db().getAllAsync<FileRecordRow>(
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE fingerprint IN (${fingerprints
+      .map((_) => `?`)
+      .join(',')})`,
+    ...fingerprints
   )
   return rows.map((row) => transformRow(row))
 }

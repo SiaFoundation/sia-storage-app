@@ -1,19 +1,18 @@
 import * as ImagePicker from 'react-native-image-picker'
 import { useCallback, useRef } from 'react'
-import { mimeFromAssetUri } from '../lib/fileTypes'
-import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
-import { type PickerAsset } from './useImagePicker'
+import { FileRecord } from '../stores/files'
 import { useUploader } from '../managers/uploader'
+import { proccessAssets } from '../lib/processAssets'
 
 export function useCameraCapture() {
   const toast = useToast()
   const isCapturingRef = useRef<boolean>(false)
-  return useCallback(async () => {
+  return useCallback(async (): Promise<FileRecord[]> => {
     if (isCapturingRef.current) {
       logger.log('[cameraCapture] already capturing, ignoring new request.')
-      return [] as PickerAsset[]
+      return []
     }
     isCapturingRef.current = true
     try {
@@ -26,36 +25,30 @@ export function useCameraCapture() {
 
       if (result.didCancel) {
         logger.log('[cameraCapture] capture canceled.')
-        return [] as PickerAsset[]
+        return []
       }
       if (result.errorCode) {
         logger.log(
           `[cameraCapture] error: ${result.errorMessage ?? result.errorCode}`
         )
-        return [] as PickerAsset[]
+        return []
       }
 
       const first = (result.assets ?? [])[0]
       if (!first || !first.uri) {
         toast.show('No media captured.')
-        return [] as PickerAsset[]
+        return []
       }
 
-      const asset: PickerAsset = {
-        id: uniqueId(),
-        uri: first.uri,
-        fileType: mimeFromAssetUri(first),
-        createdAt: Date.now(),
-        fileSize: first.fileSize ?? 0,
-        fileName:
-          first.fileName ??
-          (first.type?.startsWith('video') ? 'camera-video' : 'camera-photo'),
+      const { files, warnings } = await proccessAssets(result.assets ?? [])
+      if (warnings.length > 0) {
+        warnings.forEach((warning) => toast.show(warning))
       }
 
-      return [asset]
+      return files
     } catch (e) {
       logger.log('[cameraCapture] error', e)
-      return [] as PickerAsset[]
+      return []
     } finally {
       isCapturingRef.current = false
     }
@@ -66,9 +59,9 @@ export function useCameraCaptureAndUpload() {
   const capture = useCameraCapture()
   const uploader = useUploader()
   return useCallback(async () => {
-    const assets = await capture()
-    if (assets && assets.length > 0) {
-      await uploader(assets)
+    const files = await capture()
+    if (files && files.length > 0) {
+      await uploader(files)
     }
   }, [capture, uploader])
 }
