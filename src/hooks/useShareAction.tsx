@@ -38,11 +38,11 @@ export function useShareAction({ fileId }: { fileId: string }) {
   const handleShareFile = useCallback(async () => {
     if (!file) return
     if (!file.fileType) return
-    if (!status.cachedUri) return
+    if (!status.data?.fileUri) return
 
     try {
       await Share.open({
-        url: status.cachedUri,
+        url: status.data.fileUri,
         type: file.fileType,
         filename: file.fileName ?? undefined,
         subject: `Sia Mobile - ${file.fileType}`,
@@ -52,7 +52,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
         logger.log('File sharing failed:', e)
       }
     }
-  }, [file, status.cachedUri])
+  }, [file, status.data?.fileUri])
 
   return {
     canShare: status.isUploaded,

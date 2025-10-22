@@ -47,7 +47,6 @@ export function useDocumentPicker() {
 
       const assets: PickerAsset[] = assetsWithRequiredFields.map((a) => ({
         id: uniqueId(),
-        uri: a.uri,
         fileName: a.name,
         fileSize: a.size ?? 0,
         createdAt: Date.now(),

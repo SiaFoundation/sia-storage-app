@@ -55,7 +55,17 @@ export function FileMeta({
               value={file.localId ?? '-'}
               isMonospace
               ellipsizeMode="middle"
-              canCopy={!!status.cachedUri}
+              canCopy={!!file.localId}
+              showDividerTop
+            />
+          )}
+          {showAdvanced.data && (
+            <LabeledValueRow
+              label="File URI"
+              value={status.fileUri ?? 'Not available'}
+              isMonospace
+              ellipsizeMode="middle"
+              canCopy={!!status.fileUri}
               showDividerTop
             />
           )}

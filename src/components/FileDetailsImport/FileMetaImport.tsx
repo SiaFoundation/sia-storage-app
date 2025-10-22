@@ -43,10 +43,10 @@ export function FileMetaImport({
             value={file.fileType ?? '—'}
             showDividerTop
           />
-          {showAdvanced.data && status.cachedUri && (
+          {showAdvanced.data && status.fileUri && (
             <LabeledValueRow
-              label="Cached URL"
-              value={status.cachedUri}
+              label="File URI"
+              value={status.fileUri}
               showDividerTop
             />
           )}

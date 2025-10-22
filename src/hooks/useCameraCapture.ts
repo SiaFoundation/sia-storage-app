@@ -21,7 +21,6 @@ export function useCameraCapture() {
       const result = await ImagePicker.launchCamera({
         mediaType: 'mixed',
         includeExtra: true,
-        includeBase64: true,
         saveToPhotos: false,
       })
 

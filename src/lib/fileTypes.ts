@@ -29,9 +29,12 @@ export type Mime =
 
 export function mimeFromAssetUri(a: ImagePicker.Asset): Mime {
   const name = a.fileName ?? ''
+  return mimeFromFileName(name)
+}
+
+export function mimeFromFileName(name: string): Mime {
   const ext = name.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
   if (!ext) return 'application/octet-stream'
-
   const map: Record<string, Mime> = {
     // video
     mov: 'video/quicktime',
@@ -57,7 +60,6 @@ export function mimeFromAssetUri(a: ImagePicker.Asset): Mime {
     json: 'application/json',
     pdf: 'application/pdf',
   }
-
   return map[ext] ?? 'application/octet-stream'
 }
 
@@ -89,6 +91,7 @@ export type Ext =
   | '.pdf'
   // other
   | '.bin'
+  | '.tmp'
 
 export function extFromMime(mime?: string | null): Ext {
   // video

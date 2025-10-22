@@ -36,10 +36,10 @@ export function FileThumbnail({
   }
 
   if (file.fileType?.includes('image')) {
-    if (status.cachedUri) {
+    if (status.data?.fileUri) {
       return (
         <Image
-          source={{ uri: status.cachedUri }}
+          source={{ uri: status.data?.fileUri }}
           style={styles.thumbnailImage}
         />
       )
@@ -51,10 +51,10 @@ export function FileThumbnail({
     )
   }
   if (file.fileType?.includes('pdf')) {
-    if (status.cachedUri) {
+    if (status.data?.fileUri) {
       return (
         <Image
-          source={{ uri: status.cachedUri }}
+          source={{ uri: status.data?.fileUri }}
           style={styles.thumbnailImage}
         />
       )
