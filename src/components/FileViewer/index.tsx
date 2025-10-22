@@ -37,7 +37,7 @@ export function FileViewer({
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
 
-  const handleLongPress = useCallback(() => {
+  const onDownloadPress = useCallback(() => {
     if (isDownloading) return
     if (customDownloader) customDownloader()
     else fileDownload()
@@ -56,25 +56,23 @@ export function FileViewer({
           { justifyContent: 'center', alignItems: 'center', gap: 20 },
         ]}
       >
-        <TouchableHighlight onLongPress={handleLongPress}>
+        <TouchableHighlight onPress={onDownloadPress}>
           <CloudDownloadIcon color={colors.textPrimary} size={40} />
         </TouchableHighlight>
 
         {!isDownloading ? (
-          <Text style={{ color: colors.textPrimary }}>
-            Long press to download
-          </Text>
+          <Text style={{ color: colors.textPrimary }}>Press to download</Text>
         ) : null}
 
         {isDownloading ? (
           <Text style={{ color: colors.textPrimary }}>
-            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(2)}
+            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(0)}
             %
           </Text>
         ) : null}
       </View>
     )
-  }, [fullscreen, handleLongPress, isDownloading, fileDownloadState?.progress])
+  }, [fullscreen, onDownloadPress, isDownloading, fileDownloadState?.progress])
 
   const MediaDisplayElement = useMemo(() => {
     if (!isDownloaded || !cachedUri) return DownloadPanel
@@ -143,11 +141,11 @@ export function FileViewer({
       <View
         style={[
           fullscreen ? styles.mediaWithPadding : styles.media,
-          { justifyContent: 'center', alignItems: 'center', gap: 10 },
+          { justifyContent: 'center', alignItems: 'center', gap: 20 },
         ]}
       >
-        <FileIcon />
-        <Text>Preview not available</Text>
+        <FileIcon color={colors.textPrimary} size={40} />
+        <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
       </View>
     )
   }, [
@@ -158,6 +156,7 @@ export function FileViewer({
     fullscreen,
     fileName,
     file.fileSize,
+    DownloadPanel,
   ])
 
   return (
