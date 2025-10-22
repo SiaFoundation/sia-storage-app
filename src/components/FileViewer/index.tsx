@@ -25,6 +25,7 @@ export function FileViewer({
     fileName: string | null
     fileType: string | null
     fileSize: number | null
+    localId: string | null
     objects: LocalObjectsMap | null
   }
   header?: React.ReactNode

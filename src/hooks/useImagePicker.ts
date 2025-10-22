@@ -5,10 +5,12 @@ import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
+import { mimeFromAssetUri } from '../lib/fileTypes'
+import { readFileRecordsByLocalIds } from '../stores/files'
 
 export type PickerAsset = {
   id: string
-  uri: string
+  localId: string | null
   fileName: string
   fileSize: number
   createdAt: number
@@ -47,24 +49,44 @@ export function useImagePicker() {
 
       const assetsWithRequiredFields = (result.assets ?? []).filter(
         (a) => a.uri && a.id && a.fileName && a.fileSize
+      ) as {
+        id: string
+        type: string | undefined
+        fileName: string
+        fileSize: number
+        // This uri is not necessarily a local URI, it could be a network URI.
+        // so we should not assume it can be used to read the file bytes.
+        uri: string
+      }[]
+
+      // Check for easy localId in the files database, filter out any files that already exist.
+      const existingFiles = await readFileRecordsByLocalIds(
+        assetsWithRequiredFields.map((a) => a.id)
       )
 
-      if (assetsWithRequiredFields.length !== result.assets?.length) {
+      const newAssets = assetsWithRequiredFields.filter(
+        (a) => !existingFiles.some((f) => f.localId === a.id)
+      )
+
+      const withoutRequiredFieldsCount =
+        assetsWithRequiredFields.length - newAssets.length
+      const existingFilesCount = existingFiles.length
+      if (withoutRequiredFieldsCount > 0) {
         toast.show(
-          `Assets without required fields: ${
-            result.assets?.length
-              ? result.assets.length - assetsWithRequiredFields.length
-              : 0
-          }`
+          'Some files were missing required metadata and were not included.'
         )
       }
-      const assets: PickerAsset[] = assetsWithRequiredFields.map((a) => ({
+      if (existingFilesCount > 0) {
+        toast.show('Some files were duplicates and were not included.')
+      }
+
+      const assets = newAssets.map((a) => ({
         id: uniqueId(),
-        uri: a.uri as string,
-        fileType: mimeFromAssetUri(a),
+        localId: a.id,
+        fileType: a.type ?? mimeFromAssetUri(a),
         createdAt: Date.now(),
-        fileSize: a.fileSize!,
-        fileName: a.fileName!,
+        fileSize: a.fileSize,
+        fileName: a.fileName,
       }))
 
       if (assets.length === 0) {

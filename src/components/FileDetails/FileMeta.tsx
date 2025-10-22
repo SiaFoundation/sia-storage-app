@@ -51,8 +51,8 @@ export function FileMeta({
           )}
           {showAdvanced.data && (
             <LabeledValueRow
-              label="Cached URL"
-              value={status.cachedUri ?? 'Not available'}
+              label="Local ID"
+              value={file.localId ?? '-'}
               isMonospace
               ellipsizeMode="middle"
               canCopy={!!status.cachedUri}
