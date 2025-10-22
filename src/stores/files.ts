@@ -17,6 +17,7 @@ export type FileRecord = {
   fileType: string | null
   objects: Record<string, LocalObject>
   localId: string | null
+  fingerprint: string | null
 }
 
 export type FileRecordRow = {
@@ -27,23 +28,33 @@ export type FileRecordRow = {
   updatedAt: number
   fileType: string | null
   localId: string | null
+  fingerprint: string | null
 }
 
 export async function createFileRecord(
   fileRecord: Omit<FileRecord, 'objects'>,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, fileName, fileSize, createdAt, updatedAt, fileType, localId } =
-    fileRecord
-  await db().runAsync(
-    'INSERT INTO files (id, fileName, fileSize, createdAt, updatedAt, fileType, localId) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  const {
     id,
     fileName,
     fileSize,
     createdAt,
     updatedAt,
     fileType,
-    localId ?? null
+    localId,
+    fingerprint,
+  } = fileRecord
+  await db().runAsync(
+    'INSERT INTO files (id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    id,
+    fileName,
+    fileSize,
+    createdAt,
+    updatedAt,
+    fileType,
+    localId,
+    fingerprint
   )
   if (triggerUpdate) {
     await librarySwr.triggerChange()
@@ -152,7 +163,7 @@ export async function readAllFileRecords(opts: {
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.fileName, f.fileSize, f.createdAt, f.updatedAt, f.fileType, f.localId,
+    `SELECT f.id, f.fileName, f.fileSize, f.createdAt, f.updatedAt, f.fileType, f.localId, f.fingerprint,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedMasterKey as encryptedMasterKey, o.encryptedMetadata as encryptedMetadata,
             o.signature as signature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
@@ -200,8 +211,9 @@ export async function readFileRecordByObjectId(
     updatedAt: number
     fileType: string
     localId: string | null
+    fingerprint: string | null
   }>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
     objectId
   )
   if (!row) return null
@@ -213,7 +225,7 @@ export async function readFileRecordsByLocalIds(
   localIds: string[]
 ): Promise<FileRecord[]> {
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE localId IN (${localIds
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds
@@ -223,7 +235,7 @@ export async function readFileRecordsByLocalIds(
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE id = ?',
     id
   )
   if (!row) {
@@ -238,7 +250,7 @@ export async function readFileRecordBySourceId(
   localId: string
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE localId = ?',
+    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, fingerprint FROM files WHERE localId = ?',
     localId
   )
   if (!row) return null
@@ -286,6 +298,7 @@ export function transformRow(
     updatedAt: row.updatedAt,
     fileType: row.fileType,
     localId: row.localId,
+    fingerprint: row.fingerprint,
     objects: objectsMap,
   }
 }

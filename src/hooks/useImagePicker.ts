@@ -4,8 +4,8 @@ import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
-import { mimeFromAssetUri } from '../lib/fileTypes'
 import { readFileRecordsByLocalIds } from '../stores/files'
+import { mimeFromAssetUri } from '../lib/fileTypes'
 
 export type PickerAsset = {
   id: string
@@ -14,6 +14,9 @@ export type PickerAsset = {
   fileSize: number
   createdAt: number
   fileType: string
+  width?: number
+  height?: number
+  duration?: number
 }
 
 export function useImagePicker() {

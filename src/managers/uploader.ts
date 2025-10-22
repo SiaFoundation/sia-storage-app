@@ -12,6 +12,7 @@ import {
 import { logger } from '../lib/logger'
 import { PickerAsset } from '../hooks/useImagePicker'
 import { runUploadWithSlot } from '../stores/uploads'
+import { buildFingerprintV1, kindFromMime } from '../lib/fingerprint'
 
 export function useUploader() {
   const sdk = useSdk()
@@ -30,6 +31,15 @@ export function useUploader() {
             asset.fileName,
             asset.fileType
           )
+          const fingerprint = buildFingerprintV1({
+            mime: asset.fileType,
+            kind: kindFromMime(asset.fileType),
+            width: asset.width,
+            height: asset.height,
+            durationMs: asset.duration,
+            size: asset.fileSize,
+            createdAtMs: asset.createdAt,
+          })
           fileRecords.push({
             id: asset.id,
             fileName: asset.fileName,
@@ -39,6 +49,7 @@ export function useUploader() {
             fileType: asset.fileType,
             localId: asset.localId,
             objects: {},
+            fingerprint,
           })
         }
         await createManyFileRecords(fileRecords)

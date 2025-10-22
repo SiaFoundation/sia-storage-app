@@ -21,10 +21,12 @@ import { logger } from '../../lib/logger'
 import { type Migration } from './types'
 import { migration_0001_init_schema } from './0001_init_schema'
 import { migration_0002_add_file_local_id } from './0002_add_file_local_id'
+import { migration_0003_add_fingerprint } from './0003_add_fingerprint'
 
 const migrations: Migration[] = [
   migration_0001_init_schema,
   migration_0002_add_file_local_id,
+  migration_0003_add_fingerprint,
 ]
 
 export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
