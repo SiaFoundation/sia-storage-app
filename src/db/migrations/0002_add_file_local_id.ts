@@ -20,7 +20,7 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
     if (!hasCol) {
       await db.execAsync(`ALTER TABLE files ADD COLUMN localId TEXT`)
       await db.execAsync(
-        `CREATE UNIQUE INDEX IF NOT EXISTS idx_files_localId ON files(localId)`
+        `CREATE INDEX IF NOT EXISTS idx_files_localId ON files(localId)`
       )
     }
   } catch (e) {

@@ -10,16 +10,10 @@ import {
 } from '../config'
 import { upsertLocalObject } from '../stores/localObjects'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
+import { FileRecordRow } from '../stores/files'
 
 export async function uploadToIndexer(params: {
-  file: {
-    id: string
-    fileName: string | null
-    fileType: string | null
-    fileSize: number | null
-    updatedAt: number
-    createdAt: number
-  }
+  file: FileRecordRow
   sdk: Sdk
   indexerURL: string
   data: ArrayBuffer
@@ -36,12 +30,8 @@ export async function uploadToIndexer(params: {
     dataShards: UPLOAD_DATA_SHARDS,
     parityShards: UPLOAD_PARITY_SHARDS,
     metadata: encodeFileMetadata({
-      id: file.id,
-      name: file.fileName ?? '',
-      fileType: file.fileType ?? '',
-      updatedAt: file.updatedAt ?? new Date().getTime(),
-      createdAt: file.createdAt ?? new Date().getTime(),
-      size: data.byteLength,
+      ...file,
+      fileSize: data.byteLength,
     }),
     progressCallback: {
       progress: (uploaded, encodedSize) => {

@@ -61,7 +61,9 @@ export async function createManyFileRecords(
       await createFileRecord(fr, false)
     }
   })
-  await librarySwr.triggerChange()
+  if (files.length > 0) {
+    await librarySwr.triggerChange()
+  }
 }
 
 function buildFileRecordsQuery(
@@ -204,14 +206,24 @@ export async function readFileRecordByObjectId(
   return transformRow(row, objects)
 }
 
-export async function readFileRecordsByLocalIds(
-  localIds: string[]
-): Promise<FileRecord[]> {
+export async function readFileRecordsByLocalIds(localIds: string[]) {
   const rows = await db().getAllAsync<FileRecordRow>(
     `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds
+  )
+  return rows.map((row) => transformRow(row)) as (FileRecord & {
+    localId: string
+  })[]
+}
+
+export async function readFileRecordsByContentHashes(contentHashes: string[]) {
+  const rows = await db().getAllAsync<FileRecordRow>(
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE contentHash IN (${contentHashes
+      .map((_) => `?`)
+      .join(',')})`,
+    ...contentHashes
   )
   return rows.map((row) => transformRow(row)) as (FileRecord & {
     contentHash: string
@@ -232,19 +244,50 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 }
 
 export async function updateFileRecord(
-  fileRecord: Omit<FileRecord, 'objects'>
+  update: Partial<FileRecordRow> & { id: string },
+  triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, fileName, fileSize, createdAt, updatedAt, fileType } = fileRecord
-  await db().runAsync(
-    'UPDATE files SET fileName = ?, fileSize = ?, createdAt = ?, updatedAt = ?, fileType = ? WHERE id = ?',
-    fileName,
-    fileSize,
-    createdAt,
-    updatedAt,
-    fileType,
-    id
-  )
-  await librarySwr.triggerChange()
+  const { id } = update
+  const sets: string[] = []
+  const params: (string | number | null)[] = []
+  const updatableFields = [
+    'fileName',
+    'fileSize',
+    'createdAt',
+    'updatedAt',
+    'fileType',
+    'localId',
+    'contentHash',
+  ]
+  for (const field of updatableFields) {
+    if (field in update) {
+      sets.push(`${field} = ?`)
+      params.push(update[field as keyof typeof update] ?? null)
+    }
+  }
+
+  if (sets.length === 0) {
+    return
+  }
+
+  const sql = `UPDATE files SET ${sets.join(', ')} WHERE id = ?`
+  await db().runAsync(sql, ...params, id)
+  if (triggerUpdate) {
+    await librarySwr.triggerChange()
+  }
+}
+
+export async function updateManyFileRecords(
+  updates: Partial<FileRecordRow> & { id: string }[]
+): Promise<void> {
+  await db().withTransactionAsync(async () => {
+    for (const update of updates) {
+      await updateFileRecord(update, false)
+    }
+  })
+  if (updates.length > 0) {
+    await librarySwr.triggerChange()
+  }
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {

@@ -1,41 +1,45 @@
 import { logger } from '../lib/logger'
+import { FileRecordRow } from '../stores/files'
 
-export type FileMetadata = {
-  id: string
-  name: string
-  fileType: string
+type LegacyFileMetadata = {
+  name?: string
   size?: number
-  updatedAt: number
-  createdAt: number
-  localId: string | null
-  contentHash: string | null
+}
+
+export type FileMetadata = FileRecordRow & LegacyFileMetadata
+
+export function transformFileMetadata(
+  metadata: FileRecordRow & LegacyFileMetadata
+): FileRecordRow {
+  const now = new Date().getTime()
+  return {
+    id: metadata.id,
+    fileName: metadata.fileName ?? metadata.name ?? '',
+    fileType: metadata.fileType,
+    fileSize: metadata.fileSize ?? metadata.size ?? 0,
+    updatedAt: metadata.updatedAt ?? now,
+    createdAt: metadata.createdAt ?? now,
+    localId: metadata.localId,
+    contentHash: metadata.contentHash,
+  }
 }
 
 export function encodeFileMetadata(
-  params: Required<FileMetadata>
+  params: Required<FileRecordRow> & LegacyFileMetadata
 ): ArrayBuffer {
-  return new TextEncoder().encode(
-    JSON.stringify({
-      id: params.id,
-      name: params.name,
-      fileType: params.fileType,
-      size: params.size,
-      updatedAt: params.updatedAt,
-      createdAt: params.createdAt,
-      localId: params.localId,
-      contentHash: params.contentHash,
-    })
-  ).buffer as ArrayBuffer
+  return new TextEncoder().encode(JSON.stringify(transformFileMetadata(params)))
+    .buffer as ArrayBuffer
 }
 
-export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
+export function decodeFileMetadata(buffer?: ArrayBuffer): FileRecordRow {
   try {
-    return JSON.parse(new TextDecoder().decode(buffer)) as FileMetadata
+    return transformFileMetadata(JSON.parse(new TextDecoder().decode(buffer)))
   } catch (e) {
     logger.log('Error converting file metadata from buffer', e)
     return {
       id: '',
-      name: '',
+      fileName: '',
+      fileSize: 0,
       fileType: '',
       updatedAt: 0,
       createdAt: 0,

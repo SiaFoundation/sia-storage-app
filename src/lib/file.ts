@@ -83,7 +83,7 @@ export function useFileStatus(file?: {
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFileUri(file)
   return useSWR(
-    [file?.id, file?.localId || '', file?.objects || '', fileUri.data || ''],
+    [file?.id, 'status'],
     () =>
       computeFileStatus({
         file: file ?? { objects: null },
@@ -91,7 +91,10 @@ export function useFileStatus(file?: {
         downloadState,
         fileUri: fileUri.data ?? null,
         errorText: uploadState?.error || downloadState?.error || null,
-      })
+      }),
+    {
+      refreshInterval: 5_000,
+    }
   )
 }
 

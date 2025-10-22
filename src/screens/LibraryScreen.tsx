@@ -119,7 +119,9 @@ export function LibraryScreen({ route, navigation }: Props) {
             />
             <Text style={styles.emptyTitle}>No files found</Text>
             <Text style={styles.emptyText}>
-              No files matching the selected filters.
+              {files.error
+                ? files.error.message
+                : 'No files matching the selected filters.'}
             </Text>
           </View>
         )
