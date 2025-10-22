@@ -18,7 +18,7 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
     if (!hasContentHash) {
       await db.execAsync(`ALTER TABLE files ADD COLUMN contentHash TEXT`)
       await db.execAsync(
-        `CREATE UNIQUE INDEX IF NOT EXISTS idx_files_contentHash ON files(contentHash)`
+        `CREATE INDEX IF NOT EXISTS idx_files_contentHash ON files(contentHash)`
       )
     }
   } catch (e) {

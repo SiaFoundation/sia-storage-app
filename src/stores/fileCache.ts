@@ -143,7 +143,7 @@ export function useFileUri(file?: {
   fileType: string | null
   localId?: string | null
 }) {
-  return useSWR([...getKey(file?.id), file?.localId], () => {
+  return useSWR([...getKey(file?.id), 'uri', file?.localId || ''], () => {
     return file ? getFileUri(file) : null
   })
 }

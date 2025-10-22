@@ -4,79 +4,44 @@ import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
 import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
-import {
-  createManyFileRecords,
-  FileRecord,
-  readFileRecord,
-} from '../stores/files'
+import { FileRecord, readFileRecord } from '../stores/files'
 import { logger } from '../lib/logger'
-import { PickerAsset } from '../hooks/useImagePicker'
 import { runUploadWithSlot } from '../stores/uploads'
-import { calculateContentHash } from '../lib/contentHash'
 
 export function useUploader() {
   const sdk = useSdk()
   return useCallback(
-    async (assets: PickerAsset[]) => {
+    async (files: FileRecord[]) => {
       if (!sdk) {
         logger.log('[uploader] sdk not initialized')
         return
       }
       try {
-        const fileRecords: FileRecord[] = []
-        for (const asset of assets) {
-          logger.log(
-            '[uploader] creating file record for asset',
-            asset.id,
-            asset.fileName,
-            asset.fileType
-          )
-          const contentHash = await calculateContentHash(asset.uri)
-          fileRecords.push({
-            id: asset.id,
-            fileName: asset.fileName,
-            fileSize: asset.fileSize,
-            updatedAt: asset.createdAt,
-            createdAt: asset.createdAt,
-            fileType: asset.fileType,
-            localId: asset.localId,
-            contentHash: contentHash,
-            objects: {},
-          })
-        }
-        await createManyFileRecords(fileRecords)
         await Promise.all(
-          assets.map(async (asset: PickerAsset, index: number) => {
+          files.map(async (file: FileRecord, index: number) => {
             logger.log(
-              `[uploader] processing media ${index + 1}/$${assets.length}...`
+              `[uploader] processing media ${index + 1}/$${files.length}...`
             )
-            const fileUri = await getLocalUri(asset.localId)
+            const fileUri = await getLocalUri(file.localId)
             if (!fileUri) {
-              logger.log(`[uploader] file not found ${asset.id}`)
+              logger.log(`[uploader] file uri not found ${file.id}`)
               return
             }
-            logger.log(`[uploader] cached file ${asset.id} -> ${fileUri}`)
+            logger.log(`[uploader] cached file ${file.id} -> ${fileUri}`)
             runUploadWithSlot({
-              id: asset.id,
+              id: file.id,
               task: async (signal) => {
                 const indexerURL = await getIndexerURL()
-                logger.log(`[uploader] uploading ${asset.id} to hosts...`)
+                logger.log(`[uploader] uploading ${file.id} to hosts...`)
                 const fileBytes = await new FileSystem.File(fileUri).bytes()
                 await uploadToIndexer({
-                  file: {
-                    id: asset.id,
-                    fileName: asset.fileName,
-                    fileType: asset.fileType,
-                    fileSize: asset.fileSize,
-                    updatedAt: asset.createdAt,
-                    createdAt: asset.createdAt,
-                  },
+                  file,
                   indexerURL,
                   sdk,
                   data: fileBytes.buffer as ArrayBuffer,
                   signal,
                 })
-                logger.log(`[uploader] upload complete ${asset.id}`)
+                logger.log(`[uploader] upload complete ${file.id}`)
               },
             })
           })
@@ -110,14 +75,7 @@ export function useReuploadFile() {
           logger.log(`[uploader] uploading ${fileId}...`)
           const fileBytes = await new FileSystem.File(fileUri).bytes()
           await uploadToIndexer({
-            file: {
-              id: fileId,
-              fileName: file.fileName,
-              fileType: file.fileType,
-              fileSize: file.fileSize,
-              updatedAt: file.updatedAt,
-              createdAt: file.createdAt,
-            },
+            file,
             indexerURL,
             sdk,
             data: fileBytes.buffer,
@@ -143,14 +101,7 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
     task: async (signal) => {
       const fileBytes = await new FileSystem.File(fileUri).bytes()
       await uploadToIndexer({
-        file: {
-          id: fileId,
-          fileName: file.fileName,
-          fileType: file.fileType,
-          fileSize: file.fileSize,
-          updatedAt: file.updatedAt,
-          createdAt: file.createdAt,
-        },
+        file,
         indexerURL,
         sdk,
         data: fileBytes.buffer,

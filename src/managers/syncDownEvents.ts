@@ -67,7 +67,15 @@ async function syncDownEvents(): Promise<void> {
 
       const events = await sdk.objects(cursor, batchSize)
 
-      logger.log(`[syncDownEvents] batch size=${events.length}`)
+      // If the batch size is 1, we are probably synced and repeatedly polling the last event.
+      if (events.length === 1) {
+        logger.log(
+          `[syncDownEvents] batch size=${events.length}, no new events found`
+        )
+      } else {
+        logger.log(`[syncDownEvents] batch size=${events.length}`)
+      }
+
       await processBatch(events, counts)
 
       // Update the cursor to the last event in the batch.
@@ -159,13 +167,13 @@ async function handleUpdateEvent(
   } else {
     await createFileRecord({
       id: fileId,
-      fileName: metadata.name ?? null,
-      fileSize: metadata.size ?? null,
+      fileName: metadata.fileName,
+      fileSize: metadata.fileSize,
       createdAt: object.createdAt().getTime(),
       updatedAt: object.updatedAt().getTime(),
-      fileType: metadata.fileType ?? null,
-      localId: metadata.localId ?? null,
-      contentHash: metadata.contentHash ?? null,
+      fileType: metadata.fileType,
+      localId: metadata.localId,
+      contentHash: metadata.contentHash,
     })
     const localObject = await pinnedObjectToLocalObject(
       fileId,
@@ -214,4 +222,9 @@ async function getSyncDownCursor(): Promise<ObjectsCursor | undefined> {
 
 export async function setSyncDownCursor(value: ObjectsCursor | undefined) {
   await setSecureStoreJSON('syncDownCursor', value, objectsCursorCodec)
+}
+
+export async function resetSyncDownCursor() {
+  logger.log('[syncDownEvents] resetting sync down cursor')
+  await setSyncDownCursor(undefined)
 }

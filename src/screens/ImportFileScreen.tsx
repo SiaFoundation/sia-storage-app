@@ -20,7 +20,11 @@ import { createFileRecord } from '../stores/files'
 import { uniqueId } from '../lib/uniqueId'
 import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
-import { decodeFileMetadata } from '../encoding/fileMetadata'
+import {
+  decodeFileMetadata,
+  FileMetadata,
+  transformFileMetadata,
+} from '../encoding/fileMetadata'
 import { getIndexerURL } from '../stores/settings'
 import { BottomActionButton } from '../components/BottomActionButton'
 import { PlusIcon } from 'lucide-react-native'
@@ -55,13 +59,17 @@ export function ImportFileScreen({ route }: Props) {
       try {
         if (!sharedObject.data) return null
         const metadata = decodeFileMetadata(sharedObject.data.metadata())
-        return {
+        const file: FileMetadata = transformFileMetadata({
           id,
-          size: Number(sharedObject.data.size()),
-          fileSize: metadata.size ?? 0,
-          fileType: metadata.fileType ?? '',
-          fileName: metadata.name ?? '',
-        }
+          fileSize: Number(sharedObject.data.size()),
+          fileType: metadata.fileType,
+          fileName: metadata.fileName,
+          contentHash: metadata.contentHash,
+          localId: metadata.localId,
+          createdAt: metadata.createdAt,
+          updatedAt: metadata.updatedAt,
+        })
+        return file
       } catch (e) {
         logger.log('Error getting shared file', e)
         return null
@@ -78,11 +86,7 @@ export function ImportFileScreen({ route }: Props) {
       indexerURL,
       pinnedObject
     )
-    await createFileRecord({
-      ...sharedFile.data,
-      createdAt: new Date().getTime(),
-      updatedAt: new Date().getTime(),
-    })
+    await createFileRecord(sharedFile.data)
     await upsertLocalObject(localObject)
     toast.show('File added')
     navigation.navigate('MainTab', {
