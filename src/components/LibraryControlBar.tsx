@@ -35,7 +35,7 @@ export function LibraryControlBar({ route, navigation }: Props) {
           }}
         >
           <IconButton onPress={toggleLibraryViewMode}>
-            {viewMode.data === 'gallery' ? (
+            {viewMode.data === 'list' ? (
               <Grid2X2Icon color={iconColors.white} />
             ) : (
               <ListIcon color={iconColors.white} />
