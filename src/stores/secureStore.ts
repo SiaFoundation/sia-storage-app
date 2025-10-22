@@ -9,7 +9,7 @@ export async function setSecureStoreBoolean(key: string, value: boolean) {
   return SecureStore.setItemAsync(key, value ? 'true' : 'false')
 }
 
-export async function getSecureStoreBoolean(key: string, fallback = false) {
+export async function getSecureStoreBoolean(key: string, initialValue = false) {
   try {
     const found = await SecureStore.getItemAsync(key)
     if (typeof found === 'string') {
@@ -19,9 +19,10 @@ export async function getSecureStoreBoolean(key: string, fallback = false) {
         return false
       }
     }
-    return fallback
+    setSecureStoreBoolean(key, initialValue)
+    return initialValue
   } catch {
-    return fallback
+    return initialValue
   }
 }
 
@@ -35,16 +36,19 @@ export async function setSecureStoreNumber(key: string, value: number) {
   return SecureStore.setItemAsync(key, str)
 }
 
-export async function getSecureStoreNumber(key: string, fallback = 0) {
+export async function getSecureStoreNumber(key: string, initialValue = 0) {
   try {
     const found = await SecureStore.getItemAsync(key)
     if (typeof found === 'string' && found.trim().length > 0) {
       const n = Number(found)
-      return Number.isFinite(n) ? n : fallback
+      if (Number.isFinite(n)) {
+        return n
+      }
+      setSecureStoreNumber(key, initialValue)
     }
-    return fallback
+    return initialValue
   } catch {
-    return fallback
+    return initialValue
   }
 }
 
@@ -62,13 +66,17 @@ export async function setSecureStoreString<T extends string>(
 
 export async function getSecureStoreString<T extends string>(
   key: string,
-  fallback: T
+  initialValue: T
 ): Promise<T> {
   try {
     const found = await SecureStore.getItemAsync(key)
-    return (found as T | null) || fallback
+    if (typeof found === 'string' && found.trim().length > 0) {
+      return found as T
+    }
+    setSecureStoreString(key, initialValue)
+    return initialValue
   } catch {
-    return fallback
+    return initialValue
   }
 }
 
@@ -102,16 +110,17 @@ export async function setSecureStoreJSON<TStorage, TDomain>(
 export async function getSecureStoreJSON<TStorage, TDomain>(
   key: string,
   codec: JsonCodec<TStorage, TDomain>,
-  fallback?: TDomain
+  initialValue?: TDomain
 ): Promise<TDomain | undefined> {
   try {
     const found = await SecureStore.getItemAsync(key)
     if (typeof found !== 'string' || found.trim().length === 0) {
-      return fallback
+      setSecureStoreJSON(key, initialValue, codec)
+      return initialValue
     }
     const parsed = JSON.parse(found) as TStorage
     return codec.decode(parsed)
   } catch {
-    return fallback
+    return initialValue
   }
 }

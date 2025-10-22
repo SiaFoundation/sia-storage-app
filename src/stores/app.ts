@@ -11,8 +11,16 @@ import { ensureCacheDir } from './fileCache'
 import { resetDb } from '../db'
 import {
   initSyncDownEvents,
-  setSyncDownCursor,
+  resetSyncDownCursor,
 } from '../managers/syncDownEvents'
+import {
+  initSyncNewPhotos,
+  resetPhotosNewCursor,
+} from '../managers/syncNewPhotos'
+import {
+  initSyncPhotosArchive,
+  resetPhotosArchiveCursor,
+} from '../managers/syncPhotosArchive'
 
 export type AppState = {
   isInitializing: boolean
@@ -38,6 +46,8 @@ export async function initApp() {
   await SplashScreen.hideAsync()
   initUploadScanner()
   initSyncDownEvents()
+  initSyncNewPhotos()
+  initSyncPhotosArchive()
 }
 
 export async function onboardIndexer(indexerURL: string) {
@@ -61,7 +71,9 @@ export async function resetApp() {
   await setRecoveryPhrase('')
   await setHasOnboarded(false)
   await resetSdk()
-  await setSyncDownCursor(undefined)
+  await resetSyncDownCursor()
+  await resetPhotosNewCursor()
+  await resetPhotosArchiveCursor()
 }
 
 // selectors

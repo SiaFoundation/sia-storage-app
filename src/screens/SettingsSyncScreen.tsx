@@ -8,18 +8,26 @@ import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
 import { Button } from '../components/Button'
 import { RowGroup } from '../components/Group'
 import { InputRow } from '../components/InputRow'
-import {
-  toggleAutoScanUploads,
-  toggleAutoSyncDownEvents,
-  useAutoScanUploads,
-  useAutoSyncDownEvents,
-} from '../stores/settings'
 import { useInputValue } from '../hooks/useInputValue'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { colors } from '../styles/colors'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { setMaxUploads, useMaxUploads } from '../managers/uploadsPool'
 import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
+import {
+  toggleAutoScanUploads,
+  toggleAutoSyncDownEvents,
+  useAutoScanUploads,
+  useAutoSyncDownEvents,
+} from '../stores/settings'
+import {
+  toggleAutoSyncNewPhotos,
+  useAutoSyncNewPhotos,
+} from '../managers/syncNewPhotos'
+import {
+  usePhotosArchiveCursor,
+  restartPhotosArchiveCursor,
+} from '../managers/syncPhotosArchive'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Sync'>
 
@@ -31,6 +39,9 @@ export function SettingsSyncScreen(_props: Props) {
   const maxUploads = useMaxUploads()
   const maxDownloads = useMaxDownloads()
   const autoSync = useAutoSyncDownEvents()
+  const autoSyncNew = useAutoSyncNewPhotos()
+  const photosArchiveCursor = usePhotosArchiveCursor()
+  const photosArchiveInProgress = (photosArchiveCursor.data ?? 0) > 0
 
   const maxUploadsInputProps = useInputValue({
     value: String(maxUploads.data),
@@ -53,8 +64,8 @@ export function SettingsSyncScreen(_props: Props) {
       <RowGroup title="Sync">
         <InfoCard>
           <LabeledValueRow
-            label="Auto upload unsynced files"
-            labelWidth={200}
+            label="Automatically upload files to network"
+            labelWidth={300}
             value={
               <Switch
                 value={autoScan.data ?? false}
@@ -63,8 +74,8 @@ export function SettingsSyncScreen(_props: Props) {
             }
           />
           <LabeledValueRow
-            label="Auto sync with other devices"
-            labelWidth={200}
+            label="Automatically sync with your other devices"
+            labelWidth={300}
             value={
               <Switch
                 value={autoSync.data ?? false}
@@ -73,6 +84,31 @@ export function SettingsSyncScreen(_props: Props) {
             }
           />
         </InfoCard>
+      </RowGroup>
+      <RowGroup title="Photos">
+        <InfoCard>
+          <LabeledValueRow
+            label="Automatically import new photos"
+            labelWidth={300}
+            value={
+              <Switch
+                value={autoSyncNew.data ?? false}
+                onValueChange={toggleAutoSyncNewPhotos}
+              />
+            }
+          />
+        </InfoCard>
+        <Button
+          style={{ marginTop: 10 }}
+          disabled={photosArchiveInProgress}
+          onPress={() => {
+            void restartPhotosArchiveCursor()
+          }}
+        >
+          {photosArchiveInProgress
+            ? 'Sync in progress'
+            : 'Import photos library'}
+        </Button>
       </RowGroup>
       <RowGroup title="Uploads">
         <InfoCard>
@@ -86,13 +122,11 @@ export function SettingsSyncScreen(_props: Props) {
             label="Queued"
             value={String(uploadCounts.totalQueued)}
             canCopy={false}
-            showDividerTop
           />
           <LabeledValueRow
             label="Active"
             value={String(uploadCounts.totalActive)}
             canCopy={false}
-            showDividerTop
           />
         </InfoCard>
         <Button
@@ -118,13 +152,11 @@ export function SettingsSyncScreen(_props: Props) {
             label="Queued"
             value={String(downloadCounts.totalQueued)}
             canCopy={false}
-            showDividerTop
           />
           <LabeledValueRow
             label="Active"
             value={String(downloadCounts.totalActive)}
             canCopy={false}
-            showDividerTop
           />
         </InfoCard>
         <Button
