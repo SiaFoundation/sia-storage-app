@@ -1,0 +1,7 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`calculateContentHash falls back to whole-file read when stat/read fail 1`] = `"sha256|BYTESv1|bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721"`;
+
+exports[`calculateContentHash hashes images via IMGv1-RGBA scheme with canonical pixels 1`] = `"sha256|IMGv1-RGBA|8d48680f2defa6ce83cef6bfc64dbdf8b2f5a510274989cc741f4676e8d24bb0"`;
+
+exports[`calculateContentHash hashes non-images via BYTESv1 scheme using streaming 1`] = `"sha256|BYTESv1|c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"`;

@@ -165,6 +165,7 @@ async function handleUpdateEvent(
       updatedAt: object.updatedAt().getTime(),
       fileType: metadata.fileType ?? null,
       localId: metadata.localId ?? null,
+      contentHash: metadata.contentHash ?? null,
     })
     const localObject = await pinnedObjectToLocalObject(
       fileId,

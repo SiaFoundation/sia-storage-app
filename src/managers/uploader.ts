@@ -12,6 +12,7 @@ import {
 import { logger } from '../lib/logger'
 import { PickerAsset } from '../hooks/useImagePicker'
 import { runUploadWithSlot } from '../stores/uploads'
+import { calculateContentHash } from '../lib/contentHash'
 
 export function useUploader() {
   const sdk = useSdk()
@@ -30,6 +31,7 @@ export function useUploader() {
             asset.fileName,
             asset.fileType
           )
+          const contentHash = await calculateContentHash(asset.uri)
           fileRecords.push({
             id: asset.id,
             fileName: asset.fileName,
@@ -38,6 +40,7 @@ export function useUploader() {
             createdAt: asset.createdAt,
             fileType: asset.fileType,
             localId: asset.localId,
+            contentHash: contentHash,
             objects: {},
           })
         }
