@@ -42,6 +42,7 @@ export function useUploader() {
             updatedAt: asset.createdAt,
             createdAt: asset.createdAt,
             fileType: asset.fileType,
+            localId: asset.localId,
             objects: {},
           })
         }

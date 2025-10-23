@@ -38,6 +38,7 @@ export function useAutoDownload(
     id: string
     fileType: string | null
     fileSize: number | null
+    localId: string | null
     objects: LocalObjectsMap | null
   },
   shouldDownload: (file: {
@@ -56,6 +57,7 @@ export function useAutoDownload(
     if (!status.isUploaded) return
     if (status.isDownloaded) return
     if (status.isDownloading) return
+    if (file.localId) return
     if (!shouldDownload(file)) return
     download()
   }, [isInitializing, isConnected, status.isUploaded])
