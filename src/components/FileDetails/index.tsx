@@ -4,6 +4,7 @@ import { colors, palette } from '../../styles/colors'
 import { type FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
 import { FileMeta } from './FileMeta'
+import { FileMap } from './FileMap'
 
 export function FileDetails({
   file,
@@ -18,7 +19,10 @@ export function FileDetails({
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {header}
-        <View style={styles.metaWrap}>
+        <View style={styles.mapContainer}>
+          <FileMap file={file} />
+        </View>
+        <View style={styles.metaContainer}>
           <FileMeta file={file} status={status} />
         </View>
       </ScrollView>
@@ -29,6 +33,6 @@ export function FileDetails({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.gray[950] },
   scrollContent: { paddingBottom: 96 },
-  viewerWrap: {},
-  metaWrap: { marginTop: 16, backgroundColor: colors.bgElevated },
+  metaContainer: { marginTop: 16, backgroundColor: colors.bgElevated },
+  mapContainer: { height: '100%' },
 })
