@@ -35,6 +35,7 @@ export function FileDetailsImport({
     fileSize: file.fileSize,
     fileType: file.fileType,
     objects: null,
+    localId: null,
   }
 
   return (

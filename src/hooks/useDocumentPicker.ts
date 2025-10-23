@@ -52,6 +52,8 @@ export function useDocumentPicker() {
         fileSize: a.size ?? 0,
         createdAt: Date.now(),
         fileType: a.mimeType ?? mimeFromAssetUri(a),
+        // Documents do not have any local ID.
+        localId: null,
       }))
 
       if (assets.length === 0) {
