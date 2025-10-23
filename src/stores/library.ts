@@ -64,7 +64,7 @@ async function readOrderedFileRecords(
   }
 
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,

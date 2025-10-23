@@ -8,6 +8,7 @@ export type FileMetadata = {
   updatedAt: number
   createdAt: number
   localId: string | null
+  contentHash: string | null
 }
 
 export function encodeFileMetadata(
@@ -22,6 +23,7 @@ export function encodeFileMetadata(
       updatedAt: params.updatedAt,
       createdAt: params.createdAt,
       localId: params.localId,
+      contentHash: params.contentHash,
     })
   ).buffer as ArrayBuffer
 }
@@ -38,6 +40,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
       updatedAt: 0,
       createdAt: 0,
       localId: null,
+      contentHash: null,
     }
   }
 }

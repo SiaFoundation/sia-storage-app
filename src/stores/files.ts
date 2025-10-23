@@ -8,17 +8,6 @@ import { LocalObjectRow } from '../encoding/localObject'
 import { getIndexerURL } from './settings'
 import { librarySwr } from './library'
 
-export type FileRecord = {
-  id: string
-  fileName: string | null
-  fileSize: number | null
-  createdAt: number
-  updatedAt: number
-  fileType: string | null
-  objects: Record<string, LocalObject>
-  localId: string | null
-}
-
 export type FileRecordRow = {
   id: string
   fileName: string | null
@@ -27,23 +16,37 @@ export type FileRecordRow = {
   updatedAt: number
   fileType: string | null
   localId: string | null
+  contentHash: string | null
+}
+
+export type FileRecord = FileRecordRow & {
+  objects: Record<string, LocalObject>
 }
 
 export async function createFileRecord(
   fileRecord: Omit<FileRecord, 'objects'>,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, fileName, fileSize, createdAt, updatedAt, fileType, localId } =
-    fileRecord
-  await db().runAsync(
-    'INSERT INTO files (id, fileName, fileSize, createdAt, updatedAt, fileType, localId) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  const {
     id,
     fileName,
     fileSize,
     createdAt,
     updatedAt,
     fileType,
-    localId ?? null
+    localId,
+    contentHash,
+  } = fileRecord
+  await db().runAsync(
+    'INSERT INTO files (id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    id,
+    fileName,
+    fileSize,
+    createdAt,
+    updatedAt,
+    fileType,
+    localId,
+    contentHash
   )
   if (triggerUpdate) {
     await librarySwr.triggerChange()
@@ -152,7 +155,7 @@ export async function readAllFileRecords(opts: {
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.fileName, f.fileSize, f.createdAt, f.updatedAt, f.fileType, f.localId,
+    `SELECT f.id, f.fileName, f.fileSize, f.createdAt, f.updatedAt, f.fileType, f.localId, f.contentHash,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedMasterKey as encryptedMasterKey, o.encryptedMetadata as encryptedMetadata,
             o.signature as signature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
@@ -192,16 +195,8 @@ export async function readAllFileRecords(opts: {
 export async function readFileRecordByObjectId(
   objectId: string
 ): Promise<FileRecord | null> {
-  const row = await db().getFirstAsync<{
-    id: string
-    fileName: string | null
-    fileSize: number | null
-    createdAt: number
-    updatedAt: number
-    fileType: string
-    localId: string | null
-  }>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
+  const row = await db().getFirstAsync<FileRecordRow>(
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
     objectId
   )
   if (!row) return null
@@ -213,7 +208,7 @@ export async function readFileRecordsByLocalIds(
   localIds: string[]
 ): Promise<FileRecord[]> {
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE localId IN (${localIds
+    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds
@@ -225,7 +220,7 @@ export async function readFileRecordsByLocalIds(
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE id = ?',
+    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE id = ?',
     id
   )
   if (!row) {
@@ -234,17 +229,6 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
   }
   const objects = await readLocalObjectsForFile(id)
   return transformRow(row, objects)
-}
-
-export async function readFileRecordBySourceId(
-  localId: string
-): Promise<FileRecord | null> {
-  const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId FROM files WHERE localId = ?',
-    localId
-  )
-  if (!row) return null
-  return transformRow(row)
 }
 
 export async function updateFileRecord(
@@ -288,6 +272,7 @@ export function transformRow(
     updatedAt: row.updatedAt,
     fileType: row.fileType,
     localId: row.localId,
+    contentHash: row.contentHash,
     objects: objectsMap,
   }
 }
