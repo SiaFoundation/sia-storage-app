@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, StyleSheet, ScrollView } from 'react-native'
+import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native'
 import { colors, palette } from '../../styles/colors'
 import { type FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
@@ -14,12 +14,13 @@ export function FileDetails({
   header?: React.ReactNode
 }) {
   const status = useFileStatus(file)
+  const { height: windowHeight } = useWindowDimensions()
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {header}
-        <View style={styles.mapContainer}>
+        <View style={{ height: Math.round(windowHeight * 0.5) }}>
           <FileMap file={file} />
         </View>
         <View style={styles.metaContainer}>
@@ -33,6 +34,8 @@ export function FileDetails({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.gray[950] },
   scrollContent: { paddingBottom: 96 },
-  metaContainer: { marginTop: 16, backgroundColor: colors.bgElevated },
-  mapContainer: { height: '100%' },
+  metaContainer: {
+    marginTop: 16,
+    backgroundColor: colors.bgElevated,
+  },
 })
