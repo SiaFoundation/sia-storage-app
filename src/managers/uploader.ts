@@ -1,14 +1,9 @@
 import { uploadToIndexer } from './uploadToIndexer'
-import {
-  writeToCache,
-  copyUriToCache,
-  readCachedUri,
-} from '../stores/fileCache'
+import { getFileUri, getLocalUri } from '../stores/fileCache'
 import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
 import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
-import { extFromMime } from '../lib/fileTypes'
 import {
   createManyFileRecords,
   FileRecord,
@@ -52,24 +47,18 @@ export function useUploader() {
             logger.log(
               `[uploader] processing media ${index + 1}/$${assets.length}...`
             )
-            const cacheUri = asset.uri
-              ? await copyUriToCache(
-                  asset.id,
-                  asset.uri,
-                  extFromMime(asset.fileType)
-                )
-              : await writeToCache(
-                  asset.id,
-                  await readArrayBuffer(asset),
-                  extFromMime(asset.fileType)
-                )
-            logger.log(`[uploader] cached file ${asset.id} -> ${cacheUri}`)
+            const fileUri = await getLocalUri(asset.localId)
+            if (!fileUri) {
+              logger.log(`[uploader] file not found ${asset.id}`)
+              return
+            }
+            logger.log(`[uploader] cached file ${asset.id} -> ${fileUri}`)
             runUploadWithSlot({
               id: asset.id,
               task: async (signal) => {
                 const indexerURL = await getIndexerURL()
                 logger.log(`[uploader] uploading ${asset.id} to hosts...`)
-                const fileBytes = await new FileSystem.File(cacheUri).bytes()
+                const fileBytes = await new FileSystem.File(fileUri).bytes()
                 await uploadToIndexer({
                   file: {
                     id: asset.id,
@@ -111,15 +100,12 @@ export function useReuploadFile() {
           if (!file) {
             throw new Error('File not found')
           }
-          const cacheUri = await readCachedUri(
-            fileId,
-            extFromMime(file.fileType)
-          )
-          if (!cacheUri) {
-            throw new Error('File not cached')
+          const fileUri = await getFileUri(file)
+          if (!fileUri) {
+            throw new Error('File not available locally')
           }
           logger.log(`[uploader] uploading ${fileId}...`)
-          const fileBytes = await new FileSystem.File(cacheUri).bytes()
+          const fileBytes = await new FileSystem.File(fileUri).bytes()
           await uploadToIndexer({
             file: {
               id: fileId,
@@ -144,15 +130,15 @@ export function useReuploadFile() {
 export async function queueUploadForFileId(fileId: string): Promise<void> {
   const file = await readFileRecord(fileId)
   if (!file) return
-  const cachedUri = await readCachedUri(fileId, extFromMime(file.fileType))
-  if (!cachedUri) return
+  const fileUri = await getFileUri(file)
+  if (!fileUri) return
   const indexerURL = await getIndexerURL()
   const sdk = getSdk()
   if (!sdk) return
   await runUploadWithSlot({
     id: fileId,
     task: async (signal) => {
-      const fileBytes = await new FileSystem.File(cachedUri).bytes()
+      const fileBytes = await new FileSystem.File(fileUri).bytes()
       await uploadToIndexer({
         file: {
           id: fileId,
@@ -164,22 +150,9 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
         },
         indexerURL,
         sdk,
-        data: fileBytes.buffer as ArrayBuffer,
+        data: fileBytes.buffer,
         signal,
       })
     },
   })
-}
-
-async function readArrayBuffer(asset: PickerAsset): Promise<ArrayBuffer> {
-  const uri = asset.uri as string
-  try {
-    const response = await fetch(uri)
-    return await response.arrayBuffer()
-  } catch {
-    // Fallback for content:// URIs on Android.
-    const file = new FileSystem.File(uri)
-    const bytes = await file.bytes()
-    return bytes.buffer as ArrayBuffer
-  }
 }

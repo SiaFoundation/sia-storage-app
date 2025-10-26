@@ -4,8 +4,7 @@ import { type DownloadState } from '../stores/downloads'
 import { FileRecord } from '../stores/files'
 import { useDownloadState } from '../stores/downloads'
 import { useUploadState } from '../stores/uploads'
-import { useCachedUri } from '../stores/fileCache'
-import { extFromMime } from './fileTypes'
+import { useFileUri } from '../stores/fileCache'
 import {
   PinnedObject,
   PinnedObjectInterface,
@@ -13,6 +12,8 @@ import {
 } from 'react-native-sia'
 import { LocalObject, LocalObjectsMap } from '../encoding/localObject'
 import { getAppKey } from './appKey'
+import { SWRResponse } from 'swr'
+import useSWR from 'swr'
 
 export function fileHasASealedObject(file: {
   objects?: LocalObjectsMap | null
@@ -30,7 +31,7 @@ export type FileStatus = {
   downloadProgress: number
   isUploadQueued: boolean
   isDownloadQueued: boolean
-  cachedUri: string | null
+  fileUri: string | null
   fileIsGone: boolean
   errorText: string | null
 }
@@ -39,7 +40,7 @@ function computeFileStatus({
   file,
   uploadState,
   downloadState,
-  cachedUri,
+  fileUri,
   errorText,
 }: {
   file: {
@@ -47,7 +48,7 @@ function computeFileStatus({
   }
   uploadState: UploadState | undefined
   downloadState: DownloadState | undefined
-  cachedUri: string | null
+  fileUri: string | null
   errorText: string | null
 }) {
   const isUploading =
@@ -61,14 +62,13 @@ function computeFileStatus({
     isUploadQueued: uploadState?.status === 'queued',
     isDownloadQueued: downloadState?.status === 'queued',
     isUploaded: hasSealedObject,
-    isDownloaded: !!cachedUri,
+    isDownloaded: !!fileUri,
     isErrored:
       uploadState?.status === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,
-    cachedUri,
-    fileIsGone:
-      !isUploading && !isDownloading && !hasSealedObject && !cachedUri,
+    fileUri,
+    fileIsGone: !isUploading && !isDownloading && !hasSealedObject && !fileUri,
     errorText,
   }
 }
@@ -76,21 +76,22 @@ function computeFileStatus({
 export function useFileStatus(file?: {
   id: string
   fileType: string | null
+  localId?: string | null
   objects?: LocalObjectsMap | null
-}): FileStatus {
+}): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
-  const cachedUri = useCachedUri(file?.id || '', extFromMime(file?.fileType))
-  return useMemo(
+  const fileUri = useFileUri(file)
+  return useSWR(
+    [file?.id, file?.localId || '', file?.objects || '', fileUri.data || ''],
     () =>
       computeFileStatus({
         file: file ?? { objects: null },
         uploadState,
         downloadState,
-        cachedUri: cachedUri.data ?? null,
+        fileUri: fileUri.data ?? null,
         errorText: uploadState?.error || downloadState?.error || null,
-      }),
-    [uploadState, downloadState, cachedUri, file]
+      })
   )
 }
 

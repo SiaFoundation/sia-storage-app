@@ -1,5 +1,9 @@
 import { useToast } from '../lib/toastContext'
-import { copyFileToCache, getOrCreateCachedFile } from '../stores/fileCache'
+import {
+  copyFileToCache,
+  getOrCreateCacheFile,
+  getOrCreateCacheTmpFile,
+} from '../stores/fileCache'
 import {
   getDownloadState,
   updateDownloadProgress,
@@ -8,7 +12,6 @@ import {
 import { useSdk } from '../stores/sdk'
 import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
-import { extFromMime, type Ext } from '../lib/fileTypes'
 import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
@@ -55,18 +58,16 @@ export function useDownload(
           }
         )
         await streamToCache({
-          id: file.id,
-          targetExt: '.tmp',
+          file: {
+            id: file.id,
+            fileType: null,
+          },
           getNextChunk: () => downloader.readChunk({ signal }),
           totalSize: Array.isArray(sealedObject.slabs)
             ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
             : undefined,
           onAfterClose: async (targetFile) => {
-            await copyFileToCache(
-              file.id,
-              targetFile,
-              extFromMime(file.fileType)
-            )
+            await copyFileToCache(file, targetFile)
           },
           signal,
         })
@@ -91,15 +92,19 @@ export function useDownloadFromShareURL() {
             length: undefined,
           })
           await streamToCache({
-            id,
-            targetExt: '.tmp',
+            file: {
+              id,
+              fileType: null,
+            },
             getNextChunk: () => downloader.readChunk({ signal }),
             totalSize: Number(sharedObject.size()),
             onAfterClose: async (targetFile) => {
               await copyFileToCache(
-                id,
-                targetFile,
-                extFromMime(metadata.fileType)
+                {
+                  id,
+                  fileType: metadata.fileType,
+                },
+                targetFile
               )
             },
             signal,
@@ -112,18 +117,19 @@ export function useDownloadFromShareURL() {
 }
 
 async function streamToCache(params: {
-  id: string
-  targetExt: Ext
+  file: {
+    id: string
+    fileType: string | null
+  }
   totalSize?: number
   getNextChunk: () => Promise<ArrayBuffer | undefined>
   onAfterClose?: (
-    targetFile: Awaited<ReturnType<typeof getOrCreateCachedFile>>
+    targetFile: Awaited<ReturnType<typeof getOrCreateCacheFile>>
   ) => Promise<void>
   signal: AbortSignal
 }): Promise<void> {
-  const { id, targetExt, totalSize, getNextChunk, onAfterClose, signal } =
-    params
-  const targetFile = await getOrCreateCachedFile(id, targetExt)
+  const { file, totalSize, getNextChunk, onAfterClose, signal } = params
+  const targetFile = await getOrCreateCacheTmpFile(file)
   logger.log('[streamToCache] writing to cache path:', targetFile.uri)
   const writer = targetFile.writableStream().getWriter()
   let total = 0
@@ -136,7 +142,7 @@ async function streamToCache(params: {
         break
       }
       const chunk = await getNextChunk()
-      if (!chunk || (chunk as ArrayBuffer).byteLength === 0) {
+      if (!chunk || chunk.byteLength === 0) {
         logger.log(
           '[streamToCache] download stream ended. chunks=',
           chunks,
@@ -150,9 +156,9 @@ async function streamToCache(params: {
       chunks += 1
       await writer.write(buf)
       if (typeof totalSize === 'number' && totalSize > 0) {
-        updateDownloadProgress(id, Math.min(1, total / totalSize))
+        updateDownloadProgress(file.id, Math.min(1, total / totalSize))
       } else if (chunks % 5 === 0) {
-        updateDownloadProgress(id, Math.min(0.99, (chunks % 20) / 20))
+        updateDownloadProgress(file.id, Math.min(0.99, (chunks % 20) / 20))
       }
       if (chunks % 10 === 0)
         logger.log('[streamToCache] downloaded', total, 'bytes so far')

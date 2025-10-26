@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system'
+import * as MediaLibrary from 'expo-media-library'
 import useSWR from 'swr'
-import { Ext } from '../lib/fileTypes'
+import { extFromMime } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
 import { buildSWRHelpers } from '../lib/swr'
 
@@ -15,15 +16,22 @@ export async function ensureCacheDir(): Promise<void> {
   }
 }
 
-export async function getCachedFileForId(id: string, ext: Ext): Promise<File> {
-  return new File(CACHE_DIR, `${id}${ext}`)
+async function getCacheFileForId(file: {
+  id: string
+  fileType: string | null
+}): Promise<File> {
+  return new File(CACHE_DIR, `${file.id}${extFromMime(file.fileType)}`)
 }
 
-export async function getOrCreateCachedFile(
-  id: string,
-  ext: Ext
-): Promise<File> {
-  const f = await getCachedFileForId(id, ext)
+async function getCacheTmpFileForId(file: { id: string }): Promise<File> {
+  return new File(CACHE_DIR, `${file.id}.tmp`)
+}
+
+export async function getOrCreateCacheFile(file: {
+  id: string
+  fileType: string | null
+}): Promise<File> {
+  const f = await getCacheFileForId(file)
   const info = f.info()
   if (!info.exists) {
     f.create({ intermediates: true })
@@ -31,81 +39,111 @@ export async function getOrCreateCachedFile(
   return f
 }
 
-export async function getCachedPathForId(
-  id: string,
-  ext: Ext
-): Promise<string> {
-  const f = await getCachedFileForId(id, ext)
-  return f.uri
-}
-
-export async function isFileCached(id: string, ext: Ext): Promise<boolean> {
-  const f = await getCachedFileForId(id, ext)
+export async function getOrCreateCacheTmpFile(file: {
+  id: string
+}): Promise<File> {
+  const f = await getCacheTmpFileForId(file)
   const info = f.info()
-  return info.exists === true
+  if (!info.exists) {
+    f.create({ intermediates: true })
+  }
+  return f
 }
 
-export async function removeFromCache(id: string, ext: Ext): Promise<void> {
-  const f = await getCachedFileForId(id, ext)
+export async function removeFileFromCache(file: {
+  id: string
+  fileType: string | null
+}): Promise<void> {
+  const f = await getCacheFileForId(file)
   const info = f.info()
   if (info.exists) {
     f.delete()
   }
-  triggerChange(id)
+  triggerChange(file.id)
 }
 
-export async function readCachedUri(
-  id: string,
-  ext: Ext
-): Promise<string | null> {
-  const f = await getCachedFileForId(id, ext)
+export async function removeTmpFileFromCache(file: {
+  id: string
+}): Promise<void> {
+  const f = await getCacheTmpFileForId(file)
+  const info = f.info()
+  if (info.exists) {
+    f.delete()
+  }
+}
+
+async function readCacheUri(file: {
+  id: string
+  fileType: string | null
+}): Promise<string | null> {
+  const f = await getCacheFileForId(file)
   const info = f.info()
   return info.exists ? f.uri : null
 }
 
-export async function writeToCache(
-  id: string,
-  data: ArrayBuffer,
-  ext: Ext
-): Promise<string> {
-  logger.log('writeToCache', id)
-  const f = await getOrCreateCachedFile(id, ext)
-  const writer = f.writableStream().getWriter()
-  await writer.write(new Uint8Array(data))
-  await writer.close()
-  triggerChange(id)
-  return f.uri
-}
-
-export async function copyUriToCache(
-  id: string,
-  sourceUri: string,
-  ext: Ext
-): Promise<string> {
-  logger.log('copyUriToCache', id, sourceUri, ext)
-  const f = await getOrCreateCachedFile(id, ext)
-  const exists = f.info().exists
-  if (exists) f.delete()
-  const srcFile = new File(sourceUri)
-  srcFile.copy(f)
-  triggerChange(id)
-  return f.uri
-}
-
 export async function copyFileToCache(
-  id: string,
-  sourceFile: File,
-  ext: Ext
+  file: {
+    id: string
+    fileType: string | null
+  },
+  sourceFile: File
 ): Promise<string> {
-  logger.log('copyFileToCache', id, sourceFile.uri)
-  const f = await getOrCreateCachedFile(id, ext)
+  logger.log('copyFileToCache', file.id, sourceFile.uri)
+  const f = await getOrCreateCacheFile(file)
   const exists = f.info().exists
   if (exists) f.delete()
   sourceFile.copy(f)
-  triggerChange(id)
+  triggerChange(file.id)
   return f.uri
 }
 
-export function useCachedUri(id: string, ext: Ext) {
-  return useSWR(getKey(id), () => readCachedUri(id, ext))
+/**
+ * Get the local URI for a file record. If the file has a local ID, use the
+ * local URI from the MediaLibrary. The media may need to be downloaded from
+ * the network if it is not already cached.
+ */
+export async function getLocalUri(
+  localId: string | null
+): Promise<string | null> {
+  if (!localId) return null
+  try {
+    const asset = await MediaLibrary.getAssetInfoAsync(localId, {
+      shouldDownloadFromNetwork: true,
+    })
+    return asset.localUri ?? null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
+ * Get the URI for a file record. If the file has a local ID, use the local
+ * URI from the MediaLibrary. Otherwise, check the file cache.
+ */
+export async function getFileUri(file: {
+  id: string
+  fileType: string | null
+  localId?: string | null
+}): Promise<string | null> {
+  if (file.localId) {
+    const localUri = await getLocalUri(file.localId)
+    if (localUri) {
+      return localUri
+    }
+  }
+  return await readCacheUri(file)
+}
+
+/**
+ * Get the URI for a file record. If the file has a local ID, use the local
+ * URI from the MediaLibrary. Otherwise, check the file cache.
+ */
+export function useFileUri(file?: {
+  id: string
+  fileType: string | null
+  localId?: string | null
+}) {
+  return useSWR([...getKey(file?.id), file?.localId], () => {
+    return file ? getFileUri(file) : null
+  })
 }

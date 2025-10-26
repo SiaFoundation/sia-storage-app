@@ -24,7 +24,7 @@ export function FileDetails({
           <FileMap file={file} />
         </View>
         <View style={styles.metaContainer}>
-          <FileMeta file={file} status={status} />
+          {status.data ? <FileMeta file={file} status={status.data} /> : null}
         </View>
       </ScrollView>
     </View>
