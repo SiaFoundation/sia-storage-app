@@ -1,10 +1,10 @@
 import * as ImagePicker from 'react-native-image-picker'
 import { useCallback, useRef } from 'react'
-import { mimeFromAssetUri } from '../lib/fileTypes'
 import { uniqueId } from '../lib/uniqueId'
 import { logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
+import { mimeFromAssetUri } from '../lib/fileTypes'
 
 export type PickerAsset = {
   id: string
@@ -13,7 +13,6 @@ export type PickerAsset = {
   fileSize: number
   createdAt: number
   fileType: string
-  cacheUri?: string
 }
 
 export function useImagePicker() {
@@ -31,7 +30,6 @@ export function useImagePicker() {
         mediaType: 'mixed',
         selectionLimit: 0, // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
         includeExtra: true,
-        includeBase64: true,
       })
 
       if (result.didCancel) {

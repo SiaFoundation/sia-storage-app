@@ -11,9 +11,8 @@ import {
 } from 'lucide-react-native'
 import { useToast } from '../lib/toastContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { removeFromCache } from '../stores/fileCache'
+import { removeFileFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
-import { extFromMime } from '../lib/fileTypes'
 import { getSdk, useSdk } from '../stores/sdk'
 import { useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
@@ -55,7 +54,7 @@ export function FileActionsSheet({
   const handleRemoveCache = useCallback(async () => {
     if (!file) return
     try {
-      await removeFromCache(file.id, extFromMime(file.fileType))
+      await removeFileFromCache(file)
       toast.show('Removed from cache')
       closeSheet()
     } catch (e) {
@@ -96,7 +95,7 @@ export function FileActionsSheet({
       await deleteFileRecord(file.id)
       await deleteAllIndexerObjects(file)
       await deleteLocalObjects(file.id)
-      await removeFromCache(file.id, extFromMime(file.fileType))
+      await removeFileFromCache(file)
       toast.show('Deleted file')
       closeSheet()
       navigation.goBack()
@@ -127,25 +126,29 @@ export function FileActionsSheet({
       >
         Export file
       </ActionSheetButton>
-      {!status.isDownloaded && !status.isDownloading && !status.fileIsGone && (
-        <ActionSheetButton
-          variant="primary"
-          icon={<ArrowDownToLineIcon size={18} />}
-          onPress={handlePressAndClose(handleDownload)}
-        >
-          Download file
-        </ActionSheetButton>
-      )}
-      {!status.isUploaded && !status.isUploading && !status.fileIsGone && (
-        <ActionSheetButton
-          variant="primary"
-          icon={<CloudUploadIcon size={18} />}
-          onPress={handlePressAndClose(handleReupload)}
-        >
-          Upload file
-        </ActionSheetButton>
-      )}
-      {status.cachedUri && status.isUploaded && (
+      {!status.data?.isDownloaded &&
+        !status.data?.isDownloading &&
+        !status.data?.fileIsGone && (
+          <ActionSheetButton
+            variant="primary"
+            icon={<ArrowDownToLineIcon size={18} />}
+            onPress={handlePressAndClose(handleDownload)}
+          >
+            Download file
+          </ActionSheetButton>
+        )}
+      {!status.data?.isUploaded &&
+        !status.data?.isUploading &&
+        !status.data?.fileIsGone && (
+          <ActionSheetButton
+            variant="primary"
+            icon={<CloudUploadIcon size={18} />}
+            onPress={handlePressAndClose(handleReupload)}
+          >
+            Upload file
+          </ActionSheetButton>
+        )}
+      {status.data?.fileUri && status.data?.isUploaded && (
         <ActionSheetButton
           variant="primary"
           icon={<EraserIcon size={18} />}
@@ -154,7 +157,7 @@ export function FileActionsSheet({
           Remove from device
         </ActionSheetButton>
       )}
-      {status.isUploaded && (
+      {status.data?.isUploaded && (
         <ActionSheetButton
           variant="primary"
           icon={<CloudOffIcon size={18} />}

@@ -22,17 +22,23 @@ export function FileIndicators({
   const status = useFileStatus(file)
   return (
     <>
-      {status.isUploading ? (
+      {status.data?.isUploading ? (
         <View style={styles.thumbProgressTrack}>
           <View
             style={[
               styles.thumbProgressFill,
-              { width: `${Math.round(status.uploadProgress * 100)}%` },
+              { width: `${Math.round(status.data?.uploadProgress * 100)}%` },
             ]}
           />
         </View>
       ) : null}
-      <StatusBadges status={status} size={size} interactive={interactive} />
+      {status.data ? (
+        <StatusBadges
+          status={status.data}
+          size={size}
+          interactive={interactive}
+        />
+      ) : null}
     </>
   )
 }

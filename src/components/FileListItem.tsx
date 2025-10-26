@@ -32,14 +32,18 @@ function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
             {file.fileName}
           </Text>
           <View style={styles.fileMetaData}>
-            <UploadStatusIcon
-              size={12}
-              status={status}
-              interactive={false}
-              color="gray"
-              variant="icon"
-            />
-            <DotIcon size={16} color="grey" />
+            {status.data ? (
+              <>
+                <UploadStatusIcon
+                  size={12}
+                  status={status.data}
+                  interactive={false}
+                  color="gray"
+                  variant="icon"
+                />
+                <DotIcon size={16} color="grey" />
+              </>
+            ) : null}
             <Text style={styles.fileText}>{humanSize(file.fileSize)}</Text>
             <DotIcon size={16} color="grey" />
             <Text style={styles.fileText}>{file.fileType}</Text>

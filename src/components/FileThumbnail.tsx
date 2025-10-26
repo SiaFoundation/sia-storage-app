@@ -28,19 +28,19 @@ export function FileThumbnail({
   const status = useFileStatus(file)
   useAutoDownload(file, thumbnailShouldAutoDownload)
 
-  if (status.isDownloading) {
+  if (status.data?.isDownloading) {
     return (
       <View style={styles.thumbnailImage}>
-        <CenteredProgress status={status} size={iconSize} />
+        <CenteredProgress status={status.data} size={iconSize} />
       </View>
     )
   }
 
   if (file.fileType?.includes('image')) {
-    if (status.cachedUri) {
+    if (status.data?.fileUri) {
       return (
         <Image
-          source={{ uri: status.cachedUri }}
+          source={{ uri: status.data?.fileUri }}
           style={styles.thumbnailImage}
         />
       )
@@ -52,10 +52,10 @@ export function FileThumbnail({
     )
   }
   if (file.fileType?.includes('pdf')) {
-    if (status.cachedUri) {
+    if (status.data?.fileUri) {
       return (
         <Image
-          source={{ uri: status.cachedUri }}
+          source={{ uri: status.data?.fileUri }}
           style={styles.thumbnailImage}
         />
       )

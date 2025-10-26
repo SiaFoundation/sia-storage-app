@@ -21,8 +21,10 @@ import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
 import { isoToEpochCodec } from '../encoding/date'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { upsertLocalObject } from '../stores/localObjects'
-import { removeFromCache } from '../stores/fileCache'
-import { extFromMime } from '../lib/fileTypes'
+import {
+  removeFileFromCache,
+  removeTmpFileFromCache,
+} from '../stores/fileCache'
 
 const batchSize = 100
 
@@ -120,12 +122,9 @@ async function handleDeleteEvent(key: string, counts: Counts): Promise<void> {
   if (existingFileRecord) {
     await Promise.all([
       // Remove the file from the cache.
-      removeFromCache(
-        existingFileRecord.id,
-        extFromMime(existingFileRecord.fileType)
-      ),
+      removeFileFromCache(existingFileRecord),
       // Remove any tmp file from the cache.
-      removeFromCache(existingFileRecord.id, '.tmp'),
+      removeTmpFileFromCache(existingFileRecord),
       // Remove the file from the database.
       deleteFileRecord(existingFileRecord.id),
     ])

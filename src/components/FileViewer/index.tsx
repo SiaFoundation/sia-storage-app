@@ -34,7 +34,7 @@ export function FileViewer({
 }) {
   const { fileType, fileName } = file
   const status = useFileStatus(file)
-  const { cachedUri, isDownloaded, isDownloading } = status
+  const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
 
@@ -76,12 +76,12 @@ export function FileViewer({
   }, [fullscreen, onDownloadPress, isDownloading, fileDownloadState?.progress])
 
   const MediaDisplayElement = useMemo(() => {
-    if (!isDownloaded || !cachedUri) return DownloadPanel
+    if (!isDownloaded || !fileUri) return DownloadPanel
 
     if (fileType?.includes('image')) {
       return (
         <ImageViewer
-          uri={cachedUri}
+          uri={fileUri}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
@@ -89,7 +89,7 @@ export function FileViewer({
     if (fileType?.includes('video')) {
       return (
         <VideoPlayer
-          source={cachedUri}
+          source={fileUri}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
@@ -97,14 +97,14 @@ export function FileViewer({
     if (fileType?.includes('audio')) {
       return (
         <AudioPlayer
-          source={cachedUri}
+          source={fileUri}
           filename={fileName}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
     }
     if (fileType?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
-      return <PDFViewer source={cachedUri} style={styles.media} />
+      return <PDFViewer source={fileUri} style={styles.media} />
     }
     if (
       fileType?.includes('application/json') ||
@@ -112,7 +112,7 @@ export function FileViewer({
     ) {
       return (
         <JSONViewer
-          uri={cachedUri}
+          uri={fileUri}
           fileSize={file.fileSize}
           style={styles.media}
         />
@@ -123,7 +123,7 @@ export function FileViewer({
       lowerCasedFileName.endsWith('.md') ||
       lowerCasedFileName.endsWith('.markdown')
     ) {
-      return <MarkdownViewer uri={cachedUri} style={styles.media} />
+      return <MarkdownViewer uri={fileUri} style={styles.media} />
     }
     if (
       fileType?.includes('text/plain') ||
@@ -131,7 +131,7 @@ export function FileViewer({
     ) {
       return (
         <TextViewer
-          uri={cachedUri}
+          uri={fileUri}
           fileSize={file.fileSize}
           style={styles.media}
         />
@@ -150,7 +150,7 @@ export function FileViewer({
       </View>
     )
   }, [
-    cachedUri,
+    fileUri,
     isDownloaded,
     fileType,
     lowerCasedFileName,

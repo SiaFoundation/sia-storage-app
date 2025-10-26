@@ -57,7 +57,9 @@ export function FileDetailsImport({
             }}
           />
         </View>
-        <FileMetaImport file={file} status={status} />
+        {status.data ? (
+          <FileMetaImport file={file} status={status.data} />
+        ) : null}
       </ScrollView>
     </View>
   )

@@ -61,11 +61,11 @@ export function FileMeta({
           )}
           {showAdvanced.data && (
             <LabeledValueRow
-              label="Cached URL"
-              value={status.cachedUri ?? 'Not available'}
+              label="File URI"
+              value={status.fileUri ?? 'Not available'}
               isMonospace
               ellipsizeMode="middle"
-              canCopy={!!status.cachedUri}
+              canCopy={!!status.fileUri}
               showDividerTop
             />
           )}

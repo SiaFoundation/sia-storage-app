@@ -49,18 +49,19 @@ export function useAutoDownload(
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const download = useDownload(file)
-  const status = useFileStatus(file ?? undefined)
+  const status = useFileStatus(file)
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return
     if (!file) return
-    if (!status.isUploaded) return
-    if (status.isDownloaded) return
-    if (status.isDownloading) return
+    if (!status.data) return
+    if (!status.data.isUploaded) return
+    if (status.data.isDownloaded) return
+    if (status.data.isDownloading) return
     if (file.localId) return
     if (!shouldDownload(file)) return
     download()
-  }, [isInitializing, isConnected, status.isUploaded])
+  }, [isInitializing, isConnected, status.data])
 }
 
 export function useAutoDownloadFromShareURL(
@@ -78,15 +79,16 @@ export function useAutoDownloadFromShareURL(
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const download = useDownloadFromShareURL()
-  const status = useFileStatus(file ?? undefined)
+  const status = useFileStatus(file)
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return
     if (!file) return
-    if (!status.isUploaded) return
-    if (status.isDownloaded) return
-    if (status.isDownloading) return
+    if (!status.data) return
+    if (!status.data.isUploaded) return
+    if (status.data.isDownloaded) return
+    if (status.data.isDownloading) return
     if (!shouldDownload(file)) return
     download(file.id, shareUrl)
-  }, [isInitializing, isConnected, status.isUploaded])
+  }, [isInitializing, isConnected, status.data])
 }
