@@ -53,7 +53,7 @@ export default function OnboardingScreen() {
         </View>
       ) : (
         <View style={styles.container}>
-          <Text style={styles.title}>Welcome to Sia Mobile!</Text>
+          <Text style={styles.title}>Welcome to Sia Storage!</Text>
           <Text style={styles.text}>
             To begin using the app, press below and authorize the indexer. A
             password should have been provided to you by the indexer admin.

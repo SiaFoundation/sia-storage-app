@@ -45,7 +45,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
         url: status.data.fileUri,
         type: file.fileType,
         filename: file.fileName ?? undefined,
-        subject: `Sia Mobile - ${file.fileType}`,
+        subject: `Sia Storage - ${file.fileType}`,
       })
     } catch (e) {
       if (typeof e === 'string' && !e.includes('User did not share')) {
