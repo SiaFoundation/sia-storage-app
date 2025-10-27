@@ -1,4 +1,4 @@
-# Sia Mobile
+# Sia Storage
 
 Mobile cloud storage app that stores files on the Sia host network.
 

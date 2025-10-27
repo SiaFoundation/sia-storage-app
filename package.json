@@ -1,5 +1,5 @@
 {
-  "name": "Sia Mobile",
+  "name": "Sia Storage",
   "main": "index.ts",
   "scripts": {
     "build": "expo prebuild",

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Sia Mobile",
-    "slug": "siamobile",
+    "name": "Sia Storage",
+    "slug": "siastorage",
     "scheme": "siamobile",
     "version": "1.0.0",
     "orientation": "portrait",
