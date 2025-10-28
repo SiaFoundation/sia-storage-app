@@ -1,4 +1,4 @@
-import { Sdk } from 'react-native-sia'
+import { Sdk, encodedSize } from 'react-native-sia'
 import { updateUploadProgress } from '../stores/uploads'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
@@ -25,6 +25,12 @@ export async function uploadToIndexer(params: {
     return
   }
 
+  const totalEncodedSize = encodedSize(
+    BigInt(data.byteLength),
+    UPLOAD_DATA_SHARDS,
+    UPLOAD_PARITY_SHARDS
+  )
+
   const upload = await sdk.upload({
     maxInflight: UPLOAD_MAX_INFLIGHT,
     dataShards: UPLOAD_DATA_SHARDS,
@@ -34,14 +40,14 @@ export async function uploadToIndexer(params: {
       fileSize: data.byteLength,
     }),
     progressCallback: {
-      progress: (uploaded, encodedSize) => {
+      progress: (uploaded) => {
         logger.log(
           `[uploadToIndexer] ${file.id} progress`,
           uploaded,
-          'encodedSize',
-          encodedSize
+          'totalEncodedSize',
+          totalEncodedSize
         )
-        const percent = (uploaded * 1000n) / encodedSize
+        const percent = (uploaded * 1000n) / totalEncodedSize
         logger.log(`[uploadToIndexer] ${file.id} percent ${percent}`)
         updateUploadProgress(file.id, Number(percent) / 1000)
       },
