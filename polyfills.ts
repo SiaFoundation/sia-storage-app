@@ -3,8 +3,8 @@
 // @ts-expect-error - @types/react-native doesn't cover this file
 import { polyfillGlobal } from 'react-native/Libraries/Utilities/PolyfillFunctions'
 
-// @ts-expect-error - @types/readable-stream doesn't have ReadableStream type
-import { ReadableStream } from 'readable-stream'
+// Use a WHATWG-compliant ReadableStream for File.stream().
+import { ReadableStream } from 'web-streams-polyfill'
 polyfillGlobal('ReadableStream', () => ReadableStream)
 
 import '@azure/core-asynciterator-polyfill'

@@ -1,4 +1,5 @@
 import { Sdk, encodedSize } from 'react-native-sia'
+import { File } from 'expo-file-system'
 import { updateUploadProgress } from '../stores/uploads'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
@@ -6,27 +7,30 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_DATA_SHARDS,
   UPLOAD_PARITY_SHARDS,
-  UPLOAD_CHUNK_SIZE,
 } from '../config'
 import { upsertLocalObject } from '../stores/localObjects'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { FileRecordRow } from '../stores/files'
 
-export async function uploadToIndexer(params: {
+export async function uploadToNetwork(params: {
   file: FileRecordRow
+  fileUri: string
   sdk: Sdk
   indexerURL: string
-  data: ArrayBuffer
   signal: AbortSignal
 }): Promise<void> {
-  const { sdk, indexerURL, data, file, signal } = params
+  const { sdk, indexerURL, fileUri, file, signal } = params
+  const fileSize = file.size
 
   if (signal.aborted) {
     return
   }
 
+  const f = new File(fileUri)
+  const stream = f.stream()
+
   const totalEncodedSize = encodedSize(
-    BigInt(data.byteLength),
+    BigInt(fileSize),
     UPLOAD_DATA_SHARDS,
     UPLOAD_PARITY_SHARDS
   )
@@ -35,10 +39,7 @@ export async function uploadToIndexer(params: {
     maxInflight: UPLOAD_MAX_INFLIGHT,
     dataShards: UPLOAD_DATA_SHARDS,
     parityShards: UPLOAD_PARITY_SHARDS,
-    metadata: encodeFileMetadata({
-      ...file,
-      size: data.byteLength,
-    }),
+    metadata: encodeFileMetadata(file),
     progressCallback: {
       progress: (uploaded) => {
         logger.log(
@@ -69,26 +70,25 @@ export async function uploadToIndexer(params: {
   }
 
   signal.addEventListener('abort', onAbort)
-
-  let offset = 0
-  const total = data.byteLength
-
-  while (offset < total) {
-    logger.log(
-      `[uploadToIndexer] ${file.id} uploading chunk ${offset} of ${total}...`
-    )
-    if (signal.aborted) {
-      break
+  const reader = stream.getReader()
+  let uploadedBytes = 0
+  // Read and upload from the file stream until exhausted or aborted.
+  while (true) {
+    if (signal.aborted) break
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) {
+      const arrayBuffer = value.buffer.slice(
+        value.byteOffset,
+        value.byteOffset + value.byteLength
+      )
+      await upload.write(arrayBuffer, { signal })
+      uploadedBytes += value.byteLength
+      logger.log(
+        `[uploadToIndexer] ${file.id} uploaded ${uploadedBytes}/${fileSize} bytes`
+      )
     }
-    const end = Math.min(offset + UPLOAD_CHUNK_SIZE, total)
-    const chunk = data.slice(offset, end)
-    await upload.write(chunk, { signal })
-    logger.log(
-      `[uploadToIndexer] ${file.id} uploaded chunk ${offset} of ${total}`
-    )
-    offset = end
   }
-
   logger.log(`[uploadToIndexer] ${file.id} finalizing upload...`)
   const pinnedObject = await upload.finalize({ signal })
 

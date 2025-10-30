@@ -1,6 +1,5 @@
-import { uploadToIndexer } from './uploadToIndexer'
+import { uploadToNetwork } from './uploadToNetwork'
 import { getFileUri, getLocalUri } from '../stores/fileCache'
-import * as FileSystem from 'expo-file-system'
 import { useCallback } from 'react'
 import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
@@ -33,12 +32,11 @@ export function useUploader() {
               task: async (signal) => {
                 const indexerURL = await getIndexerURL()
                 logger.log(`[uploader] uploading ${file.id} to hosts...`)
-                const fileBytes = await new FileSystem.File(fileUri).bytes()
-                await uploadToIndexer({
+                await uploadToNetwork({
                   file,
                   indexerURL,
                   sdk,
-                  data: fileBytes.buffer as ArrayBuffer,
+                  fileUri,
                   signal,
                 })
                 logger.log(`[uploader] upload complete ${file.id}`)
@@ -73,12 +71,11 @@ export function useReuploadFile() {
             throw new Error('File not available locally')
           }
           logger.log(`[uploader] uploading ${fileId}...`)
-          const fileBytes = await new FileSystem.File(fileUri).bytes()
-          await uploadToIndexer({
+          await uploadToNetwork({
             file,
             indexerURL,
             sdk,
-            data: fileBytes.buffer,
+            fileUri,
             signal,
           })
           logger.log(`[uploader] upload complete ${fileId}`)
@@ -99,12 +96,11 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
   await runUploadWithSlot({
     id: fileId,
     task: async (signal) => {
-      const fileBytes = await new FileSystem.File(fileUri).bytes()
-      await uploadToIndexer({
+      await uploadToNetwork({
         file,
         indexerURL,
         sdk,
-        data: fileBytes.buffer,
+        fileUri,
         signal,
       })
     },
