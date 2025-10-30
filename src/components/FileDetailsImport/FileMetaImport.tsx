@@ -33,6 +33,7 @@ export function FileMetaImport({
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
+          {showAdvanced.data && <LabeledValueRow label="ID" value={file.id} />}
           <LabeledValueRow label="Size" value={humanSize ?? '—'} />
           <LabeledValueRow
             label="Type"

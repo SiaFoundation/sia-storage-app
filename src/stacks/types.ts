@@ -20,7 +20,7 @@ export type AuthStackParamList = {
 }
 
 export type ImportStackParamList = {
-  ImportFile: { shareUrl?: string }
+  ImportFile: { shareUrl: string; id: string }
 }
 
 export type RootTabParamList = {
