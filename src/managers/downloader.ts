@@ -1,9 +1,5 @@
 import { useToast } from '../lib/toastContext'
-import {
-  copyFileToCache,
-  getOrCreateCacheFile,
-  getOrCreateCacheTmpFile,
-} from '../stores/fileCache'
+import { copyFileToCache, getOrCreateCacheTmpFile } from '../stores/fileCache'
 import {
   getDownloadState,
   updateDownloadProgress,
@@ -17,16 +13,10 @@ import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getAppKey } from '../lib/appKey'
-import { LocalObjectsMap } from '../encoding/localObject'
+import { FileLocalMetadata, FileRecord } from '../stores/files'
+import { File } from 'expo-file-system'
 
-export function useDownload(
-  file?: {
-    id: string
-    fileType: string | null
-    fileSize: number | null
-    objects: LocalObjectsMap | null
-  } | null
-) {
+export function useDownload(file?: FileRecord | null) {
   const toast = useToast()
   const sdk = useSdk()
   return useCallback(async () => {
@@ -58,10 +48,7 @@ export function useDownload(
           }
         )
         await streamToCache({
-          file: {
-            id: file.id,
-            fileType: null,
-          },
+          file,
           getNextChunk: () => downloader.readChunk({ signal }),
           totalSize: Array.isArray(sealedObject.slabs)
             ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
@@ -91,21 +78,22 @@ export function useDownloadFromShareURL() {
             offset: BigInt(0),
             length: undefined,
           })
+          const localMetadata: FileLocalMetadata = {
+            id,
+            localId: null,
+          }
+          const file: FileRecord = {
+            ...metadata,
+            ...localMetadata,
+            objects: {},
+            id,
+          }
           await streamToCache({
-            file: {
-              id,
-              fileType: null,
-            },
+            file,
             getNextChunk: () => downloader.readChunk({ signal }),
             totalSize: Number(sharedObject.size()),
             onAfterClose: async (targetFile) => {
-              await copyFileToCache(
-                {
-                  id,
-                  fileType: metadata.fileType,
-                },
-                targetFile
-              )
+              await copyFileToCache(file, targetFile)
             },
             signal,
           })
@@ -117,15 +105,10 @@ export function useDownloadFromShareURL() {
 }
 
 async function streamToCache(params: {
-  file: {
-    id: string
-    fileType: string | null
-  }
+  file: FileRecord
   totalSize?: number
   getNextChunk: () => Promise<ArrayBuffer | undefined>
-  onAfterClose?: (
-    targetFile: Awaited<ReturnType<typeof getOrCreateCacheFile>>
-  ) => Promise<void>
+  onAfterClose?: (targetFile: File) => Promise<void>
   signal: AbortSignal
 }): Promise<void> {
   const { file, totalSize, getNextChunk, onAfterClose, signal } = params

@@ -15,11 +15,14 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(
       `CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
-      fileName TEXT,
-      fileSize INTEGER,
+      localId TEXT UNIQUE,
+      addedAt INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      type TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
-      fileType TEXT
+      hash TEXT NOT NULL UNIQUE
     );`
     )
 
@@ -29,18 +32,18 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       `CREATE INDEX IF NOT EXISTS idx_files_createdAt_id ON files(createdAt, id);`
     )
 
-    // Index for category filters like WHERE fileType LIKE 'video/%'.
+    // Index for category filters like WHERE type LIKE 'video/%'.
     await db.execAsync(
-      `CREATE INDEX IF NOT EXISTS idx_files_fileType ON files(fileType);`
+      `CREATE INDEX IF NOT EXISTS idx_files_fileType ON files(type);`
     )
 
     // Index for searching and sorting on filename.
-    // 1) Case-insensitive search: accelerates prefix searches like WHERE fileName LIKE 'foo%' COLLATE NOCASE.
-    //    Note: It does not help contains searches like WHERE fileName LIKE '%foo%' due to leading wildcard.
-    // 2) Sorting: matches ORDER BY fileName COLLATE NOCASE, id for stable, index-only ordered scans.
+    // 1) Case-insensitive search: accelerates prefix searches like WHERE name LIKE 'foo%' COLLATE NOCASE.
+    //    Note: It does not help contains searches like WHERE name LIKE '%foo%' due to leading wildcard.
+    // 2) Sorting: matches ORDER BY name COLLATE NOCASE, id for stable, index-only ordered scans.
     //    Including id provides a deterministic tie-break and supports pagination without extra sort.
     await db.execAsync(
-      `CREATE INDEX IF NOT EXISTS idx_files_fileName_nocase_id ON files(fileName COLLATE NOCASE, id);`
+      `CREATE INDEX IF NOT EXISTS idx_files_fileName_nocase_id ON files(name COLLATE NOCASE, id);`
     )
 
     // Create the objects table.

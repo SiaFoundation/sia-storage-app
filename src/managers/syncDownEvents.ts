@@ -3,13 +3,17 @@ import { SYNC_EVENTS_INTERVAL } from '../config'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
 import {
-  createFileRecord,
   readFileRecord,
   readFileRecordByObjectId,
-  updateFileRecord,
   deleteFileRecord,
+  createFileRecordWithLocalObject,
+  updateFileRecordWithLocalObject,
+  readFileRecordByContentHash,
 } from '../stores/files'
-import { decodeFileMetadata } from '../encoding/fileMetadata'
+import {
+  decodeFileMetadata,
+  hasCompleteMetadata,
+} from '../encoding/fileMetadata'
 import {
   ObjectEvent,
   PinnedObjectInterface,
@@ -20,11 +24,11 @@ import { z } from 'zod'
 import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
 import { isoToEpochCodec } from '../encoding/date'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import { upsertLocalObject } from '../stores/localObjects'
 import {
   removeFileFromCache,
   removeTmpFileFromCache,
 } from '../stores/fileCache'
+import { uniqueId } from '../lib/uniqueId'
 
 const batchSize = 100
 
@@ -62,7 +66,7 @@ async function syncDownEvents(): Promise<void> {
     try {
       const cursor = await getSyncDownCursor()
       logger.log(
-        `[syncDownEvents] syncing from key=${cursor?.key} after=${cursor?.after}`
+        `[syncDownEvents] syncing from id=${cursor?.key} after=${cursor?.after}`
       )
 
       const events = await sdk.objects(cursor, batchSize)
@@ -102,13 +106,12 @@ async function syncDownEvents(): Promise<void> {
 }
 
 async function processBatch(events: ObjectEvent[], counts: Counts) {
-  for (const { object, deleted, key } of events) {
+  for (const { object, deleted, key: id } of events) {
     if (deleted) {
       try {
-        logger.log(`[syncDownEvents] deleting object key=${key}`)
-        await handleDeleteEvent(key, counts)
+        await handleDeleteEvent(id, counts)
       } catch (e) {
-        logger.log('[syncDownEvents] error handling deletion for key', key, e)
+        logger.log(`[syncDownEvents] error handling deletion for id=${id}`, e)
       }
       continue
     }
@@ -117,17 +120,17 @@ async function processBatch(events: ObjectEvent[], counts: Counts) {
     if (!object) continue
 
     try {
-      logger.log(`[syncDownEvents] updating object key=${key}`)
       await handleUpdateEvent(object, counts)
     } catch (e) {
-      logger.log('[syncDownEvents] error handling update for key', key, e)
+      logger.log(`[syncDownEvents] error handling update for id=${id}`, e)
     }
   }
 }
 
-async function handleDeleteEvent(key: string, counts: Counts): Promise<void> {
-  const existingFileRecord = await readFileRecordByObjectId(key)
+async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
+  const existingFileRecord = await readFileRecordByObjectId(id)
   if (existingFileRecord) {
+    logger.log(`[syncDownEvents] deleting file id=${existingFileRecord.id}`)
     await Promise.all([
       // Remove the file from the cache.
       removeFileFromCache(existingFileRecord),
@@ -137,6 +140,10 @@ async function handleDeleteEvent(key: string, counts: Counts): Promise<void> {
       deleteFileRecord(existingFileRecord.id),
     ])
     counts.deleted++
+  } else {
+    logger.log(
+      `[syncDownEvents] no file record found for object id=${id}, skipping delete`
+    )
   }
 }
 
@@ -146,41 +153,48 @@ async function handleUpdateEvent(
 ): Promise<void> {
   const indexerURL = await getIndexerURL()
   const metadata = decodeFileMetadata(object.metadata())
-  const fileId = metadata.id
-  if (!fileId) {
-    logger.log('[syncDownEvents] no file id in metadata, skipping update')
+  logger.log(`[syncDownEvents] updating file objectId=${object.id()}`)
+  if (!hasCompleteMetadata(metadata)) {
+    logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
     return
   }
-  const existingFileRecord = await readFileRecord(fileId)
-  if (existingFileRecord) {
+  const existingFile = await readFileRecordByContentHash(metadata.contentHash)
+
+  if (existingFile) {
     const localObject = await pinnedObjectToLocalObject(
-      existingFileRecord.id,
+      existingFile.id,
       indexerURL,
       object
     )
-    await updateFileRecord({
-      ...existingFileRecord,
-      ...decodeFileMetadata(object.metadata()),
-    })
-    await upsertLocalObject(localObject)
+    await updateFileRecordWithLocalObject(
+      {
+        ...existingFile,
+        ...decodeFileMetadata(object.metadata()),
+      },
+      localObject
+    )
+    // TODO: cancel any upload for this file.
     counts.existing++
   } else {
-    await createFileRecord({
-      id: fileId,
-      fileName: metadata.fileName,
-      fileSize: metadata.fileSize,
-      createdAt: object.createdAt().getTime(),
-      updatedAt: object.updatedAt().getTime(),
-      fileType: metadata.fileType,
-      localId: metadata.localId,
-      contentHash: metadata.contentHash,
-    })
+    const fileId = uniqueId()
     const localObject = await pinnedObjectToLocalObject(
       fileId,
       indexerURL,
       object
     )
-    await upsertLocalObject(localObject)
+    await createFileRecordWithLocalObject(
+      {
+        id: fileId,
+        fileName: metadata.fileName,
+        fileSize: metadata.fileSize,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+        fileType: metadata.fileType,
+        contentHash: metadata.contentHash,
+        localId: null,
+      },
+      localObject
+    )
     counts.added++
   }
 }

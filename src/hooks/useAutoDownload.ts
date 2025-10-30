@@ -3,16 +3,13 @@ import { useFileStatus } from '../lib/file'
 import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
 import { useDownload, useDownloadFromShareURL } from '../managers/downloader'
-import { LocalObjectsMap } from '../encoding/localObject'
+import { FileRecord } from '../stores/files'
 
 /**
  * When a file is rendered in a thumbnail view, auto download it if:
  * its an image or PDF, or its less than 4 MB.
  */
-export function thumbnailShouldAutoDownload(file: {
-  fileType: string | null
-  fileSize: number | null
-}): boolean {
+export function thumbnailShouldAutoDownload(file: FileRecord): boolean {
   const isImage = file.fileType?.startsWith('image') ?? false
   const isPdf = (file.fileType ?? '').includes('pdf')
   const sizeOk = (file.fileSize ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
@@ -23,10 +20,7 @@ export function thumbnailShouldAutoDownload(file: {
  * When a file is rendered in a detail view, auto download it if:
  * its an image, PDF, or its less than 10 MB.
  */
-export function detailsShouldAutoDownload(file: {
-  fileType: string | null
-  fileSize: number | null
-}): boolean {
+export function detailsShouldAutoDownload(file: FileRecord): boolean {
   const isImage = file.fileType?.startsWith('image') ?? false
   const isPdf = (file.fileType ?? '').includes('pdf')
   const sizeOk = (file.fileSize ?? Infinity) <= 10 * 1000 * 1000 // 10 MB
@@ -34,17 +28,8 @@ export function detailsShouldAutoDownload(file: {
 }
 
 export function useAutoDownload(
-  file: {
-    id: string
-    fileType: string | null
-    fileSize: number | null
-    localId: string | null
-    objects: LocalObjectsMap | null
-  },
-  shouldDownload: (file: {
-    fileType: string | null
-    fileSize: number | null
-  }) => boolean
+  file: FileRecord,
+  shouldDownload: (file: FileRecord) => boolean
 ): void {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
@@ -65,15 +50,8 @@ export function useAutoDownload(
 }
 
 export function useAutoDownloadFromShareURL(
-  file: {
-    id: string
-    fileType: string | null
-    fileSize: number | null
-  },
-  shouldDownload: (file: {
-    fileType: string | null
-    fileSize: number | null
-  }) => boolean,
+  file: FileRecord,
+  shouldDownload: (file: FileRecord) => boolean,
   shareUrl: string
 ): void {
   const isInitializing = useIsInitializing()

@@ -8,17 +8,13 @@ import {
   detailsShouldAutoDownload,
   useAutoDownloadFromShareURL,
 } from '../../hooks/useAutoDownload'
+import { FileRecord } from '../../stores/files'
 
 export function FileDetailsImport({
   file,
   shareUrl,
 }: {
-  file: {
-    id: string
-    fileName: string | null
-    fileSize: number | null
-    fileType: string | null
-  }
+  file: FileRecord
   shareUrl: string
 }) {
   const status = useFileStatus(file)
@@ -28,15 +24,6 @@ export function FileDetailsImport({
   // device. We might look at a settings toggle for this or otherwise more
   // smartly do this depending on whether a user is on wifi, etc.
   useAutoDownloadFromShareURL(file, detailsShouldAutoDownload, shareUrl)
-
-  const potentialFile = {
-    id: file.id,
-    fileName: file.fileName,
-    fileSize: file.fileSize,
-    fileType: file.fileType,
-    objects: null,
-    localId: null,
-  }
 
   return (
     <View style={styles.container}>
@@ -50,7 +37,7 @@ export function FileDetailsImport({
             it can be used wherever. */}
         <View style={{ height: 500 }}>
           <FileViewer
-            file={potentialFile}
+            file={file}
             fullscreen={false}
             customDownloader={() => {
               handleDownload(file.id, shareUrl)

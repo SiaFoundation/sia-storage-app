@@ -12,7 +12,7 @@ import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
 import { useCallback, useMemo } from 'react'
-import { LocalObjectsMap } from '../../encoding/localObject'
+import { FileRecord } from '../../stores/files'
 
 export function FileViewer({
   file,
@@ -20,14 +20,7 @@ export function FileViewer({
   fullscreen = true,
   customDownloader,
 }: {
-  file: {
-    id: string
-    fileName: string | null
-    fileType: string | null
-    fileSize: number | null
-    localId: string | null
-    objects: LocalObjectsMap | null
-  }
+  file: FileRecord
   header?: React.ReactNode
   fullscreen?: boolean
   customDownloader?: () => void

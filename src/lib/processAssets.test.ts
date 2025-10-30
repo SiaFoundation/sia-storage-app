@@ -2,9 +2,9 @@ import { processAssets } from './processAssets'
 import { calculateContentHash } from './contentHash'
 import {
   createFileRecord,
+  FileRecord,
   readAllFileRecords,
   readFileRecord,
-  type FileRecord,
 } from '../stores/files'
 import { initializeDB, resetDb } from '../db'
 import { copyFileToCache } from '../stores/fileCache'
@@ -20,21 +20,33 @@ jest.mock('./contentHash', () => ({
     async (uri: string) => `sha256|BYTESv1|hash:${uri}`
   ),
 }))
-jest.mock('../stores/fileCache', () => ({
-  getLocalUri: jest.fn(async (localId: string | null) =>
-    localId ? `file://${localId}` : null
-  ),
-  copyFileToCache: jest.fn(async () => 'file://cache/mock'),
-}))
+jest.mock('../stores/fileCache', () => {
+  const cachedIds = new Set<string>()
+  return {
+    getFileUri: jest.fn(async (file: FileRecord) => {
+      if (file.localId) return `file://${file.localId}`
+      return cachedIds.has(file.id) ? `file://${file.id}` : null
+    }),
+    copyFileToCache: jest.fn(async (file: { id: string }) => {
+      cachedIds.add(file.id)
+      return `file://${file.id}`
+    }),
+    clearCache: jest.fn(() => {
+      cachedIds.clear()
+    }),
+  }
+})
 jest.mock('expo-file-system', () => ({
-  File: jest.fn((uri: string) => ({ uri })),
+  File: jest.fn((uri: string) => ({
+    uri,
+    info: jest.fn(() => ({ exists: true, size: 333, uri })),
+  })),
 }))
 
-beforeAll(async () => {
+beforeEach(async () => {
   await initializeDB()
-})
-beforeEach(() => {
   jest.clearAllMocks()
+  require('../stores/fileCache').clearCache()
 })
 afterEach(async () => {
   await resetDb()
@@ -76,8 +88,8 @@ describe('processAssets', () => {
         updatedAt: 1,
         fileType: 'image/jpeg',
         localId: '1',
-        contentHash: null,
-      } as FileRecord,
+        contentHash: '',
+      },
       false
     )
 
@@ -115,9 +127,9 @@ describe('processAssets', () => {
         createdAt: 1,
         updatedAt: 1,
         fileType: 'image/jpeg',
-        localId: null,
         contentHash: 'sha256|BYTESv1|hash:file://2',
-      } as FileRecord,
+        localId: null,
+      },
       false
     )
 
@@ -170,5 +182,21 @@ describe('processAssets', () => {
     const rows = await readAllFileRecords({ order: 'ASC' })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ fileName: 'no-id.jpg', fileSize: 123 })
+  })
+
+  it('adds file size to new files', async () => {
+    const assets = [
+      {
+        id: undefined,
+        fileName: 'no-id.jpg',
+        fileSize: undefined,
+        sourceUri: 'file:///tmp/no-id.jpg',
+        fileType: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files } = await processAssets(assets)
+    expect(files).toHaveLength(1)
+    expect(files[0].fileSize).toBe(333)
   })
 })

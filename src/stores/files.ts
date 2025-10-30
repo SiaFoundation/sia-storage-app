@@ -1,5 +1,8 @@
-import { LocalObject, localObjectFromStorageRow } from '../encoding/localObject'
-import { readLocalObjectsForFile } from './localObjects'
+import {
+  type LocalObject,
+  localObjectFromStorageRow,
+} from '../encoding/localObject'
+import { upsertLocalObject, readLocalObjectsForFile } from './localObjects'
 import { logger } from '../lib/logger'
 import { db } from '../db'
 import useSWR from 'swr'
@@ -7,17 +10,25 @@ import { createGetterAndSWRHook } from '../lib/selectors'
 import { LocalObjectRow } from '../encoding/localObject'
 import { getIndexerURL } from './settings'
 import { librarySwr } from './library'
+import { removeEmptyValues } from '../lib/object'
 
-export type FileRecordRow = {
-  id: string
-  fileName: string | null
-  fileSize: number | null
+/** Fields that are stored in both the local database and the indexer metadata. */
+export type FileMetadata = {
+  fileName: string
   createdAt: number
   updatedAt: number
-  fileType: string | null
-  localId: string | null
-  contentHash: string | null
+  fileType: string
+  fileSize: number
+  contentHash: string
 }
+
+/** Fields that are stored only in the local database. */
+export type FileLocalMetadata = {
+  id: string
+  localId: string | null
+}
+
+export type FileRecordRow = FileMetadata & FileLocalMetadata
 
 export type FileRecord = FileRecordRow & {
   objects: Record<string, LocalObject>
@@ -230,6 +241,19 @@ export async function readFileRecordsByContentHashes(contentHashes: string[]) {
   })[]
 }
 
+export async function readFileRecordByContentHash(contentHash: string) {
+  const row = await db().getFirstAsync<FileRecordRow>(
+    'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE contentHash = ?',
+    contentHash
+  )
+  if (!row) {
+    logger.log('[db] file not found by contentHash', contentHash)
+    return null
+  }
+  const objects = await readLocalObjectsForFile(row.id)
+  return transformRow(row, objects)
+}
+
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     'SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash FROM files WHERE id = ?',
@@ -243,6 +267,7 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
   return transformRow(row, objects)
 }
 
+/** Updates a file record. Ignores any empty values. */
 export async function updateFileRecord(
   update: Partial<FileRecordRow> & { id: string },
   triggerUpdate: boolean = true
@@ -260,9 +285,10 @@ export async function updateFileRecord(
     'contentHash',
   ]
   for (const field of updatableFields) {
-    if (field in update) {
+    const nonEmptyUpdate = removeEmptyValues(update)
+    if (field in nonEmptyUpdate) {
       sets.push(`${field} = ?`)
-      params.push(update[field as keyof typeof update] ?? null)
+      params.push(nonEmptyUpdate[field as keyof typeof nonEmptyUpdate] ?? null)
     }
   }
 
@@ -290,13 +316,52 @@ export async function updateManyFileRecords(
   }
 }
 
-export async function deleteFileRecord(id: string): Promise<void> {
+export async function deleteFileRecord(
+  id: string,
+  triggerUpdate: boolean = true
+): Promise<void> {
   await db().runAsync('DELETE FROM files WHERE id = ?', id)
-  await librarySwr.triggerChange()
+  if (triggerUpdate) {
+    await librarySwr.triggerChange()
+  }
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
   await db().runAsync('DELETE FROM files')
+}
+
+/** Commit a file record and a local object in a single transaction. */
+export async function createFileRecordWithLocalObject(
+  fileRecord: Omit<FileRecord, 'objects'>,
+  localObject: LocalObject
+): Promise<void> {
+  try {
+    await db().withTransactionAsync(async () => {
+      await createFileRecord(fileRecord, false)
+      await upsertLocalObject(localObject, false)
+    })
+    await librarySwr.triggerChange()
+  } catch (e) {
+    logger.log('[createFileRecordWithLocalObject] error', e)
+    throw e
+  }
+}
+
+/** Update a file record and a local object in a single transaction. */
+export async function updateFileRecordWithLocalObject(
+  fileRecord: Omit<FileRecord, 'objects'>,
+  localObject: LocalObject
+): Promise<void> {
+  try {
+    await db().withTransactionAsync(async () => {
+      await updateFileRecord(fileRecord, false)
+      await upsertLocalObject(localObject, false)
+    })
+    await librarySwr.triggerChange()
+  } catch (e) {
+    logger.log('[updateFileRecordWithLocalObject] error', e)
+    throw e
+  }
 }
 
 export function transformRow(
