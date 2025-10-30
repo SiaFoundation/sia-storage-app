@@ -16,17 +16,19 @@ import { FileRecord } from '../../stores/files'
 
 export function FileViewer({
   file,
+  isShared,
   header,
   fullscreen = true,
   customDownloader,
 }: {
   file: FileRecord
+  isShared?: boolean
   header?: React.ReactNode
   fullscreen?: boolean
   customDownloader?: () => void
 }) {
   const { type, name } = file
-  const status = useFileStatus(file)
+  const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)

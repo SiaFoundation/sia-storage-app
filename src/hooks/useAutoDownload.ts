@@ -57,7 +57,7 @@ export function useAutoDownloadFromShareURL(
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const download = useDownloadFromShareURL()
-  const status = useFileStatus(file)
+  const status = useFileStatus(file, true)
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return
@@ -68,5 +68,5 @@ export function useAutoDownloadFromShareURL(
     if (status.data.isDownloading) return
     if (!shouldDownload(file)) return
     download(file.id, shareUrl)
-  }, [isInitializing, isConnected, status.data])
+  }, [file.id, shareUrl, isInitializing, isConnected, status.data])
 }

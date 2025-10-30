@@ -17,7 +17,7 @@ export function FileDetailsImport({
   file: FileRecord
   shareUrl: string
 }) {
-  const status = useFileStatus(file)
+  const status = useFileStatus(file, true)
   const handleDownload = useDownloadFromShareURL()
 
   // If the file is less than 4 MB, go ahead and download it to the user
@@ -38,6 +38,7 @@ export function FileDetailsImport({
         <View style={{ height: 500 }}>
           <FileViewer
             file={file}
+            isShared
             fullscreen={false}
             customDownloader={() => {
               handleDownload(file.id, shareUrl)

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect } from 'react'
 import { type UploadState } from '../stores/uploads'
 import { type DownloadState } from '../stores/downloads'
 import { FileRecord } from '../stores/files'
@@ -36,12 +36,14 @@ export type FileStatus = {
 
 function computeFileStatus({
   file,
+  isShared,
   uploadState,
   downloadState,
   fileUri,
   errorText,
 }: {
   file?: FileRecord
+  isShared?: boolean
   uploadState: UploadState | undefined
   downloadState: DownloadState | undefined
   fileUri: string | null
@@ -57,7 +59,7 @@ function computeFileStatus({
     isDownloading,
     isUploadQueued: uploadState?.status === 'queued',
     isDownloadQueued: downloadState?.status === 'queued',
-    isUploaded: hasSealedObject,
+    isUploaded: hasSealedObject || !!isShared,
     isDownloaded: !!fileUri,
     isErrored:
       uploadState?.status === 'error' || downloadState?.status === 'error',
@@ -70,25 +72,27 @@ function computeFileStatus({
 }
 
 export function useFileStatus(
-  file?: FileRecord
+  file?: FileRecord,
+  isShared?: boolean
 ): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFileUri(file)
-  return useSWR(
-    [file?.id, 'status'],
-    () =>
-      computeFileStatus({
-        file,
-        uploadState,
-        downloadState,
-        fileUri: fileUri.data ?? null,
-        errorText: uploadState?.error || downloadState?.error || null,
-      }),
-    {
-      refreshInterval: 5_000,
-    }
+  const response = useSWR(fileUri.isLoading ? null : [file?.id, 'status'], () =>
+    computeFileStatus({
+      file,
+      isShared,
+      uploadState,
+      downloadState,
+      fileUri: fileUri.data ?? null,
+      errorText: uploadState?.error || downloadState?.error || null,
+    })
   )
+  // Immediately update when there are changes to data or transfer progress.
+  useEffect(() => {
+    response.mutate()
+  }, [file, uploadState, downloadState, fileUri.data])
+  return response
 }
 
 export function getFileTypeName(

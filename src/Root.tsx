@@ -13,6 +13,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
+import { uniqueId } from './lib/uniqueId'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -37,7 +38,7 @@ export function Root() {
     if (shareUrl && navigationRef.isReady()) {
       navigationRef.navigate('ImportTab', {
         screen: 'ImportFile',
-        params: { shareUrl },
+        params: { shareUrl, id: uniqueId() },
       })
     }
   })
