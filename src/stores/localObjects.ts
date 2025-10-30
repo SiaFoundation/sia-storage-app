@@ -18,7 +18,10 @@ export async function readLocalObjectsForFile(
   return rows.map(localObjectFromStorageRow)
 }
 
-export async function upsertLocalObject(object: LocalObject): Promise<void> {
+export async function upsertLocalObject(
+  object: LocalObject,
+  triggerUpdate: boolean = true
+): Promise<void> {
   const e = localObjectToStorageRow(object)
   await db().runAsync(
     `INSERT OR REPLACE INTO objects (fileId, indexerURL, id, slabs, encryptedMasterKey, encryptedMetadata, signature, createdAt, updatedAt)
@@ -33,7 +36,9 @@ export async function upsertLocalObject(object: LocalObject): Promise<void> {
     e.createdAt,
     e.updatedAt
   )
-  await librarySwr.triggerChange()
+  if (triggerUpdate) {
+    await librarySwr.triggerChange()
+  }
 }
 
 export async function deleteLocalObjects(fileId: string): Promise<void> {

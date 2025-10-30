@@ -1,50 +1,46 @@
 import { logger } from '../lib/logger'
-import { FileRecordRow } from '../stores/files'
+import { FileMetadata } from '../stores/files'
 
-type LegacyFileMetadata = {
-  name?: string
-  size?: number
-}
-
-export type FileMetadata = FileRecordRow & LegacyFileMetadata
-
-export function transformFileMetadata(
-  metadata: FileRecordRow & LegacyFileMetadata
-): FileRecordRow {
-  const now = new Date().getTime()
+export function transformFileMetadata(metadata: FileMetadata): FileMetadata {
   return {
-    id: metadata.id,
-    fileName: metadata.fileName ?? metadata.name ?? '',
+    fileName: metadata.fileName,
     fileType: metadata.fileType,
-    fileSize: metadata.fileSize ?? metadata.size ?? 0,
-    updatedAt: metadata.updatedAt ?? now,
-    createdAt: metadata.createdAt ?? now,
-    localId: metadata.localId,
+    fileSize: metadata.fileSize,
+    updatedAt: metadata.updatedAt,
+    createdAt: metadata.createdAt,
     contentHash: metadata.contentHash,
   }
 }
 
-export function encodeFileMetadata(
-  params: Required<FileRecordRow> & LegacyFileMetadata
-): ArrayBuffer {
+export function encodeFileMetadata(params: FileMetadata): ArrayBuffer {
   return new TextEncoder().encode(JSON.stringify(transformFileMetadata(params)))
     .buffer as ArrayBuffer
 }
 
-export function decodeFileMetadata(buffer?: ArrayBuffer): FileRecordRow {
+export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
   try {
     return transformFileMetadata(JSON.parse(new TextDecoder().decode(buffer)))
   } catch (e) {
     logger.log('Error converting file metadata from buffer', e)
     return {
-      id: '',
       fileName: '',
       fileSize: 0,
       fileType: '',
       updatedAt: 0,
       createdAt: 0,
-      localId: null,
-      contentHash: null,
+      contentHash: '',
     }
   }
+}
+
+/// Checks for complete metadata, most importantly the presence of the contentHash.
+export function hasCompleteMetadata(metadata: FileMetadata): boolean {
+  return (
+    !!metadata.contentHash &&
+    !!metadata.fileType &&
+    !!metadata.fileName &&
+    !!metadata.fileSize &&
+    !!metadata.updatedAt &&
+    !!metadata.createdAt
+  )
 }

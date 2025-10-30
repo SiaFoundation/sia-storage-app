@@ -9,8 +9,7 @@ import {
 } from '../stores/files'
 import { mimeFromAssetUri } from './fileTypes'
 import { calculateContentHash } from './contentHash'
-import { copyFileToCache, getLocalUri } from '../stores/fileCache'
-import { removeEmptyValues } from './object'
+import { copyFileToCache, getFileUri } from '../stores/fileCache'
 import { File } from 'expo-file-system'
 
 type Asset = {
@@ -22,17 +21,33 @@ type Asset = {
   timestamp: string | undefined
 }
 
-type IncomingFileRecord = FileRecord & {
-  sourceUri?: string
-  status: 'foundByLocalId' | 'foundByContentHash' | 'new'
+type CandidateFileRecord = {
+  id: string
+  localId: string | null
+  fileName: string
+  createdAt: number
+  updatedAt: number
+  fileType: string
+  contentHash: string | null
+  fileSize: number | null
+  sourceUri: string | null
+  status: 'existing' | 'new' | 'incomplete'
+  statusDetails:
+    | 'foundByLocalId'
+    | 'foundByContentHash'
+    | 'noFileUri'
+    | 'noFileSize'
+    | 'noContentHash'
+    | null
 }
 
 /**
  * processAssets imports a list of assets from any source.
  * This function will:
  * - Check for duplicates by localId and contentHash.
- * - Create new file records for the assets.
  * - Copy files without a local ID to the app's file cache.
+ * - Add content hashes to files that are new.
+ * - Create new file records for the assets.
  * - Update the metadata of any existing files.
  * - Return the resulting files and warnings.
  * @param assets - The assets to process.
@@ -44,85 +59,41 @@ export async function processAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file'
 ) {
-  const incomingFiles: IncomingFileRecord[] = (assets ?? []).map((a) => {
-    if (a.id) {
-      return {
-        id: uniqueId(),
-        localId: a.id ?? null,
-        fileName: a.fileName ?? defaultFileName,
-        fileSize: a.fileSize ?? null,
-        createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
-        updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
-        fileType: a.fileType ?? mimeFromAssetUri(a),
-        objects: {},
-        contentHash: null,
-        status: 'new',
-      }
-    }
+  const candidateFiles: CandidateFileRecord[] = (assets ?? []).map((a) => ({
+    id: uniqueId(),
+    localId: a.id ?? null,
     // If the asset does not have an id, pass a sourceUri so we can copy the
     // file to the app's file cache.
-    return {
-      id: uniqueId(),
-      localId: null,
-      sourceUri: a.sourceUri,
-      fileName: a.fileName ?? defaultFileName,
-      fileSize: a.fileSize ?? null,
-      createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
-      updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
-      fileType: a.fileType ?? mimeFromAssetUri(a),
-      objects: {},
-      contentHash: null,
-      status: 'new',
-    }
-  })
+    sourceUri: a.id ? null : a.sourceUri ?? null,
+    fileName: a.fileName ?? defaultFileName,
+    fileSize: a.fileSize ?? null,
+    createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
+    updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
+    fileType: a.fileType ?? mimeFromAssetUri(a),
+    contentHash: null,
+    status: 'new',
+    statusDetails: null,
+  }))
 
   // Update the status of the files that are found by localId.
   // This is quick but will only detect duplicates from the same device.
   const existingLocalIds = await readFileRecordsByLocalIds(
-    incomingFiles.filter((a) => a.localId !== null).map((a) => a.localId!)
+    candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!)
   )
   for (const f of existingLocalIds) {
-    const validFile = incomingFiles.find((v) => v.localId === f.localId)
+    const validFile = candidateFiles.find((v) => v.localId === f.localId)
     if (validFile) {
       validFile.id = f.id
-      validFile.status = 'foundByLocalId'
+      validFile.status = 'existing'
+      validFile.statusDetails = 'foundByLocalId'
     }
   }
-
-  // Add content hashes to files that are still new.
-  await Promise.all(
-    incomingFiles
-      .filter((f) => f.status === 'new')
-      .map(async (f) => {
-        const fileUri = await getLocalUri(f.localId)
-        if (!fileUri) return f
-        const contentHash = await calculateContentHash(fileUri)
-        f.contentHash = contentHash
-      })
-  )
-
-  // Check for duplicates by content hash.
-  const existingContentHashes = await readFileRecordsByContentHashes(
-    incomingFiles
-      .filter((f) => f.status === 'new' && f.contentHash !== null)
-      .map((f) => f.contentHash!)
-  )
-
-  // Update the status of the files that are found by content hash.
-  for (const f of existingContentHashes) {
-    const validFile = incomingFiles.find((v) => v.contentHash === f.contentHash)
-    if (validFile) {
-      validFile.id = f.id
-      validFile.status = 'foundByContentHash'
-    }
-  }
-
-  const newFiles = incomingFiles.filter((f) => f.status === 'new')
-  const existingFiles = incomingFiles.filter((f) => f.status !== 'new')
 
   // Non media library assets do not have a localId so we need to copy the
   // file to the app cache.
-  const nonMediaAssets = newFiles.filter((a) => !!a.sourceUri)
+  const nonMediaAssets = candidateFiles.filter(
+    (f) => f.status === 'new' && !f.localId && !!f.sourceUri
+  )
   logger.log(
     `[processAssets] copying ${nonMediaAssets.length} non media assets to cache`
   )
@@ -130,17 +101,87 @@ export async function processAssets(
     await copyFileToCache(f, new File(f.sourceUri!))
   }
 
+  // Add content hash and file size to files that are still new.
+  await Promise.all(
+    candidateFiles
+      .filter((f) => f.status === 'new')
+      .map(async (f) => {
+        const fileUri = await getFileUri(f)
+        if (!fileUri) {
+          f.status = 'incomplete'
+          f.statusDetails = 'noFileUri'
+          return
+        }
+        if (!f.fileSize) {
+          // Try again to get the file size.
+          f.fileSize = getFileSize(fileUri)
+          if (!f.fileSize) {
+            f.status = 'incomplete'
+            f.statusDetails = 'noFileSize'
+            return
+          }
+        }
+        f.contentHash = await calculateContentHash(fileUri)
+        if (!f.contentHash) {
+          f.status = 'incomplete'
+          f.statusDetails = 'noContentHash'
+          return
+        }
+      })
+  )
+
+  // Check for duplicates by content hash.
+  const existingContentHashes = await readFileRecordsByContentHashes(
+    candidateFiles
+      .filter((f) => f.status === 'new' && f.contentHash !== null)
+      .map((f) => f.contentHash!)
+  )
+
+  // Update the status of the files that are found by content hash.
+  for (const f of existingContentHashes) {
+    const validFile = candidateFiles.find(
+      (v) => v.contentHash === f.contentHash
+    )
+    if (validFile) {
+      validFile.id = f.id
+      validFile.status = 'existing'
+      validFile.statusDetails = 'foundByContentHash'
+    }
+  }
+
+  // Assert that the files are new and have a content hash.
+  const newFiles: FileRecord[] = candidateFiles
+    .filter(
+      (f) => f.status === 'new' && f.contentHash !== null && f.fileSize !== null
+    )
+    .map((f) => ({
+      id: f.id,
+      localId: f.localId,
+      fileName: f.fileName,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
+      addedAt: Date.now(),
+      fileType: f.fileType,
+      fileSize: f.fileSize!,
+      contentHash: f.contentHash!,
+      objects: {},
+    }))
+  const incompleteFiles = candidateFiles.filter(
+    (f) => f.status === 'incomplete'
+  )
+  const existingFiles = candidateFiles.filter((f) => f.status === 'existing')
+
   const warnings: string[] = []
   const existingFilesByLocalIdCount = existingLocalIds.length
   const existingFilesByContentHashCount = existingContentHashes.length
   logger.log(
-    `[processAssets] result: picked=${incomingFiles.length}, new=${newFiles.length}, existingFilesByLocalId=${existingFilesByLocalIdCount}, existingFilesByContentHash=${existingFilesByContentHashCount}`
+    `[processAssets] result: picked=${candidateFiles.length}, new=${newFiles.length}, incomplete=${incompleteFiles.length}, existing=${existingFiles.length}`
   )
   if (existingFilesByLocalIdCount > 0 || existingFilesByContentHashCount > 0) {
     warnings.push('Some files were duplicates and were not included.')
   }
 
-  await updateManyFileRecords(existingFiles.map((f) => removeEmptyValues(f)))
+  await updateManyFileRecords(existingFiles)
   await createManyFileRecords(newFiles)
 
   return {
@@ -148,4 +189,9 @@ export async function processAssets(
     updatedFiles: existingFiles,
     warnings,
   }
+}
+
+function getFileSize(fileUri: string) {
+  const info = new File(fileUri).info()
+  return info.size ?? null
 }

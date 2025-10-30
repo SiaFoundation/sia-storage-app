@@ -10,15 +10,13 @@ import {
   PinnedObjectInterface,
   SealedObject,
 } from 'react-native-sia'
-import { LocalObject, LocalObjectsMap } from '../encoding/localObject'
+import { LocalObject } from '../encoding/localObject'
 import { getAppKey } from './appKey'
 import { SWRResponse } from 'swr'
 import useSWR from 'swr'
 
-export function fileHasASealedObject(file: {
-  objects?: LocalObjectsMap | null
-}): boolean {
-  return !!Object.keys(file.objects ?? {}).length
+export function fileHasASealedObject(file?: FileRecord): boolean {
+  return !!Object.keys(file?.objects ?? {}).length
 }
 
 export type FileStatus = {
@@ -43,9 +41,7 @@ function computeFileStatus({
   fileUri,
   errorText,
 }: {
-  file: {
-    objects?: LocalObjectsMap | null
-  }
+  file?: FileRecord
   uploadState: UploadState | undefined
   downloadState: DownloadState | undefined
   fileUri: string | null
@@ -73,12 +69,9 @@ function computeFileStatus({
   }
 }
 
-export function useFileStatus(file?: {
-  id: string
-  fileType: string | null
-  localId?: string | null
-  objects?: LocalObjectsMap | null
-}): SWRResponse<FileStatus, Error> {
+export function useFileStatus(
+  file?: FileRecord
+): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFileUri(file)
@@ -86,7 +79,7 @@ export function useFileStatus(file?: {
     [file?.id, 'status'],
     () =>
       computeFileStatus({
-        file: file ?? { objects: null },
+        file,
         uploadState,
         downloadState,
         fileUri: fileUri.data ?? null,

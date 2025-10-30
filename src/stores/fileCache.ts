@@ -9,6 +9,12 @@ const { getKey, triggerChange } = buildSWRHelpers('cache/files')
 
 const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 
+type FileCopyInfo = {
+  id: string
+  fileType: string
+  localId: string | null
+}
+
 export async function ensureCacheDir(): Promise<void> {
   const info = CACHE_DIR.info()
   if (!info.exists) {
@@ -16,21 +22,15 @@ export async function ensureCacheDir(): Promise<void> {
   }
 }
 
-async function getCacheFileForId(file: {
-  id: string
-  fileType: string | null
-}): Promise<File> {
+async function getCacheFileForId(file: FileCopyInfo): Promise<File> {
   return new File(CACHE_DIR, `${file.id}${extFromMime(file.fileType)}`)
 }
 
-async function getCacheTmpFileForId(file: { id: string }): Promise<File> {
+async function getCacheTmpFileForId(file: FileCopyInfo): Promise<File> {
   return new File(CACHE_DIR, `${file.id}.tmp`)
 }
 
-export async function getOrCreateCacheFile(file: {
-  id: string
-  fileType: string | null
-}): Promise<File> {
+async function getOrCreateCacheFile(file: FileCopyInfo): Promise<File> {
   const f = await getCacheFileForId(file)
   const info = f.info()
   if (!info.exists) {
@@ -39,9 +39,9 @@ export async function getOrCreateCacheFile(file: {
   return f
 }
 
-export async function getOrCreateCacheTmpFile(file: {
-  id: string
-}): Promise<File> {
+export async function getOrCreateCacheTmpFile(
+  file: FileCopyInfo
+): Promise<File> {
   const f = await getCacheTmpFileForId(file)
   const info = f.info()
   if (!info.exists) {
@@ -50,10 +50,7 @@ export async function getOrCreateCacheTmpFile(file: {
   return f
 }
 
-export async function removeFileFromCache(file: {
-  id: string
-  fileType: string | null
-}): Promise<void> {
+export async function removeFileFromCache(file: FileCopyInfo): Promise<void> {
   const f = await getCacheFileForId(file)
   const info = f.info()
   if (info.exists) {
@@ -62,9 +59,9 @@ export async function removeFileFromCache(file: {
   triggerChange(file.id)
 }
 
-export async function removeTmpFileFromCache(file: {
-  id: string
-}): Promise<void> {
+export async function removeTmpFileFromCache(
+  file: FileCopyInfo
+): Promise<void> {
   const f = await getCacheTmpFileForId(file)
   const info = f.info()
   if (info.exists) {
@@ -72,20 +69,14 @@ export async function removeTmpFileFromCache(file: {
   }
 }
 
-async function readCacheUri(file: {
-  id: string
-  fileType: string | null
-}): Promise<string | null> {
+async function readCacheUri(file: FileCopyInfo): Promise<string | null> {
   const f = await getCacheFileForId(file)
   const info = f.info()
   return info.exists ? f.uri : null
 }
 
 export async function copyFileToCache(
-  file: {
-    id: string
-    fileType: string | null
-  },
+  file: FileCopyInfo,
   sourceFile: File
 ): Promise<string> {
   logger.log('copyFileToCache', file.id, sourceFile.uri)
@@ -120,11 +111,7 @@ export async function getLocalUri(
  * Get the URI for a file record. If the file has a local ID, use the local
  * URI from the MediaLibrary. Otherwise, check the file cache.
  */
-export async function getFileUri(file: {
-  id: string
-  fileType: string | null
-  localId?: string | null
-}): Promise<string | null> {
+export async function getFileUri(file: FileCopyInfo): Promise<string | null> {
   if (file.localId) {
     const localUri = await getLocalUri(file.localId)
     if (localUri) {
@@ -138,12 +125,8 @@ export async function getFileUri(file: {
  * Get the URI for a file record. If the file has a local ID, use the local
  * URI from the MediaLibrary. Otherwise, check the file cache.
  */
-export function useFileUri(file?: {
-  id: string
-  fileType: string | null
-  localId?: string | null
-}) {
-  return useSWR([...getKey(file?.id), 'uri', file?.localId || ''], () => {
+export function useFileUri(file?: FileCopyInfo) {
+  return useSWR([...getKey(file?.id), 'uri', file?.localId ?? ''], () => {
     return file ? getFileUri(file) : null
   })
 }

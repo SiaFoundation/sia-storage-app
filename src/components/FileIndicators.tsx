@@ -2,14 +2,10 @@ import { View, StyleSheet } from 'react-native'
 import { whiteA, palette } from '../styles/colors'
 import { useFileStatus } from '../lib/file'
 import { StatusBadges } from './StatusBadges'
-import { LocalObject } from '../encoding/localObject'
+import { FileRecord } from '../stores/files'
 
 type Props = {
-  file: {
-    id: string
-    fileType: string | null
-    objects: Record<string, LocalObject> | null
-  }
+  file: FileRecord
   size?: number
   interactive?: boolean
 }
