@@ -43,11 +43,11 @@ async function readOrderedFileRecords(
   const whereParts: string[] = []
   const params: (string | number | null)[] = []
   if (hasCategories) {
-    whereParts.push(prefixes.map(() => 'fileType LIKE ?').join(' OR '))
+    whereParts.push(prefixes.map(() => 'type LIKE ?').join(' OR '))
     params.push(...prefixes.map((p) => `${p}%`))
   }
   if (hasQuery) {
-    whereParts.push('fileName LIKE ? COLLATE NOCASE ESCAPE "\\"')
+    whereParts.push('name LIKE ? COLLATE NOCASE ESCAPE "\\"')
     const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
     params.push(`%${escaped}%`)
   }
@@ -55,7 +55,7 @@ async function readOrderedFileRecords(
 
   const orderExpr =
     sortBy === 'NAME'
-      ? `(fileName IS NULL) ASC, fileName COLLATE NOCASE ${dir}, id ${dir}`
+      ? `(name IS NULL) ASC, name COLLATE NOCASE ${dir}, id ${dir}`
       : `createdAt ${dir}, id ${dir}`
 
   let pageClause = ''
@@ -64,7 +64,7 @@ async function readOrderedFileRecords(
   }
 
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, fileName, fileSize, createdAt, updatedAt, fileType, localId, contentHash
+    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,

@@ -6,30 +6,26 @@ import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 import { RowGroup } from '../Group'
 import { useShowAdvanced } from '../../stores/settings'
+import { FileRecord } from '../../stores/files'
 
 export function FileMetaImport({
   file,
   status,
 }: {
-  file: {
-    id: string
-    fileName: string | null
-    fileSize: number | null
-    fileType: string | null
-  }
+  file: FileRecord
   status: FileStatus
 }) {
   const humanSize = useMemo(() => {
-    if (file.fileSize == null) return null
+    if (file.size == null) return null
     const units = ['B', 'KB', 'MB', 'GB']
-    let s = file.fileSize
+    let s = file.size
     let u = 0
     while (s >= 1024 && u < units.length - 1) {
       s /= 1024
       u += 1
     }
     return `${s.toFixed(1)} ${units[u]}`
-  }, [file.fileSize])
+  }, [file.size])
 
   const showAdvanced = useShowAdvanced()
 
@@ -40,7 +36,7 @@ export function FileMetaImport({
           <LabeledValueRow label="Size" value={humanSize ?? '—'} />
           <LabeledValueRow
             label="Type"
-            value={file.fileType ?? '—'}
+            value={file.type ?? '—'}
             showDividerTop
           />
           {showAdvanced.data && status.fileUri && (

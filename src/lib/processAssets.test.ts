@@ -57,10 +57,10 @@ describe('processAssets', () => {
     const assets = [
       {
         id: '1',
-        fileName: 'a.jpg',
-        fileSize: 100,
+        name: 'a.jpg',
+        size: 100,
         sourceUri: 'file://1',
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
     ]
@@ -72,8 +72,8 @@ describe('processAssets', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       id: 'uid-1',
-      fileName: 'a.jpg',
-      fileSize: 100,
+      name: 'a.jpg',
+      size: 100,
     })
     expect(copyFileToCache).not.toHaveBeenCalled()
   })
@@ -82,13 +82,13 @@ describe('processAssets', () => {
     await createFileRecord(
       {
         id: 'existing-1',
-        fileName: 'old.jpg',
-        fileSize: 5,
+        name: 'old.jpg',
+        size: 5,
         createdAt: 1,
         updatedAt: 1,
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         localId: '1',
-        contentHash: '',
+        hash: '',
       },
       false
     )
@@ -96,10 +96,10 @@ describe('processAssets', () => {
     const assets = [
       {
         id: '1',
-        fileName: 'new.jpg',
-        fileSize: 200,
+        name: 'new.jpg',
+        size: 200,
         sourceUri: 'file://1',
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
     ]
@@ -112,22 +112,22 @@ describe('processAssets', () => {
     const updated = await readFileRecord('existing-1')
     expect(updated).toMatchObject({
       id: 'existing-1',
-      fileName: 'new.jpg',
-      fileSize: 200,
+      name: 'new.jpg',
+      size: 200,
     })
     expect(copyFileToCache).not.toHaveBeenCalled()
   })
 
-  it('updates existing by contentHash and does not create new records', async () => {
+  it('updates existing by hash and does not create new records', async () => {
     await createFileRecord(
       {
         id: 'existing-hash',
-        fileName: 'old-h.jpg',
-        fileSize: 10,
+        name: 'old-h.jpg',
+        size: 10,
         createdAt: 1,
         updatedAt: 1,
-        fileType: 'image/jpeg',
-        contentHash: 'sha256|BYTESv1|hash:file://2',
+        type: 'image/jpeg',
+        hash: 'sha256|BYTESv1|hash:file://2',
         localId: null,
       },
       false
@@ -136,10 +136,10 @@ describe('processAssets', () => {
     const assets = [
       {
         id: '2',
-        fileName: 'new-h.jpg',
-        fileSize: 300,
+        name: 'new-h.jpg',
+        size: 300,
         sourceUri: 'file://2',
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
     ]
@@ -150,8 +150,8 @@ describe('processAssets', () => {
     const updated = await readFileRecord('existing-hash')
     expect(updated).toMatchObject({
       id: 'existing-hash',
-      fileName: 'new-h.jpg',
-      fileSize: 300,
+      name: 'new-h.jpg',
+      size: 300,
     })
     expect(copyFileToCache).not.toHaveBeenCalled()
   })
@@ -162,10 +162,10 @@ describe('processAssets', () => {
     const assets = [
       {
         id: undefined,
-        fileName: 'no-id.jpg',
-        fileSize: 123,
+        name: 'no-id.jpg',
+        size: 123,
         sourceUri: 'file:///tmp/no-id.jpg',
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
     ]
@@ -175,28 +175,28 @@ describe('processAssets', () => {
     expect(files).toHaveLength(1)
     expect(copyFileToCache).toHaveBeenCalledTimes(1)
     const call = copyFileToCacheMock.mock.calls[0]
-    expect(call[0]).toMatchObject({ id: files[0].id, fileType: 'image/jpeg' })
+    expect(call[0]).toMatchObject({ id: files[0].id, type: 'image/jpeg' })
     expect(call[1]).toBeDefined()
     expect(call[1].uri).toBe('file:///tmp/no-id.jpg')
 
     const rows = await readAllFileRecords({ order: 'ASC' })
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ fileName: 'no-id.jpg', fileSize: 123 })
+    expect(rows[0]).toMatchObject({ name: 'no-id.jpg', size: 123 })
   })
 
   it('adds file size to new files', async () => {
     const assets = [
       {
         id: undefined,
-        fileName: 'no-id.jpg',
-        fileSize: undefined,
+        name: 'no-id.jpg',
+        size: undefined,
         sourceUri: 'file:///tmp/no-id.jpg',
-        fileType: 'image/jpeg',
+        type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
     ]
     const { files } = await processAssets(assets)
     expect(files).toHaveLength(1)
-    expect(files[0].fileSize).toBe(333)
+    expect(files[0].size).toBe(333)
   })
 })

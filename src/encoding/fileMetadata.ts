@@ -3,12 +3,12 @@ import { FileMetadata } from '../stores/files'
 
 export function transformFileMetadata(metadata: FileMetadata): FileMetadata {
   return {
-    fileName: metadata.fileName,
-    fileType: metadata.fileType,
-    fileSize: metadata.fileSize,
+    name: metadata.name,
+    type: metadata.type,
+    size: metadata.size,
     updatedAt: metadata.updatedAt,
     createdAt: metadata.createdAt,
-    contentHash: metadata.contentHash,
+    hash: metadata.hash,
   }
 }
 
@@ -23,23 +23,23 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
   } catch (e) {
     logger.log('Error converting file metadata from buffer', e)
     return {
-      fileName: '',
-      fileSize: 0,
-      fileType: '',
+      name: '',
+      size: 0,
+      type: '',
       updatedAt: 0,
       createdAt: 0,
-      contentHash: '',
+      hash: '',
     }
   }
 }
 
-/// Checks for complete metadata, most importantly the presence of the contentHash.
+/// Checks for complete metadata, most importantly the presence of the hash.
 export function hasCompleteMetadata(metadata: FileMetadata): boolean {
   return (
-    !!metadata.contentHash &&
-    !!metadata.fileType &&
-    !!metadata.fileName &&
-    !!metadata.fileSize &&
+    !!metadata.hash &&
+    !!metadata.type &&
+    !!metadata.name &&
+    !!metadata.size &&
     !!metadata.updatedAt &&
     !!metadata.createdAt
   )

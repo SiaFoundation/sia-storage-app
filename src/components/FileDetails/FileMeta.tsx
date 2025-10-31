@@ -22,13 +22,13 @@ export function FileMeta({
 }) {
   const showAdvanced = useShowAdvanced()
   const fileSize = useMemo(() => {
-    return humanSize(file.fileSize)
-  }, [file.fileSize])
+    return humanSize(file.size)
+  }, [file.size])
 
   const fileNameInputProps = useInputValue({
-    value: file.fileName ?? '',
+    value: file.name ?? '',
     save: (value) => {
-      updateFileRecord({ ...file, fileName: value })
+      updateFileRecord({ ...file, name: value })
     },
   })
   const pinnedObjects = usePinnedObjects(file)
@@ -62,10 +62,10 @@ export function FileMeta({
           {showAdvanced.data && (
             <LabeledValueRow
               label="Content Hash"
-              value={file.contentHash ?? '-'}
+              value={file.hash ?? '-'}
               isMonospace
               ellipsizeMode="middle"
-              canCopy={!!file.contentHash}
+              canCopy={!!file.hash}
               showDividerTop
             />
           )}
@@ -96,7 +96,7 @@ export function FileMeta({
           />
           <LabeledValueRow
             label="Type"
-            value={file.fileType ?? '—'}
+            value={file.type ?? '—'}
             showDividerTop
           />
         </InfoCard>

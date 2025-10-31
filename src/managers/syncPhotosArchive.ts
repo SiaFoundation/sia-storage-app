@@ -39,9 +39,9 @@ export async function workBackward(): Promise<void> {
       page.assets.map((asset) => ({
         id: asset.id,
         sourceUri: undefined,
-        fileName: asset.filename,
-        fileType: undefined,
-        fileSize: undefined,
+        name: asset.filename,
+        type: undefined,
+        size: undefined,
         timestamp: new Date(asset.creationTime).toISOString(),
       }))
     )

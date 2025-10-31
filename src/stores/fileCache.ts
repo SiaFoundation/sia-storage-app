@@ -11,7 +11,7 @@ const CACHE_DIR = new Directory(Paths.cache, 'files-cache')
 
 type FileCopyInfo = {
   id: string
-  fileType: string
+  type: string
   localId: string | null
 }
 
@@ -23,7 +23,7 @@ export async function ensureCacheDir(): Promise<void> {
 }
 
 async function getCacheFileForId(file: FileCopyInfo): Promise<File> {
-  return new File(CACHE_DIR, `${file.id}${extFromMime(file.fileType)}`)
+  return new File(CACHE_DIR, `${file.id}${extFromMime(file.type)}`)
 }
 
 async function getCacheTmpFileForId(file: FileCopyInfo): Promise<File> {

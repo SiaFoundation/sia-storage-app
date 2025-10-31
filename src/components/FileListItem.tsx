@@ -29,7 +29,7 @@ function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
       <View style={styles.infoContainer}>
         <View style={styles.fileDetails}>
           <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="tail">
-            {file.fileName}
+            {file.name}
           </Text>
           <View style={styles.fileMetaData}>
             {status.data ? (
@@ -44,9 +44,9 @@ function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
                 <DotIcon size={16} color="grey" />
               </>
             ) : null}
-            <Text style={styles.fileText}>{humanSize(file.fileSize)}</Text>
+            <Text style={styles.fileText}>{humanSize(file.size)}</Text>
             <DotIcon size={16} color="grey" />
-            <Text style={styles.fileText}>{file.fileType}</Text>
+            <Text style={styles.fileText}>{file.type}</Text>
           </View>
         </View>
       </View>

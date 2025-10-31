@@ -94,13 +94,13 @@ export function useFileStatus(
 export function getFileTypeName(
   file: FileRecord
 ): 'photo' | 'video' | 'audio' | 'document' | 'other' {
-  return file.fileType?.startsWith('image')
+  return file.type?.startsWith('image')
     ? 'photo'
-    : file.fileType?.startsWith('video')
+    : file.type?.startsWith('video')
     ? 'video'
-    : file.fileType?.startsWith('audio')
+    : file.type?.startsWith('audio')
     ? 'audio'
-    : file.fileType?.startsWith('application')
+    : file.type?.startsWith('application')
     ? 'document'
     : 'other'
 }

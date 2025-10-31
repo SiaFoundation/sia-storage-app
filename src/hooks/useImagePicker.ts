@@ -37,9 +37,9 @@ export function useImagePicker() {
       const { files, warnings } = await processAssets(
         result.assets?.map((a) => ({
           id: a.id,
-          fileName: a.fileName,
-          fileSize: a.fileSize,
-          fileType: a.type,
+          name: a.fileName,
+          size: a.fileSize,
+          type: a.type,
           timestamp: a.timestamp,
           sourceUri: a.uri,
         }))
