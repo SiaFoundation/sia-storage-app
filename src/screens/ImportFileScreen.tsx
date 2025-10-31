@@ -32,15 +32,16 @@ import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
 import { colors } from '../styles/colors'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { upsertLocalObject } from '../stores/localObjects'
+import { convertSiaShareUrlToHttp } from '../lib/shareUrl'
 
 type Props = NativeStackScreenProps<ImportStackParamList, 'ImportFile'>
 
 export function ImportFileScreen({ route }: Props) {
   const navigation = useNavigation<NavigationProp<RootTabParamList>>()
   const toast = useToast()
-  const shareUrl = route.params?.shareUrl
+  const shareUrl = convertSiaShareUrlToHttp(route.params?.shareUrl)
   const sdk = useSdk()
-  const id = useMemo(() => uniqueId(), [])
+  const id = useMemo(() => uniqueId(), [shareUrl])
   const sharedObject = useSWR(
     sdk ? ['sharedObject', shareUrl] : null,
     async () => {

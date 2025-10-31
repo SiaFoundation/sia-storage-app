@@ -6,6 +6,7 @@ import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
 import { useFileDetails } from '../stores/files'
 import Share from 'react-native-share'
 import { logger } from '../lib/logger'
+import { generateSiaShareUrl } from '../lib/shareUrl'
 
 export function useShareAction({ fileId }: { fileId: string }) {
   const toast = useToast()
@@ -22,8 +23,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
     const pinnedObject = await getPinnedObject(sealedObject)
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    const shareUrl = sdk.shareObject(pinnedObject, expiresAt)
-    return `siamobile://new-file?shareUrl=${encodeURIComponent(shareUrl)}`
+    return generateSiaShareUrl(sdk, pinnedObject, expiresAt)
   }, [file, sdk])
 
   const handleShareURL = useCallback(async () => {

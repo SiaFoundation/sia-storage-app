@@ -4,8 +4,8 @@ import { palette } from '../styles/colors'
 
 export default async function authApp(url: string) {
   if (await InAppBrowser.isAvailable()) {
-    const sub = Linking.addEventListener('url', ({ url: recievedURL }) => {
-      if (recievedURL.includes('siamobile://')) {
+    const sub = Linking.addEventListener('url', ({ url: receivedURL }) => {
+      if (receivedURL.includes('sia://')) {
         InAppBrowser.close()
         sub.remove()
       }

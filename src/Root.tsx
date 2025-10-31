@@ -27,22 +27,18 @@ export function Root() {
     }
   }, [])
 
-  useLinkedURL((incomingUrl) => {
+  useLinkedURL((shareUrl) => {
     try {
-      const url = new URL(incomingUrl)
-      const path = url.pathname.replace(/^\//, '')
-      const host = url.host
-      if (host === 'new-file' || path === 'new-file') {
-        const shareUrl = url.searchParams.get('shareUrl') ?? undefined
-        if (shareUrl && navigationRef.isReady()) {
-          navigationRef.navigate('ImportTab', {
-            screen: 'ImportFile',
-            params: { shareUrl },
-          })
-        }
-      }
-    } catch (_) {
+      new URL(shareUrl)
+    } catch (error) {
       // Ignore invalid URLs.
+      return
+    }
+    if (shareUrl && navigationRef.isReady()) {
+      navigationRef.navigate('ImportTab', {
+        screen: 'ImportFile',
+        params: { shareUrl },
+      })
     }
   })
 
