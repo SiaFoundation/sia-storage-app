@@ -1,41 +1,40 @@
 import * as ImagePicker from 'react-native-image-picker'
 
-export type Mime =
+export const MimeTypes = [
   // video
-  | 'video/quicktime'
-  | 'video/mp4'
-  | 'video/x-m4v'
+  'video/quicktime',
+  'video/mp4',
+  'video/x-m4v',
   // image
-  | 'image/heic'
-  | 'image/heif'
-  | 'image/jpeg'
-  | 'image/png'
-  | 'image/webp'
-  | 'image/gif'
+  'image/heic',
+  'image/heif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
   // audio
-  | 'audio/mpeg'
-  | 'audio/mp4'
-  | 'audio/x-m4a'
-  | 'audio/aac'
-  | 'audio/wav'
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/wav',
   // text/docs
-  | 'text/plain'
-  | 'text/markdown'
-  | 'text/x-markdown'
-  | 'application/json'
-  | 'application/pdf'
+  'text/plain',
+  'text/markdown',
+  'text/x-markdown',
+  'application/json',
+  'application/pdf',
   // other
-  | 'application/octet-stream'
+  'application/octet-stream',
+] as const
 
-export function mimeFromAssetUri(a: ImagePicker.Asset): Mime {
-  const name = a.fileName ?? ''
-  return mimeFromFileName(name)
-}
+export type MimeType = (typeof MimeTypes)[number]
 
-export function mimeFromFileName(name: string): Mime {
-  const ext = name.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
-  if (!ext) return 'application/octet-stream'
-  const map: Record<string, Mime> = {
+function getMimeTypeFromPath(path: string | undefined): MimeType | null {
+  if (!path) return null
+  const ext = path.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
+  if (!ext) return null
+  const map: Record<string, MimeType> = {
     // video
     mov: 'video/quicktime',
     mp4: 'video/mp4',
@@ -60,7 +59,28 @@ export function mimeFromFileName(name: string): Mime {
     json: 'application/json',
     pdf: 'application/pdf',
   }
-  return map[ext] ?? 'application/octet-stream'
+  return map[ext] ?? null
+}
+
+/** Detect the mimeType from available fields. */
+export function getMimeType(asset: {
+  type?: string
+  name?: string
+  uri?: string
+}): MimeType {
+  const typeFromType = isMimeType(asset.type) ? asset.type : null
+  if (typeFromType) {
+    return typeFromType
+  }
+  const typeFromUri = getMimeTypeFromPath(asset.uri)
+  if (typeFromUri) {
+    return typeFromUri
+  }
+  const typeFromName = getMimeTypeFromPath(asset.name)
+  if (typeFromName) {
+    return typeFromName
+  }
+  return 'application/octet-stream'
 }
 
 /**
@@ -117,4 +137,8 @@ export function extFromMime(mime?: string | null): Ext {
   // other
   if (mime === 'application/octet-stream') return '.bin'
   return '.bin'
+}
+
+export function isMimeType(type?: string): type is MimeType {
+  return MimeTypes.includes(type as MimeType)
 }

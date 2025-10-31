@@ -89,6 +89,7 @@ describe('processAssets', () => {
         type: 'image/jpeg',
         localId: '1',
         hash: '',
+        addedAt: 1,
       },
       false
     )
@@ -129,6 +130,7 @@ describe('processAssets', () => {
         type: 'image/jpeg',
         hash: 'sha256|BYTESv1|hash:file://2',
         localId: null,
+        addedAt: 1,
       },
       false
     )
