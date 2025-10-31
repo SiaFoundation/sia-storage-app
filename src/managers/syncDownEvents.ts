@@ -29,6 +29,7 @@ import {
   removeTmpFileFromCache,
 } from '../stores/fileCache'
 import { uniqueId } from '../lib/uniqueId'
+import { cancelUpload } from '../stores/uploads'
 
 const batchSize = 100
 
@@ -173,7 +174,8 @@ async function handleUpdateEvent(
       },
       localObject
     )
-    // TODO: cancel any upload for this file.
+    // Cancel any inflight upload for this file since we now have a pinned object.
+    cancelUpload(existingFile.id)
     counts.existing++
   } else {
     const fileId = uniqueId()

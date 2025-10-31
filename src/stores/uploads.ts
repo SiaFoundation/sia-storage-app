@@ -74,6 +74,15 @@ export function cancelAllUploads() {
   useUploadsStore.setState({ uploads: {} })
 }
 
+export function cancelUpload(id: string) {
+  const current = getState().uploads
+  const rec = current[id]
+  if (!rec) return
+  logger.log('aborting upload', id)
+  rec.controller?.abort()
+  removeUpload(id)
+}
+
 export type UploadCounts = {
   total: number
   totalActive: number
