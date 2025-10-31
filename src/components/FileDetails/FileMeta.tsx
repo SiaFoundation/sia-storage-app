@@ -61,6 +61,16 @@ export function FileMeta({
           )}
           {showAdvanced.data && (
             <LabeledValueRow
+              label="Content Hash"
+              value={file.contentHash ?? '-'}
+              isMonospace
+              ellipsizeMode="middle"
+              canCopy={!!file.contentHash}
+              showDividerTop
+            />
+          )}
+          {showAdvanced.data && (
+            <LabeledValueRow
               label="File URI"
               value={status.fileUri ?? 'Not available'}
               isMonospace
@@ -77,6 +87,11 @@ export function FileMeta({
           <LabeledValueRow
             label="Created"
             value={new Date(file.createdAt).toLocaleString()}
+            showDividerTop
+          />
+          <LabeledValueRow
+            label="Updated"
+            value={new Date(file.updatedAt).toLocaleString()}
             showDividerTop
           />
           <LabeledValueRow

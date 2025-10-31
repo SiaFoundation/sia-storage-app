@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sia Storage",
     "slug": "siastorage",
-    "scheme": "siamobile",
+    "scheme": "sia",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

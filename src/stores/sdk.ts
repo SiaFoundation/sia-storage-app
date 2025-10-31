@@ -102,7 +102,7 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
         name: 'Test',
         description: 'Test',
         serviceUrl: 'https://sia.storage',
-        callbackUrl: 'siamobile://callback',
+        callbackUrl: 'sia://callback',
         logoUrl: 'https://sia.storage/logo.png',
       })
 
