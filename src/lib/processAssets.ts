@@ -7,7 +7,7 @@ import {
   readFileRecordsByLocalIds,
   updateManyFileRecords,
 } from '../stores/files'
-import { mimeFromAssetUri } from './fileTypes'
+import { MimeType, getMimeType } from './fileTypes'
 import { calculateContentHash } from './contentHash'
 import { copyFileToCache, getFileUri } from '../stores/fileCache'
 import { File } from 'expo-file-system'
@@ -27,7 +27,7 @@ type CandidateFileRecord = {
   name: string
   createdAt: number
   updatedAt: number
-  type: string
+  type: MimeType
   hash: string | null
   size: number | null
   sourceUri: string | null
@@ -69,7 +69,11 @@ export async function processAssets(
     size: a.size ?? null,
     createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
     updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
-    type: a.type ?? mimeFromAssetUri(a),
+    type: getMimeType({
+      type: a.type,
+      name: a.name,
+      uri: a.sourceUri,
+    }),
     hash: null,
     status: 'new',
     statusDetails: null,

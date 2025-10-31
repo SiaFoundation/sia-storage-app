@@ -39,7 +39,7 @@ async function workForward(): Promise<void> {
     const { files } = await processAssets(
       page.assets.map((asset) => ({
         id: asset.id,
-        sourceUri: undefined,
+        sourceUri: asset.uri,
         name: asset.filename,
         type: undefined,
         size: undefined,
