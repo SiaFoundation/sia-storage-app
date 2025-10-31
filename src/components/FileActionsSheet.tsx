@@ -61,7 +61,7 @@ export function FileActionsSheet({
       toast.show('Failed to remove cache')
       closeSheet()
     }
-  }, [file?.id, file?.fileType, toast])
+  }, [file?.id, file?.type, toast])
 
   const reupload = useReuploadFile()
   const handleReupload = useCallback(async () => {

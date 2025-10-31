@@ -62,10 +62,10 @@ export function ImportFileScreen({ route }: Props) {
         const metadata = decodeFileMetadata(sharedObject.data.metadata())
         const file: FileMetadata = transformFileMetadata({
           id,
-          fileSize: Number(sharedObject.data.size()),
-          fileType: metadata.fileType,
-          fileName: metadata.fileName,
-          contentHash: metadata.contentHash,
+          size: Number(sharedObject.data.size()),
+          type: metadata.type,
+          name: metadata.name,
+          hash: metadata.hash,
           localId: metadata.localId,
           createdAt: metadata.createdAt,
           updatedAt: metadata.updatedAt,

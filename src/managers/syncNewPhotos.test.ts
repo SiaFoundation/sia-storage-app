@@ -98,14 +98,14 @@ describe('syncNewPhotos', () => {
     expect(getTime(opts3?.createdAfter)).toBe(2500)
     expect(processAssetsMock).toHaveBeenCalledTimes(3)
     expect(processAssetsMock).toHaveBeenNthCalledWith(1, [
-      expect.objectContaining({ id: 'a1', fileName: '1.jpg' }),
-      expect.objectContaining({ id: 'a2', fileName: '2.jpg' }),
+      expect.objectContaining({ id: 'a1', name: '1.jpg' }),
+      expect.objectContaining({ id: 'a2', name: '2.jpg' }),
     ])
     expect(processAssetsMock).toHaveBeenNthCalledWith(2, [
-      expect.objectContaining({ id: 'a3', fileName: '3.jpg' }),
+      expect.objectContaining({ id: 'a3', name: '3.jpg' }),
     ])
     expect(processAssetsMock).toHaveBeenNthCalledWith(3, [
-      expect.objectContaining({ id: 'a4', fileName: '4.jpg' }),
+      expect.objectContaining({ id: 'a4', name: '4.jpg' }),
     ])
   })
 })

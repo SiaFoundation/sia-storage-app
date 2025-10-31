@@ -15,21 +15,21 @@ import { File } from 'expo-file-system'
 type Asset = {
   id: string | undefined
   sourceUri: string | undefined
-  fileSize: number | undefined
-  fileType: string | undefined
-  fileName: string | undefined
+  size: number | undefined
+  type: string | undefined
+  name: string | undefined
   timestamp: string | undefined
 }
 
 type CandidateFileRecord = {
   id: string
   localId: string | null
-  fileName: string
+  name: string
   createdAt: number
   updatedAt: number
-  fileType: string
-  contentHash: string | null
-  fileSize: number | null
+  type: string
+  hash: string | null
+  size: number | null
   sourceUri: string | null
   status: 'existing' | 'new' | 'incomplete'
   statusDetails:
@@ -44,7 +44,7 @@ type CandidateFileRecord = {
 /**
  * processAssets imports a list of assets from any source.
  * This function will:
- * - Check for duplicates by localId and contentHash.
+ * - Check for duplicates by localId and hash.
  * - Copy files without a local ID to the app's file cache.
  * - Add content hashes to files that are new.
  * - Create new file records for the assets.
@@ -65,12 +65,12 @@ export async function processAssets(
     // If the asset does not have an id, pass a sourceUri so we can copy the
     // file to the app's file cache.
     sourceUri: a.id ? null : a.sourceUri ?? null,
-    fileName: a.fileName ?? defaultFileName,
-    fileSize: a.fileSize ?? null,
+    name: a.name ?? defaultFileName,
+    size: a.size ?? null,
     createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
     updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
-    fileType: a.fileType ?? mimeFromAssetUri(a),
-    contentHash: null,
+    type: a.type ?? mimeFromAssetUri(a),
+    hash: null,
     status: 'new',
     statusDetails: null,
   }))
@@ -112,17 +112,17 @@ export async function processAssets(
           f.statusDetails = 'noFileUri'
           return
         }
-        if (!f.fileSize) {
+        if (!f.size) {
           // Try again to get the file size.
-          f.fileSize = getFileSize(fileUri)
-          if (!f.fileSize) {
+          f.size = getFileSize(fileUri)
+          if (!f.size) {
             f.status = 'incomplete'
             f.statusDetails = 'noFileSize'
             return
           }
         }
-        f.contentHash = await calculateContentHash(fileUri)
-        if (!f.contentHash) {
+        f.hash = await calculateContentHash(fileUri)
+        if (!f.hash) {
           f.status = 'incomplete'
           f.statusDetails = 'noContentHash'
           return
@@ -133,15 +133,13 @@ export async function processAssets(
   // Check for duplicates by content hash.
   const existingContentHashes = await readFileRecordsByContentHashes(
     candidateFiles
-      .filter((f) => f.status === 'new' && f.contentHash !== null)
-      .map((f) => f.contentHash!)
+      .filter((f) => f.status === 'new' && f.hash !== null)
+      .map((f) => f.hash!)
   )
 
   // Update the status of the files that are found by content hash.
   for (const f of existingContentHashes) {
-    const validFile = candidateFiles.find(
-      (v) => v.contentHash === f.contentHash
-    )
+    const validFile = candidateFiles.find((v) => v.hash === f.hash)
     if (validFile) {
       validFile.id = f.id
       validFile.status = 'existing'
@@ -151,19 +149,17 @@ export async function processAssets(
 
   // Assert that the files are new and have a content hash.
   const newFiles: FileRecord[] = candidateFiles
-    .filter(
-      (f) => f.status === 'new' && f.contentHash !== null && f.fileSize !== null
-    )
+    .filter((f) => f.status === 'new' && f.hash !== null && f.size !== null)
     .map((f) => ({
       id: f.id,
       localId: f.localId,
-      fileName: f.fileName,
+      name: f.name,
       createdAt: f.createdAt,
       updatedAt: f.updatedAt,
       addedAt: Date.now(),
-      fileType: f.fileType,
-      fileSize: f.fileSize!,
-      contentHash: f.contentHash!,
+      type: f.type,
+      size: f.size!,
+      hash: f.hash!,
       objects: {},
     }))
   const incompleteFiles = candidateFiles.filter(

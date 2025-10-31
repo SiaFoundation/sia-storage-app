@@ -37,7 +37,7 @@ export async function uploadToIndexer(params: {
     parityShards: UPLOAD_PARITY_SHARDS,
     metadata: encodeFileMetadata({
       ...file,
-      fileSize: data.byteLength,
+      size: data.byteLength,
     }),
     progressCallback: {
       progress: (uploaded) => {

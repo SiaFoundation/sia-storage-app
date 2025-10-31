@@ -158,7 +158,7 @@ async function handleUpdateEvent(
     logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
     return
   }
-  const existingFile = await readFileRecordByContentHash(metadata.contentHash)
+  const existingFile = await readFileRecordByContentHash(metadata.hash)
 
   if (existingFile) {
     const localObject = await pinnedObjectToLocalObject(
@@ -185,13 +185,14 @@ async function handleUpdateEvent(
     await createFileRecordWithLocalObject(
       {
         id: fileId,
-        fileName: metadata.fileName,
-        fileSize: metadata.fileSize,
+        name: metadata.name,
+        size: metadata.size,
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
-        fileType: metadata.fileType,
-        contentHash: metadata.contentHash,
+        type: metadata.type,
+        hash: metadata.hash,
         localId: null,
+        addedAt: Date.now(),
       },
       localObject
     )

@@ -25,7 +25,7 @@ export function FileViewer({
   fullscreen?: boolean
   customDownloader?: () => void
 }) {
-  const { fileType, fileName } = file
+  const { type, name } = file
   const status = useFileStatus(file)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
   const fileDownload = useDownload(file)
@@ -37,10 +37,7 @@ export function FileViewer({
     else fileDownload()
   }, [isDownloading, customDownloader, fileDownload])
 
-  const lowerCasedFileName = useMemo(
-    () => fileName?.toLowerCase() ?? '',
-    [fileName]
-  )
+  const lowerCasedFileName = useMemo(() => name?.toLowerCase() ?? '', [name])
 
   const DownloadPanel = useMemo(() => {
     return (
@@ -71,7 +68,7 @@ export function FileViewer({
   const MediaDisplayElement = useMemo(() => {
     if (!isDownloaded || !fileUri) return DownloadPanel
 
-    if (fileType?.includes('image')) {
+    if (type?.includes('image')) {
       return (
         <ImageViewer
           uri={fileUri}
@@ -79,7 +76,7 @@ export function FileViewer({
         />
       )
     }
-    if (fileType?.includes('video')) {
+    if (type?.includes('video')) {
       return (
         <VideoPlayer
           source={fileUri}
@@ -87,47 +84,36 @@ export function FileViewer({
         />
       )
     }
-    if (fileType?.includes('audio')) {
+    if (type?.includes('audio')) {
       return (
         <AudioPlayer
           source={fileUri}
-          filename={fileName}
+          filename={name}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
       )
     }
-    if (fileType?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
+    if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
       return <PDFViewer source={fileUri} style={styles.media} />
     }
     if (
-      fileType?.includes('application/json') ||
+      type?.includes('application/json') ||
       lowerCasedFileName.endsWith('.json')
     ) {
       return (
-        <JSONViewer
-          uri={fileUri}
-          fileSize={file.fileSize}
-          style={styles.media}
-        />
+        <JSONViewer uri={fileUri} fileSize={file.size} style={styles.media} />
       )
     }
     if (
-      fileType?.includes('text/markdown') ||
+      type?.includes('text/markdown') ||
       lowerCasedFileName.endsWith('.md') ||
       lowerCasedFileName.endsWith('.markdown')
     ) {
       return <MarkdownViewer uri={fileUri} style={styles.media} />
     }
-    if (
-      fileType?.includes('text/plain') ||
-      lowerCasedFileName.endsWith('.txt')
-    ) {
+    if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt')) {
       return (
-        <TextViewer
-          uri={fileUri}
-          fileSize={file.fileSize}
-          style={styles.media}
-        />
+        <TextViewer uri={fileUri} fileSize={file.size} style={styles.media} />
       )
     }
 
@@ -145,11 +131,11 @@ export function FileViewer({
   }, [
     fileUri,
     isDownloaded,
-    fileType,
+    type,
     lowerCasedFileName,
     fullscreen,
-    fileName,
-    file.fileSize,
+    name,
+    file.size,
     DownloadPanel,
   ])
 

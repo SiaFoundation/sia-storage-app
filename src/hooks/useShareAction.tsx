@@ -37,15 +37,15 @@ export function useShareAction({ fileId }: { fileId: string }) {
 
   const handleShareFile = useCallback(async () => {
     if (!file) return
-    if (!file.fileType) return
+    if (!file.type) return
     if (!status.data?.fileUri) return
 
     try {
       await Share.open({
         url: status.data.fileUri,
-        type: file.fileType,
-        filename: file.fileName ?? undefined,
-        subject: `Sia Storage - ${file.fileType}`,
+        type: file.type,
+        filename: file.name ?? undefined,
+        subject: `Sia Storage - ${file.type}`,
       })
     } catch (e) {
       if (typeof e === 'string' && !e.includes('User did not share')) {

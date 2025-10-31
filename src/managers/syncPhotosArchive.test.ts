@@ -104,15 +104,15 @@ describe('syncPhotosArchive', () => {
     // Tick 1: createdBefore 1_000_000 -> returns [10_000, 5_000], cursor -> 5_000
     await runTick()
     expect(processAssetsMock).toHaveBeenNthCalledWith(1, [
-      expect.objectContaining({ id: 'b1', fileName: 'one.jpg' }),
-      expect.objectContaining({ id: 'b2', fileName: 'two.jpg' }),
+      expect.objectContaining({ id: 'b1', name: 'one.jpg' }),
+      expect.objectContaining({ id: 'b2', name: 'two.jpg' }),
     ])
     expect(await getPhotosArchiveCursor()).toBe(5_000)
 
     // Tick 2: createdBefore 5_000 -> returns [1_000], cursor -> 1_000
     await runTick()
     expect(processAssetsMock).toHaveBeenNthCalledWith(2, [
-      expect.objectContaining({ id: 'b3', fileName: 'three.jpg' }),
+      expect.objectContaining({ id: 'b3', name: 'three.jpg' }),
     ])
     expect(await getPhotosArchiveCursor()).toBe(1_000)
 

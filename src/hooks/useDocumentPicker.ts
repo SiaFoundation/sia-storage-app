@@ -31,9 +31,9 @@ export function useDocumentPicker() {
       const { files, warnings } = await processAssets(
         result.assets?.map((a) => ({
           id: undefined,
-          fileName: a.name,
-          fileSize: a.size,
-          fileType: a.mimeType,
+          name: a.name,
+          size: a.size,
+          type: a.mimeType,
           timestamp: new Date(a.lastModified).toISOString(),
           sourceUri: a.uri,
         }))

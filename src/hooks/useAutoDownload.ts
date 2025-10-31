@@ -10,9 +10,9 @@ import { FileRecord } from '../stores/files'
  * its an image or PDF, or its less than 4 MB.
  */
 export function thumbnailShouldAutoDownload(file: FileRecord): boolean {
-  const isImage = file.fileType?.startsWith('image') ?? false
-  const isPdf = (file.fileType ?? '').includes('pdf')
-  const sizeOk = (file.fileSize ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
+  const isImage = file.type?.startsWith('image') ?? false
+  const isPdf = (file.type ?? '').includes('pdf')
+  const sizeOk = (file.size ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
   return isImage || isPdf || sizeOk
 }
 
@@ -21,9 +21,9 @@ export function thumbnailShouldAutoDownload(file: FileRecord): boolean {
  * its an image, PDF, or its less than 10 MB.
  */
 export function detailsShouldAutoDownload(file: FileRecord): boolean {
-  const isImage = file.fileType?.startsWith('image') ?? false
-  const isPdf = (file.fileType ?? '').includes('pdf')
-  const sizeOk = (file.fileSize ?? Infinity) <= 10 * 1000 * 1000 // 10 MB
+  const isImage = file.type?.startsWith('image') ?? false
+  const isPdf = (file.type ?? '').includes('pdf')
+  const sizeOk = (file.size ?? Infinity) <= 10 * 1000 * 1000 // 10 MB
   return isImage || isPdf || sizeOk
 }
 

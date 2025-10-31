@@ -36,7 +36,7 @@ export function FileThumbnail({
     )
   }
 
-  if (file.fileType?.includes('image')) {
+  if (file.type?.includes('image')) {
     if (status.data?.fileUri) {
       return (
         <Image
@@ -51,7 +51,7 @@ export function FileThumbnail({
       </View>
     )
   }
-  if (file.fileType?.includes('pdf')) {
+  if (file.type?.includes('pdf')) {
     if (status.data?.fileUri) {
       return (
         <Image
@@ -66,21 +66,21 @@ export function FileThumbnail({
       </View>
     )
   }
-  if (file.fileType?.includes('video')) {
+  if (file.type?.includes('video')) {
     return (
       <View style={styles.thumbnailImage}>
         <FileVideoIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
-  if (file.fileType?.includes('application/pdf')) {
+  if (file.type?.includes('application/pdf')) {
     return (
       <View style={styles.thumbnailImage}>
         <FileTextIcon size={iconSize} color={iconColor} />
       </View>
     )
   }
-  if (file.fileType?.includes('audio')) {
+  if (file.type?.includes('audio')) {
     return (
       <View style={styles.thumbnailImage}>
         <FileAudioIcon size={iconSize} color={iconColor} />
@@ -88,9 +88,9 @@ export function FileThumbnail({
     )
   }
   if (
-    file.fileType?.includes('text/plain') ||
-    file.fileType?.includes('text/markdown') ||
-    file.fileName?.toLowerCase().includes('.md')
+    file.type?.includes('text/plain') ||
+    file.type?.includes('text/markdown') ||
+    file.name?.toLowerCase().includes('.md')
   ) {
     return (
       <View style={styles.thumbnailImage}>
@@ -99,8 +99,8 @@ export function FileThumbnail({
     )
   }
   if (
-    file.fileType?.includes('application/json') ||
-    file.fileName?.toLowerCase().includes('.json')
+    file.type?.includes('application/json') ||
+    file.name?.toLowerCase().includes('.json')
   ) {
     return (
       <View style={styles.thumbnailImage}>
