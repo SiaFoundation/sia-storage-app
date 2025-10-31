@@ -13,16 +13,21 @@ import { useToast } from '../lib/toastContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
 import { removeFileFromCache } from '../stores/fileCache'
 import { useDownload } from '../managers/downloader'
-import { getSdk, useSdk } from '../stores/sdk'
+import { useSdk } from '../stores/sdk'
 import { useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
 import { ActionSheetButton } from './ActionSheetButton'
 import { ActionSheet } from './ActionSheet'
-import { useFileDetails, deleteFileRecord, FileRecord } from '../stores/files'
+import { useFileDetails, deleteFileRecord } from '../stores/files'
 import { deleteLocalObjects } from '../stores/localObjects'
 import { useSheetOpen, closeSheet } from '../stores/sheets'
 import { useShareAction } from '../hooks/useShareAction'
 import { logger } from '../lib/logger'
+import {
+  deleteAllIndexerObjects,
+  permanentlyDeleteFile,
+  deleteFileFromNetwork,
+} from '../lib/deleteFile'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
   sheetName?: string
@@ -37,7 +42,6 @@ export function FileActionsSheet({
   const { data: file } = useFileDetails(route.params.id)
   const status = useFileStatus(file ?? undefined)
   const isOpen = useSheetOpen(sheetName)
-  const sdk = useSdk()
 
   const { handleShareFile, handleShareURL, canShare } = useShareAction({
     fileId: route.params.id,
@@ -56,10 +60,9 @@ export function FileActionsSheet({
     try {
       await removeFileFromCache(file)
       toast.show('Removed from cache')
-      closeSheet()
     } catch (e) {
+      logger.log('[FileActionsSheet] failed to remove cache', e)
       toast.show('Failed to remove cache')
-      closeSheet()
     }
   }, [file?.id, file?.type, toast])
 
@@ -69,42 +72,33 @@ export function FileActionsSheet({
     try {
       await reupload(file.id)
       toast.show('Reuploaded file')
-      closeSheet()
     } catch (e) {
+      logger.log('[FileActionsSheet] failed to reupload file', e)
       toast.show('Failed to reupload file')
-      closeSheet()
     }
   }, [file?.id, toast])
 
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
     try {
-      await deleteAllIndexerObjects(file)
-      await deleteLocalObjects(file.id)
+      await deleteFileFromNetwork(file)
       toast.show('Removed from network')
-      closeSheet()
     } catch (e) {
+      logger.log('[FileActionsSheet] failed to remove from network', e)
       toast.show('Failed to remove from network')
-      closeSheet()
     }
   }, [file?.id, toast])
 
   const handleDelete = useCallback(async () => {
     if (!file) return
     try {
-      await deleteFileRecord(file.id)
-      await deleteAllIndexerObjects(file)
-      await deleteLocalObjects(file.id)
-      await removeFileFromCache(file)
-      toast.show('Deleted file')
-      closeSheet()
-      navigation.goBack()
+      await permanentlyDeleteFile(file)
+      toast.show('File deleted')
     } catch (e) {
       logger.log('[FileActionsSheet] failed to delete file', e)
       toast.show('Failed to delete file')
-      closeSheet()
     }
-  }, [file, sdk, toast, navigation])
+  }, [file])
 
   const handleDownload = useDownload(file)
 
@@ -122,7 +116,7 @@ export function FileActionsSheet({
         disabled={!canShare}
         variant="primary"
         icon={<ShareIcon size={18} />}
-        onPress={handleShareFile}
+        onPress={handlePressAndClose(handleShareFile)}
       >
         Export file
       </ActionSheetButton>
@@ -175,16 +169,4 @@ export function FileActionsSheet({
       </ActionSheetButton>
     </ActionSheet>
   )
-}
-
-// TODO: in the future if a file is synced with multiple indexers,
-// we will need to init and use an sdk for each indexer.
-async function deleteAllIndexerObjects(file: FileRecord) {
-  const sdk = getSdk()
-  if (!sdk) return
-  for (const [_, object] of Object.entries(file.objects)) {
-    if (object.id) {
-      await sdk.deleteObject(object.id)
-    }
-  }
 }

@@ -194,9 +194,9 @@ export async function readAllFileRecords(opts: {
     }
   }
 
-  return Array.from(byId.values()).map((row) =>
-    transformRow(row, objectsById.get(row.id))
-  )
+  return Array.from(byId.values()).map((row) => {
+    return transformRow(row, objectsById.get(row.id))
+  })
 }
 
 export async function readFileRecordByObjectId(
