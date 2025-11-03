@@ -19,8 +19,13 @@ export function useImagePicker() {
       logger.log('[imagePicker] opening media picker...')
       const result = await ImagePicker.launchImageLibrary({
         mediaType: 'mixed',
-        selectionLimit: 0, // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
+        // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
+        selectionLimit: 0,
         includeExtra: true,
+        // Docs: A mode that determines which representation to use if an asset contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android if set to 'current'.
+        assetRepresentationMode: 'current',
+        videoQuality: 'high',
+        quality: 1,
       })
 
       if (result.didCancel) {

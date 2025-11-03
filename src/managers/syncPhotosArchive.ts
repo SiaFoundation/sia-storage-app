@@ -25,6 +25,8 @@ export async function workBackward(): Promise<void> {
       // Descending order.
       sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
+      // Resolve full info. For images this gets the full EXIF data and can fix the orientation.
+      resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
       logger.log('[syncPhotosArchive] archive is fully synced')
