@@ -16,6 +16,7 @@ import { LibraryControlBar } from '../components/LibraryControlBar'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { IconButton } from '../components/IconButton'
 import { SettingsIcon } from 'lucide-react-native'
+import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -123,6 +124,7 @@ export function LibraryScreen({ route, navigation }: Props) {
                 ? files.error.message
                 : 'No files matching the selected filters.'}
             </Text>
+            {files.error ? <LibraryLocalResetButton /> : null}
           </View>
         )
       ) : (

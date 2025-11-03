@@ -62,18 +62,27 @@ export async function onboardIndexer(indexerURL: string) {
   return success
 }
 
-export function shutdownApp() {
+function cancelAllTransfers() {
   cancelAllUploads()
   cancelAllDownloads()
 }
 
-export async function resetApp() {
+export function shutdownApp() {
+  cancelAllTransfers()
+}
+
+export async function resetData() {
   await deleteAllFileRecords()
   await resetDb()
+  await resetSyncDownCursor()
+  cancelAllTransfers()
+}
+
+export async function resetApp() {
+  await resetData()
   await setRecoveryPhrase('')
   await setHasOnboarded(false)
   await resetSdk()
-  await resetSyncDownCursor()
   await resetPhotosNewCursor()
   await resetPhotosArchiveCursor()
 }
