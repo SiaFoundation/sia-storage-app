@@ -12,12 +12,12 @@ import {
   setSecureStoreBoolean,
   setSecureStoreNumber,
 } from '../stores/secureStore'
-import { ensurePhotosPermission } from '../lib/permissions'
+import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 
 const PAGE_SIZE = 200
 
 async function workForward(): Promise<void> {
-  if (!(await ensurePhotosPermission())) return
+  if (!(await ensureMediaLibraryPermission())) return
   const cursor = await getPhotosNewCursor()
 
   try {
