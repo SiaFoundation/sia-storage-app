@@ -1,7 +1,7 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
 import { initSyncNewPhotos } from './syncNewPhotos'
 import * as MediaLibrary from 'expo-media-library'
-import { ensurePhotosPermission } from '../lib/permissions'
+import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 
 jest.useFakeTimers()
@@ -11,8 +11,8 @@ jest.mock('expo-media-library', () => ({
   SortBy: { creationTime: 'creationTime' },
   MediaType: { photo: 'photo', video: 'video' },
 }))
-jest.mock('../lib/permissions', () => ({
-  ensurePhotosPermission: jest.fn(),
+jest.mock('../lib/mediaLibraryPermissions', () => ({
+  ensureMediaLibraryPermission: jest.fn(),
 }))
 jest.mock('../lib/processAssets', () => ({
   processAssets: jest.fn(),
@@ -65,11 +65,13 @@ describe('syncNewPhotos', () => {
   })
 
   it('iterates forward adding all new files', async () => {
-    const ensurePhotosPermissionMock = jest.mocked(ensurePhotosPermission)
+    const ensureMediaLibraryPermissionMock = jest.mocked(
+      ensureMediaLibraryPermission
+    )
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
     const processAssetsMock = jest.mocked(processAssets)
 
-    ensurePhotosPermissionMock.mockResolvedValue(true)
+    ensureMediaLibraryPermissionMock.mockResolvedValue(true)
     getAssetsAsyncMock
       .mockResolvedValueOnce(
         page([asset('a1', '1.jpg', 1000), asset('a2', '2.jpg', 2000)])

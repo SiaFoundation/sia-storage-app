@@ -10,12 +10,12 @@ import {
 } from '../stores/secureStore'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
-import { ensurePhotosPermission } from '../lib/permissions'
+import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 
 const PAGE_SIZE = 200
 
 export async function workBackward(): Promise<void> {
-  if (!(await ensurePhotosPermission())) return
+  if (!(await ensureMediaLibraryPermission())) return
   const cursor = await getPhotosArchiveCursor()
 
   try {
