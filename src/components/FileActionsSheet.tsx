@@ -93,12 +93,13 @@ export function FileActionsSheet({
     if (!file) return
     try {
       await permanentlyDeleteFile(file)
+      navigation.goBack()
       toast.show('File deleted')
     } catch (e) {
       logger.log('[FileActionsSheet] failed to delete file', e)
       toast.show('Failed to delete file')
     }
-  }, [file])
+  }, [file, navigation, toast])
 
   const handleDownload = useDownload(file)
 
