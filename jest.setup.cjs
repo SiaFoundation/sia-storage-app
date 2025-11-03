@@ -40,16 +40,6 @@ jest.mock('react-native-fs', () => ({
 }))
 global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile }
 
-const makeImageFromEncoded = jest.fn()
-jest.mock('@shopify/react-native-skia', () => ({
-  __esModule: true,
-  Skia: {
-    Data: { fromBase64: () => ({}) },
-    Image: { MakeImageFromEncoded: makeImageFromEncoded },
-  },
-}))
-global.__skia = { makeImageFromEncoded }
-
 // In-memory SecureStore for tests.
 jest.mock('./src/stores/secureStore', () => {
   const numStore = new Map()
