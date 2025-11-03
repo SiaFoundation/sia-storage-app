@@ -19,8 +19,12 @@ export function useCameraCapture() {
       logger.log('[cameraCapture] opening camera...')
       const result = await ImagePicker.launchCamera({
         mediaType: 'mixed',
-        includeExtra: true,
         saveToPhotos: false,
+        includeExtra: true,
+        // Docs: A mode that determines which representation to use if an asset contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android if set to 'current'.
+        assetRepresentationMode: 'current',
+        quality: 1,
+        videoQuality: 'high',
       })
 
       if (result.didCancel) {

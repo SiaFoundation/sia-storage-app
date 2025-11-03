@@ -1,11 +1,12 @@
-import * as ImagePicker from 'react-native-image-picker'
-
 export const MimeTypes = [
   // video
   'video/quicktime',
   'video/mp4',
   'video/x-m4v',
   // image
+  'image/dng',
+  'image/x-adobe-dng',
+  'image/x-apple-proraw',
   'image/heic',
   'image/heif',
   'image/jpeg',
@@ -40,6 +41,7 @@ function getMimeTypeFromPath(path: string | undefined): MimeType | null {
     mp4: 'video/mp4',
     m4v: 'video/x-m4v',
     // image
+    dng: 'image/dng',
     heic: 'image/heic',
     heif: 'image/heif',
     jpg: 'image/jpeg',
@@ -93,6 +95,7 @@ export type Ext =
   | '.mp4'
   | '.m4v'
   // image
+  | '.dng'
   | '.heic'
   | '.heif'
   | '.jpg'
@@ -118,6 +121,12 @@ export function extFromMime(mime?: string | null): Ext {
   if (mime === 'video/mp4') return '.mp4'
   if (mime === 'video/x-m4v') return '.m4v'
   // image
+  if (
+    mime === 'image/dng' ||
+    mime === 'image/x-adobe-dng' ||
+    mime === 'image/x-apple-proraw'
+  )
+    return '.dng'
   if (mime === 'image/heic') return '.heic'
   if (mime === 'image/heif') return '.heif'
   if (mime === 'image/jpeg') return '.jpg'

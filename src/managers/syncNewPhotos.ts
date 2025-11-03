@@ -27,6 +27,8 @@ async function workForward(): Promise<void> {
       // Ascending order.
       sortBy: [[MediaLibrary.SortBy.creationTime, true]],
       mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
+      // Resolve full info. For images this gets the full EXIF data and can fix the orientation.
+      resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
       logger.log('[syncNewPhotos] no new photos found')
