@@ -6,7 +6,7 @@ module.exports = {
     '<rootDir>/jest.setup.cjs',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@shopify/react-native-skia|react-native-fs|react-native-quick-crypto|expo|@expo|expo-.*|expo-sqlite|expo-modules-core)/)',
+    'node_modules/(?!(react-native|@react-native|react-native-fs|react-native-quick-crypto|expo|@expo|expo-.*|expo-sqlite|expo-modules-core)/)',
   ],
   moduleNameMapper: {},
 }
