@@ -1,6 +1,6 @@
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import * as MediaLibrary from 'expo-media-library'
-import { ensurePhotosPermission } from '../lib/permissions'
+import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 import {
   initSyncPhotosArchive,
@@ -17,9 +17,9 @@ jest.mock('expo-media-library', () => ({
   SortBy: { creationTime: 'creationTime' },
   MediaType: { photo: 'photo', video: 'video' },
 }))
-jest.mock('../lib/permissions', () => ({
+jest.mock('../lib/mediaLibraryPermissions', () => ({
   __esModule: true,
-  ensurePhotosPermission: jest.fn(),
+  ensureMediaLibraryPermission: jest.fn(),
 }))
 jest.mock('../lib/processAssets', () => ({
   __esModule: true,
@@ -69,11 +69,13 @@ describe('syncPhotosArchive', () => {
   })
 
   it('iterates backward adding files until exhausting the archive', async () => {
-    const ensurePhotosPermissionMock = jest.mocked(ensurePhotosPermission)
+    const ensureMediaLibraryPermissionMock = jest.mocked(
+      ensureMediaLibraryPermission
+    )
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
     const processAssetsMock = jest.mocked(processAssets)
 
-    ensurePhotosPermissionMock.mockResolvedValue(true)
+    ensureMediaLibraryPermissionMock.mockResolvedValue(true)
 
     getAssetsAsyncMock.mockImplementation(
       async (

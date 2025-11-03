@@ -17,8 +17,8 @@ export function SettingsAdvancedSync() {
     <RowGroup title="Advanced Sync">
       <InfoCard>
         <LabeledValueRow
-          label="Automatically upload files to network"
-          labelWidth={300}
+          label="Upload files to network"
+          labelWidth={250}
           value={
             <Switch
               value={autoScan.data ?? false}
@@ -27,8 +27,8 @@ export function SettingsAdvancedSync() {
           }
         />
         <LabeledValueRow
-          label="Automatically sync with your other devices"
-          labelWidth={300}
+          label="Sync with other devices"
+          labelWidth={250}
           value={
             <Switch
               value={autoSync.data ?? false}
