@@ -1,5 +1,11 @@
 import React from 'react'
-import { TriangleAlertIcon, UploadCloudIcon } from 'lucide-react-native'
+import {
+  CheckCheckIcon,
+  CheckIcon,
+  CircleCheckIcon,
+  TriangleAlertIcon,
+  UploadCloudIcon,
+} from 'lucide-react-native'
 import { palette } from '../styles/colors'
 import { useIsConnected } from '../stores/sdk'
 import { useIsInitializing } from '../stores/app'
@@ -9,7 +15,6 @@ import { useIsOnline } from './useIsOnline'
 
 export type AppStatus = {
   visible: boolean
-  message: string
   icon: React.ReactElement | null
   hint?: string
   level: 'info' | 'warning'
@@ -23,13 +28,12 @@ export function useAppStatus(): AppStatus {
   const isOnline = useIsOnline()
 
   if (!hasOnboarded || isInitializing) {
-    return { visible: false, message: '', icon: null, level: 'info' }
+    return { visible: false, icon: null, level: 'info' }
   }
 
   if (typeof isOnline.data === 'boolean' && !isOnline.data) {
     return {
       visible: true,
-      message: 'No internet connection',
       icon: <TriangleAlertIcon size={14} color={palette.yellow[400]} />,
       level: 'warning',
     }
@@ -38,7 +42,6 @@ export function useAppStatus(): AppStatus {
   if (!isConnected) {
     return {
       visible: true,
-      message: 'Indexer not connected',
       icon: <TriangleAlertIcon size={14} color={palette.yellow[400]} />,
       level: 'warning',
     }
@@ -47,12 +50,15 @@ export function useAppStatus(): AppStatus {
   if (uploadsProgress.show) {
     return {
       visible: true,
-      message: 'Uploading files to network',
       icon: <UploadCloudIcon size={14} color={palette.gray[50]} />,
       hint: `${uploadsProgress.percentComplete}`,
       level: 'info',
     }
   }
 
-  return { visible: false, message: '', icon: null, level: 'info' }
+  return {
+    visible: true,
+    icon: <CircleCheckIcon size={14} color={palette.green[500]} />,
+    level: 'info',
+  }
 }
