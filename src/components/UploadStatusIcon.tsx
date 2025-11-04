@@ -5,20 +5,19 @@ import {
 } from 'lucide-react-native'
 import { FileStatus } from '../lib/file'
 import { overlay, palette } from '../styles/colors'
-import { SpinnerIcon } from './SpinnerIcon'
 import { useMemo } from 'react'
 import { ExpandableBadge } from './ExpandableBadge'
+import { CircularProgress } from './CircularProgress'
+import { SpinnerIcon } from './SpinnerIcon'
 
 export function UploadStatusIcon({
   status,
   size = 16,
-  interactive = false,
   variant = 'badge',
   color,
 }: {
   status: FileStatus
   size?: number
-  interactive?: boolean
   variant?: 'badge' | 'icon'
   color?: string
 }) {
@@ -41,7 +40,16 @@ export function UploadStatusIcon({
   const iconEL = status.isErrored ? (
     <CloudAlertIcon color={iconColor} size={size} />
   ) : status.isUploading ? (
-    <SpinnerIcon size={size} />
+    status.uploadProgress > 0 ? (
+      <CircularProgress
+        progress={status.uploadProgress}
+        size={size - 2}
+        strokeWidth={1}
+        progressColor={palette.green[500]}
+      />
+    ) : (
+      <SpinnerIcon color={iconColor} size={size} />
+    )
   ) : status.isUploaded ? (
     status.isDownloaded ? (
       <CloudCheckIcon color={iconColor} size={size} />
@@ -60,7 +68,7 @@ export function UploadStatusIcon({
     <ExpandableBadge
       label={label}
       size={size}
-      interactive={interactive}
+      interactive={false}
       backgroundColor={pillColor}
       borderColor={pillColor}
       textColor={palette.gray[50]}

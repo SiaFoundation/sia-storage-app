@@ -23,6 +23,7 @@ export function FileDetailScreen({ route, navigation }: Props) {
           file={file}
           header={
             <FileDetailScreenHeader
+              file={file}
               title={file?.name ?? 'View'}
               navigation={navigation}
             />
@@ -34,6 +35,7 @@ export function FileDetailScreen({ route, navigation }: Props) {
             file={file}
             header={
               <FileDetailScreenHeader
+                file={file}
                 title={file?.name ?? 'Details'}
                 navigation={navigation}
               />
