@@ -35,7 +35,7 @@ export function Root() {
       // Ignore invalid URLs.
       return
     }
-    if (shareUrl && navigationRef.isReady()) {
+    if (shareUrl && navigationRef.isReady() && isShareUrl(shareUrl)) {
       navigationRef.navigate('ImportTab', {
         screen: 'ImportFile',
         params: { shareUrl, id: uniqueId() },
@@ -66,3 +66,14 @@ export function Root() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.gray[950] },
 })
+
+/** Determine if a URL is a share URL. */
+function isShareUrl(urlString: string): boolean {
+  try {
+    const u = new URL(urlString)
+    const path = u.pathname.toLowerCase()
+    return path.includes('/objects') || path.includes('/shared')
+  } catch (_e) {
+    return false
+  }
+}
