@@ -22,6 +22,23 @@ export async function ensureCacheDir(): Promise<void> {
   }
 }
 
+export async function getCacheTmpUploadFileForId(
+  file: FileCopyInfo
+): Promise<File> {
+  await removeCacheTmpUploadFileForId(file)
+  return new File(CACHE_DIR, `${file.id}.upload.tmp`)
+}
+
+export async function removeCacheTmpUploadFileForId(
+  file: FileCopyInfo
+): Promise<void> {
+  const tmp = new File(CACHE_DIR, `${file.id}.upload.tmp`)
+  try {
+    const exists = tmp.info().exists
+    if (exists) tmp.delete()
+  } catch {}
+}
+
 async function getCacheFileForId(file: FileCopyInfo): Promise<File> {
   return new File(CACHE_DIR, `${file.id}${extFromMime(file.type)}`)
 }
