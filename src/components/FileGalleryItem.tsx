@@ -1,11 +1,12 @@
 import { View, Pressable, StyleSheet } from 'react-native'
-import { colors, whiteA, palette } from '../styles/colors'
+import { colors } from '../styles/colors'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useToast } from '../lib/toastContext'
 import { type FileRecord } from '../stores/files'
-import { FileIndicators } from './FileIndicators'
 import { FileThumbnail } from './FileThumbnail'
 import { memo } from 'react'
+import { useFileStatus } from '../lib/file'
+import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = {
   file: FileRecord
@@ -15,6 +16,7 @@ type Props = {
 
 function FileGalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
   const toast = useToast()
+  const status = useFileStatus(file)
   return (
     <View
       collapsable={false}
@@ -31,7 +33,11 @@ function FileGalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
         }}
       >
         <FileThumbnail file={file} iconSize={24} />
-        <FileIndicators file={file} size={10} interactive={false} />
+        {status.data ? (
+          <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
+            <UploadStatusIcon status={status.data} size={10} />
+          </View>
+        ) : null}
       </Pressable>
     </View>
   )

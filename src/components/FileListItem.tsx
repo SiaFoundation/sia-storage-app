@@ -37,7 +37,6 @@ function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
                 <UploadStatusIcon
                   size={12}
                   status={status.data}
-                  interactive={false}
                   color="gray"
                   variant="icon"
                 />

@@ -5,18 +5,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
 import { overlay, palette } from '../styles/colors'
 import { IconButton } from './IconButton'
+import { FileRecord } from '../stores/files'
+import { useFileStatus } from '../lib/file'
+import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = {
+  file: FileRecord
   title: string
   navigation: NavigationProp<Record<string, object | undefined>>
   icon?: 'back' | 'close'
 }
 
 export function FileDetailScreenHeader({
+  file,
   title,
   navigation,
   icon = 'back',
 }: Props) {
+  const status = useFileStatus(file)
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 2 }]}>
@@ -31,7 +37,9 @@ export function FileDetailScreenHeader({
         <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {title}
         </Text>
-        <View style={{ width: 36 }} />
+        {status.data ? (
+          <UploadStatusIcon status={status.data} size={16} />
+        ) : null}
       </View>
     </View>
   )
