@@ -8,24 +8,25 @@ import { type MainStackParamList } from '../stacks/types'
 import { type FileRecord, useFileCount } from '../stores/files'
 import { useFileList, useLibrary, type Category } from '../stores/library'
 import { FileList } from '../components/FileList'
-import { useAppStatus } from '../hooks/useAppStatus'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
-import { ExpandableBadge } from '../components/ExpandableBadge'
+import LibraryStatusSheet from '../components/LibraryStatusSheet'
+import { useState } from 'react'
 import { useLibraryViewMode } from '../stores/settings'
 import { LibraryControlBar } from '../components/LibraryControlBar'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { IconButton } from '../components/IconButton'
 import { SettingsIcon } from 'lucide-react-native'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
+import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
 export function LibraryScreen({ route, navigation }: Props) {
+  const [statusSheetVisible, setStatusSheetVisible] = useState<boolean>(false)
   const viewMode = useLibraryViewMode()
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
   const fileCount = useFileCount()
-  const appStatus = useAppStatus()
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
       navigation.navigate('FileDetail', { id: file.id })
@@ -79,20 +80,7 @@ export function LibraryScreen({ route, navigation }: Props) {
           </Text>
         </View>
         <View style={styles.buttonRow}>
-          {appStatus.visible && (
-            <View style={styles.statusPillContainer}>
-              <ExpandableBadge
-                label={appStatus.message}
-                hint={appStatus.hint}
-                size={12}
-                interactive={true}
-                backgroundColor={overlay.pill}
-                borderColor={overlay.pill}
-              >
-                {appStatus.icon}
-              </ExpandableBadge>
-            </View>
-          )}
+          <LibraryAppStatusIcon />
           <IconButton
             onPress={() => navigation.navigate('SettingsTab' as never)}
             style={[styles.headerIcon, { paddingHorizontal: 4 }]}
@@ -141,6 +129,7 @@ export function LibraryScreen({ route, navigation }: Props) {
         </View>
       )}
       <AddFileActionSheet />
+      <LibraryStatusSheet />
       <LibraryControlBar navigation={navigation} route={route} />
     </View>
   )
@@ -178,37 +167,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   headerIcon: { paddingVertical: 6, paddingHorizontal: 8 },
-  blurPillWrap: {
-    position: 'relative',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  blurShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: overlay.pill,
-  },
-  statusPillContainer: {
-    position: 'relative',
-  },
-  statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-    flexDirection: 'row',
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: overlay.pill,
-  },
-  statusPillText: {
-    color: palette.gray[50],
-    fontSize: 10,
-    fontWeight: '600',
-  },
-
   emptyImage: { width: 140, height: 140 },
   emptyWrap: {
     flex: 1,
