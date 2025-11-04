@@ -69,10 +69,9 @@ export function useUploadScannerStatus(): {
   const activeProgress = activeUploads
     .map((u) => u.progress)
     .reduce((a, b) => a + b, 0)
-  const percentComplete =
-    localOnlyCount && totalCount
-      ? (activeProgress + uploadedCount) / totalCount
-      : 0
+  const percentComplete = totalCount
+    ? (activeProgress + uploadedCount) / totalCount
+    : 0
 
   return {
     show: isEnabled && !!localOnlyCount,
