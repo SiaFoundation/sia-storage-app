@@ -66,12 +66,15 @@ export const initSyncNewPhotos = createServiceInterval({
 
 export const [getAutoSyncNewPhotos, useAutoSyncNewPhotos] =
   createGetterAndSWRHook(getKey('autoSyncNewPhotos'), () =>
-    getSecureStoreBoolean('autoSyncNewPhotos', true)
+    getSecureStoreBoolean('autoSyncNewPhotos', false)
   )
 
 export async function setAutoSyncNewPhotos(value: boolean) {
   await setSecureStoreBoolean('autoSyncNewPhotos', value)
   triggerChange('autoSyncNewPhotos')
+  if (value) {
+    ensureMediaLibraryPermission()
+  }
 }
 
 export async function toggleAutoSyncNewPhotos() {

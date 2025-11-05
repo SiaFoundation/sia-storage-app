@@ -51,7 +51,6 @@ export function SettingsSyncPhotos() {
           labelWidth={250}
           value={
             <Switch
-              disabled={isPhotosAccessDisabled}
               value={autoSyncNew.data ?? false}
               onValueChange={toggleAutoSyncNewPhotos}
             />
@@ -64,7 +63,6 @@ export function SettingsSyncPhotos() {
           labelWidth={250}
           value={
             <Switch
-              disabled={isPhotosAccessDisabled}
               value={autoSyncPhotosArchive.data ?? false}
               onValueChange={toggleAutoSyncPhotosArchive}
             />

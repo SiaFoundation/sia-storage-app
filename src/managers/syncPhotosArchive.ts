@@ -73,6 +73,9 @@ export const [getAutoSyncPhotosArchive, useAutoSyncPhotosArchive] =
 export async function setAutoSyncPhotosArchive(value: boolean) {
   await setSecureStoreBoolean('autoSyncPhotosArchive', value)
   triggerChange('autoSyncPhotosArchive')
+  if (value) {
+    ensureMediaLibraryPermission()
+  }
 }
 
 export async function toggleAutoSyncPhotosArchive() {

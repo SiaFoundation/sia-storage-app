@@ -40,7 +40,7 @@ export function useMediaLibraryPermissions() {
       : photosAccess === 'limited'
       ? 'Access limited (selected photos)'
       : photosAccess === 'none'
-      ? 'No access'
+      ? 'No access, tap to grant access'
       : 'Unknown access'
   const color =
     photosAccess === 'all'
