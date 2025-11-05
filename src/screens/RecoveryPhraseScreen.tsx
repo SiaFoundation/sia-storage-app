@@ -58,6 +58,7 @@ export default function RecoveryPhraseScreen() {
 
       try {
         validateRecoveryPhrase(normalizedManualPhrase)
+        setRecoveryPhrase(normalizedManualPhrase)
         return { isValid: true, error: null }
       } catch (e) {
         if (__DEV__) logger.log('Recovery phrase validation failed:', e)
