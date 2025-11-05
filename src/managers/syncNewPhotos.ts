@@ -35,9 +35,10 @@ async function workForward(): Promise<void> {
       return
     }
     logger.log('[syncNewPhotos] batch size', page.assets.length)
-    await setPhotosNewCursor(
-      page.assets[page.assets.length - 1].creationTime ?? 0
-    )
+    const lastAssetCreationTime =
+      page.assets[page.assets.length - 1].creationTime
+    const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime + 1 : 0
+    await setPhotosNewCursor(nextTimestamp)
     const { files } = await processAssets(
       page.assets.map((asset) => ({
         id: asset.id,
