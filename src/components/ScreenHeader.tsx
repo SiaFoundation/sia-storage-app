@@ -18,7 +18,7 @@ export function ScreenHeader({
   zIndex = 10,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const topOffset = Platform.OS === 'ios' && Platform.isPad ? 8 : -4
+  const topOffset = Platform.OS === 'ios' && Platform.isPad ? 8 : 0
   const paddingHorizontal = Platform.OS === 'ios' && Platform.isPad ? 18 : 16
   return (
     <View
