@@ -118,10 +118,21 @@ export async function getLocalUri(
     const asset = await MediaLibrary.getAssetInfoAsync(localId, {
       shouldDownloadFromNetwork: true,
     })
-    return asset.localUri ?? null
+    return normalizeFsUri(asset.localUri)
   } catch (e) {
     return null
   }
+}
+
+/**
+ * Normalize the URI for a file. Remove the hash index if it exists.
+ * This is necessary because the MediaLibrary.getAssetInfoAsync() sometimes
+ * returns a URI with a hash index that is not valid for the File system API.
+ */
+function normalizeFsUri(uri: string | null | undefined): string | null {
+  if (!uri) return null
+  const hashIndex = uri.indexOf('#')
+  return hashIndex >= 0 ? uri.slice(0, hashIndex) : uri
 }
 
 /**
