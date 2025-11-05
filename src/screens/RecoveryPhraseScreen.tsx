@@ -180,6 +180,8 @@ export default function RecoveryPhraseScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   textAlignVertical="center"
+                  submitBehavior="blurAndSubmit"
+                  returnKeyType="done"
                 />
               </View>
 
