@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   StyleSheet,
   View,
@@ -18,8 +18,21 @@ import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { useToast } from '../lib/toastContext'
 import { useRecoveryPhrase, setRecoveryPhrase } from '../stores/settings'
-import { generateRecoveryPhrase } from 'react-native-sia'
+import {
+  generateRecoveryPhrase,
+  validateRecoveryPhrase,
+} from 'react-native-sia'
 import { useCopyRecoveryPhrase } from '../hooks/useCopyRecoveryPhrase'
+import { logger } from '../lib/logger'
+
+const normalizeRecoveryPhrase = (phrase: string) => {
+  const trimmed = phrase.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  return trimmed.replace(/\s+/g, ' ').toLowerCase()
+}
 
 export default function RecoveryPhraseScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
@@ -32,21 +45,38 @@ export default function RecoveryPhraseScreen() {
   const [mode, setMode] = useState<'generated' | 'manual'>('generated')
   const [manualPhrase, setManualPhrase] = useState('')
 
+  const normalizedManualPhrase = useMemo(
+    () => normalizeRecoveryPhrase(manualPhrase),
+    [manualPhrase]
+  )
+
+  const { isValid: isManualPhraseValid, error: manualValidationError } =
+    useMemo(() => {
+      if (!normalizedManualPhrase) {
+        return { isValid: false, error: null as string | null }
+      }
+
+      try {
+        validateRecoveryPhrase(normalizedManualPhrase)
+        return { isValid: true, error: null }
+      } catch (e) {
+        if (__DEV__) logger.log('Recovery phrase validation failed:', e)
+
+        const message =
+          e instanceof Error
+            ? e.message
+            : typeof e === 'string'
+            ? e
+            : 'Invalid recovery phrase.'
+
+        return { isValid: false, error: message }
+      }
+    }, [normalizedManualPhrase])
+
   const makeNewRecoveryPhrase = async () => {
     await setRecoveryPhrase(generateRecoveryPhrase())
     setAckSaved(false)
   }
-
-  // This validation is not likely enough and should be expanded.
-  const validateRecoveryPhrase = (phrase: string): boolean => {
-    const phraseArray = phrase.split(' ')
-    if (phraseArray.length === 12 || phraseArray.length === 24) {
-      return true
-    }
-    return false
-  }
-
-  const isManualPhraseValid = validateRecoveryPhrase(manualPhrase)
 
   const canContinue =
     mode === 'generated'
@@ -134,7 +164,7 @@ export default function RecoveryPhraseScreen() {
                   styles.inputBox,
                   isManualPhraseValid
                     ? styles.inputBoxValid
-                    : manualPhrase
+                    : normalizedManualPhrase
                     ? styles.inputBoxInvalid
                     : styles.inputBoxNeutral,
                 ]}
@@ -153,7 +183,7 @@ export default function RecoveryPhraseScreen() {
                 />
               </View>
 
-              {manualPhrase ? (
+              {normalizedManualPhrase ? (
                 <Text
                   style={[
                     styles.validationText,
@@ -163,8 +193,8 @@ export default function RecoveryPhraseScreen() {
                   ]}
                 >
                   {isManualPhraseValid
-                    ? 'Recovery phrase looks valid.'
-                    : 'Invalid recovery phrase.'}
+                    ? 'Recovery phrase is valid.'
+                    : manualValidationError ?? 'Invalid recovery phrase.'}
                 </Text>
               ) : null}
 
