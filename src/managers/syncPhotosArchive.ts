@@ -7,15 +7,18 @@ import { createGetterAndSWRHook } from '../lib/selectors'
 import {
   getSecureStoreNumber,
   setSecureStoreNumber,
+  getSecureStoreBoolean,
+  setSecureStoreBoolean,
 } from '../stores/secureStore'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 
-const PAGE_SIZE = 200
+const PAGE_SIZE = 1
 
 export async function workBackward(): Promise<void> {
   if (!(await ensureMediaLibraryPermission())) return
+  if (await getPhotosArchivePaused()) return
   const cursor = await getPhotosArchiveCursor()
 
   try {
@@ -56,7 +59,8 @@ export async function workBackward(): Promise<void> {
 export const initSyncPhotosArchive = createServiceInterval({
   name: 'syncPhotosArchive',
   worker: workBackward,
-  getState: async () => (await getPhotosArchiveCursor()) > 0,
+  getState: async () =>
+    (await getPhotosArchiveCursor()) > 0 && !(await getPhotosArchivePaused()),
   interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
 })
 
@@ -80,4 +84,24 @@ export async function restartPhotosArchiveCursor() {
 export async function resetPhotosArchiveCursor() {
   logger.log('[syncPhotosArchive] disabling photos archive sync cursor')
   await setPhotosArchiveCursor(defaultValue)
+}
+
+// Paused state.
+
+export const [getPhotosArchivePaused, usePhotosArchivePaused] =
+  createGetterAndSWRHook(getKey('photosArchivePaused'), () =>
+    getSecureStoreBoolean('photosArchivePaused', false)
+  )
+
+export async function setPhotosArchivePaused(value: boolean) {
+  await setSecureStoreBoolean('photosArchivePaused', value)
+  triggerChange('photosArchivePaused')
+}
+
+export async function pausePhotosArchive() {
+  await setPhotosArchivePaused(true)
+}
+
+export async function resumePhotosArchive() {
+  await setPhotosArchivePaused(false)
 }
