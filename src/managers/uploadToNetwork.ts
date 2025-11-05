@@ -34,8 +34,7 @@ export async function uploadToNetwork(params: {
   let stream: ReadableStream<Uint8Array<ArrayBuffer>>
   if (file.localId) {
     logger.log(
-      'uploadToNetwork',
-      'file is a localId asset, streaming from tmp file...'
+      '[uploadToNetwork] file is a localId asset, streaming from tmp file...'
     )
     const localUri = await getLocalUri(file.localId)
     if (!localUri) {
@@ -46,7 +45,7 @@ export async function uploadToNetwork(params: {
     source.copy(tmp)
     stream = tmp.stream()
   } else {
-    logger.log('uploadToNetwork', 'file is in app cache, streaming directly...')
+    logger.log('[uploadToNetwork] file is in app cache, streaming directly...')
     stream = new File(fileUri).stream()
   }
 
@@ -64,13 +63,15 @@ export async function uploadToNetwork(params: {
     progressCallback: {
       progress: (uploaded) => {
         logger.log(
-          `[uploadToIndexer] ${file.id} progress`,
+          `[uploadToNetwork] ${file.id} progress`,
           uploaded,
           'totalEncodedSize',
           totalEncodedSize
         )
         const percent = (uploaded * 1000n) / totalEncodedSize
-        logger.log(`[uploadToIndexer] ${file.id} percent ${percent}`)
+        logger.log(
+          `[uploadToNetwork] ${file.id} percent ${percent}, uploaded ${uploaded} bytes`
+        )
         updateUploadProgress(file.id, Number(percent) / 1000)
       },
     },
@@ -78,10 +79,10 @@ export async function uploadToNetwork(params: {
 
   const onAbort = () => {
     try {
-      logger.log('[uploadToIndexer] abort received, cancelling upload...')
+      logger.log('[uploadToNetwork] abort received, cancelling upload...')
       upload.cancel()
     } catch (e) {
-      logger.log('[uploadToIndexer] error cancelling upload', e)
+      logger.log('[uploadToNetwork] error cancelling upload', e)
     }
   }
 
@@ -94,6 +95,9 @@ export async function uploadToNetwork(params: {
   const reader = stream.getReader()
   let uploadedBytes = 0
   // Read and upload from the file stream until exhausted or aborted.
+  logger.log(
+    `[uploadToNetwork] ${file.id} reading and uploading from stream...`
+  )
   while (true) {
     if (signal.aborted) break
     const { done, value } = await reader.read()
@@ -105,12 +109,12 @@ export async function uploadToNetwork(params: {
       )
       await upload.write(arrayBuffer, { signal })
       uploadedBytes += value.byteLength
-      logger.log(
-        `[uploadToIndexer] ${file.id} uploaded ${uploadedBytes}/${fileSize} bytes`
-      )
     }
   }
-  logger.log(`[uploadToIndexer] ${file.id} finalizing upload...`)
+  logger.log(
+    `[uploadToNetwork] ${file.id} uploaded ${uploadedBytes}/${fileSize} bytes`
+  )
+  logger.log(`[uploadToNetwork] ${file.id} finalizing upload...`)
   const pinnedObject = await upload.finalize({ signal })
 
   if (signal.aborted) {
@@ -119,14 +123,14 @@ export async function uploadToNetwork(params: {
   }
 
   logger.log(
-    `[uploadToIndexer] ${file.id} converting pinned object to local object...`
+    `[uploadToNetwork] ${file.id} converting pinned object to local object...`
   )
   const localObject = await pinnedObjectToLocalObject(
     file.id,
     indexerURL,
     pinnedObject
   )
-  logger.log(`[uploadToIndexer] ${file.id} updating file object...`)
+  logger.log(`[uploadToNetwork] ${file.id} updating file object...`)
   await upsertLocalObject(localObject)
 
   signal.removeEventListener('abort', onAbort)
