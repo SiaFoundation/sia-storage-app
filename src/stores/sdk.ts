@@ -2,10 +2,9 @@ import { create } from 'zustand'
 import { Sdk } from 'react-native-sia'
 import authApp from '../lib/authApp'
 import { logger } from '../lib/logger'
-import { setHasOnboarded, getIndexerURL } from './settings'
+import { getIndexerURL } from './settings'
 import { getAppKey } from '../lib/appKey'
 import { createGetterAndSelector } from '../lib/selectors'
-import { onboardIndexer } from './app'
 
 export type SdkState = {
   sdk: Sdk | null
@@ -84,7 +83,11 @@ export function useSdk(): Sdk | null {
   return useSdkStore((s) => s.sdk)
 }
 
-export async function tryToConnectAndSet(newIndexerURL: string) {
+export type ConnectResult = 'success' | 'cancelled' | 'error'
+
+export async function tryToConnectAndSet(
+  newIndexerURL: string
+): Promise<ConnectResult> {
   setState({
     isAuthing: true,
   })
@@ -99,22 +102,31 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
     if (!connected) {
       logger.log('No connection. Requesting app connection...')
       const url = await candidate.requestAppConnection({
-        name: 'Test',
-        description: 'Test',
+        name: 'Sia Storage',
+        description: 'Privacy-first, decentralized cloud storage',
         serviceUrl: 'https://sia.storage',
         callbackUrl: 'sia://callback',
         logoUrl: 'https://sia.storage/logo.png',
       })
 
-      authApp(url.responseUrl)
+      const waitForConnect = candidate.waitForConnect(url)
+      const authCompleted = await authApp(url.responseUrl)
+      if (!authCompleted) {
+        logger.log('App authorization cancelled by user')
+        void waitForConnect.catch(() => {})
+        setState({
+          isAuthing: false,
+        })
+        return 'cancelled'
+      }
 
-      const authorized = await candidate.waitForConnect(url)
+      const authorized = await waitForConnect
       if (!authorized) {
         logger.log('App not authorized')
         setState({
           isAuthing: false,
         })
-        return false
+        return 'error'
       }
     }
 
@@ -124,11 +136,11 @@ export async function tryToConnectAndSet(newIndexerURL: string) {
       isConnected: true,
       isAuthing: false,
     })
-    return true
+    return 'success'
   } catch (err) {
     logger.log('Error connecting to indexer', err)
     setState({ isAuthing: false })
-    return false
+    return 'error'
   }
 }
 

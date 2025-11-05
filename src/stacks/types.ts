@@ -16,7 +16,10 @@ export type SettingsStackParamList = {
 }
 
 export type AuthStackParamList = {
-  Connect: undefined
+  Welcome: undefined
+  RecoveryPhrase: undefined
+  ChooseIndexer: undefined
+  FinishedOnboarding: undefined
 }
 
 export type ImportStackParamList = {

@@ -14,12 +14,14 @@ import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
 import { uniqueId } from './lib/uniqueId'
+import { useHasOnboarded } from './stores/settings'
 
 SplashScreen.preventAutoHideAsync()
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
   useReconnectIndexer()
+  const { data: hasOnboarded } = useHasOnboarded()
 
   useEffect(() => {
     initApp()
@@ -29,6 +31,9 @@ export function Root() {
   }, [])
 
   useLinkedURL((shareUrl) => {
+    // If we're onboarding, we want to ignore this import logic.
+    if (!hasOnboarded) return
+
     try {
       new URL(shareUrl)
     } catch (error) {

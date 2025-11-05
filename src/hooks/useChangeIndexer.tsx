@@ -25,6 +25,7 @@ export function useChangeIndexer() {
 
   const saveAndOnboard = useCallback(async () => {
     const newUrl = newIndexerInputProps.value
+    setHasErrored(false)
     setIsWaiting(true)
     const isValid = validateURL(newUrl)
     if (!isValid) {
@@ -32,16 +33,18 @@ export function useChangeIndexer() {
       setIsWaiting(false)
       return
     }
-    const success = await onboardIndexer(newUrl)
-    if (!success) {
-      toast.show('Failed to connect')
-      setHasErrored(true)
-    } else {
+    const result = await onboardIndexer(newUrl)
+    if (result === 'success') {
       toast.show('Indexer connected')
       setIndexerURL(newUrl)
+    } else if (result === 'cancelled') {
+      toast.show('Authorization cancelled')
+    } else {
+      toast.show('Failed to connect')
+      setHasErrored(true)
     }
     setIsWaiting(false)
-  }, [newIndexerInputProps.value])
+  }, [newIndexerInputProps.value, toast])
 
   return {
     newIndexerInputProps,
