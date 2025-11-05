@@ -7,12 +7,14 @@ import { createGetterAndSWRHook } from '../lib/selectors'
 import {
   getSecureStoreNumber,
   setSecureStoreNumber,
+  getSecureStoreBoolean,
+  setSecureStoreBoolean,
 } from '../stores/secureStore'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 
-const PAGE_SIZE = 200
+const PAGE_SIZE = 1
 
 export async function workBackward(): Promise<void> {
   if (!(await ensureMediaLibraryPermission())) return
@@ -34,9 +36,10 @@ export async function workBackward(): Promise<void> {
       return
     }
     logger.log('[syncPhotosArchive] batch size', page.assets.length)
-    await setPhotosArchiveCursor(
+    const lastAssetCreationTime =
       page.assets[page.assets.length - 1].creationTime ?? 0
-    )
+    const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime - 1 : 0
+    await setPhotosArchiveCursor(nextTimestamp)
     const { files } = await processAssets(
       page.assets.map((asset) => ({
         id: asset.id,
@@ -56,11 +59,27 @@ export async function workBackward(): Promise<void> {
 export const initSyncPhotosArchive = createServiceInterval({
   name: 'syncPhotosArchive',
   worker: workBackward,
-  getState: async () => (await getPhotosArchiveCursor()) > 0,
+  getState: async () => getAutoSyncPhotosArchive(),
   interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
 })
 
 const defaultValue = 0
+
+export const [getAutoSyncPhotosArchive, useAutoSyncPhotosArchive] =
+  createGetterAndSWRHook(getKey('autoSyncPhotosArchive'), () =>
+    getSecureStoreBoolean('autoSyncPhotosArchive', false)
+  )
+
+export async function setAutoSyncPhotosArchive(value: boolean) {
+  await setSecureStoreBoolean('autoSyncPhotosArchive', value)
+  triggerChange('autoSyncPhotosArchive')
+}
+
+export async function toggleAutoSyncPhotosArchive() {
+  const current = await getAutoSyncPhotosArchive()
+  const next = !current
+  await setAutoSyncPhotosArchive(next)
+}
 
 export const [getPhotosArchiveCursor, usePhotosArchiveCursor] =
   createGetterAndSWRHook(getKey('photosArchiveCursor'), () =>
