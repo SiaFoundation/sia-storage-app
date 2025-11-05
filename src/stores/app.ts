@@ -2,7 +2,13 @@ import { create } from 'zustand'
 import { deleteAllFileRecords } from './files'
 import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
 import * as SplashScreen from 'expo-splash-screen'
-import { initSdk, reconnect, resetSdk, tryToConnectAndSet } from './sdk'
+import {
+  initSdk,
+  reconnect,
+  resetSdk,
+  tryToConnectAndSet,
+  type ConnectResult,
+} from './sdk'
 import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllUploads } from './uploads'
 import { cancelAllDownloads } from './downloads'
@@ -52,14 +58,8 @@ export async function initApp() {
   initBackgroundTasks()
 }
 
-export async function onboardIndexer(indexerURL: string) {
-  const success = await tryToConnectAndSet(indexerURL)
-  if (!success) {
-    return false
-  }
-
-  await setHasOnboarded(true)
-  return success
+export async function onboardIndexer(indexerURL: string): Promise<ConnectResult> {
+  return tryToConnectAndSet(indexerURL)
 }
 
 export function shutdownApp() {

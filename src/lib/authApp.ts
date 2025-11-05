@@ -2,43 +2,51 @@ import { Linking } from 'react-native'
 import InAppBrowser from 'react-native-inappbrowser-reborn'
 import { palette } from '../styles/colors'
 
-export default async function authApp(url: string) {
+export default async function authApp(url: string): Promise<boolean> {
   if (await InAppBrowser.isAvailable()) {
-    const sub = Linking.addEventListener('url', ({ url: receivedURL }) => {
-      if (receivedURL.includes('sia://')) {
-        InAppBrowser.close()
-        sub.remove()
+    let completed = false
+    const subscription = Linking.addEventListener(
+      'url',
+      ({ url: received }) => {
+        if (received.startsWith('sia://')) {
+          completed = true
+          InAppBrowser.close()
+        }
       }
-    })
+    )
 
-    await InAppBrowser.open(url, {
-      // iOS Properties
-      dismissButtonStyle: 'cancel',
-      preferredBarTintColor: palette.slate[700],
-      preferredControlTintColor: 'white',
-      readerMode: false,
-      animated: true,
-      modalPresentationStyle: 'fullScreen',
-      modalTransitionStyle: 'coverVertical',
-      modalEnabled: true,
-      enableBarCollapsing: false,
-      // Android Properties
-      showTitle: true,
-      toolbarColor: palette.blue[500],
-      secondaryToolbarColor: 'black',
-      navigationBarColor: 'black',
-      navigationBarDividerColor: 'white',
-      enableUrlBarHiding: true,
-      enableDefaultShare: true,
-      forceCloseOnRedirection: false,
-      // Specify full animation resource identifier(package:anim/name)
-      // or only resource name(in case of animation bundled with app).
-      animations: {
-        startEnter: 'slide_in_right',
-        startExit: 'slide_out_left',
-        endEnter: 'slide_in_left',
-        endExit: 'slide_out_right',
-      },
-    })
+    try {
+      await InAppBrowser.open(url, {
+        dismissButtonStyle: 'cancel',
+        preferredBarTintColor: palette.slate[700],
+        preferredControlTintColor: 'white',
+        readerMode: false,
+        animated: true,
+        modalPresentationStyle: 'fullScreen',
+        modalTransitionStyle: 'coverVertical',
+        modalEnabled: true,
+        enableBarCollapsing: false,
+        showTitle: true,
+        toolbarColor: palette.blue[500],
+        secondaryToolbarColor: 'black',
+        navigationBarColor: 'black',
+        navigationBarDividerColor: 'white',
+        enableUrlBarHiding: true,
+        enableDefaultShare: true,
+        forceCloseOnRedirection: false,
+        animations: {
+          startEnter: 'slide_in_right',
+          startExit: 'slide_out_left',
+          endEnter: 'slide_in_left',
+          endExit: 'slide_out_right',
+        },
+      })
+      return completed
+    } finally {
+      subscription.remove()
+    }
+  } else {
+    await Linking.openURL(url)
+    return true
   }
 }
