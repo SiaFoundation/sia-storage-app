@@ -7,10 +7,9 @@ import { useFlatListControls } from '../hooks/useFlatListControls'
 
 type Props = {
   onPressItem: (item: FileRecord) => void
-  setItemRef?: (id: string, ref: any) => void
 }
 
-export function FileList({ onPressItem, setItemRef }: Props) {
+export function FileList({ onPressItem }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
@@ -35,11 +34,7 @@ export function FileList({ onPressItem, setItemRef }: Props) {
         paddingBottom: 130,
       }}
       renderItem={({ item }) => (
-        <FileListItem
-          file={item}
-          onPressItem={onPressItem}
-          setItemRef={setItemRef}
-        />
+        <FileListItem file={item} onPressItem={onPressItem} />
       )}
       onEndReachedThreshold={0.9}
       onEndReached={handleEndReached}

@@ -10,7 +10,6 @@ import { useFileList, useLibrary, type Category } from '../stores/library'
 import { FileList } from '../components/FileList'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import LibraryStatusSheet from '../components/LibraryStatusSheet'
-import { useState } from 'react'
 import { useLibraryViewMode } from '../stores/settings'
 import { LibraryControlBar } from '../components/LibraryControlBar'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -22,7 +21,6 @@ import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
 export function LibraryScreen({ route, navigation }: Props) {
-  const [statusSheetVisible, setStatusSheetVisible] = useState<boolean>(false)
   const viewMode = useLibraryViewMode()
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
