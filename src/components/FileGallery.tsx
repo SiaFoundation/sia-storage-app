@@ -7,15 +7,10 @@ import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {
   onPressItem: (item: FileRecord) => void
-  setItemRef?: (id: string, ref: any) => void
   numColumns?: number
 }
 
-export function FileGallery({
-  onPressItem,
-  setItemRef,
-  numColumns = 3,
-}: Props) {
+export function FileGallery({ onPressItem, numColumns = 3 }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
@@ -37,11 +32,7 @@ export function FileGallery({
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={styles.galleryContent}
       renderItem={({ item }) => (
-        <FileGalleryItem
-          file={item}
-          onPressItem={onPressItem}
-          setItemRef={setItemRef}
-        />
+        <FileGalleryItem file={item} onPressItem={onPressItem} />
       )}
       onEndReachedThreshold={0.95}
       onEndReached={handleEndReached}

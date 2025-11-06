@@ -11,15 +11,13 @@ import { memo } from 'react'
 type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
-  setItemRef?: (id: string, ref: any) => void
 }
 
-function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
+function FileListItemComponent({ file, onPressItem }: Props) {
   const status = useFileStatus(file)
   return (
     <Pressable
       collapsable={false}
-      ref={(node) => setItemRef?.(file.id, node)}
       style={styles.container}
       onPress={() => onPressItem(file)}
     >
@@ -56,9 +54,9 @@ function FileListItemComponent({ file, onPressItem, setItemRef }: Props) {
 
 export const FileListItem = memo(FileListItemComponent, (prev, next) => {
   return (
-    prev.file === next.file &&
-    prev.onPressItem === next.onPressItem &&
-    prev.setItemRef === next.setItemRef
+    prev.file.id === next.file.id &&
+    prev.file.updatedAt === next.file.updatedAt &&
+    prev.onPressItem === next.onPressItem
   )
 })
 

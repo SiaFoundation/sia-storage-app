@@ -11,18 +11,13 @@ import { UploadStatusIcon } from './UploadStatusIcon'
 type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
-  setItemRef?: (id: string, ref: any) => void
 }
 
-function FileGalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
+function FileGalleryItemComponent({ file, onPressItem }: Props) {
   const toast = useToast()
   const status = useFileStatus(file)
   return (
-    <View
-      collapsable={false}
-      ref={(node) => setItemRef?.(file.id, node)}
-      style={styles.thumbCell}
-    >
+    <View collapsable={false} style={styles.thumbCell}>
       <Pressable
         accessibilityRole="button"
         onPress={() => onPressItem(file)}
@@ -45,9 +40,9 @@ function FileGalleryItemComponent({ file, onPressItem, setItemRef }: Props) {
 
 export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
   return (
-    prev.file === next.file &&
-    prev.onPressItem === next.onPressItem &&
-    prev.setItemRef === next.setItemRef
+    prev.file.id === next.file.id &&
+    prev.file.updatedAt === next.file.updatedAt &&
+    prev.onPressItem === next.onPressItem
   )
 })
 
