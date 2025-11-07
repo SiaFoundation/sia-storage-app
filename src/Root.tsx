@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { StyleSheet, Platform, StatusBar } from 'react-native'
 import { palette } from './styles/colors'
 import {
@@ -7,7 +7,6 @@ import {
 } from '@react-navigation/native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
-import { useEffect } from 'react'
 import { initApp, shutdownApp } from './stores/app'
 import * as SplashScreen from 'expo-splash-screen'
 import useLinkedURL from './hooks/useLinkedURL'
@@ -15,6 +14,8 @@ import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
 import { uniqueId } from './lib/uniqueId'
 import { useHasOnboarded } from './stores/settings'
+import { ShareIntentProvider } from 'expo-share-intent'
+import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -58,11 +59,14 @@ export function Root() {
             default: 'light-content',
           })}
         />
-        <ToastProvider>
-          <NavigationContainer ref={navigationRef}>
-            <RootTabs />
-          </NavigationContainer>
-        </ToastProvider>
+        <ShareIntentProvider>
+          <ToastProvider>
+            <ShareIntentConsumer />
+            <NavigationContainer ref={navigationRef}>
+              <RootTabs />
+            </NavigationContainer>
+          </ToastProvider>
+        </ShareIntentProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   )
