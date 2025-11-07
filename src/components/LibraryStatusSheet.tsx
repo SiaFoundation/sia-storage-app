@@ -6,20 +6,22 @@ import { LabeledValueRow } from './LabeledValueRow'
 import { palette } from '../styles/colors'
 import { useIsConnected } from '../stores/sdk'
 import { useIsOnline } from '../hooks/useIsOnline'
-import { useUploadScannerStatus } from '../managers/uploadScanner'
+import { getUploadStats } from '../stores/fileStats'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
+import useSWR from 'swr'
+import { humanUploadPercent } from '../lib/uploadPercent'
 
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
   const isOnline = useIsOnline()
-  const uploadsProgress = useUploadScannerStatus()
-
-  const uploadedCount = Math.max(
-    0,
-    (uploadsProgress.total ?? 0) - (uploadsProgress.remaining ?? 0)
-  )
-
   const isOpen = useSheetOpen('libraryStatus')
+  const stats = useSWR(
+    ['upload-stats', isOpen ?? null],
+    () => getUploadStats(),
+    {
+      refreshInterval: 5_000,
+    }
+  )
 
   return (
     <ActionSheet
@@ -73,20 +75,153 @@ export function LibraryStatusSheet() {
           </InfoCard>
         </RowGroup>
 
-        <RowGroup
-          title="Uploads"
-          style={styles.groupSpacing}
-          indicator={
-            <Text style={styles.groupIndicator}>
-              {uploadsProgress.percentComplete}
-            </Text>
-          }
-        >
+        <RowGroup title="Uploads" style={styles.groupSpacing}>
           <InfoCard>
             <LabeledValueRow
-              label="Uploaded"
-              value={`${uploadedCount} / ${uploadsProgress.total}`}
+              label="Overall"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.overall.uploaded ?? 0} / ${
+                      stats.data?.overall.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.overall.percentDecimal,
+                      stats.data?.overall.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
               canCopy={false}
+            />
+            <LabeledValueRow
+              label="Photos"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.photos.uploaded ?? 0} / ${
+                      stats.data?.photos.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.photos.percentDecimal,
+                      stats.data?.photos.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Videos"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.videos.uploaded ?? 0} / ${
+                      stats.data?.videos.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.videos.percentDecimal,
+                      stats.data?.videos.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Audio"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.audio.uploaded ?? 0} / ${
+                      stats.data?.audio.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.audio.percentDecimal,
+                      stats.data?.audio.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Docs"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.docs.uploaded ?? 0} / ${
+                      stats.data?.docs.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.docs.percentDecimal,
+                      stats.data?.docs.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Other"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.other.uploaded ?? 0} / ${
+                      stats.data?.other.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.other.percentDecimal,
+                      stats.data?.other.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
+            />
+            <LabeledValueRow
+              label="Thumbnails"
+              value={
+                <View style={styles.valueRight}>
+                  <Text style={styles.valueText}>
+                    {`${stats.data?.thumbnails.uploaded ?? 0} / ${
+                      stats.data?.thumbnails.total ?? 0
+                    }`}
+                  </Text>
+                  <Text style={styles.valuePercent}>
+                    {humanUploadPercent(
+                      stats.data?.thumbnails.percentDecimal,
+                      stats.data?.thumbnails.percent
+                    )}
+                  </Text>
+                </View>
+              }
+              align="right"
+              canCopy={false}
+              showDividerTop
             />
           </InfoCard>
         </RowGroup>
@@ -124,9 +259,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     justifyContent: 'flex-end',
+    width: '100%',
     flex: 1,
   },
   valueText: { color: palette.gray[100] },
+  valuePercent: { color: palette.gray[400] },
   dotOnline: {
     width: 8,
     height: 8,
@@ -140,5 +277,3 @@ const styles = StyleSheet.create({
     backgroundColor: palette.red[500],
   },
 })
-
-export default LibraryStatusSheet

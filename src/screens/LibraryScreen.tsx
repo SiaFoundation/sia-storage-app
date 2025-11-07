@@ -14,7 +14,7 @@ import {
 } from '../stores/library'
 import { FileList } from '../components/FileList'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
-import LibraryStatusSheet from '../components/LibraryStatusSheet'
+import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { useLibraryViewMode } from '../stores/settings'
 import { LibraryControlBar } from '../components/LibraryControlBar'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
