@@ -16,6 +16,7 @@ import { getAutoScanUploads, useAutoScanUploads } from '../stores/settings'
 import { getMaxUploads } from '../managers/uploadsPool'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { FileRecord } from '../stores/files'
+import { humanUploadPercent } from '../lib/uploadPercent'
 
 async function startUploadScanner(): Promise<void> {
   const isConnected = getIsConnected()
@@ -77,7 +78,7 @@ export function useUploadScannerStatus(): {
     show: isEnabled && !!localOnlyCount,
     enabled: isEnabled,
     remaining: localOnlyCount,
-    percentComplete: `${(percentComplete * 100).toFixed(0)}%`,
+    percentComplete: humanUploadPercent(percentComplete),
     total: total.data ?? 0,
   }
 }
