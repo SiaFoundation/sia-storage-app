@@ -5,8 +5,13 @@ import { Gradient } from '../components/Gradient'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { FileGallery } from '../components/FileGallery'
 import { type MainStackParamList } from '../stacks/types'
-import { type FileRecord, useFileCount } from '../stores/files'
-import { useFileList, useLibrary, type Category } from '../stores/library'
+import { type FileRecord } from '../stores/files'
+import {
+  useFileList,
+  useLibrary,
+  type Category,
+  useLibraryCount,
+} from '../stores/library'
 import { FileList } from '../components/FileList'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import LibraryStatusSheet from '../components/LibraryStatusSheet'
@@ -24,7 +29,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   const viewMode = useLibraryViewMode()
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
-  const fileCount = useFileCount()
+  const fileCount = useLibraryCount()
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
       navigation.navigate('FileDetail', { id: file.id })

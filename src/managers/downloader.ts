@@ -81,6 +81,7 @@ export function useDownloadFromShareURL() {
           const localMetadata: FileLocalMetadata = {
             id,
             localId: null,
+            addedAt: Date.now(),
           }
           const file: FileRecord = {
             ...metadata,

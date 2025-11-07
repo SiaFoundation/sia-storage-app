@@ -9,6 +9,8 @@ export function transformFileMetadata(metadata: FileMetadata): FileMetadata {
     updatedAt: metadata.updatedAt,
     createdAt: metadata.createdAt,
     hash: metadata.hash,
+    thumbForHash: metadata.thumbForHash,
+    thumbSize: metadata.thumbSize,
   }
 }
 
@@ -29,6 +31,8 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
       updatedAt: 0,
       createdAt: 0,
       hash: '',
+      thumbForHash: undefined,
+      thumbSize: undefined,
     }
   }
 }

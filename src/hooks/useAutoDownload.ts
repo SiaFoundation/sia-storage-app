@@ -6,17 +6,6 @@ import { useDownload, useDownloadFromShareURL } from '../managers/downloader'
 import { FileRecord } from '../stores/files'
 
 /**
- * When a file is rendered in a thumbnail view, auto download it if:
- * its an image or PDF, or its less than 4 MB.
- */
-export function thumbnailShouldAutoDownload(file: FileRecord): boolean {
-  const isImage = file.type?.startsWith('image') ?? false
-  const isPdf = (file.type ?? '').includes('pdf')
-  const sizeOk = (file.size ?? Infinity) <= 4 * 1000 * 1000 // 4 MB
-  return isImage || isPdf || sizeOk
-}
-
-/**
  * When a file is rendered in a detail view, auto download it if:
  * its an image, PDF, or its less than 10 MB.
  */
@@ -27,6 +16,10 @@ export function detailsShouldAutoDownload(file: FileRecord): boolean {
   return isImage || isPdf || sizeOk
 }
 
+/**
+ * useAutoDownload automatically downloads a file if it is not already downloaded.
+ * This is used in the main file viewer with detailsShouldAutoDownload.
+ */
 export function useAutoDownload(
   file: FileRecord,
   shouldDownload: (file: FileRecord) => boolean

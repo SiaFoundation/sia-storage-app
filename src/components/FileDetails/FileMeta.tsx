@@ -12,6 +12,9 @@ import { useShowAdvanced } from '../../stores/settings'
 import { InputRow } from '../InputRow'
 import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
+import useSWR from 'swr'
+import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
+import { getFileUri } from '../../stores/fileCache'
 
 export function FileMeta({
   file,
@@ -32,6 +35,18 @@ export function FileMeta({
     },
   })
   const pinnedObjects = usePinnedObjects(file)
+  const thumbnails = useSWR(
+    showAdvanced.data ? thumbnailSwr.getKey(`${file.hash}/all`) : null,
+    async () => {
+      const records = await readThumbnailsByHash(file.hash)
+      return Promise.all(
+        records.map(async (thumb) => ({
+          record: thumb,
+          uri: await getFileUri(thumb),
+        }))
+      )
+    }
+  )
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -103,6 +118,33 @@ export function FileMeta({
       </RowGroup>
       {showAdvanced.data && (
         <>
+          {thumbnails.data?.length ? (
+            <RowGroup title="Thumbnails">
+              <InfoCard>
+                {thumbnails.data.map(({ record, uri }, index) => {
+                  const thumbSizeLabel = record.thumbSize
+                    ? `${record.thumbSize}px`
+                    : 'Unknown'
+                  const label = `Thumbnail ${thumbSizeLabel} URI`
+                  const value = uri ?? 'Not cached'
+                  return (
+                    <LabeledValueRow
+                      key={record.id}
+                      labelWidth={200}
+                      label={label}
+                      value={value}
+                      isMonospace
+                      align="left"
+                      ellipsizeMode="middle"
+                      numberOfLines={1}
+                      showDividerTop={index > 0}
+                      canCopy={!!uri}
+                    />
+                  )
+                })}
+              </InfoCard>
+            </RowGroup>
+          ) : null}
           {pinnedObjects.data && pinnedObjects.data.length > 1 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Pinned Objects</Text>

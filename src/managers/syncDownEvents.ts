@@ -170,7 +170,7 @@ async function handleUpdateEvent(
     await updateFileRecordWithLocalObject(
       {
         ...existingFile,
-        ...decodeFileMetadata(object.metadata()),
+        ...metadata,
       },
       localObject
     )
@@ -187,12 +187,7 @@ async function handleUpdateEvent(
     await createFileRecordWithLocalObject(
       {
         id: fileId,
-        name: metadata.name,
-        size: metadata.size,
-        createdAt: metadata.createdAt,
-        updatedAt: metadata.updatedAt,
-        type: metadata.type,
-        hash: metadata.hash,
+        ...metadata,
         localId: null,
         addedAt: Date.now(),
       },

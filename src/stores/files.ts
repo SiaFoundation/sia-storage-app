@@ -12,12 +12,20 @@ import { getIndexerURL } from './settings'
 import { librarySwr } from './library'
 import { removeEmptyValues } from '../lib/object'
 
+/** Valid thumbnail sizes in pixels. */
+export type ThumbSize = 64 | 512
+export const ThumbSizes: ThumbSize[] = [64, 512]
+
 /** Fields that are stored in both the local database and the indexer metadata. */
 export type FileMetadata = {
   name: string
   type: string
   size: number
   hash: string
+  // Hash of the original file content this thumbnail is for.
+  thumbForHash?: string
+  // Size of the thumbnail in pixels.
+  thumbSize?: ThumbSize
   createdAt: number
   updatedAt: number
 }
@@ -39,10 +47,7 @@ export async function createFileRecord(
   fileRecord: Omit<FileRecord, 'objects'>,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  const { id, name, size, createdAt, updatedAt, type, localId, hash, addedAt } =
-    fileRecord
-  await db().runAsync(
-    'INSERT INTO files (id, name, size, createdAt, updatedAt, type, localId, hash, addedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  const {
     id,
     name,
     size,
@@ -51,7 +56,23 @@ export async function createFileRecord(
     type,
     localId,
     hash,
-    addedAt
+    addedAt,
+    thumbForHash,
+    thumbSize,
+  } = fileRecord
+  await db().runAsync(
+    'INSERT INTO files (id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id,
+    name,
+    size,
+    createdAt,
+    updatedAt,
+    type,
+    localId,
+    hash,
+    addedAt,
+    thumbForHash ?? null,
+    thumbSize ?? null
   )
   if (triggerUpdate) {
     await librarySwr.triggerChange()
@@ -250,7 +271,7 @@ export async function readFileRecordByContentHash(hash: string) {
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE id = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize FROM files WHERE id = ?',
     id
   )
   if (!row) {
@@ -277,6 +298,8 @@ export async function updateFileRecord(
     'type',
     'localId',
     'hash',
+    'thumbForHash',
+    'thumbSize',
   ]
   for (const field of updatableFields) {
     const nonEmptyUpdate = removeEmptyValues(update)
@@ -318,6 +341,18 @@ export async function deleteFileRecord(
   if (triggerUpdate) {
     await librarySwr.triggerChange()
   }
+}
+
+/** Delete an original file and all its associated thumbnails. */
+export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
+  const original = await readFileRecord(id)
+  if (!original) return
+  const hash = original.hash
+  await db().withTransactionAsync(async () => {
+    await db().runAsync('DELETE FROM files WHERE thumbForHash = ?', hash)
+    await db().runAsync('DELETE FROM files WHERE id = ?', id)
+  })
+  await librarySwr.triggerChange()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
@@ -376,18 +411,10 @@ export function transformRow(
     type: row.type,
     localId: row.localId,
     hash: row.hash,
+    thumbForHash: row.thumbForHash ?? undefined,
+    thumbSize: row.thumbSize ?? undefined,
     objects: objectsMap,
   }
-}
-
-export function useFileCount() {
-  return useSWR(librarySwr.getKey('count'), () =>
-    readAllFileRecordsCount({
-      limit: undefined,
-      after: undefined,
-      order: 'ASC',
-    })
-  )
 }
 
 export function useFileCountAll() {
