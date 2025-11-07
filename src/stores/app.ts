@@ -28,6 +28,7 @@ import {
   resetPhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
 import { initBackgroundTasks } from '../managers/backgroundTasks'
+import { initThumbnailer } from '../managers/thumbnailer'
 
 export type AppState = {
   isInitializing: boolean
@@ -56,9 +57,12 @@ export async function initApp() {
   initSyncNewPhotos()
   initSyncPhotosArchive()
   initBackgroundTasks()
+  initThumbnailer()
 }
 
-export async function onboardIndexer(indexerURL: string): Promise<ConnectResult> {
+export async function onboardIndexer(
+  indexerURL: string
+): Promise<ConnectResult> {
   return tryToConnectAndSet(indexerURL)
 }
 
