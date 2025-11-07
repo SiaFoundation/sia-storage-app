@@ -1,5 +1,5 @@
 import { Image, StyleSheet, View } from 'react-native'
-import { FileRecord } from '../stores/files'
+import { FileRecord, type ThumbSize } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import {
   FileAudioIcon,
@@ -8,25 +8,25 @@ import {
   FileTextIcon,
   FileVideoIcon,
   ImageIcon,
+  PlayIcon,
 } from 'lucide-react-native'
 import { palette } from '../styles/colors'
-import {
-  thumbnailShouldAutoDownload,
-  useAutoDownload,
-} from '../hooks/useAutoDownload'
 import { CenteredProgress } from './CenteredProgress'
+import { useBestThumbnailUri } from '../hooks/useBestThumbnail'
 
 export function FileThumbnail({
   file,
+  thumbSize,
   iconSize = 16,
   iconColor = palette.gray[200],
 }: {
   file: FileRecord
+  thumbSize: ThumbSize
   iconSize?: number
   iconColor?: string
 }) {
   const status = useFileStatus(file)
-  useAutoDownload(file, thumbnailShouldAutoDownload)
+  const bestThumb = useBestThumbnailUri(file, thumbSize)
 
   if (status.data?.isDownloading) {
     return (
@@ -37,13 +37,9 @@ export function FileThumbnail({
   }
 
   if (file.type?.includes('image')) {
-    if (status.data?.fileUri) {
-      return (
-        <Image
-          source={{ uri: status.data?.fileUri }}
-          style={styles.thumbnailImage}
-        />
-      )
+    const thumbUri = bestThumb.data
+    if (thumbUri) {
+      return <Image source={{ uri: thumbUri }} style={styles.thumbnailImage} />
     }
     return (
       <View style={styles.thumbnailImage}>
@@ -52,6 +48,10 @@ export function FileThumbnail({
     )
   }
   if (file.type?.includes('pdf')) {
+    const thumbUri = bestThumb.data
+    if (thumbUri) {
+      return <Image source={{ uri: thumbUri }} style={styles.thumbnailImage} />
+    }
     if (status.data?.fileUri) {
       return (
         <Image
@@ -67,9 +67,16 @@ export function FileThumbnail({
     )
   }
   if (file.type?.includes('video')) {
+    const thumbUri = bestThumb.data
     return (
       <View style={styles.thumbnailImage}>
-        <FileVideoIcon size={iconSize} color={iconColor} />
+        {thumbUri ? (
+          <Image
+            source={{ uri: thumbUri }}
+            style={[{ position: 'absolute' }, styles.thumbnailImage]}
+          />
+        ) : null}
+        <PlayIcon size={iconSize} color={iconColor} />
       </View>
     )
   }

@@ -4,6 +4,7 @@ import useSWRInfinite from 'swr/infinite'
 import { FileRecord, FileRecordRow, transformRow } from './files'
 import { readLocalObjectsForFiles } from './localObjects'
 import { buildSWRHelpers } from '../lib/swr'
+import useSWR from 'swr'
 
 export const librarySwr = buildSWRHelpers('library')
 
@@ -42,6 +43,8 @@ async function readOrderedFileRecords(
 
   const whereParts: string[] = []
   const params: (string | number | null)[] = []
+  // Exclude thumbnails from library lists.
+  whereParts.push('thumbForHash IS NULL')
   if (hasCategories) {
     whereParts.push(prefixes.map(() => 'type LIKE ?').join(' OR '))
     params.push(...prefixes.map((p) => `${p}%`))
@@ -127,6 +130,16 @@ export function useFileList() {
     data: flat,
     hasMore,
   }
+}
+
+// Count of library files excluding thumbnails.
+export function useLibraryCount() {
+  return useSWR(librarySwr.getKey('countWithoutThumbs'), async () => {
+    const row = await db().getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NULL`
+    )
+    return row?.count ?? 0
+  })
 }
 
 // File View Store

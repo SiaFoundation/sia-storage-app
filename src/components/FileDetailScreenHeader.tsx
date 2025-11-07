@@ -10,7 +10,7 @@ import { useFileStatus } from '../lib/file'
 import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = {
-  file: FileRecord
+  file?: FileRecord
   title: string
   navigation: NavigationProp<Record<string, object | undefined>>
   icon?: 'back' | 'close'

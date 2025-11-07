@@ -27,7 +27,7 @@ function FileGalleryItemComponent({ file, onPressItem }: Props) {
           toast.show('Copied item id')
         }}
       >
-        <FileThumbnail file={file} iconSize={24} />
+        <FileThumbnail file={file} iconSize={24} thumbSize={512} />
         {status.data ? (
           <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
             <UploadStatusIcon status={status.data} size={10} />

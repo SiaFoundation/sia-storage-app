@@ -22,7 +22,7 @@ function FileListItemComponent({ file, onPressItem }: Props) {
       onPress={() => onPressItem(file)}
     >
       <View style={styles.thumbnailContainer}>
-        <FileThumbnail file={file} />
+        <FileThumbnail file={file} thumbSize={64} />
       </View>
       <View style={styles.infoContainer}>
         <View style={styles.fileDetails}>
