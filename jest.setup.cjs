@@ -30,15 +30,17 @@ jest.mock('react-native-quick-crypto', () => {
 const rnfsStat = jest.fn()
 const rnfsRead = jest.fn()
 const rnfsReadFile = jest.fn()
+const rnfsHash = jest.fn()
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
     stat: rnfsStat,
     read: rnfsRead,
     readFile: rnfsReadFile,
+    hash: rnfsHash,
   },
 }))
-global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile }
+global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile, rnfsHash }
 
 // In-memory SecureStore for tests.
 jest.mock('./src/stores/secureStore', () => {
