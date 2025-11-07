@@ -38,13 +38,21 @@ export function SettingsHomeScreen({ navigation }: Props) {
           <Text style={styles.rowChevron}>›</Text>
         </View>
       </Pressable>
-      <Pressable onPress={() => navigation.navigate('Advanced')}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Advanced"
+        onPress={() => navigation.navigate('Advanced')}
+      >
         <View style={styles.rowItem}>
           <Text style={styles.rowLabel}>Advanced</Text>
           <Text style={styles.rowChevron}>›</Text>
         </View>
       </Pressable>
-      <Pressable onPress={() => navigation.navigate('Logs')}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Logs"
+        onPress={() => navigation.navigate('Logs')}
+      >
         <View style={styles.rowItem}>
           <Text style={styles.rowLabel}>Logs</Text>
           <Text style={styles.rowChevron}>›</Text>

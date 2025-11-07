@@ -7,16 +7,19 @@ export function Button({
   onPress,
   children,
   variant = 'primary',
+  accessibilityLabel,
 }: {
   style?: StyleProp<ViewStyle>
   disabled?: boolean
   onPress: () => void
   children: React.ReactNode
   variant?: 'primary' | 'secondary' | 'danger'
+  accessibilityLabel?: string
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.primaryButton,
         variant === 'danger' && styles.dangerButton,

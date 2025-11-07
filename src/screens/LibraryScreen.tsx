@@ -84,6 +84,7 @@ export function LibraryScreen({ route, navigation }: Props) {
           <IconButton
             onPress={() => navigation.navigate('SettingsTab' as never)}
             style={[styles.headerIcon, { paddingHorizontal: 4 }]}
+            accessibilityLabel="Settings"
           >
             <SettingsIcon color={palette.gray[50]} />
           </IconButton>
