@@ -42,7 +42,36 @@
       ["./plugins/ios-target-16"],
       "expo-video",
       ["./plugins/android-background-fetch-maven"],
-      "react-native-background-fetch"
+      "react-native-background-fetch",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1000,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1000,
+            "NSExtensionActivationSupportsFileWithMaxCount": 1000
+          },
+          "androidIntentFilters": [
+            "text/*",
+            "image/*",
+            "video/*",
+            "audio/*",
+            "application/json",
+            "application/pdf",
+            "application/octet-stream"
+          ],
+          "androidMultiIntentFilters": [
+            "text/*",
+            "image/*",
+            "video/*",
+            "audio/*",
+            "application/json",
+            "application/pdf",
+            "application/octet-stream"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {
