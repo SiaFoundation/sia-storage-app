@@ -13,6 +13,10 @@ import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
 import { useCallback, useMemo } from 'react'
 import { FileRecord } from '../../stores/files'
+import {
+  useAutoDownload,
+  detailsShouldAutoDownload,
+} from '../../hooks/useAutoDownload'
 
 export function FileViewer({
   file,
@@ -30,6 +34,7 @@ export function FileViewer({
   const { type, name } = file
   const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
+  useAutoDownload(file, detailsShouldAutoDownload)
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
 
