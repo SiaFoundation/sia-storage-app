@@ -85,3 +85,26 @@ jest.mock('./src/stores/secureStore', () => {
     }),
   }
 })
+
+// These warnings are produced when Jest loads Expo modules without native bindings.
+// In the test environment we intentionally replace those bindings with mocks, so
+// the messages are expected noise and safe to ignore.
+const suppressedWarnings = [
+  'EXNativeModulesProxy',
+  'ExpoModulesCoreJSLogger',
+  'ExponentConstants',
+  'ExpoUpdates',
+  'ExpoGo',
+  '_reactNative.TurboModuleRegistry.get is not a function',
+]
+const originalConsoleWarn = console.warn
+console.warn = (...args) => {
+  const [message] = args
+  if (
+    typeof message === 'string' &&
+    suppressedWarnings.some((pattern) => message.includes(pattern))
+  ) {
+    return
+  }
+  originalConsoleWarn(...args)
+}

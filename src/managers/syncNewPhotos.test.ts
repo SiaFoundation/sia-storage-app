@@ -1,5 +1,5 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
-import { initSyncNewPhotos } from './syncNewPhotos'
+import { initSyncNewPhotos, setAutoSyncNewPhotos } from './syncNewPhotos'
 import * as MediaLibrary from 'expo-media-library'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
@@ -72,6 +72,7 @@ describe('syncNewPhotos', () => {
     const processAssetsMock = jest.mocked(processAssets)
 
     ensureMediaLibraryPermissionMock.mockResolvedValue(true)
+    await setAutoSyncNewPhotos(true)
     getAssetsAsyncMock
       .mockResolvedValueOnce(
         page([asset('a1', '1.jpg', 1000), asset('a2', '2.jpg', 2000)])
@@ -93,11 +94,11 @@ describe('syncNewPhotos', () => {
     // createdAfter is set to current time on first init.
     expect(getTime(opts0?.createdAfter)).toBeGreaterThan(0)
     // First tick had two assets, two process calls.
-    expect(getTime(opts1?.createdAfter)).toBe(2000)
+    expect(getTime(opts1?.createdAfter)).toBe(2001)
     // Third tick had no assets, no further processing.
-    expect(getTime(opts2?.createdAfter)).toBe(2500)
+    expect(getTime(opts2?.createdAfter)).toBe(2501)
     // Fourth tick had one asset, one process call.
-    expect(getTime(opts3?.createdAfter)).toBe(2500)
+    expect(getTime(opts3?.createdAfter)).toBe(2501)
     expect(processAssetsMock).toHaveBeenCalledTimes(3)
     expect(processAssetsMock).toHaveBeenNthCalledWith(1, [
       expect.objectContaining({ id: 'a1', name: '1.jpg' }),

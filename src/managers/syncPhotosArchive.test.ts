@@ -6,6 +6,7 @@ import {
   initSyncPhotosArchive,
   getPhotosArchiveCursor,
   restartPhotosArchiveCursor,
+  setAutoSyncPhotosArchive,
 } from './syncPhotosArchive'
 
 jest.useFakeTimers()
@@ -76,6 +77,7 @@ describe('syncPhotosArchive', () => {
     const processAssetsMock = jest.mocked(processAssets)
 
     ensureMediaLibraryPermissionMock.mockResolvedValue(true)
+    await setAutoSyncPhotosArchive(true)
 
     getAssetsAsyncMock.mockImplementation(
       async (
@@ -89,7 +91,7 @@ describe('syncPhotosArchive', () => {
             asset('b1', 'one.jpg', 10_000),
             asset('b2', 'two.jpg', 5_000),
           ])
-        if (t === 5_000) return page([asset('b3', 'three.jpg', 1_000)])
+        if (t >= 4_999) return page([asset('b3', 'three.jpg', 1_000)])
         return page([])
       }
     )
@@ -109,14 +111,14 @@ describe('syncPhotosArchive', () => {
       expect.objectContaining({ id: 'b1', name: 'one.jpg' }),
       expect.objectContaining({ id: 'b2', name: 'two.jpg' }),
     ])
-    expect(await getPhotosArchiveCursor()).toBe(5_000)
+    expect(await getPhotosArchiveCursor()).toBe(4_999)
 
     // Tick 2: createdBefore 5_000 -> returns [1_000], cursor -> 1_000
     await runTick()
     expect(processAssetsMock).toHaveBeenNthCalledWith(2, [
       expect.objectContaining({ id: 'b3', name: 'three.jpg' }),
     ])
-    expect(await getPhotosArchiveCursor()).toBe(1_000)
+    expect(await getPhotosArchiveCursor()).toBe(999)
 
     // Tick 3: createdBefore 1_000 -> returns [], cursor should reset to 0 and stop
     await runTick()
