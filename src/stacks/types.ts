@@ -13,6 +13,7 @@ export type SettingsStackParamList = {
   Sync: undefined
   Logs: undefined
   Advanced: undefined
+  Debug: undefined
 }
 
 export type AuthStackParamList = {

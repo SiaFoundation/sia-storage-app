@@ -10,14 +10,14 @@ import { SettingsAdvancedInfo } from '../components/SettingsAdvancedInfo'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
 
-export function SettingsAdvancedScreen(_props: Props) {
+export function SettingsAdvancedScreen(props: Props) {
   useSettingsHeader()
 
   return (
     <SettingsLayout style={styles.container}>
       <SettingsAdvancedAccount />
       <SettingsRecoveryPhrase />
-      <SettingsAdvancedInfo />
+      <SettingsAdvancedInfo {...props} />
       <SettingsAdvancedDangerZone />
     </SettingsLayout>
   )

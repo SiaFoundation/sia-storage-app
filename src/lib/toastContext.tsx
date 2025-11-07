@@ -88,7 +88,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           ]}
         >
           <View style={styles.toastCard}>
-            <Text style={styles.toastText}>{message}</Text>
+            <Text style={styles.toastText} accessibilityLabel={message}>
+              {message}
+            </Text>
           </View>
         </Animated.View>
       ) : null}

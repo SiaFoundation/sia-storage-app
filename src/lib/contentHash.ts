@@ -19,7 +19,7 @@ export async function calculateContentHash(
 }
 
 /** SHA-256. Try streamed native RNFS.hash first, otherwise fallback to QuickCrypto. */
-async function sha256File(uri: string): Promise<string> {
+export async function sha256File(uri: string): Promise<string> {
   try {
     return await rnfsHash(uri)
   } catch {

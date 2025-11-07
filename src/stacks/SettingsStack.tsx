@@ -8,6 +8,7 @@ import { SettingsSyncScreen } from '../screens/SettingsSyncScreen'
 import { type SettingsStackParamList } from './types'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
+import { SettingsDebugScreen } from '../screens/SettingsDebugScreen'
 import { StyleSheet } from 'react-native'
 import { palette } from '../styles/colors'
 
@@ -56,6 +57,11 @@ export function SettingsStack() {
         name="Advanced"
         component={SettingsAdvancedScreen}
         options={{ title: 'Advanced' }}
+      />
+      <Stack.Screen
+        name="Debug"
+        component={SettingsDebugScreen}
+        options={{ title: 'Debug' }}
       />
     </Stack.Navigator>
   )
