@@ -18,29 +18,18 @@ export async function calculateContentHash(
   return `sha256|${hex}`
 }
 
-/** Streamed SHA-256. */
+/** SHA-256 via RNFS.hash. Falls back to manual hashing when needed */
 async function sha256File(uri: string): Promise<string> {
-  const h = QuickCrypto.createHash('sha256')
-  const chunkSize = 1 * 1024 * 1024 // 1MB
-
   try {
-    const stat = await RNFS.stat(uri)
-    let pos = 0
-    while (pos < stat.size) {
-      const len = Math.min(chunkSize, stat.size - pos)
-      const b64 = await RNFS.read(uri, len, pos, 'base64')
-      const buf = Buffer.from(b64, 'base64')
-      h.update(sliceBuffer(buf))
-      pos += len
-    }
+    return await RNFS.hash(uri, 'sha256')
   } catch {
     // Fallback for URIs where stat/ranged read is unsupported (some content:// cases):
     // Read entire file. Prefer avoiding this for very large files but ensures correctness.
     const b64 = await RNFS.readFile(uri, 'base64')
-    const buf = Buffer.from(b64, 'base64')
-    h.update(sliceBuffer(buf))
+    const h = QuickCrypto.createHash('sha256')
+    h.update(sliceBuffer(Buffer.from(b64, 'base64')))
+    return h.digest('hex')
   }
-  return h.digest('hex')
 }
 
 // Extract the exact ArrayBuffer slice to avoid extra capacity bytes.
