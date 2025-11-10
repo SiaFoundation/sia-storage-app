@@ -97,7 +97,54 @@ describe('syncPhotosArchive', () => {
     )
 
     processAssetsMock
-      .mockResolvedValueOnce({ files: [], updatedFiles: [], warnings: [] })
+      .mockResolvedValueOnce({
+        files: [
+          {
+            id: 'b1',
+            name: 'one.jpg',
+            type: 'image/jpeg',
+            size: 100,
+            hash: 'hash1',
+            createdAt: 10_000,
+            updatedAt: 10_000,
+            localId: 'b1',
+            addedAt: 10_000,
+            objects: {},
+          },
+          {
+            id: 'b2',
+            name: 'two.jpg',
+            type: 'image/jpeg',
+            size: 100,
+            hash: 'hash2',
+            createdAt: 5_000,
+            updatedAt: 5_000,
+            localId: 'b2',
+            addedAt: 10_000,
+            objects: {},
+          },
+        ],
+        updatedFiles: [],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        files: [
+          {
+            id: 'b3',
+            name: 'three.jpg',
+            type: 'image/jpeg',
+            size: 100,
+            hash: 'hash3',
+            createdAt: 1_000,
+            updatedAt: 1_000,
+            localId: 'b3',
+            addedAt: 10_000,
+            objects: {},
+          },
+        ],
+        updatedFiles: [],
+        warnings: [],
+      })
       .mockResolvedValueOnce({ files: [], updatedFiles: [], warnings: [] })
 
     // Seed initial cursor so service is enabled.
@@ -113,14 +160,14 @@ describe('syncPhotosArchive', () => {
     ])
     expect(await getPhotosArchiveCursor()).toBe(4_999)
 
-    // Tick 2: createdBefore 5_000 -> returns [1_000], cursor -> 1_000
+    // Tick 2: createdBefore 4_999 -> returns [1_000], cursor -> 999
     await runTick()
     expect(processAssetsMock).toHaveBeenNthCalledWith(2, [
       expect.objectContaining({ id: 'b3', name: 'three.jpg' }),
     ])
     expect(await getPhotosArchiveCursor()).toBe(999)
 
-    // Tick 3: createdBefore 1_000 -> returns [], cursor should reset to 0 and stop
+    // Tick 3: createdBefore 1_000 -> returns [], cursor -> 0
     await runTick()
     expect(await getPhotosArchiveCursor()).toBe(0)
     expect(processAssetsMock).toHaveBeenCalledTimes(2)

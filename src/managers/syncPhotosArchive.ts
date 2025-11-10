@@ -16,7 +16,7 @@ import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 
 const PAGE_SIZE = 1
 
-export async function workBackward(): Promise<void> {
+export async function workBackward() {
   if (!(await ensureMediaLibraryPermission())) return
   const cursor = await getPhotosArchiveCursor()
 
@@ -50,7 +50,12 @@ export async function workBackward(): Promise<void> {
         timestamp: new Date(asset.creationTime).toISOString(),
       }))
     )
-    if (files.length > 0) await librarySwr.triggerChange()
+    if (files.length > 0) {
+      await librarySwr.triggerChange()
+    } else {
+      // Nothing was found so immediately start next interval.
+      return 0
+    }
   } catch (e) {
     logger.log('[syncPhotosArchive] batch error', e)
   }
