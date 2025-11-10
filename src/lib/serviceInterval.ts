@@ -15,7 +15,7 @@ export function createServiceInterval({
   interval,
 }: {
   name: string
-  worker: () => void | Promise<void>
+  worker: () => void | number | Promise<void | number>
   getState: () => Promise<boolean>
   interval: number
 }): () => void {
@@ -44,19 +44,22 @@ export function createServiceInterval({
 
       if (!enabled) {
         // Service disabled: skip work but still schedule the next check.
-        scheduleNextRun()
+        scheduleNextRun(interval)
         return
       }
 
+      let nextInterval = interval
       try {
-        await Promise.resolve(worker())
+        const customInterval = await Promise.resolve(worker())
+        if (typeof customInterval === 'number') {
+          nextInterval = customInterval
+        }
       } finally {
-        // Always schedule the next run, even if the worker throws.
-        scheduleNextRun()
+        scheduleNextRun(nextInterval)
       }
     }
 
-    function scheduleNextRun() {
+    function scheduleNextRun(interval: number) {
       // Only schedule if this init remains the latest.
       const current = schedulerStateMap.get(name)
       if (!current || current.token !== token) return
@@ -64,7 +67,7 @@ export function createServiceInterval({
       schedulerStateMap.set(name, { token, timeoutId })
     }
 
-    scheduleNextRun()
+    scheduleNextRun(interval)
   }
 
   return init
