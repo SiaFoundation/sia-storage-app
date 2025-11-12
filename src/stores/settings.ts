@@ -33,7 +33,7 @@ export async function setRecoveryPhrase(
 
 export const [getIndexerURL, useIndexerURL] = createGetterAndSWRHook(
   getKey('indexerURL'),
-  () => getSecureStoreString('indexerURL', DEFAULT_INDEXER_URL)
+  () => getSecureStoreString<string>('indexerURL', DEFAULT_INDEXER_URL)
 )
 
 export async function setIndexerURL(value: string) {

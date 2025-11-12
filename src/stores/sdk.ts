@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Sdk } from 'react-native-sia'
+import { Sdk, type PinnedObjectInterface } from 'react-native-sia'
 import authApp from '../lib/authApp'
 import { logger } from '../lib/logger'
 import { getIndexerURL } from './settings'
@@ -161,4 +161,31 @@ export function useIsAuthing(): boolean {
 
 export function getSdk(): Sdk | null {
   return useSdkStore.getState().sdk
+}
+
+/**
+ * Update the metadata of a pinned object.
+ */ export async function updateMetadata(
+  pinnedObject: PinnedObjectInterface,
+  metadata: ArrayBuffer
+): Promise<void> {
+  const sdk = getSdk()
+  if (!sdk) {
+    throw new Error('SDK not initialized')
+  }
+  pinnedObject.updateMetadata(metadata)
+  await sdk.saveObject(pinnedObject)
+}
+
+/**
+ * Fetch a pinned object by id.
+ */
+export async function getPinnedObject(
+  objectId: string
+): Promise<PinnedObjectInterface> {
+  const sdk = getSdk()
+  if (!sdk) {
+    throw new Error('SDK not initialized')
+  }
+  return sdk.object(objectId)
 }
