@@ -1,29 +1,11 @@
-import { logger } from '../../lib/logger'
-import { createServiceInterval } from '../../lib/serviceInterval'
-import { db } from '../../db'
-import { File } from 'expo-file-system'
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
-import {
-  readFileRecordByContentHash,
-  createFileRecord,
-  type ThumbSize,
-  ThumbSizes,
-} from '../../stores/files'
-import {
-  readThumbnailSizesForHash,
-  thumbnailExistsForHashAndSize,
-  thumbnailSwr,
-} from '../../stores/thumbnails'
-import { getFileUri, copyFileToCache } from '../../stores/fileCache'
-import { THUMBNAIL_INTERVAL } from '../../config'
-import { calculateContentHash } from '../../lib/contentHash'
-import { getMimeType } from '../../lib/fileTypes'
-import { uniqueId } from '../../lib/uniqueId'
-import {
-  prepareImageThumbnail,
-  prepareVideoThumbnail,
-  ThumbnailInfo,
-} from './prepareThumb'
+import { logger } from '../lib/logger'
+import { createServiceInterval } from '../lib/serviceInterval'
+import { db } from '../db'
+import { type ThumbSize, ThumbSizes } from '../stores/files'
+import { readThumbnailSizesForHash } from '../stores/thumbnails'
+import { getFileUri } from '../stores/fileCache'
+import { THUMBNAIL_SCANNER_INTERVAL } from '../config'
+import { ensureThumbnailForSize } from './thumbnailer'
 
 const MAX_THUMBS_PER_TICK = 10
 
@@ -45,7 +27,7 @@ export type ThumbnailGenerationError = ThumbnailAttempt & {
   error: unknown
 }
 
-export type ThumbnailerResult = {
+export type ThumbnailScannerResult = {
   processedCandidates: number
   attempts: ThumbnailAttempt[]
   produced: ProducedThumbnail[]
@@ -71,12 +53,12 @@ async function logOverallProgress() {
     const remaining = Math.max(targetThumbs - thumbs, 0)
     const percent = targetThumbs > 0 ? Math.min(1, thumbs / targetThumbs) : 1
     logger.log(
-      `[thumbnailer] overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
+      `[thumbnailScanner] overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
         percent * 100
       )}%`
     )
   } catch (e) {
-    logger.log('[thumbnailer] progress error', e)
+    logger.log('[thumbnailScanner] progress error', e)
   }
 }
 
@@ -151,143 +133,8 @@ async function queryCandidateOriginals(
   return results
 }
 
-type EnsureOutcome =
-  | { status: 'exists' }
-  | {
-      status: 'produced'
-      thumbId: string
-      width: number | null
-      height: number | null
-    }
-  | { status: 'duplicate'; existingThumbId: string }
-  | { status: 'error'; error: unknown }
-
-async function ensureThumbnailForSize(params: {
-  fileId: string
-  fileHash: string
-  fileType: string
-  fileLocalId: string | null
-  size: ThumbSize
-  sourceUri: string
-}): Promise<EnsureOutcome> {
-  const { fileId, fileHash, fileType, size, sourceUri } = params
-
-  // Fast path: exact size exists.
-  const exactExists = await thumbnailExistsForHashAndSize(fileHash, size)
-  if (exactExists) {
-    return { status: 'exists' }
-  }
-
-  logger.log('[thumbnailer] source uri', { fileId, uri: sourceUri })
-
-  // Compute input and target aspect-preserving dimensions for thumb size = size.
-  let info: ThumbnailInfo | null = null
-  try {
-    if (fileType?.startsWith('video/')) {
-      info = await prepareVideoThumbnail(sourceUri, size)
-      logger.log('[thumbnailer] video base frame prepared', {
-        fileId,
-        size,
-        info,
-      })
-    } else {
-      info = await prepareImageThumbnail(sourceUri, size)
-      logger.log('[thumbnailer] image target size prepared', {
-        fileId,
-        size,
-        info,
-      })
-    }
-  } catch (e) {
-    logger.log('[thumbnailer] error preparing source', e)
-    return { status: 'error', error: e }
-  }
-
-  try {
-    const ctx = ImageManipulator.manipulate(info.inputUri)
-    ctx.resize({ width: info.targetWidth, height: info.targetHeight })
-    const ref = await ctx.renderAsync()
-    const result = await ref.saveAsync({
-      compress: 0.8,
-      format: SaveFormat.WEBP,
-    })
-    logger.log('[thumbnailer] manipulated', {
-      fileId,
-      hash: fileHash,
-      size,
-      outWidth: result.width,
-      outHeight: result.height,
-      uri: result.uri,
-    })
-
-    // Copy thumbnail file to cache and calculate hash.
-    const thumbId = uniqueId()
-    const thumbFileInfo = {
-      id: thumbId,
-      type: getMimeType({ type: 'image/webp', name: 'thumbnail.webp' }),
-      localId: null,
-    }
-    const cacheUri = await copyFileToCache(thumbFileInfo, new File(result.uri))
-    const thumbHash = await calculateContentHash(cacheUri)
-    if (!thumbHash) {
-      logger.log('[thumbnailer] failed to calculate hash', { fileId, size })
-      return { status: 'error', error: new Error('Missing thumbnail hash') }
-    }
-
-    // Check if a thumbnail with this hash already exists (dedupe by content hash).
-    const existingThumb = await readFileRecordByContentHash(thumbHash)
-    if (existingThumb) {
-      logger.log('[thumbnailer] thumbnail already exists by hash', {
-        thumbId: existingThumb.id,
-        hash: fileHash,
-        size,
-      })
-      return { status: 'duplicate', existingThumbId: existingThumb.id }
-    }
-
-    // Create file record with thumbForHash set from the start to avoid flicker.
-    const fileSize = new File(cacheUri).info().size ?? 0
-    const now = Date.now()
-    await createFileRecord(
-      {
-        id: thumbId,
-        name: 'thumbnail.webp',
-        type: thumbFileInfo.type,
-        size: fileSize,
-        hash: thumbHash,
-        createdAt: now,
-        updatedAt: now,
-        addedAt: now,
-        localId: null,
-        thumbForHash: fileHash,
-        thumbSize: size,
-      },
-      true
-    )
-    logger.log('[thumbnailer] created thumbnail record', {
-      thumbId,
-      hash: fileHash,
-      size,
-    })
-
-    // Invalidate thumbnail cache for this original file so gallery items update.
-    // This will revalidate all thumb sizes for this hash.
-    await thumbnailSwr.triggerChange(fileHash)
-
-    return {
-      status: 'produced',
-      thumbId,
-      width: result.width ?? null,
-      height: result.height ?? null,
-    }
-  } catch (e) {
-    logger.log('[thumbnailer] error generating thumbnail', e)
-    return { status: 'error', error: e }
-  }
-}
-
-export async function runThumbnailer(): Promise<ThumbnailerResult> {
-  const summary: ThumbnailerResult = {
+export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
+  const summary: ThumbnailScannerResult = {
     processedCandidates: 0,
     attempts: [],
     produced: [],
@@ -298,7 +145,7 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
   }
   let producedCount = 0
   try {
-    logger.log('[thumbnailer] scanning...')
+    logger.log('[thumbnailScanner] scanning...')
     const skippedNoSourceUri = new Set<string>()
     const processedThisRun = new Set<string>()
 
@@ -336,7 +183,7 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
           continue
         }
 
-        logger.log('[thumbnailer] candidate', {
+        logger.log('[thumbnailScanner] candidate', {
           id: c.id,
           hash: c.hash,
           existingSizes,
@@ -345,7 +192,7 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
 
         for (const size of missingSizes) {
           if (producedCount >= MAX_THUMBS_PER_TICK) break
-          logger.log('[thumbnailer] attempt size', { id: c.id, size })
+          logger.log('[thumbnailScanner] attempt size', { id: c.id, size })
           summary.attempts.push({
             originalId: c.id,
             originalHash: c.hash,
@@ -367,7 +214,7 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
               size,
               thumbId: outcome.thumbId,
             })
-            logger.log('[thumbnailer] produced', { id: c.id, size })
+            logger.log('[thumbnailScanner] produced', { id: c.id, size })
           } else if (outcome.status === 'duplicate') {
             summary.deduplicated.push({
               originalId: c.id,
@@ -387,7 +234,7 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
       }
     }
     logger.log(
-      `[thumbnailer] batch produced=${summary.produced.length}/${summary.processedCandidates}` +
+      `[thumbnailScanner] batch produced=${summary.produced.length}/${summary.processedCandidates}` +
         ` skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates}` +
         ` skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates}` +
         ` errors=${summary.errors.length}/${summary.processedCandidates}` +
@@ -395,16 +242,16 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
     )
     await logOverallProgress()
   } catch (e) {
-    logger.log('[thumbnailer] scan error', e)
+    logger.log('[thumbnailScanner] scan error', e)
   }
   return summary
 }
 
-export const initThumbnailer = createServiceInterval({
-  name: 'thumbnailer',
+export const initThumbnailScanner = createServiceInterval({
+  name: 'thumbnailScanner',
   worker: async () => {
-    await runThumbnailer()
+    await runThumbnailScanner()
   },
   getState: async () => true,
-  interval: THUMBNAIL_INTERVAL,
+  interval: THUMBNAIL_SCANNER_INTERVAL,
 })

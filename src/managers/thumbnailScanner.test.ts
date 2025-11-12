@@ -1,21 +1,18 @@
-import { runThumbnailer } from '.'
-import { initializeDB, resetDb } from '../../db'
-import { createFileRecord, ThumbSizes } from '../../stores/files'
-import { readThumbnailSizesForHash } from '../../stores/thumbnails'
-import { getFileUri, copyFileToCache } from '../../stores/fileCache'
-import { calculateContentHash } from '../../lib/contentHash'
+import { runThumbnailScanner } from './thumbnailScanner'
+import { initializeDB, resetDb } from '../db'
+import { createFileRecord, ThumbSizes } from '../stores/files'
+import { readThumbnailSizesForHash } from '../stores/thumbnails'
+import { getFileUri, copyFileToCache } from '../stores/fileCache'
+import { calculateContentHash } from '../lib/contentHash'
 import { Image } from 'react-native'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import {
   ImageManipulator,
   type ImageManipulatorContext,
 } from 'expo-image-manipulator'
-jest.mock('../../lib/logger', () => ({
+jest.mock('../lib/logger', () => ({
   logger: { log: jest.fn() },
 }))
-
-// Ensure expo-constants is available for transitive expo modules (expo-asset/SQLite).
-jest.mock('expo-constants', () => ({ EXDevLauncher: undefined }))
 
 jest.mock('react-native', () => ({
   Platform: {
@@ -37,20 +34,20 @@ jest.mock('expo-file-system', () => ({
     info: jest.fn(() => ({ exists: true, size: 5000, uri })),
   })),
 }))
-jest.mock('../../stores/fileCache', () => ({
+jest.mock('../stores/fileCache', () => ({
   getFileUri: jest.fn(),
   copyFileToCache: jest.fn(),
   clearCache: jest.fn(),
 }))
-jest.mock('../../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
-jest.mock('../../lib/fileTypes', () => ({
+jest.mock('../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
+jest.mock('../lib/fileTypes', () => ({
   getMimeType: jest.fn(({ type }: { type?: string }) => type),
 }))
-jest.mock('../../lib/uniqueId', () => {
+jest.mock('../lib/uniqueId', () => {
   let c = 0
   return { uniqueId: () => `thumb-id-${++c}` }
 })
-jest.mock('../../stores/settings', () => ({
+jest.mock('../stores/settings', () => ({
   getAutoGenerateThumbnails: jest.fn(async () => true),
 }))
 
@@ -64,7 +61,7 @@ const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
 beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
-  require('../../stores/fileCache').clearCache()
+  require('../stores/fileCache').clearCache()
 
   getFileUriMock.mockResolvedValue('file://source.jpg')
   copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
@@ -101,9 +98,9 @@ afterEach(async () => {
   await resetDb()
 })
 
-describe('thumbnailer', () => {
+describe('thumbnailScanner', () => {
   it('returns early when no candidates found', async () => {
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(0)
     expect(result.attempts).toHaveLength(0)
     expect(result.skippedNoSource).toHaveLength(0)
@@ -123,7 +120,7 @@ describe('thumbnailer', () => {
       localId: 'local-file1',
     })
     getFileUriMock.mockResolvedValue(null)
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
   })
 
@@ -156,7 +153,7 @@ describe('thumbnailer', () => {
       })
     }
     getFileUriMock.mockResolvedValue('file://test.jpg')
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(0)
     expect(result.attempts).toHaveLength(0)
     expect(result.skippedFullyCovered).toHaveLength(0)
@@ -194,7 +191,7 @@ describe('thumbnailer', () => {
     getFileUriMock.mockResolvedValue('file://test.jpg')
     copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
     calculateContentHashMock.mockResolvedValue('sha256|thumb-64')
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     const producedSizes = result.produced
       .filter((p) => p.originalId === 'file1')
       .map((p) => p.size)
@@ -270,7 +267,7 @@ describe('thumbnailer', () => {
       return 'file://source.jpg'
     })
 
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
 
     const producedForEligible = result.produced
       .filter((p) => p.originalId === 'eligible-1')
@@ -311,7 +308,7 @@ describe('thumbnailer', () => {
       thumbSize: 64,
     })
     getFileUriMock.mockResolvedValue('file://test.jpg')
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.produced.filter((p) => p.size === 64)).toHaveLength(0)
   })
 
@@ -344,7 +341,7 @@ describe('thumbnailer', () => {
     getFileUriMock.mockResolvedValue('file://test.jpg')
     copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
     calculateContentHashMock.mockResolvedValue('sha256|duplicate-thumb-hash')
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.deduplicated.length).toBeGreaterThanOrEqual(1)
     expect(result.deduplicated).toEqual(
       expect.arrayContaining([
@@ -378,7 +375,7 @@ describe('thumbnailer', () => {
       async () => `sha256|video-thumb-${++counter}`
     )
 
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
 
     expect(videoThumbMock).toHaveBeenCalledTimes(ThumbSizes.length)
     const producedForVideo = result.produced
@@ -411,7 +408,7 @@ describe('thumbnailer', () => {
     calculateContentHashMock.mockImplementation(
       async () => `sha256|thumb-hash-${++counter}`
     )
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(10)
   })
 
@@ -448,7 +445,7 @@ describe('thumbnailer', () => {
     )
     copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
     calculateContentHashMock.mockResolvedValue('sha256|thumb-hash')
-    await runThumbnailer()
+    await runThumbnailScanner()
     expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
   })
 
@@ -473,7 +470,7 @@ describe('thumbnailer', () => {
     imageManipulatorMock.mockImplementation(() => {
       throw new Error('Manipulation failed')
     })
-    const result = await runThumbnailer()
+    const result = await runThumbnailScanner()
     expect(result.errors).toHaveLength(ThumbSizes.length)
     expect(result.errors[0]).toMatchObject({
       originalId: 'file1',

@@ -42,6 +42,7 @@ export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
   return (
     prev.file.id === next.file.id &&
     prev.file.updatedAt === next.file.updatedAt &&
+    prev.file.objects === next.file.objects &&
     prev.onPressItem === next.onPressItem
   )
 })

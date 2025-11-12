@@ -11,6 +11,7 @@ import { MimeType, getMimeType } from './fileTypes'
 import { calculateContentHash } from './contentHash'
 import { copyFileToCache, getFileUri } from '../stores/fileCache'
 import { File } from 'expo-file-system'
+import { generateThumbnails } from '../managers/thumbnailer'
 
 type Asset = {
   id: string | undefined
@@ -49,6 +50,7 @@ type CandidateFileRecord = {
  * - Add content hashes to files that are new.
  * - Create new file records for the assets.
  * - Update the metadata of any existing files.
+ * - Generate thumbnails for new image and video files.
  * - Return the resulting files and warnings.
  * @param assets - The assets to process.
  * @param defaultFileName - The default file name to use for assets that do not have a file name.
@@ -183,6 +185,14 @@ export async function processAssets(
 
   await updateManyFileRecords(existingFiles)
   await createManyFileRecords(newFiles)
+
+  // Generate thumbnails for new image and video files.
+  logger.log(
+    `[processAssets] generating thumbnails for ${newFiles.length} new files`
+  )
+
+  // Generate thumbnails for new files, this will run in the background.
+  generateThumbnails(newFiles)
 
   return {
     files: newFiles,

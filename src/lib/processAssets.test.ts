@@ -9,7 +9,6 @@ import {
 import { initializeDB, resetDb } from '../db'
 import { copyFileToCache } from '../stores/fileCache'
 
-// Deterministic ids.
 jest.mock('./uniqueId', () => {
   let c = 0
   return { uniqueId: () => `uid-${++c}` }
@@ -41,6 +40,10 @@ jest.mock('expo-file-system', () => ({
     uri,
     info: jest.fn(() => ({ exists: true, size: 333, uri })),
   })),
+}))
+
+jest.mock('../managers/thumbnailer', () => ({
+  generateThumbnails: jest.fn(),
 }))
 
 beforeEach(async () => {
