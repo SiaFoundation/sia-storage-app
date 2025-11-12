@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 import { runMigrations } from './migrations'
 import { logger } from '../lib/logger'
+import { Mutex } from '../lib/mutex'
 
 export let database: SQLite.SQLiteDatabase
 const dbName = 'app.db'
@@ -33,4 +34,17 @@ export async function resetDb() {
 
 export function db() {
   return database
+}
+
+const txMutex = new Mutex()
+
+/** Run operations in a transaction and serialize all database transactions across the app. */
+export async function withTransactionLock<T>(fn: () => Promise<T>): Promise<T> {
+  return txMutex.runExclusive(async () => {
+    let out!: T
+    await db().withTransactionAsync(async () => {
+      out = await fn()
+    })
+    return out
+  })
 }

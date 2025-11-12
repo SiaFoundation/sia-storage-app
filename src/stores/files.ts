@@ -4,13 +4,14 @@ import {
 } from '../encoding/localObject'
 import { upsertLocalObject, readLocalObjectsForFile } from './localObjects'
 import { logger } from '../lib/logger'
-import { db } from '../db'
+import { db, withTransactionLock } from '../db'
 import useSWR from 'swr'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { LocalObjectRow } from '../encoding/localObject'
 import { getIndexerURL } from './settings'
 import { librarySwr } from './library'
 import { removeEmptyValues } from '../lib/object'
+import { keysOf } from '../lib/types'
 
 /** Valid thumbnail sizes in pixels. */
 export type ThumbSize = 64 | 512
@@ -30,6 +31,17 @@ export type FileMetadata = {
   updatedAt: number
 }
 
+export const fileMetadataKeys = keysOf<FileMetadata>()([
+  'name',
+  'type',
+  'size',
+  'hash',
+  'createdAt',
+  'updatedAt',
+  'thumbForHash',
+  'thumbSize',
+])
+
 /** Fields that are stored only in the local database. */
 export type FileLocalMetadata = {
   id: string
@@ -37,7 +49,18 @@ export type FileLocalMetadata = {
   addedAt: number
 }
 
+export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
+  'id',
+  'localId',
+  'addedAt',
+])
+
 export type FileRecordRow = FileMetadata & FileLocalMetadata
+
+export const fileRecordRowKeys = keysOf<FileRecordRow>()([
+  ...fileMetadataKeys,
+  ...fileLocalMetadataKeys,
+])
 
 export type FileRecord = FileRecordRow & {
   objects: Record<string, LocalObject>
@@ -82,7 +105,7 @@ export async function createFileRecord(
 export async function createManyFileRecords(
   files: FileRecord[]
 ): Promise<void> {
-  await db().withTransactionAsync(async () => {
+  await withTransactionLock(async () => {
     for (const fr of files) {
       await createFileRecord(fr, false)
     }
@@ -183,7 +206,7 @@ export async function readAllFileRecords(opts: {
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.localId, f.hash,
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.localId, f.hash, f.addedAt, f.thumbForHash, f.thumbSize,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedMasterKey as encryptedMasterKey, o.encryptedMetadata as encryptedMetadata,
             o.signature as signature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
@@ -292,14 +315,14 @@ export async function updateFileRecord(
   const params: (string | number | null)[] = []
   const updatableFields = [
     'name',
+    'type',
     'size',
+    'hash',
     'createdAt',
     'updatedAt',
-    'type',
-    'localId',
-    'hash',
     'thumbForHash',
     'thumbSize',
+    'localId',
   ]
   for (const field of updatableFields) {
     const nonEmptyUpdate = removeEmptyValues(update)
@@ -323,7 +346,7 @@ export async function updateFileRecord(
 export async function updateManyFileRecords(
   updates: Partial<FileRecordRow> & { id: string }[]
 ): Promise<void> {
-  await db().withTransactionAsync(async () => {
+  await withTransactionLock(async () => {
     for (const update of updates) {
       await updateFileRecord(update, false)
     }
@@ -348,7 +371,7 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
   const original = await readFileRecord(id)
   if (!original) return
   const hash = original.hash
-  await db().withTransactionAsync(async () => {
+  await withTransactionLock(async () => {
     await db().runAsync('DELETE FROM files WHERE thumbForHash = ?', hash)
     await db().runAsync('DELETE FROM files WHERE id = ?', id)
   })
@@ -365,7 +388,7 @@ export async function createFileRecordWithLocalObject(
   localObject: LocalObject
 ): Promise<void> {
   try {
-    await db().withTransactionAsync(async () => {
+    await withTransactionLock(async () => {
       await createFileRecord(fileRecord, false)
       await upsertLocalObject(localObject, false)
     })
@@ -382,7 +405,7 @@ export async function updateFileRecordWithLocalObject(
   localObject: LocalObject
 ): Promise<void> {
   try {
-    await db().withTransactionAsync(async () => {
+    await withTransactionLock(async () => {
       await updateFileRecord(fileRecord, false)
       await upsertLocalObject(localObject, false)
     })
