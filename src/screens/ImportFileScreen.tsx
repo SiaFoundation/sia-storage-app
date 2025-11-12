@@ -26,7 +26,7 @@ import { FileDetailsImport } from '../components/FileDetailsImport'
 import { logger } from '../lib/logger'
 import {
   decodeFileMetadata,
-  hasCompleteMetadata,
+  hasCompleteFileMetadata,
   transformFileMetadata,
 } from '../encoding/fileMetadata'
 import { getIndexerURL } from '../stores/settings'
@@ -86,7 +86,7 @@ export function ImportFileScreen({ route }: Props) {
         return
       }
       logger.log('[ImportFileScreen] handleAddToDatabase', sharedFile.id)
-      if (!hasCompleteMetadata(sharedFile)) {
+      if (!hasCompleteFileMetadata(sharedFile)) {
         toast.show('Shared file must have complete metadata')
         return
       }
