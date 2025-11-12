@@ -115,16 +115,21 @@ export async function createManyFileRecords(
   }
 }
 
+type FileRecordCursorColumn = 'createdAt' | 'updatedAt'
+
+type FileRecordsQueryOpts = {
+  limit?: number
+  after?: { value: number; id: string }
+  order: 'ASC' | 'DESC'
+  orderBy?: FileRecordCursorColumn
+  pinned?: {
+    indexerURL: string
+    isPinned: boolean
+  }
+}
+
 function buildFileRecordsQuery(
-  opts: {
-    limit?: number
-    after?: { createdAt: number; id: string }
-    order: 'ASC' | 'DESC'
-    pinned?: {
-      indexerURL: string
-      isPinned: boolean
-    }
-  },
+  opts: FileRecordsQueryOpts,
   tableAlias: string = 'files'
 ): {
   where: string
@@ -132,18 +137,19 @@ function buildFileRecordsQuery(
   orderExpr: string
   limitExpr: string
 } {
-  const { limit, after, order, pinned } = opts
+  const { limit, after, order, pinned, orderBy } = opts
+  const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
   const params: (string | number)[] = []
 
   let where = ''
   if (after) {
     if (order === 'ASC') {
-      where = `WHERE (${tableAlias}.createdAt > ?) OR (${tableAlias}.createdAt = ? AND ${tableAlias}.id > ?)`
+      where = `WHERE (${tableAlias}.${sortColumn} > ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id > ?)`
     } else {
-      where = `WHERE (${tableAlias}.createdAt < ?) OR (${tableAlias}.createdAt = ? AND ${tableAlias}.id < ?)`
+      where = `WHERE (${tableAlias}.${sortColumn} < ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id < ?)`
     }
-    params.push(after.createdAt, after.createdAt, after.id)
+    params.push(after.value, after.value, after.id)
   }
 
   if (pinned) {
@@ -154,7 +160,7 @@ function buildFileRecordsQuery(
     params.push(pinned.indexerURL)
   }
 
-  const orderExpr = `${tableAlias}.createdAt ${order}, ${tableAlias}.id ${order}`
+  const orderExpr = `${tableAlias}.${sortColumn} ${order}, ${tableAlias}.id ${order}`
   const limitExpr =
     limit !== undefined && Number.isFinite(limit) ? ` LIMIT ${limit | 0}` : ''
 
@@ -166,15 +172,9 @@ function buildFileRecordsQuery(
   }
 }
 
-export async function readAllFileRecordsCount(opts: {
-  limit?: number
-  after?: { createdAt: number; id: string }
-  order: 'ASC' | 'DESC'
-  pinned?: {
-    indexerURL: string
-    isPinned: boolean
-  }
-}): Promise<number> {
+export async function readAllFileRecordsCount(
+  opts: FileRecordsQueryOpts
+): Promise<number> {
   const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
 
   const row = await db().getFirstAsync<{ count: number }>(
@@ -184,15 +184,9 @@ export async function readAllFileRecordsCount(opts: {
   return row?.count ?? 0
 }
 
-export async function readAllFileRecords(opts: {
-  limit?: number
-  after?: { createdAt: number; id: string }
-  order: 'ASC' | 'DESC'
-  pinned?: {
-    indexerURL: string
-    isPinned: boolean
-  }
-}): Promise<FileRecord[]> {
+export async function readAllFileRecords(
+  opts: FileRecordsQueryOpts
+): Promise<FileRecord[]> {
   const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(
     opts,
     'f'
@@ -313,7 +307,7 @@ export async function updateFileRecord(
   const { id } = update
   const sets: string[] = []
   const params: (string | number | null)[] = []
-  const updatableFields = [
+  const updatableFields: (keyof FileRecordRow)[] = [
     'name',
     'type',
     'size',
@@ -334,6 +328,11 @@ export async function updateFileRecord(
 
   if (sets.length === 0) {
     return
+  }
+
+  if (!sets.includes('updatedAt = ?')) {
+    sets.push('updatedAt = ?')
+    params.push(Date.now())
   }
 
   const sql = `UPDATE files SET ${sets.join(', ')} WHERE id = ?`

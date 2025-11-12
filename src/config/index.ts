@@ -29,3 +29,7 @@ export const SYNC_NEW_PHOTOS_INTERVAL = 30_000 // 30 seconds
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = 5_000 // 5 seconds
 // Thumbnail interval.
 export const THUMBNAIL_INTERVAL = 5_000 // 5 seconds
+// Sync up metadata interval.
+export const SYNC_UP_METADATA_INTERVAL = 10_000 // 10 seconds
+// Sync up metadata batch size.
+export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files

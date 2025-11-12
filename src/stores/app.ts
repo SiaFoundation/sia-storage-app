@@ -29,6 +29,7 @@ import {
 } from '../managers/syncPhotosArchive'
 import { initBackgroundTasks } from '../managers/backgroundTasks'
 import { initThumbnailer } from '../managers/thumbnailer'
+import { initSyncUpMetadata } from '../managers/syncUpMetadata'
 
 export type AppState = {
   isInitializing: boolean
@@ -58,6 +59,7 @@ export async function initApp() {
   initSyncPhotosArchive()
   initBackgroundTasks()
   initThumbnailer()
+  initSyncUpMetadata()
 }
 
 export async function onboardIndexer(
