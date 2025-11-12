@@ -1,5 +1,6 @@
 import * as ImagePicker from 'react-native-image-picker'
 import { useCallback, useRef } from 'react'
+import { extFromMime, getMimeType } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
 import { FileRecord } from '../stores/files'
@@ -47,7 +48,14 @@ export function useCameraCapture() {
       const { files, warnings } = await processAssets(
         result.assets?.map((a) => ({
           id: a.id,
-          name: a.fileName,
+          name: buildDateFileName(
+            a.timestamp,
+            getMimeType({
+              type: a.type,
+              name: a.fileName,
+              uri: a.uri,
+            })
+          ),
           size: a.fileSize,
           type: a.type,
           sourceUri: a.uri,
@@ -77,4 +85,31 @@ export function useCameraCaptureAndUpload() {
       await uploader(files)
     }
   }, [capture, uploader])
+}
+
+/* Build a date-based file name from a timestamp and mime type.
+ * eg: Camera Capture 2025-11-03 2.36.59 PM.jpg
+ */
+function buildDateFileName(
+  timestamp: string | undefined,
+  mime: string | undefined
+): string {
+  const d = timestamp ? new Date(timestamp) : new Date()
+
+  const date = Number.isNaN(d.getTime()) ? new Date() : d
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  const hours24 = date.getHours()
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  const ampm = hours24 < 12 ? 'AM' : 'PM'
+
+  const datePart = `${year}-${month}-${day}`
+  const timePart = `${hours12}.${minutes}.${seconds}\u202F${ampm}`
+
+  return `Camera Capture ${datePart} ${timePart}${extFromMime(mime)}`
 }
