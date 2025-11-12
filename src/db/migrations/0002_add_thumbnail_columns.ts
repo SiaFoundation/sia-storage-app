@@ -29,7 +29,7 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
 
     // Create an index to efficiently select thumbnails for an original and size bucket.
     await db.execAsync(
-      `CREATE INDEX IF NOT EXISTS idx_files_thumbForHash_thumbSize ON files(thumbForHash, thumbSize)`
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_files_thumbForHash_thumbSize ON files(thumbForHash, thumbSize)`
     )
   } catch (e) {
     logger.log('[db] error running migration 0002_add_thumbnail_columns', e)

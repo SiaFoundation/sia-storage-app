@@ -3,16 +3,18 @@ import { SYNC_EVENTS_INTERVAL } from '../config'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
 import {
-  readFileRecord,
   readFileRecordByObjectId,
   deleteFileRecord,
   createFileRecordWithLocalObject,
   updateFileRecordWithLocalObject,
   readFileRecordByContentHash,
+  FileRecord,
+  FileMetadata,
 } from '../stores/files'
 import {
   decodeFileMetadata,
-  hasCompleteMetadata,
+  hasCompleteFileMetadata,
+  hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
 import {
   ObjectEvent,
@@ -30,6 +32,7 @@ import {
 } from '../stores/fileCache'
 import { uniqueId } from '../lib/uniqueId'
 import { cancelUpload } from '../stores/uploads'
+import { readThumbnailRecordByThumbForHashAndSize } from '../stores/thumbnails'
 
 const batchSize = 100
 
@@ -154,14 +157,52 @@ async function handleUpdateEvent(
 ): Promise<void> {
   const indexerURL = await getIndexerURL()
   const metadata = decodeFileMetadata(object.metadata())
-  logger.log(`[syncDownEvents] updating file objectId=${object.id()}`)
-  if (!hasCompleteMetadata(metadata)) {
-    logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
+  if (hasCompleteThumbnailMetadata(metadata)) {
+    const existingThumbnail = await readThumbnailRecordByThumbForHashAndSize(
+      metadata.thumbForHash!,
+      metadata.thumbSize!
+    )
+    await handleFileRecord(
+      'thumbnail',
+      existingThumbnail,
+      indexerURL,
+      object,
+      metadata,
+      counts
+    )
     return
   }
-  const existingFile = await readFileRecordByContentHash(metadata.hash)
+  if (hasCompleteFileMetadata(metadata)) {
+    const existingFile = await readFileRecordByContentHash(metadata.hash)
+    await handleFileRecord(
+      'file',
+      existingFile,
+      indexerURL,
+      object,
+      metadata,
+      counts
+    )
+    return
+  }
+  logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
+}
 
+async function handleFileRecord(
+  type: 'file' | 'thumbnail',
+  existingFile: FileRecord | null,
+  indexerURL: string,
+  object: PinnedObjectInterface,
+  metadata: FileMetadata,
+  counts: Counts
+) {
   if (existingFile) {
+    if (type === 'file') {
+      logger.log(`[syncDownEvents] updating file hash=${existingFile.hash}`)
+    } else {
+      logger.log(
+        `[syncDownEvents] updating thumbnail thumbForHash=${existingFile.thumbForHash}`
+      )
+    }
     const localObject = await pinnedObjectToLocalObject(
       existingFile.id,
       indexerURL,
@@ -170,7 +211,7 @@ async function handleUpdateEvent(
     await updateFileRecordWithLocalObject(
       {
         ...existingFile,
-        ...metadata,
+        ...(metadata.updatedAt >= existingFile.updatedAt ? metadata : {}),
       },
       localObject
     )
@@ -178,6 +219,13 @@ async function handleUpdateEvent(
     cancelUpload(existingFile.id)
     counts.existing++
   } else {
+    if (type === 'file') {
+      logger.log(`[syncDownEvents] creating file hash=${metadata.hash}`)
+    } else {
+      logger.log(
+        `[syncDownEvents] creating thumbnail thumbForHash=${metadata.thumbForHash}`
+      )
+    }
     const fileId = uniqueId()
     const localObject = await pinnedObjectToLocalObject(
       fileId,

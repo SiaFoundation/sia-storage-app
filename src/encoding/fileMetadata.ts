@@ -38,7 +38,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
 }
 
 /// Checks for complete metadata, most importantly the presence of the hash.
-export function hasCompleteMetadata(metadata: FileMetadata): boolean {
+export function hasCompleteFileMetadata(metadata: FileMetadata): boolean {
   return (
     !!metadata.hash &&
     !!metadata.type &&
@@ -46,5 +46,14 @@ export function hasCompleteMetadata(metadata: FileMetadata): boolean {
     !!metadata.size &&
     !!metadata.updatedAt &&
     !!metadata.createdAt
+  )
+}
+
+/// Checks for complete thumbnail metadata.
+export function hasCompleteThumbnailMetadata(metadata: FileMetadata): boolean {
+  return (
+    hasCompleteFileMetadata(metadata) &&
+    !!metadata.thumbForHash &&
+    !!metadata.thumbSize
   )
 }

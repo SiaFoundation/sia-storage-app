@@ -308,11 +308,6 @@ export async function runThumbnailer(): Promise<ThumbnailerResult> {
         break
       }
 
-      logger.log('[thumbnailer] candidates', {
-        count: batch.length,
-        ids: batch.map((c) => c.id).slice(0, 10),
-      })
-
       for (const c of batch) {
         if (producedCount >= MAX_THUMBS_PER_TICK) break
         processedThisRun.add(c.id)
