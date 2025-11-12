@@ -6,6 +6,7 @@ import {
   ThumbSizes,
   transformRow,
 } from './files'
+import { readLocalObjectsForFile } from './localObjects'
 import { buildSWRHelpers } from '../lib/swr'
 
 export const thumbnailSwr = buildSWRHelpers('thumbnails')
@@ -22,6 +23,21 @@ export async function readThumbnailsByHash(
     hash
   )
   return rows.map((row) => transformRow(row))
+}
+
+export async function readThumbnailRecordByThumbForHashAndSize(
+  thumbForHash: string,
+  size: ThumbSize
+): Promise<FileRecord | null> {
+  const row = await db().getFirstAsync<FileRecordRow>(
+    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
+     FROM files WHERE thumbForHash = ? AND thumbSize = ?`,
+    thumbForHash,
+    size
+  )
+  if (!row) return null
+  const objects = await readLocalObjectsForFile(row.id)
+  return transformRow(row, objects)
 }
 
 /** Read all existing thumbnail sizes for a given original hash. */
@@ -63,7 +79,9 @@ export async function readBestThumbnailByHash(
     hash,
     requiredSize
   )
-  return row ? transformRow(row) : null
+  if (!row) return null
+  const objects = await readLocalObjectsForFile(row.id)
+  return transformRow(row, objects)
 }
 
 /** Check if a thumbnail exists for an original hash and exact size. */
