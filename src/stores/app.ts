@@ -28,8 +28,8 @@ import {
   resetPhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
 import { initBackgroundTasks } from '../managers/backgroundTasks'
-import { initThumbnailer } from '../managers/thumbnailer'
 import { initSyncUpMetadata } from '../managers/syncUpMetadata'
+import { initThumbnailScanner } from '../managers/thumbnailScanner'
 
 export type AppState = {
   isInitializing: boolean
@@ -58,8 +58,8 @@ export async function initApp() {
   initSyncNewPhotos()
   initSyncPhotosArchive()
   initBackgroundTasks()
-  initThumbnailer()
   initSyncUpMetadata()
+  initThumbnailScanner()
 }
 
 export async function onboardIndexer(

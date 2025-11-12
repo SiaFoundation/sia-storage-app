@@ -27,8 +27,8 @@ export const SYNC_EVENTS_INTERVAL = 10_000 // 10 seconds
 export const SYNC_NEW_PHOTOS_INTERVAL = 30_000 // 30 seconds
 // Sync archive photos interval.
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = 5_000 // 5 seconds
-// Thumbnail interval.
-export const THUMBNAIL_INTERVAL = 5_000 // 5 seconds
+// Thumbnail scanner interval.
+export const THUMBNAIL_SCANNER_INTERVAL = 5_000 // 5 seconds
 // Sync up metadata interval.
 export const SYNC_UP_METADATA_INTERVAL = 10_000 // 10 seconds
 // Sync up metadata batch size.

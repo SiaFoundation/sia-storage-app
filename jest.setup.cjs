@@ -1,5 +1,8 @@
 jest.mock('./src/lib/logger', () => ({ logger: { log: jest.fn() } }))
 
+// Ensure expo-constants is available for transitive expo modules (expo-asset/SQLite).
+jest.mock('expo-constants', () => ({ EXDevLauncher: undefined }))
+
 jest.mock('react-native-quick-crypto', () => {
   const nodeCrypto = require('crypto')
   return {
