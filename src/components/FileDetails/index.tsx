@@ -4,7 +4,7 @@ import { colors, palette } from '../../styles/colors'
 import { type FileRecord } from '../../stores/files'
 import { useFileStatus } from '../../lib/file'
 import { FileMeta } from './FileMeta'
-import { FileMap } from './FileMap'
+// import { FileMap } from './FileMap'
 
 export function FileDetails({
   file,
@@ -21,7 +21,7 @@ export function FileDetails({
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {header}
         <View style={{ height: Math.round(windowHeight * 0.5) }}>
-          <FileMap file={file} />
+          {/* <FileMap file={file} /> */}
         </View>
         <View style={styles.metaContainer}>
           {status.data ? <FileMeta file={file} status={status.data} /> : null}
