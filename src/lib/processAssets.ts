@@ -9,7 +9,7 @@ import {
 } from '../stores/files'
 import { MimeType, getMimeType } from './fileTypes'
 import { calculateContentHash } from './contentHash'
-import { copyFileToCache, getFileUri } from '../stores/fileCache'
+import { copyFileToCache, getLocalUri } from '../stores/fileCache'
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
 
@@ -64,9 +64,9 @@ export async function processAssets(
   const candidateFiles: CandidateFileRecord[] = (assets ?? []).map((a) => ({
     id: uniqueId(),
     localId: a.id ?? null,
-    // If the asset does not have an id, pass a sourceUri so we can copy the
+    // If the asset does not have an valid id, pass a sourceUri so we can copy the
     // file to the app's file cache.
-    sourceUri: a.id ? null : a.sourceUri ?? null,
+    sourceUri: a.sourceUri ?? null,
     name: a.name ?? defaultFileName,
     size: a.size ?? null,
     createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
@@ -95,24 +95,23 @@ export async function processAssets(
     }
   }
 
-  // Non media library assets do not have a localId so we need to copy the
-  // file to the app cache.
-  const nonMediaAssets = candidateFiles.filter(
-    (f) => f.status === 'new' && !f.localId && !!f.sourceUri
-  )
-  logger.log(
-    `[processAssets] copying ${nonMediaAssets.length} non media assets to cache`
-  )
-  for (const f of nonMediaAssets) {
-    await copyFileToCache(f, new File(f.sourceUri!))
-  }
-
+  // Ensure we have a valid local URI for the file.
   // Add content hash and file size to files that are still new.
   await Promise.all(
     candidateFiles
       .filter((f) => f.status === 'new')
       .map(async (f) => {
-        const fileUri = await getFileUri(f)
+        let fileUri = await getLocalUri(f.localId)
+        // The localId Was not a valid Media Library or MediaStore ID.
+        if (!fileUri) {
+          f.localId = null
+        }
+        if (!fileUri && f.sourceUri) {
+          logger.log(
+            `[processAssets] copying file without valid localId to cache id=${f.id} sourceUri=${f.sourceUri}`
+          )
+          fileUri = await copyFileToCache(f, new File(f.sourceUri))
+        }
         if (!fileUri) {
           f.status = 'incomplete'
           f.statusDetails = 'noFileUri'
