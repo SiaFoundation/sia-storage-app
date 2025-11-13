@@ -6,6 +6,7 @@ import {
   View,
   LayoutChangeEvent,
   StyleSheet,
+  Platform,
 } from 'react-native'
 
 export function ImageViewer({
@@ -24,13 +25,18 @@ export function ImageViewer({
   }
 
   const reset = () => {
-    scrollRef.current?.scrollResponderZoomTo({
-      x: 0,
-      y: 0,
-      width: size.w || 1,
-      height: size.h || 1,
-      animated: false,
-    })
+    if (Platform.OS === 'ios') {
+      scrollRef.current?.scrollResponderZoomTo({
+        x: 0,
+        y: 0,
+        width: size.w || 1,
+        height: size.h || 1,
+        animated: false,
+      })
+    } else {
+      // Android does not implement zoomToRect; reset scroll position instead.
+      scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false })
+    }
   }
 
   useEffect(() => {
