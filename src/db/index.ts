@@ -48,3 +48,38 @@ export async function withTransactionLock<T>(fn: () => Promise<T>): Promise<T> {
     return out
   })
 }
+
+/**
+ * Generic INSERT helper that:
+ * - Inlines SQL NULL for nullish fields to avoid Android varargs null bridging issues.
+ * - Binds only primitives (string | number) for the remaining fields.
+ */
+export async function insert<
+  T extends Record<string, string | number | boolean | null | undefined>
+>(table: string, row: T): Promise<SQLite.SQLiteRunResult> {
+  const columns = Object.keys(row)
+  const valuesSql: string[] = []
+  const params: (string | number)[] = []
+
+  for (const key of columns) {
+    const value = row[key]
+    if (value === null || value === undefined) {
+      valuesSql.push('NULL')
+      continue
+    }
+    valuesSql.push('?')
+    if (typeof value === 'number' || typeof value === 'string') {
+      params.push(value)
+    } else if (typeof value === 'boolean') {
+      params.push(value ? 1 : 0)
+    } else {
+      // Fallback: store as string representation.
+      params.push(String(value))
+    }
+  }
+
+  const sql = `INSERT INTO ${table} (${columns.join(
+    ', '
+  )}) VALUES (${valuesSql.join(', ')})`
+  return await database.runAsync(sql, params)
+}

@@ -4,7 +4,7 @@ import {
 } from '../encoding/localObject'
 import { upsertLocalObject, readLocalObjectsForFile } from './localObjects'
 import { logger } from '../lib/logger'
-import { db, withTransactionLock } from '../db'
+import { db, insert, withTransactionLock } from '../db'
 import useSWR from 'swr'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { LocalObjectRow } from '../encoding/localObject'
@@ -83,8 +83,7 @@ export async function createFileRecord(
     thumbForHash,
     thumbSize,
   } = fileRecord
-  await db().runAsync(
-    'INSERT INTO files (id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  await insert('files', {
     id,
     name,
     size,
@@ -94,9 +93,9 @@ export async function createFileRecord(
     localId,
     hash,
     addedAt,
-    thumbForHash ?? null,
-    thumbSize ?? null
-  )
+    thumbForHash,
+    thumbSize,
+  })
   if (triggerUpdate) {
     await librarySwr.triggerChange()
   }
