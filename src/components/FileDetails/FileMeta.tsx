@@ -32,7 +32,7 @@ export function FileMeta({
   const fileNameInputProps = useInputValue({
     value: file.name ?? '',
     save: (value) => {
-      updateFileRecord({ ...file, name: value })
+      updateFileRecord({ id: file.id, name: value })
     },
   })
   const pinnedObjects = usePinnedObjects(file)

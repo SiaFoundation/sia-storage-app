@@ -3,6 +3,8 @@ import {
   createFileRecord,
   readAllFileRecords,
   readAllFileRecordsCount,
+  readFileRecord,
+  updateFileRecord,
 } from './files'
 
 jest.mock('./library', () => ({
@@ -118,5 +120,69 @@ describe('files store queries', () => {
     })
 
     expect(count).toBe(2)
+  })
+})
+
+describe('updateFileRecord', () => {
+  beforeEach(async () => {
+    await initializeDB()
+  })
+
+  afterEach(async () => {
+    await resetDb()
+    jest.restoreAllMocks()
+    jest.clearAllMocks()
+  })
+
+  test('update file record ignores updatedAt when includeUpdatedAt is false', async () => {
+    const mockTime = 1_695_734_567_890
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(mockTime)
+    await createFileRecord({
+      id: 'file-new',
+      name: 'old name',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-file-new',
+      createdAt: 100,
+      updatedAt: 100,
+      localId: null,
+      addedAt: 100,
+    })
+    await updateFileRecord({
+      id: 'file-new',
+      updatedAt: 4444,
+      name: 'new name',
+    })
+
+    const record = await readFileRecord('file-new')
+    expect(record).toMatchObject({ name: 'new name', updatedAt: mockTime })
+  })
+
+  test('update file record includes updatedAt when includeUpdatedAt is true', async () => {
+    const mockTime = 1_695_734_567_890
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(mockTime)
+    await createFileRecord({
+      id: 'file-new',
+      name: 'old name',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-file-new',
+      createdAt: 100,
+      updatedAt: 100,
+      localId: null,
+      addedAt: 100,
+    })
+    await updateFileRecord(
+      {
+        id: 'file-new',
+        updatedAt: 4444,
+        name: 'new name',
+      },
+      false,
+      { includeUpdatedAt: true }
+    )
+    const record = await readFileRecord('file-new')
+    expect(record).toMatchObject({ name: 'new name', updatedAt: 4444 })
+    expect(nowSpy).not.toHaveBeenCalled()
   })
 })

@@ -301,7 +301,8 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 /** Updates a file record. Ignores any empty values. */
 export async function updateFileRecord(
   update: Partial<FileRecordRow> & { id: string },
-  triggerUpdate: boolean = true
+  triggerUpdate: boolean = true,
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
 ): Promise<void> {
   const { id } = update
   const sets: string[] = []
@@ -312,11 +313,13 @@ export async function updateFileRecord(
     'size',
     'hash',
     'createdAt',
-    'updatedAt',
     'thumbForHash',
     'thumbSize',
     'localId',
   ]
+  if (options.includeUpdatedAt) {
+    updatableFields.push('updatedAt')
+  }
   for (const field of updatableFields) {
     const nonEmptyUpdate = removeEmptyValues(update)
     if (field in nonEmptyUpdate) {
@@ -329,7 +332,7 @@ export async function updateFileRecord(
     return
   }
 
-  if (!sets.includes('updatedAt = ?')) {
+  if (!options.includeUpdatedAt) {
     sets.push('updatedAt = ?')
     params.push(Date.now())
   }
@@ -342,11 +345,12 @@ export async function updateFileRecord(
 }
 
 export async function updateManyFileRecords(
-  updates: Partial<FileRecordRow> & { id: string }[]
+  updates: Partial<FileRecordRow> & { id: string }[],
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
 ): Promise<void> {
   await withTransactionLock(async () => {
     for (const update of updates) {
-      await updateFileRecord(update, false)
+      await updateFileRecord(update, false, options)
     }
   })
   if (updates.length > 0) {
@@ -400,11 +404,12 @@ export async function createFileRecordWithLocalObject(
 /** Update a file record and a local object in a single transaction. */
 export async function updateFileRecordWithLocalObject(
   fileRecord: Omit<FileRecord, 'objects'>,
-  localObject: LocalObject
+  localObject: LocalObject,
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
 ): Promise<void> {
   try {
     await withTransactionLock(async () => {
-      await updateFileRecord(fileRecord, false)
+      await updateFileRecord(fileRecord, false, options)
       await upsertLocalObject(localObject, false)
     })
     await librarySwr.triggerChange()
