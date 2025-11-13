@@ -12,12 +12,16 @@ import {
 } from '../stores/secureStore'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
-import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
+import {
+  ensureMediaLibraryPermission,
+  getMediaLibraryPermissions,
+  mediaLibraryPermissionsSwr,
+} from '../lib/mediaLibraryPermissions'
 
 const PAGE_SIZE = 1
 
 export async function workBackward() {
-  if (!(await ensureMediaLibraryPermission())) return
+  if (!(await getMediaLibraryPermissions())) return
   const cursor = await getPhotosArchiveCursor()
 
   try {
@@ -81,6 +85,7 @@ export async function setAutoSyncPhotosArchive(value: boolean) {
   if (value) {
     ensureMediaLibraryPermission()
   }
+  mediaLibraryPermissionsSwr.triggerChange()
 }
 
 export async function toggleAutoSyncPhotosArchive() {

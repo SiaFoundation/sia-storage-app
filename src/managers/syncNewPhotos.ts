@@ -12,12 +12,16 @@ import {
   setSecureStoreBoolean,
   setSecureStoreNumber,
 } from '../stores/secureStore'
-import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
+import {
+  ensureMediaLibraryPermission,
+  getMediaLibraryPermissions,
+  mediaLibraryPermissionsSwr,
+} from '../lib/mediaLibraryPermissions'
 
 const PAGE_SIZE = 200
 
 async function workForward(): Promise<void> {
-  if (!(await ensureMediaLibraryPermission())) return
+  if (!(await getMediaLibraryPermissions())) return
   const cursor = await getPhotosNewCursor()
 
   try {
@@ -75,6 +79,7 @@ export async function setAutoSyncNewPhotos(value: boolean) {
   if (value) {
     ensureMediaLibraryPermission()
   }
+  mediaLibraryPermissionsSwr.triggerChange()
 }
 
 export async function toggleAutoSyncNewPhotos() {

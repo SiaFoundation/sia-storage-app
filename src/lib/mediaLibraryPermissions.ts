@@ -4,14 +4,24 @@ import { useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import useSWR from 'swr'
 import { palette } from '../styles/colors'
+import { buildSWRHelpers } from './swr'
 
 export async function ensureMediaLibraryPermission(): Promise<boolean> {
   const res = await MediaLibrary.requestPermissionsAsync()
   return res.granted === true
 }
 
+export async function getMediaLibraryPermissions(): Promise<boolean> {
+  const res = await MediaLibrary.getPermissionsAsync()
+  return res.granted === true
+}
+
+export const mediaLibraryPermissionsSwr = buildSWRHelpers(
+  'mediaLibraryPermissions'
+)
+
 export function useMediaLibraryPermissions() {
-  const perms = useSWR(['mediaLibrary', 'permissions'], () =>
+  const perms = useSWR(mediaLibraryPermissionsSwr.getKey(), () =>
     MediaLibrary.getPermissionsAsync()
   )
 
@@ -24,11 +34,8 @@ export function useMediaLibraryPermissions() {
   const photosAccess: 'all' | 'limited' | 'none' | 'unknown' = useMemo(() => {
     const p = perms.data
     if (!p) return 'unknown'
-    if (Platform.OS === 'ios') {
-      const ap = p.accessPrivileges as 'all' | 'limited' | 'none' | undefined
-      if (ap) return ap
-      return p.granted ? 'all' : 'none'
-    }
+    const accessPrivileges = p.accessPrivileges
+    if (accessPrivileges) return accessPrivileges
     return p.granted ? 'all' : 'none'
   }, [perms.data])
 
