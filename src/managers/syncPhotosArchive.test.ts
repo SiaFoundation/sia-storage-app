@@ -21,6 +21,12 @@ jest.mock('expo-media-library', () => ({
 jest.mock('../lib/mediaLibraryPermissions', () => ({
   __esModule: true,
   ensureMediaLibraryPermission: jest.fn(),
+  getMediaLibraryPermissions: jest.fn().mockResolvedValue(true),
+  mediaLibraryPermissionsSwr: {
+    getKey: jest.fn((k: string) => [k]),
+    triggerChange: jest.fn(),
+    addChangeCallback: jest.fn(),
+  },
 }))
 jest.mock('../lib/processAssets', () => ({
   __esModule: true,

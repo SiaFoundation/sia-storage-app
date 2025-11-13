@@ -213,7 +213,8 @@ async function handleFileRecord(
         ...existingFile,
         ...(metadata.updatedAt >= existingFile.updatedAt ? metadata : {}),
       },
-      localObject
+      localObject,
+      { includeUpdatedAt: true }
     )
     // Cancel any inflight upload for this file since we now have a pinned object.
     cancelUpload(existingFile.id)
