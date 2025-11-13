@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native'
 import { colors, palette } from '../../styles/colors'
 import { updateFileRecord, type FileRecord } from '../../stores/files'
 import { FileStatus } from '../../lib/file'
@@ -15,6 +15,7 @@ import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 import useSWR from 'swr'
 import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
 import { getFileUri } from '../../stores/fileCache'
+import { FileMap } from './FileMap'
 
 export function FileMeta({
   file,
@@ -47,6 +48,7 @@ export function FileMeta({
       )
     }
   )
+  const { height: windowHeight } = useWindowDimensions()
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -114,6 +116,13 @@ export function FileMeta({
             value={file.type ?? '—'}
             showDividerTop
           />
+        </InfoCard>
+      </RowGroup>
+      <RowGroup title="File shard storage locations">
+        <InfoCard>
+          <View style={{ height: Math.round(windowHeight * 0.5) }}>
+            <FileMap file={file} />
+          </View>
         </InfoCard>
       </RowGroup>
       {showAdvanced.data && (
