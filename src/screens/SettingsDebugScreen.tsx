@@ -1,9 +1,8 @@
-import { StyleSheet } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
-import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { SettingsDebugHash } from '../components/SettingsDebugHash'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Debug'>
 
@@ -11,16 +10,8 @@ export function SettingsDebugScreen(_props: Props) {
   useSettingsHeader()
 
   return (
-    <SettingsLayout style={styles.container}>
+    <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <SettingsDebugHash />
-    </SettingsLayout>
+    </SettingsScrollLayout>
   )
 }
-
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-  },
-})

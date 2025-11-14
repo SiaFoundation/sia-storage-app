@@ -1,12 +1,11 @@
-import { StyleSheet } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { SettingsRecoveryPhrase } from '../components/SettingsRecoveryPhrase'
-import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { SettingsAdvancedAccount } from '../components/SettingsAdvancedAccount'
 import { SettingsAdvancedDangerZone } from '../components/SettingsAdvancedDangerZone'
 import { SettingsAdvancedInfo } from '../components/SettingsAdvancedInfo'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
 
@@ -14,20 +13,11 @@ export function SettingsAdvancedScreen(props: Props) {
   useSettingsHeader()
 
   return (
-    <SettingsLayout style={styles.container}>
+    <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <SettingsAdvancedAccount />
       <SettingsRecoveryPhrase />
       <SettingsAdvancedInfo {...props} />
       <SettingsAdvancedDangerZone />
-    </SettingsLayout>
+    </SettingsScrollLayout>
   )
 }
-
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-    gap: 24,
-  },
-})

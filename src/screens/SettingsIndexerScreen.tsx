@@ -9,12 +9,12 @@ import { LabeledValueRow } from '../components/LabeledValueRow'
 import { InputRow } from '../components/InputRow'
 import { useIndexerURL } from '../stores/settings'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
-import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { humanSize } from '../lib/humanSize'
 import { useAccount } from '../hooks/useAccount'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Indexer'>
 
@@ -25,7 +25,7 @@ export function SettingsIndexerScreen(_props: Props) {
   useSettingsHeader()
   const account = useAccount()
   return (
-    <SettingsLayout style={styles.container}>
+    <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <RowGroup
         title="Current Indexer"
         indicator={
@@ -38,7 +38,9 @@ export function SettingsIndexerScreen(_props: Props) {
             <Text
               style={[
                 styles.statusText,
-                { color: isConnected ? palette.green[500] : palette.red[500] },
+                {
+                  color: isConnected ? palette.green[500] : palette.red[500],
+                },
               ]}
             >
               {isConnected ? 'Connected' : 'Offline'}
@@ -90,17 +92,11 @@ export function SettingsIndexerScreen(_props: Props) {
             : 'Connect'}
         </Button>
       </View>
-    </SettingsLayout>
+    </SettingsScrollLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-    gap: 24,
-  },
   cellRowBottom: {
     flexDirection: 'row',
     alignItems: 'center',
