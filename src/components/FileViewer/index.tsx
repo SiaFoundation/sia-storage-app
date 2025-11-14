@@ -1,7 +1,10 @@
 import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
-import { ImageViewer } from '../MediaConsumers/ImageViewer'
+import {
+  ImageViewer,
+  type ImageViewerHandle,
+} from '../MediaConsumers/ImageViewer'
 import { VideoPlayer } from '../MediaConsumers/VideoPlayer'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
 import { PDFViewer } from '../MediaConsumers/PDFViewer'
@@ -12,6 +15,7 @@ import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
 import { useCallback, useMemo } from 'react'
+import type { Ref } from 'react'
 import { FileRecord } from '../../stores/files'
 import {
   useAutoDownload,
@@ -24,12 +28,14 @@ export function FileViewer({
   header,
   fullscreen = true,
   customDownloader,
+  imageViewerRef,
 }: {
   file: FileRecord
   isShared?: boolean
   header?: React.ReactNode
   fullscreen?: boolean
   customDownloader?: () => void
+  imageViewerRef?: Ref<ImageViewerHandle>
 }) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
@@ -78,6 +84,7 @@ export function FileViewer({
     if (type?.includes('image')) {
       return (
         <ImageViewer
+          ref={imageViewerRef}
           uri={fileUri}
           style={fullscreen ? styles.mediaWithPadding : styles.media}
         />
@@ -144,6 +151,7 @@ export function FileViewer({
     name,
     file.size,
     DownloadPanel,
+    imageViewerRef,
   ])
 
   return (

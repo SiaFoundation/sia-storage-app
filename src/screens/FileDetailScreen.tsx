@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { FileDetails } from '../components/FileDetails'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -9,18 +9,32 @@ import { palette } from '../styles/colors'
 import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
 import { FileViewer } from '../components/FileViewer'
 import { FileDetailsControlBar } from '../components/FileDetailsControlBar'
+import { type ImageViewerHandle } from '../components/MediaConsumers/ImageViewer'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
 export function FileDetailScreen({ route, navigation }: Props) {
   const [viewStyle, setViewStyle] = useState<'consume' | 'detail'>('consume')
+  const imageViewerRef = useRef<ImageViewerHandle>(null)
   const { data: file } = useFileDetails(route.params.id)
+
+  const handleSetViewStyle = useCallback(
+    (next: 'consume' | 'detail') => {
+      if (next === viewStyle) return
+      if (next === 'detail') {
+        imageViewerRef.current?.resetZoom()
+      }
+      setViewStyle(next)
+    },
+    [viewStyle]
+  )
 
   return (
     <View style={styles.container}>
       {file && viewStyle === 'consume' ? (
         <FileViewer
           file={file}
+          imageViewerRef={imageViewerRef}
           header={
             <FileDetailScreenHeader
               file={file}
@@ -51,7 +65,7 @@ export function FileDetailScreen({ route, navigation }: Props) {
       <FileDetailsControlBar
         route={route}
         viewStyle={viewStyle}
-        setViewStyle={setViewStyle}
+        setViewStyle={handleSetViewStyle}
         navigation={navigation}
       />
     </View>

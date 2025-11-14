@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from 'react'
 import {
   ScrollView,
   Image,
@@ -9,13 +16,17 @@ import {
   Platform,
 } from 'react-native'
 
-export function ImageViewer({
-  uri,
-  style,
-}: {
+export type ImageViewerHandle = {
+  resetZoom: () => void
+}
+
+type Props = {
   uri: string
   style?: ViewStyle
-}) {
+  ref?: Ref<ImageViewerHandle>
+}
+
+export function ImageViewer({ uri, style, ref }: Props) {
   const scrollRef = useRef<ScrollView>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
 
@@ -24,7 +35,7 @@ export function ImageViewer({
     setSize({ w: width, h: height })
   }
 
-  const reset = () => {
+  const reset = useCallback(() => {
     if (Platform.OS === 'ios') {
       scrollRef.current?.scrollResponderZoomTo({
         x: 0,
@@ -37,11 +48,21 @@ export function ImageViewer({
       // Android does not implement zoomToRect; reset scroll position instead.
       scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false })
     }
-  }
+  }, [size.w, size.h])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      resetZoom: () => {
+        reset()
+      },
+    }),
+    [reset]
+  )
 
   useEffect(() => {
     if (size.w && size.h) reset()
-  }, [uri, size.w, size.h])
+  }, [reset, uri])
 
   return (
     <View style={[styles.wrap, style]} onLayout={onLayout}>
