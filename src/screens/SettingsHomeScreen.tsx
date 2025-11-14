@@ -2,15 +2,15 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { colors, palette } from '../styles/colors'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
-import { SettingsLayout } from '../components/SettingsLayout'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>
 
 export function SettingsHomeScreen({ navigation }: Props) {
   useSettingsHeader()
   return (
-    <SettingsLayout style={styles.container}>
+    <SettingsScrollLayout>
       <Pressable
         accessibilityRole="button"
         onPress={() => navigation.navigate('Indexer')}
@@ -58,14 +58,11 @@ export function SettingsHomeScreen({ navigation }: Props) {
           <Text style={styles.rowChevron}>›</Text>
         </View>
       </Pressable>
-    </SettingsLayout>
+    </SettingsScrollLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingTop: 32,
-  },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -10,7 +10,7 @@ import Map from '../components/Map/Map'
 import { InfoCard } from '../components/InfoCard'
 import { RowGroup } from '../components/Group'
 import { LabeledValueRow } from '../components/LabeledValueRow'
-import { SettingsLayout } from '../components/SettingsLayout'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'HostDetail'>
 
@@ -36,7 +36,7 @@ export function HostDetailScreen({ route }: Props) {
     )
   }
   return (
-    <SettingsLayout style={styles.container}>
+    <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <RowGroup title="Info">
         <InfoCard>
           <LabeledValueRow label="Public Key" value={publicKey} />
@@ -67,17 +67,11 @@ export function HostDetailScreen({ route }: Props) {
           </Map>
         </InfoCard>
       </RowGroup>
-    </SettingsLayout>
+    </SettingsScrollLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-    gap: 24,
-  },
   card: {
     backgroundColor: colors.bgSurface,
     borderColor: colors.borderMutedLight,

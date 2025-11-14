@@ -1,12 +1,12 @@
 import { View, StyleSheet, Pressable } from 'react-native'
-import { colors, palette } from '../styles/colors'
+import { palette, colors } from '../styles/colors'
 import { ListIcon, MapIcon } from 'lucide-react-native'
 import { HostsList } from '../components/HostsList'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { useState, useLayoutEffect } from 'react'
 import HostsMap from '../components/HostsMap'
-import { SettingsLayout } from '../components/SettingsLayout'
+import { SettingsFullLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Hosts'>
 
@@ -57,13 +57,13 @@ export function HostListScreen({ navigation }: Props) {
   }
 
   return (
-    <SettingsLayout>
+    <SettingsFullLayout>
       {viewMode === 'list' ? (
         <HostsList onSelectHost={handleSelectHost} />
       ) : (
         <HostsMap onSelectHost={handleSelectHost} />
       )}
-    </SettingsLayout>
+    </SettingsFullLayout>
   )
 }
 
