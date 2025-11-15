@@ -72,3 +72,12 @@ export function createServiceInterval({
 
   return init
 }
+
+export function shutdownAllServiceIntervals() {
+  schedulerStateMap.forEach((state) => {
+    if (state.timeoutId) {
+      clearTimeout(state.timeoutId)
+    }
+  })
+  schedulerStateMap.clear()
+}

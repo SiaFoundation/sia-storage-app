@@ -39,5 +39,6 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
 
 export const migration_0002_add_thumbnail_columns: Migration = {
   id: '0002_add_thumbnail_columns',
+  description: 'Add thumbnail metadata columns and indexes.',
   up,
 }

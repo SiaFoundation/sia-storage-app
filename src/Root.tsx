@@ -7,8 +7,7 @@ import {
 } from '@react-navigation/native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
-import { initApp, shutdownApp } from './stores/app'
-import * as SplashScreen from 'expo-splash-screen'
+import { initApp, shutdownApp, useShowSplash } from './stores/app'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
@@ -16,13 +15,13 @@ import { uniqueId } from './lib/uniqueId'
 import { useHasOnboarded } from './stores/settings'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
-
-SplashScreen.preventAutoHideAsync()
+import { AppSplash } from './components/AppSplash'
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
   useReconnectIndexer()
   const { data: hasOnboarded } = useHasOnboarded()
+  const showSplash = useShowSplash()
 
   useEffect(() => {
     initApp()
@@ -61,10 +60,16 @@ export function Root() {
         />
         <ShareIntentProvider>
           <ToastProvider>
-            <ShareIntentConsumer />
-            <NavigationContainer ref={navigationRef}>
-              <RootTabs />
-            </NavigationContainer>
+            {showSplash ? (
+              <AppSplash />
+            ) : (
+              <>
+                <ShareIntentConsumer />
+                <NavigationContainer ref={navigationRef}>
+                  <RootTabs />
+                </NavigationContainer>
+              </>
+            )}
           </ToastProvider>
         </ShareIntentProvider>
       </SafeAreaView>

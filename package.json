@@ -32,7 +32,6 @@
     "expo-media-library": "^18.2.0",
     "expo-secure-store": "15.0.2",
     "expo-share-intent": "^5.1.0",
-    "expo-splash-screen": "^31.0.9",
     "expo-sqlite": "^15.2.14",
     "expo-updates": "~29.0.6",
     "expo-video": "~3.0.11",

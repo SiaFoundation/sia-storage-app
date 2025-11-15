@@ -3,7 +3,6 @@ import './polyfills'
 import { Root } from './src/Root'
 import { initSia, setLogger } from 'react-native-sia'
 import { logger, rustLogger } from './src/lib/logger'
-import { initializeDB } from './src/db'
 
 logger.log('initSia and uniffi...')
 
@@ -15,5 +14,4 @@ initSia().then(() => {
   setLogger(rustLogger, 'debug')
   registerRootComponent(Root)
   logger.log('App initialized')
-  initializeDB()
 })

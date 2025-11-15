@@ -17,5 +17,6 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
 
 export const migration_0003_add_updated_at_index: Migration = {
   id: '0003_add_updated_at_index',
+  description: 'Add updatedAt index for sync queries.',
   up,
 }

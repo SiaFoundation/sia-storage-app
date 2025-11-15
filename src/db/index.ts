@@ -1,16 +1,18 @@
 import * as SQLite from 'expo-sqlite'
 import { runMigrations } from './migrations'
+import { type MigrationProgressHandler } from './migrations/types'
 import { logger } from '../lib/logger'
 import { Mutex } from '../lib/mutex'
 
 export let database: SQLite.SQLiteDatabase
 const dbName = 'app.db'
 
-export async function initializeDB(): Promise<void> {
+export async function initializeDB(options?: {
+  onProgress?: MigrationProgressHandler
+}): Promise<void> {
   logger.log('[db] initializing database...')
   database = await SQLite.openDatabaseAsync(dbName)
-  // Run pending database migrations at startup.
-  await runMigrations(database)
+  await runMigrations(database, options?.onProgress)
   logger.log('[db] database initialized')
 }
 
