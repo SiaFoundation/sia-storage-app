@@ -1,18 +1,19 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   StyleSheet,
-  Platform,
-  KeyboardAvoidingView,
   StyleProp,
   ViewStyle,
+  Keyboard,
+  Platform,
+  type KeyboardEvent,
 } from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from './Gradient'
 
 type Props = {
   children?: React.ReactNode
-  overlayTop?: React.ReactNode
+  controlsTop?: React.ReactNode
   keyboardAware?: boolean
   style?: StyleProp<ViewStyle>
 }
@@ -20,41 +21,38 @@ type Props = {
 export function BottomControlBar({
   style,
   children,
-  overlayTop,
+  controlsTop,
   keyboardAware = false,
 }: Props) {
+  const keyboardOffset = useKeyboardOffset(keyboardAware)
+
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <KeyboardAvoidingView
-        enabled={keyboardAware}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-        pointerEvents="box-none"
+      <View
+        style={[
+          styles.keyboardAwareContainer,
+          { paddingBottom: 30 + keyboardOffset },
+        ]}
       >
-        <View style={styles.wrapFlex} pointerEvents="box-none">
-          <Gradient
-            fadeTo="bottom"
-            overlayTopColor={overlay.gradientLight}
-            overlayBottomColor={overlay.gradientDark}
-            style={{
-              position: 'absolute',
-              zIndex: 1,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: overlayTop ? 320 : 150,
-            }}
-          />
-          <View style={[styles.contents, style]}>
-            {overlayTop ? (
-              <View style={[styles.overlayTop]} pointerEvents="box-none">
-                {overlayTop}
-              </View>
-            ) : null}
-            <View style={styles.bar}>{children}</View>
-          </View>
+        <Gradient
+          fadeTo="bottom"
+          overlayTopColor={overlay.gradientLight}
+          overlayBottomColor={overlay.gradientDark}
+          style={[
+            styles.gradient,
+            {
+              bottom: keyboardOffset,
+              height: controlsTop ? 180 : 100,
+            },
+          ]}
+        />
+        <View style={[styles.contents, style]}>
+          {controlsTop ? (
+            <View style={styles.controlsTop}>{controlsTop}</View>
+          ) : null}
+          <View style={styles.bar}>{children}</View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   )
 }
@@ -67,23 +65,33 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
     alignItems: 'center',
+  },
+  keyboardAwareContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+    pointerEvents: 'box-none',
+  },
+  gradient: {
+    position: 'absolute',
+    zIndex: 1,
+    left: 0,
+    right: 0,
   },
   contents: {
     flexDirection: 'row',
     zIndex: 2,
-  },
-  wrapFlex: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingBottom: 30,
     width: '100%',
+    flexShrink: 0,
   },
   bar: {
     flex: 1,
+    flexShrink: 0,
     height: 56,
     borderRadius: 26,
     backgroundColor: overlay.panelStrong,
@@ -98,13 +106,14 @@ const styles = StyleSheet.create({
     borderColor: whiteA.a08,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  overlayTop: {
+  controlsTop: {
     position: 'absolute',
     zIndex: 3,
     left: 0,
     right: 0,
     bottom: 56 + 12, // Bar height + gap.
     alignSelf: 'center',
+    pointerEvents: 'box-none',
   },
   label: { fontSize: 10, color: colors.textMuted },
   disabled: { opacity: 0.3 },
@@ -114,4 +123,38 @@ export const iconColors = {
   active: colors.accentActive,
   inactive: whiteA.a70,
   white: palette.gray[50],
+}
+
+/** Returns the height of the keyboard when it is visible. */
+function useKeyboardOffset(enabled: boolean) {
+  const [offset, setOffset] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) {
+      setOffset(0)
+      return
+    }
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+
+    const handleShow = (event: KeyboardEvent) => {
+      setOffset(event.endCoordinates?.height ?? 0)
+    }
+    const handleHide = () => {
+      setOffset(0)
+    }
+
+    const showSub = Keyboard.addListener(showEvent, handleShow)
+    const hideSub = Keyboard.addListener(hideEvent, handleHide)
+
+    return () => {
+      showSub.remove()
+      hideSub.remove()
+    }
+  }, [enabled])
+
+  return offset
 }

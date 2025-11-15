@@ -1,5 +1,5 @@
 import React from 'react'
-import { FlatList, StyleSheet, ActivityIndicator } from 'react-native'
+import { FlatList, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import { type FileRecord } from '../stores/files'
 import { useFileList } from '../stores/library'
 import { useFlatListControls } from '../hooks/useFlatListControls'
@@ -40,6 +40,7 @@ export function FileGallery({ onPressItem, numColumns = 3 }: Props) {
       windowSize={9}
       maxToRenderPerBatch={20}
       updateCellsBatchingPeriod={20}
+      showsVerticalScrollIndicator={false}
       ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
       removeClippedSubviews
     />
@@ -47,5 +48,8 @@ export function FileGallery({ onPressItem, numColumns = 3 }: Props) {
 }
 
 const styles = StyleSheet.create({
-  galleryContent: { paddingTop: 130, paddingBottom: 130 },
+  galleryContent: {
+    paddingTop: Platform.OS === 'android' ? 150 : 130,
+    paddingBottom: 130,
+  },
 })
