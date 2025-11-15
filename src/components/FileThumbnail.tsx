@@ -25,16 +25,7 @@ export function FileThumbnail({
   iconSize?: number
   iconColor?: string
 }) {
-  const status = useFileStatus(file)
   const bestThumb = useBestThumbnailUri(file, thumbSize)
-
-  if (status.data?.isDownloading) {
-    return (
-      <View style={styles.thumbnailImage}>
-        <CenteredProgress status={status.data} size={iconSize} />
-      </View>
-    )
-  }
 
   if (file.type?.includes('image')) {
     const thumbUri = bestThumb.data
@@ -48,18 +39,6 @@ export function FileThumbnail({
     )
   }
   if (file.type?.includes('pdf')) {
-    const thumbUri = bestThumb.data
-    if (thumbUri) {
-      return <Image source={{ uri: thumbUri }} style={styles.thumbnailImage} />
-    }
-    if (status.data?.fileUri) {
-      return (
-        <Image
-          source={{ uri: status.data?.fileUri }}
-          style={styles.thumbnailImage}
-        />
-      )
-    }
     return (
       <View style={styles.thumbnailImage}>
         <FileTextIcon size={iconSize} color={iconColor} />
