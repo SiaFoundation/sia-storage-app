@@ -40,6 +40,23 @@ export function LabeledValueRow({
     toast.show(`Copied ${lower}`)
   }, [label, toast, value])
 
+  const valueContent =
+    typeof value === 'string' ? (
+      <Text
+        style={[
+          styles.rowValue,
+          isMonospace && styles.rowValueMono,
+          { textAlign: align },
+        ]}
+        numberOfLines={numberOfLines}
+        ellipsizeMode={ellipsizeMode}
+      >
+        {value}
+      </Text>
+    ) : (
+      value
+    )
+
   return canCopy ? (
     <Pressable accessibilityRole="button" onPress={handleCopy}>
       <View
@@ -58,21 +75,7 @@ export function LabeledValueRow({
         >
           {label}
         </Text>
-        {typeof value === 'string' ? (
-          <Text
-            style={[
-              styles.rowValue,
-              isMonospace && styles.rowValueMono,
-              { textAlign: align },
-            ]}
-            numberOfLines={numberOfLines}
-            ellipsizeMode={ellipsizeMode}
-          >
-            {value}
-          </Text>
-        ) : (
-          value
-        )}
+        {valueContent}
       </View>
     </Pressable>
   ) : (
@@ -84,17 +87,7 @@ export function LabeledValueRow({
       >
         {label}
       </Text>
-      <Text
-        style={[
-          styles.rowValue,
-          isMonospace && styles.rowValueMono,
-          { textAlign: align },
-        ]}
-        numberOfLines={numberOfLines}
-        ellipsizeMode={ellipsizeMode}
-      >
-        {value}
-      </Text>
+      {valueContent}
     </View>
   )
 }
