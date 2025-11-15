@@ -80,5 +80,6 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
 
 export const migration_0001_init_schema: Migration = {
   id: '0001_init_schema',
+  description: 'Initialize core storage schema.',
   up,
 }

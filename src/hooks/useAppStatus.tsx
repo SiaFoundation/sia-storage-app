@@ -1,7 +1,5 @@
 import React from 'react'
 import {
-  CheckCheckIcon,
-  CheckIcon,
   CircleCheckIcon,
   TriangleAlertIcon,
   UploadCloudIcon,

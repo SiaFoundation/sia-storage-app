@@ -2,7 +2,7 @@
  * Database migrations runner.
  *
  * How it works:
- * - Migrations live in `src/db/migrations` and export `{ id, up }`.
+ * - Migrations live in `src/db/migrations` and export `{ id, description, up }`.
  * - Applied migrations are tracked in the SQLite table `migrations (id TEXT PRIMARY KEY, appliedAt INTEGER)`.
  * - On app startup, `runMigrations` executes migrations not present in the table.
  * - Each migration runs inside a transaction; failures roll back and are not recorded.
@@ -18,7 +18,7 @@
  */
 import * as SQLite from 'expo-sqlite'
 import { logger } from '../../lib/logger'
-import { type Migration } from './types'
+import { type Migration, type MigrationProgressHandler } from './types'
 import { migration_0001_init_schema } from './0001_init_schema'
 import { migration_0002_add_thumbnail_columns } from './0002_add_thumbnail_columns'
 import { migration_0003_add_updated_at_index } from './0003_add_updated_at_index'
@@ -29,7 +29,10 @@ const migrations: Migration[] = [
   migration_0003_add_updated_at_index,
 ]
 
-export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function runMigrations(
+  db: SQLite.SQLiteDatabase,
+  onProgress?: MigrationProgressHandler
+): Promise<void> {
   logger.log('[db] checking migrations...')
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS migrations (
@@ -52,10 +55,16 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     )
   }
   for (const m of migrations) {
-    if (applied.has(m.id)) continue
+    if (applied.has(m.id)) {
+      continue
+    }
     logger.log('[db] applying migration', m.id)
+    onProgress?.({
+      id: m.id,
+      message: m.description,
+    })
     await db.withTransactionAsync(async () => {
-      await m.up(db)
+      await m.up(db, onProgress)
       await db.runAsync(
         'INSERT INTO migrations (id, appliedAt) VALUES (?, ?)',
         m.id,
