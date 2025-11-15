@@ -1,5 +1,5 @@
 import React from 'react'
-import { FlatList, ActivityIndicator } from 'react-native'
+import { FlatList, ActivityIndicator, Platform } from 'react-native'
 import { FileRecord } from '../stores/files'
 import { useFileList } from '../stores/library'
 import { FileListItem } from './FileListItem'
@@ -29,7 +29,7 @@ export function FileList({ onPressItem }: Props) {
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
-        paddingTop: 130,
+        paddingTop: Platform.OS === 'android' ? 150 : 130,
         gap: 8,
         paddingBottom: 130,
       }}
@@ -42,6 +42,7 @@ export function FileList({ onPressItem }: Props) {
       windowSize={9}
       maxToRenderPerBatch={20}
       updateCellsBatchingPeriod={20}
+      showsVerticalScrollIndicator={false}
       ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
       removeClippedSubviews
     />

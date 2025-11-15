@@ -21,7 +21,7 @@ export function LibraryControlBar({ route, navigation }: Props) {
     <BottomControlBar
       keyboardAware
       style={{ width: '90%', maxWidth: 600 }}
-      overlayTop={searchActive ? <LibraryControlsSearchMenus /> : null}
+      controlsTop={searchActive ? <LibraryControlsSearchMenus /> : null}
     >
       {searchActive ? (
         <FileSearchBar onExit={() => setSearchActive(false)} />
