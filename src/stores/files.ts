@@ -4,13 +4,13 @@ import {
 } from '../encoding/localObject'
 import { upsertLocalObject, readLocalObjectsForFile } from './localObjects'
 import { logger } from '../lib/logger'
-import { db, insert, withTransactionLock } from '../db'
+import { db, withTransactionLock } from '../db'
+import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import useSWR from 'swr'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { LocalObjectRow } from '../encoding/localObject'
 import { getIndexerURL } from './settings'
 import { librarySwr } from './library'
-import { removeEmptyValues } from '../lib/object'
 import { keysOf } from '../lib/types'
 
 /** Valid thumbnail sizes in pixels. */
@@ -83,7 +83,7 @@ export async function createFileRecord(
     thumbForHash,
     thumbSize,
   } = fileRecord
-  await insert('files', {
+  await sqlInsert('files', {
     id,
     name,
     size,
@@ -305,8 +305,7 @@ export async function updateFileRecord(
   options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
 ): Promise<void> {
   const { id } = update
-  const sets: string[] = []
-  const params: (string | number | null)[] = []
+  const assignments: Record<string, string | number | boolean | null> = {}
   const updatableFields: (keyof FileRecordRow)[] = [
     'name',
     'type',
@@ -321,24 +320,22 @@ export async function updateFileRecord(
     updatableFields.push('updatedAt')
   }
   for (const field of updatableFields) {
-    const nonEmptyUpdate = removeEmptyValues(update)
-    if (field in nonEmptyUpdate) {
-      sets.push(`${field} = ?`)
-      params.push(nonEmptyUpdate[field as keyof typeof nonEmptyUpdate] ?? null)
+    const value = update[field]
+    if (value === undefined || value === null) {
+      continue
     }
-  }
-
-  if (sets.length === 0) {
-    return
+    assignments[field] = value
   }
 
   if (!options.includeUpdatedAt) {
-    sets.push('updatedAt = ?')
-    params.push(Date.now())
+    assignments.updatedAt = Date.now()
   }
 
-  const sql = `UPDATE files SET ${sets.join(', ')} WHERE id = ?`
-  await db().runAsync(sql, ...params, id)
+  if (!Object.keys(assignments).length) {
+    return
+  }
+
+  await sqlUpdate('files', assignments, { id })
   if (triggerUpdate) {
     await librarySwr.triggerChange()
   }
@@ -362,7 +359,7 @@ export async function deleteFileRecord(
   id: string,
   triggerUpdate: boolean = true
 ): Promise<void> {
-  await db().runAsync('DELETE FROM files WHERE id = ?', id)
+  await sqlDelete('files', { id })
   if (triggerUpdate) {
     await librarySwr.triggerChange()
   }
@@ -374,14 +371,14 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
   if (!original) return
   const hash = original.hash
   await withTransactionLock(async () => {
-    await db().runAsync('DELETE FROM files WHERE thumbForHash = ?', hash)
-    await db().runAsync('DELETE FROM files WHERE id = ?', id)
+    await sqlDelete('files', { thumbForHash: hash })
+    await sqlDelete('files', { id })
   })
   await librarySwr.triggerChange()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
-  await db().runAsync('DELETE FROM files')
+  await sqlDelete('files')
 }
 
 /** Commit a file record and a local object in a single transaction. */

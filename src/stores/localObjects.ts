@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { sqlDelete, sqlInsert } from '../db/sql'
 import {
   type LocalObject,
   type LocalObjectRow,
@@ -23,18 +24,20 @@ export async function upsertLocalObject(
   triggerUpdate: boolean = true
 ): Promise<void> {
   const e = localObjectToStorageRow(object)
-  await db().runAsync(
-    `INSERT OR REPLACE INTO objects (fileId, indexerURL, id, slabs, encryptedMasterKey, encryptedMetadata, signature, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    e.fileId,
-    e.indexerURL,
-    e.id,
-    e.slabs,
-    e.encryptedMasterKey,
-    e.encryptedMetadata,
-    e.signature,
-    e.createdAt,
-    e.updatedAt
+  await sqlInsert(
+    'objects',
+    {
+      fileId: e.fileId,
+      indexerURL: e.indexerURL,
+      id: e.id,
+      slabs: e.slabs,
+      encryptedMasterKey: e.encryptedMasterKey,
+      encryptedMetadata: e.encryptedMetadata,
+      signature: e.signature,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+    },
+    { conflictClause: 'OR REPLACE' }
   )
   if (triggerUpdate) {
     await librarySwr.triggerChange()
@@ -42,7 +45,7 @@ export async function upsertLocalObject(
 }
 
 export async function deleteLocalObjects(fileId: string): Promise<void> {
-  await db().runAsync(`DELETE FROM objects WHERE fileId = ?`, fileId)
+  await sqlDelete('objects', { fileId })
   await librarySwr.triggerChange()
 }
 
