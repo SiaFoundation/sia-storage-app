@@ -140,13 +140,7 @@ function normalizeFsUri(uri: string | null | undefined): string | null {
  * URI from the MediaLibrary. Otherwise, check the file cache.
  */
 export async function getFileUri(file: FileCopyInfo): Promise<string | null> {
-  if (file.localId) {
-    const localUri = await getLocalUri(file.localId)
-    if (localUri) {
-      return localUri
-    }
-  }
-  return await readCacheUri(file)
+  return readCacheUri(file)
 }
 
 /**

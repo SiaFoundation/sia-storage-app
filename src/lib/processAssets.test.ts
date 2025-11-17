@@ -28,10 +28,12 @@ jest.mock('../stores/fileCache', () => {
       return cachedIds.has(file.id) ? `file://${file.id}` : null
     }),
     getLocalUri: jest.fn(),
-    copyFileToCache: jest.fn(async (file: { id: string }) => {
-      cachedIds.add(file.id)
-      return `file://${file.id}`
-    }),
+    copyFileToCache: jest.fn(
+      async (file: { id: string }, sourceFile: { uri: string }) => {
+        cachedIds.add(file.id)
+        return sourceFile.uri
+      }
+    ),
     clearCache: jest.fn(() => {
       cachedIds.clear()
     }),
@@ -77,7 +79,6 @@ describe('processAssets', () => {
     ]
 
     const { files } = await processAssets(assets)
-
     expect(files).toHaveLength(1)
     const rows = await readAllFileRecords({ order: 'ASC' })
     expect(rows).toHaveLength(1)
@@ -86,9 +87,15 @@ describe('processAssets', () => {
       name: 'a.jpg',
       size: 100,
     })
-    expect(copyFileToCache).not.toHaveBeenCalled()
+    expect(copyFileToCache).toHaveBeenCalledTimes(1)
+    expect(copyFileToCache).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'uid-1',
+        type: 'image/jpeg',
+      }),
+      expect.objectContaining({ uri: 'file://1' })
+    )
   })
-
   it('updates existing by localId and does not create new records', async () => {
     await createFileRecord(
       {
@@ -133,9 +140,8 @@ describe('processAssets', () => {
       name: 'new.jpg',
       size: 200,
     })
-    expect(copyFileToCache).not.toHaveBeenCalled()
+    expect(copyFileToCache).toHaveBeenCalledTimes(0)
   })
-
   it('updates existing by hash and does not create new records', async () => {
     await createFileRecord(
       {
@@ -178,24 +184,45 @@ describe('processAssets', () => {
       name: 'new-h.jpg',
       size: 300,
     })
-    expect(copyFileToCache).not.toHaveBeenCalled()
+    expect(copyFileToCache).toHaveBeenCalledTimes(1)
+    expect(copyFileToCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'existing-hash' }),
+      expect.objectContaining({ uri: 'file://2' })
+    )
   })
-
-  it('copies sourceUri to cache when asset lacks valid id', async () => {
+  it('dedupes on hash within new files', async () => {
     jest.mocked(getLocalUri).mockImplementation(async () => {
       return null
     })
     const assets = [
       {
         id: undefined,
-        name: 'no-id.jpg',
+        name: '1.jpg',
         size: 123,
         sourceUri: 'file:///tmp/no-id.jpg',
         type: 'image/jpeg',
         timestamp: '2021-01-01',
       },
       {
-        id: 'invalid',
+        id: undefined,
+        name: '2.jpg',
+        size: 123,
+        sourceUri: 'file:///tmp/no-id.jpg',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+
+    const { files } = await processAssets(assets)
+    expect(files).toHaveLength(1)
+  })
+  it('grabs the highest quality file when localId is valid', async () => {
+    jest.mocked(getLocalUri).mockImplementation(async () => {
+      return 'file:///tmp/valid.jpg'
+    })
+    const assets = [
+      {
+        id: 'valid',
         name: 'no-id.jpg',
         size: 123,
         sourceUri: 'file:///tmp/no-id.jpg',
@@ -206,31 +233,15 @@ describe('processAssets', () => {
 
     const { files } = await processAssets(assets)
 
-    expect(files).toHaveLength(2)
-    expect(copyFileToCache).toHaveBeenCalledTimes(2)
-    expect(copyFileToCache).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ id: files[0].id, type: 'image/jpeg' }),
-      expect.objectContaining({ uri: 'file:///tmp/no-id.jpg' })
-    )
-    expect(copyFileToCache).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ id: files[1].id, type: 'image/jpeg' }),
-      expect.objectContaining({ uri: 'file:///tmp/no-id.jpg' })
-    )
+    expect(files).toHaveLength(1)
+    expect(getLocalUri).toHaveBeenCalledTimes(1)
+    expect(getLocalUri).toHaveBeenCalledWith('valid')
 
-    const rows = await readAllFileRecords({ order: 'ASC' })
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toMatchObject({
-      name: 'no-id.jpg',
-      localId: null,
-      size: 123,
-    })
-    expect(rows[1]).toMatchObject({
-      name: 'no-id.jpg',
-      localId: null,
-      size: 123,
-    })
+    expect(copyFileToCache).toHaveBeenCalledTimes(1)
+    expect(copyFileToCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: files[0].id, type: 'image/jpeg' }),
+      expect.objectContaining({ uri: 'file:///tmp/valid.jpg' })
+    )
   })
   it('adds file size to new files', async () => {
     const assets = [

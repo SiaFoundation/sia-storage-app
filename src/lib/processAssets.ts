@@ -36,7 +36,8 @@ type CandidateFileRecord = {
   statusDetails:
     | 'foundByLocalId'
     | 'foundByContentHash'
-    | 'noFileUri'
+    | 'noUri'
+    | 'invalidUri'
     | 'noFileSize'
     | 'noContentHash'
     | null
@@ -46,7 +47,7 @@ type CandidateFileRecord = {
  * processAssets imports a list of assets from any source.
  * This function will:
  * - Check for duplicates by localId and hash.
- * - Copy files without a local ID to the app's file cache.
+ * - Copy every asset to the app's file cache.
  * - Add content hashes to files that are new.
  * - Create new file records for the assets.
  * - Update the metadata of any existing files.
@@ -64,8 +65,6 @@ export async function processAssets(
   const candidateFiles: CandidateFileRecord[] = (assets ?? []).map((a) => ({
     id: uniqueId(),
     localId: a.id ?? null,
-    // If the asset does not have an valid id, pass a sourceUri so we can copy the
-    // file to the app's file cache.
     sourceUri: a.sourceUri ?? null,
     name: a.name ?? defaultFileName,
     size: a.size ?? null,
@@ -95,42 +94,50 @@ export async function processAssets(
     }
   }
 
-  // Ensure we have a valid local URI for the file.
+  // Copy files to the app's file cache.
   // Add content hash and file size to files that are still new.
   await Promise.all(
     candidateFiles
       .filter((f) => f.status === 'new')
       .map(async (f) => {
-        let fileUri = await getLocalUri(f.localId)
-        // The localId Was not a valid Media Library or MediaStore ID.
-        if (!fileUri) {
+        const localUri = await getLocalUri(f.localId)
+        // The localId was not a valid Media Library or MediaStore ID.
+        if (!localUri) {
           f.localId = null
         }
-        if (!fileUri && f.sourceUri) {
-          logger.log(
-            `[processAssets] copying file without valid localId to cache id=${f.id} sourceUri=${f.sourceUri}`
-          )
-          fileUri = await copyFileToCache(f, new File(f.sourceUri))
-        }
-        if (!fileUri) {
+
+        const bestUri = localUri ?? f.sourceUri
+        if (!bestUri) {
           f.status = 'incomplete'
-          f.statusDetails = 'noFileUri'
+          f.statusDetails = 'noUri'
           return
         }
+
+        // Try localUri first because it will be the highest quality, then fallback to sourceUri.
+        const fileUri = await copyFileToCache(f, new File(bestUri))
+        if (!fileUri) {
+          f.status = 'incomplete'
+          f.statusDetails = 'invalidUri'
+          return
+        }
+
+        const hash = await calculateContentHash(fileUri)
+        if (!hash) {
+          f.status = 'incomplete'
+          f.statusDetails = 'noContentHash'
+          return
+        }
+        f.hash = hash
+
         if (!f.size) {
           // Try again to get the file size.
-          f.size = getFileSize(fileUri)
-          if (!f.size) {
+          const size = getFileSize(fileUri)
+          if (!size) {
             f.status = 'incomplete'
             f.statusDetails = 'noFileSize'
             return
           }
-        }
-        f.hash = await calculateContentHash(fileUri)
-        if (!f.hash) {
-          f.status = 'incomplete'
-          f.statusDetails = 'noContentHash'
-          return
+          f.size = size
         }
       })
   )
@@ -150,6 +157,19 @@ export async function processAssets(
       validFile.status = 'existing'
       validFile.statusDetails = 'foundByContentHash'
     }
+  }
+
+  // Mark any hash-based duplicates within the new files as existing.
+  const hashMap = new Map<string, CandidateFileRecord>()
+  for (const f of candidateFiles.filter(
+    (f) => f.status === 'new' && f.hash !== null
+  )) {
+    const existing = hashMap.get(f.hash!)
+    if (existing) {
+      existing.status = 'existing'
+      existing.statusDetails = 'foundByContentHash'
+    }
+    hashMap.set(f.hash!, f)
   }
 
   // Assert that the files are new and have a content hash.
