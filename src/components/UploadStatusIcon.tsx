@@ -2,6 +2,7 @@ import {
   CloudAlertIcon,
   CloudCheckIcon,
   CloudDownloadIcon,
+  CloudUploadIcon,
 } from 'lucide-react-native'
 import { FileStatus } from '../lib/file'
 import { overlay, palette } from '../styles/colors'
@@ -57,7 +58,7 @@ export function UploadStatusIcon({
       <CloudDownloadIcon color={iconColor} size={size} />
     )
   ) : (
-    <CloudAlertIcon color={iconColor} size={size} />
+    <CloudUploadIcon color={iconColor} size={size} />
   )
 
   if (variant === 'icon') {
