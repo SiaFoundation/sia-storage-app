@@ -42,3 +42,4 @@ ios/
 .env.*
 !.env.example
 !.env.test
+android-release.keystore

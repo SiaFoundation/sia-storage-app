@@ -1,11 +1,13 @@
+const PROD = process.env.PROD === 'true'
+
 export default {
   expo: {
-    name: 'Sia Storage',
-    slug: 'siastorage',
+    name: PROD ? 'Sia Storage' : 'Sia Storage Dev',
+    slug: PROD ? 'siastorage' : 'siastoragedev',
     scheme: 'sia',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: PROD ? './assets/app-icon-ios.png' : './assets/app-icon-ios-dev.png',
     userInterfaceStyle: 'dark',
     newArchEnabled: true,
     splash: {
@@ -15,7 +17,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'sia.storage',
+      bundleIdentifier: PROD ? 'sia.storage' : 'sia.storage.dev',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSPhotoLibraryUsageDescription:
@@ -30,11 +32,13 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: './assets/icon-android.png',
+        foregroundImage: PROD
+          ? './assets/app-icon-android.png'
+          : './assets/app-icon-android-dev.png',
         backgroundColor: '#ffffff',
       },
       edgeToEdgeEnabled: true,
-      package: 'sia.storage',
+      package: PROD ? 'sia.storage' : 'sia.storage.dev',
       permissions: [
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.READ_MEDIA_IMAGES',
@@ -90,9 +94,19 @@ export default {
           ],
         },
       ],
+      [
+        './plugins/android-release-signing',
+        {
+          storeFile: 'android-release.keystore',
+          keyAlias: 'siaReleaseKey',
+        },
+      ],
     ],
     runtimeVersion: {
       policy: 'appVersion',
+    },
+    extra: {
+      prod: PROD,
     },
   },
 }
