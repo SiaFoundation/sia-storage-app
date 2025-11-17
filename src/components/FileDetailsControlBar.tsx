@@ -1,6 +1,4 @@
 import React from 'react'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MainStackParamList } from '../stacks/types'
 import {
   MoreVerticalIcon,
   ShareIcon,
@@ -16,18 +14,19 @@ import { View } from 'react-native'
 import { IconButton } from './IconButton'
 import { BottomControlBar } from './BottomControlBar'
 
-type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
+type Props = {
   viewStyle: 'consume' | 'detail'
   setViewStyle: (viewStyle: 'consume' | 'detail') => void
+  fileID: string
 }
 
 export function FileDetailsControlBar({
-  route,
   viewStyle,
   setViewStyle,
+  fileID,
 }: Props) {
   const { handleShareFile, handleShareURL, canShare } = useShareAction({
-    fileId: route.params.id,
+    fileId: fileID,
   })
   return (
     <BottomControlBar style={{ width: '90%', maxWidth: 600 }}>
