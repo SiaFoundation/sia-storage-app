@@ -26,10 +26,8 @@ import { z } from 'zod'
 import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
 import { isoToEpochCodec } from '../encoding/date'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import {
-  removeFileFromCache,
-  removeTmpFileFromCache,
-} from '../stores/fileCache'
+import { fsRemoveFile } from '../stores/fs'
+import { tempFsRemoveFile } from '../stores/tempFs'
 import { uniqueId } from '../lib/uniqueId'
 import { cancelUpload } from '../stores/uploads'
 import { readThumbnailRecordByThumbForHashAndSize } from '../stores/thumbnails'
@@ -137,9 +135,9 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
     logger.log(`[syncDownEvents] deleting file id=${existingFileRecord.id}`)
     await Promise.all([
       // Remove the file from the cache.
-      removeFileFromCache(existingFileRecord),
+      fsRemoveFile(existingFileRecord),
       // Remove any tmp file from the cache.
-      removeTmpFileFromCache(existingFileRecord),
+      tempFsRemoveFile(existingFileRecord),
       // Remove the file from the database.
       deleteFileRecord(existingFileRecord.id),
     ])

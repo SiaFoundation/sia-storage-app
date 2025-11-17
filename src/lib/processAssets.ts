@@ -9,9 +9,10 @@ import {
 } from '../stores/files'
 import { MimeType, getMimeType } from './fileTypes'
 import { calculateContentHash } from './contentHash'
-import { copyFileToCache, getLocalUri } from '../stores/fileCache'
+import { fsCopyFile } from '../stores/fs'
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
+import { getMediaLibraryUri } from './mediaLibrary'
 
 type Asset = {
   id: string | undefined
@@ -100,7 +101,7 @@ export async function processAssets(
     candidateFiles
       .filter((f) => f.status === 'new')
       .map(async (f) => {
-        const localUri = await getLocalUri(f.localId)
+        const localUri = await getMediaLibraryUri(f.localId)
         // The localId was not a valid Media Library or MediaStore ID.
         if (!localUri) {
           f.localId = null
@@ -114,7 +115,7 @@ export async function processAssets(
         }
 
         // Try localUri first because it will be the highest quality, then fallback to sourceUri.
-        const fileUri = await copyFileToCache(f, new File(bestUri))
+        const fileUri = await fsCopyFile(f, new File(bestUri))
         if (!fileUri) {
           f.status = 'incomplete'
           f.statusDetails = 'invalidUri'

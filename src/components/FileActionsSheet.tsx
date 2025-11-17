@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native'
 import { useToast } from '../lib/toastContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { removeFileFromCache } from '../stores/fileCache'
+import { fsRemoveFile } from '../stores/fs'
 import { useDownload } from '../managers/downloader'
 import { useSdk } from '../stores/sdk'
 import { useFileStatus } from '../lib/file'
@@ -32,7 +32,10 @@ import {
 type Props = {
   sheetName?: string
   fileID: string
-  navigation: NativeStackScreenProps<MainStackParamList, 'FileDetail'>['navigation']
+  navigation: NativeStackScreenProps<
+    MainStackParamList,
+    'FileDetail'
+  >['navigation']
 }
 
 export function FileActionsSheet({
@@ -60,7 +63,7 @@ export function FileActionsSheet({
   const handleRemoveCache = useCallback(async () => {
     if (!file) return
     try {
-      await removeFileFromCache(file)
+      await fsRemoveFile(file)
       toast.show('Removed from cache')
     } catch (e) {
       logger.log('[FileActionsSheet] failed to remove cache', e)

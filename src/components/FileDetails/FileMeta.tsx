@@ -14,7 +14,7 @@ import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 import useSWR from 'swr'
 import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
-import { getFileUri } from '../../stores/fileCache'
+import { fsReadUri } from '../../stores/fs'
 import { FileMap } from './FileMap'
 
 export function FileMeta({
@@ -43,7 +43,7 @@ export function FileMeta({
       return Promise.all(
         records.map(async (thumb) => ({
           record: thumb,
-          uri: await getFileUri(thumb),
+          uri: await fsReadUri(thumb),
         }))
       )
     }

@@ -13,7 +13,8 @@ import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllUploads } from './uploads'
 import { cancelAllDownloads } from './downloads'
 import { initLogger } from './logs'
-import { ensureCacheDir } from './fileCache'
+import { fsEnsureDir } from './fs'
+import { tempFsEnsureDir } from './tempFs'
 import { initializeDB, resetDb } from '../db'
 import {
   initSyncDownEvents,
@@ -30,6 +31,7 @@ import {
 import { initBackgroundTasks } from '../managers/backgroundTasks'
 import { initSyncUpMetadata } from '../managers/syncUpMetadata'
 import { initThumbnailScanner } from '../managers/thumbnailScanner'
+import { initFsScanner } from '../managers/fsScanner'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 
 export type InitStep = {
@@ -66,8 +68,9 @@ export async function initApp(): Promise<void> {
       label: 'Starting application',
       message: 'Initializing...',
       runner: async () => {
-        initLogger()
-        await ensureCacheDir()
+        await initLogger()
+        await fsEnsureDir()
+        await tempFsEnsureDir()
       },
     },
     {
@@ -115,6 +118,7 @@ export async function initApp(): Promise<void> {
       initBackgroundTasks()
       initSyncUpMetadata()
       initThumbnailScanner()
+      initFsScanner()
     },
   })
 

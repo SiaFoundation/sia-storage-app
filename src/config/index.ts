@@ -29,6 +29,8 @@ export const SYNC_NEW_PHOTOS_INTERVAL = 30_000 // 30 seconds
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = 5_000 // 5 seconds
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = 5_000 // 5 seconds
+// File system scanner interval.
+export const FS_SCANNER_INTERVAL = 60_000 // 60 seconds
 // Sync up metadata interval.
 export const SYNC_UP_METADATA_INTERVAL = 10_000 // 10 seconds
 // Sync up metadata batch size.

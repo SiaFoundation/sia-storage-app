@@ -2,7 +2,7 @@ import { runThumbnailScanner } from './thumbnailScanner'
 import { initializeDB, resetDb } from '../db'
 import { createFileRecord, ThumbSizes } from '../stores/files'
 import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { getFileUri, copyFileToCache } from '../stores/fileCache'
+import { fsReadUri, fsCopyFile } from '../stores/fs'
 import { calculateContentHash } from '../lib/contentHash'
 import { Image } from 'react-native'
 import * as VideoThumbnails from 'expo-video-thumbnails'
@@ -34,10 +34,10 @@ jest.mock('expo-file-system', () => ({
     info: jest.fn(() => ({ exists: true, size: 5000, uri })),
   })),
 }))
-jest.mock('../stores/fileCache', () => ({
-  getFileUri: jest.fn(),
-  copyFileToCache: jest.fn(),
-  clearCache: jest.fn(),
+jest.mock('../stores/docsCache', () => ({
+  docsCacheGetFileUri: jest.fn(),
+  docsCacheCopyFile: jest.fn(),
+  docsCacheClearForTests: jest.fn(),
 }))
 jest.mock('../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
 jest.mock('../lib/fileTypes', () => ({
@@ -51,8 +51,8 @@ jest.mock('../stores/settings', () => ({
   getAutoGenerateThumbnails: jest.fn(async () => true),
 }))
 
-const getFileUriMock = jest.mocked(getFileUri)
-const copyFileToCacheMock = jest.mocked(copyFileToCache)
+const getFileUriMock = jest.mocked(fsReadUri)
+const copyFileToCacheMock = jest.mocked(fsCopyFile)
 const calculateContentHashMock = jest.mocked(calculateContentHash)
 const imageGetSizeMock = jest.mocked(Image.getSize)
 const imageManipulatorMock = jest.mocked(ImageManipulator.manipulate)
@@ -61,7 +61,7 @@ const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
 beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
-  require('../stores/fileCache').clearCache()
+  require('../stores/docsCache').docsCacheClearForTests()
 
   getFileUriMock.mockResolvedValue('file://source.jpg')
   copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')

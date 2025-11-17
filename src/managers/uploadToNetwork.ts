@@ -1,10 +1,10 @@
 import { Sdk, encodedSize } from 'react-native-sia'
 import { File } from 'expo-file-system'
+import { docsCacheGetLocalUri } from '../stores/fs'
 import {
-  getCacheTmpUploadFileForId,
-  getLocalUri,
-  removeCacheTmpUploadFileForId,
-} from '../stores/fileCache'
+  tempFsGetUploadFileForId,
+  tempFsRemoveUploadFileForId,
+} from '../stores/tempFs'
 import { updateUploadProgress } from '../stores/uploads'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
@@ -36,12 +36,12 @@ export async function uploadToNetwork(params: {
     logger.log(
       '[uploadToNetwork] file is a localId asset, streaming from tmp file...'
     )
-    const localUri = await getLocalUri(file.localId)
+    const localUri = await docsCacheGetLocalUri(file.localId)
     if (!localUri) {
       throw new Error('Local URI not found')
     }
     const source = new File(localUri)
-    const tmp = await getCacheTmpUploadFileForId(file)
+    const tmp = await tempFsGetUploadFileForId(file)
     source.copy(tmp)
     stream = tmp.stream()
   } else {
@@ -135,6 +135,6 @@ export async function uploadToNetwork(params: {
 
   signal.removeEventListener('abort', onAbort)
   if (file.localId) {
-    await removeCacheTmpUploadFileForId(file)
+    await tempFsRemoveUploadFileForId(file)
   }
 }

@@ -1,8 +1,6 @@
 import { LocalObject } from '../encoding/localObject'
-import {
-  removeFileFromCache,
-  removeTmpFileFromCache,
-} from '../stores/fileCache'
+import { fsRemoveFile } from '../stores/fs'
+import { tempFsRemoveFile } from '../stores/tempFs'
 import { deleteFileRecord, FileRecord } from '../stores/files'
 import { deleteLocalObjects } from '../stores/localObjects'
 import { getSdk } from '../stores/sdk'
@@ -13,8 +11,8 @@ export async function permanentlyDeleteFile(file: FileRecord) {
   await deleteFileRecord(file.id)
   await deleteAllIndexerObjects(file)
   await deleteLocalObjects(file.id)
-  await removeFileFromCache(file)
-  await removeTmpFileFromCache(file)
+  await fsRemoveFile(file)
+  await tempFsRemoveFile(file)
 }
 
 export async function deleteFileFromNetwork(file: FileRecord) {

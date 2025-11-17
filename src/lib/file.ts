@@ -4,7 +4,7 @@ import { type DownloadState } from '../stores/downloads'
 import { FileRecord } from '../stores/files'
 import { useDownloadState } from '../stores/downloads'
 import { useUploadState } from '../stores/uploads'
-import { useFileUri } from '../stores/fileCache'
+import { useFsFileUri } from '../stores/fs'
 import {
   PinnedObject,
   PinnedObjectInterface,
@@ -77,7 +77,7 @@ export function useFileStatus(
 ): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
-  const fileUri = useFileUri(file)
+  const fileUri = useFsFileUri(file)
   const response = useSWR(fileUri.isLoading ? null : [file?.id, 'status'], () =>
     computeFileStatus({
       file,

@@ -3,7 +3,7 @@ import { createServiceInterval } from '../lib/serviceInterval'
 import { db } from '../db'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
 import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { getFileUri } from '../stores/fileCache'
+import { fsReadUri } from '../stores/fs'
 import { THUMBNAIL_SCANNER_INTERVAL } from '../config'
 import { ensureThumbnailForSize } from './thumbnailer'
 
@@ -170,7 +170,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
         }
 
         // Check if we can get source URI before attempting sizes.
-        const sourceUri = await getFileUri({
+        const sourceUri = await fsReadUri({
           id: c.id,
           type: c.type,
           localId: c.localId,

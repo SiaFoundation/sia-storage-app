@@ -7,8 +7,8 @@ import {
   readFileRecord,
 } from '../stores/files'
 import { initializeDB, resetDb } from '../db'
-import { copyFileToCache, getLocalUri } from '../stores/fileCache'
-import { Platform } from 'react-native'
+import { fsCopyFile } from '../stores/fs'
+import { getMediaLibraryUri } from './mediaLibrary'
 
 jest.mock('./uniqueId', () => {
   let c = 0
@@ -20,21 +20,21 @@ jest.mock('react-native', () => ({
 jest.mock('./contentHash', () => ({
   calculateContentHash: jest.fn(async (uri: string) => `sha256|hash:${uri}`),
 }))
-jest.mock('../stores/fileCache', () => {
+jest.mock('../stores/fs', () => {
   const cachedIds = new Set<string>()
   return {
-    getFileUri: jest.fn(async (file: FileRecord) => {
+    fsGetFileUri: jest.fn(async (file: FileRecord) => {
       if (file.localId) return `file://${file.localId}`
       return cachedIds.has(file.id) ? `file://${file.id}` : null
     }),
-    getLocalUri: jest.fn(),
-    copyFileToCache: jest.fn(
+    fsGetLocalUri: jest.fn(),
+    fsCopyFile: jest.fn(
       async (file: { id: string }, sourceFile: { uri: string }) => {
         cachedIds.add(file.id)
         return sourceFile.uri
       }
     ),
-    clearCache: jest.fn(() => {
+    fsClearForTests: jest.fn(() => {
       cachedIds.clear()
     }),
   }
@@ -53,7 +53,7 @@ jest.mock('../managers/thumbnailer', () => ({
 beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
-  require('../stores/fileCache').clearCache()
+  require('../stores/fs').fsClearForTests()
 })
 afterEach(async () => {
   await resetDb()
@@ -62,7 +62,7 @@ afterEach(async () => {
 describe('processAssets', () => {
   it('creates a new record when no duplicates exist', async () => {
     jest
-      .mocked(getLocalUri)
+      .mocked(getMediaLibraryUri)
       .mockImplementation(async (localId: string | null) => {
         if (localId === '1') return 'file://1'
         return null
@@ -87,8 +87,8 @@ describe('processAssets', () => {
       name: 'a.jpg',
       size: 100,
     })
-    expect(copyFileToCache).toHaveBeenCalledTimes(1)
-    expect(copyFileToCache).toHaveBeenCalledWith(
+    expect(fsCopyFile).toHaveBeenCalledTimes(1)
+    expect(fsCopyFile).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'uid-1',
         type: 'image/jpeg',
@@ -113,7 +113,7 @@ describe('processAssets', () => {
     )
 
     jest
-      .mocked(getLocalUri)
+      .mocked(getMediaLibraryUri)
       .mockImplementation(async (localId: string | null) => {
         if (localId === '1') return 'file://1'
         return null
@@ -140,7 +140,7 @@ describe('processAssets', () => {
       name: 'new.jpg',
       size: 200,
     })
-    expect(copyFileToCache).toHaveBeenCalledTimes(0)
+    expect(fsCopyFile).toHaveBeenCalledTimes(0)
   })
   it('updates existing by hash and does not create new records', async () => {
     await createFileRecord(
@@ -159,7 +159,7 @@ describe('processAssets', () => {
     )
 
     jest
-      .mocked(getLocalUri)
+      .mocked(getMediaLibraryUri)
       .mockImplementation(async (localId: string | null) => {
         if (localId === '2') return 'file://2'
         return null
@@ -184,14 +184,14 @@ describe('processAssets', () => {
       name: 'new-h.jpg',
       size: 300,
     })
-    expect(copyFileToCache).toHaveBeenCalledTimes(1)
-    expect(copyFileToCache).toHaveBeenCalledWith(
+    expect(fsCopyFile).toHaveBeenCalledTimes(1)
+    expect(fsCopyFile).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'existing-hash' }),
       expect.objectContaining({ uri: 'file://2' })
     )
   })
   it('dedupes on hash within new files', async () => {
-    jest.mocked(getLocalUri).mockImplementation(async () => {
+    jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
       return null
     })
     const assets = [
@@ -217,7 +217,7 @@ describe('processAssets', () => {
     expect(files).toHaveLength(1)
   })
   it('grabs the highest quality file when localId is valid', async () => {
-    jest.mocked(getLocalUri).mockImplementation(async () => {
+    jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
       return 'file:///tmp/valid.jpg'
     })
     const assets = [
@@ -234,11 +234,11 @@ describe('processAssets', () => {
     const { files } = await processAssets(assets)
 
     expect(files).toHaveLength(1)
-    expect(getLocalUri).toHaveBeenCalledTimes(1)
-    expect(getLocalUri).toHaveBeenCalledWith('valid')
+    expect(getMediaLibraryUri).toHaveBeenCalledTimes(1)
+    expect(getMediaLibraryUri).toHaveBeenCalledWith('valid')
 
-    expect(copyFileToCache).toHaveBeenCalledTimes(1)
-    expect(copyFileToCache).toHaveBeenCalledWith(
+    expect(fsCopyFile).toHaveBeenCalledTimes(1)
+    expect(fsCopyFile).toHaveBeenCalledWith(
       expect.objectContaining({ id: files[0].id, type: 'image/jpeg' }),
       expect.objectContaining({ uri: 'file:///tmp/valid.jpg' })
     )

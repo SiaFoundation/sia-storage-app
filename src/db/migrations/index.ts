@@ -22,11 +22,13 @@ import { type Migration, type MigrationProgressHandler } from './types'
 import { migration_0001_init_schema } from './0001_init_schema'
 import { migration_0002_add_thumbnail_columns } from './0002_add_thumbnail_columns'
 import { migration_0003_add_updated_at_index } from './0003_add_updated_at_index'
+import { migration_0004_add_fs_table } from './0004_add_fs_table'
 
 const migrations: Migration[] = [
   migration_0001_init_schema,
   migration_0002_add_thumbnail_columns,
   migration_0003_add_updated_at_index,
+  migration_0004_add_fs_table,
 ]
 
 export async function runMigrations(
