@@ -4,11 +4,16 @@
   "scripts": {
     "build": "expo prebuild",
     "build:clean": "expo prebuild --clean",
+    "build:prod": "PROD=true expo prebuild",
     "start": "expo start --dev-client",
     "android": "expo run:android",
+    "android:prod": "PROD=true expo run:android",
     "ios": "expo run:ios",
+    "ios:prod": "PROD=true expo run:ios",
     "web": "expo start --web",
     "fresh": "bunx rimraf .expo android ios node_modules && bun install && bun run build",
+    "android:signing-report": "bun scripts/androidGradleTask.ts signingReport",
+    "android:bundle-release": "bun scripts/androidGradleTask.ts bundleRelease",
     "test": "jest",
     "test:run": "jest --coverage"
   },
