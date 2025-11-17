@@ -1,6 +1,6 @@
+import { useCallback } from 'react'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type MainStackParamList } from '../stacks/types'
-import { useCallback } from 'react'
 import {
   Trash2Icon,
   CloudOffIcon,
@@ -29,22 +29,24 @@ import {
   deleteFileFromNetwork,
 } from '../lib/deleteFile'
 
-type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'> & {
+type Props = {
   sheetName?: string
+  fileID: string
+  navigation: NativeStackScreenProps<MainStackParamList, 'FileDetail'>['navigation']
 }
 
 export function FileActionsSheet({
-  route,
   navigation,
   sheetName = 'fileActions',
+  fileID,
 }: Props) {
   const toast = useToast()
-  const { data: file } = useFileDetails(route.params.id)
+  const { data: file } = useFileDetails(fileID)
   const status = useFileStatus(file ?? undefined)
   const isOpen = useSheetOpen(sheetName)
 
   const { handleShareFile, handleShareURL, canShare } = useShareAction({
-    fileId: route.params.id,
+    fileId: fileID,
   })
 
   const handlePressAndClose = useCallback(
