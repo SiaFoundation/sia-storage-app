@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from '../components/Gradient'
@@ -22,6 +22,8 @@ import { IconButton } from '../components/IconButton'
 import { SettingsIcon } from 'lucide-react-native'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
+import { FileActionsSheet } from '../components/FileActionsSheet'
+import { openSheet } from '../stores/sheets'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -30,12 +32,17 @@ export function LibraryScreen({ route, navigation }: Props) {
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
   const fileCount = useLibraryCount()
+  const [selectedFileID, setSelectedFileID] = useState<string | null>(null)
   const handleOpenDetail = useCallback(
     (file: FileRecord) => {
       navigation.navigate('FileDetail', { id: file.id })
     },
     [navigation]
   )
+  const handleOpenActions = useCallback((file: FileRecord) => {
+    setSelectedFileID(file.id)
+    openSheet('fileActions')
+  }, [])
 
   return (
     <View style={styles.container}>
@@ -100,9 +107,15 @@ export function LibraryScreen({ route, navigation }: Props) {
       ) : !!fileCount.data ? (
         files.data && files.data.length > 0 ? (
           viewMode.data == 'gallery' ? (
-            <FileGallery onPressItem={handleOpenDetail} />
+            <FileGallery
+              onPressItem={handleOpenDetail}
+              onLongPressItem={handleOpenActions}
+            />
           ) : (
-            <FileList onPressItem={handleOpenDetail} />
+            <FileList
+              onPressItem={handleOpenDetail}
+              onLongPressItem={handleOpenActions}
+            />
           )
         ) : (
           <View style={styles.emptyWrap}>
@@ -134,6 +147,9 @@ export function LibraryScreen({ route, navigation }: Props) {
       )}
       <AddFileActionSheet />
       <LibraryStatusSheet />
+      {selectedFileID ? (
+        <FileActionsSheet fileID={selectedFileID} sheetName="fileActions" />
+      ) : null}
       <LibraryControlBar navigation={navigation} route={route} />
     </View>
   )

@@ -1,7 +1,5 @@
 import { View, Pressable, StyleSheet } from 'react-native'
 import { colors } from '../styles/colors'
-import Clipboard from '@react-native-clipboard/clipboard'
-import { useToast } from '../lib/toastContext'
 import { type FileRecord } from '../stores/files'
 import { FileThumbnail } from './FileThumbnail'
 import { memo } from 'react'
@@ -11,10 +9,14 @@ import { UploadStatusIcon } from './UploadStatusIcon'
 type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
+  onLongPressItem?: (item: FileRecord) => void
 }
 
-function FileGalleryItemComponent({ file, onPressItem }: Props) {
-  const toast = useToast()
+function FileGalleryItemComponent({
+  file,
+  onPressItem,
+  onLongPressItem,
+}: Props) {
   const status = useFileStatus(file)
   return (
     <View collapsable={false} style={styles.thumbCell}>
@@ -22,10 +24,9 @@ function FileGalleryItemComponent({ file, onPressItem }: Props) {
         accessibilityRole="button"
         onPress={() => onPressItem(file)}
         style={styles.thumbPress}
-        onLongPress={() => {
-          Clipboard.setString(file.id)
-          toast.show('Copied item id')
-        }}
+        onLongPress={
+          onLongPressItem ? () => onLongPressItem(file) : undefined
+        }
       >
         <FileThumbnail file={file} iconSize={24} thumbSize={512} />
         {status.data ? (
@@ -43,7 +44,8 @@ export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
     prev.file.id === next.file.id &&
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
-    prev.onPressItem === next.onPressItem
+    prev.onPressItem === next.onPressItem &&
+    prev.onLongPressItem === next.onLongPressItem
   )
 })
 

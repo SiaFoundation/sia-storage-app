@@ -11,15 +11,19 @@ import { memo } from 'react'
 type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
+  onLongPressItem?: (item: FileRecord) => void
 }
 
-function FileListItemComponent({ file, onPressItem }: Props) {
+function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   const status = useFileStatus(file)
   return (
     <Pressable
       collapsable={false}
       style={styles.container}
       onPress={() => onPressItem(file)}
+      onLongPress={
+        onLongPressItem ? () => onLongPressItem(file) : undefined
+      }
     >
       <View style={styles.thumbnailContainer}>
         <FileThumbnail file={file} thumbSize={64} />
@@ -57,7 +61,8 @@ export const FileListItem = memo(FileListItemComponent, (prev, next) => {
     prev.file.id === next.file.id &&
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
-    prev.onPressItem === next.onPressItem
+    prev.onPressItem === next.onPressItem &&
+    prev.onLongPressItem === next.onLongPressItem
   )
 })
 
