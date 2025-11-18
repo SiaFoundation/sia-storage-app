@@ -43,14 +43,12 @@ export async function setIndexerURL(value: string) {
 
 // Has Onboarded
 
-export const [getHasOnboarded, useHasOnboarded] = createGetterAndSWRHook(
-  getKey('hasOnboarded'),
-  () => getSecureStoreBoolean('hasOnboarded')
-)
+export function getSecureStoreHasOnboarded() {
+  return getSecureStoreBoolean('hasOnboarded')
+}
 
-export async function setHasOnboarded(value: boolean) {
+export async function setSecureStoreHasOnboarded(value: boolean) {
   await setSecureStoreBoolean('hasOnboarded', value)
-  triggerChange('hasOnboarded')
 }
 
 // Show Advanced

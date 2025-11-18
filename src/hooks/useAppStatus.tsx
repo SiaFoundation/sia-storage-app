@@ -6,8 +6,7 @@ import {
 } from 'lucide-react-native'
 import { palette } from '../styles/colors'
 import { useIsConnected } from '../stores/sdk'
-import { useIsInitializing } from '../stores/app'
-import { useHasOnboarded } from '../stores/settings'
+import { useHasOnboardedStatus, useIsInitializing } from '../stores/app'
 import { useUploadScannerStatus } from '../managers/uploadScanner'
 import { useIsOnline } from './useIsOnline'
 
@@ -21,7 +20,7 @@ export type AppStatus = {
 export function useAppStatus(): AppStatus {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
-  const hasOnboarded = useHasOnboarded()
+  const hasOnboarded = useHasOnboardedStatus()
   const uploadsProgress = useUploadScannerStatus()
   const isOnline = useIsOnline()
 

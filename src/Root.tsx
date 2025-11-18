@@ -7,12 +7,16 @@ import {
 } from '@react-navigation/native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
-import { initApp, shutdownApp, useShowSplash } from './stores/app'
+import {
+  initApp,
+  shutdownApp,
+  useHasOnboardedStatus,
+  useShowSplash,
+} from './stores/app'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { RootTabs } from './stacks/RootTabs'
 import { uniqueId } from './lib/uniqueId'
-import { useHasOnboarded } from './stores/settings'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import { AppSplash } from './components/AppSplash'
@@ -20,7 +24,7 @@ import { AppSplash } from './components/AppSplash'
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
   useReconnectIndexer()
-  const { data: hasOnboarded } = useHasOnboarded()
+  const hasOnboarded = useHasOnboardedStatus()
   const showSplash = useShowSplash()
 
   useEffect(() => {

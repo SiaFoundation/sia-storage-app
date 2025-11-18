@@ -11,7 +11,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/Button'
 import BlocksGrid from '../components/BlocksGrid'
-import { setHasOnboarded } from '../stores/settings'
+import { setHasOnboardedStatus } from '../stores/app'
 import { palette } from '../styles/colors'
 import BlocksShape from '../components/BlocksShape'
 
@@ -136,7 +136,7 @@ export default function FinishedOnboardingScreen() {
         <Button
           variant="primary"
           onPress={async () => {
-            await setHasOnboarded(true)
+            await setHasOnboardedStatus(true)
           }}
         >
           Upload files

@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { useShareIntentContext } from 'expo-share-intent'
-import { useHasOnboarded } from '../stores/settings'
+import { useHasOnboardedStatus } from '../stores/app'
 import { processAssets } from '../lib/processAssets'
 import { useUploader } from '../managers/uploader'
 import { useToast } from '../lib/toastContext'
 import { logger } from '../lib/logger'
 
 export function ShareIntentConsumer() {
-  const { data: hasOnboarded } = useHasOnboarded()
+  const hasOnboarded = useHasOnboardedStatus()
   const { hasShareIntent, shareIntent, resetShareIntent } =
     useShareIntentContext()
   const uploader = useUploader()

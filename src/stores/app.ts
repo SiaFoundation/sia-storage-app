@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { createGetterAndSelector } from '../lib/selectors'
 import { deleteAllFileRecords } from './files'
-import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
+import {
+  getSecureStoreHasOnboarded,
+  setRecoveryPhrase,
+  setSecureStoreHasOnboarded,
+} from './settings'
 import {
   initSdk,
   reconnect,
@@ -43,6 +47,7 @@ type AppInitState = {
   steps: Map<string, InitStep>
   isInitializing: boolean
   initializationError: string | null
+  hasOnboarded: boolean | undefined
 }
 
 const useAppInitStore = create<AppInitState>(() => {
@@ -50,15 +55,26 @@ const useAppInitStore = create<AppInitState>(() => {
     steps: new Map<string, InitStep>(),
     isInitializing: true,
     initializationError: null,
+    hasOnboarded: undefined,
   }
 })
 
 const { setState } = useAppInitStore
 
+function setHasOnboardedState(value: boolean) {
+  setState({ hasOnboarded: value })
+}
+
+export async function setHasOnboardedStatus(value: boolean) {
+  await setSecureStoreHasOnboarded(value)
+  setHasOnboardedState(value)
+}
+
 export async function initApp(): Promise<void> {
   startInitState()
 
-  const hasOnboarded = await getHasOnboarded()
+  const hasOnboarded = await getSecureStoreHasOnboarded()
+  setHasOnboardedState(hasOnboarded)
 
   const steps: StepDefinition[] = [
     {
@@ -157,7 +173,7 @@ export async function resetApp() {
       runner: async () => {
         await resetData()
         await setRecoveryPhrase('')
-        await setHasOnboarded(false)
+        await setHasOnboardedStatus(false)
         await resetSdk()
         await resetPhotosNewCursor()
         await resetPhotosArchiveCursor()
@@ -198,6 +214,9 @@ export const [getShowSplash, useShowSplash] = createGetterAndSelector(
   (s) => s.isInitializing || s.initializationError
 )
 
+export const [getHasOnboardedStatus, useHasOnboardedStatus] =
+  createGetterAndSelector(useAppInitStore, (s) => s.hasOnboarded)
+
 // helpers
 
 function startInitState(): void {
@@ -205,6 +224,7 @@ function startInitState(): void {
     steps: new Map<string, InitStep>(),
     isInitializing: true,
     initializationError: null,
+    hasOnboarded: undefined,
   })
 }
 

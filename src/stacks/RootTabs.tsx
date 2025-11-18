@@ -4,14 +4,19 @@ import { MainStack } from './MainStack'
 import { SettingsStack } from './SettingsStack'
 import { type RootTabParamList } from './types'
 import { AuthStack } from './AuthStack'
-import { useHasOnboarded } from '../stores/settings'
+import { useHasOnboardedStatus } from '../stores/app'
 import { ImportStack } from './ImportStack'
 
 const Tab = createBottomTabNavigator<RootTabParamList>()
 
 export function RootTabs() {
-  const hasOnboarded = useHasOnboarded()
-  if (!hasOnboarded.data) {
+  const hasOnboarded = useHasOnboardedStatus()
+  // We should never reach this null because initApp() should have
+  // already set this field true or false by the time we get here.
+  if (hasOnboarded === undefined) {
+    return null
+  }
+  if (!hasOnboarded) {
     return <AuthStack />
   }
   return (
