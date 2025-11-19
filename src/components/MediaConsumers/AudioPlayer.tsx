@@ -74,7 +74,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 40,
-    paddingBottom: 128,
   },
   audioInfo: { gap: 10, alignItems: 'center' },
   audioControlsRow: { alignItems: 'center', gap: 10 },
