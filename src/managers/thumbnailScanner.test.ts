@@ -10,17 +10,7 @@ import {
   ImageManipulator,
   type ImageManipulatorContext,
 } from 'expo-image-manipulator'
-jest.mock('../lib/logger', () => ({
-  logger: { log: jest.fn() },
-}))
 
-jest.mock('react-native', () => ({
-  Platform: {
-    OS: 'ios',
-    select: (o: any) => o?.ios ?? o?.native ?? o?.default,
-  },
-  Image: { getSize: jest.fn() },
-}))
 jest.mock('expo-image-manipulator', () => ({
   ImageManipulator: { manipulate: jest.fn() },
   SaveFormat: { WEBP: 'webp' },
@@ -28,28 +18,12 @@ jest.mock('expo-image-manipulator', () => ({
 jest.mock('expo-video-thumbnails', () => ({
   getThumbnailAsync: jest.fn(),
 }))
-jest.mock('expo-file-system', () => ({
-  File: jest.fn((uri: string) => ({
-    uri,
-    info: jest.fn(() => ({ exists: true, size: 5000, uri })),
-  })),
-}))
 jest.mock('../stores/fileCache', () => ({
   getFileUri: jest.fn(),
   copyFileToCache: jest.fn(),
   clearCache: jest.fn(),
 }))
 jest.mock('../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
-jest.mock('../lib/fileTypes', () => ({
-  getMimeType: jest.fn(({ type }: { type?: string }) => type),
-}))
-jest.mock('../lib/uniqueId', () => {
-  let c = 0
-  return { uniqueId: () => `thumb-id-${++c}` }
-})
-jest.mock('../stores/settings', () => ({
-  getAutoGenerateThumbnails: jest.fn(async () => true),
-}))
 
 const getFileUriMock = jest.mocked(getFileUri)
 const copyFileToCacheMock = jest.mocked(copyFileToCache)
@@ -61,7 +35,6 @@ const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
 beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
-  require('../stores/fileCache').clearCache()
 
   getFileUriMock.mockResolvedValue('file://source.jpg')
   copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
