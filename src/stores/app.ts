@@ -31,6 +31,8 @@ import {
 import { initBackgroundTasks } from '../managers/backgroundTasks'
 import { initSyncUpMetadata } from '../managers/syncUpMetadata'
 import { initThumbnailScanner } from '../managers/thumbnailScanner'
+import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
+import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 
 export type InitStep = {
@@ -117,6 +119,8 @@ export async function initApp(): Promise<void> {
       initBackgroundTasks()
       initSyncUpMetadata()
       initThumbnailScanner()
+      initFsOrphanScanner()
+      initFsEvictionScanner()
     },
   })
 

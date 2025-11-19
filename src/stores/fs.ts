@@ -160,31 +160,6 @@ export async function readFsFileMetadata(
   )
 }
 
-export async function readFsFilesMetadataOldest(params: {
-  limit: number
-  maxUsedAt?: number
-}): Promise<FsMetaRow[]> {
-  const { limit, maxUsedAt } = params
-  if (typeof maxUsedAt === 'number') {
-    return db().getAllAsync<FsMetaRow>(
-      `SELECT fileId, size, addedAt, usedAt
-       FROM ${fsMetadataTable}
-       WHERE usedAt <= ?
-       ORDER BY usedAt ASC, fileId ASC
-       LIMIT ?`,
-      maxUsedAt,
-      limit
-    )
-  }
-  return db().getAllAsync<FsMetaRow>(
-    `SELECT fileId, size, addedAt, usedAt
-     FROM ${fsMetadataTable}
-     ORDER BY usedAt ASC, fileId ASC
-     LIMIT ?`,
-    limit
-  )
-}
-
 export async function updateFsFileMetadataUsedAt(
   fileId: string,
   usedAt: number = Date.now()
