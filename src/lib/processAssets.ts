@@ -9,14 +9,14 @@ import {
 } from '../stores/files'
 import { MimeType, getMimeType } from './fileTypes'
 import { calculateContentHash } from './contentHash'
-import { copyFileToCache, getLocalUri } from '../stores/fileCache'
+import { copyFileToFs } from '../stores/fs'
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
+import { getMediaLibraryUri } from './mediaLibrary'
 
 type Asset = {
   id: string | undefined
   sourceUri: string | undefined
-  size: number | undefined
   type: string | undefined
   name: string | undefined
   timestamp: string | undefined
@@ -36,7 +36,8 @@ type CandidateFileRecord = {
   statusDetails:
     | 'foundByLocalId'
     | 'foundByContentHash'
-    | 'noFileUri'
+    | 'noUri'
+    | 'invalidUri'
     | 'noFileSize'
     | 'noContentHash'
     | null
@@ -46,7 +47,7 @@ type CandidateFileRecord = {
  * processAssets imports a list of assets from any source.
  * This function will:
  * - Check for duplicates by localId and hash.
- * - Copy files without a local ID to the app's file cache.
+ * - Copy every asset to the app's file cache.
  * - Add content hashes to files that are new.
  * - Create new file records for the assets.
  * - Update the metadata of any existing files.
@@ -64,11 +65,9 @@ export async function processAssets(
   const candidateFiles: CandidateFileRecord[] = (assets ?? []).map((a) => ({
     id: uniqueId(),
     localId: a.id ?? null,
-    // If the asset does not have an valid id, pass a sourceUri so we can copy the
-    // file to the app's file cache.
     sourceUri: a.sourceUri ?? null,
     name: a.name ?? defaultFileName,
-    size: a.size ?? null,
+    size: null,
     createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
     updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
     type: getMimeType({
@@ -95,43 +94,49 @@ export async function processAssets(
     }
   }
 
-  // Ensure we have a valid local URI for the file.
+  // Copy files to the app's file cache.
   // Add content hash and file size to files that are still new.
   await Promise.all(
     candidateFiles
       .filter((f) => f.status === 'new')
       .map(async (f) => {
-        let fileUri = await getLocalUri(f.localId)
-        // The localId Was not a valid Media Library or MediaStore ID.
-        if (!fileUri) {
+        // Verify that the localId is a valid Media Library or MediaStore ID.
+        const localUri = await getMediaLibraryUri(f.localId)
+        if (!localUri) {
           f.localId = null
         }
-        if (!fileUri && f.sourceUri) {
-          logger.log(
-            `[processAssets] copying file without valid localId to cache id=${f.id} sourceUri=${f.sourceUri}`
-          )
-          fileUri = await copyFileToCache(f, new File(f.sourceUri))
-        }
-        if (!fileUri) {
+
+        // Verify we have a URI.
+        const bestUri = localUri ?? f.sourceUri
+        if (!bestUri) {
           f.status = 'incomplete'
-          f.statusDetails = 'noFileUri'
+          f.statusDetails = 'noUri'
           return
         }
-        if (!f.size) {
-          // Try again to get the file size.
-          f.size = getFileSize(fileUri)
-          if (!f.size) {
-            f.status = 'incomplete'
-            f.statusDetails = 'noFileSize'
-            return
-          }
+
+        // Copy the file to the app's file cache.
+        const fileUri = await copyFileToFs(f, new File(bestUri))
+        if (!fileUri) {
+          f.status = 'incomplete'
+          f.statusDetails = 'invalidUri'
+          return
         }
-        f.hash = await calculateContentHash(fileUri)
-        if (!f.hash) {
+
+        const hash = await calculateContentHash(fileUri)
+        if (!hash) {
           f.status = 'incomplete'
           f.statusDetails = 'noContentHash'
           return
         }
+        f.hash = hash
+
+        const size = getFileSize(fileUri)
+        if (!size) {
+          f.status = 'incomplete'
+          f.statusDetails = 'noFileSize'
+          return
+        }
+        f.size = size
       })
   )
 
@@ -152,7 +157,20 @@ export async function processAssets(
     }
   }
 
-  // Assert that the files are new and have a content hash.
+  // Mark any hash-based duplicates within the new files as existing.
+  const hashSet = new Set<string>()
+  for (const f of candidateFiles.filter(
+    (f) => f.status === 'new' && f.hash !== null
+  )) {
+    const exists = hashSet.has(f.hash!)
+    if (exists) {
+      f.status = 'existing'
+      f.statusDetails = 'foundByContentHash'
+    }
+    hashSet.add(f.hash!)
+  }
+
+  // Assert that the files are new and have a content hash and size.
   const newFiles: FileRecord[] = candidateFiles
     .filter((f) => f.status === 'new' && f.hash !== null && f.size !== null)
     .map((f) => ({
