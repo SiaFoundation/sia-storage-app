@@ -186,7 +186,7 @@ export async function ensureThumbnailForSize(params: {
     }
 
     // Create file record with thumbForHash set from the start to avoid flicker.
-    const fileSize = new File(cacheUri).info().size ?? 0
+    const fileSize = new File(fileUri).info().size ?? 0
     const now = Date.now()
     await createFileRecord(
       {
