@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native'
 import { useToast } from '../lib/toastContext'
 import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { removeFileFromCache } from '../stores/fileCache'
+import { removeFsFile } from '../stores/fs'
 import { useDownload } from '../managers/downloader'
 import { useFileStatus } from '../lib/file'
 import { useReuploadFile } from '../managers/uploader'
@@ -54,14 +54,14 @@ export function FileActionsSheet({
     []
   )
 
-  const handleRemoveCache = useCallback(async () => {
+  const handleRemoveLocalFile = useCallback(async () => {
     if (!file) return
     try {
-      await removeFileFromCache(file)
-      toast.show('Removed from cache')
+      await removeFsFile(file)
+      toast.show('Removed from device')
     } catch (e) {
-      logger.log('[FileActionsSheet] failed to remove cache', e)
-      toast.show('Failed to remove cache')
+      logger.log('[FileActionsSheet] failed to remove local file', e)
+      toast.show('Failed to remove from device')
     }
   }, [file?.id, file?.type, toast])
 
@@ -146,7 +146,7 @@ export function FileActionsSheet({
         <ActionSheetButton
           variant="primary"
           icon={<EraserIcon size={18} />}
-          onPress={handlePressAndClose(handleRemoveCache)}
+          onPress={handlePressAndClose(handleRemoveLocalFile)}
         >
           Remove from device
         </ActionSheetButton>

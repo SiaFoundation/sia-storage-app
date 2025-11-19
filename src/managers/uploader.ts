@@ -1,5 +1,5 @@
 import { uploadToNetwork } from './uploadToNetwork'
-import { getFileUri, getLocalUri } from '../stores/fileCache'
+import { getFsFileUri } from '../stores/fs'
 import { useCallback } from 'react'
 import { useSdk, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
@@ -19,11 +19,11 @@ export function useUploader() {
         await Promise.all(
           files.map(async (file: FileRecord, index: number) => {
             logger.log(
-              `[uploader] processing media ${index + 1}/$${files.length}...`
+              `[uploader] processing media ${index + 1}/${files.length}...`
             )
-            const fileUri = await getLocalUri(file.localId)
+            const fileUri = await getFsFileUri(file)
             if (!fileUri) {
-              logger.log(`[uploader] file uri not found ${file.id}`)
+              logger.log(`[uploader] file not available locally ${file.id}`)
               return
             }
             logger.log(`[uploader] cached file ${file.id} -> ${fileUri}`)
@@ -66,7 +66,7 @@ export function useReuploadFile() {
           if (!file) {
             throw new Error('File not found')
           }
-          const fileUri = await getFileUri(file)
+          const fileUri = await getFsFileUri(file)
           if (!fileUri) {
             throw new Error('File not available locally')
           }
@@ -88,7 +88,7 @@ export function useReuploadFile() {
 export async function queueUploadForFileId(fileId: string): Promise<void> {
   const file = await readFileRecord(fileId)
   if (!file) return
-  const fileUri = await getFileUri(file)
+  const fileUri = await getFsFileUri(file)
   if (!fileUri) return
   const indexerURL = await getIndexerURL()
   const sdk = getSdk()

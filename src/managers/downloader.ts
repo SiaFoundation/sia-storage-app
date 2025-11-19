@@ -1,5 +1,6 @@
 import { useToast } from '../lib/toastContext'
-import { copyFileToCache, getOrCreateCacheTmpFile } from '../stores/fileCache'
+import { copyFileToFs } from '../stores/fs'
+import { getOrCreateTempDownloadFile } from '../stores/tempFs'
 import {
   getDownloadState,
   updateDownloadProgress,
@@ -54,7 +55,7 @@ export function useDownload(file?: FileRecord | null) {
             ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
             : undefined,
           onAfterClose: async (targetFile) => {
-            await copyFileToCache(file, targetFile)
+            await copyFileToFs(file, targetFile)
           },
           signal,
         })
@@ -94,7 +95,7 @@ export function useDownloadFromShareURL() {
             getNextChunk: () => downloader.readChunk({ signal }),
             totalSize: Number(sharedObject.size()),
             onAfterClose: async (targetFile) => {
-              await copyFileToCache(file, targetFile)
+              await copyFileToFs(file, targetFile)
             },
             signal,
           })
@@ -113,7 +114,7 @@ async function streamToCache(params: {
   signal: AbortSignal
 }): Promise<void> {
   const { file, totalSize, getNextChunk, onAfterClose, signal } = params
-  const targetFile = await getOrCreateCacheTmpFile(file)
+  const targetFile = await getOrCreateTempDownloadFile(file)
   logger.log('[streamToCache] writing to cache path:', targetFile.uri)
   const writer = targetFile.writableStream().getWriter()
   let total = 0
