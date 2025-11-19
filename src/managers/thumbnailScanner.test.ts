@@ -1,8 +1,11 @@
 import { runThumbnailScanner } from './thumbnailScanner'
 import { initializeDB, resetDb } from '../db'
-import { createFileRecord, ThumbSizes } from '../stores/files'
+import {
+  createFileRecord,
+  readAllFileRecordsCount,
+  ThumbSizes,
+} from '../stores/files'
 import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { getFileUri, copyFileToCache } from '../stores/fileCache'
 import { calculateContentHash } from '../lib/contentHash'
 import { Image } from 'react-native'
 import * as VideoThumbnails from 'expo-video-thumbnails'
@@ -10,6 +13,7 @@ import {
   ImageManipulator,
   type ImageManipulatorContext,
 } from 'expo-image-manipulator'
+import { getFsFileUri } from '../stores/fs'
 
 jest.mock('expo-image-manipulator', () => ({
   ImageManipulator: { manipulate: jest.fn() },
@@ -18,15 +22,9 @@ jest.mock('expo-image-manipulator', () => ({
 jest.mock('expo-video-thumbnails', () => ({
   getThumbnailAsync: jest.fn(),
 }))
-jest.mock('../stores/fileCache', () => ({
-  getFileUri: jest.fn(),
-  copyFileToCache: jest.fn(),
-  clearCache: jest.fn(),
-}))
 jest.mock('../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
 
-const getFileUriMock = jest.mocked(getFileUri)
-const copyFileToCacheMock = jest.mocked(copyFileToCache)
+const getFsFileUriMock = jest.mocked(getFsFileUri)
 const calculateContentHashMock = jest.mocked(calculateContentHash)
 const imageGetSizeMock = jest.mocked(Image.getSize)
 const imageManipulatorMock = jest.mocked(ImageManipulator.manipulate)
@@ -36,8 +34,7 @@ beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
 
-  getFileUriMock.mockResolvedValue('file://source.jpg')
-  copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
+  getFsFileUriMock.mockResolvedValue('file://source.jpg')
   let hashCounter = 0
   calculateContentHashMock.mockImplementation(
     async () => `sha256|thumb-hash-${++hashCounter}`
@@ -92,9 +89,10 @@ describe('thumbnailScanner', () => {
       addedAt: now,
       localId: 'local-file1',
     })
-    getFileUriMock.mockResolvedValue(null)
+    getFsFileUriMock.mockResolvedValue(null)
     const result = await runThumbnailScanner()
     expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
+    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(1)
   })
 
   it('skips files that already have all thumbnail sizes', async () => {
@@ -125,11 +123,12 @@ describe('thumbnailScanner', () => {
         thumbSize: size,
       })
     }
-    getFileUriMock.mockResolvedValue('file://test.jpg')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(0)
     expect(result.attempts).toHaveLength(0)
     expect(result.skippedFullyCovered).toHaveLength(0)
+    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('generates a missing thumbnail (64px)', async () => {
@@ -161,8 +160,7 @@ describe('thumbnailScanner', () => {
         thumbSize: size,
       })
     }
-    getFileUriMock.mockResolvedValue('file://test.jpg')
-    copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     calculateContentHashMock.mockResolvedValue('sha256|thumb-64')
     const result = await runThumbnailScanner()
     const producedSizes = result.produced
@@ -172,6 +170,7 @@ describe('thumbnailScanner', () => {
     expect(producedSizes).toEqual([64])
     const sizes = await readThumbnailSizesForHash('hash1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
+    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('pages past skipped candidates to find eligible originals', async () => {
@@ -235,7 +234,7 @@ describe('thumbnailScanner', () => {
       localId: 'local-eligible-1',
     })
 
-    getFileUriMock.mockImplementation(async ({ id }: { id: string }) => {
+    getFsFileUriMock.mockImplementation(async ({ id }: { id: string }) => {
       if (noSourceIds.has(id)) return null
       return 'file://source.jpg'
     })
@@ -280,9 +279,10 @@ describe('thumbnailScanner', () => {
       thumbForHash: 'hash1',
       thumbSize: 64,
     })
-    getFileUriMock.mockResolvedValue('file://test.jpg')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
     expect(result.produced.filter((p) => p.size === 64)).toHaveLength(0)
+    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('deduplicates by content hash', async () => {
@@ -311,8 +311,7 @@ describe('thumbnailScanner', () => {
       thumbForHash: 'other-hash',
       thumbSize: 64,
     })
-    getFileUriMock.mockResolvedValue('file://test.jpg')
-    copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     calculateContentHashMock.mockResolvedValue('sha256|duplicate-thumb-hash')
     const result = await runThumbnailScanner()
     expect(result.deduplicated.length).toBeGreaterThanOrEqual(1)
@@ -328,6 +327,7 @@ describe('thumbnailScanner', () => {
     )
     const sizes = await readThumbnailSizesForHash('hash1')
     expect(sizes).not.toContain(64)
+    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(2)
   })
 
   it('generates thumbnails for video files using captured frames', async () => {
@@ -375,8 +375,7 @@ describe('thumbnailScanner', () => {
         localId: `local-${i}`,
       })
     }
-    getFileUriMock.mockResolvedValue('file://test.jpg')
-    copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     let counter = 0
     calculateContentHashMock.mockImplementation(
       async () => `sha256|thumb-hash-${++counter}`
@@ -398,7 +397,7 @@ describe('thumbnailScanner', () => {
       addedAt: now,
       localId: 'local-file1',
     })
-    getFileUriMock.mockResolvedValue('file://test.jpg')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     imageGetSizeMock.mockImplementation((_, _ok, err) => {
       err?.(new Error('Failed to get size'))
       return Promise.resolve()
@@ -416,7 +415,6 @@ describe('thumbnailScanner', () => {
     imageManipulatorMock.mockReturnValue(
       ctx as unknown as ImageManipulatorContext
     )
-    copyFileToCacheMock.mockResolvedValue('file://cache/thumb.webp')
     calculateContentHashMock.mockResolvedValue('sha256|thumb-hash')
     await runThumbnailScanner()
     expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
@@ -435,7 +433,7 @@ describe('thumbnailScanner', () => {
       addedAt: now,
       localId: 'local-file1',
     })
-    getFileUriMock.mockResolvedValue('file://test.jpg')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
     imageGetSizeMock.mockImplementation((_, ok) => {
       ok?.(1920, 1080)
       return Promise.resolve()

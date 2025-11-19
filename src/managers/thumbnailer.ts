@@ -15,7 +15,7 @@ import {
   thumbnailExistsForHashAndSize,
   thumbnailSwr,
 } from '../stores/thumbnails'
-import { getFileUri, copyFileToCache } from '../stores/fileCache'
+import { getFsFileUri, copyFileToFs } from '../stores/fs'
 import { calculateContentHash } from '../lib/contentHash'
 import { getMimeType } from '../lib/fileTypes'
 import { uniqueId } from '../lib/uniqueId'
@@ -38,10 +38,9 @@ export async function generateThumbnailsForFile(
   }
 
   // Get the source URI for the file.
-  const sourceUri = await getFileUri({
+  const sourceUri = await getFsFileUri({
     id: fileRecord.id,
     type: fileRecord.type,
-    localId: fileRecord.localId,
   })
   if (!sourceUri) {
     logger.log('[generateThumbnailsForFile] no source URI', {
@@ -168,8 +167,8 @@ export async function ensureThumbnailForSize(params: {
       type: getMimeType({ type: 'image/webp', name: 'thumbnail.webp' }),
       localId: null,
     }
-    const cacheUri = await copyFileToCache(thumbFileInfo, new File(result.uri))
-    const thumbHash = await calculateContentHash(cacheUri)
+    const fileUri = await copyFileToFs(thumbFileInfo, new File(result.uri))
+    const thumbHash = await calculateContentHash(fileUri)
     if (!thumbHash) {
       logger.log('[thumbnailer] failed to calculate hash', { fileId, size })
       return { status: 'error', error: new Error('Missing thumbnail hash') }

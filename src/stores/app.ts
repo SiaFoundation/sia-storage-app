@@ -13,7 +13,8 @@ import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllUploads } from './uploads'
 import { cancelAllDownloads } from './downloads'
 import { initLogger } from './logs'
-import { ensureCacheDir } from './fileCache'
+import { ensureFsStorageDirectory } from './fs'
+import { ensureTempFsStorageDirectory } from './tempFs'
 import { initializeDB, resetDb } from '../db'
 import {
   initSyncDownEvents,
@@ -66,8 +67,9 @@ export async function initApp(): Promise<void> {
       label: 'Starting application',
       message: 'Initializing...',
       runner: async () => {
-        initLogger()
-        await ensureCacheDir()
+        await initLogger()
+        ensureFsStorageDirectory()
+        ensureTempFsStorageDirectory()
       },
     },
     {

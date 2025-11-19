@@ -6,7 +6,7 @@ import { useDownload } from '../managers/downloader'
 import { useEffect } from 'react'
 import { readBestThumbnailByHash, thumbnailSwr } from '../stores/thumbnails'
 import { FileRecord, ThumbSize } from '../stores/files'
-import { getFileUri } from '../stores/fileCache'
+import { getFsFileUri } from '../stores/fs'
 
 /**
  * useBestThumbnailUri returns the local URI of the best available thumbnail for a file.
@@ -48,7 +48,7 @@ export function useBestThumbnailUri(
     file ? thumbnailSwr.getKey(`${file.hash}/${thumbSize}/uri`) : null,
     async () => {
       if (!thumbRecord.data) return null
-      return await getFileUri(thumbRecord.data)
+      return await getFsFileUri(thumbRecord.data)
     }
   )
   // Update when status changes so the thumbnail is re-rendered when the uri becomes available.
