@@ -45,6 +45,34 @@ jest.mock('react-native-fs', () => ({
 }))
 global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile, rnfsHash }
 
+const { setExpoFileSystemMock } = require('./mocks/expo-file-system')
+
+// Mock the Expo FileSystem API with a default implementation.
+jest.mock('expo-file-system', () => setExpoFileSystemMock())
+beforeEach(() => {
+  setExpoFileSystemMock()
+})
+
+// Mock the fs store module with a default implementation.
+const { setFsMock } = require('./mocks/fs')
+jest.mock('./src/stores/fs', () => setFsMock())
+beforeEach(() => {
+  setFsMock()
+})
+
+jest.mock('react-native', () => ({
+  Platform: {
+    OS: 'ios',
+    select: (o) => o?.ios ?? o?.native ?? o?.default,
+  },
+  Image: { getSize: jest.fn() },
+}))
+
+jest.mock('./src/lib/uniqueId', () => {
+  let c = 0
+  return { uniqueId: () => `uid-${++c}` }
+})
+
 // In-memory SecureStore for tests.
 jest.mock('./src/stores/secureStore', () => {
   const numStore = new Map()

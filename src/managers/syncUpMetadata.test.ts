@@ -15,11 +15,9 @@ jest.mock('../stores/sdk', () => ({
   getPinnedObject: jest.fn(),
   updateMetadata: jest.fn(),
 }))
-
 jest.mock('../stores/settings', () => ({
   getIndexerURL: jest.fn(),
 }))
-
 jest.mock('../encoding/fileMetadata', () => ({
   decodeFileMetadata: jest.fn(),
   encodeFileMetadata: jest.fn(),
