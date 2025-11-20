@@ -99,6 +99,7 @@ async function syncDownEvents(): Promise<void> {
       }
     } catch (e) {
       logger.log('[syncDownEvents] sync error', e)
+      break
     }
   }
 
@@ -110,79 +111,82 @@ async function syncDownEvents(): Promise<void> {
 async function processBatch(events: ObjectEvent[], counts: Counts) {
   for (const { object, deleted, key: id } of events) {
     if (deleted) {
-      try {
-        await handleDeleteEvent(id, counts)
-      } catch (e) {
-        logger.log(`[syncDownEvents] error handling deletion for id=${id}`, e)
-      }
+      await handleDeleteEvent(id, counts)
       continue
     }
 
     // If the object is not deleted this will always be defined.
     if (!object) continue
 
-    try {
-      await handleUpdateEvent(object, counts)
-    } catch (e) {
-      logger.log(`[syncDownEvents] error handling update for id=${id}`, e)
-    }
+    await handleUpdateEvent(id, object, counts)
   }
 }
 
 async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
-  const existingFileRecord = await readFileRecordByObjectId(id)
-  if (existingFileRecord) {
-    logger.log(`[syncDownEvents] deleting file id=${existingFileRecord.id}`)
-    await Promise.all([
-      // Remove the file from the file system.
-      removeFsFile(existingFileRecord),
-      // Remove any temporary download file.
-      removeTempDownloadFile(existingFileRecord),
-      // Remove the file from the database.
-      deleteFileRecord(existingFileRecord.id),
-    ])
-    counts.deleted++
-  } else {
-    logger.log(
-      `[syncDownEvents] no file record found for object id=${id}, skipping delete`
-    )
+  try {
+    const existingFileRecord = await readFileRecordByObjectId(id)
+    if (existingFileRecord) {
+      logger.log(`[syncDownEvents] deleting file id=${existingFileRecord.id}`)
+      await Promise.all([
+        // Remove the file from the file system.
+        removeFsFile(existingFileRecord),
+        // Remove any temporary download file.
+        removeTempDownloadFile(existingFileRecord),
+        // Remove the file from the database.
+        deleteFileRecord(existingFileRecord.id),
+      ])
+      counts.deleted++
+    } else {
+      logger.log(
+        `[syncDownEvents] no file record found for object id=${id}, skipping delete`
+      )
+    }
+  } catch (e) {
+    logger.log(`[syncDownEvents] error handling delete for id=${id}`, e)
+    throw e
   }
 }
 
 async function handleUpdateEvent(
+  id: string,
   object: PinnedObjectInterface,
   counts: Counts
 ): Promise<void> {
-  const indexerURL = await getIndexerURL()
-  const metadata = decodeFileMetadata(object.metadata())
-  if (hasCompleteThumbnailMetadata(metadata)) {
-    const existingThumbnail = await readThumbnailRecordByThumbForHashAndSize(
-      metadata.thumbForHash!,
-      metadata.thumbSize!
-    )
-    await handleFileRecord(
-      'thumbnail',
-      existingThumbnail,
-      indexerURL,
-      object,
-      metadata,
-      counts
-    )
-    return
+  try {
+    const indexerURL = await getIndexerURL()
+    const metadata = decodeFileMetadata(object.metadata())
+    if (hasCompleteThumbnailMetadata(metadata)) {
+      const existingThumbnail = await readThumbnailRecordByThumbForHashAndSize(
+        metadata.thumbForHash!,
+        metadata.thumbSize!
+      )
+      await handleFileRecord(
+        'thumbnail',
+        existingThumbnail,
+        indexerURL,
+        object,
+        metadata,
+        counts
+      )
+      return
+    }
+    if (hasCompleteFileMetadata(metadata)) {
+      const existingFile = await readFileRecordByContentHash(metadata.hash)
+      await handleFileRecord(
+        'file',
+        existingFile,
+        indexerURL,
+        object,
+        metadata,
+        counts
+      )
+      return
+    }
+    logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
+  } catch (e) {
+    logger.log(`[syncDownEvents] error handling update for id=${id}`, e)
+    throw e
   }
-  if (hasCompleteFileMetadata(metadata)) {
-    const existingFile = await readFileRecordByContentHash(metadata.hash)
-    await handleFileRecord(
-      'file',
-      existingFile,
-      indexerURL,
-      object,
-      metadata,
-      counts
-    )
-    return
-  }
-  logger.log(`[syncDownEvents] incomplete metadata, skipping update`)
 }
 
 async function handleFileRecord(
