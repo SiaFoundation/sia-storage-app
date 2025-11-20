@@ -4,6 +4,7 @@ import {
   getFilesLocalOnly,
   useFileCountAll,
   useFileCountLocalOnly,
+  useFileCountLost,
 } from '../stores/files'
 import { queueUploadForFileId } from './uploader'
 import {
@@ -58,13 +59,16 @@ export function useUploadScannerStatus(): {
   remaining: number
   percentComplete: string
   total: number
+  lost: number
 } {
   const total = useFileCountAll()
   const localOnly = useFileCountLocalOnly()
+  const lost = useFileCountLost()
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
   const totalCount = total.data ?? 0
   const localOnlyCount = localOnly.data ?? 0
+  const lostCount = lost.data ?? 0
   const uploadedCount = totalCount - localOnlyCount
   const isEnabled = enabled.data ?? false
   const activeProgress = activeUploads
@@ -80,6 +84,7 @@ export function useUploadScannerStatus(): {
     remaining: localOnlyCount,
     percentComplete: humanUploadPercent(percentComplete),
     total: total.data ?? 0,
+    lost: lostCount,
   }
 }
 

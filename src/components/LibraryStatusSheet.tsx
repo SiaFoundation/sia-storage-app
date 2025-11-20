@@ -10,6 +10,7 @@ import { getUploadStats } from '../stores/fileStats'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import useSWR from 'swr'
 import { humanUploadPercent } from '../lib/uploadPercent'
+import { useFileCountLost } from '../stores/files'
 
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
@@ -22,6 +23,7 @@ export function LibraryStatusSheet() {
       refreshInterval: 5_000,
     }
   )
+  const lostCount = useFileCountLost()
 
   return (
     <ActionSheet
@@ -225,6 +227,20 @@ export function LibraryStatusSheet() {
             />
           </InfoCard>
         </RowGroup>
+        {lostCount.data && lostCount.data > 0 ? (
+          <RowGroup title="Integrity issues" style={styles.groupSpacing}>
+            <InfoCard>
+              <LabeledValueRow
+                label="Lost files"
+                value={
+                  <Text style={styles.valueText}>{lostCount.data ?? 0}</Text>
+                }
+                align="right"
+                canCopy={false}
+              />
+            </InfoCard>
+          </RowGroup>
+        ) : null}
       </View>
     </ActionSheet>
   )

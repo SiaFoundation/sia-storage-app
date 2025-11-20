@@ -6,6 +6,7 @@ import {
   readFileRecord,
   updateFileRecord,
 } from './files'
+import { upsertFsFileMetadata } from './fs'
 
 jest.mock('./library', () => ({
   librarySwr: {
@@ -121,6 +122,75 @@ describe('files store queries', () => {
 
     expect(count).toBe(2)
   })
+
+  test('filters records that exist locally when fileExistsLocally is true', async () => {
+    await seedRecords()
+    await upsertFsFileMetadata({
+      fileId: 'file-old',
+      size: 100,
+      addedAt: base,
+      usedAt: base,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'file-mid',
+      size: 200,
+      addedAt: base + 5,
+      usedAt: base + 5,
+    })
+
+    const rows = await readAllFileRecords({
+      order: 'ASC',
+      fileExistsLocally: true,
+    })
+
+    expect(rows.map((row) => row.id)).toEqual(['file-old', 'file-mid'])
+  })
+
+  test('filters records without local files when fileExistsLocally is false', async () => {
+    await seedRecords()
+    await upsertFsFileMetadata({
+      fileId: 'file-old',
+      size: 100,
+      addedAt: base,
+      usedAt: base,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'file-mid',
+      size: 200,
+      addedAt: base + 5,
+      usedAt: base + 5,
+    })
+
+    const rows = await readAllFileRecords({
+      order: 'ASC',
+      fileExistsLocally: false,
+    })
+
+    expect(rows.map((row) => row.id)).toEqual(['file-tie', 'file-new'])
+  })
+
+  test('counts records without local files when fileExistsLocally is false', async () => {
+    await seedRecords()
+    await upsertFsFileMetadata({
+      fileId: 'file-old',
+      size: 100,
+      addedAt: base,
+      usedAt: base,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'file-mid',
+      size: 200,
+      addedAt: base + 5,
+      usedAt: base + 5,
+    })
+
+    const count = await readAllFileRecordsCount({
+      order: 'ASC',
+      fileExistsLocally: false,
+    })
+
+    expect(count).toBe(2)
+  })
 })
 
 describe('updateFileRecord', () => {
@@ -156,6 +226,7 @@ describe('updateFileRecord', () => {
 
     const record = await readFileRecord('file-new')
     expect(record).toMatchObject({ name: 'new name', updatedAt: mockTime })
+    expect(nowSpy).toHaveBeenCalled()
   })
 
   test('update file record includes updatedAt when includeUpdatedAt is true', async () => {
