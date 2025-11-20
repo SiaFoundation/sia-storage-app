@@ -3,7 +3,7 @@ import { getActiveUploads, useActiveUploads } from '../stores/uploads'
 import {
   getFilesLocalOnly,
   useFileCountAll,
-  useFileCountLocalOnly,
+  useFileCountLocal,
 } from '../stores/files'
 import { queueUploadForFileId } from './uploader'
 import {
@@ -60,7 +60,7 @@ export function useUploadScannerStatus(): {
   total: number
 } {
   const total = useFileCountAll()
-  const localOnly = useFileCountLocalOnly()
+  const localOnly = useFileCountLocal({ localOnly: true })
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
   const totalCount = total.data ?? 0
