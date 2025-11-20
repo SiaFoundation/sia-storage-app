@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     backgroundColor: blackA.a100,
   },
   sheet: {
-    backgroundColor: 'white',
+    backgroundColor: palette.gray[800],
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderTopLeftRadius: 14,
