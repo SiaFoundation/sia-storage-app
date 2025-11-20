@@ -10,7 +10,7 @@ import { getUploadStats } from '../stores/fileStats'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import useSWR from 'swr'
 import { humanUploadPercent } from '../lib/uploadPercent'
-import { useFileCountLost } from '../stores/files'
+import { useFileCountLocal, useFileCountLost } from '../stores/files'
 
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
@@ -24,6 +24,8 @@ export function LibraryStatusSheet() {
     }
   )
   const lostCount = useFileCountLost()
+  const localCount = useFileCountLocal({ localOnly: false })
+  const localOnlyCount = useFileCountLocal({ localOnly: true })
 
   return (
     <ActionSheet
@@ -227,20 +229,34 @@ export function LibraryStatusSheet() {
             />
           </InfoCard>
         </RowGroup>
-        {lostCount.data && lostCount.data > 0 ? (
-          <RowGroup title="Integrity issues" style={styles.groupSpacing}>
-            <InfoCard>
-              <LabeledValueRow
-                label="Lost files"
-                value={
-                  <Text style={styles.valueText}>{lostCount.data ?? 0}</Text>
-                }
-                align="right"
-                canCopy={false}
-              />
-            </InfoCard>
-          </RowGroup>
-        ) : null}
+        <RowGroup title="Local storage" style={styles.groupSpacing}>
+          <InfoCard>
+            <LabeledValueRow
+              label="Local files"
+              value={
+                <Text style={styles.valueText}>{localCount.data ?? 0}</Text>
+              }
+              align="right"
+              canCopy={false}
+            />
+            <LabeledValueRow
+              label="Local only files"
+              value={
+                <Text style={styles.valueText}>{localOnlyCount.data ?? 0}</Text>
+              }
+              align="right"
+              canCopy={false}
+            />
+            <LabeledValueRow
+              label="Lost files"
+              value={
+                <Text style={styles.valueText}>{lostCount.data ?? 0}</Text>
+              }
+              align="right"
+              canCopy={false}
+            />
+          </InfoCard>
+        </RowGroup>
       </View>
     </ActionSheet>
   )
@@ -251,7 +267,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 48,
     paddingHorizontal: 12,
-    backgroundColor: palette.gray[950],
   },
   sheetInnerDark: {
     gap: 14,
