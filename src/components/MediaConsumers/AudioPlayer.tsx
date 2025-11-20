@@ -20,10 +20,12 @@ export function AudioPlayer({
   source,
   filename,
   style,
+  onViewerControlPress,
 }: {
   source: string
   filename: string | null
   style?: ViewStyle
+  onViewerControlPress?: () => void
 }) {
   const audioPlayer = useAudioPlayer(source)
   const { isLoaded, isBuffering, playing, duration, currentTime } =
@@ -46,23 +48,37 @@ export function AudioPlayer({
             <PauseIcon
               color="white"
               size={20}
-              onPress={() => audioPlayer.pause()}
+              onPress={() => {
+                onViewerControlPress?.()
+                audioPlayer.pause()
+              }}
             />
           ) : (
             <PlayIcon
               color="white"
               size={20}
               onPress={() => {
+                onViewerControlPress?.()
                 if (isReadyToPlay) audioPlayer.play()
               }}
             />
           )}
-          <Undo2Icon color="white" onPress={() => audioPlayer.seekTo(0)} />
+          <Undo2Icon
+            color="white"
+            onPress={() => {
+              onViewerControlPress?.()
+              audioPlayer.seekTo(0)
+            }}
+          />
           <Text style={{ color: 'white' }}>
             {currentLabel} / {durationLabel}
           </Text>
         </View>
-        {statusLabel && <Text style={{ color: 'white' }}>{statusLabel}</Text>}
+        <View style={styles.statusPlaceholder}>
+          {statusLabel ? (
+            <Text style={{ color: 'white' }}>{statusLabel}</Text>
+          ) : null}
+        </View>
       </View>
     </View>
   )
@@ -78,4 +94,8 @@ const styles = StyleSheet.create({
   audioInfo: { gap: 10, alignItems: 'center' },
   audioControlsRow: { alignItems: 'center', gap: 10 },
   audioControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusPlaceholder: {
+    minHeight: 18,
+    justifyContent: 'center',
+  },
 })
