@@ -503,18 +503,20 @@ export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
   }
 )
 
-export const [getFileCountLocalOnly, useFileCountLocalOnly] =
-  createGetterAndSWRHook(librarySwr.getKey('localOnlyCount'), async () => {
+export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
+  librarySwr.getKey('localCount'),
+  async ({ localOnly }: { localOnly: boolean }) => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsCount({
       order: 'ASC',
       pinned: {
         indexerURL: currentIndexerURL,
-        isPinned: false,
+        isPinned: !localOnly,
       },
       fileExistsLocally: true,
     })
-  })
+  }
+)
 
 export function useFileDetails(id: string) {
   return useSWR(librarySwr.getKey(id), () => readFileRecord(id))
