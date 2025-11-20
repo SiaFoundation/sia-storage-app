@@ -1,42 +1,52 @@
 import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
-import { useFileStatus } from '../../lib/file'
-import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
-import { ImageViewer } from '../MediaConsumers/ImageViewer'
-import { VideoPlayer } from '../MediaConsumers/VideoPlayer'
-import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
-import { PDFViewer } from '../MediaConsumers/PDFViewer'
-import { TextViewer } from '../MediaConsumers/TextViewer'
-import { MarkdownViewer } from '../MediaConsumers/MarkdownViewer'
-import { JSONViewer } from '../MediaConsumers/JSONViewer'
-import { useDownload } from '../../managers/downloader'
-import { useDownloadState } from '../../stores/downloads'
-import { colors } from '../../styles/colors'
 import { useCallback, useMemo } from 'react'
-import { FileRecord } from '../../stores/files'
+import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
+
+import { useFileStatus } from '../../lib/file'
 import {
   useAutoDownload,
   detailsShouldAutoDownload,
 } from '../../hooks/useAutoDownload'
+import { useDownload } from '../../managers/downloader'
+import { useDownloadState } from '../../stores/downloads'
+import { colors } from '../../styles/colors'
+import { FileRecord } from '../../stores/files'
+import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
+import { ImageViewer } from '../MediaConsumers/ImageViewer'
+import { JSONViewer } from '../MediaConsumers/JSONViewer'
+import { MarkdownViewer } from '../MediaConsumers/MarkdownViewer'
+import { PDFViewer } from '../MediaConsumers/PDFViewer'
+import { TextViewer } from '../MediaConsumers/TextViewer'
+import { VideoPlayer } from '../MediaConsumers/VideoPlayer'
+
+type FileViewerProps = {
+  file: FileRecord
+  isShared?: boolean
+  customDownloader?: () => void
+  textTopInset?: number
+  onViewerControlPress?: () => void
+}
 
 export function FileViewer({
   file,
   isShared,
-  header,
-  fullscreen = true,
   customDownloader,
-}: {
-  file: FileRecord
-  isShared?: boolean
-  header?: React.ReactNode
-  fullscreen?: boolean
-  customDownloader?: () => void
-}) {
+  textTopInset,
+  onViewerControlPress,
+}: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
   useAutoDownload(file, detailsShouldAutoDownload)
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
+
+  const baseMediaStyle = styles.media
+  const textMediaStyle = textTopInset
+    ? StyleSheet.flatten([baseMediaStyle, { paddingTop: textTopInset }])
+    : baseMediaStyle
+  const textInsetValue =
+    textTopInset && textTopInset > 0 ? textTopInset : undefined
 
   const onDownloadPress = useCallback(() => {
     if (isDownloading) return
@@ -50,7 +60,7 @@ export function FileViewer({
     return (
       <View
         style={[
-          fullscreen ? styles.mediaWithPadding : styles.media,
+          baseMediaStyle,
           { justifyContent: 'center', alignItems: 'center', gap: 20 },
         ]}
       >
@@ -70,45 +80,51 @@ export function FileViewer({
         ) : null}
       </View>
     )
-  }, [fullscreen, onDownloadPress, isDownloading, fileDownloadState?.progress])
+  }, [
+    baseMediaStyle,
+    isDownloading,
+    onDownloadPress,
+    fileDownloadState?.progress,
+  ])
 
-  const MediaDisplayElement = useMemo(() => {
+  const mediaContent = useMemo(() => {
     if (!isDownloaded || !fileUri) return DownloadPanel
 
-    if (type?.includes('image')) {
-      return (
-        <ImageViewer
-          uri={fileUri}
-          style={fullscreen ? styles.mediaWithPadding : styles.media}
-        />
-      )
-    }
-    if (type?.includes('video')) {
+    if (type?.includes('image'))
+      return <ImageViewer uri={fileUri} style={baseMediaStyle} />
+    if (type?.includes('video'))
       return (
         <VideoPlayer
           source={fileUri}
-          style={fullscreen ? styles.mediaWithPadding : styles.media}
+          style={baseMediaStyle}
+          onViewerControlPress={onViewerControlPress}
         />
       )
-    }
     if (type?.includes('audio')) {
       return (
         <AudioPlayer
           source={fileUri}
           filename={name}
-          style={fullscreen ? styles.mediaWithPadding : styles.media}
+          style={baseMediaStyle}
+          onViewerControlPress={onViewerControlPress}
         />
       )
     }
     if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
-      return <PDFViewer source={fileUri} style={styles.media} />
+      return <PDFViewer source={fileUri} style={baseMediaStyle} />
     }
+
     if (
       type?.includes('application/json') ||
       lowerCasedFileName.endsWith('.json')
     ) {
       return (
-        <JSONViewer uri={fileUri} fileSize={file.size} style={styles.media} />
+        <JSONViewer
+          uri={fileUri}
+          fileSize={file.size}
+          style={baseMediaStyle}
+          topInset={textInsetValue}
+        />
       )
     }
     if (
@@ -116,18 +132,29 @@ export function FileViewer({
       lowerCasedFileName.endsWith('.md') ||
       lowerCasedFileName.endsWith('.markdown')
     ) {
-      return <MarkdownViewer uri={fileUri} style={styles.media} />
+      return (
+        <MarkdownViewer
+          uri={fileUri}
+          style={textMediaStyle}
+          onViewerControlPress={onViewerControlPress}
+        />
+      )
     }
     if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt')) {
       return (
-        <TextViewer uri={fileUri} fileSize={file.size} style={styles.media} />
+        <TextViewer
+          uri={fileUri}
+          fileSize={file.size}
+          style={baseMediaStyle}
+          topInset={textInsetValue}
+        />
       )
     }
 
     return (
       <View
         style={[
-          fullscreen ? styles.mediaWithPadding : styles.media,
+          baseMediaStyle,
           { justifyContent: 'center', alignItems: 'center', gap: 20 },
         ]}
       >
@@ -136,26 +163,23 @@ export function FileViewer({
       </View>
     )
   }, [
+    DownloadPanel,
+    baseMediaStyle,
     fileUri,
     isDownloaded,
-    type,
     lowerCasedFileName,
-    fullscreen,
     name,
+    textInsetValue,
+    textMediaStyle,
+    type,
     file.size,
-    DownloadPanel,
+    onViewerControlPress,
   ])
 
-  return (
-    <View style={styles.container}>
-      {header}
-      {MediaDisplayElement}
-    </View>
-  )
+  return <View style={styles.container}>{mediaContent}</View>
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, flexDirection: 'column' },
-  mediaWithPadding: { flex: 1, marginBottom: 120 },
   media: { flex: 1 },
 })

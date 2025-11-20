@@ -39,7 +39,6 @@ export function FileDetailsImport({
           <FileViewer
             file={file}
             isShared
-            fullscreen={false}
             customDownloader={() => {
               handleDownload(file.id, shareUrl)
             }}

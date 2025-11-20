@@ -17,9 +17,11 @@ type Mode = 'preview' | 'raw'
 export function MarkdownViewer({
   uri,
   style,
+  onViewerControlPress,
 }: {
   uri: string
   style?: ViewStyle
+  onViewerControlPress?: () => void
 }) {
   const [md, setMd] = useState('')
   const [mode, setMode] = useState<Mode>('preview')
@@ -69,18 +71,26 @@ export function MarkdownViewer({
     []
   )
 
+  const setModeWithBlock = useCallback(
+    (nextMode: Mode) => {
+      onViewerControlPress?.()
+      setMode(nextMode)
+    },
+    [onViewerControlPress]
+  )
+
   return (
     <View style={[styles.container, style]}>
       <View style={styles.toolbar}>
         <Segment
           label="Preview"
           active={mode === 'preview'}
-          onPress={() => setMode('preview')}
+          onPress={() => setModeWithBlock('preview')}
         />
         <Segment
           label="Raw"
           active={mode === 'raw'}
-          onPress={() => setMode('raw')}
+          onPress={() => setModeWithBlock('raw')}
         />
       </View>
 

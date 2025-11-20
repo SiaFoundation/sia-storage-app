@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { PlayIcon } from 'lucide-react-native'
@@ -8,16 +8,18 @@ import { logger } from '../../lib/logger'
 export function VideoPlayer({
   source,
   style,
+  onViewerControlPress,
 }: {
   source: string
   style?: ViewStyle
+  onViewerControlPress?: () => void
 }) {
   const player = useVideoPlayer(source)
   const videoRef = useRef<VideoView>(null)
   const [showNativeControls, setShowNativeControls] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
 
-  const onPlayPress = async () => {
+  const onPlayPress = useCallback(async () => {
     setIsPlaying(true)
     player.play()
     try {
@@ -25,7 +27,11 @@ export function VideoPlayer({
     } catch (error) {
       logger.log('[VideoPlayer] Failed to enter fullscreen:', error)
     }
-  }
+  }, [onViewerControlPress, player])
+
+  const handlePressIn = useCallback(() => {
+    onViewerControlPress?.()
+  }, [onViewerControlPress])
 
   return (
     <View style={[styles.container, style]}>
@@ -48,6 +54,7 @@ export function VideoPlayer({
         <View style={styles.playIconContainer} pointerEvents="box-none">
           <Pressable
             style={styles.playButton}
+            onPressIn={handlePressIn}
             onPress={onPlayPress}
             hitSlop={12}
             accessibilityRole="button"
