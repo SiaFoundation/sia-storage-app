@@ -27,7 +27,10 @@ export default {
         NSCameraUsageDescription:
           'Allow $(PRODUCT_NAME) to use the camera to take photos.',
         UIBackgroundModes: ['fetch', 'processing'],
-        BGTaskSchedulerPermittedIdentifiers: ['com.transistorsoft.fetch'],
+        BGTaskSchedulerPermittedIdentifiers: [
+          'com.transistorsoft.fetch',
+          'com.transistorsoft.processing',
+        ],
       },
     },
     android: {
