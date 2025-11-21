@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native'
-import ActionSheet from './ActionSheet'
+import { ActionSheet } from './ActionSheet'
 import { InfoCard } from './InfoCard'
 import { RowGroup } from './Group'
 import { LabeledValueRow } from './LabeledValueRow'
@@ -11,6 +11,7 @@ import { closeSheet, useSheetOpen } from '../stores/sheets'
 import useSWR from 'swr'
 import { humanUploadPercent } from '../lib/uploadPercent'
 import { useFileCountLocal, useFileCountLost } from '../stores/files'
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet'
 
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
