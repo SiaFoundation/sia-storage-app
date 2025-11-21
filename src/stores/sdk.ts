@@ -11,6 +11,7 @@ export type SdkState = {
   isConnected: boolean
   connectionError: string | null
   isAuthing: boolean
+  isReconnecting: boolean
 }
 
 const useSdkStore = create<SdkState>(() => {
@@ -19,15 +20,23 @@ const useSdkStore = create<SdkState>(() => {
     isConnected: false,
     connectionError: null,
     isAuthing: false,
+    isReconnecting: false,
   }
 })
 
 const { getState, setState } = useSdkStore
 
-export async function reconnect() {
-  logger.log('Reconnecting...')
+export async function reconnect(): Promise<boolean> {
+  if (getState().isReconnecting) {
+    logger.log('[sdk] already reconnecting, skipping')
+    return false
+  }
+  setState({ isReconnecting: true })
+
+  logger.log('[sdk] reconnecting...')
   const isAuthing = getState().isAuthing
   if (isAuthing) {
+    logger.log('[sdk] already authing, skipping')
     return false
   }
   const sdk = getState().sdk || (await initSdk())
@@ -54,6 +63,8 @@ export async function reconnect() {
       connectionError: 'Failed to connect to indexer',
     })
     return false
+  } finally {
+    setState({ isReconnecting: false })
   }
 }
 

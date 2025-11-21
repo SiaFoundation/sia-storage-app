@@ -195,9 +195,10 @@ export const [getCurrentInitStep, useCurrentInitStep] = createGetterAndSelector(
 export const [getInitializationError, useInitializationError] =
   createGetterAndSelector(useAppInitStore, (state) => state.initializationError)
 
-export function useIsInitializing(): boolean {
-  return useAppInitStore((s) => s.isInitializing)
-}
+export const [getIsInitializing, useIsInitializing] = createGetterAndSelector(
+  useAppInitStore,
+  (s) => s.isInitializing
+)
 
 export const [getShowSplash, useShowSplash] = createGetterAndSelector(
   useAppInitStore,

@@ -1,32 +1,48 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import NetInfo from '@react-native-community/netinfo'
-import { reconnect, useIsConnected } from '../stores/sdk'
+import { reconnect, getIsConnected, useIsConnected } from '../stores/sdk'
 import { logger } from '../lib/logger'
-import { getIsOnline } from './useIsOnline'
-import { useIsInitializing } from '../stores/app'
+import { getIsOnline, useIsOnline } from './useIsOnline'
+import { getIsInitializing, useIsInitializing } from '../stores/app'
 
 export function useReconnectIndexer() {
-  const reconnectingRef = useRef(false)
-  const isIndexerConnected = useIsConnected()
-  const isInitializing = useIsInitializing()
-
+  // Try to reconnect to the indexer when the app reconnects to the internet.
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const isOnline = getIsOnline(state)
+    const unsubscribe = NetInfo.addEventListener(async (state) => {
+      const isOnline = await getIsOnline(state)
+      const isIndexerConnected = getIsConnected()
+      const isInitializing = getIsInitializing()
 
-      if (
-        !isInitializing &&
-        !isIndexerConnected &&
-        isOnline &&
-        !reconnectingRef.current
-      ) {
-        reconnectingRef.current = true
+      if (!isInitializing && !isIndexerConnected && isOnline) {
         logger.log('[netinfo] app is now online, reconnecting...')
-        void reconnect().finally(() => {
-          reconnectingRef.current = false
-        })
+        await reconnect()
       }
     })
     return () => unsubscribe()
   }, [])
+
+  // Try to reconnect to the indexer when the app is online but not connected to the indexer.
+  const isInitializing = useIsInitializing()
+  const isOnline = useIsOnline()
+  const isIndexerConnected = useIsConnected()
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    if (!isInitializing && isOnline && !isIndexerConnected) {
+      interval = setInterval(async () => {
+        const isOnline = await getIsOnline()
+        const isIndexerConnected = getIsConnected()
+        if (isOnline && !isIndexerConnected) {
+          logger.log(
+            '[netinfo] app is online but not connected to indexer, reconnecting...'
+          )
+          reconnect()
+        }
+      }, 5_000)
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [isOnline, isIndexerConnected])
 }
