@@ -16,6 +16,8 @@ import { useHasOnboarded } from './stores/settings'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import { AppSplash } from './components/AppSplash'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
@@ -49,31 +51,35 @@ export function Root() {
   })
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-        <StatusBar
-          barStyle={Platform.select({
-            ios: 'light-content',
-            android: 'light-content',
-            default: 'light-content',
-          })}
-        />
-        <ShareIntentProvider>
-          <ToastProvider>
-            {showSplash ? (
-              <AppSplash />
-            ) : (
-              <>
-                <ShareIntentConsumer />
-                <NavigationContainer ref={navigationRef}>
-                  <RootTabs />
-                </NavigationContainer>
-              </>
-            )}
-          </ToastProvider>
-        </ShareIntentProvider>
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <SafeAreaProvider>
+        <ToastProvider>
+          <SafeAreaView style={styles.safe} edges={['left', 'right']}>
+            <StatusBar
+              barStyle={Platform.select({
+                ios: 'light-content',
+                android: 'light-content',
+                default: 'light-content',
+              })}
+            />
+            <ShareIntentProvider>
+              <BottomSheetModalProvider>
+                {showSplash ? (
+                  <AppSplash />
+                ) : (
+                  <>
+                    <ShareIntentConsumer />
+                    <NavigationContainer ref={navigationRef}>
+                      <RootTabs />
+                    </NavigationContainer>
+                  </>
+                )}
+              </BottomSheetModalProvider>
+            </ShareIntentProvider>
+          </SafeAreaView>
+        </ToastProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }
 

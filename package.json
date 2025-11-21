@@ -20,6 +20,7 @@
   "dependencies": {
     "@azure/core-asynciterator-polyfill": "^1.0.2",
     "@bacons/text-decoder": "^0.0.0",
+    "@gorhom/bottom-sheet": "^5.2.6",
     "@react-native-clipboard/clipboard": "^1.16.3",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native/new-app-screen": "0.81.0",
