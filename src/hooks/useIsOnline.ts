@@ -3,7 +3,10 @@ import NetInfo, { type NetInfoState } from '@react-native-community/netinfo'
 import { logger } from '../lib/logger'
 import useSWR from 'swr'
 
-export function getIsOnline(state: NetInfoState): boolean {
+export async function getIsOnline(
+  customState?: NetInfoState
+): Promise<boolean> {
+  const state = customState || (await NetInfo.fetch())
   const reachable = state.isInternetReachable
   if (reachable !== null) return Boolean(reachable)
   return Boolean(state.isConnected)
@@ -11,8 +14,7 @@ export function getIsOnline(state: NetInfoState): boolean {
 
 export function useIsOnline() {
   const isOnline = useSWR('onlineStatus', async () => {
-    const state = await NetInfo.fetch()
-    return getIsOnline(state)
+    return getIsOnline()
   })
 
   useEffect(() => {
