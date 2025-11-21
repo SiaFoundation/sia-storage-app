@@ -125,6 +125,7 @@ type FileRecordsQueryOpts = {
     indexerURL: string
     isPinned: boolean
   }
+  fileExistsLocally?: boolean
 }
 
 function buildFileRecordsQuery(
@@ -136,17 +137,22 @@ function buildFileRecordsQuery(
   orderExpr: string
   limitExpr: string
 } {
-  const { limit, after, order, pinned, orderBy } = opts
+  const { limit, after, order, pinned, orderBy, fileExistsLocally } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
   const params: (string | number)[] = []
 
-  let where = ''
+  const whereClauses: string[] = []
+
   if (after) {
     if (order === 'ASC') {
-      where = `WHERE (${tableAlias}.${sortColumn} > ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id > ?)`
+      whereClauses.push(
+        `((${tableAlias}.${sortColumn} > ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id > ?))`
+      )
     } else {
-      where = `WHERE (${tableAlias}.${sortColumn} < ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id < ?)`
+      whereClauses.push(
+        `((${tableAlias}.${sortColumn} < ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id < ?))`
+      )
     }
     params.push(after.value, after.value, after.id)
   }
@@ -155,9 +161,24 @@ function buildFileRecordsQuery(
     const existsExpr = pinned.isPinned
       ? `EXISTS (SELECT 1 FROM objects s WHERE s.fileId = ${tableAlias}.id AND s.indexerURL = ?)`
       : `NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = ${tableAlias}.id AND s.indexerURL = ?)`
-    where = where ? `${where} AND ${existsExpr}` : `WHERE ${existsExpr}`
+    whereClauses.push(existsExpr)
     params.push(pinned.indexerURL)
   }
+
+  if (fileExistsLocally !== undefined) {
+    if (fileExistsLocally) {
+      whereClauses.push(
+        `EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`
+      )
+    } else {
+      whereClauses.push(
+        `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`
+      )
+    }
+  }
+
+  const where =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
 
   const orderExpr = `${tableAlias}.${sortColumn} ${order}, ${tableAlias}.id ${order}`
   const limitExpr =
@@ -462,6 +483,22 @@ export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
         indexerURL: currentIndexerURL,
         isPinned: false,
       },
+      fileExistsLocally: true,
+    })
+  }
+)
+
+export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
+  librarySwr.getKey('lostFiles'),
+  async () => {
+    const currentIndexerURL = await getIndexerURL()
+    return readAllFileRecordsCount({
+      order: 'ASC',
+      pinned: {
+        indexerURL: currentIndexerURL,
+        isPinned: false,
+      },
+      fileExistsLocally: false,
     })
   }
 )
@@ -471,7 +508,11 @@ export const [getFileCountLocalOnly, useFileCountLocalOnly] =
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsCount({
       order: 'ASC',
-      pinned: { indexerURL: currentIndexerURL, isPinned: false },
+      pinned: {
+        indexerURL: currentIndexerURL,
+        isPinned: false,
+      },
+      fileExistsLocally: true,
     })
   })
 
