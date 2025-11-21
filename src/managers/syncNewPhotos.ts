@@ -1,17 +1,17 @@
 import * as MediaLibrary from 'expo-media-library'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
-import { getKey, triggerChange } from '../stores/settings'
+import { settingsSwr } from '../stores/settings'
 import { processAssets } from '../lib/processAssets'
 import { librarySwr } from '../stores/library'
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import {
-  getSecureStoreBoolean,
-  getSecureStoreNumber,
-  setSecureStoreBoolean,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageBoolean,
+  getAsyncStorageNumber,
+  setAsyncStorageBoolean,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
@@ -69,13 +69,13 @@ export const initSyncNewPhotos = createServiceInterval({
 // Photos sync - new photos forward cursor and toggle.
 
 export const [getAutoSyncNewPhotos, useAutoSyncNewPhotos] =
-  createGetterAndSWRHook(getKey('autoSyncNewPhotos'), () =>
-    getSecureStoreBoolean('autoSyncNewPhotos', false)
+  createGetterAndSWRHook(settingsSwr.getKey('autoSyncNewPhotos'), () =>
+    getAsyncStorageBoolean('autoSyncNewPhotos', false)
   )
 
 export async function setAutoSyncNewPhotos(value: boolean) {
-  await setSecureStoreBoolean('autoSyncNewPhotos', value)
-  triggerChange('autoSyncNewPhotos')
+  await setAsyncStorageBoolean('autoSyncNewPhotos', value)
+  settingsSwr.triggerChange('autoSyncNewPhotos')
   if (value) {
     ensureMediaLibraryPermission()
   }
@@ -91,13 +91,13 @@ export async function toggleAutoSyncNewPhotos() {
 const defaultValue = new Date().getTime()
 
 export const [getPhotosNewCursor, usePhotosNewCursor] = createGetterAndSWRHook(
-  getKey('photosNewCursor'),
-  () => getSecureStoreNumber('photosNewCursor', defaultValue)
+  settingsSwr.getKey('photosNewCursor'),
+  () => getAsyncStorageNumber('photosNewCursor', defaultValue)
 )
 
 export async function setPhotosNewCursor(value: number) {
-  await setSecureStoreNumber('photosNewCursor', value)
-  triggerChange('photosNewCursor')
+  await setAsyncStorageNumber('photosNewCursor', value)
+  settingsSwr.triggerChange('photosNewCursor')
 }
 
 export async function resetPhotosNewCursor() {

@@ -8,9 +8,9 @@ import {
 } from '../stores/fs'
 import { createFileRecord } from '../stores/files'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 import { File } from 'expo-file-system'
 
 const listFilesInFsStorageDirectoryMock = jest.mocked(
@@ -32,7 +32,7 @@ describe('fsOrphanScanner', () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     listFilesInFsStorageDirectoryMock.mockImplementation(() => [])
     await initializeDB()
-    await setSecureStoreNumber('fsOrphanLastRun', 0)
+    await setAsyncStorageNumber('fsOrphanLastRun', 0)
   })
 
   afterEach(async () => {
@@ -42,12 +42,15 @@ describe('fsOrphanScanner', () => {
   })
 
   it('skips run when last run was recent', async () => {
-    await setSecureStoreNumber('fsOrphanLastRun', now - FS_ORPHAN_FREQUENCY / 2)
+    await setAsyncStorageNumber(
+      'fsOrphanLastRun',
+      now - FS_ORPHAN_FREQUENCY / 2
+    )
 
     const result = await runFsOrphanScanner()
 
     expect(listFilesInFsStorageDirectoryMock).not.toHaveBeenCalled()
-    expect(await getSecureStoreNumber('fsOrphanLastRun', 0)).toBe(
+    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(
       now - FS_ORPHAN_FREQUENCY / 2
     )
     expect(result).toBeUndefined()
@@ -56,7 +59,7 @@ describe('fsOrphanScanner', () => {
   it('records timestamp even when there are no files', async () => {
     const result = await runFsOrphanScanner()
 
-    expect(await getSecureStoreNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toBeUndefined()
   })
 
@@ -68,7 +71,7 @@ describe('fsOrphanScanner', () => {
 
     expect(file.delete).toHaveBeenCalledTimes(1)
     expect(await readFsFileMetadata('file-1')).toBeNull()
-    expect(await getSecureStoreNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toEqual({ removed: 1 })
   })
 
@@ -97,7 +100,7 @@ describe('fsOrphanScanner', () => {
 
     expect(file.delete).not.toHaveBeenCalled()
     expect((await readFsFileMetadata('file-2'))?.fileId).toBe('file-2')
-    expect(await getSecureStoreNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toEqual({ removed: 0 })
   })
   it('deletes files that have no associated files table row', async () => {

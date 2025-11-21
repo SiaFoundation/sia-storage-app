@@ -23,7 +23,7 @@ import {
 } from 'react-native-sia'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { z } from 'zod'
-import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
+import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { isoToEpochCodec } from '../encoding/date'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { removeFsFile } from '../stores/fs'
@@ -275,12 +275,15 @@ const objectsCursorCodec = z.codec(
 )
 
 async function getSyncDownCursor(): Promise<ObjectsCursor | undefined> {
-  const decoded = await getSecureStoreJSON('syncDownCursor', objectsCursorCodec)
+  const decoded = await getAsyncStorageJSON(
+    'syncDownCursor',
+    objectsCursorCodec
+  )
   return decoded == null ? undefined : (decoded as unknown as ObjectsCursor)
 }
 
 export async function setSyncDownCursor(value: ObjectsCursor | undefined) {
-  await setSecureStoreJSON('syncDownCursor', value, objectsCursorCodec)
+  await setAsyncStorageJSON('syncDownCursor', value, objectsCursorCodec)
 }
 
 export async function resetSyncDownCursor() {

@@ -1,19 +1,20 @@
+import { setSecureStoreString, getSecureStoreString } from './secureStore'
 import {
-  setSecureStoreBoolean,
-  getSecureStoreBoolean,
-  setSecureStoreString,
-  getSecureStoreString,
-} from './secureStore'
+  setAsyncStorageBoolean,
+  getAsyncStorageBoolean,
+  setAsyncStorageString,
+  getAsyncStorageString,
+} from './asyncStore'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
 import { DEFAULT_INDEXER_URL } from '../config'
 
-export const { getKey, triggerChange } = buildSWRHelpers('secureStore')
+export const settingsSwr = buildSWRHelpers('settings')
 
 // Recovery Phrase
 
 export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
-  getKey('recoveryPhrase'),
+  settingsSwr.getKey('recoveryPhrase'),
   async () => getSecureStoreString('recoveryPhrase', '')
 )
 
@@ -22,7 +23,7 @@ export async function setRecoveryPhrase(
 ): Promise<boolean> {
   try {
     await setSecureStoreString('recoveryPhrase', recoveryPhrase)
-    triggerChange('recoveryPhrase')
+    settingsSwr.triggerChange('recoveryPhrase')
     return true
   } catch {
     return false
@@ -32,49 +33,49 @@ export async function setRecoveryPhrase(
 // Indexer
 
 export const [getIndexerURL, useIndexerURL] = createGetterAndSWRHook(
-  getKey('indexerURL'),
-  () => getSecureStoreString<string>('indexerURL', DEFAULT_INDEXER_URL)
+  settingsSwr.getKey('indexerURL'),
+  () => getAsyncStorageString<string>('indexerURL', DEFAULT_INDEXER_URL)
 )
 
 export async function setIndexerURL(value: string) {
-  await setSecureStoreString('indexerURL', value)
-  triggerChange('indexerURL')
+  await setAsyncStorageString('indexerURL', value)
+  settingsSwr.triggerChange('indexerURL')
 }
 
 // Has Onboarded
 
 export const [getHasOnboarded, useHasOnboarded] = createGetterAndSWRHook(
-  getKey('hasOnboarded'),
-  () => getSecureStoreBoolean('hasOnboarded')
+  settingsSwr.getKey('hasOnboarded'),
+  () => getAsyncStorageBoolean('hasOnboarded')
 )
 
 export async function setHasOnboarded(value: boolean) {
-  await setSecureStoreBoolean('hasOnboarded', value)
-  triggerChange('hasOnboarded')
+  await setAsyncStorageBoolean('hasOnboarded', value)
+  settingsSwr.triggerChange('hasOnboarded')
 }
 
 // Show Advanced
 
 export async function setShowAdvanced(value: boolean) {
-  await setSecureStoreBoolean('showAdvanced', value)
-  triggerChange('showAdvanced')
+  await setAsyncStorageBoolean('showAdvanced', value)
+  settingsSwr.triggerChange('showAdvanced')
 }
 
 export const [getShowAdvanced, useShowAdvanced] = createGetterAndSWRHook(
-  getKey('showAdvanced'),
-  () => getSecureStoreBoolean('showAdvanced')
+  settingsSwr.getKey('showAdvanced'),
+  () => getAsyncStorageBoolean('showAdvanced')
 )
 
 // Auto Scan Uploads
 
 export const [getAutoScanUploads, useAutoScanUploads] = createGetterAndSWRHook(
-  getKey('autoScanUploads'),
-  () => getSecureStoreBoolean('autoScanUploads', true)
+  settingsSwr.getKey('autoScanUploads'),
+  () => getAsyncStorageBoolean('autoScanUploads', true)
 )
 
 export async function setAutoScanUploads(value: boolean) {
-  await setSecureStoreBoolean('autoScanUploads', value)
-  triggerChange('autoScanUploads')
+  await setAsyncStorageBoolean('autoScanUploads', value)
+  settingsSwr.triggerChange('autoScanUploads')
 }
 
 export async function toggleAutoScanUploads() {
@@ -86,13 +87,13 @@ export async function toggleAutoScanUploads() {
 // Auto Sync Down Events
 
 export const [getAutoSyncDownEvents, useAutoSyncDownEvents] =
-  createGetterAndSWRHook(getKey('autoSyncDownEvents'), () =>
-    getSecureStoreBoolean('autoSyncDownEvents', true)
+  createGetterAndSWRHook(settingsSwr.getKey('autoSyncDownEvents'), () =>
+    getAsyncStorageBoolean('autoSyncDownEvents', true)
   )
 
 export async function setAutoSyncDownEvents(value: boolean) {
-  await setSecureStoreBoolean('autoSyncDownEvents', value)
-  triggerChange('autoSyncDownEvents')
+  await setAsyncStorageBoolean('autoSyncDownEvents', value)
+  settingsSwr.triggerChange('autoSyncDownEvents')
 }
 
 export async function toggleAutoSyncDownEvents() {
@@ -106,13 +107,13 @@ export async function toggleAutoSyncDownEvents() {
 export type LibraryViewMode = 'gallery' | 'list'
 
 export const [getLibraryViewMode, useLibraryViewMode] = createGetterAndSWRHook(
-  getKey('libraryViewMode'),
-  () => getSecureStoreString<LibraryViewMode>('libraryViewMode', 'gallery')
+  settingsSwr.getKey('libraryViewMode'),
+  () => getAsyncStorageString<LibraryViewMode>('libraryViewMode', 'gallery')
 )
 
 export async function setLibraryViewMode(value: LibraryViewMode) {
-  await setSecureStoreString<LibraryViewMode>('libraryViewMode', value)
-  triggerChange('libraryViewMode')
+  await setAsyncStorageString<LibraryViewMode>('libraryViewMode', value)
+  settingsSwr.triggerChange('libraryViewMode')
 }
 
 export async function toggleLibraryViewMode() {

@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { logger } from '../lib/logger'
-import { getSecureStoreBoolean, setSecureStoreBoolean } from './secureStore'
 import { createGetterAndSelector } from '../lib/selectors'
+import { getAsyncStorageBoolean, setAsyncStorageBoolean } from './asyncStore'
 
 export type LogsState = {
   logs: string[]
@@ -43,7 +43,7 @@ export async function initLogger(): Promise<void> {
 
   // Init state with secure store value so that we can use an in memory value
   // in the logger callbacks.
-  const enableSdkLogs = await getSecureStorageEnableSdkLogs()
+  const enableSdkLogs = await getEnableSdkLogs()
   setState((state) => {
     return { ...state, enableSdkLogs }
   })
@@ -79,13 +79,13 @@ export const [getSDKLogsEnabled, useSDKLogsEnabled] = createGetterAndSelector(
 )
 
 // Get the enable SDK logs flag from the secure store.
-async function getSecureStorageEnableSdkLogs(): Promise<boolean> {
-  return getSecureStoreBoolean('enableSdkLogs', false)
+export async function getEnableSdkLogs(): Promise<boolean> {
+  return getAsyncStorageBoolean('enableSdkLogs', false)
 }
 
-// Set the enable SDK logs flag in both the secure store and the store state.
+// Set the enable SDK logs flag in both the async store and the store state.
 export async function setEnableSdkLogs(value: boolean): Promise<void> {
-  await setSecureStoreBoolean('enableSdkLogs', value)
+  await setAsyncStorageBoolean('enableSdkLogs', value)
   setState((state) => {
     return { ...state, enableSdkLogs: value }
   })

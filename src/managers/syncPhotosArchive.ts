@@ -1,15 +1,15 @@
 import * as MediaLibrary from 'expo-media-library'
 import { logger } from '../lib/logger'
-import { getKey, triggerChange } from '../stores/settings'
+import { settingsSwr } from '../stores/settings'
 import { processAssets } from '../lib/processAssets'
 import { librarySwr } from '../stores/library'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-  getSecureStoreBoolean,
-  setSecureStoreBoolean,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+  getAsyncStorageBoolean,
+  setAsyncStorageBoolean,
+} from '../stores/asyncStore'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import {
@@ -75,13 +75,13 @@ export const initSyncPhotosArchive = createServiceInterval({
 const defaultValue = 0
 
 export const [getAutoSyncPhotosArchive, useAutoSyncPhotosArchive] =
-  createGetterAndSWRHook(getKey('autoSyncPhotosArchive'), () =>
-    getSecureStoreBoolean('autoSyncPhotosArchive', false)
+  createGetterAndSWRHook(settingsSwr.getKey('autoSyncPhotosArchive'), () =>
+    getAsyncStorageBoolean('autoSyncPhotosArchive', false)
   )
 
 export async function setAutoSyncPhotosArchive(value: boolean) {
-  await setSecureStoreBoolean('autoSyncPhotosArchive', value)
-  triggerChange('autoSyncPhotosArchive')
+  await setAsyncStorageBoolean('autoSyncPhotosArchive', value)
+  settingsSwr.triggerChange('autoSyncPhotosArchive')
   if (value) {
     ensureMediaLibraryPermission()
   }
@@ -95,13 +95,13 @@ export async function toggleAutoSyncPhotosArchive() {
 }
 
 export const [getPhotosArchiveCursor, usePhotosArchiveCursor] =
-  createGetterAndSWRHook(getKey('photosArchiveCursor'), () =>
-    getSecureStoreNumber('photosArchiveCursor', defaultValue)
+  createGetterAndSWRHook(settingsSwr.getKey('photosArchiveCursor'), () =>
+    getAsyncStorageNumber('photosArchiveCursor', defaultValue)
   )
 
 export async function setPhotosArchiveCursor(value: number) {
-  await setSecureStoreNumber('photosArchiveCursor', value)
-  triggerChange('photosArchiveCursor')
+  await setAsyncStorageNumber('photosArchiveCursor', value)
+  settingsSwr.triggerChange('photosArchiveCursor')
 }
 
 export async function restartPhotosArchiveCursor() {

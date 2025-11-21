@@ -1,11 +1,11 @@
 import { SlotPool } from '../lib/slotPool'
-import { getKey, triggerChange } from '../stores/settings'
+import { settingsSwr } from '../stores/settings'
 import { SingleInit } from '../lib/singleflight'
 import { logger } from '../lib/logger'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { DEFAULT_MAX_UPLOADS } from '../config'
 
@@ -40,12 +40,12 @@ export async function setMaxUploads(value: number) {
     logger.log('[settings] setMaxUploads: value must be 1 or greater')
   }
   const clamped = Math.max(1, Math.floor(Number(value) || 1))
-  await setSecureStoreNumber('maxUploads', clamped)
+  await setAsyncStorageNumber('maxUploads', clamped)
   setUploadMaxSlots(clamped)
-  triggerChange('maxUploads')
+  settingsSwr.triggerChange('maxUploads')
 }
 
 export const [getMaxUploads, useMaxUploads] = createGetterAndSWRHook(
-  getKey('maxUploads'),
-  () => getSecureStoreNumber('maxUploads', DEFAULT_MAX_UPLOADS)
+  settingsSwr.getKey('maxUploads'),
+  () => getAsyncStorageNumber('maxUploads', DEFAULT_MAX_UPLOADS)
 )
