@@ -8,7 +8,7 @@ import {
   toggleDir,
   useLibrary,
 } from '../stores/library'
-import ActionSheet from '../components/ActionSheet'
+import { ActionSheet } from '../components/ActionSheet'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { openSheet } from '../stores/sheets'
 

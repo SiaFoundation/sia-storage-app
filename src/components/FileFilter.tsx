@@ -8,7 +8,7 @@ import {
   toggleCategory,
   useLibrary,
 } from '../stores/library'
-import ActionSheet from '../components/ActionSheet'
+import { ActionSheet } from '../components/ActionSheet'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 
 const CATEGORIES: Category[] = ['Video', 'Image', 'Audio', 'Files']

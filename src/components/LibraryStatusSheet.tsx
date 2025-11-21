@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native'
-import ActionSheet from './ActionSheet'
+import { ActionSheet } from './ActionSheet'
 import { InfoCard } from './InfoCard'
 import { RowGroup } from './Group'
 import { LabeledValueRow } from './LabeledValueRow'
