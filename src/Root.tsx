@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { StyleSheet, Platform, StatusBar } from 'react-native'
 import { palette } from './styles/colors'
 import {
+  DarkTheme,
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native'
@@ -18,6 +19,16 @@ import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import { AppSplash } from './components/AppSplash'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
+
+const darkNavigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: palette.gray[950],
+    card: palette.gray[950],
+    primary: palette.blue[400],
+  },
+}
 
 export function Root() {
   const navigationRef = useNavigationContainerRef<any>()
@@ -69,7 +80,10 @@ export function Root() {
                 ) : (
                   <>
                     <ShareIntentConsumer />
-                    <NavigationContainer ref={navigationRef}>
+                    <NavigationContainer
+                      ref={navigationRef}
+                      theme={darkNavigationTheme}
+                    >
                       <RootTabs />
                     </NavigationContainer>
                   </>
@@ -84,6 +98,7 @@ export function Root() {
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: { flex: 1, backgroundColor: palette.gray[950] },
   safe: { flex: 1, backgroundColor: palette.gray[950] },
 })
 
