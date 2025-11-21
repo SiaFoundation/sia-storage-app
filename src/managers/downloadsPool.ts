@@ -1,10 +1,10 @@
 import { SlotPool } from '../lib/slotPool'
-import { getKey, triggerChange } from '../stores/settings'
+import { settingsSwr } from '../stores/settings'
 import { SingleInit } from '../lib/singleflight'
 import {
-  setSecureStoreNumber,
-  getSecureStoreNumber,
-} from '../stores/secureStore'
+  setAsyncStorageNumber,
+  getAsyncStorageNumber,
+} from '../stores/asyncStore'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { logger } from '../lib/logger'
 import { DEFAULT_MAX_DOWNLOADS } from '../config'
@@ -40,12 +40,12 @@ export async function setMaxDownloads(value: number) {
     logger.log('[settings] setMaxDownloads: value must be 1 or greater')
   }
   const clamped = Math.max(1, Math.floor(Number(value) || 1))
-  await setSecureStoreNumber('maxDownloads', clamped)
+  await setAsyncStorageNumber('maxDownloads', clamped)
   setDownloadMaxSlots(clamped)
-  triggerChange('maxDownloads')
+  settingsSwr.triggerChange('maxDownloads')
 }
 
 export const [getMaxDownloads, useMaxDownloads] = createGetterAndSWRHook(
-  getKey('maxDownloads'),
-  () => getSecureStoreNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS)
+  settingsSwr.getKey('maxDownloads'),
+  () => getAsyncStorageNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS)
 )

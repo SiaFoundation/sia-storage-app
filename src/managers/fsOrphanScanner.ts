@@ -8,9 +8,9 @@ import {
   listFilesInFsStorageDirectory,
 } from '../stores/fs'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 
 function extractFileIdFromName(name: string): string | null {
   const dotIndex = name.lastIndexOf('.')
@@ -96,9 +96,9 @@ export const initFsOrphanScanner = createServiceInterval({
 })
 
 export async function setFsOrphanLastRun(): Promise<void> {
-  await setSecureStoreNumber('fsOrphanLastRun', Date.now())
+  await setAsyncStorageNumber('fsOrphanLastRun', Date.now())
 }
 
 export async function getFsOrphanLastRun(): Promise<number> {
-  return await getSecureStoreNumber('fsOrphanLastRun', 0)
+  return await getAsyncStorageNumber('fsOrphanLastRun', 0)
 }

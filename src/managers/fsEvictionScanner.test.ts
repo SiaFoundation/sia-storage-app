@@ -9,9 +9,9 @@ import {
 import { type LocalObject } from '../encoding/localObject'
 import { readFsFileMetadata, upsertFsFileMetadata } from '../stores/fs'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 
 jest.mock('../config', () => {
   const daysInMs = jest.requireActual('../lib/time').daysInMs
@@ -31,7 +31,7 @@ describe('fsEvictionScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     await initializeDB()
-    await setSecureStoreNumber('fsEvictionLastRun', 0)
+    await setAsyncStorageNumber('fsEvictionLastRun', 0)
   })
 
   afterEach(async () => {
@@ -48,7 +48,7 @@ describe('fsEvictionScanner', () => {
     const result = await runFsEvictionScanner()
 
     expect(await readFsFileMetadata('file-1')).toBeDefined()
-    expect(await getSecureStoreNumber('fsEvictionLastRun', now)).toBe(now)
+    expect(await getAsyncStorageNumber('fsEvictionLastRun', now)).toBe(now)
     expect(result).toBeUndefined()
   })
 
@@ -67,7 +67,7 @@ describe('fsEvictionScanner', () => {
 
     expect(await readFsFileMetadata('file-2')).toBeDefined()
     expect(await readFsFileMetadata('file-3')).toBeDefined()
-    expect(await getSecureStoreNumber('fsEvictionLastRun', now)).toBe(now)
+    expect(await getAsyncStorageNumber('fsEvictionLastRun', now)).toBe(now)
     expect(result).toBeUndefined()
   })
 
@@ -115,7 +115,7 @@ describe('fsEvictionScanner', () => {
     expect(await readFsFileMetadata('file-3')).toBeDefined()
     expect(await readFsFileMetadata('file-4')).toBeNull()
     expect(await readFsFileMetadata('file-5')).toBeDefined()
-    expect(await getSecureStoreNumber('fsEvictionLastRun', 0)).toBe(now)
+    expect(await getAsyncStorageNumber('fsEvictionLastRun', 0)).toBe(now)
   })
 })
 

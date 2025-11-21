@@ -73,50 +73,6 @@ jest.mock('./src/lib/uniqueId', () => {
   return { uniqueId: () => `uid-${++c}` }
 })
 
-// In-memory SecureStore for tests.
-jest.mock('./src/stores/secureStore', () => {
-  const numStore = new Map()
-  const boolStore = new Map()
-  const strStore = new Map()
-  return {
-    __esModule: true,
-    setSecureStoreNumber: jest.fn(async (key, value) => {
-      numStore.set(key, value)
-    }),
-    getSecureStoreNumber: jest.fn(async (key, fallback = 0) => {
-      return numStore.has(key) ? numStore.get(key) : fallback
-    }),
-    setSecureStoreBoolean: jest.fn(async (key, value) => {
-      boolStore.set(key, value)
-    }),
-    getSecureStoreBoolean: jest.fn(async (key, fallback = false) => {
-      return boolStore.has(key) ? boolStore.get(key) : fallback
-    }),
-    setSecureStoreString: jest.fn(async (key, value) => {
-      strStore.set(key, value)
-    }),
-    getSecureStoreString: jest.fn(async (key, fallback) => {
-      return strStore.has(key) ? strStore.get(key) : fallback
-    }),
-    setSecureStoreJSON: jest.fn(async (key, value) => {
-      if (value == null) {
-        strStore.set(key, '')
-      } else {
-        strStore.set(key, JSON.stringify(value))
-      }
-    }),
-    getSecureStoreJSON: jest.fn(async (key, _codec, fallback) => {
-      const v = strStore.get(key)
-      if (typeof v !== 'string' || v.trim() === '') return fallback
-      try {
-        return JSON.parse(v)
-      } catch {
-        return fallback
-      }
-    }),
-  }
-})
-
 // These warnings are produced when Jest loads Expo modules without native bindings.
 // In the test environment we intentionally replace those bindings with mocks, so
 // the messages are expected noise and safe to ignore.

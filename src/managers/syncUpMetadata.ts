@@ -7,7 +7,7 @@ import {
 import { getIndexerURL } from '../stores/settings'
 import { getIsConnected, getPinnedObject, updateMetadata } from '../stores/sdk'
 import { createServiceInterval } from '../lib/serviceInterval'
-import { getSecureStoreJSON, setSecureStoreJSON } from '../stores/secureStore'
+import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { z } from 'zod'
 import {
   SYNC_UP_METADATA_INTERVAL,
@@ -130,13 +130,13 @@ type SyncUpCursor = {
 }
 
 export async function getSyncUpCursor(): Promise<SyncUpCursor | undefined> {
-  return getSecureStoreJSON('syncUpCursor', syncUpCursorCodec)
+  return getAsyncStorageJSON('syncUpCursor', syncUpCursorCodec)
 }
 
 export async function setSyncUpCursor(
   value: SyncUpCursor | undefined
 ): Promise<void> {
-  await setSecureStoreJSON('syncUpCursor', value, syncUpCursorCodec)
+  await setAsyncStorageJSON('syncUpCursor', value, syncUpCursorCodec)
 }
 
 /**

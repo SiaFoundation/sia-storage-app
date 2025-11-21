@@ -2,11 +2,7 @@ import * as SecureStore from 'expo-secure-store'
 import { retry } from '../lib/retry'
 
 export async function setSecureStoreBoolean(key: string, value: boolean) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
-    throw new Error(
-      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
-    )
-  }
+  validateKey(key)
   return SecureStore.setItemAsync(key, value ? 'true' : 'false')
 }
 
@@ -26,11 +22,7 @@ export async function getSecureStoreBoolean(key: string, initialValue = false) {
 }
 
 export async function setSecureStoreNumber(key: string, value: number) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
-    throw new Error(
-      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
-    )
-  }
+  validateKey(key)
   const str = Number.isFinite(value) ? String(Math.floor(value)) : '0'
   return SecureStore.setItemAsync(key, str)
 }
@@ -53,11 +45,7 @@ export async function setSecureStoreString<T extends string>(
   key: string,
   value: T
 ) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
-    throw new Error(
-      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
-    )
-  }
+  validateKey(key)
   return SecureStore.setItemAsync(key, value)
 }
 
@@ -85,11 +73,7 @@ export async function setSecureStoreJSON<TStorage, TDomain>(
   value: TDomain | undefined,
   codec: JsonCodec<TStorage, TDomain>
 ) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
-    throw new Error(
-      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
-    )
-  }
+  validateKey(key)
   if (value == null) {
     return SecureStore.setItemAsync(key, '')
   }
@@ -120,5 +104,13 @@ export async function getSecureStoreJSON<TStorage, TDomain>(
   } else {
     await setSecureStoreJSON(key, initialValue, codec)
     return initialValue
+  }
+}
+
+export function validateKey(key: string) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
+    throw new Error(
+      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
+    )
   }
 }

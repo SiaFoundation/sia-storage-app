@@ -13,9 +13,9 @@ import {
   FsMetaRow,
 } from '../stores/fs'
 import {
-  getSecureStoreNumber,
-  setSecureStoreNumber,
-} from '../stores/secureStore'
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 
 /**
  * fsEvictionScanner evicts stale files from the file system under the following rules:
@@ -142,9 +142,9 @@ export const initFsEvictionScanner = createServiceInterval({
 })
 
 export async function setFsEvictionLastRun(): Promise<void> {
-  await setSecureStoreNumber('fsEvictionLastRun', Date.now())
+  await setAsyncStorageNumber('fsEvictionLastRun', Date.now())
 }
 
 export async function getFsEvictionLastRun(): Promise<number> {
-  return await getSecureStoreNumber('fsEvictionLastRun', 0)
+  return await getAsyncStorageNumber('fsEvictionLastRun', 0)
 }
