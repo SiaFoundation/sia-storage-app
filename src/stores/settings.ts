@@ -15,7 +15,7 @@ export const settingsSwr = buildSWRHelpers('settings')
 
 export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
   settingsSwr.getKey('recoveryPhrase'),
-  async () => getSecureStoreString('recoveryPhrase', '')
+  async () => getSecureStoreString<string>('recoveryPhrase', '')
 )
 
 export async function setRecoveryPhrase(
