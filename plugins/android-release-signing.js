@@ -19,8 +19,8 @@ const DEFAULTS = {
 const SIGNING_TAG = '// Added by android-release-signing plugin.'
 
 function isReleaseBuild() {
-  if (process.env.PROD) {
-    return process.env.PROD === 'true'
+  if (process.env.RELEASE) {
+    return process.env.RELEASE === 'true'
   }
 
   const easProfile = process.env.EAS_BUILD_PROFILE

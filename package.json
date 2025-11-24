@@ -2,20 +2,34 @@
   "name": "Sia Storage",
   "main": "index.ts",
   "scripts": {
-    "build": "expo prebuild",
-    "build:clean": "expo prebuild --clean",
-    "build:prod": "PROD=true expo prebuild",
+    "fresh": "bunx rimraf .expo android ios node_modules && bun install && expo prebuild",
     "start": "expo start --dev-client",
-    "android": "expo run:android",
-    "android:prod": "PROD=true expo run:android",
-    "ios": "expo run:ios",
-    "ios:prod": "PROD=true expo run:ios",
-    "web": "expo start --web",
-    "fresh": "bunx rimraf .expo android ios node_modules && bun install && bun run build",
-    "android:signing-report": "bun scripts/androidGradleTask.ts signingReport",
-    "android:bundle-release": "bun scripts/androidGradleTask.ts bundleRelease",
+    "ios:build:sim": "bunx rimraf .expo ios && expo run:ios",
+    "ios:build:device": "bunx rimraf .expo ios && expo prebuild && fastlane ios dev_device",
+    "android:build": "bunx rimraf .expo android && expo run:android --device",
+    "fastlane:ios:build-ipa": "fastlane ios build_ipa",
+    "fastlane:android:distribute-play-store": "fastlane android distribute_play_store",
+    "fastlane:android:distribute-internal": "fastlane android distribute_internal",
+    "fastlane:ios:distribute-app-store": "fastlane ios distribute_app_store",
+    "fastlane:ios:distribute-testflight": "fastlane ios distribute_testflight",
+    "gradle:signing-report": "bun scripts/androidGradleTask.ts signingReport",
+    "gradle:bundle-release": "bun scripts/androidGradleTask.ts bundleRelease",
+    "release:android:prebuild": "bunx rimraf .expo android && RELEASE=true expo prebuild",
+    "release:android:build": "bun run gradle:bundle-release",
+    "release:ios:prebuild": "bunx rimraf .expo ios && RELEASE=true expo prebuild",
+    "release:ios:build": "bun run fastlane:ios:build-ipa",
+    "release:both:prebuild": "bunx rimraf .expo ios android && RELEASE=true expo prebuild",
+    "release:both:build": "bunx concurrently --kill-others-on-fail --names \"android,ios\" --prefix-colors \"green,blue\" \"bun run release:android:build\" \"bun run release:ios:build\"",
+    "release:build": "bun run release:both:prebuild && bun run release:both:build",
+    "release:production": "bun run release:build && bunx concurrently --kill-others-on-fail --names \"android,ios\" --prefix-colors \"green,blue\" \"bun run fastlane:android:distribute-play-store\" \"bun run fastlane:ios:distribute-app-store\"",
+    "release:internal": "bun run release:build && bunx concurrently --kill-others-on-fail --names \"android,ios\" --prefix-colors \"green,blue\" \"bun run fastlane:android:distribute-internal\" \"bun run fastlane:ios:distribute-testflight\"",
+    "release:ios:production": "bun run release:ios:prebuild && bun run release:ios:build && bun run fastlane:ios:distribute-app-store",
+    "release:ios:internal": "bun run release:ios:prebuild && bun run release:ios:build && bun run fastlane:ios:distribute-testflight",
+    "release:android:production": "bun run release:android:prebuild && bun run release:android:build && bun run fastlane:android:distribute-play-store",
+    "release:android:internal": "bun run release:android:prebuild && bun run release:android:build && bun run fastlane:android:distribute-internal",
     "test": "jest",
-    "test:run": "jest --coverage"
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@azure/core-asynciterator-polyfill": "^1.0.2",
@@ -89,5 +103,6 @@
   "private": true,
   "trustedDependencies": [
     "better-sqlite3"
-  ]
+  ],
+  "version": "1.0.0"
 }

@@ -1,0 +1,10 @@
+# Appfile for iOS and Android app configuration
+
+# iOS App Store Connect
+app_identifier("sia.storage")
+apple_id(ENV["APPLE_ID"] || "")
+team_id(ENV["APPLE_TEAM_ID"] || "")
+
+# Android Google Play
+package_name("sia.storage")
+

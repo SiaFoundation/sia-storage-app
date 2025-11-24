@@ -1,0 +1,8 @@
+# Fastlane specific
+report.xml
+*.html
+*.zip
+Preview.html
+screenshots
+metadata
+
