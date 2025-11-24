@@ -1,0 +1,179 @@
+# Fastfile for iOS and Android app distribution
+
+default_platform(:ios)
+
+# Path to the iOS workspace
+IOS_WORKSPACE_PATH = File.expand_path("../ios/SiaStorage.xcworkspace", __dir__)
+
+# iOS IPA names
+IOS_RELEASE_IPA_NAME = "SiaStorage.ipa"
+IOS_DEV_IPA_NAME = "SiaStorageDev.ipa"
+IOS_RELEASE_IPA_PATH = File.expand_path("../ios/build/#{IOS_RELEASE_IPA_NAME}", __dir__)
+IOS_DEV_IPA_PATH = File.expand_path("../ios/build/#{IOS_DEV_IPA_NAME}", __dir__)
+
+# Path to the Android AAB file
+ANDROID_AAB_PATH = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
+
+# Get App Store Connect API key from environment variable
+# APP_STORE_CONNECT_API_KEY_JSON must be a JSON string with key_id, issuer_id, and key_filepath or key_content
+def app_store_connect_api_key
+  api_key_env = ENV["APP_STORE_CONNECT_API_KEY_JSON"]
+  
+  if api_key_env.nil? || api_key_env.empty?
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON environment variable is required")
+  end
+  
+  # Parse as JSON string
+  begin
+    JSON.parse(api_key_env)
+  rescue JSON::ParserError
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must be a valid JSON string")
+  end
+end
+
+platform :ios do
+  desc "Build and install dev build on connected iOS device"
+  lane :dev_device do
+    # Builds a development build and installs it on the connected physical device
+    # This automates: expo run:ios -> Xcode -> configure signing -> run
+    
+    team_id = ENV["APPLE_TEAM_ID"]
+    if team_id.nil? || team_id.empty?
+      UI.user_error!("APPLE_TEAM_ID environment variable is required")
+    end
+    
+    # Dev builds use SiaStorageDev workspace (when RELEASE != true)
+    dev_workspace = File.expand_path("../ios/SiaStorageDev.xcworkspace", __dir__)
+    if !File.exist?(dev_workspace)
+      UI.user_error!("Dev workspace not found at #{dev_workspace}. Run 'expo prebuild' first.")
+    end
+    
+    # Build the app for development
+    build_app(
+      workspace: dev_workspace,
+      scheme: "SiaStorageDev",
+      configuration: "Debug", # Use Debug for dev builds
+      export_method: "development", # Development signing for physical devices
+      output_directory: File.expand_path("../ios/build", __dir__),
+      output_name: "SiaStorageDev.ipa",
+      # Set DEVELOPMENT_TEAM during build phase (expo prebuild regenerates the project)
+      xcargs: "DEVELOPMENT_TEAM=#{team_id}",
+      export_options: {
+        method: "development",
+        signingStyle: "automatic"
+      }
+    )
+    
+    # Install the generated IPA on the connected device
+    if !File.exist?(IOS_DEV_IPA_PATH)
+      UI.user_error!("Could not find generated IPA file at #{IOS_DEV_IPA_PATH}")
+    end
+    
+    install_on_device(
+      ipa: IOS_DEV_IPA_PATH
+    )
+  end
+
+  desc "Build and export iOS IPA for App Store"
+  lane :build_ipa do
+    # This does the same as:
+    # 1. Product > Archive (builds both SiaStorage and ShareExtension)
+    # 2. Export > App Store Connect (creates signed IPA)
+    
+    team_id = ENV["APPLE_TEAM_ID"]
+    if team_id.nil? || team_id.empty?
+      UI.user_error!("APPLE_TEAM_ID environment variable is required")
+    end
+    
+    build_app(
+      workspace: IOS_WORKSPACE_PATH,
+      scheme: "SiaStorage",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: File.expand_path("../ios/build", __dir__),
+      output_name: "SiaStorage.ipa",
+      export_team_id: team_id,
+      # Set DEVELOPMENT_TEAM during build phase (export_team_id only applies during export).
+      # expo prebuild regenerates the project, so the team isn't saved in the Xcode project file.
+      # Alternative: create an Expo config plugin to set the team during prebuild.
+      xcargs: "DEVELOPMENT_TEAM=#{team_id}",
+      export_options: {
+        method: "app-store",
+        signingStyle: "automatic"
+      },
+      include_bitcode: false,
+      include_symbols: true,
+    )
+  end
+
+  desc "Upload iOS app to App Store Connect"
+  lane :distribute_app_store do
+    # Build IPA if it doesn't exist
+    build_ipa unless File.exist?(IOS_RELEASE_IPA_PATH)
+    
+    upload_to_app_store(
+      api_key: app_store_connect_api_key,
+      ipa: IOS_RELEASE_IPA_PATH,
+      skip_screenshots: true, # Don't upload screenshots - we manage them manually in App Store Connect
+      skip_metadata: true, # Don't upload metadata - we manage descriptions, keywords, etc. manually in App Store Connect
+    )
+  end
+
+  desc "Upload iOS app to TestFlight"
+  lane :distribute_testflight do
+    # Build IPA if it doesn't exist
+    build_ipa unless File.exist?(IOS_RELEASE_IPA_PATH)
+    
+    upload_to_testflight(
+      api_key: app_store_connect_api_key,
+      ipa: IOS_RELEASE_IPA_PATH,
+      skip_waiting_for_build_processing: false, # Wait for processing - ensures build is ready before command completes (takes 10-30 min)
+      distribute_external: false, # Don't auto-distribute externally - we manually manage tester groups in TestFlight
+      notify_external_testers: false # Don't notify testers - we control when to send notifications manually
+    )
+  end
+end
+
+# Get Google Play service account JSON key from environment variable
+# GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON must be a JSON string with the service account key content
+def google_play_service_account_key
+  json_key = ENV["GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON"]
+  
+  if json_key.nil? || json_key.empty?
+    UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON environment variable is required")
+  end
+  
+  # Return JSON string - Fastlane will use json_key_data parameter
+  json_key
+end
+
+platform :android do
+  desc "Upload Android app to Google Play Store"
+  lane :distribute_play_store do
+    upload_to_play_store(
+      track: "production", # Production track - for public release
+      aab: ANDROID_AAB_PATH,
+      skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
+      skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
+      skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console
+      skip_upload_images: true, # Don't upload images - we manage app icons and feature graphics manually
+      skip_upload_screenshots: true, # Don't upload screenshots - we manage them manually in Play Console
+      json_key_data: google_play_service_account_key
+    )
+  end
+
+  desc "Upload Android app to internal testing track"
+  lane :distribute_internal do
+    upload_to_play_store(
+      track: "internal", # Internal track - for testing
+      aab: ANDROID_AAB_PATH,
+      skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
+      skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
+      skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console
+      skip_upload_images: true, # Don't upload images - we manage app icons and feature graphics manually
+      skip_upload_screenshots: true, # Don't upload screenshots - we manage them manually in Play Console
+      json_key_data: google_play_service_account_key
+    )
+  end
+end
+
