@@ -22,6 +22,10 @@ import { type FileRecord } from '../stores/files'
 import { useFileList } from '../stores/library'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import { type MainStackParamList } from '../stacks/types'
+import {
+  detailsShouldAutoDownload,
+  useAutoDownload,
+} from '../hooks/useAutoDownload'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'FileDetail'>
 
@@ -211,22 +215,24 @@ export function FileDetailScreen({ route, navigation }: Props) {
   const renderFileItem = useCallback(
     ({ item }: { item: FileRecord }) => {
       return (
-        <View style={[styles.swipePage, { width }]}>
-          {viewStyle === 'consume' ? (
-            renderConsumeView(item)
-          ) : (
-            <FileDetails
-              file={item}
-              header={
-                <FileDetailScreenHeader
-                  file={item}
-                  title={item?.name ?? 'Details'}
-                  navigation={navigation}
-                />
-              }
-            />
-          )}
-        </View>
+        <AutoDownload file={item}>
+          <View style={[styles.swipePage, { width }]}>
+            {viewStyle === 'consume' ? (
+              renderConsumeView(item)
+            ) : (
+              <FileDetails
+                file={item}
+                header={
+                  <FileDetailScreenHeader
+                    file={item}
+                    title={item?.name ?? 'Details'}
+                    navigation={navigation}
+                  />
+                }
+              />
+            )}
+          </View>
+        </AutoDownload>
       )
     },
     [navigation, renderConsumeView, viewStyle, width]
@@ -363,3 +369,14 @@ const normalizeIdentifier = (touch: NativeTouchEvent) =>
   touch.identifier != null
     ? String(touch.identifier)
     : `${touch.pageX}-${touch.pageY}`
+
+function AutoDownload({
+  file,
+  children,
+}: {
+  file: FileRecord
+  children: React.ReactNode
+}) {
+  useAutoDownload(file, detailsShouldAutoDownload)
+  return children
+}

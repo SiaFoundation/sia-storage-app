@@ -37,7 +37,6 @@ export function FileViewer({
   const { type, name } = file
   const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
-  useAutoDownload(file, detailsShouldAutoDownload)
   const fileDownload = useDownload(file)
   const fileDownloadState = useDownloadState(file.id)
 
