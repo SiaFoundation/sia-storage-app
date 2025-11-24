@@ -24,6 +24,7 @@ import { migration_0002_add_thumbnail_columns } from './0002_add_thumbnail_colum
 import { migration_0003_add_updated_at_index } from './0003_add_updated_at_index'
 import { migration_0004_add_fs_table } from './0004_add_fs_table'
 import { migration_0005_migrate_settings_to_async } from './0005_migrate_settings_to_async'
+import { migration_0006_migrate_lost_files_from_media_library } from './0006_migrate_lost_files_from_media_library'
 
 const migrations: Migration[] = [
   migration_0001_init_schema,
@@ -31,6 +32,7 @@ const migrations: Migration[] = [
   migration_0003_add_updated_at_index,
   migration_0004_add_fs_table,
   migration_0005_migrate_settings_to_async,
+  migration_0006_migrate_lost_files_from_media_library,
 ]
 
 export async function runMigrations(
