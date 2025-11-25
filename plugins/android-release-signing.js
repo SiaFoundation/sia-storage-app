@@ -18,6 +18,24 @@ const DEFAULTS = {
 
 const SIGNING_TAG = '// Added by android-release-signing plugin.'
 
+function isReleaseBuild() {
+  if (process.env.PROD) {
+    return process.env.PROD === 'true'
+  }
+
+  const easProfile = process.env.EAS_BUILD_PROFILE
+  if (easProfile) {
+    return ['production', 'release'].includes(easProfile.toLowerCase())
+  }
+
+  const gradleTask = process.env.ANDROID_GRADLE_TASK
+  if (gradleTask) {
+    return gradleTask.toLowerCase().includes('release')
+  }
+
+  return false
+}
+
 function ensureProperty(modResults, key, value) {
   if (value === undefined || value === null) {
     return
@@ -225,6 +243,10 @@ function stripSigningConfigAssignments(contents) {
 }
 
 function withAndroidReleaseSigning(config, rawOptions = {}) {
+  if (!isReleaseBuild()) {
+    return config
+  }
+
   const options = {
     ...DEFAULTS,
     ...rawOptions,
