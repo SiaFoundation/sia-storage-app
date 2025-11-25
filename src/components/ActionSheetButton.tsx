@@ -66,9 +66,11 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     fontSize: 16,
+    color: palette.gray[100],
     opacity: 0.3,
   },
   disabledIcon: {
-    opacity: 0.3,
+    color: palette.gray[100],
+    opacity: 0.7,
   },
 })
