@@ -39,7 +39,11 @@ export function VideoPlayer({
         ref={videoRef}
         style={StyleSheet.absoluteFill}
         player={player}
-        allowsFullscreen
+        fullscreenOptions={{
+          enable: true,
+          orientation: 'default',
+          autoExitOnRotate: false,
+        }}
         allowsPictureInPicture
         contentFit="contain"
         nativeControls={showNativeControls}
