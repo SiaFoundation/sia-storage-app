@@ -10,7 +10,7 @@ import {
 import { iconColors } from './BottomControlBar'
 import { openSheet } from '../stores/sheets'
 import { useShareAction } from '../hooks/useShareAction'
-import { View } from 'react-native'
+import { View, useWindowDimensions } from 'react-native'
 import { IconButton } from './IconButton'
 import { BottomControlBar } from './BottomControlBar'
 
@@ -28,8 +28,14 @@ export function FileDetailsControlBar({
   const { handleShareFile, handleShareURL, canShare } = useShareAction({
     fileId: fileID,
   })
+  const { width, height } = useWindowDimensions()
+  const isLandscape = width > height
+  const controlBarStyle = isLandscape
+    ? { width: '80%', maxWidth: 420 }
+    : { width: '90%', maxWidth: 600 }
+
   return (
-    <BottomControlBar style={{ width: '90%', maxWidth: 600 }}>
+    <BottomControlBar style={controlBarStyle}>
       <View
         style={{
           flex: 1,

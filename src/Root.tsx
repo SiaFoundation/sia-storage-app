@@ -6,6 +6,7 @@ import {
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native'
+import * as ScreenOrientation from 'expo-screen-orientation'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { ToastProvider } from './lib/toastContext'
 import { initApp, shutdownApp, useShowSplash } from './stores/app'
@@ -41,6 +42,14 @@ export function Root() {
     return () => {
       shutdownApp()
     }
+  }, [])
+
+  useEffect(() => {
+    ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP
+    ).catch(() => {
+      // Ignore failures caused by platform limitations or missing permissions.
+    })
   }, [])
 
   useLinkedURL((shareUrl) => {

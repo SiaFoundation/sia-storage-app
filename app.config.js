@@ -6,7 +6,7 @@ export default {
     slug: PROD ? 'siastorage' : 'siastoragedev',
     scheme: 'sia',
     version: '1.0.0',
-    orientation: 'portrait',
+    orientation: 'default',
     icon: PROD ? './assets/app-icon-ios.png' : './assets/app-icon-ios-dev.png',
     userInterfaceStyle: 'dark',
     newArchEnabled: true,

@@ -1,7 +1,6 @@
-import { Platform, StyleSheet, ViewStyle } from 'react-native'
-import { WebView } from 'react-native-webview'
+import { StyleSheet, ViewStyle } from 'react-native'
 import Pdf from 'react-native-pdf'
-import { useMemo } from 'react'
+import { blackA } from '../../styles/colors'
 
 export function PDFViewer({
   source,
@@ -10,45 +9,19 @@ export function PDFViewer({
   source: string
   style?: ViewStyle
 }) {
-  const allowingDir = useMemo(() => {
-    if (!source.startsWith('file://')) return undefined
-    return source.replace(/[^/]+$/, '')
-  }, [source])
-
-  const pdfSource = useMemo(
-    () => ({
-      uri: source,
-    }),
-    [source]
-  )
-
-  // The webview does not support PDF files on Android.
-  if (Platform.OS === 'android') {
-    return (
-      <Pdf
-        maxScale={4}
-        minScale={1}
-        spacing={8}
-        enablePaging
-        source={pdfSource}
-        style={[styles.webview, style]}
-        trustAllCerts={false}
-        enableAntialiasing
-      />
-    )
-  }
-
-  // Continue using the webview on other platforms because its nicer to use.
   return (
-    <WebView
-      style={[styles.webview, style]}
-      originWhitelist={['*']}
+    <Pdf
+      fitPolicy={2}
+      maxScale={8}
+      minScale={1}
       source={{ uri: source }}
-      allowingReadAccessToURL={allowingDir}
+      style={[styles.pdf, style]}
+      trustAllCerts={false}
+      enableAntialiasing
     />
   )
 }
 
 const styles = StyleSheet.create({
-  webview: { flex: 1 },
+  pdf: { flex: 1, backgroundColor: blackA['a20'] },
 })
