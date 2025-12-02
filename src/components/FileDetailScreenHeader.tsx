@@ -25,7 +25,12 @@ export function FileDetailScreenHeader({
   const status = useFileStatus(file)
   const insets = useSafeAreaInsets()
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 2 }]}>
+    <View
+      style={[
+        styles.headerContainer,
+        { paddingTop: insets.top + 2, paddingHorizontal: 12 },
+      ]}
+    >
       <View style={styles.headerRow}>
         <IconButton onPress={() => navigation.goBack()}>
           {icon === 'back' ? (
@@ -48,7 +53,6 @@ export function FileDetailScreenHeader({
 const styles = StyleSheet.create({
   headerContainer: { backgroundColor: palette.gray[950], paddingBottom: 8 },
   headerRow: {
-    marginHorizontal: 10,
     height: 44,
     flexDirection: 'row',
     alignItems: 'center',

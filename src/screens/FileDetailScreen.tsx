@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   StyleSheet,
-  FlatList,
   useWindowDimensions,
   type GestureResponderEvent,
   type NativeTouchEvent,
@@ -11,6 +10,9 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useFocusEffect } from '@react-navigation/native'
+import * as ScreenOrientation from 'expo-screen-orientation'
+import PagerView from 'react-native-pager-view'
 
 import { FileDetails } from '../components/FileDetails'
 import { FileDetailsControlBar } from '../components/FileDetailsControlBar'
@@ -42,7 +44,13 @@ export function FileDetailScreen({ route, navigation }: Props) {
   const [activeFileID, setActiveFileID] = useState(route.params.id)
   const [areControlsVisible, setAreControlsVisible] = useState(false)
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false)
-  const { top: topInset } = useSafeAreaInsets()
+  const [currentPageIndex, setCurrentPageIndex] = useState<number | null>(null)
+  const [layoutWidth, setLayoutWidth] = useState<number | null>(null)
+  const {
+    top: topInset,
+    left: leftInset,
+    right: rightInset,
+  } = useSafeAreaInsets()
   const tapStateRef = useRef<TapState | null>(null)
   const shouldIgnoreNextToggleRef = useRef(false)
 
@@ -62,15 +70,31 @@ export function FileDetailScreen({ route, navigation }: Props) {
     [files, activeFileID]
   )
 
-  const flatListRef = useRef<FlatList<FileRecord>>(null)
+  const pagerRef = useRef<PagerView>(null)
   const hasAlignedInitialIndex = useRef(false)
 
   const initialTargetIndex = useMemo(
     () => files.findIndex((item) => item.id === route.params.id),
     [files, route.params.id]
   )
-  const canPage = files.length > 0 && initialTargetIndex !== -1
   const initialIndex = initialTargetIndex === -1 ? 0 : initialTargetIndex
+  const activeIndex = useMemo(
+    () => files.findIndex((item) => item.id === activeFileID),
+    [activeFileID, files]
+  )
+  const canPage = files.length > 0 && initialTargetIndex !== -1
+  const activeIndexForWindow = activeIndex === -1 ? initialIndex : activeIndex
+  const windowStart = Math.max(0, activeIndexForWindow - 1)
+  const windowEnd = Math.min(files.length, activeIndexForWindow + 2)
+  const windowFiles = useMemo(
+    () => files.slice(windowStart, windowEnd),
+    [files, windowEnd, windowStart]
+  )
+  const initialWindowPage = Math.max(0, activeIndexForWindow - windowStart)
+  const availableWidth = useMemo(() => {
+    const safeWidth = width - leftInset - rightInset
+    return layoutWidth ?? safeWidth
+  }, [layoutWidth, leftInset, rightInset, width])
 
   const { handleEndReached } = useFlatListControls({
     data: fileList,
@@ -80,23 +104,83 @@ export function FileDetailScreen({ route, navigation }: Props) {
     hasMore,
   })
 
+  const loadMoreIfAvailable = useCallback(
+    (index: number) => {
+      if (index >= files.length - 2) {
+        handleEndReached()
+      }
+    },
+    [files.length, handleEndReached]
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.DEFAULT
+      ).catch(() => {
+        // We would end up here because of a platform error or permissions issue.
+        // It can likely be ignored.
+      })
+
+      return () => {
+        ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP
+        ).catch(() => {
+          // We would end up here because of a platform error or permissions issue.
+          // It can likely be ignored.
+        })
+      }
+    }, [])
+  )
+
   useEffect(() => {
     setActiveFileID(route.params.id)
     hasAlignedInitialIndex.current = false
   }, [route.params.id])
 
+  const lastAlignedWidthRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!canPage) return
+    if (activeIndex === -1) return
+    const targetPage = activeIndex - windowStart
+    if (targetPage < 0 || targetPage >= windowFiles.length) return
+
+    const widthChanged = lastAlignedWidthRef.current !== availableWidth
+    const needsPageChange =
+      currentPageIndex == null || currentPageIndex !== activeIndex
+
+    if (needsPageChange || widthChanged) {
+      requestAnimationFrame(() => {
+        pagerRef.current?.setPageWithoutAnimation(targetPage)
+      })
+      lastAlignedWidthRef.current = availableWidth
+      setCurrentPageIndex(activeIndex)
+    }
+  }, [
+    availableWidth,
+    canPage,
+    currentPageIndex,
+    activeIndex,
+    windowFiles.length,
+    windowStart,
+  ])
+
   useEffect(() => {
     if (!canPage || hasAlignedInitialIndex.current) return
-    const index = initialIndex
+    const index = activeIndexForWindow
+    const targetPage = index - windowStart
+    if (targetPage < 0 || targetPage >= windowFiles.length) return
     requestAnimationFrame(() => {
       try {
-        flatListRef.current?.scrollToIndex({ index, animated: false })
+        pagerRef.current?.setPageWithoutAnimation(targetPage)
       } catch (e) {
-        // ignore until list is ready
+        // ignore until pager is ready
       }
     })
+    setCurrentPageIndex(index)
     hasAlignedInitialIndex.current = true
-  }, [canPage, initialIndex, route.params.id])
+  }, [activeIndexForWindow, canPage, route.params.id, windowFiles.length, windowStart])
 
   useEffect(() => {
     AccessibilityInfo.isScreenReaderEnabled().then(setIsScreenReaderEnabled)
@@ -117,16 +201,18 @@ export function FileDetailScreen({ route, navigation }: Props) {
     [viewStyle]
   )
 
-  const handleMomentumEnd = useCallback(
-    (event: { nativeEvent: { contentOffset: { x: number } } }) => {
-      if (!files.length) return
-      const index = Math.round(event.nativeEvent.contentOffset.x / width)
-      const next = files[index]
+  const handlePageSelected = useCallback(
+    (event: { nativeEvent: { position: number } }) => {
+      const position = event.nativeEvent.position
+      const fileIndex = windowStart + position
+      const next = files[fileIndex]
       if (next && next.id !== activeFileID) {
         setActiveFileID(next.id)
       }
+      setCurrentPageIndex(fileIndex)
+      loadMoreIfAvailable(fileIndex)
     },
-    [files, width, activeFileID]
+    [activeFileID, files, loadMoreIfAvailable, windowStart]
   )
 
   const handleTouchStart = useCallback((event: GestureResponderEvent) => {
@@ -212,60 +298,47 @@ export function FileDetailScreen({ route, navigation }: Props) {
     ]
   )
 
-  const renderFileItem = useCallback(
-    ({ item }: { item: FileRecord }) => {
-      return (
-        <AutoDownload file={item}>
-          <View style={[styles.swipePage, { width }]}>
-            {viewStyle === 'consume' ? (
-              renderConsumeView(item)
-            ) : (
-              <FileDetails
-                file={item}
-                header={
-                  <FileDetailScreenHeader
-                    file={item}
-                    title={item?.name ?? 'Details'}
-                    navigation={navigation}
-                  />
-                }
-              />
-            )}
-          </View>
-        </AutoDownload>
-      )
+  const handleLayout = useCallback(
+    (event: { nativeEvent: { layout: { width: number } } }) => {
+      setLayoutWidth(event.nativeEvent.layout.width)
     },
-    [navigation, renderConsumeView, viewStyle, width]
-  )
-
-  const flatListExtraData = useMemo(
-    () => ({ viewStyle, areControlsVisible }),
-    [areControlsVisible, viewStyle]
+    []
   )
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleLayout}>
       {canPage && file ? (
-        <FlatList
-          ref={flatListRef}
-          horizontal
-          pagingEnabled
-          data={files}
-          renderItem={renderFileItem}
-          keyExtractor={(item) => item.id}
-          showsHorizontalScrollIndicator={false}
-          initialScrollIndex={initialIndex}
-          getItemLayout={(_, index) => ({
-            length: width,
-            offset: width * index,
-            index,
-          })}
-          onMomentumScrollEnd={handleMomentumEnd}
-          onEndReached={handleEndReached}
-          onEndReachedThreshold={0.7}
-          windowSize={3}
-          extraData={flatListExtraData}
-        />
+        <PagerView
+          ref={pagerRef}
+          style={styles.pager}
+          initialPage={initialWindowPage}
+          onPageSelected={handlePageSelected}
+        >
+          {windowFiles.map((item, idx) => (
+            <View
+              key={`${item.id}-${windowStart + idx}`}
+              collapsable={false}
+              style={[styles.swipePage, { width: availableWidth }]}
+            >
+              <AutoDownload file={item}>
+                {viewStyle === 'consume' ? (
+                  renderConsumeView(item)
+                ) : (
+                  <FileDetails
+                    file={item}
+                    header={
+                      <FileDetailScreenHeader
+                        file={item}
+                        title={item?.name ?? 'Details'}
+                        navigation={navigation}
+                      />
+                    }
+                  />
+                )}
+              </AutoDownload>
+            </View>
+          ))}
+        </PagerView>
       ) : (
         file &&
         (viewStyle === 'consume' ? (
@@ -334,6 +407,7 @@ export function FileDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.gray[950], zIndex: 1 },
+  pager: { flex: 1 },
   swipePage: { flex: 1 },
   consumeContainer: { flex: 1 },
   headerOverlay: {
