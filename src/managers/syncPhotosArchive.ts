@@ -1,5 +1,5 @@
 import * as MediaLibrary from 'expo-media-library'
-import { logger } from '../lib/logger'
+import { serviceLog } from '../lib/logger'
 import { settingsSwr } from '../stores/settings'
 import { processAssets } from '../lib/processAssets'
 import { librarySwr } from '../stores/library'
@@ -35,11 +35,11 @@ export async function workBackward() {
       resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
-      logger.log('[syncPhotosArchive] archive is fully synced')
+      serviceLog('[syncPhotosArchive] archive is fully synced')
       await setPhotosArchiveCursor(0)
       return
     }
-    logger.log('[syncPhotosArchive] batch size', page.assets.length)
+    serviceLog('[syncPhotosArchive] batch size', page.assets.length)
     const lastAssetCreationTime =
       page.assets[page.assets.length - 1].creationTime ?? 0
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime - 1 : 0
@@ -61,7 +61,7 @@ export async function workBackward() {
       return 0
     }
   } catch (e) {
-    logger.log('[syncPhotosArchive] batch error', e)
+    serviceLog('[syncPhotosArchive] batch error', e)
   }
 }
 
@@ -105,11 +105,11 @@ export async function setPhotosArchiveCursor(value: number) {
 }
 
 export async function restartPhotosArchiveCursor() {
-  logger.log('[syncPhotosArchive] restarting photos archive sync cursor')
+  serviceLog('[syncPhotosArchive] restarting photos archive sync cursor')
   await setPhotosArchiveCursor(Date.now())
 }
 
 export async function resetPhotosArchiveCursor() {
-  logger.log('[syncPhotosArchive] disabling photos archive sync cursor')
+  serviceLog('[syncPhotosArchive] disabling photos archive sync cursor')
   await setPhotosArchiveCursor(defaultValue)
 }

@@ -1,4 +1,4 @@
-import { logger } from '../lib/logger'
+import { serviceLog } from '../lib/logger'
 import BackgroundFetch, {
   BackgroundFetchConfig,
 } from 'react-native-background-fetch'
@@ -79,7 +79,7 @@ const taskStates: Record<TaskId, TaskState> = {
 }
 
 export async function initBackgroundTasks() {
-  logger.log(`[backgroundTask] init`)
+  serviceLog(`[backgroundTask] init`)
 
   const status = await BackgroundFetch.configure(
     {
@@ -90,7 +90,7 @@ export async function initBackgroundTasks() {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
       if (!config) {
-        logger.log(`[backgroundTask] unknown task id: ${taskId}`)
+        serviceLog(`[backgroundTask] unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
@@ -104,7 +104,7 @@ export async function initBackgroundTasks() {
       const state = taskStates[taskId as TaskId]
       transitionTaskState(state, 'finished')
       if (!config) {
-        logger.log(`[backgroundTask] unknown task id: ${taskId}`)
+        serviceLog(`[backgroundTask] unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
@@ -117,7 +117,7 @@ export async function initBackgroundTasks() {
     }
   )
 
-  logger.log('[backgroundTask] configure status: ', status)
+  serviceLog('[backgroundTask] configure status: ', status)
 
   // Schedule custom background processing task on iOS.
   if (Platform.OS === 'ios') {
@@ -129,11 +129,11 @@ export async function initBackgroundTasks() {
         delay: secondsInMs(5),
         ...sharedConfig,
       })
-      logger.log(
+      serviceLog(
         `[backgroundTask] scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`
       )
     } catch (error) {
-      logger.log(
+      serviceLog(
         `[backgroundTask] scheduleTask failed for ${bgProcessingTaskConfig.id}:`,
         error
       )
@@ -194,7 +194,7 @@ function delay(ms: number) {
 
 function logTask(config: TaskConfig) {
   return (message: string) => {
-    logger.log(
+    serviceLog(
       `[${new Date().toISOString()}][${config.type}][${config.id}] ${message}`
     )
   }

@@ -1,4 +1,4 @@
-import { logger } from '../lib/logger'
+import { serviceLog } from '../lib/logger'
 import {
   fileMetadataKeys,
   readAllFileRecords,
@@ -147,12 +147,12 @@ export async function setSyncUpCursor(
  */
 export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   if (!getIsConnected()) {
-    logger.log('[syncUpMetadata] not connected to indexer, skipping')
+    serviceLog('[syncUpMetadata] not connected to indexer, skipping')
     return
   }
   const indexerURL = await getIndexerURL()
   const after = await getSyncUpCursor()
-  logger.log(
+  serviceLog(
     `[syncUpMetadata] service tick: from ${after?.id ?? 'begin'} after=${
       after?.updatedAt
     }`
@@ -170,7 +170,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       : undefined,
   })
   if (batch.length === 0) {
-    logger.log('[syncUpMetadata] no new updates')
+    serviceLog('[syncUpMetadata] no new updates')
     return
   }
   for (const f of batch) {
@@ -182,7 +182,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       const diffs = diffFileMetadata(f, remoteMeta)
       if (Object.keys(diffs).length === 0) continue
       const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
-      logger.log(
+      serviceLog(
         formatDiff({
           fileId: f.id,
           objectId: obj.id,
@@ -196,7 +196,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
         await updateMetadata(remote, encodeFileMetadata(f))
       }
     } catch (e) {
-      logger.log('[syncUpMetadata] error', e)
+      serviceLog('[syncUpMetadata] error', e)
     }
   }
   const last = batch[batch.length - 1]
@@ -205,7 +205,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       updatedAt: last.updatedAt + 1,
       id: last.id,
     })
-    logger.log('[syncUpMetadata] end reached')
+    serviceLog('[syncUpMetadata] end reached')
   } else {
     await setSyncUpCursor({
       updatedAt: last.updatedAt,
