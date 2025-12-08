@@ -1,4 +1,8 @@
-jest.mock('./src/lib/logger', () => ({ logger: { log: jest.fn() } }))
+jest.mock('./src/lib/logger', () => ({
+  LOG_SERVICES: true,
+  logger: { log: jest.fn(), sdk: jest.fn(), clear: jest.fn() },
+  serviceLog: jest.fn(),
+}))
 
 // Ensure expo-constants is available for transitive expo modules (expo-asset/SQLite).
 jest.mock('expo-constants', () => ({ EXDevLauncher: undefined }))

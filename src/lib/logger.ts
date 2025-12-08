@@ -14,6 +14,10 @@ export const rustLogger = {
   },
 }
 
+// Flip this to false locally to silence service logs in dev.
+// Saving this file likely crashes your dev app.
+const logServices = true
+
 export const logger = {
   log: (...args: any[]) => {
     console.log(...args)
@@ -22,4 +26,15 @@ export const logger = {
     console.log(...args)
   },
   clear: () => {},
+}
+
+/**
+ * Logs messages from background services and periodic tasks.
+ * In development mode, logging can be toggled using the `logServices` flag.
+ * In production, all service logs are always output.
+ */
+export const serviceLog = (...args: any[]) => {
+  if (!__DEV__ || logServices) {
+    logger.log(...args)
+  }
 }
