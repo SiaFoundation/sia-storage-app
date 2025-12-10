@@ -48,10 +48,11 @@ export function FileViewer({
     textTopInset && textTopInset > 0 ? textTopInset : undefined
 
   const onDownloadPress = useCallback(() => {
+    if (onViewerControlPress) onViewerControlPress()
     if (isDownloading) return
     if (customDownloader) customDownloader()
     else fileDownload()
-  }, [isDownloading, customDownloader, fileDownload])
+  }, [isDownloading, customDownloader, fileDownload, onViewerControlPress])
 
   const lowerCasedFileName = useMemo(() => name?.toLowerCase() ?? '', [name])
 
