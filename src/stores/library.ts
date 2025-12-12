@@ -37,29 +37,13 @@ async function readOrderedFileRecords(
   } = opts ?? {}
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
-  const hasCategories = prefixes.length > 0
-  const hasQuery = typeof query === 'string' && query.trim().length > 0
-
-  const whereParts: string[] = []
-  const params: (string | number | null)[] = []
-  // Exclude thumbnails from library lists.
-  whereParts.push('thumbForHash IS NULL')
-  if (hasCategories) {
-    whereParts.push(prefixes.map(() => 'type LIKE ?').join(' OR '))
-    params.push(...prefixes.map((p) => `${p}%`))
-  }
-  if (hasQuery) {
-    whereParts.push('name LIKE ? COLLATE NOCASE ESCAPE "\\"')
-    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
-    params.push(`%${escaped}%`)
-  }
-  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
-
-  const orderExpr =
-    sortBy === 'NAME'
-      ? `(name IS NULL) ASC, name COLLATE NOCASE ${dir}, id ${dir}`
-      : `createdAt ${dir}, id ${dir}`
+  const { where, params, orderExpr } = buildLibraryQueryParts({
+    sortBy,
+    sortDir: dir,
+    categories,
+    query,
+    tableAlias: 'files',
+  })
 
   let pageClause = ''
   if (limit != null && offset != null) {
@@ -147,6 +131,59 @@ export type SortBy = 'NAME' | 'DATE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
 export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
+
+export function buildLibraryQueryParts(
+  opts: {
+    sortBy?: SortBy
+    sortDir?: SortDir
+    categories?: Category[]
+    query?: string
+    tableAlias?: string
+  } = {}
+): {
+  where: string
+  params: (string | number)[]
+  orderExpr: string
+} {
+  const {
+    sortBy = 'DATE',
+    sortDir,
+    categories = [],
+    query,
+    tableAlias = 'files',
+  } = opts
+  const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+
+  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
+  const hasCategories = prefixes.length > 0
+  const hasQuery = typeof query === 'string' && query.trim().length > 0
+
+  const whereParts: string[] = []
+  const params: (string | number)[] = []
+  // Exclude thumbnails from library lists.
+  whereParts.push(`${tableAlias}.thumbForHash IS NULL`)
+  if (hasCategories) {
+    whereParts.push(
+      prefixes.map(() => `${tableAlias}.type LIKE ?`).join(' OR ')
+    )
+    params.push(...prefixes.map((p) => `${p}%`))
+  }
+  if (hasQuery) {
+    whereParts.push(
+      `${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE "\\"`
+    )
+    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
+    params.push(`%${escaped}%`)
+  }
+  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
+
+  const orderExpr =
+    sortBy === 'NAME'
+      ? `(${tableAlias}.name IS NULL) ASC, ${tableAlias}.name COLLATE NOCASE ${dir}, ${tableAlias}.id ${dir}`
+      : `${tableAlias}.createdAt ${dir}, ${tableAlias}.id ${dir}`
+
+  return { where, params, orderExpr }
+}
 
 type LibraryState = {
   sortBy: SortBy
