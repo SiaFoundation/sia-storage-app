@@ -12,7 +12,7 @@ export async function readLocalObjectsForFile(
   fileId: string
 ): Promise<LocalObject[]> {
   const rows = await db().getAllAsync<LocalObjectRow>(
-    `SELECT id, fileId, indexerURL, slabs, encryptedMasterKey, encryptedMetadata, signature, createdAt, updatedAt
+    `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId = ?`,
     fileId
   )
@@ -31,9 +31,11 @@ export async function upsertLocalObject(
       indexerURL: e.indexerURL,
       id: e.id,
       slabs: e.slabs,
-      encryptedMasterKey: e.encryptedMasterKey,
+      encryptedDataKey: e.encryptedDataKey,
+      encryptedMetadataKey: e.encryptedMetadataKey,
       encryptedMetadata: e.encryptedMetadata,
-      signature: e.signature,
+      dataSignature: e.dataSignature,
+      metadataSignature: e.metadataSignature,
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
     },
@@ -55,7 +57,7 @@ export async function readLocalObjectsForFiles(
   if (fileIds.length === 0) return {}
   const placeholders = fileIds.map(() => '?').join(',')
   const rows = await db().getAllAsync<LocalObjectRow>(
-    `SELECT id, fileId, indexerURL, slabs, encryptedMasterKey, encryptedMetadata, signature, createdAt, updatedAt
+    `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId IN (${placeholders})`,
     ...fileIds
   )

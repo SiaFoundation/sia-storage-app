@@ -9,9 +9,11 @@ const localObjectStorageCodec = z.codec(
     fileId: z.string(),
     indexerURL: z.string(),
     slabs: z.string(),
-    encryptedMasterKey: z.hex(),
+    encryptedDataKey: z.hex(),
+    encryptedMetadataKey: z.hex(),
     encryptedMetadata: z.hex(),
-    signature: z.hex(),
+    dataSignature: z.hex(),
+    metadataSignature: z.hex(),
     createdAt: z.number(),
     updatedAt: z.number(),
   }),
@@ -20,9 +22,11 @@ const localObjectStorageCodec = z.codec(
     fileId: z.string(),
     indexerURL: z.string(),
     slabs: z.array(slabSchema),
-    encryptedMasterKey: z.instanceof(ArrayBuffer),
+    encryptedDataKey: z.instanceof(ArrayBuffer),
+    encryptedMetadataKey: z.instanceof(ArrayBuffer),
     encryptedMetadata: z.instanceof(ArrayBuffer),
-    signature: z.instanceof(ArrayBuffer),
+    dataSignature: z.instanceof(ArrayBuffer),
+    metadataSignature: z.instanceof(ArrayBuffer),
     createdAt: z.date(),
     updatedAt: z.date(),
   }),
@@ -32,9 +36,13 @@ const localObjectStorageCodec = z.codec(
       fileId: stored.fileId,
       indexerURL: stored.indexerURL,
       slabs: slabsStorageCodec.decode(stored.slabs),
-      encryptedMasterKey: hexArrayBufferCodec.decode(stored.encryptedMasterKey),
+      encryptedDataKey: hexArrayBufferCodec.decode(stored.encryptedDataKey),
+      encryptedMetadataKey: hexArrayBufferCodec.decode(
+        stored.encryptedMetadataKey
+      ),
       encryptedMetadata: hexArrayBufferCodec.decode(stored.encryptedMetadata),
-      signature: hexArrayBufferCodec.decode(stored.signature),
+      dataSignature: hexArrayBufferCodec.decode(stored.dataSignature),
+      metadataSignature: hexArrayBufferCodec.decode(stored.metadataSignature),
       createdAt: isoToEpochCodec.decode(stored.createdAt),
       updatedAt: isoToEpochCodec.decode(stored.updatedAt),
     }),
@@ -43,9 +51,11 @@ const localObjectStorageCodec = z.codec(
       fileId: po.fileId,
       indexerURL: po.indexerURL,
       slabs: slabsStorageCodec.encode(po.slabs),
-      encryptedMasterKey: hexArrayBufferCodec.encode(po.encryptedMasterKey),
+      encryptedDataKey: hexArrayBufferCodec.encode(po.encryptedDataKey),
+      encryptedMetadataKey: hexArrayBufferCodec.encode(po.encryptedMetadataKey),
       encryptedMetadata: hexArrayBufferCodec.encode(po.encryptedMetadata),
-      signature: hexArrayBufferCodec.encode(po.signature),
+      dataSignature: hexArrayBufferCodec.encode(po.dataSignature),
+      metadataSignature: hexArrayBufferCodec.encode(po.metadataSignature),
       createdAt: isoToEpochCodec.encode(po.createdAt),
       updatedAt: isoToEpochCodec.encode(po.updatedAt),
     }),
@@ -60,9 +70,11 @@ export type LocalObjectRow = {
   fileId: string
   indexerURL: string
   slabs: string
-  encryptedMasterKey: string
+  encryptedDataKey: string
+  encryptedMetadataKey: string
   encryptedMetadata: string
-  signature: string
+  dataSignature: string
+  metadataSignature: string
   createdAt: number
   updatedAt: number
 }
@@ -73,9 +85,11 @@ export function localObjectToStorageRow(lo: LocalObject): LocalObjectRow {
     fileId: lo.fileId,
     indexerURL: lo.indexerURL,
     slabs: lo.slabs,
-    encryptedMasterKey: lo.encryptedMasterKey,
+    encryptedDataKey: lo.encryptedDataKey,
+    encryptedMetadataKey: lo.encryptedMetadataKey,
     encryptedMetadata: lo.encryptedMetadata,
-    signature: lo.signature,
+    dataSignature: lo.dataSignature,
+    metadataSignature: lo.metadataSignature,
     createdAt: lo.createdAt,
     updatedAt: lo.updatedAt,
   })
@@ -84,9 +98,11 @@ export function localObjectToStorageRow(lo: LocalObject): LocalObjectRow {
     fileId: e.fileId,
     indexerURL: e.indexerURL,
     slabs: e.slabs,
-    encryptedMasterKey: e.encryptedMasterKey,
+    encryptedDataKey: e.encryptedDataKey,
+    encryptedMetadataKey: e.encryptedMetadataKey,
     encryptedMetadata: e.encryptedMetadata,
-    signature: e.signature,
+    dataSignature: e.dataSignature,
+    metadataSignature: e.metadataSignature,
     createdAt: Number(e.createdAt),
     updatedAt: Number(e.updatedAt),
   }
@@ -98,9 +114,11 @@ export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
     fileId: row.fileId,
     indexerURL: row.indexerURL,
     slabs: row.slabs,
-    encryptedMasterKey: row.encryptedMasterKey,
+    encryptedDataKey: row.encryptedDataKey,
+    encryptedMetadataKey: row.encryptedMetadataKey,
     encryptedMetadata: row.encryptedMetadata,
-    signature: row.signature,
+    dataSignature: row.dataSignature,
+    metadataSignature: row.metadataSignature,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   })
