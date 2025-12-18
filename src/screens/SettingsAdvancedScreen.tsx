@@ -1,6 +1,5 @@
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
-import { SettingsRecoveryPhrase } from '../components/SettingsRecoveryPhrase'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { SettingsAdvancedAccount } from '../components/SettingsAdvancedAccount'
 import { SettingsAdvancedDangerZone } from '../components/SettingsAdvancedDangerZone'
@@ -15,7 +14,6 @@ export function SettingsAdvancedScreen(props: Props) {
   return (
     <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <SettingsAdvancedAccount />
-      <SettingsRecoveryPhrase />
       <SettingsAdvancedInfo {...props} />
       <SettingsAdvancedDangerZone />
     </SettingsScrollLayout>

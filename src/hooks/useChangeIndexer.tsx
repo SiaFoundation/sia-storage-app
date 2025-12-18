@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useToast } from '../lib/toastContext'
-import { setIndexerURL, useIndexerURL } from '../stores/settings'
+import { useIndexerURL } from '../stores/settings'
 import { useInputValue } from './useInputValue'
-import { onboardIndexer } from '../stores/app'
+import { authenticateIndexer } from '../stores/sdk'
 
 function validateURL(url: string) {
   try {
@@ -13,6 +13,15 @@ function validateURL(url: string) {
   }
 }
 
+export type ConnectResult =
+  | { status: 'connected' }
+  | { status: 'needsMnemonic' }
+  | { status: 'error' }
+
+/**
+ * Hook for onboarding indexer selection.
+ * Used by SwitchIndexerScreen to manage indexer input and auth flow.
+ */
 export function useChangeIndexer() {
   const [isWaiting, setIsWaiting] = useState(false)
   const [hasErrored, setHasErrored] = useState(false)
@@ -23,7 +32,11 @@ export function useChangeIndexer() {
     value: indexerURL.data ?? '',
   })
 
-  const saveAndOnboard = useCallback(async () => {
+  /**
+   * Attempts connection to the selected indexer.
+   * Returns result indicating whether already connected, needs mnemonic, or errored.
+   */
+  const connectToIndexer = useCallback(async (): Promise<ConnectResult> => {
     const newUrl = newIndexerInputProps.value
     setHasErrored(false)
     setIsWaiting(true)
@@ -31,24 +44,29 @@ export function useChangeIndexer() {
     if (!isValid) {
       toast.show('Invalid URL')
       setIsWaiting(false)
-      return
-    }
-    const result = await onboardIndexer(newUrl)
-    if (result === 'success') {
-      toast.show('Indexer connected')
-      setIndexerURL(newUrl)
-    } else if (result === 'cancelled') {
-      toast.show('Authorization cancelled')
-    } else {
-      toast.show('Failed to connect')
       setHasErrored(true)
+      return { status: 'error' }
     }
+    const [result, error] = await authenticateIndexer(newUrl)
     setIsWaiting(false)
+    if (error) {
+      if (error.type === 'cancelled') {
+        toast.show('Authorization cancelled')
+      } else {
+        toast.show(error.message)
+      }
+      setHasErrored(true)
+      return { status: 'error' }
+    }
+    if (result.alreadyConnected) {
+      return { status: 'connected' }
+    }
+    return { status: 'needsMnemonic' }
   }, [newIndexerInputProps.value, toast])
 
   return {
     newIndexerInputProps,
-    saveAndOnboard,
+    connectToIndexer,
     isWaiting,
     hasErrored,
   }

@@ -1,29 +1,42 @@
+import { useCallback, useState } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { palette } from '../styles/colors'
-import { useIsConnected } from '../stores/sdk'
+import { useIsConnected, reconnectIndexer } from '../stores/sdk'
 import { DotIcon } from 'lucide-react-native'
 import { RowGroup } from '../components/Group'
 import { Button } from '../components/Button'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
-import { InputRow } from '../components/InputRow'
 import { useIndexerURL } from '../stores/settings'
-import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { useSettingsHeader } from '../hooks/useSettingsHeader'
 import { humanSize } from '../lib/humanSize'
 import { useAccount } from '../hooks/useAccount'
+import { useToast } from '../lib/toastContext'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type SettingsStackParamList } from '../stacks/types'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'Indexer'>
 
-export function SettingsIndexerScreen(_props: Props) {
+export function SettingsIndexerScreen({ navigation }: Props) {
   const isConnected = useIsConnected()
   const currentIndexerURL = useIndexerURL()
-  const { newIndexerInputProps, saveAndOnboard, isWaiting } = useChangeIndexer()
+  const toast = useToast()
+  const [isReconnecting, setIsReconnecting] = useState(false)
   useSettingsHeader()
   const account = useAccount()
+
+  const handleReconnect = useCallback(async () => {
+    setIsReconnecting(true)
+    const success = await reconnectIndexer()
+    setIsReconnecting(false)
+    toast.show(success ? 'Reconnected' : 'Failed to reconnect')
+  }, [toast])
+
+  const handleSwitchIndexers = useCallback(() => {
+    navigation.navigate('SwitchIndexer')
+  }, [navigation])
+
   return (
     <SettingsScrollLayout style={{ paddingHorizontal: 24, gap: 24 }}>
       <RowGroup
@@ -72,25 +85,17 @@ export function SettingsIndexerScreen(_props: Props) {
           ) : null}
         </InfoCard>
       </RowGroup>
-      <View style={{ gap: 10 }}>
-        <RowGroup title="Switch Indexers">
-          <InfoCard>
-            <InputRow
-              label="URL"
-              {...newIndexerInputProps}
-              placeholder="https://example.com"
-            />
-          </InfoCard>
-        </RowGroup>
-        <Button onPress={saveAndOnboard}>
-          {currentIndexerURL.data === newIndexerInputProps.value
-            ? isWaiting
-              ? 'Reconnecting...'
-              : 'Reconnect'
-            : isWaiting
-            ? 'Connecting...'
-            : 'Connect'}
+
+      <View style={{ gap: 12 }}>
+        <Button
+          variant="secondary"
+          onPress={handleReconnect}
+          disabled={isReconnecting}
+        >
+          {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
         </Button>
+
+        <Button onPress={handleSwitchIndexers}>Switch Indexers</Button>
       </View>
     </SettingsScrollLayout>
   )
