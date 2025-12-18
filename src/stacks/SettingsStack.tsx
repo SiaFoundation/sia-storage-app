@@ -9,6 +9,7 @@ import { type SettingsStackParamList } from './types'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
 import { SettingsDebugScreen } from '../screens/SettingsDebugScreen'
+import { SwitchIndexerStack } from './SwitchIndexerStack'
 import { StyleSheet } from 'react-native'
 import { palette } from '../styles/colors'
 
@@ -63,6 +64,13 @@ export function SettingsStack() {
         component={SettingsDebugScreen}
         options={{ title: 'Debug' }}
       />
+      <Stack.Group screenOptions={{ presentation: 'fullScreenModal' }}>
+        <Stack.Screen
+          name="SwitchIndexer"
+          component={SwitchIndexerStack}
+          options={{ headerShown: false }}
+        />
+      </Stack.Group>
     </Stack.Navigator>
   )
 }

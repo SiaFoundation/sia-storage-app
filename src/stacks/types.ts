@@ -5,22 +5,29 @@ export type MainStackParamList = {
   FileDetail: { id: string }
 }
 
+export type SwitchIndexerStackParamList = {
+  SwitchIndexer: undefined
+  SwitchRecoveryPhrase: { indexerURL: string }
+  SwitchFinished: { indexerURL: string }
+}
+
 export type SettingsStackParamList = {
   SettingsHome: undefined
   Hosts: undefined
   HostDetail: { publicKey: string }
   Indexer: undefined
+  SwitchIndexer: NavigatorScreenParams<SwitchIndexerStackParamList> | undefined
   Sync: undefined
   Logs: undefined
   Advanced: undefined
   Debug: undefined
 }
 
-export type AuthStackParamList = {
+export type OnboardingStackParamList = {
   Welcome: undefined
-  RecoveryPhrase: undefined
   ChooseIndexer: undefined
-  FinishedOnboarding: undefined
+  RecoveryPhrase: { indexerURL: string }
+  FinishedOnboarding: { indexerURL: string }
 }
 
 export type ImportStackParamList = {

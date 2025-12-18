@@ -1,87 +1,70 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import {
   StyleSheet,
   View,
   Text,
-  TextInput,
   Platform,
   Pressable,
   ScrollView,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { AuthStackParamList } from '../stacks/types'
+import type { RouteProp } from '@react-navigation/native'
+import type { OnboardingStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { useToast } from '../lib/toastContext'
-import { useRecoveryPhrase, setRecoveryPhrase } from '../stores/settings'
-import {
-  generateRecoveryPhrase,
-  validateRecoveryPhrase,
-} from 'react-native-sia'
+import { generateRecoveryPhrase } from 'react-native-sia'
 import { useCopyRecoveryPhrase } from '../hooks/useCopyRecoveryPhrase'
 import { logger } from '../lib/logger'
+import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
+import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
+import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistration'
 
-const normalizeRecoveryPhrase = (phrase: string) => {
-  const trimmed = phrase.trim()
-  if (!trimmed) {
-    return ''
-  }
-
-  return trimmed.replace(/\s+/g, ' ').toLowerCase()
-}
-
-export default function RecoveryPhraseScreen() {
-  const nav = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
+export default function OnboardingRecoveryPhraseScreen() {
+  const nav =
+    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
+  const route =
+    useRoute<RouteProp<OnboardingStackParamList, 'RecoveryPhrase'>>()
+  const { indexerURL } = route.params
   const { top, bottom } = useSafeAreaInsets()
   const toast = useToast()
   const copyRecoveryPhrase = useCopyRecoveryPhrase()
-  const recoveryPhrase = useRecoveryPhrase()
+  const [recoveryPhrase, setRecoveryPhrase] = useState('')
 
   const [ackSaved, setAckSaved] = useState(false)
   const [mode, setMode] = useState<'generated' | 'manual'>('generated')
   const [manualPhrase, setManualPhrase] = useState('')
 
-  const normalizedManualPhrase = useMemo(
-    () => normalizeRecoveryPhrase(manualPhrase),
-    [manualPhrase]
-  )
+  const { normalizedManualPhrase, isManualPhraseValid, manualValidationError } =
+    useRecoveryPhraseValidation(manualPhrase)
 
-  const { isValid: isManualPhraseValid, error: manualValidationError } =
-    useMemo(() => {
-      if (!normalizedManualPhrase) {
-        return { isValid: false, error: null as string | null }
+  const { register, isSubmitting } = useRecoveryPhraseRegistration()
+
+  const handleContinue = async () => {
+    try {
+      const phrase =
+        mode === 'generated' ? recoveryPhrase : normalizedManualPhrase
+      const { success } = await register(phrase, indexerURL)
+      if (success) {
+        nav.navigate('FinishedOnboarding', { indexerURL })
       }
-
-      try {
-        validateRecoveryPhrase(normalizedManualPhrase)
-        setRecoveryPhrase(normalizedManualPhrase)
-        return { isValid: true, error: null }
-      } catch (e) {
-        if (__DEV__) logger.log('Recovery phrase validation failed:', e)
-
-        const message =
-          e instanceof Error
-            ? e.message
-            : typeof e === 'string'
-            ? e
-            : 'Invalid recovery phrase.'
-
-        return { isValid: false, error: message }
-      }
-    }, [normalizedManualPhrase])
+    } catch (err) {
+      logger.log('Error completing recovery phrase setup', err)
+    }
+  }
 
   const makeNewRecoveryPhrase = async () => {
-    await setRecoveryPhrase(generateRecoveryPhrase())
+    setRecoveryPhrase(generateRecoveryPhrase())
     setAckSaved(false)
   }
 
   const canContinue =
     mode === 'generated'
-      ? Boolean(recoveryPhrase.data) && ackSaved
+      ? Boolean(recoveryPhrase) && ackSaved
       : isManualPhraseValid && ackSaved
 
   return (
@@ -127,7 +110,7 @@ export default function RecoveryPhraseScreen() {
                   keyboardShouldPersistTaps="handled"
                 >
                   <Text style={styles.phraseText} selectable>
-                    {recoveryPhrase.data ?? ''}
+                    {recoveryPhrase ?? ''}
                   </Text>
                 </ScrollView>
               </View>
@@ -160,46 +143,14 @@ export default function RecoveryPhraseScreen() {
             </>
           ) : (
             <>
-              <View
-                style={[
-                  styles.inputBox,
-                  isManualPhraseValid
-                    ? styles.inputBoxValid
-                    : normalizedManualPhrase
-                    ? styles.inputBoxInvalid
-                    : styles.inputBoxNeutral,
-                ]}
-              >
-                <TextInput
-                  value={manualPhrase}
-                  onChangeText={setManualPhrase}
-                  placeholder="Enter your 12 or 24 word recovery phrase"
-                  placeholderTextColor={palette.gray[500]}
-                  multiline
-                  scrollEnabled
-                  style={styles.textInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  textAlignVertical="center"
-                  submitBehavior="blurAndSubmit"
-                  returnKeyType="done"
-                />
-              </View>
-
-              {normalizedManualPhrase ? (
-                <Text
-                  style={[
-                    styles.validationText,
-                    isManualPhraseValid
-                      ? styles.validationTextValid
-                      : styles.validationTextInvalid,
-                  ]}
-                >
-                  {isManualPhraseValid
-                    ? 'Recovery phrase is valid.'
-                    : manualValidationError ?? 'Invalid recovery phrase.'}
-                </Text>
-              ) : null}
+              <RecoveryPhraseInput
+                value={manualPhrase}
+                onChangeText={setManualPhrase}
+                isValid={isManualPhraseValid}
+                normalizedValue={normalizedManualPhrase}
+                validationError={manualValidationError}
+                editable={!isSubmitting}
+              />
 
               <Pressable onPress={() => setMode('generated')}>
                 <Text style={styles.toggleText}>
@@ -229,10 +180,10 @@ export default function RecoveryPhraseScreen() {
         </Pressable>
 
         <Button
-          onPress={() => nav.navigate('ChooseIndexer')}
-          disabled={!canContinue}
+          onPress={handleContinue}
+          disabled={!canContinue || isSubmitting}
         >
-          Continue
+          {isSubmitting ? 'Connecting...' : 'Continue'}
         </Button>
       </View>
     </SafeAreaView>
@@ -292,36 +243,6 @@ const styles = StyleSheet.create({
       default: 'monospace',
     }),
   },
-
-  inputBox: {
-    height: 90,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: '#000',
-  },
-  inputBoxNeutral: { borderColor: palette.gray[700] },
-  inputBoxValid: { borderColor: palette.green[500] },
-  inputBoxInvalid: { borderColor: palette.red[500] },
-
-  textInput: {
-    color: palette.gray[100],
-    fontSize: 14,
-    lineHeight: 20,
-    paddingVertical: 0,
-    flex: 1,
-    textAlign: 'left',
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
-  },
-
-  validationText: { fontSize: 13 },
-  validationTextValid: { color: palette.green[500] },
-  validationTextInvalid: { color: palette.red[500] },
 
   actionsRow: { flexDirection: 'row', gap: 12 },
   button: { flex: 1 },

@@ -3,7 +3,7 @@ import { StyleSheet, View, Animated, Easing, Text } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { AuthStackParamList } from '../stacks/types'
+import type { OnboardingStackParamList } from '../stacks/types'
 import { Button } from '../components/Button'
 import BlocksGrid from '../components/BlocksGrid'
 import { SHAPES } from '../components/BlocksShape'
@@ -18,8 +18,9 @@ const gridDimTarget = 0.12
 const gridDimDurationMs = 1400
 const contentFadeDurationMs = 1200
 
-export default function WelcomeScreen() {
-  const nav = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
+export default function OnboardingWelcomeScreen() {
+  const nav =
+    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
 
   const gridOpacity = useRef(new Animated.Value(1)).current
@@ -86,7 +87,7 @@ export default function WelcomeScreen() {
       >
         <Button
           style={styles.footerButton}
-          onPress={() => nav.navigate('RecoveryPhrase')}
+          onPress={() => nav.navigate('ChooseIndexer')}
         >
           Get Started
         </Button>

@@ -15,7 +15,7 @@ import { setHasOnboarded } from '../stores/settings'
 import { palette } from '../styles/colors'
 import BlocksShape from '../components/BlocksShape'
 
-export default function FinishedOnboardingScreen() {
+export default function OnboardingFinishedScreen() {
   const { height: screenHeight } = useWindowDimensions()
   const { top, bottom } = useSafeAreaInsets()
   const gridHeight = Math.round(screenHeight * 2.2)

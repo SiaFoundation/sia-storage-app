@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { MainStack } from './MainStack'
 import { SettingsStack } from './SettingsStack'
 import { type RootTabParamList } from './types'
-import { AuthStack } from './AuthStack'
+import { OnboardingStack } from './OnboardingStack'
 import { useHasOnboarded } from '../stores/settings'
 import { ImportStack } from './ImportStack'
 
@@ -12,7 +12,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>()
 export function RootTabs() {
   const hasOnboarded = useHasOnboarded()
   if (!hasOnboarded.data) {
-    return <AuthStack />
+    return <OnboardingStack />
   }
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }}>

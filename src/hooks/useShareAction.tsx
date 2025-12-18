@@ -18,9 +18,12 @@ export function useShareAction({ fileId }: { fileId: string }) {
     if (!file) return
     if (!sdk) return
 
-    const sealedObject = getOneSealedObject(file)
-    if (!sealedObject) return
-    const pinnedObject = await getPinnedObject(sealedObject)
+    const result = getOneSealedObject(file)
+    if (!result) return
+    const pinnedObject = await getPinnedObject(
+      result.indexerURL,
+      result.sealedObject
+    )
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
     return generateSiaShareUrl(sdk, pinnedObject, expiresAt)

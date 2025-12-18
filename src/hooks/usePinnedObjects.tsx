@@ -1,19 +1,31 @@
 import { PinnedObject, PinnedObjectInterface } from 'react-native-sia'
-import { getAppKey } from '../lib/appKey'
+import { getAppKeyForIndexer } from '../stores/appKey'
 import useSWR from 'swr'
 import { FileRecord } from '../stores/files'
+import { logger } from '../lib/logger'
 
 export function usePinnedObjects(file: FileRecord) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(
     ['pinnedObjects', file.id],
     async () => {
       const objects = Object.entries(file.objects)
-      return await Promise.all(
-        objects.map(async ([indexerURL, so]) => ({
-          indexerURL,
-          pinnedObject: PinnedObject.open(await getAppKey(), so),
-        }))
+      const results = await Promise.all(
+        objects.map(async ([indexerURL, so]) => {
+          const appKey = await getAppKeyForIndexer(indexerURL)
+          if (!appKey) {
+            // TODO: Figure out how to handle this situation.
+            logger.log(
+              `[usePinnedObjects] fileId=${file.id} indexerURL=${indexerURL} No AppKey found`
+            )
+            return null
+          }
+          return {
+            indexerURL,
+            pinnedObject: PinnedObject.open(appKey, so),
+          }
+        })
       )
+      return results.filter((o) => o !== null)
     }
   )
 }
