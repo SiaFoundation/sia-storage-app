@@ -1,7 +1,7 @@
-import { PinnedObjectInterface, Sdk } from 'react-native-sia'
+import { PinnedObjectInterface, SdkInterface } from 'react-native-sia'
 
 export function generateSiaShareUrl(
-  sdk: Sdk,
+  sdk: SdkInterface,
   pinnedObject: PinnedObjectInterface,
   expiresAt: Date
 ) {

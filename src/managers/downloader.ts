@@ -13,7 +13,7 @@ import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
 import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
-import { getAppKey } from '../lib/appKey'
+import { getAppKeyForIndexer } from '../stores/appKey'
 import { FileLocalMetadata, FileRecord } from '../stores/files'
 import { File } from 'expo-file-system'
 
@@ -23,11 +23,12 @@ export function useDownload(file?: FileRecord | null) {
   return useCallback(async () => {
     if (!file) return
     if (!sdk) return
-    const sealedObject = getOneSealedObject(file)
-    if (!sealedObject) {
+    const result = getOneSealedObject(file)
+    if (!result) {
       toast.show('No slabs available for this file')
       return
     }
+    const { indexerURL, sealedObject } = result
     const downloadState = getDownloadState(file.id)
     if (
       downloadState?.status === 'running' ||
@@ -39,7 +40,10 @@ export function useDownload(file?: FileRecord | null) {
       id: file.id,
       task: async (signal) => {
         if (!sdk) throw new Error('SDK not initialized')
-        const appKey = await getAppKey()
+        const appKey = await getAppKeyForIndexer(indexerURL)
+        if (!appKey) {
+          throw new Error(`No AppKey found for indexer: ${indexerURL}`)
+        }
         const downloader = await sdk.download(
           PinnedObject.open(appKey, sealedObject),
           {

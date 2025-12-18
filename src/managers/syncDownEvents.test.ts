@@ -20,7 +20,7 @@ import { getIndexerURL } from '../stores/settings'
 import { removeFsFile } from '../stores/fs'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { cancelUpload } from '../stores/uploads'
-import { getAppKey } from '../lib/appKey'
+import { getAppKeyForIndexer } from '../stores/appKey'
 
 jest.mock('../stores/sdk', () => ({
   getIsConnected: jest.fn(),
@@ -39,8 +39,8 @@ jest.mock('../stores/tempFs', () => ({
 jest.mock('../stores/uploads', () => ({
   cancelUpload: jest.fn(),
 }))
-jest.mock('../lib/appKey', () => ({
-  getAppKey: jest.fn(),
+jest.mock('../stores/appKey', () => ({
+  getAppKeyForIndexer: jest.fn(),
 }))
 
 function makeLocalObject(params: {
@@ -115,7 +115,7 @@ const getIndexerURLMock = jest.mocked(getIndexerURL)
 const removeFsFileMock = jest.mocked(removeFsFile)
 const removeTempDownloadFileMock = jest.mocked(removeTempDownloadFile)
 const cancelUploadMock = jest.mocked(cancelUpload)
-const getAppKeyMock = jest.mocked(getAppKey)
+const getAppKeyForIndexerMock = jest.mocked(getAppKeyForIndexer)
 const getIsConnectedMock = jest.mocked(getIsConnected)
 
 const cursorIncrement = 1
@@ -133,7 +133,7 @@ describe('syncDownEvents', () => {
     removeFsFileMock.mockResolvedValue(undefined)
     removeTempDownloadFileMock.mockResolvedValue(undefined)
     cancelUploadMock.mockReturnValue(undefined)
-    getAppKeyMock.mockResolvedValue({} as any)
+    getAppKeyForIndexerMock.mockResolvedValue({} as any)
   })
 
   afterEach(async () => {
@@ -191,7 +191,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -238,7 +238,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -287,7 +287,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -349,7 +349,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -380,7 +380,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -436,7 +436,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -515,7 +515,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -556,7 +556,7 @@ describe('syncDownEvents', () => {
     ]
 
     jest.mocked(getSdk).mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -606,7 +606,7 @@ describe('syncDownEvents', () => {
     ]
 
     jest.mocked(getSdk).mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     // Simulate error during file system removal.
@@ -624,7 +624,7 @@ describe('syncDownEvents', () => {
 
   test('error in update event breaks loop without advancing cursor', async () => {
     const mockSdk = {
-      objects: jest.fn(),
+      objectEvents: jest.fn(),
     }
     jest.mocked(getSdk).mockReturnValue(mockSdk as any)
 
@@ -663,10 +663,12 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    mockSdk.objects.mockResolvedValueOnce(events)
+    mockSdk.objectEvents.mockResolvedValueOnce(events)
 
     // Simulate error during seal operation by making appKey throw.
-    jest.mocked(getAppKey).mockRejectedValueOnce(new Error('AppKey error'))
+    jest
+      .mocked(getAppKeyForIndexer)
+      .mockRejectedValueOnce(new Error('AppKey error'))
 
     await syncDownEvents()
 
@@ -700,7 +702,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest.fn().mockResolvedValueOnce(events),
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
     await syncDownEvents()
@@ -751,7 +753,7 @@ describe('syncDownEvents', () => {
     ]
 
     getSdkMock.mockReturnValue({
-      objects: jest
+      objectEvents: jest
         .fn()
         .mockResolvedValueOnce(events1)
         .mockResolvedValueOnce(events2),

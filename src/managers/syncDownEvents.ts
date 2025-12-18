@@ -71,7 +71,7 @@ export async function syncDownEvents(): Promise<void> {
         `[syncDownEvents] syncing from id=${cursor?.key} after=${cursor?.after}`
       )
 
-      const events = await sdk.objects(cursor, batchSize)
+      const events = await sdk.objectEvents(cursor, batchSize)
 
       // If the batch size is 1, we are probably synced and repeatedly polling the last event.
       if (events.length === 1) {
