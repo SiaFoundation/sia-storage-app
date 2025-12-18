@@ -222,8 +222,9 @@ export async function readAllFileRecords(
   >(
     `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.localId, f.hash, f.addedAt, f.thumbForHash, f.thumbSize,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
-            o.encryptedMasterKey as encryptedMasterKey, o.encryptedMetadata as encryptedMetadata,
-            o.signature as signature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
+            o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
+            o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
+            o.metadataSignature as metadataSignature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
      FROM files f
      LEFT JOIN objects o ON o.fileId = f.id
      ${where}

@@ -22,7 +22,9 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       type TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
-      hash TEXT NOT NULL UNIQUE
+      hash TEXT NOT NULL UNIQUE,
+      thumbForHash TEXT,
+      thumbSize INTEGER
     );`
     )
 
@@ -46,6 +48,16 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       `CREATE INDEX IF NOT EXISTS idx_files_fileName_nocase_id ON files(name COLLATE NOCASE, id);`
     )
 
+    // Index for sync queries on updatedAt.
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_files_updatedAt_id ON files(updatedAt, id);`
+    )
+
+    // Index to efficiently select thumbnails for an original and size bucket.
+    await db.execAsync(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_files_thumbForHash_thumbSize ON files(thumbForHash, thumbSize);`
+    )
+
     // Create the objects table.
     await db.execAsync(
       `CREATE TABLE IF NOT EXISTS objects (
@@ -53,9 +65,11 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       indexerURL TEXT NOT NULL,
       id TEXT NOT NULL,
       slabs TEXT NOT NULL,
-      encryptedMasterKey TEXT NOT NULL,
+      encryptedDataKey TEXT NOT NULL,
+      encryptedMetadataKey TEXT NOT NULL,
       encryptedMetadata TEXT NOT NULL,
-      signature TEXT NOT NULL,
+      dataSignature TEXT NOT NULL,
+      metadataSignature TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
       PRIMARY KEY (indexerURL, id),
@@ -72,6 +86,25 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(
       `CREATE INDEX IF NOT EXISTS idx_objects_fileId ON objects(fileId);`
     )
+
+    // Create the fs table.
+    // Metadata table that mirrors files on disk so we can track usage,
+    // limit the total size of local storage, and evict unused files.
+    await db.execAsync(
+      `CREATE TABLE IF NOT EXISTS fs (
+      fileId TEXT PRIMARY KEY,
+      size INTEGER NOT NULL,
+      addedAt INTEGER NOT NULL,
+      usedAt INTEGER NOT NULL
+    );`
+    )
+
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_fs_addedAt ON fs(addedAt);`
+    )
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`
+    )
   } catch (e) {
     logger.log('[db] error running migration 0001_init_schema', e)
     throw e
@@ -80,6 +113,6 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
 
 export const migration_0001_init_schema: Migration = {
   id: '0001_init_schema',
-  description: 'Initialize core storage schema.',
+  description: 'Initialize storage schema.',
   up,
 }
