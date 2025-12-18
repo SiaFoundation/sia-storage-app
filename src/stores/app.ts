@@ -1,14 +1,8 @@
 import { create } from 'zustand'
 import { createGetterAndSelector } from '../lib/selectors'
 import { deleteAllFileRecords } from './files'
-import { getHasOnboarded, setRecoveryPhrase, setHasOnboarded } from './settings'
-import {
-  initSdk,
-  reconnect,
-  resetSdk,
-  tryToConnectAndSet,
-  type ConnectResult,
-} from './sdk'
+import { getHasOnboarded, setHasOnboarded } from './settings'
+import { reconnectIndexer, resetSdk } from './sdk'
 import { initUploadScanner } from '../managers/uploadScanner'
 import { cancelAllUploads } from './uploads'
 import { cancelAllDownloads } from './downloads'
@@ -34,6 +28,8 @@ import { initThumbnailScanner } from '../managers/thumbnailScanner'
 import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
 import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
+import { clearAppKeys } from './appKey'
+import { clearMnemonicHash } from './mnemonic'
 
 export type InitStep = {
   id: string
@@ -93,13 +89,8 @@ export async function initApp(): Promise<void> {
       id: 'connect',
       label: 'Connecting to indexer',
       message: 'Initializing SDK...',
-      runner: async (updateDetail) => {
-        const sdk = await initSdk()
-        if (!sdk) {
-          throw new Error('Failed to initialize SDK.')
-        }
-        updateDetail('Connecting to indexer...')
-        const connected = await reconnect()
+      runner: async () => {
+        const connected = await reconnectIndexer()
         if (!connected) {
           throw new Error('Failed to connect to indexer.')
         }
@@ -129,12 +120,6 @@ export async function initApp(): Promise<void> {
   endInitState()
 }
 
-export async function onboardIndexer(
-  indexerURL: string
-): Promise<ConnectResult> {
-  return tryToConnectAndSet(indexerURL)
-}
-
 function cancelAllTransfers() {
   cancelAllUploads()
   cancelAllDownloads()
@@ -162,7 +147,8 @@ export async function resetApp() {
       message: 'Clearing data...',
       runner: async () => {
         await resetData()
-        await setRecoveryPhrase('')
+        await clearAppKeys()
+        await clearMnemonicHash()
         await setHasOnboarded(false)
         await resetSdk()
         await resetPhotosNewCursor()

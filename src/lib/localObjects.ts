@@ -1,5 +1,5 @@
 import { PinnedObjectInterface } from 'react-native-sia'
-import { getAppKey } from './appKey'
+import { getAppKeyForIndexer } from '../stores/appKey'
 import { LocalObject } from '../encoding/localObject'
 
 export async function pinnedObjectToLocalObject(
@@ -7,7 +7,11 @@ export async function pinnedObjectToLocalObject(
   indexerURL: string,
   pinnedObject: PinnedObjectInterface
 ): Promise<LocalObject> {
-  const sealedObject = pinnedObject.seal(await getAppKey())
+  const appKey = await getAppKeyForIndexer(indexerURL)
+  if (!appKey) {
+    throw new Error(`No AppKey found for indexer: ${indexerURL}`)
+  }
+  const sealedObject = pinnedObject.seal(appKey)
   return {
     ...sealedObject,
     fileId,

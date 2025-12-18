@@ -1,4 +1,4 @@
-import { Sdk, encodedSize } from 'react-native-sia'
+import { SdkInterface, encodedSize } from 'react-native-sia'
 import { File } from 'expo-file-system'
 import { updateUploadProgress } from '../stores/uploads'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
@@ -15,7 +15,7 @@ import { FileRecordRow } from '../stores/files'
 export async function uploadToNetwork(params: {
   file: FileRecordRow
   fileUri: string
-  sdk: Sdk
+  sdk: SdkInterface
   indexerURL: string
   signal: AbortSignal
 }): Promise<void> {

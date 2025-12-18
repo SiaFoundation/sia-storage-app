@@ -11,7 +11,7 @@ import {
   SealedObject,
 } from 'react-native-sia'
 import { LocalObject } from '../encoding/localObject'
-import { getAppKey } from './appKey'
+import { getAppKeyForIndexer } from '../stores/appKey'
 import { SWRResponse } from 'swr'
 import useSWR from 'swr'
 
@@ -111,13 +111,20 @@ export function getFileTypeName(
 
 export function getOneSealedObject(file: {
   objects: Record<string, LocalObject> | null
-}): SealedObject | null {
-  const objects = Object.values(file.objects ?? {})
-  return objects[0] ?? null
+}): { indexerURL: string; sealedObject: SealedObject } | null {
+  const entries = Object.entries(file.objects ?? {})
+  if (entries.length === 0) return null
+  const [indexerURL, sealedObject] = entries[0]
+  return { indexerURL, sealedObject }
 }
 
 export async function getPinnedObject(
+  indexerURL: string,
   sealedObject: SealedObject
 ): Promise<PinnedObjectInterface> {
-  return PinnedObject.open(await getAppKey(), sealedObject)
+  const appKey = await getAppKeyForIndexer(indexerURL)
+  if (!appKey) {
+    throw new Error(`No AppKey found for indexer: ${indexerURL}`)
+  }
+  return PinnedObject.open(appKey, sealedObject)
 }

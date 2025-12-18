@@ -1,4 +1,3 @@
-import { setSecureStoreString, getSecureStoreString } from './secureStore'
 import {
   setAsyncStorageBoolean,
   getAsyncStorageBoolean,
@@ -11,26 +10,7 @@ import { DEFAULT_INDEXER_URL } from '../config'
 
 export const settingsSwr = buildSWRHelpers('settings')
 
-// Recovery Phrase
-
-export const [getRecoveryPhrase, useRecoveryPhrase] = createGetterAndSWRHook(
-  settingsSwr.getKey('recoveryPhrase'),
-  async () => getSecureStoreString<string>('recoveryPhrase', '')
-)
-
-export async function setRecoveryPhrase(
-  recoveryPhrase: string
-): Promise<boolean> {
-  try {
-    await setSecureStoreString('recoveryPhrase', recoveryPhrase)
-    settingsSwr.triggerChange('recoveryPhrase')
-    return true
-  } catch {
-    return false
-  }
-}
-
-// Indexer
+// Active Indexer URL
 
 export const [getIndexerURL, useIndexerURL] = createGetterAndSWRHook(
   settingsSwr.getKey('indexerURL'),
