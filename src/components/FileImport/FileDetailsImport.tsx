@@ -4,10 +4,6 @@ import { useFileStatus } from '../../lib/file'
 import { FileMetaImport } from './FileMetaImport'
 import { FileViewer } from '../FileViewer'
 import { useDownloadFromShareURL } from '../../managers/downloader'
-import {
-  detailsShouldAutoDownload,
-  useAutoDownloadFromShareURL,
-} from '../../hooks/useAutoDownload'
 import { FileRecord } from '../../stores/files'
 
 export function FileDetailsImport({
@@ -19,11 +15,6 @@ export function FileDetailsImport({
 }) {
   const status = useFileStatus(file, true)
   const handleDownload = useDownloadFromShareURL()
-
-  // If the file is less than 4 MB, go ahead and download it to the user
-  // device. We might look at a settings toggle for this or otherwise more
-  // smartly do this depending on whether a user is on wifi, etc.
-  useAutoDownloadFromShareURL(file, detailsShouldAutoDownload, shareUrl)
 
   return (
     <View style={styles.container}>

@@ -1,12 +1,7 @@
 import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { useCallback, useMemo } from 'react'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
-
 import { useFileStatus } from '../../lib/file'
-import {
-  useAutoDownload,
-  detailsShouldAutoDownload,
-} from '../../hooks/useAutoDownload'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'

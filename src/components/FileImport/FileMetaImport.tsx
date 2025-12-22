@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { View, StyleSheet } from 'react-native'
+import { View, StyleSheet, Text } from 'react-native'
 import { colors } from '../../styles/colors'
 import { type FileStatus } from '../../lib/file'
 import { InfoCard } from '../InfoCard'
@@ -29,15 +29,54 @@ export function FileMetaImport({
 
   const showAdvanced = useShowAdvanced()
 
+  const hasValidSize = file.size > 0
+  const hasValidType = file.type && file.type !== 'application/octet-stream'
+  const hasValidHash = !!file.hash
+
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
           {showAdvanced.data && <LabeledValueRow label="ID" value={file.id} />}
-          <LabeledValueRow label="Size" value={humanSize ?? '—'} />
+          <LabeledValueRow
+            label="Size"
+            value={
+              hasValidSize ? (
+                humanSize ?? '—'
+              ) : (
+                <View style={styles.unknownValue}>
+                  <Text style={styles.unknownText}>unknown</Text>
+                  <View style={styles.requiredIndicator} />
+                </View>
+              )
+            }
+          />
           <LabeledValueRow
             label="Type"
-            value={file.type ?? '—'}
+            value={
+              hasValidType ? (
+                file.type
+              ) : (
+                <View style={styles.unknownValue}>
+                  <Text style={styles.unknownText}>unknown</Text>
+                  <View style={styles.requiredIndicator} />
+                </View>
+              )
+            }
+            showDividerTop
+          />
+          <LabeledValueRow
+            label="Hash"
+            value={
+              hasValidHash ? (
+                file.hash
+              ) : (
+                <View style={styles.unknownValue}>
+                  <Text style={styles.unknownText}>unknown</Text>
+                  <View style={styles.requiredIndicator} />
+                </View>
+              )
+            }
             showDividerTop
           />
           {showAdvanced.data && status.fileUri && (
@@ -83,5 +122,20 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+  },
+  unknownValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  unknownText: {
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  requiredIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.textDanger,
   },
 })

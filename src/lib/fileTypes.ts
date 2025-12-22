@@ -1,3 +1,5 @@
+import { detectMimeType } from './detectMimeType'
+
 export const MimeTypes = [
   // video
   'video/quicktime',
@@ -64,12 +66,15 @@ function getMimeTypeFromPath(path: string | undefined): MimeType | null {
   return map[ext] ?? null
 }
 
-/** Detect the mimeType from available fields. */
-export function getMimeType(asset: {
+/**
+ * Detect the mimeType from available fields.
+ * Uses file path, name, and magic number sniffing as fallbacks.
+ */
+export async function getMimeType(asset: {
   type?: string
   name?: string
   uri?: string
-}): MimeType {
+}): Promise<MimeType> {
   const typeFromType = isMimeType(asset.type) ? asset.type : null
   if (typeFromType) {
     return typeFromType
@@ -81,6 +86,12 @@ export function getMimeType(asset: {
   const typeFromName = getMimeTypeFromPath(asset.name)
   if (typeFromName) {
     return typeFromName
+  }
+  if (asset.uri) {
+    const typeFromData = await detectMimeType(asset.uri)
+    if (typeFromData) {
+      return typeFromData
+    }
   }
   return 'application/octet-stream'
 }

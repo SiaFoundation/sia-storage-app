@@ -164,7 +164,7 @@ export async function ensureThumbnailForSize(params: {
     const thumbId = uniqueId()
     const thumbFileInfo = {
       id: thumbId,
-      type: getMimeType({ type: 'image/webp', name: 'thumbnail.webp' }),
+      type: await getMimeType({ type: 'image/webp', name: 'thumbnail.webp' }),
       localId: null,
     }
     const fileUri = await copyFileToFs(thumbFileInfo, new File(result.uri))
