@@ -1,8 +1,8 @@
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import BackgroundFetch, {
   BackgroundFetchConfig,
 } from 'react-native-background-fetch'
-import { secondsInMs } from '../lib/time'
+import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
 import { getFileCountLocal } from '../stores/files'
 import BackgroundTimer from 'react-native-background-timer'
@@ -79,7 +79,7 @@ const taskStates: Record<TaskId, TaskState> = {
 }
 
 export async function initBackgroundTasks() {
-  serviceLog(`[backgroundTask] init`)
+  logger.info('backgroundTask', 'init')
 
   const status = await BackgroundFetch.configure(
     {
@@ -90,7 +90,7 @@ export async function initBackgroundTasks() {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
       if (!config) {
-        serviceLog(`[backgroundTask] unknown task id: ${taskId}`)
+        logger.warn('backgroundTask', `unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
@@ -104,7 +104,7 @@ export async function initBackgroundTasks() {
       const state = taskStates[taskId as TaskId]
       transitionTaskState(state, 'finished')
       if (!config) {
-        serviceLog(`[backgroundTask] unknown task id: ${taskId}`)
+        logger.warn('backgroundTask', `unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
@@ -117,7 +117,7 @@ export async function initBackgroundTasks() {
     }
   )
 
-  serviceLog('[backgroundTask] configure status: ', status)
+  logger.info('backgroundTask', `configure status: ${status}`)
 
   // Schedule custom background processing task on iOS.
   if (Platform.OS === 'ios') {
@@ -126,15 +126,17 @@ export async function initBackgroundTasks() {
       const scheduled = await BackgroundFetch.scheduleTask({
         taskId: bgProcessingTaskConfig.id,
         periodic: true,
-        delay: secondsInMs(5),
+        delay: minutesInMs(31),
         ...sharedConfig,
       })
-      serviceLog(
-        `[backgroundTask] scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`
+      logger.info(
+        'backgroundTask',
+        `scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`
       )
     } catch (error) {
-      serviceLog(
-        `[backgroundTask] scheduleTask failed for ${bgProcessingTaskConfig.id}:`,
+      logger.error(
+        'backgroundTask',
+        `scheduleTask failed for ${bgProcessingTaskConfig.id}:`,
         error
       )
     }
@@ -194,9 +196,7 @@ function delay(ms: number) {
 
 function logTask(config: TaskConfig) {
   return (message: string) => {
-    serviceLog(
-      `[${new Date().toISOString()}][${config.type}][${config.id}] ${message}`
-    )
+    logger.debug('backgroundTask', `[${config.type}][${config.id}] ${message}`)
   }
 }
 

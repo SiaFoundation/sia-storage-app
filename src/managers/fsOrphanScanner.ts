@@ -1,6 +1,6 @@
 import { FS_ORPHAN_FREQUENCY } from '../config'
 import { db } from '../db'
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import {
   deleteFsFileMetadata,
@@ -49,22 +49,24 @@ export async function runFsOrphanScanner(): Promise<
         removed += 1
         await deleteFsFileMetadata(fileId)
         await fsTriggerRefresh(fileId)
-        serviceLog(
-          `[fsOrphanScanner] removed unindexed file fileId=${fileId} uri=${file.uri}`
+        logger.info(
+          'fsOrphanScanner',
+          `removed unindexed file fileId=${fileId} uri=${file.uri}`
         )
       } catch (error) {
-        serviceLog(
-          `[fsOrphanScanner] failed to delete file fileId=${fileId} uri=${file.uri} error=${error}`
+        logger.error(
+          'fsOrphanScanner',
+          `failed to delete file fileId=${fileId} uri=${file.uri} error=${error}`
         )
       }
     }
 
     if (removed > 0) {
-      serviceLog(`[fsOrphanScanner] summary removed=${removed}`)
+      logger.info('fsOrphanScanner', `summary removed=${removed}`)
     }
     return { removed }
   } catch (error) {
-    serviceLog('[fsOrphanScanner] error during scan', error)
+    logger.error('fsOrphanScanner', 'error during scan', error)
   } finally {
     await setFsOrphanLastRun()
   }

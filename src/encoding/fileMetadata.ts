@@ -23,7 +23,11 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
   try {
     return transformFileMetadata(JSON.parse(new TextDecoder().decode(buffer)))
   } catch (e) {
-    logger.log('Error converting file metadata from buffer', e)
+    logger.error(
+      'fileMetadata',
+      'Error converting file metadata from buffer',
+      e
+    )
     return {
       name: '',
       size: 0,

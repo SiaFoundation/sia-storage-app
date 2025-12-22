@@ -53,7 +53,7 @@ export default function OnboardingRecoveryPhraseScreen() {
         nav.navigate('FinishedOnboarding', { indexerURL })
       }
     } catch (err) {
-      logger.log('Error completing recovery phrase setup', err)
+      logger.error('onboarding', 'Error completing recovery phrase setup', err)
     }
   }
 

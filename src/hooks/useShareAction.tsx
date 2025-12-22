@@ -52,7 +52,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
       })
     } catch (e) {
       if (typeof e === 'string' && !e.includes('User did not share')) {
-        logger.log('File sharing failed:', e)
+        logger.error('shareAction', 'File sharing failed:', e)
       }
     }
   }, [file, status.data?.fileUri])

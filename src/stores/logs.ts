@@ -1,98 +1,216 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { logger } from '../lib/logger'
-import { createGetterAndSelector } from '../lib/selectors'
-import { getAsyncStorageBoolean, setAsyncStorageBoolean } from './asyncStore'
+import { useState, useEffect } from 'react'
+import { logger, type LogLevel, type LogEntry } from '../lib/logger'
+import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
+import { db } from '../db'
+import { sqlInsert } from '../db/sql'
 
 export type LogsState = {
-  logs: string[]
-  enableSdkLogs: boolean
+  logLevel: LogLevel
+  logScopes: string[]
 }
 
 export const useLogsStore = create<LogsState>(() => ({
-  logs: [],
-  enableSdkLogs: false,
+  logLevel: 'debug',
+  logScopes: [],
 }))
 
-const { setState, getState } = useLogsStore
-
-export function appendLogLine(...args: unknown[]): void {
-  setState((state) => {
-    const line = `${new Date().toLocaleTimeString()} ${args
-      .map(String)
-      .join(' ')}`
-    const next = [...state.logs.slice(-100), line]
-    return { logs: next }
-  })
-}
-
-export function clearLogs(): void {
-  setState(() => {
-    return { logs: [] }
-  })
-}
+const { setState } = useLogsStore
 
 let hasInit = false
 
 export async function initLogger(): Promise<void> {
   if (hasInit) {
-    logger.log('[logs] initLogger already called, skipping')
     return
   }
-  logger.log('[logs] initLogger called')
 
-  // Init state with secure store value so that we can use an in memory value
-  // in the logger callbacks.
-  const enableSdkLogs = await getEnableSdkLogs()
+  // Now we can log.
+  logger.info('logs', 'initLogger called')
+
+  // Init state with stored values.
+  const storedLevel = await getLogLevel()
+  const storedScopes = await getLogScopes()
   setState((state) => {
-    return { ...state, enableSdkLogs }
+    return {
+      ...state,
+      logLevel: storedLevel,
+      logScopes: storedScopes,
+    }
   })
 
-  // Wire the global logger to the logs store.
-  logger.log = (...args: unknown[]) => {
-    console.log(...args)
-    appendLogLine(...args)
-  }
-  logger.sdk = (...args: unknown[]) => {
-    const state = getState()
-    if (state.enableSdkLogs) {
-      console.log(...args)
-      appendLogLine(...args)
-    }
-  }
-  logger.clear = () => {
-    clearLogs()
-  }
   hasInit = true
 }
 
-// selectors
-
-export function useLogs(): string[] {
-  return useLogsStore(useShallow((s) => s.logs))
+// Get available scopes from log files.
+export async function getAvailableScopes(): Promise<string[]> {
+  const logs = await readLogs()
+  return extractScopes(logs)
 }
 
-// Get the enable SDK logs flag from the store state.
-export const [getSDKLogsEnabled, useSDKLogsEnabled] = createGetterAndSelector(
-  useLogsStore,
-  (state) => state.enableSdkLogs
-)
+// Hook to get available scopes (reads from files).
+export function useAvailableScopes(): string[] {
+  const [scopes, setScopes] = useState<string[]>([])
 
-// Get the enable SDK logs flag from the secure store.
-export async function getEnableSdkLogs(): Promise<boolean> {
-  return getAsyncStorageBoolean('enableSdkLogs', false)
+  useEffect(() => {
+    getAvailableScopes().then(setScopes)
+  }, [])
+
+  return scopes
 }
 
-// Set the enable SDK logs flag in both the async store and the store state.
-export async function setEnableSdkLogs(value: boolean): Promise<void> {
-  await setAsyncStorageBoolean('enableSdkLogs', value)
+export function useLogLevel(): LogLevel {
+  return useLogsStore(useShallow((s) => s.logLevel))
+}
+
+export function useLogScopes(): string[] {
+  return useLogsStore(useShallow((s) => s.logScopes))
+}
+
+// Get the log level from async storage.
+export async function getLogLevel(): Promise<LogLevel> {
+  const stored = await getAsyncStorageString('logLevel', 'debug')
+  if (
+    stored === 'debug' ||
+    stored === 'info' ||
+    stored === 'warn' ||
+    stored === 'error'
+  ) {
+    return stored
+  }
+  return 'debug'
+}
+
+// Set the log level in both async storage and store state.
+export async function setLogLevel(value: LogLevel): Promise<void> {
+  await setAsyncStorageString('logLevel', value)
   setState((state) => {
-    return { ...state, enableSdkLogs: value }
+    return { ...state, logLevel: value }
   })
 }
 
-// Toggle the enable SDK logs flag in both the secure store and the store state.
-export async function toggleEnableSdkLogs(): Promise<void> {
-  const value = !getSDKLogsEnabled()
-  await setEnableSdkLogs(value)
+// Get the log scopes from async storage.
+export async function getLogScopes(): Promise<string[]> {
+  const stored = await getAsyncStorageString<string>('logScopes', '')
+  if (!stored) {
+    return []
+  }
+  return stored
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+}
+
+// Set the log scopes in both async storage and store state.
+export async function setLogScopes(value: string[]): Promise<void> {
+  const valueStr = value.join(',')
+  await setAsyncStorageString<string>('logScopes', valueStr)
+  setState((state) => {
+    return { ...state, logScopes: value }
+  })
+}
+
+// Toggle a scope in the filter.
+export async function toggleLogScope(scope: string): Promise<void> {
+  const current = await getLogScopes()
+  const newScopes = current.includes(scope)
+    ? current.filter((s) => s !== scope)
+    : [...current, scope]
+  await setLogScopes(newScopes)
+}
+
+/** Append log entry directly to database. */
+export async function appendLog(entry: LogEntry): Promise<void> {
+  try {
+    if (!db()) {
+      // Database not initialized yet, skip appending log.
+      return
+    }
+    await sqlInsert('logs', {
+      timestamp: entry.timestamp,
+      level: entry.level,
+      scope: entry.scope,
+      message: entry.message,
+      createdAt: Date.now(),
+    })
+  } catch (error) {
+    console.error('[logs] Failed to append log:', error)
+  }
+}
+
+/** Get levels that should be included based on minimum level. */
+function getLevelsForFilter(minLevel: LogLevel): LogLevel[] {
+  const levelOrder: LogLevel[] = ['debug', 'info', 'warn', 'error']
+  const minIndex = levelOrder.indexOf(minLevel)
+  return levelOrder.slice(minIndex)
+}
+
+/** Read logs from database with optional filters. */
+export async function readLogs(
+  logLevel?: LogLevel,
+  logScopes?: string[]
+): Promise<LogEntry[]> {
+  try {
+    const conditions: string[] = []
+    const params: (string | number)[] = []
+
+    // Filter by level.
+    if (logLevel) {
+      const allowedLevels = getLevelsForFilter(logLevel)
+      const placeholders = allowedLevels.map(() => '?').join(',')
+      conditions.push(`level IN (${placeholders})`)
+      params.push(...allowedLevels)
+    }
+
+    // Filter by scope.
+    if (logScopes && logScopes.length > 0) {
+      const placeholders = logScopes.map(() => '?').join(',')
+      conditions.push(`scope IN (${placeholders})`)
+      params.push(...logScopes)
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const query = `SELECT timestamp, level, scope, message FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC`
+
+    const rows = await db().getAllAsync<{
+      timestamp: string
+      level: string
+      scope: string
+      message: string
+    }>(query, ...params)
+
+    return rows.map((row) => ({
+      timestamp: row.timestamp,
+      level: row.level as LogEntry['level'],
+      scope: row.scope,
+      message: row.message,
+    }))
+  } catch (error) {
+    console.error('[logs] Failed to read logs:', error)
+    return []
+  }
+}
+
+/** Extract unique scopes from entries. */
+export function extractScopes(entries: LogEntry[]): string[] {
+  const scopes = new Set<string>()
+  for (const entry of entries) {
+    scopes.add(entry.scope)
+  }
+  return Array.from(scopes).sort()
+}
+
+/** Clear all logs from the database. */
+export async function clearLogs(): Promise<void> {
+  try {
+    if (!db()) {
+      return
+    }
+    await db().runAsync('DELETE FROM logs')
+  } catch (error) {
+    console.error('[logs] Failed to clear logs:', error)
+    throw error
+  }
 }

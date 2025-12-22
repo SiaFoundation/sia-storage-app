@@ -20,7 +20,7 @@ export async function detectMimeType(
     }
     return detectMimeTypeFromBytes(bytes)
   } catch (e) {
-    logger.log('[detectMimeType] error:', e)
+    logger.error('detectMimeType', 'error:', e)
     return null
   }
 }

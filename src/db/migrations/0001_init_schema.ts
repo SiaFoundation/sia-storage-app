@@ -5,12 +5,6 @@ import { logger } from '../../lib/logger'
 // Initial schema migration.
 async function up(db: SQLite.SQLiteDatabase): Promise<void> {
   try {
-    const cols = await db.getAllAsync<{ name: string }>(
-      "PRAGMA table_info('files')"
-    )
-    const hasTable = cols.length > 0
-    if (hasTable) return
-
     // Create the files table.
     await db.execAsync(
       `CREATE TABLE IF NOT EXISTS files (
@@ -105,8 +99,30 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(
       `CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`
     )
+
+    // Create the logs table.
+    await db.execAsync(
+      `CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      level TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      message TEXT NOT NULL,
+      createdAt INTEGER NOT NULL
+    );`
+    )
+
+    // Index for filtering by level and scope.
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_logs_level_scope ON logs(level, scope);`
+    )
+
+    // Index for ordering by creation time.
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_logs_createdAt ON logs(createdAt);`
+    )
   } catch (e) {
-    logger.log('[db] error running migration 0001_init_schema', e)
+    logger.error('db', 'error running migration 0001_init_schema', e)
     throw e
   }
 }

@@ -41,15 +41,17 @@ export async function uploadToNetwork(params: {
     metadata: encodeFileMetadata(file),
     progressCallback: {
       progress: (uploaded) => {
-        logger.log(
-          `[uploadToNetwork] ${file.id} progress`,
+        logger.debug(
+          'uploadToNetwork',
+          `${file.id} progress`,
           uploaded,
           'totalEncodedSize',
           totalEncodedSize
         )
         const percent = (uploaded * 1000n) / totalEncodedSize
-        logger.log(
-          `[uploadToNetwork] ${file.id} percent ${percent}, uploaded ${uploaded} bytes`
+        logger.debug(
+          'uploadToNetwork',
+          `${file.id} percent ${percent}, uploaded ${uploaded} bytes`
         )
         updateUploadProgress(file.id, Number(percent) / 1000)
       },
@@ -58,10 +60,10 @@ export async function uploadToNetwork(params: {
 
   const onAbort = () => {
     try {
-      logger.log('[uploadToNetwork] abort received, cancelling upload...')
+      logger.debug('uploadToNetwork', 'abort received, cancelling upload...')
       upload.cancel()
     } catch (e) {
-      logger.log('[uploadToNetwork] error cancelling upload', e)
+      logger.error('uploadToNetwork', 'error cancelling upload', e)
     }
   }
 
@@ -74,8 +76,9 @@ export async function uploadToNetwork(params: {
   const reader = stream.getReader()
   let uploadedBytes = 0
   // Read and upload from the file stream until exhausted or aborted.
-  logger.log(
-    `[uploadToNetwork] ${file.id} reading and uploading from stream...`
+  logger.debug(
+    'uploadToNetwork',
+    `${file.id} reading and uploading from stream...`
   )
   while (true) {
     if (signal.aborted) break
@@ -90,10 +93,11 @@ export async function uploadToNetwork(params: {
       uploadedBytes += value.byteLength
     }
   }
-  logger.log(
-    `[uploadToNetwork] ${file.id} uploaded ${uploadedBytes}/${fileSize} bytes`
+  logger.debug(
+    'uploadToNetwork',
+    `${file.id} uploaded ${uploadedBytes}/${fileSize} bytes`
   )
-  logger.log(`[uploadToNetwork] ${file.id} finalizing upload...`)
+  logger.debug('uploadToNetwork', `${file.id} finalizing upload...`)
   const pinnedObject = await upload.finalize({ signal })
 
   if (signal.aborted) {
@@ -101,15 +105,16 @@ export async function uploadToNetwork(params: {
     return
   }
 
-  logger.log(
-    `[uploadToNetwork] ${file.id} converting pinned object to local object...`
+  logger.debug(
+    'uploadToNetwork',
+    `${file.id} converting pinned object to local object...`
   )
   const localObject = await pinnedObjectToLocalObject(
     file.id,
     indexerURL,
     pinnedObject
   )
-  logger.log(`[uploadToNetwork] ${file.id} updating file object...`)
+  logger.debug('uploadToNetwork', `${file.id} updating file object...`)
   await upsertLocalObject(localObject)
 
   signal.removeEventListener('abort', onAbort)

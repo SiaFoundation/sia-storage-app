@@ -1,4 +1,4 @@
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { db } from '../db'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
@@ -52,13 +52,14 @@ async function logOverallProgress() {
     const targetThumbs = originals * ThumbSizes.length
     const remaining = Math.max(targetThumbs - thumbs, 0)
     const percent = targetThumbs > 0 ? Math.min(1, thumbs / targetThumbs) : 1
-    serviceLog(
-      `[thumbnailScanner] overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
+    logger.debug(
+      'thumbnailScanner',
+      `overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
         percent * 100
       )}%`
     )
   } catch (e) {
-    serviceLog('[thumbnailScanner] progress error', e)
+    logger.error('thumbnailScanner', 'progress error', e)
   }
 }
 
@@ -145,7 +146,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
   }
   let producedCount = 0
   try {
-    serviceLog('[thumbnailScanner] scanning...')
+    logger.debug('thumbnailScanner', 'scanning...')
     const skippedNoSourceUri = new Set<string>()
     const processedThisRun = new Set<string>()
 
@@ -182,16 +183,21 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
           continue
         }
 
-        serviceLog('[thumbnailScanner] candidate', {
-          id: c.id,
-          hash: c.hash,
-          existingSizes,
-          missingSizes,
-        })
+        logger.debug(
+          'thumbnailScanner',
+          `candidate id=${c.id} hash=${
+            c.hash
+          } existingSizes=${existingSizes.join(
+            ','
+          )} missingSizes=${missingSizes.join(',')}`
+        )
 
         for (const size of missingSizes) {
           if (producedCount >= MAX_THUMBS_PER_TICK) break
-          serviceLog('[thumbnailScanner] attempt size', { id: c.id, size })
+          logger.debug(
+            'thumbnailScanner',
+            `attempt size id=${c.id} size=${size}`
+          )
           summary.attempts.push({
             originalId: c.id,
             originalHash: c.hash,
@@ -213,7 +219,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
               size,
               thumbId: outcome.thumbId,
             })
-            serviceLog('[thumbnailScanner] produced', { id: c.id, size })
+            logger.info('thumbnailScanner', `produced id=${c.id} size=${size}`)
           } else if (outcome.status === 'duplicate') {
             summary.deduplicated.push({
               originalId: c.id,
@@ -232,16 +238,13 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
         }
       }
     }
-    serviceLog(
-      `[thumbnailScanner] batch produced=${summary.produced.length}/${summary.processedCandidates}` +
-        ` skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates}` +
-        ` skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates}` +
-        ` errors=${summary.errors.length}/${summary.processedCandidates}` +
-        ` deduplicated=${summary.deduplicated.length}/${summary.processedCandidates}`
+    logger.info(
+      'thumbnailScanner',
+      `batch produced=${summary.produced.length}/${summary.processedCandidates} skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates} skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates} errors=${summary.errors.length}/${summary.processedCandidates} deduplicated=${summary.deduplicated.length}/${summary.processedCandidates}`
     )
     await logOverallProgress()
   } catch (e) {
-    serviceLog('[thumbnailScanner] scan error', e)
+    logger.error('thumbnailScanner', 'scan error', e)
   }
   return summary
 }

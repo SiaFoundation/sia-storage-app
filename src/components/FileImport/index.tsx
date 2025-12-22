@@ -48,9 +48,9 @@ async function detectFileType(
   sharedObject: SharedObjectInterface,
   id: string
 ): Promise<string> {
-  logger.log(
-    `[FileImport] Detecting type from first ${MAGIC_BYTES_LENGTH} bytes`,
-    id
+  logger.debug(
+    'FileImport',
+    `Detecting type from first ${MAGIC_BYTES_LENGTH} bytes ${id}`
   )
   try {
     if (!sdk || !sharedObject) {
@@ -64,15 +64,15 @@ async function detectFileType(
     )
 
     if (bytes.length === 0) {
-      logger.log('[FileImport] No bytes received for type detection')
+      logger.warn('FileImport', 'No bytes received for type detection')
       return 'application/octet-stream'
     }
 
     const type = detectMimeTypeFromBytes(bytes)
-    logger.log('[FileImport] Detected type:', type)
+    logger.debug('FileImport', `Detected type: ${type}`)
     return type || 'application/octet-stream'
   } catch (e) {
-    logger.log('[FileImport] Error detecting type', e)
+    logger.error('FileImport', 'Error detecting type', e)
     return 'application/octet-stream'
   }
 }
@@ -83,13 +83,13 @@ async function downloadAndProcessFile(
   shareUrl: string,
   downloadFromShareURL: ReturnType<typeof useDownloadFromShareURL>
 ): Promise<FileRecord> {
-  logger.log('[FileImport] SWR function starting for', id)
+  logger.debug('FileImport', `SWR function starting for ${id}`)
   try {
     if (!shareUrl) throw new Error('Invalid share URL')
 
-    logger.log('[FileImport] downloading to temp', id, shareUrl)
+    logger.debug('FileImport', `downloading to temp ${id} ${shareUrl}`)
     await downloadFromShareURL(id, shareUrl)
-    logger.log('[FileImport] download complete')
+    logger.debug('FileImport', 'download complete')
 
     const tempFsFileUri = await getFsFileUri({
       id,
@@ -99,13 +99,13 @@ async function downloadAndProcessFile(
       throw new Error('File not found in cache after download')
     }
 
-    logger.log('[FileImport] sniffing type from', tempFsFileUri)
+    logger.debug('FileImport', `sniffing type from ${tempFsFileUri}`)
     let type: string
     try {
       type = await getMimeType({ uri: tempFsFileUri })
-      logger.log('[FileImport] detected type', type)
+      logger.debug('FileImport', `detected type ${type}`)
     } catch (e) {
-      logger.log('[FileImport] error detecting type', e)
+      logger.error('FileImport', 'error detecting type', e)
       type = 'application/octet-stream'
     }
 
@@ -114,17 +114,20 @@ async function downloadAndProcessFile(
     const size = fileInfo.size ?? 0
 
     const finalFsFileUri = await copyFileToFs({ id, type }, tempFile)
-    logger.log('[FileImport] copied to final location', finalFsFileUri)
+    logger.debug('FileImport', `copied to final location ${finalFsFileUri}`)
 
     if (finalFsFileUri !== tempFsFileUri) {
       tempFile.delete()
     }
 
-    logger.log('[FileImport] calculating hash from', finalFsFileUri)
+    logger.debug('FileImport', `calculating hash from ${finalFsFileUri}`)
     const hash = await calculateContentHash(finalFsFileUri)
-    logger.log('[FileImport] hash calculated', hash)
+    logger.debug('FileImport', `hash calculated ${hash}`)
 
-    logger.log('[FileImport] file ready', { type, size, hash })
+    logger.info(
+      'FileImport',
+      `file ready type=${type} size=${size} hash=${hash}`
+    )
 
     return {
       id,
@@ -139,7 +142,7 @@ async function downloadAndProcessFile(
       objects: {},
     } satisfies FileRecord
   } catch (e) {
-    logger.log('[FileImport] Error preparing file', e)
+    logger.error('FileImport', 'Error preparing file', e)
     throw e
   }
 }
@@ -166,7 +169,7 @@ export function FileImport({
         if (!sdk || !shareUrl) return null
         return sdk.sharedObject(shareUrl)
       } catch (e) {
-        logger.log('Error getting shared object', e)
+        logger.error('FileImport', 'Error getting shared object', e)
         return null
       }
     }
@@ -266,7 +269,7 @@ export function FileImport({
 
     setIsAddingToDatabase(true)
     try {
-      logger.log('[FileImport] importing file', sharedFile.data.id)
+      logger.info('FileImport', `importing file ${sharedFile.data.id}`)
 
       // Pin the shared object and create file record.
       const indexerURL = await getIndexerURL()
@@ -284,7 +287,7 @@ export function FileImport({
         params: { id: sharedFile.data.id },
       })
     } catch (e) {
-      logger.log('[FileImport] Error adding file to library', e)
+      logger.error('FileImport', 'Error adding file to library', e)
       toast.show('Error adding file to library')
     } finally {
       setIsAddingToDatabase(false)

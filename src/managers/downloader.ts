@@ -78,7 +78,11 @@ export function useDownloadFromShareURL() {
         downloadState?.status === 'running' ||
         downloadState?.status === 'queued'
       ) {
-        logger.log('[useDownloadFromShareURL] download already in progress', id)
+        logger.debug(
+          'useDownloadFromShareURL',
+          'download already in progress',
+          id
+        )
         return id
       }
 
@@ -132,21 +136,22 @@ async function streamToCache(params: {
 }): Promise<void> {
   const { file, totalSize, getNextChunk, onAfterClose, signal } = params
   const targetFile = await getOrCreateTempDownloadFile(file)
-  logger.log('[streamToCache] writing to cache path:', targetFile.uri)
+  logger.debug('streamToCache', 'writing to cache path:', targetFile.uri)
   const writer = targetFile.writableStream().getWriter()
   let total = 0
   let chunks = 0
   try {
     while (true) {
       if (signal.aborted) {
-        logger.log('[streamToCache] abort received, stopping download...')
+        logger.debug('streamToCache', 'abort received, stopping download...')
         targetFile.delete()
         break
       }
       const chunk = await getNextChunk()
       if (!chunk || chunk.byteLength === 0) {
-        logger.log(
-          '[streamToCache] download stream ended. chunks=',
+        logger.debug(
+          'streamToCache',
+          'download stream ended. chunks=',
           chunks,
           'bytes=',
           total
@@ -163,11 +168,11 @@ async function streamToCache(params: {
         updateDownloadProgress(file.id, Math.min(0.99, (chunks % 20) / 20))
       }
       if (chunks % 10 === 0)
-        logger.log('[streamToCache] downloaded', total, 'bytes so far')
+        logger.debug('streamToCache', 'downloaded', total, 'bytes so far')
     }
   } finally {
     await writer.close()
-    logger.log('[streamToCache] writer closed. Total bytes:', total)
+    logger.debug('streamToCache', 'writer closed. Total bytes:', total)
   }
   if (onAfterClose) {
     await onAfterClose(targetFile)
@@ -187,8 +192,9 @@ export async function downloadFirstBytesFromShared(
     throw new Error('SDK not initialized')
   }
 
-  logger.log(
-    `[downloadFirstBytesFromShared] Downloading first ${byteCount} bytes`
+  logger.debug(
+    'downloadFirstBytesFromShared',
+    `Downloading first ${byteCount} bytes`
   )
 
   // Download only first N bytes for type detection.
@@ -230,6 +236,9 @@ export async function downloadFirstBytesFromShared(
     if (offset >= byteCount) break
   }
 
-  logger.log(`[downloadFirstBytesFromShared] Downloaded ${bytes.length} bytes`)
+  logger.debug(
+    'downloadFirstBytesFromShared',
+    `Downloaded ${bytes.length} bytes`
+  )
   return bytes
 }

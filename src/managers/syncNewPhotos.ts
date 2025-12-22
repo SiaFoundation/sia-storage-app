@@ -1,5 +1,5 @@
 import * as MediaLibrary from 'expo-media-library'
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { settingsSwr } from '../stores/settings'
 import { processAssets } from '../lib/processAssets'
@@ -35,10 +35,10 @@ async function workForward(): Promise<void> {
       resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
-      serviceLog('[syncNewPhotos] no new photos found')
+      logger.debug('syncNewPhotos', 'no new photos found')
       return
     }
-    serviceLog('[syncNewPhotos] batch size', page.assets.length)
+    logger.info('syncNewPhotos', `batch size=${page.assets.length}`)
     const lastAssetCreationTime =
       page.assets[page.assets.length - 1].creationTime
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime + 1 : 0
@@ -55,7 +55,7 @@ async function workForward(): Promise<void> {
     )
     if (files.length > 0) await librarySwr.triggerChange()
   } catch (e) {
-    serviceLog('[syncNewPhotos] batch error', e)
+    logger.error('syncNewPhotos', 'batch error', e)
   }
 }
 
@@ -101,6 +101,6 @@ export async function setPhotosNewCursor(value: number) {
 }
 
 export async function resetPhotosNewCursor() {
-  serviceLog('[syncNewPhotos] resetting photos new sync cursor')
+  logger.info('syncNewPhotos', 'resetting photos new sync cursor')
   await setPhotosNewCursor(defaultValue)
 }

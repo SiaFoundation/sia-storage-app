@@ -65,10 +65,10 @@ export function cancelAllUploads() {
   const current = getState().uploads
   Object.values(current).forEach((r) => {
     try {
-      logger.log('aborting upload', r.id)
+      logger.debug('uploads', 'aborting upload', r.id)
       r.controller?.abort()
     } catch (e) {
-      logger.log('error aborting upload', r.id, e)
+      logger.error('uploads', 'error aborting upload', r.id, e)
     }
   })
   useUploadsStore.setState({ uploads: {} })
@@ -78,7 +78,7 @@ export function cancelUpload(id: string) {
   const current = getState().uploads
   const rec = current[id]
   if (!rec) return
-  logger.log('aborting upload', id)
+  logger.debug('uploads', 'aborting upload', id)
   rec.controller?.abort()
   removeUpload(id)
 }
@@ -111,14 +111,14 @@ export async function runUploadWithSlot<T>(params: {
   setUploadState(id, 'queued', 0)
   const release = await acquireUploadSlot()
   try {
-    logger.log('upload running', id)
+    logger.debug('uploads', 'upload running', id)
     setUploadState(id, 'running', 0)
     const result = await task(controller.signal)
-    logger.log('upload success', id)
+    logger.debug('uploads', 'upload success', id)
     removeUpload(id)
     return result
   } catch (e) {
-    logger.log('upload error', id, e)
+    logger.error('uploads', 'upload error', id, e)
     const message = e instanceof Error ? e.message : String(e)
     setUploadState(id, 'error', 0, message)
     throw e

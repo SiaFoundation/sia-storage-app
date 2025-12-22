@@ -10,10 +10,10 @@ const dbName = 'app.db'
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
 }): Promise<void> {
-  logger.log('[db] initializing database...')
+  logger.info('db', 'initializing database...')
   database = await SQLite.openDatabaseAsync(dbName)
   await runMigrations(database, options?.onProgress)
-  logger.log('[db] database initialized')
+  logger.info('db', 'database initialized')
 }
 
 // Drop all tables and run migrations again
@@ -22,8 +22,9 @@ export async function resetDb() {
     const rows = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
     )
-    logger.log(
-      '[db] dropping tables',
+    logger.debug(
+      'db',
+      'dropping tables',
       rows.map((r) => r.name)
     )
     for (let i = 0; i < rows.length; i++) {

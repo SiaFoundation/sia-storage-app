@@ -43,8 +43,9 @@ export class SlotPool {
   /** Acquire a slot. Resolves with a release function to free the slot. */
   async acquire(): Promise<() => void> {
     if (this.inUseCount < this.maxSlots) {
-      logger.log(
-        `[slotPool] acquired: inUse=${this.inUseCount + 1}/${
+      logger.debug(
+        'slotPool',
+        `acquired: inUse=${this.inUseCount + 1}/${
           this.maxSlots
         } queued=${Math.max(0, this.waitQueue.length - 1)}`
       )
@@ -60,13 +61,15 @@ export class SlotPool {
     }
 
     // Wait for a slot to free up.
-    logger.log(
-      `[slotPool] waiting: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
+    logger.debug(
+      'slotPool',
+      `waiting: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
     )
     return await new Promise<() => void>((resolve) => {
       const grant = () => {
-        logger.log(
-          `[slotPool] acquired: inUse=${this.inUseCount + 1}/${
+        logger.debug(
+          'slotPool',
+          `acquired: inUse=${this.inUseCount + 1}/${
             this.maxSlots
           } queued=${Math.max(0, this.waitQueue.length - 1)}`
         )
@@ -76,8 +79,9 @@ export class SlotPool {
           if (released) return
           released = true
           this.inUseCount -= 1
-          logger.log(
-            `[slotPool] released: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
+          logger.debug(
+            'slotPool',
+            `released: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
           )
           this.drain()
         }

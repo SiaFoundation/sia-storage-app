@@ -37,7 +37,7 @@ export async function acquireDownloadSlot(): Promise<() => void> {
 
 export async function setMaxDownloads(value: number) {
   if (!value) {
-    logger.log('[settings] setMaxDownloads: value must be 1 or greater')
+    logger.warn('settings', 'setMaxDownloads: value must be 1 or greater')
   }
   const clamped = Math.max(1, Math.floor(Number(value) || 1))
   await setAsyncStorageNumber('maxDownloads', clamped)

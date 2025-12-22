@@ -33,8 +33,9 @@ export async function retry<T>(
         0,
         Math.round(exponentialDelay + jitterOffset)
       )
-      logger.log(
-        `[${name}] failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayWithJitter}ms... error: ${
+      logger.warn(
+        'retry',
+        `${name} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayWithJitter}ms... error: ${
           error instanceof Error ? error.message : String(error)
         }`
       )
