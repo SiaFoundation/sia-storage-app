@@ -185,6 +185,12 @@ export function FileMeta({
                     showDividerTop
                   />
                   <LabeledValueRow
+                    label="Slabs"
+                    value={pinnedObject.slabs().length}
+                    isMonospace
+                    showDividerTop
+                  />
+                  <LabeledValueRow
                     label="Metadata"
                     value={JSON.stringify(
                       decodeFileMetadata(pinnedObject.metadata()),
@@ -198,21 +204,6 @@ export function FileMeta({
                   />
                 </InfoCard>
               </RowGroup>
-              <View style={styles.verticalSmallGap}>
-                <RowSubGroup title={`Slabs (${pinnedObject.slabs().length})`}>
-                  <InfoCard>
-                    {pinnedObject.slabs().map((s, i) => (
-                      <LabeledValueRow
-                        key={s.id}
-                        label="Slab"
-                        value={s.id}
-                        isMonospace
-                        showDividerTop={i > 0}
-                      />
-                    ))}
-                  </InfoCard>
-                </RowSubGroup>
-              </View>
             </Fragment>
           ))}
         </>
@@ -228,13 +219,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 24,
     backgroundColor: palette.gray[950],
-  },
-  verticalSmallGap: {
-    gap: 10,
-  },
-  photoFileName: {
-    color: colors.textTitleDark,
-    marginBottom: 6,
   },
   section: { marginTop: 30, marginBottom: 6 },
   sectionTitle: {
