@@ -5,34 +5,39 @@ import {
   LinkIcon,
   FullscreenIcon,
   TextAlignStart,
-  Icon,
 } from 'lucide-react-native'
-import { iconColors } from './BottomControlBar'
-import { openSheet } from '../stores/sheets'
-import { useShareAction } from '../hooks/useShareAction'
+import { iconColors } from '../BottomControlBar'
 import { View, useWindowDimensions } from 'react-native'
-import { IconButton } from './IconButton'
-import { BottomControlBar } from './BottomControlBar'
+import { IconButton } from '../IconButton'
+import { BottomControlBar } from '../BottomControlBar'
 
 type Props = {
   viewStyle: 'consume' | 'detail'
   setViewStyle: (viewStyle: 'consume' | 'detail') => void
-  fileID: string
+  onShareFile: () => void
+  onShareURL: () => void
+  onPressMore: () => void
+  canShare: boolean
 }
 
-export function FileDetailsControlBar({
+/**
+ * A control bar for the carousel overlay designed to work within a modal context.
+ * All actions are passed as props from the parent to ensure toasts and sheets
+ * render correctly above the modal.
+ */
+export function FileCarouselControlBar({
   viewStyle,
   setViewStyle,
-  fileID,
+  onShareFile,
+  onShareURL,
+  onPressMore,
+  canShare,
 }: Props) {
-  const { handleShareFile, handleShareURL, canShare } = useShareAction({
-    fileId: fileID,
-  })
   const { width, height } = useWindowDimensions()
   const isLandscape = width > height
   const controlBarStyle = isLandscape
-    ? { width: '80%', maxWidth: 420 }
-    : { width: '90%', maxWidth: 600 }
+    ? ({ width: '80%', maxWidth: 420 } as const)
+    : ({ width: '90%', maxWidth: 600 } as const)
 
   return (
     <BottomControlBar style={controlBarStyle}>
@@ -45,10 +50,10 @@ export function FileDetailsControlBar({
         }}
       >
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <IconButton onPress={handleShareFile} disabled={!canShare}>
+          <IconButton onPress={onShareFile} disabled={!canShare}>
             <ShareIcon color={iconColors.white} />
           </IconButton>
-          <IconButton onPress={handleShareURL} disabled={!canShare}>
+          <IconButton onPress={onShareURL} disabled={!canShare}>
             <LinkIcon color={iconColors.white} />
           </IconButton>
         </View>
@@ -62,7 +67,7 @@ export function FileDetailsControlBar({
               <FullscreenIcon color={iconColors.white} />
             </IconButton>
           )}
-          <IconButton onPress={() => openSheet('fileActions')}>
+          <IconButton onPress={onPressMore}>
             <MoreVerticalIcon color={iconColors.white} />
           </IconButton>
         </View>

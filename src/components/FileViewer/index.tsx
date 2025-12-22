@@ -20,6 +20,7 @@ type FileViewerProps = {
   customDownloader?: () => void
   textTopInset?: number
   onViewerControlPress?: () => void
+  onImageZoomChange?: (isZoomed: boolean) => void
 }
 
 export function FileViewer({
@@ -28,6 +29,7 @@ export function FileViewer({
   customDownloader,
   textTopInset,
   onViewerControlPress,
+  onImageZoomChange,
 }: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
@@ -86,7 +88,13 @@ export function FileViewer({
     if (!isDownloaded || !fileUri) return DownloadPanel
 
     if (type?.includes('image'))
-      return <ImageViewer uri={fileUri} style={baseMediaStyle} />
+      return (
+        <ImageViewer
+          uri={fileUri}
+          style={baseMediaStyle}
+          onZoomChange={onImageZoomChange}
+        />
+      )
     if (type?.includes('video'))
       return (
         <VideoPlayer

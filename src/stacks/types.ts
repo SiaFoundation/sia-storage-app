@@ -1,8 +1,7 @@
 import { type NavigatorScreenParams } from '@react-navigation/native'
 
 export type MainStackParamList = {
-  LibraryHome: undefined
-  FileDetail: { id: string }
+  LibraryHome: { openFileId?: string } | undefined
 }
 
 export type SwitchIndexerStackParamList = {

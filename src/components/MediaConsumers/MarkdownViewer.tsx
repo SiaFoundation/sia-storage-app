@@ -11,6 +11,7 @@ import { WebView } from 'react-native-webview'
 import MarkdownIt from 'markdown-it'
 import { readFileAsText } from '../../lib/readFileAsText'
 import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
+import BlocksLoader from '../BlocksLoader'
 
 type Mode = 'preview' | 'raw'
 
@@ -25,6 +26,10 @@ export function MarkdownViewer({
 }) {
   const [md, setMd] = useState('')
   const [mode, setMode] = useState<Mode>('preview')
+  const [fileLoading, setFileLoading] = useState(true)
+  const [webViewLoading, setWebViewLoading] = useState(true)
+
+  const isLoading = fileLoading || webViewLoading
 
   const mdParser = useMemo(
     () =>
@@ -39,12 +44,20 @@ export function MarkdownViewer({
 
   useEffect(() => {
     let cancelled = false
+    setFileLoading(true)
+    setWebViewLoading(true)
     const openFile = async () => {
       try {
         const txt = await readFileAsText(uri)
-        if (!cancelled) setMd(txt ?? '')
+        if (!cancelled) {
+          setMd(txt ?? '')
+          setFileLoading(false)
+        }
       } catch {
-        if (!cancelled) setMd('[Unable to load markdown]')
+        if (!cancelled) {
+          setMd('[Unable to load markdown]')
+          setFileLoading(false)
+        }
       }
     }
     openFile()
@@ -98,8 +111,19 @@ export function MarkdownViewer({
         style={[{ flex: 1, backgroundColor: 'black' }]}
         originWhitelist={['*']}
         source={{ html }}
+        onLoadStart={() => setWebViewLoading(true)}
+        onLoadEnd={() => setWebViewLoading(false)}
         onShouldStartLoadWithRequest={handleShouldStart}
       />
+
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <BlocksLoader size={20} />
+          <Text style={styles.loadingText}>
+            {fileLoading ? 'Reading file...' : 'Rendering...'}
+          </Text>
+        </View>
+      )}
     </View>
   )
 }
@@ -187,4 +211,15 @@ const styles = StyleSheet.create({
     borderColor: '#555',
   },
   segmentText: { color: 'white', fontSize: 13 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 14,
+  },
 })

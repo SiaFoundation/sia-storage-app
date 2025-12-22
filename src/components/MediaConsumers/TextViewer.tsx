@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, Text, StyleSheet, ViewStyle, Platform } from 'react-native'
+import { ScrollView, Text, StyleSheet, ViewStyle, Platform, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'
+import BlocksLoader from '../BlocksLoader'
 
 type Props = {
   uri: string
@@ -12,17 +13,30 @@ type Props = {
 
 export function TextViewer({ uri, style, fileSize, topInset }: Props) {
   const [text, setText] = useState('')
+  const [fileLoading, setFileLoading] = useState(true)
+  const [webViewLoading, setWebViewLoading] = useState(true)
 
   const shouldUseWebView = fileSize == null ? true : fileSize > 256 * 1024 // ~256kb
+  const isLoading = fileLoading || (shouldUseWebView && webViewLoading)
+  const isLargeFile = fileSize && fileSize > 256 * 1024
+  const isVeryLargeFile = fileSize && fileSize > 5 * 1024 * 1024 // 5MB
 
   useEffect(() => {
     let cancelled = false
+    setFileLoading(true)
+    setWebViewLoading(true)
     const openFile = async () => {
       try {
         const data = await readFileAsText(uri)
-        if (!cancelled) setText(data ?? '')
+        if (!cancelled) {
+          setText(data ?? '')
+          setFileLoading(false)
+        }
       } catch {
-        if (!cancelled) setText('[Unable to load text]')
+        if (!cancelled) {
+          setText('[Unable to load text]')
+          setFileLoading(false)
+        }
       }
     }
     openFile()
@@ -43,12 +57,28 @@ export function TextViewer({ uri, style, fileSize, topInset }: Props) {
 
   if (shouldUseWebView) {
     return (
-      <WebView
-        style={[{ flex: 1, backgroundColor: 'black' }, style]}
-        originWhitelist={['*']}
-        source={{ html }}
-        onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:')}
-      />
+      <View style={[{ flex: 1 }, style]}>
+        <WebView
+          style={{ flex: 1, backgroundColor: 'black' }}
+          originWhitelist={['*']}
+          source={{ html }}
+          onLoadStart={() => setWebViewLoading(true)}
+          onLoadEnd={() => setWebViewLoading(false)}
+          onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:')}
+        />
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <BlocksLoader size={20} />
+            <Text style={styles.loadingText}>
+              {fileLoading
+                ? isVeryLargeFile
+                  ? `Loading ${(fileSize / 1024 / 1024).toFixed(1)}MB file...`
+                  : 'Reading file...'
+                : 'Rendering...'}
+            </Text>
+          </View>
+        )}
+      </View>
     )
   }
 
@@ -75,6 +105,17 @@ const styles = StyleSheet.create({
     }),
     fontSize: 14,
     color: 'white',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 14,
   },
 })
 

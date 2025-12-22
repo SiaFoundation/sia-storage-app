@@ -1,17 +1,17 @@
-import { useCallback, useState } from 'react'
-import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native'
+import { useCallback, useState, useEffect, useRef } from 'react'
+import { View, Text, StyleSheet, Image, ActivityIndicator, Animated } from 'react-native'
 import { colors, overlay, whiteA, palette } from '../styles/colors'
 import { Gradient } from '../components/Gradient'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { FileGallery } from '../components/FileGallery'
 import { type MainStackParamList } from '../stacks/types'
-import { type FileRecord } from '../stores/files'
 import {
   useFileList,
   useLibrary,
   type Category,
   useLibraryCount,
 } from '../stores/library'
+import { FileRecord } from '../stores/files'
 import { FileList } from '../components/FileList'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
@@ -24,6 +24,7 @@ import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { openSheet } from '../stores/sheets'
+import { FileCarousel } from '../components/FileCarousel'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -32,17 +33,55 @@ export function LibraryScreen({ route, navigation }: Props) {
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
   const fileCount = useLibraryCount()
-  const [selectedFileID, setSelectedFileID] = useState<string | null>(null)
-  const handleOpenDetail = useCallback(
-    (file: FileRecord) => {
-      navigation.navigate('FileDetail', { id: file.id })
-    },
-    [navigation]
-  )
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(() => {
+    const openFileId = route.params?.openFileId
+    if (!openFileId) return null
+    return files.data?.find(f => f.id === openFileId) ?? null
+  })
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
+  const handleOpenDetail = useCallback((file: FileRecord) => {
+    setSelectedFile(file)
+  }, [])
   const handleOpenActions = useCallback((file: FileRecord) => {
-    setSelectedFileID(file.id)
+    setSelectedFile(file)
     openSheet('fileActions')
   }, [])
+  const handleShowCarouselActions = useCallback(() => {
+    openSheet('fileActions')
+  }, [])
+
+  // Animate carousel fade in/out with scale
+  useEffect(() => {
+    if (selectedFile) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 8,
+        }),
+      ]).start()
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start()
+    }
+  }, [selectedFile, fadeAnim, scaleAnim])
 
   return (
     <View style={styles.container}>
@@ -147,10 +186,30 @@ export function LibraryScreen({ route, navigation }: Props) {
       )}
       <AddFileActionSheet />
       <LibraryStatusSheet />
-      {selectedFileID ? (
-        <FileActionsSheet fileID={selectedFileID} sheetName="fileActions" />
-      ) : null}
       <LibraryControlBar navigation={navigation} route={route} />
+      {selectedFile ? (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            styles.carouselOverlay,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <FileCarousel
+            initialId={selectedFile.id}
+            initialFile={selectedFile}
+            onClose={() => setSelectedFile(null)}
+            onShowActionSheet={handleShowCarouselActions}
+          />
+        </Animated.View>
+      ) : null}
+      {selectedFile ? (
+        <FileActionsSheet fileID={selectedFile.id} sheetName="fileActions" />
+      ) : null}
     </View>
   )
 }
@@ -207,5 +266,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  carouselOverlay: {
+    zIndex: 100,
   },
 })
