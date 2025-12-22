@@ -2,7 +2,7 @@ import RNFS from 'react-native-fs'
 import QuickCrypto from 'react-native-quick-crypto'
 import { Buffer } from 'buffer'
 
-export type HashResult = `sha256|${string}`
+export type HashResult = `sha256:${string}`
 
 /**
  * Calculate a content hash for a file.
@@ -15,7 +15,7 @@ export async function calculateContentHash(
     return null
   }
   const hex = await sha256File(uri)
-  return `sha256|${hex}`
+  return `sha256:${hex}`
 }
 
 /** SHA-256. Try streamed native RNFS.hash first, otherwise fallback to QuickCrypto. */
