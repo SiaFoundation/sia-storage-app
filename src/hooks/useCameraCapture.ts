@@ -46,21 +46,23 @@ export function useCameraCapture() {
       }
 
       const { files, warnings } = await processAssets(
-        result.assets?.map((a) => ({
-          id: a.id,
-          name: buildDateFileName(
-            a.timestamp,
-            getMimeType({
-              type: a.type,
-              name: a.fileName,
-              uri: a.uri,
-            })
-          ),
-          size: a.fileSize,
-          type: a.type,
-          sourceUri: a.uri,
-          timestamp: a.timestamp,
-        }))
+        await Promise.all(
+          (result.assets ?? []).map(async (a) => ({
+            id: a.id,
+            name: buildDateFileName(
+              a.timestamp,
+              await getMimeType({
+                type: a.type,
+                name: a.fileName,
+                uri: a.uri,
+              })
+            ),
+            size: a.fileSize,
+            type: a.type,
+            sourceUri: a.uri,
+            timestamp: a.timestamp,
+          }))
+        )
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))

@@ -11,11 +11,11 @@ import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
-import { decodeFileMetadata } from '../encoding/fileMetadata'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { FileLocalMetadata, FileRecord } from '../stores/files'
+import { FileRecord } from '../stores/files'
 import { File } from 'expo-file-system'
+import { type SharedObjectInterface } from 'react-native-sia'
 
 export function useDownload(file?: FileRecord | null) {
   const toast = useToast()
@@ -71,28 +71,40 @@ export function useDownload(file?: FileRecord | null) {
 export function useDownloadFromShareURL() {
   const sdk = useSdk()
   return useCallback(
-    async (id: string, sharedUrl: string) =>
-      runDownloadWithSlot({
+    async (id: string, sharedUrl: string) => {
+      // Check if download is already running or queued.
+      const downloadState = getDownloadState(id)
+      if (
+        downloadState?.status === 'running' ||
+        downloadState?.status === 'queued'
+      ) {
+        logger.log('[useDownloadFromShareURL] download already in progress', id)
+        return id
+      }
+
+      return runDownloadWithSlot({
         id,
         task: async (signal) => {
           if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
-          const metadata = decodeFileMetadata(sharedObject.metadata())
           const downloader = await sdk.downloadShared(sharedObject, {
             maxInflight: DOWNLOAD_MAX_INFLIGHT,
             offset: BigInt(0),
             length: undefined,
           })
-          const localMetadata: FileLocalMetadata = {
+          // Create a minimal file record for downloading
+          // The actual metadata will be extracted from the downloaded file
+          const file: FileRecord = {
             id,
+            name: 'Shared File',
+            type: 'application/octet-stream',
+            size: Number(sharedObject.size()),
+            hash: '',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
             localId: null,
             addedAt: Date.now(),
-          }
-          const file: FileRecord = {
-            ...metadata,
-            ...localMetadata,
             objects: {},
-            id,
           }
           await streamToCache({
             file,
@@ -105,7 +117,8 @@ export function useDownloadFromShareURL() {
           })
           return id
         },
-      }),
+      })
+    },
     [sdk]
   )
 }
@@ -159,4 +172,64 @@ async function streamToCache(params: {
   if (onAfterClose) {
     await onAfterClose(targetFile)
   }
+}
+
+/**
+ * Download only the first N bytes from a shared object for type detection.
+ * Returns the bytes as a Uint8Array.
+ */
+export async function downloadFirstBytesFromShared(
+  sdk: ReturnType<typeof useSdk>,
+  sharedObject: SharedObjectInterface,
+  byteCount: number
+): Promise<Uint8Array> {
+  if (!sdk) {
+    throw new Error('SDK not initialized')
+  }
+
+  logger.log(
+    `[downloadFirstBytesFromShared] Downloading first ${byteCount} bytes`
+  )
+
+  // Download only first N bytes for type detection.
+  const downloader = await sdk.downloadShared(sharedObject, {
+    maxInflight: DOWNLOAD_MAX_INFLIGHT,
+    offset: BigInt(0),
+    length: BigInt(byteCount),
+  })
+
+  // Read the bytes.
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  const abortController = new AbortController()
+
+  try {
+    while (totalBytes < byteCount) {
+      const chunk = await downloader.readChunk({
+        signal: abortController.signal,
+      })
+      if (!chunk || chunk.byteLength === 0) break
+
+      const buf = new Uint8Array(chunk)
+      chunks.push(buf)
+      totalBytes += buf.length
+      if (totalBytes >= byteCount) break
+    }
+  } finally {
+    // Abort the download after we have enough bytes.
+    abortController.abort()
+  }
+
+  // Combine chunks and take only the requested number of bytes.
+  const bytes = new Uint8Array(Math.min(totalBytes, byteCount))
+  let offset = 0
+  for (const chunk of chunks) {
+    const toCopy = Math.min(chunk.length, byteCount - offset)
+    bytes.set(chunk.slice(0, toCopy), offset)
+    offset += toCopy
+    if (offset >= byteCount) break
+  }
+
+  logger.log(`[downloadFirstBytesFromShared] Downloaded ${bytes.length} bytes`)
+  return bytes
 }

@@ -62,23 +62,25 @@ export async function processAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file'
 ) {
-  const candidateFiles: CandidateFileRecord[] = (assets ?? []).map((a) => ({
-    id: uniqueId(),
-    localId: a.id ?? null,
-    sourceUri: a.sourceUri ?? null,
-    name: a.name ?? defaultFileName,
-    size: null,
-    createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
-    updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
-    type: getMimeType({
-      type: a.type,
-      name: a.name,
-      uri: a.sourceUri,
-    }),
-    hash: null,
-    status: 'new',
-    statusDetails: null,
-  }))
+  const candidateFiles: CandidateFileRecord[] = await Promise.all(
+    (assets ?? []).map(async (a) => ({
+      id: uniqueId(),
+      localId: a.id ?? null,
+      sourceUri: a.sourceUri ?? null,
+      name: a.name ?? defaultFileName,
+      size: null,
+      createdAt: new Date(a.timestamp ?? Date.now()).getTime(),
+      updatedAt: new Date(a.timestamp ?? Date.now()).getTime(),
+      type: await getMimeType({
+        type: a.type,
+        name: a.name,
+        uri: a.sourceUri,
+      }),
+      hash: null,
+      status: 'new',
+      statusDetails: null,
+    }))
+  )
 
   // Update the status of the files that are found by localId.
   // This is quick but will only detect duplicates from the same device.
