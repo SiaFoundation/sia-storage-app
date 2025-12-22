@@ -37,7 +37,7 @@ beforeEach(async () => {
   getFsFileUriMock.mockResolvedValue('file://source.jpg')
   let hashCounter = 0
   calculateContentHashMock.mockImplementation(
-    async () => `sha256|thumb-hash-${++hashCounter}`
+    async () => `sha256:thumb-hash-${++hashCounter}`
   )
 
   imageGetSizeMock.mockImplementation((_, ok) => {
@@ -161,7 +161,7 @@ describe('thumbnailScanner', () => {
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    calculateContentHashMock.mockResolvedValue('sha256|thumb-64')
+    calculateContentHashMock.mockResolvedValue('sha256:thumb-64')
     const result = await runThumbnailScanner()
     const producedSizes = result.produced
       .filter((p) => p.originalId === 'file1')
@@ -303,7 +303,7 @@ describe('thumbnailScanner', () => {
       name: 'thumbnail.webp',
       type: 'image/webp',
       size: 100,
-      hash: 'sha256|duplicate-thumb-hash',
+      hash: 'sha256:duplicate-thumb-hash',
       createdAt: now,
       updatedAt: now,
       addedAt: now,
@@ -312,7 +312,7 @@ describe('thumbnailScanner', () => {
       thumbSize: 64,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    calculateContentHashMock.mockResolvedValue('sha256|duplicate-thumb-hash')
+    calculateContentHashMock.mockResolvedValue('sha256:duplicate-thumb-hash')
     const result = await runThumbnailScanner()
     expect(result.deduplicated.length).toBeGreaterThanOrEqual(1)
     expect(result.deduplicated).toEqual(
@@ -345,7 +345,7 @@ describe('thumbnailScanner', () => {
     })
     let counter = 0
     calculateContentHashMock.mockImplementation(
-      async () => `sha256|video-thumb-${++counter}`
+      async () => `sha256:video-thumb-${++counter}`
     )
 
     const result = await runThumbnailScanner()
@@ -378,7 +378,7 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     let counter = 0
     calculateContentHashMock.mockImplementation(
-      async () => `sha256|thumb-hash-${++counter}`
+      async () => `sha256:thumb-hash-${++counter}`
     )
     const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(10)
@@ -415,7 +415,7 @@ describe('thumbnailScanner', () => {
     imageManipulatorMock.mockReturnValue(
       ctx as unknown as ImageManipulatorContext
     )
-    calculateContentHashMock.mockResolvedValue('sha256|thumb-hash')
+    calculateContentHashMock.mockResolvedValue('sha256:thumb-hash')
     await runThumbnailScanner()
     expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
   })

@@ -28,7 +28,7 @@ describe('calculateContentHash', () => {
     rnfs.rnfsHash.mockResolvedValueOnce(expectedHash)
 
     const res = await calculateContentHash('file:///test.txt')
-    expect(res).toBe(`sha256|${expectedHash}`)
+    expect(res).toBe(`sha256:${expectedHash}`)
   })
 
   it('falls back to QuickCrypto when RNFS.hash fails', async () => {

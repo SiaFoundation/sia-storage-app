@@ -18,7 +18,7 @@ jest.mock('./mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
 }))
 jest.mock('./contentHash', () => ({
-  calculateContentHash: jest.fn(async (uri: string) => `sha256|hash:${uri}`),
+  calculateContentHash: jest.fn(async (uri: string) => `sha256:hash:${uri}`),
 }))
 jest.mock('../managers/thumbnailer', () => ({
   generateThumbnails: jest.fn(),
@@ -119,7 +119,7 @@ describe('processAssets', () => {
         createdAt: 1,
         updatedAt: 1,
         type: 'image/jpeg',
-        hash: 'sha256|existing-hash',
+        hash: 'sha256:existing-hash',
         localId: null,
         addedAt: 1,
       },
@@ -128,7 +128,7 @@ describe('processAssets', () => {
 
     jest
       .mocked(calculateContentHash)
-      .mockImplementation(async () => 'sha256|existing-hash')
+      .mockImplementation(async () => 'sha256:existing-hash')
     const assets = [
       {
         id: 'same-hash',
@@ -159,7 +159,7 @@ describe('processAssets', () => {
     })
     jest
       .mocked(calculateContentHash)
-      .mockImplementation(async () => 'sha256|same-for-all')
+      .mockImplementation(async () => 'sha256:same-for-all')
     const assets = [
       {
         id: undefined,
