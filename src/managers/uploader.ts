@@ -12,26 +12,27 @@ export function useUploader() {
   return useCallback(
     async (files: FileRecord[]) => {
       if (!sdk) {
-        logger.log('[uploader] sdk not initialized')
+        logger.warn('uploader', 'sdk not initialized')
         return
       }
       try {
         await Promise.all(
           files.map(async (file: FileRecord, index: number) => {
-            logger.log(
-              `[uploader] processing media ${index + 1}/${files.length}...`
+            logger.debug(
+              'uploader',
+              `processing media ${index + 1}/${files.length}...`
             )
             const fileUri = await getFsFileUri(file)
             if (!fileUri) {
-              logger.log(`[uploader] file not available locally ${file.id}`)
+              logger.warn('uploader', `file not available locally ${file.id}`)
               return
             }
-            logger.log(`[uploader] cached file ${file.id} -> ${fileUri}`)
+            logger.debug('uploader', `cached file ${file.id} -> ${fileUri}`)
             runUploadWithSlot({
               id: file.id,
               task: async (signal) => {
                 const indexerURL = await getIndexerURL()
-                logger.log(`[uploader] uploading ${file.id} to hosts...`)
+                logger.debug('uploader', `uploading ${file.id} to hosts...`)
                 await uploadToNetwork({
                   file,
                   indexerURL,
@@ -39,14 +40,14 @@ export function useUploader() {
                   fileUri,
                   signal,
                 })
-                logger.log(`[uploader] upload complete ${file.id}`)
+                logger.debug('uploader', `upload complete ${file.id}`)
               },
             })
           })
         )
-        logger.log('[uploader] all selected assets processed.')
+        logger.debug('uploader', 'all selected assets processed.')
       } catch (e) {
-        logger.log(`[uploader] error`, e)
+        logger.error('uploader', 'error', e)
       }
     },
     [sdk]
@@ -70,7 +71,7 @@ export function useReuploadFile() {
           if (!fileUri) {
             throw new Error('File not available locally')
           }
-          logger.log(`[uploader] uploading ${fileId}...`)
+          logger.debug('uploader', `uploading ${fileId}...`)
           await uploadToNetwork({
             file,
             indexerURL,
@@ -78,7 +79,7 @@ export function useReuploadFile() {
             fileUri,
             signal,
           })
-          logger.log(`[uploader] upload complete ${fileId}`)
+          logger.debug('uploader', `upload complete ${fileId}`)
         },
       }),
     []

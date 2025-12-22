@@ -1,4 +1,4 @@
-import { serviceLog } from './logger'
+import { logger } from './logger'
 
 // Scheduler state for a service: the latest token and its timeout handle.
 type SchedulerState = {
@@ -25,7 +25,7 @@ export function createServiceInterval({
       clearTimeout(existing.timeoutId)
     }
 
-    serviceLog(`[${name}] initializing`)
+    logger.debug(name, 'initializing')
 
     // Increment the token to invalidate any previously scheduled or in-flight ticks.
     const token = (existing?.token ?? 0) + 1

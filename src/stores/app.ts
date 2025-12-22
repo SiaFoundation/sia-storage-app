@@ -27,6 +27,7 @@ import { initSyncUpMetadata } from '../managers/syncUpMetadata'
 import { initThumbnailScanner } from '../managers/thumbnailScanner'
 import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
 import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
+import { initLogRotation } from '../managers/logRotation'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { clearAppKeys } from './appKey'
 import { clearMnemonicHash } from './mnemonic'
@@ -65,7 +66,6 @@ export async function initApp(): Promise<void> {
       label: 'Starting application',
       message: 'Initializing...',
       runner: async () => {
-        await initLogger()
         ensureFsStorageDirectory()
         ensureTempFsStorageDirectory()
       },
@@ -80,6 +80,7 @@ export async function initApp(): Promise<void> {
             updateDetail(event.message)
           },
         })
+        await initLogger()
       },
     },
   ]
@@ -112,6 +113,7 @@ export async function initApp(): Promise<void> {
       initThumbnailScanner()
       initFsOrphanScanner()
       initFsEvictionScanner()
+      await initLogRotation()
     },
   })
 
@@ -125,7 +127,7 @@ function cancelAllTransfers() {
   cancelAllDownloads()
 }
 
-export function shutdownApp() {
+export async function shutdownApp() {
   cancelAllTransfers()
 }
 

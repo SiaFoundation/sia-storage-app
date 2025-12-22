@@ -4,7 +4,7 @@ import {
   FS_EVICTABLE_MIN_AGE,
 } from '../config'
 import { db } from '../db'
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import {
   calcFsFilesMetadataTotalSize,
@@ -43,7 +43,10 @@ export async function runFsEvictionScanner(): Promise<
     }
 
     let currentSize = totalSize
-    serviceLog('[fsEvictionScanner] total size over limit', { totalSize })
+    logger.warn(
+      'fsEvictionScanner',
+      `total size over limit totalSize=${totalSize}`
+    )
 
     let processedRows = 0
     let evicted = 0
@@ -69,10 +72,10 @@ export async function runFsEvictionScanner(): Promise<
           currentSize -= row.size
           evicted += 1
         } catch (error) {
-          serviceLog('[fsEvictionScanner] failed to remove file', {
-            fileId: row.fileId,
-            error,
-          })
+          logger.error(
+            'fsEvictionScanner',
+            `failed to remove file fileId=${row.fileId} error=${error}`
+          )
         }
       }
 
@@ -88,12 +91,13 @@ export async function runFsEvictionScanner(): Promise<
       evicted,
       currentSize,
     }
-    serviceLog(
-      `[fsEvictionScanner] summary processedRows=${processedRows} evicted=${evicted} currentSize=${currentSize}`
+    logger.info(
+      'fsEvictionScanner',
+      `summary processedRows=${processedRows} evicted=${evicted} currentSize=${currentSize}`
     )
     return results
   } catch (error) {
-    serviceLog('[fsEvictionScanner] error during scan', error)
+    logger.error('fsEvictionScanner', 'error during scan', error)
   } finally {
     await setFsEvictionLastRun()
   }

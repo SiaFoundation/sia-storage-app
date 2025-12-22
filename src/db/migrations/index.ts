@@ -27,7 +27,7 @@ export async function runMigrations(
   db: SQLite.SQLiteDatabase,
   onProgress?: MigrationProgressHandler
 ): Promise<void> {
-  logger.log('[db] checking migrations...')
+  logger.debug('db', 'checking migrations...')
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS migrations (
       id TEXT PRIMARY KEY,
@@ -42,8 +42,9 @@ export async function runMigrations(
 
   const needToApply = migrations.length - applied.size
   if (needToApply > 0) {
-    logger.log(
-      '[db] need to apply',
+    logger.info(
+      'db',
+      'need to apply',
       migrations.length - applied.size,
       'migrations'
     )
@@ -52,7 +53,7 @@ export async function runMigrations(
     if (applied.has(m.id)) {
       continue
     }
-    logger.log('[db] applying migration', m.id)
+    logger.info('db', 'applying migration', m.id)
     onProgress?.({
       id: m.id,
       message: m.description,
@@ -66,5 +67,5 @@ export async function runMigrations(
       )
     })
   }
-  logger.log('[db] all migrations applied')
+  logger.info('db', 'all migrations applied')
 }

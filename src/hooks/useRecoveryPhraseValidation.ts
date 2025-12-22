@@ -21,7 +21,12 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
         validateRecoveryPhrase(normalizedManualPhrase)
         return { isValid: true, error: null }
       } catch (e) {
-        if (__DEV__) logger.log('Recovery phrase validation failed:', e)
+        if (__DEV__)
+          logger.debug(
+            'recoveryPhraseValidation',
+            'Recovery phrase validation failed:',
+            e
+          )
 
         const message =
           e instanceof Error

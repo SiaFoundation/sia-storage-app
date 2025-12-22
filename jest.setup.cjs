@@ -1,7 +1,19 @@
 jest.mock('./src/lib/logger', () => ({
   LOG_SERVICES: true,
-  logger: { log: jest.fn(), sdk: jest.fn(), clear: jest.fn() },
-  serviceLog: jest.fn(),
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    clear: jest.fn(),
+  },
+  rustLogger: {
+    hasInitialized: false,
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
 }))
 
 // Ensure expo-constants is available for transitive expo modules (expo-asset/SQLite).

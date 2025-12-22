@@ -43,7 +43,7 @@ export async function generateThumbnailsForFile(
     type: fileRecord.type,
   })
   if (!sourceUri) {
-    logger.log('[generateThumbnailsForFile] no source URI', {
+    logger.warn('generateThumbnailsForFile', 'no source URI', {
       fileId: fileRecord.id,
     })
     return
@@ -54,14 +54,14 @@ export async function generateThumbnailsForFile(
   const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
 
   if (missingSizes.length === 0) {
-    logger.log('[generateThumbnailsForFile] all thumbnails already exist', {
+    logger.debug('generateThumbnailsForFile', 'all thumbnails already exist', {
       fileId: fileRecord.id,
     })
     return
   }
 
   // Generate missing thumbnails.
-  logger.log('[generateThumbnailsForFile] generating thumbnails', {
+  logger.debug('generateThumbnailsForFile', 'generating thumbnails', {
     fileId: fileRecord.id,
     missingSizes,
   })
@@ -83,7 +83,7 @@ export async function generateThumbnails(files: FileRecord[]) {
     try {
       await generateThumbnailsForFile(file)
     } catch (error) {
-      logger.log('[generateThumbnails] thumbnail generation error', {
+      logger.error('generateThumbnails', 'thumbnail generation error', {
         fileId: file.id,
         error,
       })
@@ -118,28 +118,28 @@ export async function ensureThumbnailForSize(params: {
     return { status: 'exists' }
   }
 
-  logger.log('[thumbnailer] source uri', { fileId, uri: sourceUri })
+  logger.debug('thumbnailer', 'source uri', { fileId, uri: sourceUri })
 
   // Compute input and target aspect-preserving dimensions for thumb size = size.
   let info: ThumbnailInfo | null = null
   try {
     if (fileType?.startsWith('video/')) {
       info = await prepareVideoThumbnail(sourceUri, size)
-      logger.log('[thumbnailer] video base frame prepared', {
+      logger.debug('thumbnailer', 'video base frame prepared', {
         fileId,
         size,
         info,
       })
     } else {
       info = await prepareImageThumbnail(sourceUri, size)
-      logger.log('[thumbnailer] image target size prepared', {
+      logger.debug('thumbnailer', 'image target size prepared', {
         fileId,
         size,
         info,
       })
     }
   } catch (e) {
-    logger.log('[thumbnailer] error preparing source', e)
+    logger.error('thumbnailer', 'error preparing source', e)
     return { status: 'error', error: e }
   }
 
@@ -151,7 +151,7 @@ export async function ensureThumbnailForSize(params: {
       compress: 0.8,
       format: SaveFormat.WEBP,
     })
-    logger.log('[thumbnailer] manipulated', {
+    logger.debug('thumbnailer', 'manipulated', {
       fileId,
       hash: fileHash,
       size,
@@ -170,14 +170,14 @@ export async function ensureThumbnailForSize(params: {
     const fileUri = await copyFileToFs(thumbFileInfo, new File(result.uri))
     const thumbHash = await calculateContentHash(fileUri)
     if (!thumbHash) {
-      logger.log('[thumbnailer] failed to calculate hash', { fileId, size })
+      logger.error('thumbnailer', 'failed to calculate hash', { fileId, size })
       return { status: 'error', error: new Error('Missing thumbnail hash') }
     }
 
     // Check if a thumbnail with this hash already exists (dedupe by content hash).
     const existingThumb = await readFileRecordByContentHash(thumbHash)
     if (existingThumb) {
-      logger.log('[thumbnailer] thumbnail already exists by hash', {
+      logger.debug('thumbnailer', 'thumbnail already exists by hash', {
         thumbId: existingThumb.id,
         hash: fileHash,
         size,
@@ -204,7 +204,7 @@ export async function ensureThumbnailForSize(params: {
       },
       true
     )
-    logger.log('[thumbnailer] created thumbnail record', {
+    logger.debug('thumbnailer', 'created thumbnail record', {
       thumbId,
       hash: fileHash,
       size,
@@ -221,7 +221,7 @@ export async function ensureThumbnailForSize(params: {
       height: result.height ?? null,
     }
   } catch (e) {
-    logger.log('[thumbnailer] error generating thumbnail', e)
+    logger.error('thumbnailer', 'error generating thumbnail', e)
     return { status: 'error', error: e }
   }
 }

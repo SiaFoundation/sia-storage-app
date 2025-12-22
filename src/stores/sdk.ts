@@ -82,7 +82,7 @@ export async function connectSdk(): Promise<SdkInterface | null> {
 
     const [sdk, err] = await builderConnected(builder, appKey)
     if (err) {
-      logger.log('Error connecting', err)
+      logger.error('sdk', 'Error connecting', err)
       return null
     }
 
@@ -91,10 +91,10 @@ export async function connectSdk(): Promise<SdkInterface | null> {
       return sdk
     }
 
-    logger.log('SDK not connected, auth required')
+    logger.warn('sdk', 'SDK not connected, auth required')
     return null
   } catch (err) {
-    logger.log('Error initializing SDK', err)
+    logger.error('sdk', 'Error initializing SDK', err)
     return null
   }
 }
@@ -106,15 +106,15 @@ export async function connectSdk(): Promise<SdkInterface | null> {
  */
 export async function reconnectIndexer(): Promise<boolean> {
   if (getState().isReconnecting) {
-    logger.log('[sdk] already reconnecting, skipping')
+    logger.debug('sdk', 'already reconnecting, skipping')
     return false
   }
   setState({ isReconnecting: true })
 
-  logger.log('[sdk] reconnecting...')
+  logger.info('sdk', 'reconnecting...')
   const isAuthing = getState().isAuthing
   if (isAuthing) {
-    logger.log('[sdk] already authing, skipping')
+    logger.debug('sdk', 'already authing, skipping')
     setState({ isReconnecting: false })
     return false
   }
@@ -180,7 +180,7 @@ export type SwitchResult = Result<void, SwitchError>
 export async function authenticateIndexer(
   indexerURL: string
 ): Promise<AuthenticateResult> {
-  logger.log(`Authenticating with ${indexerURL}...`)
+  logger.info('sdk', `Authenticating with ${indexerURL}...`)
 
   // Check if we have an AppKey for this indexer (returning user).
   const appKey = await getAppKeyForIndexer(indexerURL)
@@ -190,11 +190,11 @@ export async function authenticateIndexer(
     const [sdk, connectedErr] = await builderConnected(builder, appKey)
     if (connectedErr) {
       setState({ isAuthing: false })
-      logger.log('Connection error', connectedErr)
+      logger.error('sdk', 'Connection error', connectedErr)
       return err({ type: 'error', message: connectedErr.message })
     }
     if (sdk) {
-      logger.log('Already registered, connected.')
+      logger.info('sdk', 'Already registered, connected.')
       setState({ sdk, isConnected: true, isAuthing: false })
       setIndexerURL(indexerURL)
       return ok({ alreadyConnected: true })
@@ -203,7 +203,7 @@ export async function authenticateIndexer(
   }
 
   // New user - run browser auth and save approved builder for registerWithIndexer.
-  logger.log('New user, running browser auth...')
+  logger.info('sdk', 'New user, running browser auth...')
   setState({ isAuthing: true, pendingApproval: null })
 
   const builder = new Builder(indexerURL)
@@ -225,7 +225,7 @@ export async function authenticateIndexer(
       : null,
   })
 
-  logger.log('Browser auth completed.')
+  logger.info('sdk', 'Browser auth completed.')
   return ok({ alreadyConnected: false })
 }
 
@@ -250,7 +250,7 @@ export function setSdk(sdk: SdkInterface | null) {
 export async function switchIndexer(
   newIndexerURL: string
 ): Promise<SwitchResult> {
-  logger.log(`Attempting to switch to ${newIndexerURL}...`)
+  logger.info('sdk', `Attempting to switch to ${newIndexerURL}...`)
 
   // First, check if we have an AppKey specifically for this indexer.
   const appKeyForIndexer = await getAppKeyForIndexer(newIndexerURL)
@@ -262,12 +262,12 @@ export async function switchIndexer(
     )
 
     if (connectedErr) {
-      logger.log('Connection error with stored AppKey', connectedErr)
+      logger.error('sdk', 'Connection error with stored AppKey', connectedErr)
       return err({ type: 'error', message: connectedErr.message })
     }
 
     if (sdk) {
-      logger.log('Connected using stored AppKey for this indexer.')
+      logger.info('sdk', 'Connected using stored AppKey for this indexer.')
       setState({ sdk, isConnected: true })
       setIndexerURL(newIndexerURL)
       return ok(undefined)
@@ -275,7 +275,7 @@ export async function switchIndexer(
   }
 
   // No stored AppKey for this indexer - user needs to enter mnemonic.
-  logger.log('No stored AppKey for this indexer, needs reauth')
+  logger.info('sdk', 'No stored AppKey for this indexer, needs reauth')
   return err({ type: 'needsReauth' })
 }
 
@@ -297,7 +297,7 @@ export async function registerWithIndexer(
   // Validate mnemonic against stored hash if one exists.
   const mnemonicValid = await validateMnemonic(mnemonic)
   if (mnemonicValid === 'invalid') {
-    logger.log('Mnemonic does not match stored hash')
+    logger.warn('sdk', 'Mnemonic does not match stored hash')
     // Keep pendingApproval so user can fix mnemonic and retry.
     setState({ isAuthing: false })
     return err({ type: 'mnemonicMismatch' })
@@ -308,11 +308,11 @@ export async function registerWithIndexer(
   let approvedBuilder: BuilderInterface | null = null
 
   if (pendingApproval && pendingApproval.indexerURL === indexerURL) {
-    logger.log('Using pending approval from authenticateIndexer')
+    logger.debug('sdk', 'Using pending approval from authenticateIndexer')
     approvedBuilder = pendingApproval.builder
   } else {
     // No pending approval - run browser auth (fallback for edge cases).
-    logger.log('No pending approval, running browser auth...')
+    logger.info('sdk', 'No pending approval, running browser auth...')
     const builder = new Builder(indexerURL)
     const [result, authErr] = await runBrowserAuthFlow(builder)
     if (authErr) {
@@ -331,7 +331,7 @@ export async function registerWithIndexer(
   const [sdk, registerErr] = await builderRegister(approvedBuilder, mnemonic)
   if (registerErr) {
     setState({ isAuthing: false, pendingApproval: null })
-    logger.log('Error registering with mnemonic', registerErr)
+    logger.error('sdk', 'Error registering with mnemonic', registerErr)
     return err({ type: 'error', message: registerErr.message })
   }
 
@@ -353,7 +353,7 @@ async function builderConnected(
   appKey: AppKey
 ): Promise<Result<SdkInterface | null>> {
   try {
-    logger.log('Attempting builder.connected...')
+    logger.debug('sdk', 'Attempting builder.connected...')
     const sdk = await withTimeout(
       builder.connected(appKey),
       CONNECTION_TIMEOUT_MS
@@ -371,7 +371,7 @@ async function builderRequestConnection(
   builder: Builder
 ): Promise<Result<BuilderInterface>> {
   try {
-    logger.log('Requesting app connection...')
+    logger.debug('sdk', 'Requesting app connection...')
     const result = await withTimeout(
       builder.requestConnection({
         id: hexToUint8(APP_KEY).buffer,
@@ -396,7 +396,7 @@ async function builderWaitForApproval(
   builder: BuilderInterface
 ): Promise<Result<BuilderInterface>> {
   try {
-    logger.log('Waiting for approval...')
+    logger.debug('sdk', 'Waiting for approval...')
     const result = await withTimeout(
       builder.waitForApproval(),
       CONNECTION_TIMEOUT_MS
@@ -415,7 +415,7 @@ async function builderRegister(
   mnemonic: string
 ): Promise<Result<SdkInterface>> {
   try {
-    logger.log('Registering with mnemonic...')
+    logger.info('sdk', 'Registering with mnemonic...')
     const result = await withTimeout(
       builder.register(mnemonic),
       CONNECTION_TIMEOUT_MS
@@ -458,7 +458,7 @@ async function runBrowserAuthFlow(
     builder
   )
   if (requestErr) {
-    logger.log('Error requesting connection', requestErr)
+    logger.error('sdk', 'Error requesting connection', requestErr)
     return err({ type: 'error', message: requestErr.message })
   }
 
@@ -467,9 +467,9 @@ async function runBrowserAuthFlow(
   )
   if (approvalErr) {
     if (approvalErr.type === 'cancelled') {
-      logger.log('App authorization cancelled by user')
+      logger.info('sdk', 'App authorization cancelled by user')
     } else {
-      logger.log('Error during approval', approvalErr)
+      logger.error('sdk', 'Error during approval', approvalErr)
     }
     return err(approvalErr)
   }

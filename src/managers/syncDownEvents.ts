@@ -1,4 +1,4 @@
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { SYNC_EVENTS_INTERVAL } from '../config'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
@@ -49,12 +49,12 @@ type Counts = {
 export async function syncDownEvents(): Promise<void> {
   const isConnected = getIsConnected()
   if (!isConnected) {
-    serviceLog('[syncDownEvents] not connected to indexer, skipping sync')
+    logger.debug('syncDownEvents', 'not connected to indexer, skipping sync')
     return
   }
   const sdk = getSdk()
   if (!sdk) {
-    serviceLog('[syncDownEvents] no sdk, skipping sync')
+    logger.debug('syncDownEvents', 'no sdk, skipping sync')
     return
   }
 
@@ -67,19 +67,21 @@ export async function syncDownEvents(): Promise<void> {
   while (true) {
     try {
       const cursor = await getSyncDownCursor()
-      serviceLog(
-        `[syncDownEvents] syncing from id=${cursor?.key} after=${cursor?.after}`
+      logger.debug(
+        'syncDownEvents',
+        `syncing from id=${cursor?.key} after=${cursor?.after}`
       )
 
       const events = await sdk.objectEvents(cursor, batchSize)
 
       // If the batch size is 1, we are probably synced and repeatedly polling the last event.
       if (events.length === 1) {
-        serviceLog(
-          `[syncDownEvents] batch size=${events.length}, no new events found`
+        logger.debug(
+          'syncDownEvents',
+          `batch size=${events.length}, no new events found`
         )
       } else {
-        serviceLog(`[syncDownEvents] batch size=${events.length}`)
+        logger.info('syncDownEvents', `batch size=${events.length}`)
       }
 
       await processBatch(events, counts)
@@ -99,13 +101,14 @@ export async function syncDownEvents(): Promise<void> {
         break
       }
     } catch (e) {
-      serviceLog('[syncDownEvents] sync error', e)
+      logger.error('syncDownEvents', 'sync error', e)
       break
     }
   }
 
-  serviceLog(
-    `[syncDownEvents] synced, existingCount=${counts.existing}, addedCount=${counts.added}, deletedCount=${counts.deleted}`
+  logger.info(
+    'syncDownEvents',
+    `synced, existingCount=${counts.existing}, addedCount=${counts.added}, deletedCount=${counts.deleted}`
   )
 }
 
@@ -127,7 +130,7 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
   try {
     const existingFileRecord = await readFileRecordByObjectId(id)
     if (existingFileRecord) {
-      serviceLog(`[syncDownEvents] deleting file id=${existingFileRecord.id}`)
+      logger.info('syncDownEvents', `deleting file id=${existingFileRecord.id}`)
       await Promise.all([
         // Remove the file from the file system.
         removeFsFile(existingFileRecord),
@@ -138,12 +141,13 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
       ])
       counts.deleted++
     } else {
-      serviceLog(
-        `[syncDownEvents] no file record found for object id=${id}, skipping delete`
+      logger.debug(
+        'syncDownEvents',
+        `no file record found for object id=${id}, skipping delete`
       )
     }
   } catch (e) {
-    serviceLog(`[syncDownEvents] error handling delete for id=${id}`, e)
+    logger.error('syncDownEvents', `error handling delete for id=${id}`, e)
     throw e
   }
 }
@@ -183,9 +187,9 @@ async function handleUpdateEvent(
       )
       return
     }
-    serviceLog(`[syncDownEvents] incomplete metadata, skipping update`)
+    logger.debug('syncDownEvents', 'incomplete metadata, skipping update')
   } catch (e) {
-    serviceLog(`[syncDownEvents] error handling update for id=${id}`, e)
+    logger.error('syncDownEvents', `error handling update for id=${id}`, e)
     throw e
   }
 }
@@ -200,10 +204,11 @@ async function handleFileRecord(
 ) {
   if (existingFile) {
     if (type === 'file') {
-      serviceLog(`[syncDownEvents] updating file hash=${existingFile.hash}`)
+      logger.debug('syncDownEvents', `updating file hash=${existingFile.hash}`)
     } else {
-      serviceLog(
-        `[syncDownEvents] updating thumbnail thumbForHash=${existingFile.thumbForHash}`
+      logger.debug(
+        'syncDownEvents',
+        `updating thumbnail thumbForHash=${existingFile.thumbForHash}`
       )
     }
     const localObject = await pinnedObjectToLocalObject(
@@ -224,10 +229,11 @@ async function handleFileRecord(
     counts.existing++
   } else {
     if (type === 'file') {
-      serviceLog(`[syncDownEvents] creating file hash=${metadata.hash}`)
+      logger.info('syncDownEvents', `creating file hash=${metadata.hash}`)
     } else {
-      serviceLog(
-        `[syncDownEvents] creating thumbnail thumbForHash=${metadata.thumbForHash}`
+      logger.info(
+        'syncDownEvents',
+        `creating thumbnail thumbForHash=${metadata.thumbForHash}`
       )
     }
     const fileId = uniqueId()
@@ -292,6 +298,6 @@ export async function setSyncDownCursor(value: ObjectsCursor | undefined) {
 }
 
 export async function resetSyncDownCursor() {
-  serviceLog('[syncDownEvents] resetting sync down cursor')
+  logger.info('syncDownEvents', 'resetting sync down cursor')
   await setSyncDownCursor(undefined)
 }

@@ -37,7 +37,7 @@ export async function acquireUploadSlot(): Promise<() => void> {
 
 export async function setMaxUploads(value: number) {
   if (!value) {
-    logger.log('[settings] setMaxUploads: value must be 1 or greater')
+    logger.warn('settings', 'setMaxUploads: value must be 1 or greater')
   }
   const clamped = Math.max(1, Math.floor(Number(value) || 1))
   await setAsyncStorageNumber('maxUploads', clamped)

@@ -47,7 +47,7 @@ export async function readFileBytes(
       reader.releaseLock()
     }
   } catch (e) {
-    logger.log('[readFileBytes] error:', e)
+    logger.error('readFileBytes', 'error:', e)
     return null
   }
 }

@@ -67,10 +67,10 @@ export function cancelAllDownloads() {
   const current = getState().downloads
   Object.values(current).forEach((r) => {
     try {
-      logger.log('aborting download', r.id)
+      logger.debug('downloads', 'aborting download', r.id)
       r.controller?.abort()
     } catch (e) {
-      logger.log('error aborting download', r.id, e)
+      logger.error('downloads', 'error aborting download', r.id, e)
     }
   })
   useDownloadsStore.setState({ downloads: {} })
@@ -104,14 +104,14 @@ export async function runDownloadWithSlot<T>(params: {
   setDownloadState(id, 'queued', 0)
   const release = await acquireDownloadSlot()
   try {
-    logger.log('download running', id)
+    logger.debug('downloads', 'download running', id)
     setDownloadState(id, 'running', 0)
     const result = await task(controller.signal)
-    logger.log('download success', id)
+    logger.debug('downloads', 'download success', id)
     removeDownload(id)
     return result
   } catch (e) {
-    logger.log('download error', id, e)
+    logger.error('downloads', 'download error', id, e)
     const message = e instanceof Error ? e.message : String(e)
     setDownloadState(id, 'error', 0, message)
     throw e

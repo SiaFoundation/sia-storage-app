@@ -1,4 +1,4 @@
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import { getActiveUploads, useActiveUploads } from '../stores/uploads'
 import {
   getFilesLocalOnly,
@@ -21,10 +21,10 @@ import { humanUploadPercent } from '../lib/uploadPercent'
 async function startUploadScanner(): Promise<void> {
   const isConnected = getIsConnected()
   if (!isConnected) {
-    serviceLog('[uploadScanner] not connected to indexer, skipping scan')
+    logger.debug('uploadScanner', 'not connected to indexer, skipping scan')
     return
   }
-  serviceLog('[uploadScanner] scanning...')
+  logger.debug('uploadScanner', 'scanning...')
   try {
     const maxUploads = await getMaxUploads()
     const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxUploads
@@ -34,14 +34,14 @@ async function startUploadScanner(): Promise<void> {
     }
     const files = await getNextUploads(maxToAdd)
     if (files.length > 0) {
-      serviceLog(
-        `[uploadScanner] queuing ${files.length} uploads`,
-        files.map((f) => f.id).join(', ')
+      logger.info(
+        'uploadScanner',
+        `queuing ${files.length} uploads: ${files.map((f) => f.id).join(', ')}`
       )
       files.forEach((f) => queueUploadForFileId(f.id))
     }
   } catch (e) {
-    serviceLog('[uploadScanner] scan error', e)
+    logger.error('uploadScanner', 'scan error', e)
   }
 }
 

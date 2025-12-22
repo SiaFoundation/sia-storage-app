@@ -12,12 +12,12 @@ export function useCameraCapture() {
   const isCapturingRef = useRef<boolean>(false)
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isCapturingRef.current) {
-      logger.log('[cameraCapture] already capturing, ignoring new request.')
+      logger.debug('cameraCapture', 'already capturing, ignoring new request.')
       return []
     }
     isCapturingRef.current = true
     try {
-      logger.log('[cameraCapture] opening camera...')
+      logger.debug('cameraCapture', 'opening camera...')
       const result = await ImagePicker.launchCamera({
         mediaType: 'mixed',
         saveToPhotos: false,
@@ -29,12 +29,13 @@ export function useCameraCapture() {
       })
 
       if (result.didCancel) {
-        logger.log('[cameraCapture] capture canceled.')
+        logger.debug('cameraCapture', 'capture canceled.')
         return []
       }
       if (result.errorCode) {
-        logger.log(
-          `[cameraCapture] error: ${result.errorMessage ?? result.errorCode}`
+        logger.warn(
+          'cameraCapture',
+          `error: ${result.errorMessage ?? result.errorCode}`
         )
         return []
       }
@@ -70,7 +71,7 @@ export function useCameraCapture() {
 
       return files
     } catch (e) {
-      logger.log('[cameraCapture] error', e)
+      logger.error('cameraCapture', 'error', e)
       return []
     } finally {
       isCapturingRef.current = false

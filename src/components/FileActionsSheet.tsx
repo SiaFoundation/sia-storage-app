@@ -60,7 +60,7 @@ export function FileActionsSheet({
       await removeFsFile(file)
       toast.show('Removed from device')
     } catch (e) {
-      logger.log('[FileActionsSheet] failed to remove local file', e)
+      logger.error('FileActionsSheet', 'failed to remove local file', e)
       toast.show('Failed to remove from device')
     }
   }, [file?.id, file?.type, toast])
@@ -72,7 +72,7 @@ export function FileActionsSheet({
       await reupload(file.id)
       toast.show('Reuploaded file')
     } catch (e) {
-      logger.log('[FileActionsSheet] failed to reupload file', e)
+      logger.error('FileActionsSheet', 'failed to reupload file', e)
       toast.show('Failed to reupload file')
     }
   }, [file?.id, toast])
@@ -83,7 +83,7 @@ export function FileActionsSheet({
       await deleteFileFromNetwork(file)
       toast.show('Removed from network')
     } catch (e) {
-      logger.log('[FileActionsSheet] failed to remove from network', e)
+      logger.error('FileActionsSheet', 'failed to remove from network', e)
       toast.show('Failed to remove from network')
     }
   }, [file?.id, toast])
@@ -95,7 +95,7 @@ export function FileActionsSheet({
       if (navigation) navigation.goBack()
       toast.show('File deleted')
     } catch (e) {
-      logger.log('[FileActionsSheet] failed to delete file', e)
+      logger.error('FileActionsSheet', 'failed to delete file', e)
       toast.show('Failed to delete file')
     }
   }, [file, navigation, toast])

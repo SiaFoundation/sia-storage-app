@@ -1,4 +1,4 @@
-import { serviceLog } from '../lib/logger'
+import { logger } from '../lib/logger'
 import {
   fileMetadataKeys,
   readAllFileRecords,
@@ -147,15 +147,14 @@ export async function setSyncUpCursor(
  */
 export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   if (!getIsConnected()) {
-    serviceLog('[syncUpMetadata] not connected to indexer, skipping')
+    logger.debug('syncUpMetadata', 'not connected to indexer, skipping')
     return
   }
   const indexerURL = await getIndexerURL()
   const after = await getSyncUpCursor()
-  serviceLog(
-    `[syncUpMetadata] service tick: from ${after?.id ?? 'begin'} after=${
-      after?.updatedAt
-    }`
+  logger.debug(
+    'syncUpMetadata',
+    `service tick: from ${after?.id ?? 'begin'} after=${after?.updatedAt}`
   )
   const batch = await readAllFileRecords({
     order: 'ASC',
@@ -170,7 +169,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       : undefined,
   })
   if (batch.length === 0) {
-    serviceLog('[syncUpMetadata] no new updates')
+    logger.debug('syncUpMetadata', 'no new updates')
     return
   }
   for (const f of batch) {
@@ -182,7 +181,8 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       const diffs = diffFileMetadata(f, remoteMeta)
       if (Object.keys(diffs).length === 0) continue
       const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
-      serviceLog(
+      logger.info(
+        'syncUpMetadata',
         formatDiff({
           fileId: f.id,
           objectId: obj.id,
@@ -196,7 +196,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
         await updateMetadata(remote, encodeFileMetadata(f))
       }
     } catch (e) {
-      serviceLog('[syncUpMetadata] error', e)
+      logger.error('syncUpMetadata', 'error', e)
     }
   }
   const last = batch[batch.length - 1]
@@ -205,7 +205,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       updatedAt: last.updatedAt + 1,
       id: last.id,
     })
-    serviceLog('[syncUpMetadata] end reached')
+    logger.debug('syncUpMetadata', 'end reached')
   } else {
     await setSyncUpCursor({
       updatedAt: last.updatedAt,

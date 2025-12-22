@@ -25,7 +25,7 @@ export function VideoPlayer({
     try {
       await videoRef.current?.enterFullscreen()
     } catch (error) {
-      logger.log('[VideoPlayer] Failed to enter fullscreen:', error)
+      logger.error('VideoPlayer', 'Failed to enter fullscreen:', error)
     }
   }, [onViewerControlPress, player])
 

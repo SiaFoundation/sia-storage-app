@@ -14,7 +14,7 @@ export function useReconnectIndexer() {
       const isInitializing = getIsInitializing()
 
       if (!isInitializing && !isIndexerConnected && isOnline) {
-        logger.log('[netinfo] app is now online, reconnecting...')
+        logger.info('netinfo', 'app is now online, reconnecting...')
         await reconnectIndexer()
       }
     })
@@ -32,8 +32,9 @@ export function useReconnectIndexer() {
         const isOnline = await getIsOnline()
         const isIndexerConnected = getIsConnected()
         if (isOnline && !isIndexerConnected) {
-          logger.log(
-            '[netinfo] app is online but not connected to indexer, reconnecting...'
+          logger.info(
+            'netinfo',
+            'app is online but not connected to indexer, reconnecting...'
           )
           reconnectIndexer()
         }

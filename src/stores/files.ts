@@ -300,7 +300,7 @@ export async function readFileRecordByContentHash(hash: string) {
     hash
   )
   if (!row) {
-    logger.log('[db] file not found by hash', hash)
+    logger.debug('db', 'file not found by hash', hash)
     return null
   }
   const objects = await readLocalObjectsForFile(row.id)
@@ -313,7 +313,7 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
     id
   )
   if (!row) {
-    logger.log('[db] file not found', id)
+    logger.debug('db', 'file not found', id)
     return null
   }
   const objects = await readLocalObjectsForFile(id)
@@ -415,7 +415,7 @@ export async function createFileRecordWithLocalObject(
     })
     await librarySwr.triggerChange()
   } catch (e) {
-    logger.log('[createFileRecordWithLocalObject] error', e)
+    logger.error('db', 'createFileRecordWithLocalObject error', e)
     throw e
   }
 }
@@ -433,7 +433,7 @@ export async function updateFileRecordWithLocalObject(
     })
     await librarySwr.triggerChange()
   } catch (e) {
-    logger.log('[updateFileRecordWithLocalObject] error', e)
+    logger.error('db', 'updateFileRecordWithLocalObject error', e)
     throw e
   }
 }

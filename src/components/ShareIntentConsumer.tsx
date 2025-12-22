@@ -24,7 +24,7 @@ export function ShareIntentConsumer() {
       try {
         const files = (shareIntent.files ?? []).filter((file) => file?.path)
         if (files.length === 0) {
-          logger.log('[shareIntent] no supported files in shared payload')
+          logger.debug('shareIntent', 'no supported files in shared payload')
           toast.show('No shareable files found.')
           return
         }
@@ -46,7 +46,7 @@ export function ShareIntentConsumer() {
 
         await uploader(processedFiles)
       } catch (error) {
-        logger.log('[shareIntent] failed to process shared content', error)
+        logger.error('shareIntent', 'failed to process shared content', error)
         toast.show('Failed to import shared files.')
       } finally {
         resetShareIntent()
