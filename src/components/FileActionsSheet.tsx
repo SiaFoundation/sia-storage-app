@@ -28,7 +28,7 @@ type Props = {
   fileID: string
   navigation?: NativeStackScreenProps<
     MainStackParamList,
-    'FileDetail'
+    'LibraryHome'
   >['navigation']
 }
 

@@ -3,11 +3,11 @@ import { View, StyleSheet, Text, Pressable } from 'react-native'
 import { type NavigationProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
-import { overlay, palette } from '../styles/colors'
-import { IconButton } from './IconButton'
-import { FileRecord } from '../stores/files'
-import { useFileStatus } from '../lib/file'
-import { UploadStatusIcon } from './UploadStatusIcon'
+import { overlay, palette } from '../../styles/colors'
+import { IconButton } from '../IconButton'
+import { FileRecord } from '../../stores/files'
+import { useFileStatus } from '../../lib/file'
+import { UploadStatusIcon } from '../UploadStatusIcon'
 
 type Props = {
   file?: FileRecord
@@ -16,7 +16,7 @@ type Props = {
   icon?: 'back' | 'close'
 }
 
-export function FileDetailScreenHeader({
+export function FileCarouselHeader({
   file,
   title,
   navigation,

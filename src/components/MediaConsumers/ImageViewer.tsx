@@ -12,12 +12,15 @@ import {
 export function ImageViewer({
   uri,
   style,
+  onZoomChange,
 }: {
   uri: string
   style?: ViewStyle
+  onZoomChange?: (isZoomed: boolean) => void
 }) {
   const scrollRef = useRef<ScrollView>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
+  const [currentZoom, setCurrentZoom] = useState(1)
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout
@@ -40,8 +43,25 @@ export function ImageViewer({
   }
 
   useEffect(() => {
-    if (size.w && size.h) reset()
+    if (size.w && size.h) {
+      reset()
+      setCurrentZoom(1) // Reset zoom state when image changes
+    }
   }, [uri, size.w, size.h])
+
+  // Notify parent when zoom state changes
+  useEffect(() => {
+    if (onZoomChange) {
+      onZoomChange(currentZoom > 1)
+    }
+  }, [currentZoom, onZoomChange])
+
+  const handleScroll = (event: any) => {
+    const zoom = event.nativeEvent.zoomScale
+    if (zoom !== undefined && zoom !== currentZoom) {
+      setCurrentZoom(zoom)
+    }
+  }
 
   return (
     <View style={[styles.wrap, style]} onLayout={onLayout}>
@@ -59,6 +79,8 @@ export function ImageViewer({
         contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         <Image
           source={{ uri }}

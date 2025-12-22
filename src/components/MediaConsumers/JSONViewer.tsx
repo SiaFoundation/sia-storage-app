@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, Text, StyleSheet, ViewStyle, Platform } from 'react-native'
+import { ScrollView, Text, StyleSheet, ViewStyle, Platform, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'
+import BlocksLoader from '../BlocksLoader'
 
 type Props = {
   uri: string
@@ -13,11 +14,17 @@ type Props = {
 export function JSONViewer({ uri, style, fileSize, topInset }: Props) {
   const [text, setText] = useState('')
   const [note, setNote] = useState<string | null>(null)
+  const [fileLoading, setFileLoading] = useState(true)
+  const [webViewLoading, setWebViewLoading] = useState(true)
 
   const shouldUseWebView = fileSize == null ? true : fileSize > 256 * 1024 // ~256kb
+  const isLoading = fileLoading || (shouldUseWebView && webViewLoading)
+  const isVeryLargeFile = fileSize && fileSize > 5 * 1024 * 1024 // 5MB
 
   useEffect(() => {
     let cancelled = false
+    setFileLoading(true)
+    setWebViewLoading(true)
     const openFile = async () => {
       try {
         const raw = await readFileAsText(uri)
@@ -27,6 +34,7 @@ export function JSONViewer({ uri, style, fileSize, topInset }: Props) {
           if (!cancelled) {
             setText(raw ?? '')
             setNote(null)
+            setFileLoading(false)
           }
           return
         }
@@ -36,17 +44,20 @@ export function JSONViewer({ uri, style, fileSize, topInset }: Props) {
           if (!cancelled) {
             setText(JSON.stringify(obj, null, 2))
             setNote(null)
+            setFileLoading(false)
           }
         } catch {
           if (!cancelled) {
             setText(raw ?? '')
             setNote('Invalid JSON — showing raw text')
+            setFileLoading(false)
           }
         }
       } catch {
         if (!cancelled) {
           setText('[Unable to load JSON]')
           setNote(null)
+          setFileLoading(false)
         }
       }
     }
@@ -68,12 +79,28 @@ export function JSONViewer({ uri, style, fileSize, topInset }: Props) {
 
   if (shouldUseWebView) {
     return (
-      <WebView
-        style={[{ flex: 1, backgroundColor: 'black' }, style]}
-        originWhitelist={['*']}
-        source={{ html }}
-        onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:')}
-      />
+      <View style={[{ flex: 1 }, style]}>
+        <WebView
+          style={{ flex: 1, backgroundColor: 'black' }}
+          originWhitelist={['*']}
+          source={{ html }}
+          onLoadStart={() => setWebViewLoading(true)}
+          onLoadEnd={() => setWebViewLoading(false)}
+          onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:')}
+        />
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <BlocksLoader size={20} />
+            <Text style={styles.loadingText}>
+              {fileLoading
+                ? isVeryLargeFile
+                  ? `Loading ${(fileSize / 1024 / 1024).toFixed(1)}MB JSON...`
+                  : 'Reading JSON...'
+                : 'Rendering...'}
+            </Text>
+          </View>
+        )}
+      </View>
     )
   }
 
@@ -108,6 +135,17 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   note: { color: 'orange', marginBottom: 8, fontSize: 12 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 14,
+  },
 })
 
 function buildPreHtml(s: string, topInset?: number) {

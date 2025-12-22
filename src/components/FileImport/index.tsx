@@ -283,8 +283,8 @@ export function FileImport({
 
       toast.show('File added')
       navigation.navigate('MainTab', {
-        screen: 'FileDetail',
-        params: { id: sharedFile.data.id },
+        screen: 'LibraryHome',
+        params: { openFileId: sharedFile.data.id },
       })
     } catch (e) {
       logger.error('FileImport', 'Error adding file to library', e)

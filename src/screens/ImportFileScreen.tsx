@@ -6,7 +6,7 @@ import {
   type ImportStackParamList,
   type RootTabParamList,
 } from '../stacks/types'
-import { FileDetailScreenHeader } from '../components/FileDetailScreenHeader'
+import { FileCarouselHeader } from '../components/FileCarousel/FileCarouselHeader'
 import { colors } from '../styles/colors'
 import { convertSiaShareUrlToHttp } from '../lib/shareUrl'
 import { FileImport } from '../components/FileImport'
@@ -20,7 +20,7 @@ export function ImportFileScreen({ route }: Props) {
 
   return (
     <View style={styles.container}>
-      <FileDetailScreenHeader
+      <FileCarouselHeader
         title="Import File"
         navigation={navigation}
         icon="close"
