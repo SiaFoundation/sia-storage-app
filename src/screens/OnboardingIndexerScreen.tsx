@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { StyleSheet, View, Text } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { palette } from '../styles/colors'
@@ -7,7 +7,6 @@ import { Button } from '../components/Button'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import BlocksLoader from '../components/BlocksLoader'
 import BlocksShape from '../components/BlocksShape'
-import { useIsConnected } from '../stores/sdk'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { OnboardingStackParamList } from '../stacks/types'
@@ -19,11 +18,10 @@ export default function OnboardingIndexerScreen() {
   const { top, bottom } = useSafeAreaInsets()
   const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } =
     useChangeIndexer()
-  const isConnected = useIsConnected()
-
+  const [isNavigating, setIsNavigating] = useState(false)
   const trimmedValue = newIndexerInputProps.value.trim()
   const isInputEmpty = trimmedValue.length === 0
-  const showWaiting = isWaiting || isConnected
+  const showWaiting = isWaiting || isNavigating
 
   const handleBack = () => {
     if (nav.canGoBack()) {
@@ -35,9 +33,10 @@ export default function OnboardingIndexerScreen() {
     const indexerURL = newIndexerInputProps.value.trim()
     const result = await connectToIndexer()
     if (result.status === 'connected') {
-      // Already registered with this indexer, skip to finished.
+      setIsNavigating(true)
       nav.navigate('FinishedOnboarding', { indexerURL })
     } else if (result.status === 'needsMnemonic') {
+      setIsNavigating(true)
       nav.navigate('RecoveryPhrase', { indexerURL })
     }
     // If error, stay on screen (error already shown via toast).
@@ -65,7 +64,7 @@ export default function OnboardingIndexerScreen() {
           <View style={styles.waitingWrap}>
             <BlocksLoader colorStart={1} size={20} />
             <Text style={styles.waitingText}>
-              {isConnected ? 'Connected' : 'Connecting...'}
+              {isNavigating ? 'Connected' : 'Connecting...'}
             </Text>
           </View>
         ) : (
