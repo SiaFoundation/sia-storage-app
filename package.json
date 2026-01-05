@@ -19,6 +19,7 @@
     "release:ios:internal": "bun scripts/release-ios.ts testflight",
     "release:ios:production": "bun scripts/release-ios.ts appstore",
     "test": "jest",
+    "sync-app-version": "bun scripts/sync-app-version.ts",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },

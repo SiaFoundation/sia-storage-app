@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  # Manual trigger for selecting platform/track
   workflow_dispatch:
     inputs:
       platform:
@@ -21,13 +22,73 @@ on:
           - production
         default: internal
 
+  # Trigger on release PR merge
+  pull_request:
+    types: [closed]
+    branches: [main]
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # Determine if this is a release and set parameters
+  check-release:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'release'))
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      platform: ${{ steps.check.outputs.platform }}
+      track: ${{ steps.check.outputs.track }}
+      is_pr_release: ${{ steps.check.outputs.is_pr_release }}
+    steps:
+      - id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "platform=${{ inputs.platform }}" >> $GITHUB_OUTPUT
+            echo "track=${{ inputs.track }}" >> $GITHUB_OUTPUT
+            echo "is_pr_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "platform=both" >> $GITHUB_OUTPUT
+            echo "track=internal" >> $GITHUB_OUTPUT
+            echo "is_pr_release=true" >> $GITHUB_OUTPUT
+          fi
+
+  # Create GitHub release when triggered by PR merge
+  create-github-release:
+    needs: check-release
+    if: |
+      needs.check-release.outputs.should_release == 'true' &&
+      needs.check-release.outputs.is_pr_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Knope
+        run: |
+          curl -sSfL https://github.com/knope-dev/knope/releases/latest/download/knope-x86_64-unknown-linux-musl.tgz | tar xz
+          chmod +x knope
+          sudo mv knope /usr/local/bin/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: knope release
+
   release-android:
-    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    needs: [check-release, create-github-release]
+    if: |
+      always() &&
+      needs.check-release.outputs.should_release == 'true' &&
+      (needs.check-release.outputs.platform == 'android' || needs.check-release.outputs.platform == 'both') &&
+      (needs.create-github-release.result == 'success' || needs.create-github-release.result == 'skipped')
     runs-on: tenki-standard-autoscale
     steps:
       - name: Checkout
@@ -66,11 +127,16 @@ jobs:
           SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
           CI: true
-        run: bun scripts/release-android.ts ${{ inputs.track }}
+        run: bun scripts/release-android.ts ${{ needs.check-release.outputs.track }}
         shell: bash
 
   release-ios:
-    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    needs: [check-release, create-github-release]
+    if: |
+      always() &&
+      needs.check-release.outputs.should_release == 'true' &&
+      (needs.check-release.outputs.platform == 'ios' || needs.check-release.outputs.platform == 'both') &&
+      (needs.create-github-release.result == 'success' || needs.create-github-release.result == 'skipped')
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -101,7 +167,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           CI: true
         run: |
-          TRACK="${{ inputs.track }}"
+          TRACK="${{ needs.check-release.outputs.track }}"
           if [[ "$TRACK" == "internal" ]]; then
             bun scripts/release-ios.ts testflight
           else

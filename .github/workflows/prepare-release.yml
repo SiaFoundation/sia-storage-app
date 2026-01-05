@@ -1,0 +1,40 @@
+name: Prepare Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prepare-release:
+    # Skip if commit is from release workflow
+    if: "!startsWith(github.event.head_commit.message, 'chore: release v')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.19
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Knope
+        run: |
+          curl -sSfL https://github.com/knope-dev/knope/releases/latest/download/knope-x86_64-unknown-linux-musl.tgz | tar xz
+          chmod +x knope
+          sudo mv knope /usr/local/bin/
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: knope prepare-release --verbose
