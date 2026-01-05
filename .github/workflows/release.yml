@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to release'
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+          - both
+        default: both
+      track:
+        description: 'Release track'
+        required: true
+        type: choice
+        options:
+          - internal
+          - production
+        default: internal
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-android:
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    runs-on: tenki-standard-autoscale
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Decode Android keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android-release.keystore
+        shell: bash
+
+      - name: Release Android
+        env:
+          SIA_RELEASE_STORE_FILE: ${{ github.workspace }}/android-release.keystore
+          SIA_RELEASE_STORE_PASSWORD: ${{ secrets.SIA_RELEASE_STORE_PASSWORD }}
+          SIA_RELEASE_KEY_ALIAS: ${{ secrets.SIA_RELEASE_KEY_ALIAS }}
+          SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
+          CI: true
+        run: bun scripts/release-android.ts ${{ inputs.track }}
+        shell: bash
+
+  release-ios:
+    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Release iOS
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
+          CI: true
+        run: |
+          TRACK="${{ inputs.track }}"
+          if [[ "$TRACK" == "internal" ]]; then
+            bun scripts/release-ios.ts testflight
+          else
+            bun scripts/release-ios.ts appstore
+          fi
+        shell: bash

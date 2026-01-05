@@ -16,19 +16,64 @@ ANDROID_AAB_PATH = File.expand_path("../android/app/build/outputs/bundle/release
 
 # Get App Store Connect API key from environment variable
 # APP_STORE_CONNECT_API_KEY_JSON must be a JSON string with key_id, issuer_id, and key_filepath or key_content
-def app_store_connect_api_key
+def get_app_store_connect_api_key
   api_key_env = ENV["APP_STORE_CONNECT_API_KEY_JSON"]
   
   if api_key_env.nil? || api_key_env.empty?
     UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON environment variable is required")
   end
   
-  # Parse as JSON string
+  # Parse as JSON string with symbol keys (fastlane's Ruby code expects symbols)
   begin
-    JSON.parse(api_key_env)
-  rescue JSON::ParserError
-    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must be a valid JSON string")
+    api_key = JSON.parse(api_key_env, symbolize_names: true)
+  rescue JSON::ParserError => e
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must be a valid JSON string: #{e.message}")
   end
+  
+  # Validate required fields
+  if api_key[:key_id].nil? || api_key[:key_id].empty?
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must include 'key_id' field")
+  end
+  
+  if api_key[:issuer_id].nil? || api_key[:issuer_id].empty?
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must include 'issuer_id' field")
+  end
+  
+  # Validate that either key_filepath or key_content is provided
+  if api_key[:key_filepath].nil? && api_key[:key_content].nil?
+    UI.user_error!("APP_STORE_CONNECT_API_KEY_JSON must include either 'key_filepath' or 'key_content' field")
+  end
+  
+  # Build result hash, only including keys that are actually present
+  # IMPORTANT: Only include key_filepath OR key_content, never both
+  # Fastlane will try to use key_filepath first if it exists, even if nil
+  result = {
+    key_id: api_key[:key_id],
+    issuer_id: api_key[:issuer_id]
+  }
+  
+  # Prefer key_content if both are provided, to avoid filepath issues
+  if !api_key[:key_content].nil? && !api_key[:key_content].empty?
+    key_content = api_key[:key_content]
+    
+    # Check if it's base64 (no PEM headers) and format as PEM if needed
+    if !key_content.include?("BEGIN") && !key_content.include?("END")
+      # It's base64 encoded, format it as PEM
+      # Fastlane expects PEM format with proper line breaks
+      result[:key_content] = "-----BEGIN PRIVATE KEY-----\n#{key_content.scan(/.{1,64}/).join("\n")}\n-----END PRIVATE KEY-----"
+    else
+      # Already in PEM format
+      result[:key_content] = key_content
+    end
+  elsif !api_key[:key_filepath].nil? && !api_key[:key_filepath].empty?
+    filepath = File.expand_path(api_key[:key_filepath])
+    if !File.exist?(filepath)
+      UI.user_error!("App Store Connect API key file not found at: #{filepath}")
+    end
+    result[:key_filepath] = filepath
+  end
+  
+  result
 end
 
 platform :ios do
@@ -112,7 +157,7 @@ platform :ios do
     build_ipa unless File.exist?(IOS_RELEASE_IPA_PATH)
     
     upload_to_app_store(
-      api_key: app_store_connect_api_key,
+      api_key: get_app_store_connect_api_key,
       ipa: IOS_RELEASE_IPA_PATH,
       skip_screenshots: true, # Don't upload screenshots - we manage them manually in App Store Connect
       skip_metadata: true, # Don't upload metadata - we manage descriptions, keywords, etc. manually in App Store Connect
@@ -124,8 +169,19 @@ platform :ios do
     # Build IPA if it doesn't exist
     build_ipa unless File.exist?(IOS_RELEASE_IPA_PATH)
     
+    # Use app_store_connect_api_key action to set up the API key globally
+    api_key_hash = get_app_store_connect_api_key
+    # Only pass the parameters that are actually present (not nil)
+    api_key_params = {
+      key_id: api_key_hash[:key_id],
+      issuer_id: api_key_hash[:issuer_id]
+    }
+    api_key_params[:key_content] = api_key_hash[:key_content] if !api_key_hash[:key_content].nil?
+    api_key_params[:key_filepath] = api_key_hash[:key_filepath] if !api_key_hash[:key_filepath].nil?
+    
+    app_store_connect_api_key(api_key_params)
+    
     upload_to_testflight(
-      api_key: app_store_connect_api_key,
       ipa: IOS_RELEASE_IPA_PATH,
       skip_waiting_for_build_processing: false, # Wait for processing - ensures build is ready before command completes (takes 10-30 min)
       distribute_external: false, # Don't auto-distribute externally - we manually manage tester groups in TestFlight
@@ -143,16 +199,79 @@ def google_play_service_account_key
     UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON environment variable is required")
   end
   
-  # Return JSON string - Fastlane will use json_key_data parameter
-  json_key
+  # Parse and validate the JSON
+  begin
+    key_data = JSON.parse(json_key)
+  rescue JSON::ParserError => e
+    UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON must be a valid JSON string: #{e.message}")
+  end
+  
+  # Validate required fields
+  if key_data["private_key"].nil? || key_data["private_key"].empty?
+    UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON must include 'private_key' field")
+  end
+  
+  if key_data["client_email"].nil? || key_data["client_email"].empty?
+    UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON must include 'client_email' field")
+  end
+  
+  # Fix private_key format if needed - ensure it has proper PEM formatting
+  private_key = key_data["private_key"]
+  
+  # Replace escaped newlines with actual newlines (in case JSON has \\n as literal string)
+  # JSON.parse already converts \n to actual newlines, but handle double-escaped case
+  private_key = private_key.gsub("\\n", "\n") if private_key.include?("\\n")
+  
+  # Normalize the key - remove any trailing/leading whitespace
+  private_key = private_key.strip
+  
+  # Check if key is already properly formatted (has headers, footers, and newlines)
+  has_begin = private_key.match?(/-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----/i)
+  has_end = private_key.match?(/-----END\s+(?:RSA\s+)?PRIVATE\s+KEY-----/i)
+  has_newlines = private_key.include?("\n")
+  
+  # Only reformat if the key is missing proper formatting
+  if !has_begin || !has_end || !has_newlines
+    # Extract the key body (remove headers/footers and whitespace)
+    key_body = private_key.gsub(/-----BEGIN[^-]+-----/i, "").gsub(/-----END[^-]+-----/i, "").gsub(/\s+/, "")
+    
+    # Check if we have a valid key body
+    if key_body.empty? || key_body.length < 100
+      UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON private_key appears to be empty or too short (got #{key_body.length} chars). A valid RSA private key should be at least 1000+ characters.")
+    end
+    
+    # Determine the key type
+    key_type = "PRIVATE KEY"
+    if private_key.include?("RSA PRIVATE KEY") || private_key.include?("RSA")
+      key_type = "RSA PRIVATE KEY"
+    end
+    
+    # Format as proper PEM with line breaks every 64 characters
+    formatted_key = "-----BEGIN #{key_type}-----\n"
+    formatted_key += key_body.scan(/.{1,64}/).join("\n")
+    formatted_key += "\n-----END #{key_type}-----"
+    
+    key_data["private_key"] = formatted_key
+  else
+    # Key appears properly formatted, but ensure it ends with a newline
+    key_data["private_key"] = private_key.end_with?("\n") ? private_key : private_key + "\n"
+  end
+  
+  # Return the fixed JSON as a string
+  JSON.generate(key_data)
 end
 
 platform :android do
   desc "Upload Android app to Google Play Store"
   lane :distribute_play_store do
+    if !File.exist?(ANDROID_AAB_PATH)
+      UI.user_error!("AAB file not found at #{ANDROID_AAB_PATH}. Run 'bun run release:android:build' first.")
+    end
+    
     upload_to_play_store(
       track: "production", # Production track - for public release
       aab: ANDROID_AAB_PATH,
+      release_status: "draft", # Use draft status until app is published in Play Console
       skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
       skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
       skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console
@@ -164,9 +283,14 @@ platform :android do
 
   desc "Upload Android app to internal testing track"
   lane :distribute_internal do
+    if !File.exist?(ANDROID_AAB_PATH)
+      UI.user_error!("AAB file not found at #{ANDROID_AAB_PATH}. Run 'bun run release:android:build' first.")
+    end
+    
     upload_to_play_store(
       track: "internal", # Internal track - for testing
       aab: ANDROID_AAB_PATH,
+      release_status: "draft", # Use draft status until app is published in Play Console
       skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
       skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
       skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console

@@ -33,6 +33,12 @@ if (missing.length > 0) {
 
 const envOverrides: Record<string, string> = {}
 
+// Set JVM memory settings to prevent out of memory errors during builds
+// These settings won't be regenerated since they're in this script
+// Use -D to override gradle.properties settings
+const jvmArgs =
+  '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError'
+
 const storeFile = process.env.SIA_RELEASE_STORE_FILE
 if (storeFile) {
   const resolvedStoreFile = path.isAbsolute(storeFile)
@@ -49,11 +55,17 @@ if (storeFile) {
 
 const finalEnv = { ...process.env, ...envOverrides }
 
-const result = spawnSync('./gradlew', [task], {
-  cwd: androidDir,
-  stdio: 'inherit',
-  env: finalEnv,
-})
+// Pass JVM args as system property to override gradle.properties
+// This ensures the memory settings are applied even if gradle.properties is regenerated
+const result = spawnSync(
+  './gradlew',
+  [`-Dorg.gradle.jvmargs=${jvmArgs}`, task],
+  {
+    cwd: androidDir,
+    stdio: 'inherit',
+    env: finalEnv,
+  }
+)
 
 if (result.error) {
   console.error(result.error)

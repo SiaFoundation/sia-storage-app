@@ -36,7 +36,7 @@ export default {
       },
     },
     android: {
-      versionCode: 2,
+      versionCode: 4,
       adaptiveIcon: {
         foregroundImage: RELEASE
           ? './assets/app-icon-android.png'
