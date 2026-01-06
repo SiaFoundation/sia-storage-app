@@ -37,9 +37,16 @@ yarn-error.*
 *.tsbuildinfo
 android/
 ios/
+.build-cache/
 # env files
 .env
 .env.*
 !.env.example
 !.env.test
 android-release.keystore
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+test/e2e/.maestro/
