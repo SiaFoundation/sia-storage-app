@@ -26,55 +26,46 @@ jobs:
       - name: Test
         run: bun run test
         shell: bash
-  # build-ios:
-  #   runs-on: macos-latest
-  #   env:
-  #     XCODE_VERSION: 16.2
-  #   if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Setup
-  #       uses: ./.github/actions/setup
-  #       with:
-  #         bun_version: 1.2.19
-  #     - name: Use appropriate Xcode version
-  #       uses: maxim-lobanov/setup-xcode@v1
-  #       with:
-  #         xcode-version: '16.2'
-  #     - name: Install simulator runtime
-  #       run: |
-  #         sudo xcodebuild -downloadPlatform iOS
-  #       shell: bash
-  #     - name: Prebuild iOS native project
-  #       run: bunx expo prebuild --platform ios --non-interactive
-  #       shell: bash
-  #     - name: Build iOS
-  #       run: |
-  #         xcodebuild \
-  #           -workspace ios/SiaStorage.xcworkspace \
-  #           -scheme SiaStorage \
-  #           -configuration Release \
-  #           -sdk iphonesimulator \
-  #           -destination 'generic/platform=iOS Simulator' \
-  #           build \
-  #           CODE_SIGNING_ALLOWED=NO
-  #       shell: bash
-  # build-android:
-  #   runs-on: tenki-standard-autoscale
-  #   if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Setup
-  #       uses: ./.github/actions/setup
-  #       with:
-  #         bun_version: 1.2.19
-  #     - name: Prebuild Android native project
-  #       run: bunx expo prebuild --platform android --non-interactive
-  #       shell: bash
-  #     - name: Build Android
-  #       run: |
-  #         cd android
-  #         ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -Dkotlin.daemon.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=1024m"
-  #       shell: bash
+
+  build-ios:
+    runs-on: macos-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+
+      - name: Build iOS
+        run: bun run ci-test-build:ios
+        shell: bash
+
+  build-android:
+    runs-on: tenki-standard-autoscale
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+
+      - name: Build Android
+        run: bun run ci-test-build:android
+        shell: bash
