@@ -63,7 +63,7 @@ export default function OnboardingIndexerScreen() {
         {showWaiting ? (
           <View style={styles.waitingWrap}>
             <BlocksLoader colorStart={1} size={20} />
-            <Text style={styles.waitingText}>
+            <Text testID="indexer-connecting-text" style={styles.waitingText}>
               {isNavigating ? 'Connected' : 'Connecting...'}
             </Text>
           </View>
@@ -79,7 +79,7 @@ export default function OnboardingIndexerScreen() {
                   style={styles.titleIconGlyph}
                 />
               </View>
-              <Text style={styles.title}>Connect to a provider</Text>
+              <Text testID="indexer-title" style={styles.title}>Connect to a provider</Text>
             </View>
             <Text style={styles.subtitle}>
               Use our provider or link whichever one you prefer. This can be
@@ -97,6 +97,7 @@ export default function OnboardingIndexerScreen() {
       {!showWaiting ? (
         <View style={[styles.footer, { paddingBottom: bottom + 12 }]}>
           <Button
+            testID="indexer-back-button"
             variant="secondary"
             onPress={handleBack}
             style={styles.footerButton}
@@ -104,6 +105,7 @@ export default function OnboardingIndexerScreen() {
             Back
           </Button>
           <Button
+            testID="indexer-authorize-button"
             onPress={handleContinue}
             style={styles.footerButton}
             disabled={isInputEmpty}

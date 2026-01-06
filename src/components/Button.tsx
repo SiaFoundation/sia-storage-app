@@ -8,6 +8,7 @@ export function Button({
   children,
   variant = 'primary',
   accessibilityLabel,
+  testID,
 }: {
   style?: StyleProp<ViewStyle>
   disabled?: boolean
@@ -15,9 +16,11 @@ export function Button({
   children: React.ReactNode
   variant?: 'primary' | 'secondary' | 'danger'
   accessibilityLabel?: string
+  testID?: string
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={[
