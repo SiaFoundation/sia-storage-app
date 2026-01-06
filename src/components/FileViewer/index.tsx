@@ -2,6 +2,7 @@ import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { useCallback, useMemo } from 'react'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useFileStatus } from '../../lib/file'
+import { humanSize } from '../../lib/humanSize'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
 import { colors } from '../../styles/colors'
@@ -66,7 +67,9 @@ export function FileViewer({
         </TouchableHighlight>
 
         {!isDownloading ? (
-          <Text style={{ color: colors.textPrimary }}>Press to download</Text>
+          <Text style={{ color: colors.textPrimary }}>
+            Press to download ({humanSize(file.size)})
+          </Text>
         ) : null}
 
         {isDownloading ? (
