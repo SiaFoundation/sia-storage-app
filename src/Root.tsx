@@ -20,6 +20,7 @@ import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import { AppSplash } from './components/AppSplash'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
+import { AuthWebViewModal } from './components/AuthWebViewModal'
 
 const darkNavigationTheme = {
   ...DarkTheme,
@@ -98,6 +99,7 @@ export function Root() {
                   </>
                 )}
               </BottomSheetModalProvider>
+              <AuthWebViewModal />
             </ShareIntentProvider>
           </SafeAreaView>
         </ToastProvider>

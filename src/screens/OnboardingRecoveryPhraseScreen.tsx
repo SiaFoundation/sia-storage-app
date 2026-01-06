@@ -92,7 +92,7 @@ export default function OnboardingRecoveryPhraseScreen() {
                 ringStart={0}
               />
             </View>
-            <Text style={styles.title}>Recovery Phrase</Text>
+            <Text testID="recovery-title" style={styles.title}>Recovery Phrase</Text>
           </View>
 
           <Text style={styles.subtitle}>
@@ -108,7 +108,7 @@ export default function OnboardingRecoveryPhraseScreen() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.phraseText} selectable>
+                  <Text testID="recovery-phrase-text" style={styles.phraseText} selectable>
                     {recoveryPhrase ?? ''}
                   </Text>
                 </ScrollView>
@@ -116,6 +116,7 @@ export default function OnboardingRecoveryPhraseScreen() {
 
               <View style={styles.actionsRow}>
                 <Button
+                  testID="recovery-generate-button"
                   variant="secondary"
                   onPress={makeNewRecoveryPhrase}
                   style={styles.button}
@@ -123,6 +124,7 @@ export default function OnboardingRecoveryPhraseScreen() {
                   Generate new key
                 </Button>
                 <Button
+                  testID="recovery-copy-button"
                   variant="secondary"
                   onPress={() => {
                     Clipboard.setString(recoveryPhrase)
@@ -134,7 +136,7 @@ export default function OnboardingRecoveryPhraseScreen() {
                 </Button>
               </View>
 
-              <Pressable onPress={() => setMode('manual')}>
+              <Pressable testID="recovery-toggle-manual" onPress={() => setMode('manual')}>
                 <Text style={styles.toggleText}>
                   Already have a recovery phrase?
                 </Text>
@@ -151,7 +153,7 @@ export default function OnboardingRecoveryPhraseScreen() {
                 editable={!isSubmitting}
               />
 
-              <Pressable onPress={() => setMode('generated')}>
+              <Pressable testID="recovery-toggle-generated" onPress={() => setMode('generated')}>
                 <Text style={styles.toggleText}>
                   Generate a new recovery phrase instead.
                 </Text>
@@ -163,6 +165,7 @@ export default function OnboardingRecoveryPhraseScreen() {
 
       <View style={[styles.footer, { paddingBottom: bottom }]}>
         <Pressable
+          testID="recovery-checkbox"
           onPress={() => setAckSaved((v) => !v)}
           style={styles.checkboxRow}
           accessibilityRole="checkbox"
@@ -179,6 +182,7 @@ export default function OnboardingRecoveryPhraseScreen() {
         </Pressable>
 
         <Button
+          testID="recovery-continue-button"
           onPress={handleContinue}
           disabled={!canContinue || isSubmitting}
         >

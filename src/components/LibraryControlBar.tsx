@@ -41,7 +41,7 @@ export function LibraryControlBar({ route, navigation }: Props) {
               <ListIcon color={iconColors.white} />
             )}
           </IconButton>
-          <IconButton onPress={() => openSheet('addFile')}>
+          <IconButton testID="library-add-button" onPress={() => openSheet('addFile')}>
             <PlusIcon color={iconColors.white} />
           </IconButton>
           <FileSearchButton onOpen={() => setSearchActive((s) => !s)} />
