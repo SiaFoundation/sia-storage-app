@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useState, useEffect } from 'react'
 import { logger, type LogLevel, type LogEntry } from '../lib/logger'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
-import { db } from '../db'
+import { db, dbInitialized } from '../db'
 import { sqlInsert } from '../db/sql'
 
 export type LogsState = {
@@ -122,8 +122,9 @@ export async function toggleLogScope(scope: string): Promise<void> {
 /** Append log entry directly to database. */
 export async function appendLog(entry: LogEntry): Promise<void> {
   try {
-    if (!db()) {
-      // Database not initialized yet, skip appending log.
+    if (!dbInitialized) {
+      // Database not fully initialized (migrations not run), skip DB write.
+      // Early logs still go to console via logger.ts.
       return
     }
     await sqlInsert('logs', {
@@ -151,6 +152,9 @@ export async function readLogs(
   logScopes?: string[]
 ): Promise<LogEntry[]> {
   try {
+    if (!dbInitialized) {
+      return []
+    }
     const conditions: string[] = []
     const params: (string | number)[] = []
 
@@ -205,7 +209,7 @@ export function extractScopes(entries: LogEntry[]): string[] {
 /** Clear all logs from the database. */
 export async function clearLogs(): Promise<void> {
   try {
-    if (!db()) {
+    if (!dbInitialized) {
       return
     }
     await db().runAsync('DELETE FROM logs')

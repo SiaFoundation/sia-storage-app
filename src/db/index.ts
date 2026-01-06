@@ -5,6 +5,7 @@ import { logger } from '../lib/logger'
 import { Mutex } from '../lib/mutex'
 
 export let database: SQLite.SQLiteDatabase
+export let dbInitialized = false
 const dbName = 'app.db'
 
 export async function initializeDB(options?: {
@@ -13,6 +14,7 @@ export async function initializeDB(options?: {
   logger.info('db', 'initializing database...')
   database = await SQLite.openDatabaseAsync(dbName)
   await runMigrations(database, options?.onProgress)
+  dbInitialized = true
   logger.info('db', 'database initialized')
 }
 
