@@ -1,0 +1,140 @@
+appId: sia.storage.dev
+env:
+  E2E_CONNECT_KEY: "${E2E_CONNECT_KEY}"
+---
+# Onboarding E2E Test (iOS & Android)
+
+# iOS: Clear keychain to remove saved seed
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - clearKeychain
+
+- launchApp:
+    clearState: true
+
+# Expo dev client - connect to dev server (iOS: localhost, Android: 10.0.2.2)
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            text: "http://localhost:8081"
+          timeout: 10000
+      - tapOn:
+          text: "http://localhost:8081"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible:
+            text: "http://10.0.2.2:8081"
+          timeout: 10000
+      - tapOn:
+          text: "http://10.0.2.2:8081"
+
+# Wait for bundling, dismiss dev menu popups
+- extendedWaitUntil:
+    visible:
+      text: "Continue"
+    timeout: 60000
+- tapOn:
+    text: "Continue"
+- extendedWaitUntil:
+    visible:
+      text: "Go home"
+    timeout: 5000
+- tapOn:
+    point: "93%,40%"
+
+# Welcome screen
+- extendedWaitUntil:
+    visible:
+      id: "welcome-title"
+    timeout: 15000
+- assertVisible:
+    text: "Sia Storage"
+- tapOn:
+    id: "welcome-get-started-button"
+
+# Indexer selection
+- extendedWaitUntil:
+    visible:
+      id: "indexer-title"
+    timeout: 10000
+- assertVisible:
+    text: "Connect to a provider"
+- tapOn:
+    id: "indexer-authorize-button"
+
+# Auth WebView
+- extendedWaitUntil:
+    visible:
+      text: "App password"
+    timeout: 20000
+# iOS: Can tap on placeholder text directly
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Enter your app password"
+# Android: WebView doesn't expose placeholder text, use id selector
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          id: "appPassword"
+- inputText: "${E2E_CONNECT_KEY}"
+- extendedWaitUntil:
+    visible:
+      text: "Accept"
+    timeout: 5000
+- tapOn:
+    point: "50%,20%"
+- tapOn:
+    text: "Accept"
+- extendedWaitUntil:
+    visible:
+      text: "Connection approved"
+    timeout: 30000
+- tapOn:
+    text: "Return to app"
+
+# Recovery phrase
+- extendedWaitUntil:
+    visible:
+      id: "recovery-title"
+    timeout: 15000
+- assertVisible:
+    text: "Recovery Phrase"
+- tapOn:
+    id: "recovery-generate-button"
+- extendedWaitUntil:
+    visible:
+      id: "recovery-phrase-text"
+    timeout: 5000
+- tapOn:
+    id: "recovery-checkbox"
+- tapOn:
+    id: "recovery-continue-button"
+
+# Finished
+- extendedWaitUntil:
+    visible:
+      id: "finished-title"
+    timeout: 15000
+- assertVisible:
+    text: "All set!"
+- tapOn:
+    id: "finished-upload-button"
+
+# Verify Library screen
+- extendedWaitUntil:
+    visible:
+      text: "Library"
+    timeout: 10000

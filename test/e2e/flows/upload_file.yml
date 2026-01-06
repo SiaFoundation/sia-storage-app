@@ -1,0 +1,50 @@
+appId: sia.storage.dev
+---
+# Sia Storage - File Upload E2E Test
+# Prerequisites: App must already be onboarded (run onboarding.yml first or use a pre-configured state)
+
+- launchApp
+
+# Wait for Library screen to load
+- extendedWaitUntil:
+    visible:
+      text: "Library"
+    timeout: 15000
+
+# Add test media to the simulator's photo library
+- addMedia:
+    path: test/e2e/assets/test-image.png
+
+# Tap the add button to open the action sheet
+- tapOn:
+    id: "library-add-button"
+
+# Wait for action sheet and select "Choose from Photos"
+- extendedWaitUntil:
+    visible:
+      text: "Choose from Photos"
+    timeout: 5000
+- tapOn:
+    text: "Choose from Photos"
+
+# Handle iOS photo picker
+# Wait for photo library to appear and select the first photo
+- extendedWaitUntil:
+    visible:
+      text: "Recents"
+    timeout: 10000
+
+# Tap on the first photo in the grid
+- tapOn:
+    point: "20%,30%"
+
+# Tap Add button in picker
+- tapOn:
+    text: "Add"
+
+# Wait for upload to start - file should appear in library
+# The exact text depends on implementation (could show filename or "1 item")
+- extendedWaitUntil:
+    visible:
+      text: "test-image"
+    timeout: 30000
