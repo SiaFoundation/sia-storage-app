@@ -74,7 +74,7 @@ export default function OnboardingWelcomeScreen() {
       >
         <View style={styles.card}>
           <View style={styles.center}>
-            <Text style={styles.title}>Sia Storage</Text>
+            <Text testID="welcome-title" style={styles.title}>Sia Storage</Text>
           </View>
         </View>
       </Animated.View>
@@ -86,6 +86,7 @@ export default function OnboardingWelcomeScreen() {
         ]}
       >
         <Button
+          testID="welcome-get-started-button"
           style={styles.footerButton}
           onPress={() => nav.navigate('ChooseIndexer')}
         >

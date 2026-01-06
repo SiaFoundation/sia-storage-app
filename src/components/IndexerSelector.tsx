@@ -44,6 +44,7 @@ export function IndexerSelector({
         ]}
       >
         <Pressable
+          testID="indexer-option-default"
           accessibilityRole="radio"
           accessibilityState={{ selected: !isUsingCustomProvider }}
           onPress={handleSelectDefault}
@@ -65,6 +66,7 @@ export function IndexerSelector({
         ]}
       >
         <Pressable
+          testID="indexer-option-custom"
           accessibilityRole="radio"
           accessibilityState={{ selected: isUsingCustomProvider }}
           onPress={handleUseCustom}

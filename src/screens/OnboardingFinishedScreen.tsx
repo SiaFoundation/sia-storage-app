@@ -117,7 +117,7 @@ export default function OnboardingFinishedScreen() {
                 rotation={90}
               />
             </View>
-            <Animated.Text style={[styles.title, { opacity: fadeInValue }]}>
+            <Animated.Text testID="finished-title" style={[styles.title, { opacity: fadeInValue }]}>
               All set!
             </Animated.Text>
           </View>
@@ -134,6 +134,7 @@ export default function OnboardingFinishedScreen() {
 
       <View style={[styles.footer, { paddingBottom: bottom }]}>
         <Button
+          testID="finished-upload-button"
           variant="primary"
           onPress={async () => {
             await setHasOnboarded(true)
