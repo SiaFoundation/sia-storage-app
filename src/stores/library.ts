@@ -8,11 +8,11 @@ import useSWR from 'swr'
 
 export const librarySwr = buildSWRHelpers('library')
 
-const CATEGORY_TO_PREFIX: Record<Category, string> = {
+type MediaCategory = 'Video' | 'Image' | 'Audio'
+const MEDIA_PREFIXES: Record<MediaCategory, string> = {
   Video: 'video/',
   Image: 'image/',
   Audio: 'audio/',
-  Files: 'application/',
 }
 
 type FileOrderParams = {
@@ -154,19 +154,39 @@ export function buildLibraryQueryParts(
   } = opts
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const prefixes = categories.map((c) => CATEGORY_TO_PREFIX[c])
-  const hasCategories = prefixes.length > 0
+  const mediaCategories = categories.filter(
+    (c): c is MediaCategory => c in MEDIA_PREFIXES
+  )
+  const includesFiles = categories.includes('Files')
   const hasQuery = typeof query === 'string' && query.trim().length > 0
+
+  // If all 4 categories selected, no filter needed
+  const allSelected = mediaCategories.length === 3 && includesFiles
 
   const whereParts: string[] = []
   const params: (string | number)[] = []
   // Exclude thumbnails from library lists.
   whereParts.push(`${tableAlias}.thumbForHash IS NULL`)
-  if (hasCategories) {
-    whereParts.push(
-      prefixes.map(() => `${tableAlias}.type LIKE ?`).join(' OR ')
-    )
-    params.push(...prefixes.map((p) => `${p}%`))
+
+  if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
+    const categoryConditions: string[] = []
+
+    // Add LIKE conditions for selected media categories
+    for (const cat of mediaCategories) {
+      categoryConditions.push(`${tableAlias}.type LIKE ?`)
+      params.push(`${MEDIA_PREFIXES[cat]}%`)
+    }
+
+    // Add NOT LIKE conditions for Files (everything not video/image/audio)
+    if (includesFiles) {
+      const notLikeClauses = Object.values(MEDIA_PREFIXES)
+        .map(() => `${tableAlias}.type NOT LIKE ?`)
+        .join(' AND ')
+      categoryConditions.push(`(${notLikeClauses})`)
+      params.push(...Object.values(MEDIA_PREFIXES).map((p) => `${p}%`))
+    }
+
+    whereParts.push(`(${categoryConditions.join(' OR ')})`)
   }
   if (hasQuery) {
     whereParts.push(
