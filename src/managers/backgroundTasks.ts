@@ -6,6 +6,8 @@ import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
 import { getFileCountLocal } from '../stores/files'
 import BackgroundTimer from 'react-native-background-timer'
+import { getIsConnected } from '../stores/sdk'
+import { hasCachedAppKey } from '../stores/appKey'
 
 /**
  * Background tasks are scheduled by the operating system and run for about the following durations:
@@ -155,7 +157,17 @@ export async function initBackgroundTasks() {
 async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   state.startTime = Date.now()
   const log = logTask(config)
-  log('starting...')
+
+  // Log diagnostic info to distinguish cold start vs resume
+  const isConnected = getIsConnected()
+  const hasCached = hasCachedAppKey()
+  log(
+    `starting... (connected=${isConnected}, hasCachedAppKey=${hasCached}, coldStart=${!hasCached})`
+  )
+
+  if (!isConnected) {
+    log('SDK not connected, uploads will wait for connection...')
+  }
 
   while (true) {
     if (state.status === 'finished') {
