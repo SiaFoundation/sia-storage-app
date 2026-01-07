@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, Text, StyleSheet, ViewStyle, Platform, View } from 'react-native'
+import {
+  ScrollView,
+  Text,
+  StyleSheet,
+  ViewStyle,
+  Platform,
+  View,
+} from 'react-native'
 import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'
 import BlocksLoader from '../BlocksLoader'
@@ -18,8 +25,7 @@ export function TextViewer({ uri, style, fileSize, topInset }: Props) {
 
   const shouldUseWebView = fileSize == null ? true : fileSize > 256 * 1024 // ~256kb
   const isLoading = fileLoading || (shouldUseWebView && webViewLoading)
-  const isLargeFile = fileSize && fileSize > 256 * 1024
-  const isVeryLargeFile = fileSize && fileSize > 5 * 1024 * 1024 // 5MB
+  const isLargeFile = fileSize && fileSize > 5 * 1024 * 1024 // 5MB
 
   useEffect(() => {
     let cancelled = false
@@ -71,7 +77,7 @@ export function TextViewer({ uri, style, fileSize, topInset }: Props) {
             <BlocksLoader size={20} />
             <Text style={styles.loadingText}>
               {fileLoading
-                ? isVeryLargeFile
+                ? isLargeFile
                   ? `Loading ${(fileSize / 1024 / 1024).toFixed(1)}MB file...`
                   : 'Reading file...'
                 : 'Rendering...'}

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import RNFS from 'react-native-fs'
 import { Buffer } from 'buffer'
 import { colors, palette } from '../styles/colors'
-import { RowGroup, GroupTitle } from './Group'
+import { GroupTitle } from './Group'
 import { InfoCard } from './InfoCard'
 import { Button } from './Button'
 import { rnfsHash, quickcryptoHash } from '../lib/contentHash'
@@ -237,7 +237,6 @@ export function SettingsDebugHash() {
 
     let largeFile: string | null = null
     let testDir: string | null = null
-    const testStartTime = Date.now()
 
     try {
       testDir = `${RNFS.DocumentDirectoryPath}/hash-test`

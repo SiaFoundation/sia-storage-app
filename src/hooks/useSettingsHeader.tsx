@@ -1,4 +1,3 @@
-import { StyleSheet } from 'react-native'
 import { palette } from '../styles/colors'
 import { HomeIcon } from 'lucide-react-native'
 import { useLayoutEffect } from 'react'
@@ -22,7 +21,3 @@ export function useSettingsHeader() {
     })
   }, [navigation])
 }
-
-const styles = StyleSheet.create({
-  headerIcon: { paddingVertical: 6, paddingHorizontal: 8 },
-})

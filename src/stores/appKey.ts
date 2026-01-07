@@ -14,7 +14,6 @@ const appKeySwr = buildSWRHelpers('appKey')
  */
 
 const APP_KEYS_SECURE_STORE_KEY = 'appKeys'
-const MNEMONIC_HASH_SECURE_STORE_KEY = 'mnemonicHash'
 
 // In-memory cache of appKeys map for background task access.
 let cachedAppKeys: Map<string, ArrayBuffer> = new Map()
