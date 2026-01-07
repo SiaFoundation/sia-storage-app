@@ -4,6 +4,7 @@ import { createGetterAndSWRHook } from '../lib/selectors'
 import { buildSWRHelpers } from '../lib/swr'
 import { getIndexerURL } from './settings'
 import { hexArrayBufferCodec } from '../encoding/arrayBuffer'
+import { logger } from '../lib/logger'
 
 const appKeySwr = buildSWRHelpers('appKey')
 
@@ -17,6 +18,14 @@ const APP_KEYS_SECURE_STORE_KEY = 'appKeys'
 
 // In-memory cache of appKeys map for background task access.
 let cachedAppKeys: Map<string, ArrayBuffer> = new Map()
+
+/**
+ * Check if the AppKey cache is populated (for diagnostic logging).
+ * Returns true if at least one AppKey is cached in memory.
+ */
+export function hasCachedAppKey(): boolean {
+  return cachedAppKeys.size > 0
+}
 
 /**
  * AppKeys map type: indexerURL → AppKey ArrayBuffer
@@ -37,16 +46,20 @@ export async function getAppKeyForIndexer(
   // Check cache first.
   const cached = cachedAppKeys.get(indexerURL)
   if (cached) {
+    logger.debug('appKey', 'cache hit, using cached AppKey')
     return new AppKey(cached)
   }
 
   // Load from storage.
+  logger.debug('appKey', 'cache miss, loading from SecureStore...')
   const appKeysMap = await getAppKeysMap()
   const keyBuffer = appKeysMap[indexerURL]
   if (!keyBuffer) {
+    logger.debug('appKey', 'AppKey not found in SecureStore')
     return undefined
   }
 
+  logger.debug('appKey', 'AppKey loaded from SecureStore, caching')
   cachedAppKeys.set(indexerURL, keyBuffer)
   return new AppKey(keyBuffer)
 }
@@ -140,4 +153,42 @@ export async function clearAppKeys(): Promise<void> {
   await setSecureStoreJSON(APP_KEYS_SECURE_STORE_KEY, undefined, appKeysCodec)
   cachedAppKeys.clear()
   appKeySwr.triggerChange()
+}
+
+/**
+ * Migrate keychain items to use AFTER_FIRST_UNLOCK accessibility.
+ * This re-writes stored AppKeys with the new accessibility setting,
+ * allowing them to be accessed in background mode.
+ *
+ * This migration only works in foreground (when device is unlocked)
+ * because it needs to read items stored with the old WHEN_UNLOCKED setting.
+ */
+export async function migrateKeychainAccessibility(): Promise<void> {
+  try {
+    logger.info('appKey', 'Starting keychain accessibility migration...')
+
+    // Read the current AppKeys map (will use new options, but can still read old items in foreground)
+    const appKeysMap = await getAppKeysMap()
+    const keyCount = Object.keys(appKeysMap).length
+
+    if (keyCount === 0) {
+      logger.info('appKey', 'No AppKeys to migrate')
+      return
+    }
+
+    // Re-write the AppKeys with new accessibility options
+    await setAppKeysMap(appKeysMap)
+
+    logger.info(
+      'appKey',
+      `Keychain accessibility migration complete: migrated ${keyCount} key(s)`
+    )
+  } catch (error) {
+    // This can fail in background mode - that's expected
+    logger.warn(
+      'appKey',
+      'Keychain accessibility migration failed (expected if in background):',
+      error
+    )
+  }
 }
