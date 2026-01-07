@@ -29,7 +29,7 @@ import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
 import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
 import { initLogRotation } from '../managers/logRotation'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
-import { clearAppKeys } from './appKey'
+import { clearAppKeys, migrateKeychainAccessibility } from './appKey'
 import { clearMnemonicHash } from './mnemonic'
 
 export type InitStep = {
@@ -68,6 +68,9 @@ export async function initApp(): Promise<void> {
       runner: async () => {
         ensureFsStorageDirectory()
         ensureTempFsStorageDirectory()
+        // Migrate keychain items to use AFTER_FIRST_UNLOCK accessibility
+        // so they can be accessed in background mode.
+        await migrateKeychainAccessibility()
       },
     },
     {
