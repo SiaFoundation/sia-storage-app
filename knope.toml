@@ -1,0 +1,40 @@
+[package]
+versioned_files = ["package.json"]
+changelog = "CHANGELOG.md"
+
+[github]
+owner = "SiaFoundation"
+repo = "sia-mobile"
+
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+
+[[workflows.steps]]
+type = "Command"
+command = "bun run sync-app-version"
+
+[[workflows.steps]]
+type = "CreatePullRequest"
+base = "main"
+
+[workflows.steps.title]
+template = "chore: release v$version"
+
+[workflows.steps.body]
+template = """
+## Release v$version
+
+$changelog
+
+---
+Merging this PR will trigger app store deployments.
+"""
+
+[[workflows]]
+name = "release"
+
+[[workflows.steps]]
+type = "Release"
