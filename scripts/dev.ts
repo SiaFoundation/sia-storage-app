@@ -36,7 +36,7 @@ import {
   ensureCacheDir,
   writeBuildLog,
   getBuildLogTail,
-} from './buildCache'
+} from './build-cache'
 
 // Parse arguments
 const args = process.argv.slice(2)
@@ -105,9 +105,17 @@ if (rebuildNeeded) {
   // Prebuild if platform directory doesn't exist
   const platformDir = join(PROJECT_ROOT, platform)
   if (!existsSync(platformDir)) {
-    console.log(`   Prebuilding ${platform}...`)
-    const prebuildResult = await $`bunx expo prebuild --platform ${platform} 2>&1`.quiet().nothrow()
-    writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
+    const prebuildLabel = `Prebuilding ${platform}`
+    console.log(`   ${prebuildLabel}...`)
+
+    const prebuildResult = await runWithProgress(
+      prebuildLabel,
+      async () => {
+        const result = await $`bunx expo prebuild --platform ${platform} 2>&1`.quiet().nothrow()
+        writeBuildLog(target, `=== PREBUILD ===\n${result.stdout}\n`)
+        return result
+      }
+    )
 
     if (prebuildResult.exitCode !== 0) {
       console.error('❌ Prebuild failed. Last 30 lines:')
@@ -139,15 +147,121 @@ if (!noRun) {
   }
 }
 
+// === Progress Indicator ===
+function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000)
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+}
+
+async function runWithProgress<T>(
+  label: string,
+  task: () => Promise<T>,
+  getStatus?: () => string | null
+): Promise<T> {
+  const startTime = Date.now()
+  const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  let spinnerIdx = 0
+  let lastStatus = ''
+
+  // Start the task
+  const taskPromise = task()
+
+  // Progress update interval
+  const interval = setInterval(() => {
+    const elapsed = formatElapsed(Date.now() - startTime)
+    const status = getStatus?.() || ''
+    const statusDisplay = status && status !== lastStatus ? ` - ${status}` : (lastStatus ? ` - ${lastStatus}` : '')
+    if (status) lastStatus = status
+
+    process.stdout.write(`\r   ${spinner[spinnerIdx]} ${label} (${elapsed})${statusDisplay}`.padEnd(80) + '\r')
+    spinnerIdx = (spinnerIdx + 1) % spinner.length
+  }, 100)
+
+  try {
+    const result = await taskPromise
+    clearInterval(interval)
+    const elapsed = formatElapsed(Date.now() - startTime)
+    process.stdout.write(`\r   ✓ ${label} completed (${elapsed})`.padEnd(80) + '\n')
+    return result
+  } catch (error) {
+    clearInterval(interval)
+    const elapsed = formatElapsed(Date.now() - startTime)
+    process.stdout.write(`\r   ✗ ${label} failed (${elapsed})`.padEnd(80) + '\n')
+    throw error
+  }
+}
+
+// Get current build phase from log file
+type BuildType = 'xcodebuild' | 'gradle'
+
+function getBuildPhase(logPath: string, buildType: BuildType = 'xcodebuild'): string | null {
+  try {
+    const content = require('fs').readFileSync(logPath, 'utf-8')
+    const lines = content.split('\n').filter(Boolean)
+
+    // Look for meaningful status lines (from end)
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 50); i--) {
+      const line = lines[i]
+
+      if (buildType === 'xcodebuild') {
+        // Raw xcodebuild output patterns
+        if (line.startsWith('CompileC ') || line.startsWith('CompileSwift ')) return 'Compiling...'
+        if (line.startsWith('Ld ')) return 'Linking...'
+        if (line.startsWith('CodeSign ')) return 'Code signing...'
+        if (line.startsWith('ProcessInfoPlistFile ')) return 'Processing plists...'
+        if (line.startsWith('CopySwiftLibs ')) return 'Copying Swift libs...'
+        if (line.startsWith('Touch ') && line.includes('.app')) return 'Finalizing app...'
+        if (line.includes('BUILD SUCCEEDED')) return 'Build succeeded'
+        if (line.includes('ARCHIVE SUCCEEDED')) return 'Archive succeeded'
+        // xcpretty formatted output (fastlane/gym)
+        if (line.includes('▸ Compiling')) return 'Compiling...'
+        if (line.includes('▸ Linking')) return 'Linking...'
+        if (line.includes('▸ Signing')) return 'Signing...'
+        if (line.includes('▸ Processing')) return 'Processing...'
+        // Fastlane phases
+        if (line.includes('gym')) return 'Building archive...'
+        if (line.includes('Exporting')) return 'Exporting...'
+      }
+
+      if (buildType === 'gradle') {
+        // Gradle task patterns
+        if (line.includes(':compileKotlin') || line.includes(':compileJava')) return 'Compiling...'
+        if (line.includes(':compile') && line.includes('Sources')) return 'Compiling...'
+        if (line.includes(':merge') && line.includes('Resources')) return 'Merging resources...'
+        if (line.includes(':package')) return 'Packaging...'
+        if (line.includes(':dex')) return 'Dexing...'
+        if (line.includes(':assemble')) return 'Assembling...'
+        if (line.includes(':bundle')) return 'Bundling...'
+        if (line.includes('BUILD SUCCESSFUL')) return 'Build succeeded'
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 // === iOS Build ===
 async function buildIos(): Promise<void> {
-  console.log(`   Building iOS (${isDevice ? 'device' : 'simulator'})...`)
+  const buildLabel = `Building iOS (${isDevice ? 'device' : 'simulator'})`
+  console.log(`   ${buildLabel}...`)
   console.log(`   Build log: ${paths.buildLog}`)
 
   if (isDevice) {
     // Device build via fastlane
-    const buildResult = await $`fastlane ios dev_device 2>&1`.quiet().nothrow()
-    writeBuildLog(target, `=== FASTLANE ===\n${buildResult.stdout}`, true)
+    const gymLog = `${process.env.HOME}/Library/Logs/gym/SiaStorageDev-SiaStorageDev.log`
+
+    const buildResult = await runWithProgress(
+      buildLabel,
+      async () => {
+        const result = await $`fastlane ios dev_device 2>&1`.quiet().nothrow()
+        writeBuildLog(target, `=== FASTLANE ===\n${result.stdout}`, true)
+        return result
+      },
+      () => getBuildPhase(gymLog)
+    )
 
     if (buildResult.exitCode !== 0) {
       console.error('❌ Build failed. Last 50 lines:')
@@ -156,19 +270,33 @@ async function buildIos(): Promise<void> {
     }
   } else {
     // Simulator build via xcodebuild with dedicated DerivedData
-    const buildResult = await $`xcodebuild \
-      -workspace ios/SiaStorageDev.xcworkspace \
-      -scheme SiaStorageDev \
-      -configuration Debug \
-      -sdk iphonesimulator \
-      -arch arm64 \
-      -derivedDataPath ${paths.derivedData} \
-      build \
-      CODE_SIGNING_ALLOWED=NO 2>&1`.quiet().nothrow()
+    // Stream output to log file for real-time phase detection
+    const logFile = paths.buildLog
+    require('fs').writeFileSync(logFile, '=== XCODEBUILD ===\n')
 
-    writeBuildLog(target, `=== XCODEBUILD ===\n${buildResult.stdout}`, true)
+    const buildResult = await runWithProgress(
+      buildLabel,
+      async () => {
+        // Use ad-hoc signing (CODE_SIGN_IDENTITY="-") instead of disabling signing.
+        // This ensures entitlements are processed correctly for keychain access.
+        const result = await $`xcodebuild \
+          -workspace ios/SiaStorageDev.xcworkspace \
+          -scheme SiaStorageDev \
+          -configuration Debug \
+          -sdk iphonesimulator \
+          -arch arm64 \
+          -derivedDataPath ${paths.derivedData} \
+          build \
+          CODE_SIGN_IDENTITY=- \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=YES 2>&1 | tee -a ${logFile}`.quiet().nothrow()
+        return result
+      },
+      () => getBuildPhase(logFile, 'xcodebuild')
+    )
 
-    if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
+    const logContent = require('fs').readFileSync(logFile, 'utf-8')
+    if (buildResult.exitCode !== 0 || logContent.includes('BUILD FAILED')) {
       console.error('❌ Build failed. Last 50 lines:')
       console.error(getBuildLogTail(target, 50))
       throw new Error('iOS simulator build failed')
@@ -178,16 +306,27 @@ async function buildIos(): Promise<void> {
 
 // === Android Build ===
 async function buildAndroid(): Promise<void> {
-  console.log('   Building Android...')
+  const buildLabel = 'Building Android'
+  console.log(`   ${buildLabel}...`)
   console.log(`   Build log: ${paths.buildLog}`)
 
-  $.cwd(join(PROJECT_ROOT, 'android'))
-  const buildResult = await $`./gradlew assembleDebug --no-daemon 2>&1`.quiet().nothrow()
-  $.cwd(PROJECT_ROOT)
+  // Stream output to log file for real-time phase detection
+  const logFile = paths.buildLog
+  require('fs').writeFileSync(logFile, '=== GRADLE ===\n')
 
-  writeBuildLog(target, `=== GRADLE ===\n${buildResult.stdout}`, true)
+  const buildResult = await runWithProgress(
+    buildLabel,
+    async () => {
+      $.cwd(join(PROJECT_ROOT, 'android'))
+      const result = await $`./gradlew assembleDebug --no-daemon 2>&1 | tee -a ${logFile}`.quiet().nothrow()
+      $.cwd(PROJECT_ROOT)
+      return result
+    },
+    () => getBuildPhase(logFile, 'gradle')
+  )
 
-  if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
+  const logContent = require('fs').readFileSync(logFile, 'utf-8')
+  if (buildResult.exitCode !== 0 || logContent.includes('BUILD FAILED')) {
     console.error('❌ Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
     throw new Error('Android build failed')

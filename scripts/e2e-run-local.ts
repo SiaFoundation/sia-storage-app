@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
 /**
- * E2E Test Runner with Smart Build Caching
+ * E2E Test Runner with Smart Build Caching (Local Development)
+ *
+ * Builds, installs, and runs E2E tests locally with intelligent caching.
+ * Handles the full workflow: boot device, build app, install, start Metro, run tests.
  *
  * Usage:
- *   bun test/e2e/runLocal.ts ios              # Run on iOS Simulator
- *   bun test/e2e/runLocal.ts android          # Run on Android emulator
- *   bun test/e2e/runLocal.ts ios flow.yml     # Run specific flow
+ *   bun scripts/e2e-run-local.ts ios              # Run on iOS Simulator
+ *   bun scripts/e2e-run-local.ts android          # Run on Android emulator
+ *   bun scripts/e2e-run-local.ts ios flow.yml     # Run specific flow
  *
  * Flags:
  *   --rebuild       Force a fresh build (ignore cache)
@@ -13,16 +16,19 @@
  *   --headless      Run simulator/emulator without UI window
  *
  * Environment:
- *   E2E_CONNECT_KEY - App password for indexer auth (required for auth tests)
+ *   E2E_CONNECT_KEY  - App password for indexer auth (required for auth tests)
+ *   E2E_INDEXER_URL  - Custom indexer URL (optional, defaults to https://app.sia.storage)
  *
  * How caching works:
- *   - Uses shared build cache from scripts/buildCache.ts
+ *   - Uses shared build cache from scripts/build-cache.ts
  *   - E2E builds stored in .build-cache/e2e-ios/ and .build-cache/e2e-android/
  *   - Separate from dev builds, survives rimraf ios/android
  *
  * CI Note:
  *   iOS Simulator supports headless mode via --headless flag.
  *   On CI, also set MAESTRO_DRIVER_STARTUP_TIMEOUT for slower VMs.
+ *
+ * For CI (release builds without caching logic), use e2e-run.ts instead.
  */
 
 import { $ } from 'bun'
@@ -37,9 +43,9 @@ import {
   ensureCacheDir,
   writeBuildLog,
   getBuildLogTail,
-} from '../../scripts/buildCache'
+} from './build-cache'
 
-const E2E_DIR = import.meta.dir
+const E2E_DIR = join(PROJECT_ROOT, 'test/e2e')
 const FLOWS_DIR = join(E2E_DIR, 'flows')
 const OUTPUT_DIR = join(E2E_DIR, '.maestro/tests')
 
@@ -57,7 +63,7 @@ const headless = args.includes('--headless')
 
 // Require explicit platform
 if (!platformArg) {
-  console.error('Usage: bun test/e2e/runLocal.ts <platform> [flow.yml] [flags]')
+  console.error('Usage: bun scripts/e2e-run-local.ts <platform> [flow.yml] [flags]')
   console.error('')
   console.error('Platforms:')
   console.error('  ios       Run on iOS Simulator')
@@ -69,7 +75,7 @@ if (!platformArg) {
   console.error('  --headless      Run simulator/emulator without UI')
   console.error('')
   console.error('Example:')
-  console.error('  E2E_CONNECT_KEY="..." bun test/e2e/runLocal.ts ios onboarding.yml')
+  console.error('  E2E_CONNECT_KEY="..." bun scripts/e2e-run-local.ts ios onboarding.yml')
   process.exit(1)
 }
 
@@ -166,11 +172,11 @@ async function buildIos(): Promise<void> {
 
   ensureCacheDir(target)
 
-  // Prebuild if needed
+  // Prebuild if needed (with E2E_TEST=true to enable in-memory keychain)
   const iosDir = join(PROJECT_ROOT, 'ios')
   if (!existsSync(iosDir)) {
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`E2E_TEST=true bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
     if (prebuildResult.exitCode !== 0) {
       console.error('❌ Prebuild failed. Last 30 lines:')
@@ -211,11 +217,11 @@ async function buildAndroid(): Promise<void> {
 
   ensureCacheDir(target)
 
-  // Prebuild if needed
+  // Prebuild if needed (with E2E_TEST=true to enable in-memory keychain)
   const androidDir = join(PROJECT_ROOT, 'android')
   if (!existsSync(androidDir)) {
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`E2E_TEST=true bunx expo prebuild --platform android 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
     if (prebuildResult.exitCode !== 0) {
       console.error('❌ Prebuild failed. Last 30 lines:')
@@ -323,19 +329,20 @@ async function isMetroRunning(): Promise<boolean> {
   }
 }
 
-// Start Metro if not running
+// Start Metro if not running (with E2E_TEST=true for in-memory keychain)
 async function ensureMetroRunning(): Promise<void> {
   if (await isMetroRunning()) {
     console.log('🚇 Metro already running')
     return
   }
 
-  console.log('🚇 Starting Metro...')
+  console.log('🚇 Starting Metro (E2E mode)...')
 
   Bun.spawn(['bun', 'run', 'start'], {
     cwd: PROJECT_ROOT,
     stdout: 'ignore',
     stderr: 'ignore',
+    env: { ...process.env, E2E_TEST: 'true' },
   })
 
   // Wait for Metro to be ready
@@ -419,9 +426,18 @@ async function main() {
       MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: 'true',
     }
 
-    const maestroArgs = ['test', flowPath, '--output', OUTPUT_DIR]
+    const maestroArgs = [
+      '--platform', platform,
+      'test', flowPath,
+      '--output', OUTPUT_DIR
+    ]
+
     if (process.env.E2E_CONNECT_KEY) {
       maestroArgs.push('-e', `E2E_CONNECT_KEY=${process.env.E2E_CONNECT_KEY}`)
+    }
+
+    if (process.env.E2E_INDEXER_URL) {
+      maestroArgs.push('-e', `E2E_INDEXER_URL=${process.env.E2E_INDEXER_URL}`)
     }
 
     const result = await $`maestro ${maestroArgs}`.env(env).nothrow()

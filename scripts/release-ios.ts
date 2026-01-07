@@ -1,3 +1,28 @@
+#!/usr/bin/env bun
+/**
+ * iOS Release Build & Upload Script
+ *
+ * Builds and uploads the iOS app to App Store Connect.
+ * Handles the full release workflow: clean, prebuild, build IPA, upload.
+ *
+ * Usage:
+ *   bun scripts/release-ios.ts [testflight|appstore]
+ *
+ * Tracks:
+ *   testflight - Upload to TestFlight (default)
+ *   appstore   - Upload to App Store for review
+ *
+ * Required environment variables:
+ *   APPLE_TEAM_ID                  - Apple Developer Team ID
+ *   APP_STORE_CONNECT_API_KEY_JSON - App Store Connect API credentials
+ *
+ * What it does:
+ *   1. Cleans .expo and ios directories
+ *   2. Runs expo prebuild with RELEASE=true
+ *   3. Builds release IPA via Fastlane
+ *   4. Uploads to App Store Connect via Fastlane
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 

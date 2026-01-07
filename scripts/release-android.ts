@@ -1,3 +1,31 @@
+#!/usr/bin/env bun
+/**
+ * Android Release Build & Upload Script
+ *
+ * Builds and uploads the Android app to Google Play Store.
+ * Handles the full release workflow: clean, prebuild, build AAB, upload.
+ *
+ * Usage:
+ *   bun scripts/release-android.ts [internal|production]
+ *
+ * Tracks:
+ *   internal   - Upload to internal testing track (default)
+ *   production - Upload to production track
+ *
+ * Required environment variables:
+ *   SIA_RELEASE_STORE_FILE              - Path to the release keystore
+ *   SIA_RELEASE_STORE_PASSWORD          - Keystore password
+ *   SIA_RELEASE_KEY_ALIAS               - Key alias
+ *   SIA_RELEASE_KEY_PASSWORD            - Key password
+ *   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON - Google Play API credentials
+ *
+ * What it does:
+ *   1. Cleans .expo and android directories
+ *   2. Runs expo prebuild with RELEASE=true
+ *   3. Builds release AAB via android-gradle-task.ts
+ *   4. Uploads to Play Store via Fastlane
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 
@@ -40,7 +68,7 @@ await $`RELEASE=true bunx expo prebuild --platform android`
 
 // Step 2: Build AAB
 console.log('Step 2/3: Building release AAB...')
-await $`bun scripts/androidGradleTask.ts bundleRelease`
+await $`bun scripts/android-gradle-task.ts bundleRelease`
 
 // Step 3: Upload to Play Store
 console.log(`Step 3/3: Uploading to Play Store (${track} track)...`)

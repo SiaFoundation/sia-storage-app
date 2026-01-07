@@ -1,3 +1,31 @@
+#!/usr/bin/env bun
+/**
+ * Android Gradle Task Runner
+ *
+ * Runs Gradle tasks in the Android project directory with proper environment setup.
+ * Handles keystore resolution and JVM memory configuration.
+ *
+ * Usage:
+ *   bun scripts/android-gradle-task.ts <task>
+ *
+ * Examples:
+ *   bun scripts/android-gradle-task.ts signingReport    # Show signing configuration
+ *   bun scripts/android-gradle-task.ts bundleRelease    # Build release AAB
+ *   bun scripts/android-gradle-task.ts assembleRelease  # Build release APK
+ *
+ * Required environment variables:
+ *   SIA_RELEASE_STORE_FILE      - Path to the release keystore file
+ *   SIA_RELEASE_STORE_PASSWORD  - Keystore password
+ *   SIA_RELEASE_KEY_ALIAS       - Key alias in the keystore
+ *   SIA_RELEASE_KEY_PASSWORD    - Key password
+ *
+ * What it does:
+ *   - Validates required environment variables are set
+ *   - Resolves keystore path (relative paths resolved from project root)
+ *   - Sets JVM memory limits to prevent OOM during builds
+ *   - Runs the specified Gradle task in android/ directory
+ */
+
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'

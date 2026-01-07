@@ -1,5 +1,6 @@
 const { version } = require('./package.json')
 const RELEASE = process.env.RELEASE === 'true'
+const E2E_TEST = process.env.E2E_TEST === 'true'
 
 // Calculate Android versionCode from semver (1.2.3 → 10203)
 // This ensures versionCode always increases with version bumps
@@ -121,6 +122,7 @@ export default {
     },
     extra: {
       prod: RELEASE,
+      e2eTest: E2E_TEST,
     },
   },
 }
