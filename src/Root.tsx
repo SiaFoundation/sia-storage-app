@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react'
-import { StyleSheet, Platform, StatusBar } from 'react-native'
+import React, { useEffect, useRef } from 'react'
+import { StyleSheet, Platform, StatusBar, AppState, AppStateStatus } from 'react-native'
 import { palette } from './styles/colors'
 import {
   DarkTheme,
@@ -21,6 +21,7 @@ import { AppSplash } from './components/AppSplash'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 import { AuthWebViewModal } from './components/AuthWebViewModal'
+import { logger } from './lib/logger'
 
 const darkNavigationTheme = {
   ...DarkTheme,
@@ -38,11 +39,32 @@ export function Root() {
   const { data: hasOnboarded } = useHasOnboarded()
   const showSplash = useShowSplash()
 
+  // Track the previous AppState for logging transitions.
+  const appStateRef = useRef(AppState.currentState)
+
   useEffect(() => {
     initApp()
     return () => {
       shutdownApp()
     }
+  }, [])
+
+  // Log AppState changes for debugging background task behavior.
+  useEffect(() => {
+    logger.info('appState', `initial state: ${appStateRef.current}`)
+
+    const subscription = AppState.addEventListener(
+      'change',
+      (nextAppState: AppStateStatus) => {
+        logger.info(
+          'appState',
+          `state changed: ${appStateRef.current} -> ${nextAppState}`
+        )
+        appStateRef.current = nextAppState
+      }
+    )
+
+    return () => subscription.remove()
   }, [])
 
   useEffect(() => {
