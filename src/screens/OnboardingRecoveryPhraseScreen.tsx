@@ -18,7 +18,7 @@ import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { useToast } from '../lib/toastContext'
 import { generateRecoveryPhrase } from 'react-native-sia'
-import { useCopyRecoveryPhrase } from '../hooks/useCopyRecoveryPhrase'
+import Clipboard from '@react-native-clipboard/clipboard'
 import { logger } from '../lib/logger'
 import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
 import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
@@ -32,7 +32,6 @@ export default function OnboardingRecoveryPhraseScreen() {
   const { indexerURL } = route.params
   const { top, bottom } = useSafeAreaInsets()
   const toast = useToast()
-  const copyRecoveryPhrase = useCopyRecoveryPhrase()
   const [recoveryPhrase, setRecoveryPhrase] = useState('')
 
   const [ackSaved, setAckSaved] = useState(false)
@@ -125,8 +124,8 @@ export default function OnboardingRecoveryPhraseScreen() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onPress={async () => {
-                    await copyRecoveryPhrase()
+                  onPress={() => {
+                    Clipboard.setString(recoveryPhrase)
                     toast.show('Copied')
                   }}
                   style={styles.button}
