@@ -7,7 +7,7 @@ import {
   RefreshControl,
   ListRenderItem,
 } from 'react-native'
-import { colors, palette, whiteA } from '../styles/colors'
+import { colors, palette } from '../styles/colors'
 import { useCallback, useState } from 'react'
 import { SWRResponse } from 'swr'
 

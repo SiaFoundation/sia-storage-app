@@ -6,11 +6,7 @@ import {
   readFileRecord,
 } from '../stores/files'
 import { initializeDB, resetDb } from '../db'
-import {
-  copyFileToFs,
-  readFsFileMetadata,
-  upsertFsFileMetadata,
-} from '../stores/fs'
+import { copyFileToFs, readFsFileMetadata } from '../stores/fs'
 import { getMediaLibraryUri } from './mediaLibrary'
 import { setExpoFileSystemMockMethods } from '../../mocks/expo-file-system'
 

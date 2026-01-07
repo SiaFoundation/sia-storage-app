@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Animated, Easing, StyleSheet, View } from 'react-native'
+import { Animated, Easing, View } from 'react-native'
 import { palette } from '../styles/colors'
 import Svg, { Circle } from 'react-native-svg'
 import { memo } from 'react'

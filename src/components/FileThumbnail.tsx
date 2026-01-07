@@ -1,17 +1,14 @@
 import { Image, StyleSheet, View } from 'react-native'
 import { FileRecord, type ThumbSize } from '../stores/files'
-import { useFileStatus } from '../lib/file'
 import {
   FileAudioIcon,
   FileIcon,
   FileJsonIcon,
   FileTextIcon,
-  FileVideoIcon,
   ImageIcon,
   PlayIcon,
 } from 'lucide-react-native'
 import { palette } from '../styles/colors'
-import { CenteredProgress } from './CenteredProgress'
 import { useBestThumbnailUri } from '../hooks/useBestThumbnail'
 
 export function FileThumbnail({

@@ -1,6 +1,5 @@
 import { db } from '../db'
 import { getIndexerURL } from './settings'
-import { logger } from '../lib/logger'
 
 export type UploadCategoryStats = {
   total: number
