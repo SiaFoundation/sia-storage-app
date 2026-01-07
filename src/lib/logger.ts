@@ -93,6 +93,21 @@ function serializeValue(value: unknown): string {
   return String(value)
 }
 
+/** Format timestamp with full date and time for better log analysis.
+ * Format: "2026-01-05 07:56:03.123" (ISO-like, local time)
+ */
+function formatTimestamp(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+  const millis = String(now.getMilliseconds()).padStart(3, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`
+}
+
 /** Check if a log should be output to terminal based on level and scope filters. */
 function shouldLogToTerminal(level: LogLevel, scope: string): boolean {
   const envLevel = getLogLevelFromEnv()
@@ -118,12 +133,12 @@ function shouldLogToTerminal(level: LogLevel, scope: string): boolean {
 function formatTerminalLog(
   level: LogLevel,
   scope: string,
+  timestamp: string,
   ...args: unknown[]
 ): string {
   const levelColor = getLevelColorAnsi(level)
   const scopeColor = getScopeColorAnsi(scope)
   const levelUpper = level.toUpperCase().padEnd(5)
-  const timestamp = new Date().toLocaleTimeString()
 
   const message = args.map(serializeValue).join(' ')
   return `${timestamp} ${levelColor}${ANSI_BOLD}${levelUpper}${ANSI_RESET} ${scopeColor}${ANSI_BOLD}[${scope}]${ANSI_RESET} ${message}`
@@ -132,7 +147,7 @@ function formatTerminalLog(
 /** Create a logger function for a specific level. */
 function createLogger(level: LogLevel) {
   return (scope: string, ...args: unknown[]) => {
-    const timestamp = new Date().toLocaleTimeString()
+    const timestamp = formatTimestamp()
     const message = args.map(serializeValue).join(' ')
     const entry: LogEntry = {
       timestamp,
@@ -143,7 +158,7 @@ function createLogger(level: LogLevel) {
 
     appendLog(entry)
 
-    const terminalMessage = formatTerminalLog(level, scope, ...args)
+    const terminalMessage = formatTerminalLog(level, scope, timestamp, ...args)
 
     if (shouldLogToTerminal(level, scope)) {
       console.log(terminalMessage)
