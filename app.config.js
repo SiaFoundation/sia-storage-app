@@ -1,11 +1,17 @@
+const { version } = require('./package.json')
 const RELEASE = process.env.RELEASE === 'true'
+
+// Calculate Android versionCode from semver (1.2.3 → 10203)
+// This ensures versionCode always increases with version bumps
+const [major, minor, patch] = version.split('.').map(Number)
+const versionCode = major * 10000 + minor * 100 + patch
 
 export default {
   expo: {
     name: RELEASE ? 'Sia Storage' : 'Sia Storage Dev',
     slug: RELEASE ? 'siastorage' : 'siastoragedev',
     scheme: 'sia',
-    version: '1.0.0',
+    version,
     orientation: 'default',
     icon: RELEASE
       ? './assets/app-icon-ios.png'
@@ -36,7 +42,7 @@ export default {
       },
     },
     android: {
-      versionCode: 4,
+      versionCode,
       adaptiveIcon: {
         foregroundImage: RELEASE
           ? './assets/app-icon-android.png'
