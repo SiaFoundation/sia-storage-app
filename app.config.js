@@ -33,7 +33,9 @@ export default {
         NSPhotoLibraryAddUsageDescription:
           'Allow $(PRODUCT_NAME) to save images to your photo library.',
         NSCameraUsageDescription:
-          'Allow $(PRODUCT_NAME) to use the camera to take photos.',
+          'Allow $(PRODUCT_NAME) to use the camera to take photos and videos.',
+        NSMicrophoneUsageDescription:
+          'Allow $(PRODUCT_NAME) to use the microphone to record audio with videos.',
         UIBackgroundModes: ['fetch', 'processing'],
         BGTaskSchedulerPermittedIdentifiers: [
           'com.transistorsoft.fetch',
