@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
-import useSWR from 'swr'
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 
 import { db } from '../db'
 import { FileRecord, FileRecordRow, transformRow } from './files'
@@ -11,26 +10,13 @@ import {
   useLibrary,
   buildLibraryQueryParts,
 } from './library'
-import { logger } from '../lib/logger'
-
-export type WindowResult = {
-  files: FileRecord[]
-  hasPrevious: boolean
-  hasNext: boolean
-  anchorId: string | null
-}
-
-export type FetchFileCarouselWindowParams = {
-  initialId: string
-  neighborsPerSide: number
-  sortBy: SortBy
-  sortDir: SortDir
-  categories: Category[]
-  searchQuery: string
-}
 
 const FILE_COLUMNS =
   'f.id, f.name, f.size, f.createdAt, f.updatedAt, f.addedAt, f.type, f.localId, f.hash, f.thumbForHash, f.thumbSize'
+
+// Cursor-based pagination helpers. These build WHERE clauses that find rows
+// "before" or "after" a given anchor row in the sort order. Used by
+// fetchFilePosition to count how many rows come before a specific file.
 
 function buildDateCursorClause(
   dir: SortDir,
@@ -101,246 +87,371 @@ async function hydrateRows(rows: FileRecordRow[]): Promise<FileRecord[]> {
   return rows.map((row) => transformRow(row, objectsById[row.id]))
 }
 
-export async function fetchFileCarouselWindow(
-  params: FetchFileCarouselWindowParams
-): Promise<WindowResult> {
-  const {
-    initialId,
-    neighborsPerSide,
-    sortBy,
-    sortDir: sortingDir,
-    categories,
-    searchQuery,
-  } = params
+type VirtualListQueryParams = {
+  sortBy: SortBy
+  sortDir: SortDir
+  categories: Category[]
+  searchQuery: string
+}
 
+function buildOrderExpr(sortBy: SortBy, sortDir: SortDir, alias: string = 'f') {
+  return sortBy === 'NAME'
+    ? `(${alias}.name IS NULL) ASC, ${alias}.name COLLATE NOCASE ${sortDir}, ${alias}.id ${sortDir}`
+    : `${alias}.createdAt ${sortDir}, ${alias}.id ${sortDir}`
+}
+
+// Returns the total number of files matching the current filters.
+export async function fetchTotalCount(
+  params: VirtualListQueryParams
+): Promise<number> {
   const { where, params: queryParams } = buildLibraryQueryParts({
-    sortBy,
-    sortDir: sortingDir,
-    categories,
-    query: searchQuery,
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+    categories: params.categories,
+    query: params.searchQuery,
+    tableAlias: 'f',
+  })
+
+  const result = await db().getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files f ${where ?? ''}`,
+    ...queryParams
+  )
+
+  return result?.count ?? 0
+}
+
+// Given a file ID, returns its position (0-indexed) in the sorted list.
+// Used to determine where to start the carousel when opening a specific file.
+export async function fetchFilePosition(
+  fileId: string,
+  params: VirtualListQueryParams
+): Promise<number> {
+  const { where, params: queryParams } = buildLibraryQueryParts({
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+    categories: params.categories,
+    query: params.searchQuery,
     tableAlias: 'f',
   })
 
   const anchorRow = await db().getFirstAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS}
-     FROM files f
-     ${where ? `${where} AND f.id = ?` : 'WHERE f.id = ?'}
-     LIMIT 1`,
+    `SELECT ${FILE_COLUMNS} FROM files f ${
+      where ? `${where} AND f.id = ?` : 'WHERE f.id = ?'
+    } LIMIT 1`,
     ...queryParams,
-    initialId
+    fileId
   )
 
-  if (!anchorRow) {
-    return { files: [], hasPrevious: false, hasNext: false, anchorId: null }
-  }
-
-  const buildOrderExpr = (dir: SortDir) =>
-    sortBy === 'NAME'
-      ? `(f.name IS NULL) ASC, f.name COLLATE NOCASE ${dir}, f.id ${dir}`
-      : `f.createdAt ${dir}, f.id ${dir}`
+  if (!anchorRow) return 0
 
   const beforeCursor =
-    sortBy === 'NAME'
+    params.sortBy === 'NAME'
       ? buildNameCursorClause(
-          sortingDir,
+          params.sortDir,
           'before',
           'f',
           anchorRow.name ?? null,
           anchorRow.id
         )
       : buildDateCursorClause(
-          sortingDir,
+          params.sortDir,
           'before',
           'f',
           anchorRow.createdAt,
           anchorRow.id
         )
 
-  const afterCursor =
-    sortBy === 'NAME'
-      ? buildNameCursorClause(
-          sortingDir,
-          'after',
-          'f',
-          anchorRow.name ?? null,
-          anchorRow.id
-        )
-      : buildDateCursorClause(
-          sortingDir,
-          'after',
-          'f',
-          anchorRow.createdAt,
-          anchorRow.id
-        )
-
-  const beforeRows = await db().getAllAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS}
-     FROM files f
-     ${
-       where
-         ? `${where} AND (${beforeCursor.clause})`
-         : `WHERE ${beforeCursor.clause}`
-     }
-     ORDER BY ${buildOrderExpr(beforeCursor.orderDirection)}
-     LIMIT ${neighborsPerSide | 0}`,
+  const result = await db().getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files f ${
+      where
+        ? `${where} AND (${beforeCursor.clause})`
+        : `WHERE ${beforeCursor.clause}`
+    }`,
     ...queryParams,
     ...beforeCursor.params
   )
 
-  const afterRows = await db().getAllAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS}
-     FROM files f
-     ${
-       where
-         ? `${where} AND (${afterCursor.clause})`
-         : `WHERE ${afterCursor.clause}`
-     }
-     ORDER BY ${buildOrderExpr(afterCursor.orderDirection)}
-     LIMIT ${neighborsPerSide | 0}`,
-    ...queryParams,
-    ...afterCursor.params
-  )
-
-  const orderedBeforeRows = [...beforeRows].reverse()
-  const allRows = [...orderedBeforeRows, anchorRow, ...afterRows]
-  const records = await hydrateRows(allRows)
-
-  return {
-    files: records,
-    hasPrevious: beforeRows.length === neighborsPerSide,
-    hasNext: afterRows.length === neighborsPerSide,
-    anchorId: anchorRow.id,
-  }
+  return result?.count ?? 0
 }
 
-type UseFileCarouselWindowParams = {
+type FileRecordRowWithIndex = FileRecordRow & { __virtual_index: number }
+
+// Fetches multiple files by their sorted position in a single query.
+// We build one SELECT per index, tag each with its position, then UNION ALL
+// them together so we only make one database round-trip.
+export async function fetchFilesAtIndices(
+  indices: number[],
+  params: VirtualListQueryParams
+): Promise<Map<number, FileRecord>> {
+  const result = new Map<number, FileRecord>()
+  if (indices.length === 0) return result
+
+  const { where, params: queryParams } = buildLibraryQueryParts({
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+    categories: params.categories,
+    query: params.searchQuery,
+    tableAlias: 'f',
+  })
+
+  const orderExpr = buildOrderExpr(params.sortBy, params.sortDir)
+
+  // Build a UNION ALL query: one SELECT per index, each tagged with its index.
+  // Each sub-SELECT is wrapped in a subquery so ORDER BY/LIMIT/OFFSET apply
+  // to each individually (SQLite requires ORDER BY after UNION otherwise).
+  const selectStatements: string[] = []
+  const allParams: (string | number | null)[] = []
+
+  for (const index of indices) {
+    selectStatements.push(
+      `SELECT *, ? as __virtual_index FROM (SELECT ${FILE_COLUMNS} FROM files f ${
+        where ?? ''
+      } ORDER BY ${orderExpr} LIMIT 1 OFFSET ?)`
+    )
+    // Parameter order: virtual index tag, then WHERE params, then OFFSET value
+    allParams.push(index, ...queryParams, index)
+  }
+
+  const sql = selectStatements.join(' UNION ALL ')
+  const rows = await db().getAllAsync<FileRecordRowWithIndex>(sql, ...allParams)
+
+  // Hydrate all rows in one batch
+  const hydratedFiles = await hydrateRows(rows)
+
+  // Map each file back to its index using the tagged __virtual_index
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const file = hydratedFiles[i]
+    if (file) {
+      result.set(row.__virtual_index, file)
+    }
+  }
+
+  return result
+}
+
+// The carousel can't hold thousands of files in memory, so we give it placeholder
+// indices and fetch the actual file data as the user swipes nearby.
+type UseVirtualFileListParams = {
   initialId: string
   initialFile?: FileRecord
-  windowSize: number
+  prefetchRadius?: number
+  maxCacheSize?: number
 }
 
-type UseFileCarouselWindowReturn = {
+type UseVirtualFileListReturn = {
+  totalCount: number
+  currentIndex: number
   currentFile: FileRecord | null
-  prevFile: FileRecord | undefined
-  nextFile: FileRecord | undefined
-  setCurrentFile: (file: FileRecord) => void
-  isValidating: boolean
+  getFileAtIndex: (index: number) => FileRecord | null
+  setCurrentIndex: (index: number) => void
+  isLoading: boolean
 }
 
 /**
- * Hook for managing the file carousel window (current file + neighbors).
- * Handles fetching the file list window, managing current file state,
- * and extracting prev/next files for navigation.
+ * Hook for virtualized file browsing in the carousel.
+ *
+ * Instead of loading all files into memory, this maintains a sparse cache
+ * and fetches files on-demand as the user swipes. The carousel receives
+ * placeholder indices and calls getFileAtIndex to get actual file data.
+ *
+ * @param initialId - The file ID to start viewing
+ * @param initialFile - Optional pre-loaded file to avoid a flash of loading state
+ * @param prefetchRadius - How many files to prefetch in each direction (default: 3)
+ * @param maxCacheSize - Maximum files to keep in memory (default: 50)
  */
-export function useFileCarouselWindow({
+export function useVirtualFileList({
   initialId,
   initialFile,
-  windowSize,
-}: UseFileCarouselWindowParams): UseFileCarouselWindowReturn {
+  prefetchRadius = 3,
+  maxCacheSize = 50,
+}: UseVirtualFileListParams): UseVirtualFileListReturn {
   const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
   const sortingDir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const [currentFile, setCurrentFile] = useState<FileRecord | null>(
-    initialFile ?? null
+  const [currentIndex, setCurrentIndexState] = useState<number>(0)
+  // Seed with 1 if we have initialFile so carousel can render before count loads.
+  const [totalCount, setTotalCount] = useState<number>(initialFile ? 1 : 0)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const cacheRef = useRef<Map<number, FileRecord>>(new Map())
+  const fetchingRef = useRef<Set<number>>(new Set())
+  const [cacheVersion, setCacheVersion] = useState(0)
+
+  // Store initialFile in a ref so it doesn't cause re-init when reference changes
+  const initialFileRef = useRef(initialFile)
+
+  // Serialize categories to a stable string to avoid re-init when Set reference changes
+  const categoriesKey = useMemo(
+    () =>
+      Array.from(selectedCategories ?? new Set())
+        .sort()
+        .join(','),
+    [selectedCategories]
   )
 
-  // Build SWR key based on current file ID and library filters
-  const swrKey = useMemo(() => {
-    const fileId = currentFile?.id ?? initialId
-    const cats = Array.from(selectedCategories ?? new Set())
-      .slice()
-      .sort()
-      .join(',')
-    return `viewer:${sortBy}:${sortingDir}:${cats}:${
-      searchQuery ?? ''
-    }:${fileId}:${windowSize}`
+  const queryParams = useMemo<VirtualListQueryParams>(
+    () => ({
+      sortBy,
+      sortDir: sortingDir,
+      categories: categoriesKey ? (categoriesKey.split(',') as Category[]) : [],
+      searchQuery: searchQuery ?? '',
+    }),
+    [sortBy, sortingDir, categoriesKey, searchQuery]
+  )
+
+  // Initialize: find the starting position and prefetch nearby files
+  useEffect(() => {
+    let cancelled = false
+
+    async function init() {
+      setIsLoading(true)
+      cacheRef.current.clear()
+      fetchingRef.current.clear()
+
+      try {
+        const [count, position] = await Promise.all([
+          fetchTotalCount(queryParams),
+          fetchFilePosition(initialId, queryParams),
+        ])
+
+        if (cancelled) return
+
+        setTotalCount(count)
+        setCurrentIndexState(position)
+
+        const indicesToFetch: number[] = []
+        for (
+          let i = Math.max(0, position - prefetchRadius);
+          i <= Math.min(count - 1, position + prefetchRadius);
+          i++
+        ) {
+          indicesToFetch.push(i)
+        }
+
+        if (initialFileRef.current) {
+          cacheRef.current.set(position, initialFileRef.current)
+        }
+
+        const fetched = await fetchFilesAtIndices(
+          indicesToFetch.filter((i) => !cacheRef.current.has(i)),
+          queryParams
+        )
+
+        if (cancelled) return
+
+        fetched.forEach((file, index) => {
+          cacheRef.current.set(index, file)
+        })
+
+        setCacheVersion((v) => v + 1)
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    init()
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialId, queryParams, prefetchRadius])
+
+  // Prefetch: as the user swipes, fetch nearby files and evict distant ones
+  useEffect(() => {
+    if (isLoading || totalCount === 0) return
+
+    let cancelled = false
+
+    async function prefetch() {
+      const indicesToFetch: number[] = []
+
+      for (
+        let i = Math.max(0, currentIndex - prefetchRadius);
+        i <= Math.min(totalCount - 1, currentIndex + prefetchRadius);
+        i++
+      ) {
+        if (!cacheRef.current.has(i) && !fetchingRef.current.has(i)) {
+          indicesToFetch.push(i)
+          fetchingRef.current.add(i)
+        }
+      }
+
+      if (indicesToFetch.length === 0) return
+
+      try {
+        const fetched = await fetchFilesAtIndices(indicesToFetch, queryParams)
+
+        if (cancelled) return
+
+        fetched.forEach((file, index) => {
+          cacheRef.current.set(index, file)
+        })
+
+        // Evict files furthest from current position to stay under maxCacheSize
+        if (cacheRef.current.size > maxCacheSize) {
+          const entries = Array.from(cacheRef.current.entries())
+          entries.sort(
+            (a, b) =>
+              Math.abs(a[0] - currentIndex) - Math.abs(b[0] - currentIndex)
+          )
+          const toKeep = new Set(
+            entries.slice(0, maxCacheSize).map(([idx]) => idx)
+          )
+          for (const [idx] of entries) {
+            if (!toKeep.has(idx)) {
+              cacheRef.current.delete(idx)
+            }
+          }
+        }
+
+        setCacheVersion((v) => v + 1)
+      } finally {
+        indicesToFetch.forEach((i) => fetchingRef.current.delete(i))
+      }
+    }
+
+    prefetch()
+
+    return () => {
+      cancelled = true
+    }
   }, [
-    selectedCategories,
-    sortBy,
-    sortingDir,
-    searchQuery,
-    currentFile?.id,
-    initialId,
-    windowSize,
+    currentIndex,
+    totalCount,
+    isLoading,
+    queryParams,
+    prefetchRadius,
+    maxCacheSize,
   ])
 
-  // Fetch the windowed file list centered around the current file
-  const { data, isValidating } = useSWR<WindowResult>(
-    swrKey,
-    () => {
-      const fileId = currentFile?.id ?? initialId
-      logger.debug('useFileCarouselWindow', `Fetching window for ${fileId}`)
-      return fetchFileCarouselWindow({
-        initialId: fileId,
-        neighborsPerSide: windowSize,
-        sortBy,
-        sortDir: sortingDir,
-        categories: Array.from(selectedCategories ?? new Set()),
-        searchQuery: searchQuery ?? '',
-      })
+  // cacheVersion in deps forces a new function reference when cache updates.
+  const getFileAtIndex = useCallback(
+    (index: number): FileRecord | null => {
+      return cacheRef.current.get(index) ?? null
     },
-    {
-      revalidateOnFocus: false,
-      keepPreviousData: true,
-    }
+    [cacheVersion]
   )
 
-  // Initialize and update currentFile state based on data changes
-  useEffect(() => {
-    if (!data?.files?.length) return
+  const setCurrentIndex = useCallback(
+    (index: number) => {
+      if (index >= 0 && index < totalCount) {
+        setCurrentIndexState(index)
+      }
+    },
+    [totalCount]
+  )
 
-    // If no current file, initialize with the target file or first in list
-    if (!currentFile) {
-      const initial =
-        data.files.find((f) => f.id === initialId) ?? data.files[0]
-      logger.debug(
-        'useFileCarouselWindow',
-        `Initializing with file ${initial.id}`
-      )
-      setCurrentFile(initial)
-      return
-    }
-
-    // Update current file if it exists in the new data and has changed
-    const updatedFile = data.files.find((f) => f.id === currentFile.id)
-    if (!updatedFile) return
-
-    // Only update if the file has actually changed (by updatedAt timestamp)
-    if (updatedFile.updatedAt === currentFile.updatedAt) return
-
-    logger.debug(
-      'useFileCarouselWindow',
-      `Updating file ${currentFile.id} (updatedAt changed)`
-    )
-    setCurrentFile(updatedFile)
-  }, [data, initialId, currentFile])
-
-  // Extract prev and next files from the window
-  const { prevFile, nextFile } = useMemo(() => {
-    if (!data?.files?.length || !currentFile) {
-      return { prevFile: undefined, nextFile: undefined }
-    }
-
-    const idx = data.files.findIndex((f) => f.id === currentFile.id)
-    if (idx === -1) {
-      return { prevFile: undefined, nextFile: undefined }
-    }
-
-    const previousFile =
-      idx > 0 && data.hasPrevious ? data.files[idx - 1] : undefined
-    const nextFileItem =
-      idx < data.files.length - 1 && data.hasNext
-        ? data.files[idx + 1]
-        : undefined
-
-    return { prevFile: previousFile, nextFile: nextFileItem }
-  }, [data, currentFile])
+  const currentFile = getFileAtIndex(currentIndex)
 
   return {
+    totalCount,
+    currentIndex,
     currentFile,
-    prevFile,
-    nextFile,
-    setCurrentFile,
-    isValidating,
+    getFileAtIndex,
+    setCurrentIndex,
+    isLoading,
   }
 }

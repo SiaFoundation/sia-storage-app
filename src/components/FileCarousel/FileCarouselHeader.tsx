@@ -1,6 +1,5 @@
 import React from 'react'
 import { View, StyleSheet, Text } from 'react-native'
-import { type NavigationProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
 import { overlay, palette } from '../../styles/colors'
@@ -12,7 +11,7 @@ import { UploadStatusIcon } from '../UploadStatusIcon'
 type Props = {
   file?: FileRecord
   title: string
-  navigation: NavigationProp<Record<string, object | undefined>>
+  navigation: { goBack: () => void }
   icon?: 'back' | 'close'
 }
 

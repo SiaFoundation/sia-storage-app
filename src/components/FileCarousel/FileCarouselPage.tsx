@@ -1,6 +1,5 @@
 import React, { memo } from 'react'
-import { type GestureResponderEvent } from 'react-native'
-import { Animated } from 'react-native'
+import { StyleSheet, Pressable } from 'react-native'
 import { FileViewer } from '../FileViewer'
 import { type FileRecord } from '../../stores/files'
 import {
@@ -10,15 +9,11 @@ import {
 
 type Props = {
   file: FileRecord
-  position: 'prev' | 'current' | 'next'
-  translateX: Animated.Value
-  screenWidth: number
   textTopInset: number
-  onViewerControlPress: () => void
+  onTap?: () => void
   onImageZoomChange?: (isZoomed: boolean) => void
-  onTouchStart: (event: GestureResponderEvent) => void
-  onTouchMove: (event: GestureResponderEvent) => void
-  onTouchEnd: (event: GestureResponderEvent) => void
+  onSwipeLeft?: () => void
+  onSwipeRight?: () => void
 }
 
 /**
@@ -27,54 +22,33 @@ type Props = {
  */
 function FileCarouselPageComponent({
   file,
-  position,
-  translateX,
-  screenWidth,
   textTopInset,
-  onViewerControlPress,
+  onTap,
   onImageZoomChange,
-  onTouchStart,
-  onTouchMove,
-  onTouchEnd,
+  onSwipeLeft,
+  onSwipeRight,
 }: Props) {
   // Each page independently triggers auto-download for its file
   useAutoDownload(file, detailsShouldAutoDownload)
 
-  const offset =
-    position === 'prev' ? -screenWidth : position === 'next' ? screenWidth : 0
-
   return (
-    <Animated.View
-      key={file.id}
-      style={[
-        {
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-        },
-        {
-          transform: [
-            {
-              translateX: Animated.add(translateX, offset),
-            },
-          ],
-        },
-      ]}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
+    <Pressable style={styles.container} onPress={onTap}>
       <FileViewer
         file={file}
         textTopInset={textTopInset}
-        onViewerControlPress={onViewerControlPress}
         onImageZoomChange={onImageZoomChange}
+        onSwipeLeft={onSwipeLeft}
+        onSwipeRight={onSwipeRight}
       />
-    </Animated.View>
+    </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+})
 
 // Memoize to prevent unnecessary re-renders when parent state changes
 export const FileCarouselPage = memo(FileCarouselPageComponent)
