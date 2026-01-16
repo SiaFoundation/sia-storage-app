@@ -22,6 +22,8 @@ type FileViewerProps = {
   textTopInset?: number
   onViewerControlPress?: () => void
   onImageZoomChange?: (isZoomed: boolean) => void
+  onSwipeLeft?: () => void
+  onSwipeRight?: () => void
 }
 
 export function FileViewer({
@@ -31,6 +33,8 @@ export function FileViewer({
   textTopInset,
   onViewerControlPress,
   onImageZoomChange,
+  onSwipeLeft,
+  onSwipeRight,
 }: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
@@ -117,7 +121,14 @@ export function FileViewer({
       )
     }
     if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
-      return <PDFViewer source={fileUri} style={baseMediaStyle} />
+      return (
+        <PDFViewer
+          source={fileUri}
+          style={baseMediaStyle}
+          onSwipeLeft={onSwipeLeft}
+          onSwipeRight={onSwipeRight}
+        />
+      )
     }
 
     if (
@@ -180,6 +191,8 @@ export function FileViewer({
     type,
     file.size,
     onViewerControlPress,
+    onSwipeLeft,
+    onSwipeRight,
   ])
 
   return <View style={styles.container}>{mediaContent}</View>
