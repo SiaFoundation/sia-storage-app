@@ -9,6 +9,7 @@ import {
   Category,
   useLibrary,
   buildLibraryQueryParts,
+  librarySwr,
 } from './library'
 
 const FILE_COLUMNS =
@@ -232,11 +233,34 @@ export async function fetchFilesAtIndices(
 
 // The carousel can't hold thousands of files in memory, so we give it placeholder
 // indices and fetch the actual file data as the user swipes nearby.
+
+async function fetchFileByID(fileID: string): Promise<FileRecord | null> {
+  const row = await db().getFirstAsync<FileRecordRow>(
+    `SELECT ${FILE_COLUMNS} FROM files f WHERE f.id = ? LIMIT 1`,
+    fileID
+  )
+
+  if (!row) return null
+
+  const [file] = await hydrateRows([row])
+  return file ?? null
+}
+
+async function fileExists(fileID: string): Promise<boolean> {
+  const result = await db().getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files WHERE id = ?`,
+    fileID
+  )
+  return (result?.count ?? 0) > 0
+}
+
 type UseVirtualFileListParams = {
   initialId: string
   initialFile?: FileRecord
   prefetchRadius?: number
   maxCacheSize?: number
+  onDeleted?: () => void
+  onUpdated?: (message: string) => void
 }
 
 type UseVirtualFileListReturn = {
@@ -265,6 +289,8 @@ export function useVirtualFileList({
   initialFile,
   prefetchRadius = 3,
   maxCacheSize = 50,
+  onDeleted,
+  onUpdated,
 }: UseVirtualFileListParams): UseVirtualFileListReturn {
   const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
   const sortingDir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
@@ -425,6 +451,94 @@ export function useVirtualFileList({
     queryParams,
     prefetchRadius,
     maxCacheSize,
+  ])
+
+  const currentFileIDRef = useRef<string | null>(null)
+  useEffect(() => {
+    const file = cacheRef.current.get(currentIndex)
+    currentFileIDRef.current = file?.id ?? null
+  }, [currentIndex, cacheVersion])
+
+  useEffect(() => {
+    if (isLoading) return
+
+    const handleChange = async () => {
+      const currentFileID = currentFileIDRef.current
+      if (!currentFileID) return
+
+      try {
+        const exists = await fileExists(currentFileID)
+        if (!exists) {
+          onDeleted?.()
+          return
+        }
+
+        const [newCount, newPosition] = await Promise.all([
+          fetchTotalCount(queryParams),
+          fetchFilePosition(currentFileID, queryParams),
+        ])
+
+        if (newCount !== totalCount || newPosition !== currentIndex) {
+          setTotalCount(newCount)
+          setCurrentIndexState(newPosition)
+          cacheRef.current.clear()
+          fetchingRef.current.clear()
+          setCacheVersion((v) => v + 1)
+        }
+
+        const cachedFile = cacheRef.current.get(currentIndex)
+        if (cachedFile && cachedFile.id === currentFileID) {
+          const freshFile = await fetchFileByID(currentFileID)
+          if (freshFile) {
+            const nameChanged = cachedFile.name !== freshFile.name
+            const metadataChanged =
+              nameChanged ||
+              cachedFile.updatedAt !== freshFile.updatedAt ||
+              cachedFile.size !== freshFile.size ||
+              cachedFile.type !== freshFile.type
+
+            if (metadataChanged) {
+              cacheRef.current.set(currentIndex, freshFile)
+              setCacheVersion((v) => v + 1)
+
+              const message = nameChanged ? 'File renamed' : 'File info updated'
+              onUpdated?.(message)
+
+              if (nameChanged && sortBy === 'NAME') {
+                const updatedPosition = await fetchFilePosition(
+                  currentFileID,
+                  queryParams
+                )
+                if (updatedPosition !== currentIndex) {
+                  setCurrentIndexState(updatedPosition)
+                  cacheRef.current.clear()
+                  fetchingRef.current.clear()
+                  setCacheVersion((v) => v + 1)
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Silently ignore errors during sync handling.
+      }
+    }
+
+    const callbackKey = `virtualFileList-${initialId}`
+    librarySwr.addChangeCallback(callbackKey, handleChange)
+
+    return () => {
+      librarySwr.removeChangeCallback(callbackKey)
+    }
+  }, [
+    isLoading,
+    initialId,
+    queryParams,
+    totalCount,
+    currentIndex,
+    sortBy,
+    onDeleted,
+    onUpdated,
   ])
 
   // cacheVersion in deps forces a new function reference when cache updates.

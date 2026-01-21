@@ -52,6 +52,15 @@ export function FileCarousel({
 
   const toast = useToast()
 
+  const handleFileDeleted = useCallback(() => {
+    toast.show('File deleted')
+    onClose()
+  }, [onClose, toast])
+
+  const handleFileUpdated = useCallback((message: string) => {
+    toast.show(message)
+  }, [toast])
+
   const {
     totalCount,
     currentIndex,
@@ -64,6 +73,8 @@ export function FileCarousel({
     initialFile,
     prefetchRadius: 3,
     maxCacheSize: 50,
+    onDeleted: handleFileDeleted,
+    onUpdated: handleFileUpdated,
   })
 
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 })

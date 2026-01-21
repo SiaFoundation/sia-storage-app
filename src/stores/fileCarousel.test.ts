@@ -1,20 +1,36 @@
-import { initializeDB, resetDb } from '../db'
+import { renderHook, act, waitFor } from '@testing-library/react-native'
+import { initializeDB, resetDb, db } from '../db'
 import { createFileRecord } from './files'
 import {
   fetchTotalCount,
   fetchFilePosition,
   fetchFilesAtIndices,
+  useVirtualFileList,
 } from './fileCarousel'
 import { Category } from './library'
+
+// Track registered change callbacks so tests can trigger them.
+// Prefixed with "mock" to satisfy Jest's module factory variable restriction.
+const mockChangeCallbacks = new Map<string, () => void>()
 
 jest.mock('./library', () => {
   const actual = jest.requireActual('./library')
   return {
     ...actual,
+    useLibrary: () => ({
+      sortBy: 'DATE',
+      sortDir: 'DESC',
+      selectedCategories: new Set(),
+      searchQuery: '',
+    }),
     librarySwr: {
       triggerChange: jest.fn(),
-      addChangeCallback: jest.fn(),
-      removeChangeCallback: jest.fn(),
+      addChangeCallback: jest.fn((key: string, cb: () => void) => {
+        mockChangeCallbacks.set(key, cb)
+      }),
+      removeChangeCallback: jest.fn((key: string) => {
+        mockChangeCallbacks.delete(key)
+      }),
       getKey: jest.fn((key: string) => key),
     },
   }
@@ -417,6 +433,153 @@ describe('fileCarousel virtual list functions', () => {
         sortDir: 'ASC',
       })
       expect(files.size).toBe(2)
+    })
+  })
+})
+
+describe('useVirtualFileList hook', () => {
+  const base = 2_000
+
+  beforeEach(async () => {
+    await initializeDB()
+    mockChangeCallbacks.clear()
+  })
+
+  afterEach(async () => {
+    await resetDb()
+    jest.clearAllMocks()
+    mockChangeCallbacks.clear()
+  })
+
+  async function createRecord(params: {
+    id: string
+    name: string
+    createdAt: number
+  }) {
+    await createFileRecord({
+      id: params.id,
+      name: params.name,
+      type: 'image/jpeg',
+      size: 100,
+      hash: `hash-${params.id}`,
+      createdAt: params.createdAt,
+      updatedAt: params.createdAt,
+      localId: null,
+      addedAt: params.createdAt,
+    })
+  }
+
+  async function deleteRecord(id: string) {
+    await db().runAsync('DELETE FROM files WHERE id = ?', id)
+  }
+
+  async function updateRecord(id: string, updates: { name?: string; updatedAt?: number }) {
+    const setClauses: string[] = []
+    const params: (string | number)[] = []
+    if (updates.name !== undefined) {
+      setClauses.push('name = ?')
+      params.push(updates.name)
+    }
+    if (updates.updatedAt !== undefined) {
+      setClauses.push('updatedAt = ?')
+      params.push(updates.updatedAt)
+    }
+    params.push(id)
+    await db().runAsync(`UPDATE files SET ${setClauses.join(', ')} WHERE id = ?`, ...params)
+  }
+
+  function triggerSyncChange() {
+    mockChangeCallbacks.forEach((cb) => cb())
+  }
+
+  describe('sync event handling', () => {
+    test('calls onDeleted when current file is deleted', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+
+      const onDeleted = jest.fn()
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-2',
+          onDeleted,
+        })
+      )
+
+      // Wait for hook to initialize
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.currentFile?.id).toBe('file-2')
+
+      // Delete the current file and trigger sync
+      await deleteRecord('file-2')
+      await act(async () => {
+        triggerSyncChange()
+        // Give the async handler time to run
+        await new Promise((r) => setTimeout(r, 50))
+      })
+
+      expect(onDeleted).toHaveBeenCalled()
+    })
+
+    test('calls onUpdated when file metadata changes', async () => {
+      await createRecord({ id: 'file-1', name: 'original.jpg', createdAt: base })
+
+      const onUpdated = jest.fn()
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-1',
+          onUpdated,
+        })
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.currentFile?.name).toBe('original.jpg')
+
+      // Update the file's name and trigger sync
+      await updateRecord('file-1', { name: 'renamed.jpg', updatedAt: base + 100 })
+      await act(async () => {
+        triggerSyncChange()
+        await new Promise((r) => setTimeout(r, 50))
+      })
+
+      expect(onUpdated).toHaveBeenCalledWith('File renamed')
+    })
+
+    test('updates position when total count changes', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-2',
+        })
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      // file-2 is at position 1 (DESC: file-3, file-2, file-1)
+      expect(result.current.totalCount).toBe(3)
+      expect(result.current.currentIndex).toBe(1)
+
+      // Delete file-3 (the one before file-2), so file-2 moves to position 0
+      await deleteRecord('file-3')
+      await act(async () => {
+        triggerSyncChange()
+        await new Promise((r) => setTimeout(r, 50))
+      })
+
+      await waitFor(() => {
+        expect(result.current.totalCount).toBe(2)
+      })
+      expect(result.current.currentIndex).toBe(0)
     })
   })
 })
