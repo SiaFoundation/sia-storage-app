@@ -25,6 +25,7 @@ import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { openSheet } from '../stores/sheets'
 import { FileCarousel } from '../components/FileCarousel'
+import { DragToDismiss } from '../components/DragToDismiss'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -38,6 +39,8 @@ export function LibraryScreen({ route, navigation }: Props) {
     if (!openFileId) return null
     return files.data?.find(f => f.id === openFileId) ?? null
   })
+  const [isCarouselZoomed, setIsCarouselZoomed] = useState(false)
+  const [isDraggingToDismiss, setIsDraggingToDismiss] = useState(false)
   const fadeAnim = useRef(new Animated.Value(0)).current
   const scaleAnim = useRef(new Animated.Value(0.95)).current
   const handleOpenDetail = useCallback((file: FileRecord) => {
@@ -199,12 +202,23 @@ export function LibraryScreen({ route, navigation }: Props) {
           ]}
           pointerEvents="box-none"
         >
-          <FileCarousel
-            initialId={selectedFile.id}
-            initialFile={selectedFile}
-            onClose={() => setSelectedFile(null)}
-            onShowActionSheet={handleShowCarouselActions}
-          />
+          <DragToDismiss
+            onDismiss={() => {
+              setSelectedFile(null)
+              setIsDraggingToDismiss(false)
+            }}
+            onDragStart={() => setIsDraggingToDismiss(true)}
+            enabled={!isCarouselZoomed}
+          >
+            <FileCarousel
+              initialId={selectedFile.id}
+              initialFile={selectedFile}
+              onClose={() => setSelectedFile(null)}
+              onShowActionSheet={handleShowCarouselActions}
+              onZoomChange={setIsCarouselZoomed}
+              isDismissing={isDraggingToDismiss}
+            />
+          </DragToDismiss>
         </Animated.View>
       ) : null}
       {selectedFile ? (

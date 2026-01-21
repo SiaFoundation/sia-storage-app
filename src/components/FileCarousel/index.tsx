@@ -37,6 +37,8 @@ type Props = {
   initialFile?: FileRecord
   onClose: () => void
   onShowActionSheet?: () => void
+  onZoomChange?: (isZoomed: boolean) => void
+  isDismissing?: boolean
 }
 
 export function FileCarousel({
@@ -44,9 +46,18 @@ export function FileCarousel({
   initialFile,
   onClose,
   onShowActionSheet,
+  onZoomChange,
+  isDismissing,
 }: Props) {
   const [viewStyle, setViewStyle] = useState<'consume' | 'detail'>('consume')
   const [showChrome, setShowChrome] = useState(false)
+
+  // Hide chrome during drag-to-dismiss
+  useEffect(() => {
+    if (isDismissing) {
+      setShowChrome(false)
+    }
+  }, [isDismissing])
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false)
   const [isZoomed, setIsZoomed] = useState(false)
 
@@ -164,9 +175,13 @@ export function FileCarousel({
     setShowChrome((curr) => !curr)
   }, [])
 
-  const handleImageZoomChange = useCallback((zoomed: boolean) => {
-    setIsZoomed(zoomed)
-  }, [])
+  const handleImageZoomChange = useCallback(
+    (zoomed: boolean) => {
+      setIsZoomed(zoomed)
+      onZoomChange?.(zoomed)
+    },
+    [onZoomChange]
+  )
 
   const handleSnapToItem = useCallback(
     (index: number) => {
@@ -320,7 +335,6 @@ export function FileCarousel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.gray[950],
   },
   center: {
     flex: 1,
