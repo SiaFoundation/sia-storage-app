@@ -1,15 +1,15 @@
 import { LogView } from '../components/LogView'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
-import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { type MenuStackParamList } from '../stacks/types'
+import { useMenuHeader } from '../hooks/useMenuHeader'
 import { SettingsLogsControlBar } from '../components/SettingsLogsControlBar'
 import { SettingsFullLayout } from '../components/SettingsLayout'
 import { logsSwr } from '../hooks/useLogs'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Logs'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'>
 
 export function SettingsLogsScreen({ route, navigation }: Props) {
-  useSettingsHeader()
+  useMenuHeader()
 
   const handleRefresh = async () => {
     await logsSwr.triggerChange()

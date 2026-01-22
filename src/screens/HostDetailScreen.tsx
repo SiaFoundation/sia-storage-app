@@ -1,7 +1,7 @@
 import { Text, StyleSheet, ActivityIndicator, View } from 'react-native'
 import { colors, palette } from '../styles/colors'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
+import { type MenuStackParamList } from '../stacks/types'
 import { useHost } from '../stores/hosts'
 import { determineBestRegion } from '../components/Map/mapHelpers'
 import { useMemo } from 'react'
@@ -12,7 +12,7 @@ import { RowGroup } from '../components/Group'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'HostDetail'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'HostDetail'>
 
 export function HostDetailScreen({ route }: Props) {
   const { publicKey } = route.params

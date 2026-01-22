@@ -8,22 +8,22 @@ import { Button } from '../components/Button'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { useIndexerURL } from '../stores/settings'
-import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { useMenuHeader } from '../hooks/useMenuHeader'
 import { humanSize } from '../lib/humanSize'
 import { useAccount } from '../hooks/useAccount'
 import { useToast } from '../lib/toastContext'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
+import { type MenuStackParamList } from '../stacks/types'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Indexer'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'Indexer'>
 
 export function SettingsIndexerScreen({ navigation }: Props) {
   const isConnected = useIsConnected()
   const currentIndexerURL = useIndexerURL()
   const toast = useToast()
   const [isReconnecting, setIsReconnecting] = useState(false)
-  useSettingsHeader()
+  useMenuHeader()
   const account = useAccount()
 
   const handleReconnect = useCallback(async () => {

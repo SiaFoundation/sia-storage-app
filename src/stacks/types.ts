@@ -10,8 +10,8 @@ export type SwitchIndexerStackParamList = {
   SwitchFinished: { indexerURL: string }
 }
 
-export type SettingsStackParamList = {
-  SettingsHome: undefined
+export type MenuStackParamList = {
+  MenuHome: undefined
   Hosts: undefined
   HostDetail: { publicKey: string }
   Indexer: undefined
@@ -20,6 +20,10 @@ export type SettingsStackParamList = {
   Logs: undefined
   Advanced: undefined
   Debug: undefined
+  LearnRecoveryPhrase: undefined
+  LearnHowItWorks: undefined
+  LearnIndexer: undefined
+  LearnSiaNetwork: undefined
 }
 
 export type OnboardingStackParamList = {
@@ -35,6 +39,6 @@ export type ImportStackParamList = {
 
 export type RootTabParamList = {
   MainTab: NavigatorScreenParams<MainStackParamList> | undefined
-  SettingsTab: NavigatorScreenParams<SettingsStackParamList> | undefined
+  MenuTab: NavigatorScreenParams<MenuStackParamList> | undefined
   ImportTab: NavigatorScreenParams<ImportStackParamList> | undefined
 }

@@ -19,7 +19,7 @@ import { useLibraryViewMode } from '../stores/settings'
 import { LibraryControlBar } from '../components/LibraryControlBar'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
 import { IconButton } from '../components/IconButton'
-import { SettingsIcon } from 'lucide-react-native'
+import { MenuIcon } from 'lucide-react-native'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
 import { FileActionsSheet } from '../components/FileActionsSheet'
@@ -134,11 +134,11 @@ export function LibraryScreen({ route, navigation }: Props) {
         <View style={styles.buttonRow}>
           <LibraryAppStatusIcon />
           <IconButton
-            onPress={() => navigation.navigate('SettingsTab' as never)}
+            onPress={() => navigation.navigate('MenuTab' as never)}
             style={[styles.headerIcon, { paddingHorizontal: 4 }]}
-            accessibilityLabel="Settings"
+            accessibilityLabel="Menu"
           >
-            <SettingsIcon color={palette.gray[50]} />
+            <MenuIcon color={palette.gray[50]} />
           </IconButton>
         </View>
       </ScreenHeader>

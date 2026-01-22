@@ -1,7 +1,7 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { MainStack } from './MainStack'
-import { SettingsStack } from './SettingsStack'
+import { MenuStack } from './MenuStack'
 import { type RootTabParamList } from './types'
 import { OnboardingStack } from './OnboardingStack'
 import { useHasOnboarded } from '../stores/settings'
@@ -26,10 +26,10 @@ export function RootTabs() {
         {() => <ImportStack />}
       </Tab.Screen>
       <Tab.Screen
-        name="SettingsTab"
+        name="MenuTab"
         options={{ tabBarStyle: { display: 'none' } }}
       >
-        {() => <SettingsStack />}
+        {() => <MenuStack />}
       </Tab.Screen>
     </Tab.Navigator>
   )
