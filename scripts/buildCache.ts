@@ -20,12 +20,11 @@ export const PROJECT_ROOT = join(import.meta.dir, '..')
 export const BUILD_CACHE_DIR = join(PROJECT_ROOT, '.build-cache')
 
 // Build targets - each has isolated cache
+// Note: E2E uses the same targets as dev since builds are identical
 export type BuildTarget =
-  | 'ios-sim'      // iOS Simulator dev builds
-  | 'ios-device'   // iOS real device dev builds
-  | 'android'      // Android emulator/device dev builds
-  | 'e2e-ios'      // E2E iOS simulator builds
-  | 'e2e-android'  // E2E Android builds
+  | 'ios-sim'      // iOS Simulator builds (dev and e2e)
+  | 'ios-device'   // iOS real device builds
+  | 'android'      // Android builds (dev and e2e)
 
 // Get paths for a specific build target
 export function getTargetPaths(target: BuildTarget) {

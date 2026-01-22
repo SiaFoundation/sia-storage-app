@@ -19,6 +19,8 @@
     "release:ios:internal": "bun scripts/releaseIos.ts testflight",
     "release:ios:production": "bun scripts/releaseIos.ts appstore",
     "test": "jest",
+    "e2e:ios": "bun scripts/e2e.ts ios",
+    "e2e:android": "bun scripts/e2e.ts android",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
