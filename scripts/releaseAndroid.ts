@@ -1,3 +1,20 @@
+#!/usr/bin/env bun
+/**
+ * Android Release Build & Distribution
+ *
+ * Builds a signed Android AAB and uploads to Google Play Store.
+ *
+ * Usage:
+ *   bun scripts/releaseAndroid.ts [internal|production]
+ *
+ * Required environment variables:
+ *   SIA_RELEASE_STORE_FILE             - Path to release keystore
+ *   SIA_RELEASE_STORE_PASSWORD         - Keystore password
+ *   SIA_RELEASE_KEY_ALIAS              - Key alias
+ *   SIA_RELEASE_KEY_PASSWORD           - Key password
+ *   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON - Google Play service account key
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 
@@ -7,7 +24,7 @@ const projectRoot = path.resolve(import.meta.dir, '..')
 const track = Bun.argv[2] || 'internal'
 
 if (track !== 'internal' && track !== 'production') {
-  console.error('Usage: bun scripts/release-android.ts [internal|production]')
+  console.error('Usage: bun scripts/releaseAndroid.ts [internal|production]')
   console.error('  internal   - Upload to internal testing track (default)')
   console.error('  production - Upload to production track')
   process.exit(1)
