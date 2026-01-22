@@ -8,15 +8,13 @@
  *   bun scripts/dev.ts android      # Build & run on Android emulator/device
  *
  * Flags:
- *   --rebuild    Force a fresh build (ignore cache)
+ *   --rebuild    Full clean build (delete platform dir, prebuild, build)
  *   --no-run     Build only, don't launch the app
- *   --clean      Full clean build (rimraf + prebuild + build)
  *
  * How caching works:
  *   - Computes hash from package.json, bun.lock, app.config.js, eas.json, plugins/*.js
  *   - Each target (ios, ios:device, android) has isolated cache in .build-cache/
  *   - Skips rebuild if hash matches and artifacts exist
- *   - Use --rebuild to force rebuild, --clean for full clean build
  *
  * Cache locations:
  *   .build-cache/ios-sim/       - iOS Simulator builds
@@ -25,25 +23,21 @@
  */
 
 import { $ } from 'bun'
-import { existsSync, rmSync } from 'fs'
+import { rmSync } from 'fs'
 import { join } from 'path'
 import {
   PROJECT_ROOT,
   type BuildTarget,
   getTargetPaths,
   needsRebuild,
-  saveBuildHash,
-  ensureCacheDir,
-  writeBuildLog,
-  getBuildLogTail,
 } from './buildCache'
+import { buildIosSim, buildIosDevice, buildAndroid } from './build'
 
 // Parse arguments
 const args = process.argv.slice(2)
 const targetArg = args.find(a => !a.startsWith('-'))
 const forceRebuild = args.includes('--rebuild')
 const noRun = args.includes('--no-run')
-const cleanBuild = args.includes('--clean')
 
 // Map CLI arg to build target
 function getTarget(): BuildTarget {
@@ -64,9 +58,8 @@ function getTarget(): BuildTarget {
       console.error('  android      Build & run on Android emulator/device')
       console.error('')
       console.error('Flags:')
-      console.error('  --rebuild    Force a fresh build (ignore cache)')
+      console.error('  --rebuild    Full clean build (delete platform dir, prebuild, build)')
       console.error('  --no-run     Build only, don\'t launch the app')
-      console.error('  --clean      Full clean build (rimraf + prebuild + build)')
       process.exit(1)
   }
 }
@@ -79,15 +72,15 @@ const paths = getTargetPaths(target)
 // Print header
 console.log(`\n🚀 Smart Dev Build`)
 console.log(`   Target: ${targetArg}`)
-console.log(`   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run', cleanBuild && '--clean'].filter(Boolean).join(' ') || 'none'}`)
+console.log(`   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`)
 console.log(`   Cache: .build-cache/${target}/`)
 console.log('')
 
 $.cwd(PROJECT_ROOT)
 
-// Clean build: wipe everything and start fresh
-if (cleanBuild) {
-  console.log('🧹 Clean build requested')
+// Full rebuild: wipe everything and start fresh
+if (forceRebuild) {
+  console.log('🔨 Full rebuild requested')
   console.log(`   Removing ${platform}/...`)
   rmSync(join(PROJECT_ROOT, platform), { recursive: true, force: true })
   console.log(`   Removing .build-cache/${target}/...`)
@@ -96,34 +89,22 @@ if (cleanBuild) {
 }
 
 // Check if rebuild needed
-const [rebuildNeeded, reason] = needsRebuild(target, { forceRebuild: forceRebuild || cleanBuild })
+const [rebuildNeeded, reason] = needsRebuild(target, { forceRebuild })
 
 if (rebuildNeeded) {
   console.log(`🔨 Build needed: ${reason}`)
-  ensureCacheDir(target)
-
-  // Prebuild if platform directory doesn't exist
-  const platformDir = join(PROJECT_ROOT, platform)
-  if (!existsSync(platformDir)) {
-    console.log(`   Prebuilding ${platform}...`)
-    const prebuildResult = await $`bunx expo prebuild --platform ${platform} 2>&1`.quiet().nothrow()
-    writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
-
-    if (prebuildResult.exitCode !== 0) {
-      console.error('❌ Prebuild failed. Last 30 lines:')
-      console.error(getBuildLogTail(target, 30))
-      process.exit(1)
-    }
-  }
 
   // Platform-specific build
   if (platform === 'ios') {
-    await buildIos()
+    if (isDevice) {
+      await buildIosDevice({ target })
+    } else {
+      await buildIosSim({ target })
+    }
   } else {
-    await buildAndroid()
+    await buildAndroid({ target })
   }
 
-  saveBuildHash(target)
   console.log('✅ Build complete')
 } else {
   console.log(`✅ Using cached build (${reason})`)
@@ -136,61 +117,6 @@ if (!noRun) {
     await runIos()
   } else {
     await runAndroid()
-  }
-}
-
-// === iOS Build ===
-async function buildIos(): Promise<void> {
-  console.log(`   Building iOS (${isDevice ? 'device' : 'simulator'})...`)
-  console.log(`   Build log: ${paths.buildLog}`)
-
-  if (isDevice) {
-    // Device build via fastlane
-    const buildResult = await $`fastlane ios dev_device 2>&1`.quiet().nothrow()
-    writeBuildLog(target, `=== FASTLANE ===\n${buildResult.stdout}`, true)
-
-    if (buildResult.exitCode !== 0) {
-      console.error('❌ Build failed. Last 50 lines:')
-      console.error(getBuildLogTail(target, 50))
-      throw new Error('iOS device build failed')
-    }
-  } else {
-    // Simulator build via xcodebuild with dedicated DerivedData
-    const buildResult = await $`xcodebuild \
-      -workspace ios/SiaStorageDev.xcworkspace \
-      -scheme SiaStorageDev \
-      -configuration Debug \
-      -sdk iphonesimulator \
-      -arch arm64 \
-      -derivedDataPath ${paths.derivedData} \
-      build \
-      CODE_SIGNING_ALLOWED=NO 2>&1`.quiet().nothrow()
-
-    writeBuildLog(target, `=== XCODEBUILD ===\n${buildResult.stdout}`, true)
-
-    if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
-      console.error('❌ Build failed. Last 50 lines:')
-      console.error(getBuildLogTail(target, 50))
-      throw new Error('iOS simulator build failed')
-    }
-  }
-}
-
-// === Android Build ===
-async function buildAndroid(): Promise<void> {
-  console.log('   Building Android...')
-  console.log(`   Build log: ${paths.buildLog}`)
-
-  $.cwd(join(PROJECT_ROOT, 'android'))
-  const buildResult = await $`./gradlew assembleDebug --no-daemon 2>&1`.quiet().nothrow()
-  $.cwd(PROJECT_ROOT)
-
-  writeBuildLog(target, `=== GRADLE ===\n${buildResult.stdout}`, true)
-
-  if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
-    console.error('❌ Build failed. Last 50 lines:')
-    console.error(getBuildLogTail(target, 50))
-    throw new Error('Android build failed')
   }
 }
 
