@@ -38,9 +38,9 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
 
   const iosDir = join(PROJECT_ROOT, 'ios')
 
-  // Clean if requested or if dir doesn't exist
+  // Clean and prebuild if explicitly requested or dir doesn't exist
   if (alwaysClean || !existsSync(iosDir)) {
-    if (alwaysClean && existsSync(iosDir)) {
+    if (existsSync(iosDir)) {
       console.log('   Cleaning ios/...')
       await $`rm -rf ${iosDir}`.quiet().nothrow()
     }
@@ -146,9 +146,9 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
 
   const androidDir = join(PROJECT_ROOT, 'android')
 
-  // Clean if requested or if dir doesn't exist
+  // Clean and prebuild if explicitly requested or dir doesn't exist
   if (alwaysClean || !existsSync(androidDir)) {
-    if (alwaysClean && existsSync(androidDir)) {
+    if (existsSync(androidDir)) {
       console.log('   Cleaning android/...')
       await $`rm -rf ${androidDir}`.quiet().nothrow()
     }
