@@ -4,10 +4,10 @@ import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
+import { type MenuStackParamList } from '../stacks/types'
 import { colors, palette } from '../styles/colors'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Advanced'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
 
 export function SettingsAdvancedInfo({ navigation }: Props) {
   const showAdvanced = useShowAdvanced()

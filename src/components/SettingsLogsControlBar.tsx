@@ -13,7 +13,7 @@ import { logger } from '../lib/logger'
 import { logsSwr } from '../hooks/useLogs'
 import { Alert } from 'react-native'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
+import { type MenuStackParamList } from '../stacks/types'
 import { iconColors } from './BottomControlBar'
 import {
   FilterIcon,
@@ -32,7 +32,7 @@ import { palette } from '../styles/colors'
 import { useState } from 'react'
 import { SpinnerIcon } from './SpinnerIcon'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Logs'> & {
+type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'> & {
   onRefresh?: () => void
 }
 

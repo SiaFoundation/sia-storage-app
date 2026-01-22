@@ -1,16 +1,16 @@
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
-import { useSettingsHeader } from '../hooks/useSettingsHeader'
+import { type MenuStackParamList } from '../stacks/types'
+import { useMenuHeader } from '../hooks/useMenuHeader'
 import { SettingsSyncPhotos } from '../components/SettingsSyncPhotos'
 import { SettingsAdvancedSync } from '../components/SettingsAdvancedSync'
 import { SettingsAdvancedTransfers } from '../components/SettingsAdvancedTransfers'
 import { useShowAdvanced } from '../stores/settings'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Sync'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'Sync'>
 
 export function SettingsSyncScreen(_props: Props) {
-  useSettingsHeader()
+  useMenuHeader()
   const showAdvanced = useShowAdvanced()
 
   return (

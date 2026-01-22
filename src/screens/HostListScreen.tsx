@@ -3,12 +3,12 @@ import { palette, colors } from '../styles/colors'
 import { ListIcon, MapIcon } from 'lucide-react-native'
 import { HostsList } from '../components/HostsList'
 import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SettingsStackParamList } from '../stacks/types'
+import { type MenuStackParamList } from '../stacks/types'
 import { useState, useLayoutEffect } from 'react'
 import HostsMap from '../components/HostsMap'
 import { SettingsFullLayout } from '../components/SettingsLayout'
 
-type Props = NativeStackScreenProps<SettingsStackParamList, 'Hosts'>
+type Props = NativeStackScreenProps<MenuStackParamList, 'Hosts'>
 
 export function HostListScreen({ navigation }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list')
