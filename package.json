@@ -21,6 +21,10 @@
     "test": "jest",
     "e2e:ios": "bun scripts/e2e.ts ios",
     "e2e:android": "bun scripts/e2e.ts android",
+    "ci-test-build:ios": "bun scripts/ciTestBuildIos.ts",
+    "ci-test-build:android": "bun scripts/ciTestBuildAndroid.ts",
+    "ci-e2e:ios": "bun scripts/e2eCi.ts ios",
+    "ci-e2e:android": "bun scripts/e2eCi.ts android",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },

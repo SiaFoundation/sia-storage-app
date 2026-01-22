@@ -2,32 +2,44 @@
 /**
  * CI Android Test Build
  *
- * Builds a debug APK for CI testing. No signing required.
- * Used in GitHub Actions to verify the Android build compiles.
+ * Builds Android APK in Release mode for CI E2E testing.
+ * Builds x86_64 only for CI emulator compatibility.
  *
  * Usage:
  *   bun scripts/ciTestBuildAndroid.ts
  */
 
 import { $ } from 'bun'
-import path from 'node:path'
+import { existsSync } from 'fs'
+import { join } from 'path'
 
-const projectRoot = path.resolve(import.meta.dir, '..')
+const PROJECT_ROOT = join(import.meta.dir, '..')
+const ANDROID_DIR = join(PROJECT_ROOT, 'android')
 
-$.cwd(projectRoot)
+$.cwd(PROJECT_ROOT)
 
-console.log('=== Android Build (Debug) ===')
+console.log('=== Android CI Build (Release x86_64) ===')
 
 // Step 1: Clean and prebuild
-console.log('Step 1/2: Cleaning and prebuilding...')
-await $`bunx rimraf .expo android`
+console.log('\nStep 1/2: Cleaning and prebuilding...')
+if (existsSync(ANDROID_DIR)) {
+  await $`rm -rf ${ANDROID_DIR}`.quiet()
+}
 await $`bunx expo prebuild --platform android`
 
-// Step 2: Build debug APK (no signing required)
-console.log('Step 2/2: Building debug APK...')
-const jvmArgs =
-  '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError'
+// Step 2: Build Release APK for x86_64 (CI emulators)
+console.log('\nStep 2/2: Building Release APK (x86_64)...')
 
-await $`cd android && ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs=${jvmArgs}`
+const jvmArgs = '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError'
 
-console.log('=== Android build complete! ===')
+const result = await $`./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs=${jvmArgs} -PreactNativeArchitectures=x86_64`
+  .cwd(ANDROID_DIR)
+  .nothrow()
+
+if (result.exitCode !== 0) {
+  console.error('❌ Android build failed')
+  process.exit(result.exitCode)
+}
+
+console.log('\n✅ Android CI build complete!')
+console.log(`   APK location: ${ANDROID_DIR}/app/build/outputs/apk/release/`)
