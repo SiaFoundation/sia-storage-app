@@ -1,3 +1,14 @@
+#!/usr/bin/env bun
+/**
+ * CI iOS Test Build
+ *
+ * Builds for iOS Simulator in Release mode. No code signing required.
+ * Used in GitHub Actions to verify the iOS build compiles.
+ *
+ * Usage:
+ *   bun scripts/ciTestBuildIos.ts
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 

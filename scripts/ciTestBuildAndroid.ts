@@ -1,3 +1,14 @@
+#!/usr/bin/env bun
+/**
+ * CI Android Test Build
+ *
+ * Builds a debug APK for CI testing. No signing required.
+ * Used in GitHub Actions to verify the Android build compiles.
+ *
+ * Usage:
+ *   bun scripts/ciTestBuildAndroid.ts
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 

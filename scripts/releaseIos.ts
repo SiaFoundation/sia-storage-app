@@ -1,3 +1,17 @@
+#!/usr/bin/env bun
+/**
+ * iOS Release Build & Distribution
+ *
+ * Builds a signed iOS IPA and uploads to App Store Connect.
+ *
+ * Usage:
+ *   bun scripts/releaseIos.ts [testflight|appstore]
+ *
+ * Required environment variables:
+ *   APPLE_TEAM_ID                  - Apple Developer Team ID
+ *   APP_STORE_CONNECT_API_KEY_JSON - App Store Connect API key
+ */
+
 import { $ } from 'bun'
 import path from 'node:path'
 
@@ -7,7 +21,7 @@ const projectRoot = path.resolve(import.meta.dir, '..')
 const track = Bun.argv[2] || 'testflight'
 
 if (track !== 'testflight' && track !== 'appstore') {
-  console.error('Usage: bun scripts/release-ios.ts [testflight|appstore]')
+  console.error('Usage: bun scripts/releaseIos.ts [testflight|appstore]')
   console.error('  testflight - Upload to TestFlight (default)')
   console.error('  appstore   - Upload to App Store')
   process.exit(1)

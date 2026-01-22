@@ -1,3 +1,23 @@
+#!/usr/bin/env bun
+/**
+ * Android Gradle Task Runner
+ *
+ * Runs Gradle tasks with proper environment and memory settings.
+ *
+ * Usage:
+ *   bun scripts/androidGradleTask.ts <task>
+ *
+ * Examples:
+ *   bun scripts/androidGradleTask.ts signingReport
+ *   bun scripts/androidGradleTask.ts bundleRelease
+ *
+ * Required environment variables:
+ *   SIA_RELEASE_STORE_FILE     - Path to release keystore
+ *   SIA_RELEASE_STORE_PASSWORD - Keystore password
+ *   SIA_RELEASE_KEY_ALIAS      - Key alias
+ *   SIA_RELEASE_KEY_PASSWORD   - Key password
+ */
+
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
