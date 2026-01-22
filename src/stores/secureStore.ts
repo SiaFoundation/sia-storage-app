@@ -10,14 +10,22 @@ const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = Platform.select({
   default: {},
 })
 
+async function getItem(key: string): Promise<string | null> {
+  return SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS)
+}
+
+async function setItem(key: string, value: string): Promise<void> {
+  return SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS)
+}
+
 export async function setSecureStoreBoolean(key: string, value: boolean) {
   validateKey(key)
-  return SecureStore.setItemAsync(key, value ? 'true' : 'false', SECURE_STORE_OPTIONS)
+  return setItem(key, value ? 'true' : 'false')
 }
 
 export async function getSecureStoreBoolean(key: string, initialValue = false) {
   return retry('getSecureStoreBoolean', async () => {
-    const found = await SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS)
+    const found = await getItem(key)
     if (typeof found === 'string') {
       if (found === 'true') {
         return true
@@ -33,12 +41,12 @@ export async function getSecureStoreBoolean(key: string, initialValue = false) {
 export async function setSecureStoreNumber(key: string, value: number) {
   validateKey(key)
   const str = Number.isFinite(value) ? String(Math.floor(value)) : '0'
-  return SecureStore.setItemAsync(key, str, SECURE_STORE_OPTIONS)
+  return setItem(key, str)
 }
 
 export async function getSecureStoreNumber(key: string, initialValue = 0) {
   return retry('getSecureStoreNumber', async () => {
-    const found = await SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS)
+    const found = await getItem(key)
     if (typeof found === 'string' && found.trim().length > 0) {
       const n = Number(found)
       if (Number.isFinite(n)) {
@@ -55,7 +63,7 @@ export async function setSecureStoreString<T extends string>(
   value: T
 ) {
   validateKey(key)
-  return SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS)
+  return setItem(key, value)
 }
 
 export async function getSecureStoreString<T extends string>(
@@ -63,7 +71,7 @@ export async function getSecureStoreString<T extends string>(
   initialValue: T
 ): Promise<T> {
   return retry('getSecureStoreString', async () => {
-    const found = await SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS)
+    const found = await getItem(key)
     if (typeof found === 'string' && found.trim().length > 0) {
       return found as T
     }
@@ -84,14 +92,14 @@ export async function setSecureStoreJSON<TStorage, TDomain>(
 ) {
   validateKey(key)
   if (value == null) {
-    return SecureStore.setItemAsync(key, '', SECURE_STORE_OPTIONS)
+    return setItem(key, '')
   }
   try {
     const encoded = codec.encode(value)
     const json = JSON.stringify(encoded)
-    return SecureStore.setItemAsync(key, json, SECURE_STORE_OPTIONS)
+    return setItem(key, json)
   } catch {
-    return SecureStore.setItemAsync(key, '', SECURE_STORE_OPTIONS)
+    return setItem(key, '')
   }
 }
 
@@ -101,7 +109,7 @@ export async function getSecureStoreJSON<TStorage, TDomain>(
   initialValue?: TDomain
 ): Promise<TDomain | undefined> {
   const storedValue = await retry('getSecureStoreJSON', async () => {
-    const found = await SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS)
+    const found = await getItem(key)
     if (typeof found !== 'string' || found.trim().length === 0) {
       return undefined
     }
