@@ -399,6 +399,16 @@ export async function deleteFileRecord(
   }
 }
 
+export async function deleteManyFileRecords(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  await withTransactionLock(async () => {
+    for (const id of ids) {
+      await deleteFileRecord(id, false)
+    }
+  })
+  await librarySwr.triggerChange()
+}
+
 /** Delete an original file and all its associated thumbnails. */
 export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
   const original = await readFileRecord(id)
@@ -407,6 +417,27 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
   await withTransactionLock(async () => {
     await sqlDelete('files', { thumbForHash: hash })
     await sqlDelete('files', { id })
+  })
+  await librarySwr.triggerChange()
+}
+
+/** Delete multiple files and all their associated thumbnails. */
+export async function deleteManyFileRecordsAndThumbnails(
+  ids: string[],
+  hashes: string[]
+): Promise<void> {
+  if (ids.length === 0) return
+  await withTransactionLock(async () => {
+    // Delete thumbnails for all hashes
+    for (const hash of hashes) {
+      if (hash) {
+        await sqlDelete('files', { thumbForHash: hash })
+      }
+    }
+    // Delete the files themselves
+    for (const id of ids) {
+      await sqlDelete('files', { id })
+    }
   })
   await librarySwr.triggerChange()
 }

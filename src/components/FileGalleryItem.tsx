@@ -1,21 +1,26 @@
 import { View, Pressable, StyleSheet } from 'react-native'
-import { colors } from '../styles/colors'
+import { colors, palette, whiteA } from '../styles/colors'
 import { type FileRecord } from '../stores/files'
 import { FileThumbnail } from './FileThumbnail'
 import { memo } from 'react'
 import { useFileStatus } from '../lib/file'
 import { UploadStatusIcon } from './UploadStatusIcon'
+import { CircleIcon, CircleCheckIcon } from 'lucide-react-native'
 
 type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
+  isSelectionMode?: boolean
+  isSelected?: boolean
 }
 
 function FileGalleryItemComponent({
   file,
   onPressItem,
   onLongPressItem,
+  isSelectionMode = false,
+  isSelected = false,
 }: Props) {
   const status = useFileStatus(file)
   return (
@@ -29,8 +34,27 @@ function FileGalleryItemComponent({
         }
       >
         <FileThumbnail file={file} iconSize={24} thumbSize={512} />
-        {status.data ? (
-          <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
+        {isSelectionMode ? (
+          <>
+            {isSelected && <View style={styles.selectedOverlay} />}
+            <View style={styles.checkboxContainer}>
+              {isSelected ? (
+                <View style={styles.checkboxSelected}>
+                  <CircleCheckIcon
+                    size={18}
+                    color={palette.blue[500]}
+                    fill={palette.gray[50]}
+                  />
+                </View>
+              ) : (
+                <View style={styles.checkboxUnselected}>
+                  <CircleIcon size={18} color={whiteA.a70} />
+                </View>
+              )}
+            </View>
+          </>
+        ) : status.data ? (
+          <View style={styles.statusContainer}>
             <UploadStatusIcon status={status.data} size={10} />
           </View>
         ) : null}
@@ -45,7 +69,9 @@ export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
     prev.onPressItem === next.onPressItem &&
-    prev.onLongPressItem === next.onLongPressItem
+    prev.onLongPressItem === next.onLongPressItem &&
+    prev.isSelectionMode === next.isSelectionMode &&
+    prev.isSelected === next.isSelected
   )
 })
 
@@ -60,5 +86,28 @@ const styles = StyleSheet.create({
   thumbPress: {
     flex: 1,
     position: 'relative',
+  },
+  statusContainer: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+  },
+  checkboxContainer: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+  },
+  checkboxSelected: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  checkboxUnselected: {
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    overflow: 'hidden',
+  },
+  selectedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
 })

@@ -9,12 +9,16 @@ type Props = {
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
   numColumns?: number
+  isSelectionMode?: boolean
+  selectedFileIds?: Set<string>
 }
 
 export function FileGallery({
   onPressItem,
   onLongPressItem,
   numColumns = 3,
+  isSelectionMode = false,
+  selectedFileIds,
 }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
@@ -41,6 +45,8 @@ export function FileGallery({
           file={item}
           onPressItem={onPressItem}
           onLongPressItem={onLongPressItem}
+          isSelectionMode={isSelectionMode}
+          isSelected={selectedFileIds?.has(item.id) ?? false}
         />
       )}
       onEndReachedThreshold={0.95}
