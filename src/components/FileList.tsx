@@ -8,9 +8,16 @@ import { useFlatListControls } from '../hooks/useFlatListControls'
 type Props = {
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
+  isSelectionMode?: boolean
+  selectedFileIds?: Set<string>
 }
 
-export function FileList({ onPressItem, onLongPressItem }: Props) {
+export function FileList({
+  onPressItem,
+  onLongPressItem,
+  isSelectionMode = false,
+  selectedFileIds,
+}: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
@@ -34,11 +41,14 @@ export function FileList({ onPressItem, onLongPressItem }: Props) {
         gap: 8,
         paddingBottom: 130,
       }}
+      extraData={isSelectionMode ? selectedFileIds : undefined}
       renderItem={({ item }) => (
         <FileListItem
           file={item}
           onPressItem={onPressItem}
           onLongPressItem={onLongPressItem}
+          isSelectionMode={isSelectionMode}
+          isSelected={selectedFileIds?.has(item.id) ?? false}
         />
       )}
       onEndReachedThreshold={0.9}

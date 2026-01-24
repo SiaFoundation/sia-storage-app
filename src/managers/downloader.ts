@@ -6,7 +6,7 @@ import {
   updateDownloadProgress,
   runDownloadWithSlot,
 } from '../stores/downloads'
-import { useSdk } from '../stores/sdk'
+import { useSdk, getSdk } from '../stores/sdk'
 import { PinnedObject } from 'react-native-sia'
 import { useCallback } from 'react'
 import { getOneSealedObject } from '../lib/file'
@@ -17,54 +17,70 @@ import { FileRecord } from '../stores/files'
 import { File } from 'expo-file-system'
 import { type SharedObjectInterface } from 'react-native-sia'
 
+/** Non-hook version for programmatic downloads (e.g., bulk operations) */
+export async function downloadFile(file: FileRecord): Promise<void> {
+  const sdk = getSdk()
+  if (!sdk) throw new Error('SDK not initialized')
+
+  const result = getOneSealedObject(file)
+  if (!result) {
+    throw new Error('No slabs available for this file')
+  }
+
+  const { indexerURL, sealedObject } = result
+  const downloadState = getDownloadState(file.id)
+  if (
+    downloadState?.status === 'running' ||
+    downloadState?.status === 'queued'
+  ) {
+    return // Already downloading
+  }
+
+  await runDownloadWithSlot({
+    id: file.id,
+    task: async (signal) => {
+      const appKey = await getAppKeyForIndexer(indexerURL)
+      if (!appKey) {
+        throw new Error(`No AppKey found for indexer: ${indexerURL}`)
+      }
+      const downloader = await sdk.download(
+        PinnedObject.open(appKey, sealedObject),
+        {
+          maxInflight: DOWNLOAD_MAX_INFLIGHT,
+          offset: BigInt(0),
+          length: undefined,
+        }
+      )
+      await streamToCache({
+        file,
+        getNextChunk: () => downloader.readChunk({ signal }),
+        totalSize: Array.isArray(sealedObject.slabs)
+          ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
+          : undefined,
+        onAfterClose: async (targetFile) => {
+          await copyFileToFs(file, targetFile)
+        },
+        signal,
+      })
+    },
+  })
+}
+
 export function useDownload(file?: FileRecord | null) {
   const toast = useToast()
   const sdk = useSdk()
-  return useCallback(async () => {
+  return useCallback(() => {
     if (!file) return
     if (!sdk) return
-    const result = getOneSealedObject(file)
-    if (!result) {
+    // Check for slabs synchronously before queueing
+    const sealedObject = getOneSealedObject(file)
+    if (!sealedObject) {
       toast.show('No slabs available for this file')
       return
     }
-    const { indexerURL, sealedObject } = result
-    const downloadState = getDownloadState(file.id)
-    if (
-      downloadState?.status === 'running' ||
-      downloadState?.status === 'queued'
-    ) {
-      return
-    }
-    await runDownloadWithSlot({
-      id: file.id,
-      task: async (signal) => {
-        if (!sdk) throw new Error('SDK not initialized')
-        const appKey = await getAppKeyForIndexer(indexerURL)
-        if (!appKey) {
-          throw new Error(`No AppKey found for indexer: ${indexerURL}`)
-        }
-        const downloader = await sdk.download(
-          PinnedObject.open(appKey, sealedObject),
-          {
-            maxInflight: DOWNLOAD_MAX_INFLIGHT,
-            offset: BigInt(0),
-            length: undefined,
-          }
-        )
-        await streamToCache({
-          file,
-          getNextChunk: () => downloader.readChunk({ signal }),
-          totalSize: Array.isArray(sealedObject.slabs)
-            ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
-            : undefined,
-          onAfterClose: async (targetFile) => {
-            await copyFileToFs(file, targetFile)
-          },
-          signal,
-        })
-      },
-    })
+    // Fire and forget - queue the download
+    downloadFile(file)
+    toast.show('Download queued')
   }, [sdk, file, toast])
 }
 

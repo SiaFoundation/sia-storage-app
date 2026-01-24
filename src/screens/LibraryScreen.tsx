@@ -26,6 +26,14 @@ import { FileActionsSheet } from '../components/FileActionsSheet'
 import { openSheet } from '../stores/sheets'
 import { FileCarousel } from '../components/FileCarousel'
 import { DragToDismiss } from '../components/DragToDismiss'
+import {
+  useIsSelectionMode,
+  useSelectedFileIds,
+  toggleFileSelection,
+  enterSelectionMode,
+  selectFile,
+  exitSelectionMode,
+} from '../stores/fileSelection'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -43,15 +51,41 @@ export function LibraryScreen({ route, navigation }: Props) {
   const [isDraggingToDismiss, setIsDraggingToDismiss] = useState(false)
   const fadeAnim = useRef(new Animated.Value(0)).current
   const scaleAnim = useRef(new Animated.Value(0.95)).current
-  const handleOpenDetail = useCallback((file: FileRecord) => {
-    setSelectedFile(file)
-  }, [])
-  const handleOpenActions = useCallback((file: FileRecord) => {
-    setSelectedFile(file)
-    openSheet('fileActions')
-  }, [])
+
+  // Selection mode state
+  const isSelectionMode = useIsSelectionMode()
+  const selectedFileIds = useSelectedFileIds()
+
+  // Handle item press - opens carousel or toggles selection
+  const handlePressItem = useCallback((file: FileRecord) => {
+    if (isSelectionMode) {
+      toggleFileSelection(file.id)
+    } else {
+      setSelectedFile(file)
+    }
+  }, [isSelectionMode])
+
+  // Handle long press - enters selection mode with file selected
+  const handleLongPressItem = useCallback((file: FileRecord) => {
+    if (!isSelectionMode) {
+      enterSelectionMode()
+    }
+    selectFile(file.id)
+  }, [isSelectionMode])
+
+  // Handle opening the action sheet from carousel
   const handleShowCarouselActions = useCallback(() => {
     openSheet('fileActions')
+  }, [])
+
+  // Handle opening selection action sheet
+  const handleOpenSelectionActions = useCallback(() => {
+    openSheet('fileActions')
+  }, [])
+
+  // Handle completion of bulk action
+  const handleBulkActionComplete = useCallback(() => {
+    exitSelectionMode()
   }, [])
 
   // Animate carousel fade in/out with scale
@@ -85,6 +119,13 @@ export function LibraryScreen({ route, navigation }: Props) {
       ]).start()
     }
   }, [selectedFile, fadeAnim, scaleAnim])
+
+  // Get file IDs for action sheet
+  const actionSheetFileIds = isSelectionMode
+    ? Array.from(selectedFileIds)
+    : selectedFile
+    ? [selectedFile.id]
+    : []
 
   return (
     <View style={styles.container}>
@@ -150,13 +191,17 @@ export function LibraryScreen({ route, navigation }: Props) {
         files.data && files.data.length > 0 ? (
           viewMode.data == 'gallery' ? (
             <FileGallery
-              onPressItem={handleOpenDetail}
-              onLongPressItem={handleOpenActions}
+              onPressItem={handlePressItem}
+              onLongPressItem={handleLongPressItem}
+              isSelectionMode={isSelectionMode}
+              selectedFileIds={selectedFileIds}
             />
           ) : (
             <FileList
-              onPressItem={handleOpenDetail}
-              onLongPressItem={handleOpenActions}
+              onPressItem={handlePressItem}
+              onLongPressItem={handleLongPressItem}
+              isSelectionMode={isSelectionMode}
+              selectedFileIds={selectedFileIds}
             />
           )
         ) : (
@@ -189,7 +234,11 @@ export function LibraryScreen({ route, navigation }: Props) {
       )}
       <AddFileActionSheet />
       <LibraryStatusSheet />
-      <LibraryControlBar navigation={navigation} route={route} />
+      <LibraryControlBar
+        navigation={navigation}
+        route={route}
+        onOpenSelectionActions={handleOpenSelectionActions}
+      />
       {selectedFile ? (
         <Animated.View
           style={[
@@ -221,8 +270,12 @@ export function LibraryScreen({ route, navigation }: Props) {
           </DragToDismiss>
         </Animated.View>
       ) : null}
-      {selectedFile ? (
-        <FileActionsSheet fileID={selectedFile.id} sheetName="fileActions" />
+      {actionSheetFileIds.length > 0 ? (
+        <FileActionsSheet
+          fileIds={actionSheetFileIds}
+          sheetName="fileActions"
+          onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
+        />
       ) : null}
     </View>
   )

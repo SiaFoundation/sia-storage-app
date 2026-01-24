@@ -58,6 +58,8 @@ export function FileViewer({
 
   const lowerCasedFileName = useMemo(() => name?.toLowerCase() ?? '', [name])
 
+  const isQueued = fileDownloadState?.status === 'queued'
+
   const DownloadPanel = useMemo(() => {
     return (
       <View
@@ -66,17 +68,21 @@ export function FileViewer({
           { justifyContent: 'center', alignItems: 'center', gap: 20 },
         ]}
       >
-        <TouchableHighlight onPress={onDownloadPress}>
+        <TouchableHighlight onPress={onDownloadPress} disabled={isQueued}>
           <CloudDownloadIcon color={colors.textPrimary} size={40} />
         </TouchableHighlight>
 
-        {!isDownloading ? (
+        {!isDownloading && !isQueued ? (
           <Text style={{ color: colors.textPrimary }}>
             Press to download ({humanSize(file.size)})
           </Text>
         ) : null}
 
-        {isDownloading ? (
+        {isQueued ? (
+          <Text style={{ color: colors.textPrimary }}>Queued</Text>
+        ) : null}
+
+        {isDownloading && !isQueued ? (
           <Text style={{ color: colors.textPrimary }}>
             Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(0)}
             %
@@ -87,6 +93,7 @@ export function FileViewer({
   }, [
     baseMediaStyle,
     isDownloading,
+    isQueued,
     onDownloadPress,
     fileDownloadState?.progress,
   ])

@@ -3,7 +3,7 @@ import { whiteA, palette } from '../styles/colors'
 import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
-import { DotIcon } from 'lucide-react-native'
+import { DotIcon, CircleIcon, CircleCheckIcon } from 'lucide-react-native'
 import { UploadStatusIcon } from './UploadStatusIcon'
 import { FileThumbnail } from './FileThumbnail'
 import { memo } from 'react'
@@ -12,14 +12,22 @@ type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
+  isSelectionMode?: boolean
+  isSelected?: boolean
 }
 
-function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
+function FileListItemComponent({
+  file,
+  onPressItem,
+  onLongPressItem,
+  isSelectionMode = false,
+  isSelected = false,
+}: Props) {
   const status = useFileStatus(file)
   return (
     <Pressable
       collapsable={false}
-      style={styles.container}
+      style={[styles.container, isSelected && styles.containerSelected]}
       onPress={() => onPressItem(file)}
       onLongPress={
         onLongPressItem ? () => onLongPressItem(file) : undefined
@@ -51,7 +59,23 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
           </View>
         </View>
       </View>
-      <View pointerEvents="box-none" style={styles.trailing}></View>
+      <View pointerEvents="box-none" style={styles.trailing}>
+        {isSelectionMode ? (
+          isSelected ? (
+            <View style={styles.checkboxSelected}>
+              <CircleCheckIcon
+                size={18}
+                color={palette.blue[500]}
+                fill={palette.gray[50]}
+              />
+            </View>
+          ) : (
+            <View style={styles.checkboxUnselected}>
+              <CircleIcon size={18} color={whiteA.a50} />
+            </View>
+          )
+        ) : null}
+      </View>
     </Pressable>
   )
 }
@@ -62,7 +86,9 @@ export const FileListItem = memo(FileListItemComponent, (prev, next) => {
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
     prev.onPressItem === next.onPressItem &&
-    prev.onLongPressItem === next.onLongPressItem
+    prev.onLongPressItem === next.onLongPressItem &&
+    prev.isSelectionMode === next.isSelectionMode &&
+    prev.isSelected === next.isSelected
   )
 })
 
@@ -78,6 +104,9 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingRight: 24,
     overflow: 'hidden',
+  },
+  containerSelected: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   thumbnailContainer: {
     alignItems: 'center',
@@ -119,7 +148,15 @@ const styles = StyleSheet.create({
   },
   trailing: {
     paddingLeft: 8,
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  checkboxSelected: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  checkboxUnselected: {
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 })

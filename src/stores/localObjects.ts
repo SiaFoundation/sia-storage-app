@@ -46,8 +46,21 @@ export async function upsertLocalObject(
   }
 }
 
-export async function deleteLocalObjects(fileId: string): Promise<void> {
+export async function deleteLocalObjects(
+  fileId: string,
+  triggerUpdate: boolean = true
+): Promise<void> {
   await sqlDelete('objects', { fileId })
+  if (triggerUpdate) {
+    await librarySwr.triggerChange()
+  }
+}
+
+export async function deleteManyLocalObjects(fileIds: string[]): Promise<void> {
+  if (fileIds.length === 0) return
+  for (const fileId of fileIds) {
+    await deleteLocalObjects(fileId, false)
+  }
   await librarySwr.triggerChange()
 }
 
