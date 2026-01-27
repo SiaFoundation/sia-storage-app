@@ -1,35 +1,58 @@
-import { LocalObject } from '../encoding/localObject'
-import { removeFsFile } from '../stores/fs'
-import { removeTempDownloadFile } from '../stores/tempFs'
+import { type LocalObject } from '../encoding/localObject'
 import {
-  deleteManyFileRecordsAndThumbnails,
   deleteFileRecordAndThumbnails,
-  FileRecord,
+  deleteManyFileRecordsAndThumbnails,
+  type FileRecord,
 } from '../stores/files'
+import { removeFsFile } from '../stores/fs'
 import {
   deleteLocalObjects,
   deleteManyLocalObjects,
 } from '../stores/localObjects'
 import { getSdk } from '../stores/sdk'
+import { removeTempDownloadFile } from '../stores/tempFs'
 import { cancelUpload } from '../stores/uploads'
+import { logger } from './logger'
+import { tryCatch } from './result'
+
+async function tryStep<T>(
+  step: string,
+  id: string,
+  fn: () => Promise<T>
+): Promise<void> {
+  const [, err] = await tryCatch(fn)
+  if (err) {
+    logger.error('deleteFile', `${step} failed for ${id}`, err)
+  }
+}
 
 export async function permanentlyDeleteFile(file: FileRecord) {
   cancelUpload(file.id)
-  await deleteFileRecordAndThumbnails(file.id)
-  await deleteAllIndexerObjects(file)
-  await deleteLocalObjects(file.id)
-  await removeFsFile(file)
-  await removeTempDownloadFile(file)
+  await tryStep('deleteFileRecord', file.id, () =>
+    deleteFileRecordAndThumbnails(file.id)
+  )
+  await tryStep('deleteAllIndexerObjects', file.id, () =>
+    deleteAllIndexerObjects(file)
+  )
+  await tryStep('deleteLocalObjects', file.id, () =>
+    deleteLocalObjects(file.id)
+  )
+  await tryStep('removeFsFile', file.id, () => removeFsFile(file))
+  await tryStep('removeTempDownloadFile', file.id, () =>
+    removeTempDownloadFile(file)
+  )
 }
 
-export async function permanentlyDeleteFiles(files: FileRecord[]): Promise<void> {
+export async function permanentlyDeleteFiles(
+  files: FileRecord[]
+): Promise<void> {
   if (files.length === 0) return
 
   const ids = files.map((f) => f.id)
   const hashes = files.map((f) => f.hash).filter(Boolean)
 
   // Cancel uploads synchronously (fast, in-memory)
-  ids.forEach((id) => cancelUpload(id))
+  ids.forEach((id) => void cancelUpload(id))
 
   // Batch DB deletes (single transaction, single SWR trigger)
   // Also delete thumbnails for these files
@@ -68,8 +91,12 @@ async function deleteAllIndexerObjectsForFiles(
 }
 
 export async function deleteFileFromNetwork(file: FileRecord) {
-  await deleteAllIndexerObjects(file)
-  await deleteLocalObjects(file.id)
+  await tryStep('deleteAllIndexerObjects', file.id, () =>
+    deleteAllIndexerObjects(file)
+  )
+  await tryStep('deleteLocalObjects', file.id, () =>
+    deleteLocalObjects(file.id)
+  )
 }
 
 // TODO: in the future if a file is synced with multiple indexers,
@@ -82,7 +109,9 @@ export async function deleteAllIndexerObjects(file: {
   if (!sdk) return
   for (const [_, object] of Object.entries(file.objects)) {
     if (object.id) {
-      await sdk.deleteObject(object.id)
+      await tryStep('sdk.deleteObject', object.id, () =>
+        sdk.deleteObject(object.id)
+      )
     }
   }
 }
