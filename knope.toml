@@ -15,6 +15,7 @@ command = "git switch -c release"
 
 [[workflows.steps]]
 type = "PrepareRelease"
+ignore_conventional_commits = true
 
 [[workflows.steps]]
 type = "Command"
@@ -22,7 +23,11 @@ command = "bun scripts/syncAppVersion.ts"
 
 [[workflows.steps]]
 type = "Command"
-command = "git add -A && git commit -m \"chore: release v$version\""
+command = "git add -A"
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: release v$version\""
 
 [[workflows.steps]]
 type = "Command"
