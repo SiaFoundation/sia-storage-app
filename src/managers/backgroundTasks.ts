@@ -4,7 +4,7 @@ import BackgroundFetch, {
 } from 'react-native-background-fetch'
 import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
-import { getFileCountLocal } from '../stores/files'
+import { getFileStatsLocal } from '../stores/files'
 import { getIsConnected } from '../stores/sdk'
 import { hasCachedAppKey } from '../stores/appKey'
 import { createBackgroundDelay } from '../lib/backgroundDelay'
@@ -31,6 +31,7 @@ type TaskConfig = {
 type TaskState = {
   startTime: number
   status: 'running' | 'finished'
+  invocationId: string
   abort?: () => void
 }
 const taskConfigs: Record<TaskId, TaskConfig> = {
@@ -70,16 +71,19 @@ const taskStates: Record<TaskId, TaskState> = {
   'com.transistorsoft.fetch': {
     startTime: 0,
     status: 'finished',
+    invocationId: '',
     abort: undefined,
   },
   'com.transistorsoft.processing': {
     startTime: 0,
     status: 'finished',
+    invocationId: '',
     abort: undefined,
   },
   'react-native-background-fetch': {
     startTime: 0,
     status: 'finished',
+    invocationId: '',
     abort: undefined,
   },
 }
@@ -88,6 +92,7 @@ function createFreshTaskState(): TaskState {
   return {
     startTime: 0,
     status: 'finished',
+    invocationId: '',
     abort: undefined,
   }
 }
@@ -150,7 +155,7 @@ export async function initBackgroundTasks() {
         BackgroundFetch.finish(taskId)
         return
       }
-      const log = logTask(config)
+      const log = logTask(config, state)
 
       log(`timeout callback fired, aborting delay and finishing task`)
 
@@ -203,48 +208,61 @@ export async function initBackgroundTasks() {
  * work these tasks more explicit, we may want to take this into account.
  */
 async function runBackgroundWork(config: TaskConfig, state: TaskState) {
-  state.startTime = Date.now()
-  const log = logTask(config)
+  const log = logTask(config, state)
 
   // Create instance-based cancellable delay for this invocation
   const { delay: delayFn, abort } = createBackgroundDelay()
   state.abort = abort
 
-  // Log diagnostic info to distinguish cold start vs resume
+  // Detect cold start: if in-memory cache is empty, the process was restarted
+  const isColdStart = !hasCachedAppKey()
   const isConnected = getIsConnected()
-  const hasCached = hasCachedAppKey()
-  log(
-    `starting... (connected=${isConnected}, hasCachedAppKey=${hasCached}, coldStart=${!hasCached})`
-  )
+  log(`starting... (connected=${isConnected}, coldStart=${isColdStart})`)
 
   if (!isConnected) {
     log('SDK not connected, uploads will wait for connection...')
   }
 
+  // Track initial stats to calculate delta at end
+  const initialStats = await getFileStatsLocal({ localOnly: true })
+  log(
+    `initial queue: ${initialStats.count} files, ${formatBytes(initialStats.totalBytes)}`
+  )
+
   while (true) {
     if (state.status === 'finished') {
+      const finalStats = await getFileStatsLocal({ localOnly: true })
+      const filesUploaded = initialStats.count - finalStats.count
+      const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
-        `task is in finished state, breaking loop, elapsedTime: ${getElapsedTime(
+        `task is in finished state, breaking loop, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
           state.startTime
         )}`
       )
       return
     }
-    log(`checking for local only files...`)
-    const localCount = await getFileCountLocal({ localOnly: true })
-    log(`local only files count: ${localCount}`)
-    if (localCount === 0) {
+    const stats = await getFileStatsLocal({ localOnly: true })
+    log(`pending: ${stats.count} files (${formatBytes(stats.totalBytes)})`)
+    if (stats.count === 0) {
+      const filesUploaded = initialStats.count
+      const bytesUploaded = initialStats.totalBytes
       log(
-        `stopping, reason: all files uploaded, elapsedTime: ${getElapsedTime(
+        `stopping, reason: all files uploaded, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
           state.startTime
         )}`
       )
       return
     }
-    log(`waiting for uploads...`)
     const result = await delayFn(secondsInMs(10))
     if (result === 'aborted') {
-      log(`delay aborted, exiting cleanly`)
+      const finalStats = await getFileStatsLocal({ localOnly: true })
+      const filesUploaded = initialStats.count - finalStats.count
+      const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
+      log(
+        `delay aborted, exiting, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
+          state.startTime
+        )}`
+      )
       return
     }
   }
@@ -254,9 +272,20 @@ function getElapsedTime(startTime: number) {
   return Date.now() - startTime
 }
 
-function logTask(config: TaskConfig) {
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const value = bytes / Math.pow(1024, i)
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+function logTask(config: TaskConfig, state: TaskState) {
+  const prefix = state.invocationId
+    ? `[${config.type}][${config.id}][${state.invocationId}]`
+    : `[${config.type}][${config.id}]`
   return (message: string) => {
-    logger.debug('backgroundTask', `[${config.type}][${config.id}] ${message}`)
+    logger.debug('backgroundTask', `${prefix} ${message}`)
   }
 }
 
@@ -266,6 +295,7 @@ function transitionTaskState(
 ) {
   if (newStatus === 'running') {
     state.startTime = Date.now()
+    state.invocationId = Math.random().toString(36).substring(2, 8)
     state.status = 'running'
   } else if (newStatus === 'finished') {
     state.status = 'finished'
