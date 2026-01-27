@@ -11,6 +11,7 @@ type Props = {
   selected?: boolean
   size?: number
   accessibilityLabel?: string
+  testID?: string
 }
 
 export function IconButton({
@@ -21,11 +22,13 @@ export function IconButton({
   selected = false,
   size = 36,
   accessibilityLabel,
+  testID,
 }: Props) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
       hitSlop={6}
       onPress={onPress}
       disabled={disabled}

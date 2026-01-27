@@ -77,7 +77,20 @@ export function UploadStatusIcon({
       backgroundColor={pillColor}
       borderColor={pillColor}
       textColor={palette.gray[50]}
-      accessibilityLabel="Transfer status"
+      accessibilityLabel={`Status: ${label}`}
+      testID={`upload-status-${
+        status.isErrored
+          ? 'error'
+          : status.isUploadQueued
+          ? 'queued'
+          : status.isPacking
+          ? 'packing'
+          : status.isUploading
+          ? 'uploading'
+          : status.isUploaded
+          ? 'uploaded'
+          : 'local'
+      }`}
     >
       {iconEL}
     </ExpandableBadge>

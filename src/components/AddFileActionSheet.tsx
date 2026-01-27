@@ -25,6 +25,7 @@ export function AddFileActionSheet() {
         Take Photo or Video
       </ActionSheetButton>
       <ActionSheetButton
+        testID="action-choose-from-photos"
         icon={<ImageIcon size={18} />}
         onPress={async () => {
           await closeSheet()

@@ -2,8 +2,8 @@ appId: sia.storage.dev
 env:
   E2E_CONNECT_KEY: "${E2E_CONNECT_KEY}"
 ---
-# Sia Storage - File Upload E2E Test
-# Tests single file upload via photo picker
+# Sia Storage - Upload Packing E2E Test
+# Tests that multiple files uploaded quickly are packed together into batches
 
 # iOS: Clear keychain to remove saved seed
 - runFlow:
@@ -134,9 +134,11 @@ env:
 - assertVisible:
     text: "0 items"
 
-# Add test image to simulator's photo library
+# Add 3 unique test images to simulator's photo library
 - addMedia:
   - ../assets/test-image-1.png
+  - ../assets/test-image-2.png
+  - ../assets/test-image-3.png
 
 # Tap the add button to open the action sheet
 - tapOn:
@@ -168,7 +170,7 @@ env:
           text: "Dismiss"
       - waitForAnimationToEnd
 
-# Select the first photo in the grid
+# Select multiple photos by tapping on different photos in the grid
 # iOS photos are at y=30% (first row after clearing stock photos), Android at y=45%
 - runFlow:
     when:
@@ -176,12 +178,20 @@ env:
     commands:
       - tapOn:
           point: "17%,30%"
+      - tapOn:
+          point: "50%,30%"
+      - tapOn:
+          point: "83%,30%"
 - runFlow:
     when:
       platform: Android
     commands:
       - tapOn:
           point: "17%,45%"
+      - tapOn:
+          point: "50%,45%"
+      - tapOn:
+          point: "83%,45%"
 
 # Wait for selection UI to update
 - waitForAnimationToEnd
@@ -208,16 +218,16 @@ env:
       text: "Library"
     timeout: 15000
 
-# Verify exactly 1 file was added
+# Verify exactly 3 files were added
 - assertVisible:
-    text: "1 item"
+    text: "3 items"
 
-# Wait for upload to complete (5 minute timeout)
-# The file goes through queued -> packing -> uploading -> uploaded states
+# Wait for at least one upload to complete (10 minute timeout)
+# Files go through queued -> packing -> uploading -> uploaded states
 - extendedWaitUntil:
     visible:
       id: "upload-status-uploaded"
-    timeout: 300000
+    timeout: 600000
 
 # Verify no upload errors
 - assertNotVisible:
