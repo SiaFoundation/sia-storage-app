@@ -31,11 +31,21 @@ import {
   getTargetPaths,
   needsRebuild,
 } from './buildCache'
-import { buildIosSim, buildIosDevice, buildAndroid } from './build'
+import { buildIosSim, buildIosDevice, buildAndroid, findIosDeviceApp } from './build'
+import {
+  listDevices,
+  selectDevice,
+  installIosApp,
+  launchIosApp,
+  installAndroidApp,
+  launchAndroidApp,
+  type Device,
+} from './lib/devices'
+import { waitForDeviceUnlock } from './lib/ui'
 
 // Parse arguments
 const args = process.argv.slice(2)
-const targetArg = args.find(a => !a.startsWith('-'))
+const targetArg = args.find((a) => !a.startsWith('-'))
 const forceRebuild = args.includes('--rebuild')
 const noRun = args.includes('--no-run')
 
@@ -59,7 +69,7 @@ function getTarget(): BuildTarget {
       console.error('')
       console.error('Flags:')
       console.error('  --rebuild    Full clean build (delete platform dir, prebuild, build)')
-      console.error('  --no-run     Build only, don\'t launch the app')
+      console.error("  --no-run     Build only, don't launch the app")
       process.exit(1)
   }
 }
@@ -72,7 +82,9 @@ const paths = getTargetPaths(target)
 // Print header
 console.log(`\n🚀 Smart Dev Build`)
 console.log(`   Target: ${targetArg}`)
-console.log(`   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`)
+console.log(
+  `   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`
+)
 console.log(`   Cache: .build-cache/${target}/`)
 console.log('')
 
@@ -85,6 +97,25 @@ if (forceRebuild) {
   rmSync(join(PROJECT_ROOT, platform), { recursive: true, force: true })
   console.log(`   Removing .build-cache/${target}/...`)
   rmSync(paths.dir, { recursive: true, force: true })
+  console.log('')
+}
+
+// For device builds, check for connected device first
+let selectedDevice: Device | null = null
+if (isDevice) {
+  console.log('📱 Checking for iOS device...')
+  selectedDevice = await selectDevice('ios', 'device')
+
+  if (!selectedDevice) {
+    console.error('')
+    console.error('   No iOS device connected')
+    console.error('')
+    console.error('   Please connect your iPhone with a USB cable and unlock it.')
+    console.error('   Run `xcrun devicectl list devices` to verify.')
+    process.exit(1)
+  }
+
+  console.log(`   Found: ${selectedDevice.name}`)
   console.log('')
 }
 
@@ -123,38 +154,99 @@ if (!noRun) {
 // === Run iOS App ===
 async function runIos(): Promise<void> {
   if (isDevice) {
-    console.log('📱 Running on iOS device...')
-    // For device, we typically use ios-deploy or the app was installed by fastlane
-    console.log('   App should be installed on device. Open it manually or use ios-deploy.')
+    await runIosDevice()
   } else {
-    console.log('📱 Running on iOS Simulator...')
-
-    // Find the built app
-    const appPath = await findIosSimApp()
-    if (!appPath) {
-      console.error('❌ Could not find built app')
-      process.exit(1)
-    }
-
-    // Boot simulator if needed
-    const bootedResult = await $`xcrun simctl list devices booted`.quiet().nothrow()
-    if (!bootedResult.stdout.toString().includes('iPhone')) {
-      console.log('   Booting simulator...')
-      const devices = await $`xcrun simctl list devices available`.text()
-      const match = devices.match(/iPhone[^(]*\(([^)]+)\)/)
-      if (match) {
-        await $`xcrun simctl boot ${match[1]}`.quiet().nothrow()
-        await $`open -a Simulator`.nothrow()
-      }
-    }
-
-    // Install and launch
-    console.log('   Installing app...')
-    await $`xcrun simctl install booted ${appPath}`.quiet()
-    console.log('   Launching app...')
-    await $`xcrun simctl launch booted sia.storage.dev`.quiet()
-    console.log('✅ App launched')
+    await runIosSimulator()
   }
+}
+
+// === Run iOS on Physical Device ===
+async function runIosDevice(): Promise<void> {
+  console.log('📱 Installing on iOS device...')
+
+  // Find the built app
+  const appPath = await findIosDeviceApp(target)
+  if (!appPath) {
+    console.error('   Could not find built app')
+    process.exit(1)
+  }
+
+  // Get fresh device list (in case state changed)
+  const device = await selectDevice('ios', 'device')
+  if (!device) {
+    console.error('   Device disconnected')
+    process.exit(1)
+  }
+
+  // Install with retry loop for device unlock
+  while (true) {
+    const installResult = await installIosApp(device, appPath)
+
+    if (installResult.success) {
+      console.log('   Installed successfully')
+      break
+    }
+
+    if (installResult.error === 'locked') {
+      await waitForDeviceUnlock(device.name)
+      continue
+    }
+
+    console.error(`   Install failed: ${installResult.message}`)
+    process.exit(1)
+  }
+
+  // Launch the app
+  console.log('🚀 Launching app...')
+  const bundleId = 'sia.storage.dev'
+
+  while (true) {
+    const launchResult = await launchIosApp(device, bundleId)
+
+    if (launchResult.success) {
+      console.log('✅ App launched')
+      break
+    }
+
+    if (launchResult.error === 'locked') {
+      await waitForDeviceUnlock(device.name)
+      continue
+    }
+
+    console.error(`   Launch failed: ${launchResult.message}`)
+    process.exit(1)
+  }
+}
+
+// === Run iOS on Simulator ===
+async function runIosSimulator(): Promise<void> {
+  console.log('📱 Running on iOS Simulator...')
+
+  // Find the built app
+  const appPath = await findIosSimApp()
+  if (!appPath) {
+    console.error('   Could not find built app')
+    process.exit(1)
+  }
+
+  // Boot simulator if needed
+  const bootedResult = await $`xcrun simctl list devices booted`.quiet().nothrow()
+  if (!bootedResult.stdout.toString().includes('iPhone')) {
+    console.log('   Booting simulator...')
+    const devices = await $`xcrun simctl list devices available`.text()
+    const match = devices.match(/iPhone[^(]*\(([^)]+)\)/)
+    if (match) {
+      await $`xcrun simctl boot ${match[1]}`.quiet().nothrow()
+      await $`open -a Simulator`.nothrow()
+    }
+  }
+
+  // Install and launch
+  console.log('   Installing app...')
+  await $`xcrun simctl install booted ${appPath}`.quiet()
+  console.log('   Launching app...')
+  await $`xcrun simctl launch booted sia.storage.dev`.quiet()
+  console.log('✅ App launched')
 }
 
 // === Run Android App ===
@@ -164,45 +256,81 @@ async function runAndroid(): Promise<void> {
   // Find APK
   const apkDir = join(PROJECT_ROOT, 'android/app/build/outputs/apk/debug')
   const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`.quiet().nothrow()
-  const apkPath = apkResult.stdout.toString().trim().split('\n').filter(Boolean)[0]
+  const apkPath = apkResult.stdout
+    .toString()
+    .trim()
+    .split('\n')
+    .filter(Boolean)[0]
 
   if (!apkPath) {
-    console.error('❌ Could not find APK')
+    console.error('   Could not find APK')
     process.exit(1)
   }
 
   // Check for connected device/emulator
-  const devices = await $`adb devices`.quiet()
-  if (!devices.stdout.toString().includes('\tdevice')) {
+  const devices = await listDevices('android')
+  let device = devices.find((d) => d.state === 'available')
+
+  if (!device) {
     console.log('   No device connected. Starting emulator...')
     const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
-    const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
+    const avds = avdsResult.stdout
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
     if (avds.length === 0) {
-      console.error('❌ No Android emulator found. Create one in Android Studio.')
+      console.error('   No Android emulator found. Create one in Android Studio.')
       process.exit(1)
     }
-    Bun.spawn(['sh', '-c', `emulator -avd ${avds[0]} &`], { stdout: 'ignore', stderr: 'ignore' })
+    Bun.spawn(['sh', '-c', `emulator -avd ${avds[0]} &`], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
     console.log('   Waiting for emulator...')
     await $`adb wait-for-device`
     // Wait for boot
     for (let i = 0; i < 60; i++) {
-      const bootResult = await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
+      const bootResult =
+        await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
       if (bootResult.stdout.toString().trim() === '1') break
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 2000))
     }
+
+    // Get the device again
+    const updatedDevices = await listDevices('android')
+    device = updatedDevices.find((d) => d.state === 'available')
+  }
+
+  if (!device) {
+    console.error('   Could not connect to Android device')
+    process.exit(1)
   }
 
   // Install and launch
   console.log('   Installing APK...')
-  await $`adb install -r ${apkPath}`.quiet()
+  const installResult = await installAndroidApp(device, apkPath)
+  if (!installResult.success) {
+    console.error(`   Install failed: ${installResult.message}`)
+    process.exit(1)
+  }
+
   console.log('   Launching app...')
-  await $`adb shell am start -n sia.storage.dev/.MainActivity`.quiet()
+  const launchResult = await launchAndroidApp(device, 'sia.storage.dev')
+  if (!launchResult.success) {
+    console.error(`   Launch failed: ${launchResult.message}`)
+    process.exit(1)
+  }
+
   console.log('✅ App launched')
 }
 
 // Find iOS Simulator app in DerivedData
 async function findIosSimApp(): Promise<string | null> {
-  const result = await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphonesimulator*" -type d 2>/dev/null`.quiet().nothrow()
+  const result =
+    await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphonesimulator*" -type d 2>/dev/null`
+      .quiet()
+      .nothrow()
   const found = result.stdout.toString().trim().split('\n').filter(Boolean)[0]
   return found || null
 }

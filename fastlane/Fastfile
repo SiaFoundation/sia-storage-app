@@ -5,11 +5,9 @@ default_platform(:ios)
 # Path to the iOS workspace
 IOS_WORKSPACE_PATH = File.expand_path("../ios/SiaStorage.xcworkspace", __dir__)
 
-# iOS IPA names
+# iOS IPA path for releases
 IOS_RELEASE_IPA_NAME = "SiaStorage.ipa"
-IOS_DEV_IPA_NAME = "SiaStorageDev.ipa"
 IOS_RELEASE_IPA_PATH = File.expand_path("../ios/build/#{IOS_RELEASE_IPA_NAME}", __dir__)
-IOS_DEV_IPA_PATH = File.expand_path("../ios/build/#{IOS_DEV_IPA_NAME}", __dir__)
 
 # Path to the Android AAB file
 ANDROID_AAB_PATH = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
@@ -77,48 +75,6 @@ def get_app_store_connect_api_key
 end
 
 platform :ios do
-  desc "Build and install dev build on connected iOS device"
-  lane :dev_device do
-    # Builds a development build and installs it on the connected physical device
-    # This automates: expo run:ios -> Xcode -> configure signing -> run
-    
-    team_id = ENV["APPLE_TEAM_ID"]
-    if team_id.nil? || team_id.empty?
-      UI.user_error!("APPLE_TEAM_ID environment variable is required")
-    end
-    
-    # Dev builds use SiaStorageDev workspace (when RELEASE != true)
-    dev_workspace = File.expand_path("../ios/SiaStorageDev.xcworkspace", __dir__)
-    if !File.exist?(dev_workspace)
-      UI.user_error!("Dev workspace not found at #{dev_workspace}. Run 'expo prebuild' first.")
-    end
-    
-    # Build the app for development
-    build_app(
-      workspace: dev_workspace,
-      scheme: "SiaStorageDev",
-      configuration: "Debug", # Use Debug for dev builds
-      export_method: "development", # Development signing for physical devices
-      output_directory: File.expand_path("../ios/build", __dir__),
-      output_name: "SiaStorageDev.ipa",
-      # Set DEVELOPMENT_TEAM during build phase (expo prebuild regenerates the project)
-      xcargs: "DEVELOPMENT_TEAM=#{team_id}",
-      export_options: {
-        method: "development",
-        signingStyle: "automatic"
-      }
-    )
-    
-    # Install the generated IPA on the connected device
-    if !File.exist?(IOS_DEV_IPA_PATH)
-      UI.user_error!("Could not find generated IPA file at #{IOS_DEV_IPA_PATH}")
-    end
-    
-    install_on_device(
-      ipa: IOS_DEV_IPA_PATH
-    )
-  end
-
   desc "Build and export iOS IPA for App Store"
   lane :build_ipa do
     # This does the same as:
