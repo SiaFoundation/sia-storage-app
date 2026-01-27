@@ -1,0 +1,24 @@
+# Creates a GitHub release when the release PR is merged.
+name: Knope Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  release:
+    if: github.head_ref == 'release' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Knope
+        uses: knope-dev/action@v0.4.3
+
+      - name: Create GitHub Release
+        run: knope release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
