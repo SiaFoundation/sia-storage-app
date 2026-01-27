@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Knope
-        uses: knope-dev/action@v0.4.3
+        uses: knope-dev/action@v2.1.0
 
       - name: Create GitHub Release
         run: knope release
