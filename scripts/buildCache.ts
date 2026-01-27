@@ -10,7 +10,7 @@
  * - Cache stored in .build-cache/ directory (survives rimraf ios/android)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
 import { Glob } from 'bun'
@@ -143,10 +143,18 @@ export function writeBuildLog(target: BuildTarget, content: string, append = fal
   const paths = getTargetPaths(target)
   mkdirSync(paths.dir, { recursive: true })
   if (append && existsSync(paths.buildLog)) {
-    writeFileSync(paths.buildLog, readFileSync(paths.buildLog, 'utf-8') + content)
+    appendFileSync(paths.buildLog, content)
   } else {
     writeFileSync(paths.buildLog, content)
   }
+}
+
+/**
+ * Append to build log file (efficient streaming).
+ */
+export function appendBuildLog(target: BuildTarget, content: string): void {
+  const paths = getTargetPaths(target)
+  appendFileSync(paths.buildLog, content)
 }
 
 /**

@@ -8,5 +8,6 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|react-native-fs|react-native-quick-crypto|expo|@expo|expo-.*|expo-sqlite|expo-modules-core)/)',
   ],
+  testPathIgnorePatterns: ['/node_modules/', '/scripts/'],
   moduleNameMapper: {},
 }

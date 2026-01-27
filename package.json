@@ -3,7 +3,7 @@
   "main": "index.ts",
   "scripts": {
     "fresh": "bunx rimraf .expo android ios node_modules && bun install",
-    "start": "expo start --dev-client",
+    "start": "bun scripts/start.ts",
     "dev:ios": "bun scripts/dev.ts ios",
     "dev:ios:device": "bun scripts/dev.ts ios:device",
     "dev:android": "bun scripts/dev.ts android",
@@ -18,7 +18,7 @@
     "release:android:production": "bun scripts/releaseAndroid.ts production",
     "release:ios:internal": "bun scripts/releaseIos.ts testflight",
     "release:ios:production": "bun scripts/releaseIos.ts appstore",
-    "test": "jest",
+    "test": "jest && bun test scripts/",
     "e2e:ios": "bun scripts/e2e.ts ios",
     "e2e:android": "bun scripts/e2e.ts android",
     "android": "expo run:android",
