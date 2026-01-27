@@ -42,10 +42,15 @@ const OUTPUT_DIR = join(E2E_DIR, '.maestro/tests')
 const IOS_BUNDLE_ID = 'sia.storage.dev'
 const ANDROID_PACKAGE = 'sia.storage.dev'
 
+// Dedicated E2E device names (to avoid affecting developer's main devices)
+const E2E_IOS_DEVICE_NAME = 'E2E-iPhone-16-Pro'
+const E2E_IOS_DEVICE_TYPE = 'iPhone 16 Pro'
+const E2E_ANDROID_AVD_NAME = 'E2E_Medium_Phone'
+
 // Parse args
 const args = process.argv.slice(2)
 const platformArg = args.find(a => a === 'ios' || a === 'android')
-const flow = args.find(a => a.endsWith('.yml')) || 'onboarding.yml'
+const flow = args.find(a => a.endsWith('.yml')) // undefined = run all flows
 const forceRebuild = args.includes('--rebuild')
 const skipInstall = args.includes('--skip-install')
 const headless = args.includes('--headless')
@@ -58,13 +63,17 @@ if (!platformArg) {
   console.error('  ios       Run on iOS Simulator')
   console.error('  android   Run on Android emulator')
   console.error('')
+  console.error('If no flow.yml is specified, all flows in test/e2e/flows/ will be run.')
+  console.error('')
   console.error('Flags:')
   console.error('  --rebuild         Full clean build (delete platform dir, prebuild, build)')
   console.error('  --skip-install  Skip app installation')
   console.error('  --headless      Run simulator/emulator without UI')
   console.error('')
-  console.error('Example:')
-  console.error('  E2E_CONNECT_KEY="..." bun scripts/e2e.ts ios onboarding.yml')
+  console.error('Examples:')
+  console.error('  bun scripts/e2e.ts ios                    # Run all flows on iOS')
+  console.error('  bun scripts/e2e.ts ios onboarding.yml     # Run specific flow')
+  console.error('  E2E_CONNECT_KEY="..." bun scripts/e2e.ts android')
   process.exit(1)
 }
 
@@ -79,25 +88,121 @@ if (!existsSync(OUTPUT_DIR)) {
   mkdirSync(OUTPUT_DIR, { recursive: true })
 }
 
-// Check if iOS simulator is booted
-async function isIosSimulatorBooted(): Promise<boolean> {
-  const result = await $`xcrun simctl list devices booted`.quiet().nothrow()
-  return result.stdout.toString().includes('iPhone')
+// Get or create the E2E iOS Simulator
+async function getOrCreateE2ESimulator(): Promise<string> {
+  // Check if E2E simulator already exists
+  const listResult = await $`xcrun simctl list devices`.quiet().nothrow()
+  const listOutput = listResult.stdout.toString()
+
+  // Look for our E2E simulator by name
+  const existingMatch = listOutput.match(new RegExp(`${E2E_IOS_DEVICE_NAME}\\s*\\(([A-F0-9-]+)\\)`, 'i'))
+  if (existingMatch) {
+    return existingMatch[1]
+  }
+
+  // Create the E2E simulator
+  console.log(`📱 Creating E2E iOS Simulator: ${E2E_IOS_DEVICE_NAME}...`)
+
+  // Get the latest iOS runtime
+  const runtimeResult = await $`xcrun simctl list runtimes iOS`.quiet().nothrow()
+  const runtimeMatch = runtimeResult.stdout.toString().match(/iOS[^(]*\(([^)]+)\)\s*-\s*(com\.apple\.CoreSimulator\.SimRuntime\.iOS[^\s]+)/i)
+  if (!runtimeMatch) throw new Error('No iOS runtime found')
+  const runtimeId = runtimeMatch[2]
+
+  // Get the device type ID
+  const deviceTypeResult = await $`xcrun simctl list devicetypes`.quiet().nothrow()
+  const deviceTypeMatch = deviceTypeResult.stdout.toString().match(new RegExp(`${E2E_IOS_DEVICE_TYPE}\\s*\\(([^)]+)\\)`, 'i'))
+  if (!deviceTypeMatch) throw new Error(`Device type ${E2E_IOS_DEVICE_TYPE} not found`)
+  const deviceTypeId = deviceTypeMatch[1]
+
+  // Create the simulator
+  const createResult = await $`xcrun simctl create ${E2E_IOS_DEVICE_NAME} ${deviceTypeId} ${runtimeId}`.quiet().nothrow()
+  const udid = createResult.stdout.toString().trim()
+
+  if (!udid || udid.length < 30) {
+    throw new Error(`Failed to create E2E simulator: ${createResult.stderr.toString()}`)
+  }
+
+  console.log(`   Created: ${udid}`)
+  return udid
 }
 
-// Boot iOS simulator
+// Check if our E2E iOS simulator is booted
+async function isE2ESimulatorBooted(udid: string): Promise<boolean> {
+  const result = await $`xcrun simctl list devices booted`.quiet().nothrow()
+  return result.stdout.toString().includes(udid)
+}
+
+// Get booted E2E iOS simulator UDID (for compatibility with existing code)
+async function getIosSimulatorUdid(): Promise<string | null> {
+  const udid = await getOrCreateE2ESimulator()
+  return udid
+}
+
+// Get Android emulator serial
+async function getAndroidEmulatorSerial(): Promise<string | null> {
+  const result = await $`adb devices`.quiet().nothrow()
+  const output = result.stdout.toString()
+  // Match: emulator-5554	device
+  const match = output.match(/(emulator-\d+)\s+device/)
+  return match ? match[1] : null
+}
+
+// Clear iOS Simulator photo library by deleting Photos database directly
+// This removes stock photos that come with simulators, unlike simctl erase
+async function clearIosPhotoLibrary(): Promise<void> {
+  const udid = await getIosSimulatorUdid()
+  if (!udid) return
+
+  console.log('🧹 Clearing iOS photo library...')
+
+  // Shutdown simulator first
+  await $`xcrun simctl shutdown ${udid}`.quiet().nothrow()
+
+  // Delete the Photos library database directly
+  // This removes stock photos that simctl erase doesn't clear
+  await $`rm -rf ~/Library/Developer/CoreSimulator/Devices/${udid}/data/Media/DCIM/*`.quiet().nothrow()
+  await $`rm -rf ~/Library/Developer/CoreSimulator/Devices/${udid}/data/Media/PhotoData/*`.quiet().nothrow()
+
+  // Boot simulator back up
+  await $`xcrun simctl boot ${udid}`.quiet().nothrow()
+
+  // Wait for simulator to fully boot
+  await new Promise(resolve => setTimeout(resolve, 5000))
+}
+
+// Clear Android emulator photo library
+// Clears both the media database and files to remove stock photos
+async function clearAndroidPhotoLibrary(): Promise<void> {
+  console.log('🧹 Clearing Android photo library...')
+
+  // Clear media database directly (removes all photo entries including stock)
+  await $`adb shell content delete --uri content://media/external/images/media`.quiet().nothrow()
+
+  // Also delete files from common directories
+  await $`adb shell "find /sdcard/DCIM -type f -delete 2>/dev/null || true"`.quiet().nothrow()
+  await $`adb shell "find /sdcard/Pictures -type f -delete 2>/dev/null || true"`.quiet().nothrow()
+  await $`adb shell "find /sdcard/Download -name '*.png' -o -name '*.jpg' -delete 2>/dev/null || true"`.quiet().nothrow()
+
+  // Trigger media scanner to update
+  await $`adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/DCIM`.quiet().nothrow()
+
+  // Give it time to process
+  await new Promise(resolve => setTimeout(resolve, 2000))
+}
+
+// Boot E2E iOS simulator
 async function bootIosSimulator(): Promise<void> {
-  if (await isIosSimulatorBooted()) {
-    console.log('📱 iOS Simulator already running')
+  const udid = await getOrCreateE2ESimulator()
+
+  if (await isE2ESimulatorBooted(udid)) {
+    console.log(`📱 E2E iOS Simulator already running (${E2E_IOS_DEVICE_NAME})`)
     return
   }
 
-  console.log(`📱 Booting iOS Simulator${headless ? ' (headless)' : ''}...`)
-  const devices = await $`xcrun simctl list devices available`.text()
-  const match = devices.match(/iPhone[^(]*\(([^)]+)\)/)
-  if (!match) throw new Error('No iPhone simulator found')
+  console.log(`📱 Booting E2E iOS Simulator: ${E2E_IOS_DEVICE_NAME}${headless ? ' (headless)' : ''}...`)
 
-  await $`xcrun simctl boot ${match[1]}`
+  await $`xcrun simctl boot ${udid}`
 
   // Open Simulator.app unless headless
   if (!headless) {
@@ -105,34 +210,63 @@ async function bootIosSimulator(): Promise<void> {
   }
 
   // Wait for boot
-  await new Promise(resolve => setTimeout(resolve, 3000))
+  await new Promise(resolve => setTimeout(resolve, 5000))
 }
 
-// Check if Android emulator is running
-async function isAndroidEmulatorRunning(): Promise<boolean> {
-  const result = await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
-  return result.stdout.toString().trim() === '1'
+// Check if our E2E Android emulator is running
+async function isE2EAndroidEmulatorRunning(): Promise<boolean> {
+  // Check if any emulator is running and get its AVD name
+  const result = await $`adb shell getprop ro.boot.qemu.avd_name 2>/dev/null`.quiet().nothrow()
+  const avdName = result.stdout.toString().trim()
+  return avdName === E2E_ANDROID_AVD_NAME
 }
 
-// Boot Android emulator
+// Check if Android AVD exists
+async function e2eAndroidAvdExists(): Promise<boolean> {
+  const result = await $`emulator -list-avds`.quiet().nothrow()
+  const avds = result.stdout.toString().trim().split('\n').filter(Boolean)
+  return avds.includes(E2E_ANDROID_AVD_NAME)
+}
+
+// Boot E2E Android emulator
 async function bootAndroidEmulator(): Promise<void> {
-  if (await isAndroidEmulatorRunning()) {
-    console.log('🤖 Android Emulator already running')
-    return
+  // Check if our E2E emulator is running
+  const anyEmulatorResult = await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
+  const anyEmulatorRunning = anyEmulatorResult.stdout.toString().trim() === '1'
+
+  if (anyEmulatorRunning) {
+    // Check if it's our E2E emulator
+    const avdNameResult = await $`adb shell getprop ro.boot.qemu.avd_name 2>/dev/null`.quiet().nothrow()
+    const runningAvd = avdNameResult.stdout.toString().trim()
+
+    if (runningAvd === E2E_ANDROID_AVD_NAME) {
+      console.log(`🤖 E2E Android Emulator already running (${E2E_ANDROID_AVD_NAME})`)
+      return
+    } else {
+      console.log(`⚠️  Different emulator running (${runningAvd}), need E2E emulator (${E2E_ANDROID_AVD_NAME})`)
+      console.log(`   Please close the current emulator and run again, or create the E2E AVD`)
+    }
   }
 
-  console.log('🤖 Booting Android Emulator...')
-  const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
-  const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
-  if (avds.length === 0) throw new Error('No Android AVD found. Create one in Android Studio.')
+  // Check if E2E AVD exists
+  if (!await e2eAndroidAvdExists()) {
+    console.error(`\n❌ E2E Android AVD not found: ${E2E_ANDROID_AVD_NAME}`)
+    console.error(`\nTo create it, run in Android Studio:`)
+    console.error(`  1. Tools > Device Manager > Create Device`)
+    console.error(`  2. Select "Medium Phone" and click Next`)
+    console.error(`  3. Select an API 34+ image and click Next`)
+    console.error(`  4. Name the AVD: ${E2E_ANDROID_AVD_NAME}`)
+    console.error(`  5. Click Finish`)
+    console.error(`\nOr run: avdmanager create avd -n ${E2E_ANDROID_AVD_NAME} -k "system-images;android-34;google_apis;arm64-v8a" -d "Medium Phone"`)
+    process.exit(1)
+  }
 
-  const avd = avds[0]
-  console.log(`   Using AVD: ${avd}`)
+  console.log(`🤖 Booting E2E Android Emulator: ${E2E_ANDROID_AVD_NAME}...`)
 
   // Start emulator in background
   const emulatorArgs = headless
-    ? `-avd ${avd} -no-window -no-audio -no-boot-anim`
-    : `-avd ${avd}`
+    ? `-avd ${E2E_ANDROID_AVD_NAME} -no-window -no-audio -no-boot-anim`
+    : `-avd ${E2E_ANDROID_AVD_NAME}`
 
   Bun.spawn(['sh', '-c', `emulator ${emulatorArgs} &`], {
     stdout: 'ignore',
@@ -176,9 +310,9 @@ async function findAndroidApk(): Promise<string> {
   return apkPath
 }
 
-// Check if iOS app is installed on simulator
-async function isIosAppInstalled(): Promise<boolean> {
-  const result = await $`xcrun simctl listapps booted 2>/dev/null`.quiet().nothrow()
+// Check if iOS app is installed on specific simulator
+async function isIosAppInstalled(udid: string): Promise<boolean> {
+  const result = await $`xcrun simctl listapps ${udid} 2>/dev/null`.quiet().nothrow()
   return result.stdout.toString().includes(IOS_BUNDLE_ID)
 }
 
@@ -188,21 +322,21 @@ async function isAndroidAppInstalled(): Promise<boolean> {
   return result.stdout.toString().includes(ANDROID_PACKAGE)
 }
 
-// Install iOS app
-async function installIosApp(): Promise<void> {
+// Install iOS app on specific simulator
+async function installIosApp(udid: string): Promise<void> {
   if (skipInstall) {
     console.log('📲 Skipping iOS app install (--skip-install)')
     return
   }
 
-  if (await isIosAppInstalled()) {
+  if (await isIosAppInstalled(udid)) {
     console.log('📲 iOS app already installed')
     return
   }
 
   console.log('📲 Installing iOS app...')
   const appPath = await findIosApp()
-  await $`xcrun simctl install booted ${appPath}`
+  await $`xcrun simctl install ${udid} ${appPath}`
   console.log('✅ iOS app installed')
 }
 
@@ -291,20 +425,38 @@ function findLatestScreenshots(): string | null {
 async function main() {
   console.log(`\n🚀 E2E Test Runner`)
   console.log(`   Platform: ${platform}`)
-  console.log(`   Flow: ${flow}`)
+  console.log(`   Flow: ${flow || 'all flows'}`)
   console.log(`   Cache: .build-cache/${target}/`)
   console.log(`   Flags: ${[forceRebuild && '--rebuild', skipInstall && '--skip-install', headless && '--headless'].filter(Boolean).join(' ') || 'none'}`)
   console.log('')
 
   try {
-    // 1. Boot device
+    // 1. Boot device and get device ID
+    let deviceId: string
     if (platform === 'ios') {
       await bootIosSimulator()
+      const udid = await getIosSimulatorUdid()
+      if (!udid) {
+        throw new Error('Could not get iOS Simulator UDID. Is the simulator running?')
+      }
+      deviceId = udid
     } else {
       await bootAndroidEmulator()
+      const serial = await getAndroidEmulatorSerial()
+      if (!serial) {
+        throw new Error('Could not get Android emulator serial. Is the emulator running?')
+      }
+      deviceId = serial
     }
 
-    // 2. Build if needed
+    // 2. Clear photo library for test isolation
+    if (platform === 'ios') {
+      await clearIosPhotoLibrary()
+    } else {
+      await clearAndroidPhotoLibrary()
+    }
+
+    // 3. Build if needed
     const [rebuildNeeded, reason] = needsRebuild(target, { forceRebuild: forceRebuild })
     if (rebuildNeeded || forceRebuild) {
       console.log(`🔨 Build needed: ${forceRebuild ? '--rebuild requested' : reason}`)
@@ -317,24 +469,17 @@ async function main() {
       console.log(`✅ Using cached build (${reason})`)
     }
 
-    // 3. Install app
+    // 4. Install app
     if (platform === 'ios') {
-      await installIosApp()
+      await installIosApp(deviceId)
     } else {
       await installAndroidApp()
     }
 
-    // 4. Start Metro
+    // 5. Start Metro
     await ensureMetroRunning()
 
-    // 5. Run E2E test
-    console.log(`\n🧪 Running E2E test: ${flow}\n`)
-
-    const flowPath = join(FLOWS_DIR, flow)
-    if (!existsSync(flowPath)) {
-      throw new Error(`Flow not found: ${flowPath}`)
-    }
-
+    // 6. Run E2E test(s)
     const env = {
       ...process.env,
       PATH: `${process.env.PATH}:${process.env.HOME}/.maestro/bin`,
@@ -343,24 +488,69 @@ async function main() {
       MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: 'true',
     }
 
-    const maestroArgs = ['test', flowPath, '--output', OUTPUT_DIR]
-    if (process.env.E2E_CONNECT_KEY) {
-      maestroArgs.push('-e', `E2E_CONNECT_KEY=${process.env.E2E_CONNECT_KEY}`)
+    // Get list of flows to run
+    const flowsToRun: string[] = []
+    if (flow) {
+      const flowPath = join(FLOWS_DIR, flow)
+      if (!existsSync(flowPath)) {
+        throw new Error(`Flow not found: ${flowPath}`)
+      }
+      flowsToRun.push(flow)
+    } else {
+      // Run all flows in the flows directory
+      const allFlows = readdirSync(FLOWS_DIR)
+        .filter(f => f.endsWith('.yml'))
+        .sort()
+      flowsToRun.push(...allFlows)
     }
 
-    const result = await $`maestro ${maestroArgs}`.env(env).nothrow()
+    console.log(`\n🧪 Running E2E tests: ${flowsToRun.length} flow(s)\n`)
 
-    if (result.exitCode !== 0) {
-      console.log('\n❌ E2E test failed')
+    let passed = 0
+    let failed = 0
+    const failedFlows: string[] = []
+
+    for (const flowFile of flowsToRun) {
+      const flowPath = join(FLOWS_DIR, flowFile)
+      console.log(`\n▶️  Running: ${flowFile}`)
+
+      // Always specify device to avoid running on wrong platform
+      // --device is a global flag that must come BEFORE the 'test' subcommand
+      const maestroArgs = ['--device', deviceId, 'test', flowPath, '--output', OUTPUT_DIR]
+      if (process.env.E2E_CONNECT_KEY) {
+        maestroArgs.push('-e', `E2E_CONNECT_KEY=${process.env.E2E_CONNECT_KEY}`)
+      }
+
+      const result = await $`maestro ${maestroArgs}`.env(env).nothrow()
+
+      if (result.exitCode !== 0) {
+        console.log(`   ❌ ${flowFile} failed`)
+        failed++
+        failedFlows.push(flowFile)
+      } else {
+        console.log(`   ✅ ${flowFile} passed`)
+        passed++
+      }
+    }
+
+    // Summary
+    console.log(`\n${'─'.repeat(50)}`)
+    console.log(`📊 Results: ${passed} passed, ${failed} failed`)
+
+    if (failed > 0) {
+      console.log(`\n❌ Failed flows:`)
+      for (const f of failedFlows) {
+        console.log(`   - ${f}`)
+      }
       const screenshotDir = findLatestScreenshots()
       if (screenshotDir) {
-        console.log(`📸 Screenshots: ${screenshotDir}`)
+        console.log(`\n📸 Screenshots: ${screenshotDir}`)
       }
       stopMetro()
-      process.exit(result.exitCode)
+      process.exit(1)
     }
 
-    console.log('\n✅ E2E test passed!')
+    console.log('\n✅ All E2E tests passed!')
     stopMetro()
     process.exit(0)
 
