@@ -49,7 +49,7 @@ export function Root() {
     }
   }, [])
 
-  // Log AppState changes for debugging background task behavior.
+  // Log AppState changes.
   useEffect(() => {
     logger.info('appState', `initial state: ${appStateRef.current}`)
 

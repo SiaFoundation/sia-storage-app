@@ -6,22 +6,12 @@ import { Button } from './Button'
 import { RowGroup } from './Group'
 import { InputRow } from './InputRow'
 import { useInputValue } from '../hooks/useInputValue'
-import { setMaxUploads, useMaxUploads } from '../managers/uploadsPool'
 import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
 
 export function SettingsAdvancedTransfers() {
   const uploadCounts = useUploadCounts()
   const downloadCounts = useDownloadCounts()
-  const maxUploads = useMaxUploads()
   const maxDownloads = useMaxDownloads()
-
-  const maxUploadsInputProps = useInputValue({
-    value: String(maxUploads.data),
-    save: (text) => {
-      const n = Number(text.replace(/[^0-9]/g, ''))
-      if (Number.isFinite(n) && n > 0) setMaxUploads(n)
-    },
-  })
 
   const maxDownloadsInputProps = useInputValue({
     value: String(maxDownloads.data),
@@ -35,12 +25,6 @@ export function SettingsAdvancedTransfers() {
     <>
       <RowGroup title="Uploads">
         <InfoCard>
-          <InputRow
-            label="Max concurrent uploads"
-            labelWidth={200}
-            keyboardType="number-pad"
-            {...maxUploadsInputProps}
-          />
           <LabeledValueRow
             label="Queued"
             value={String(uploadCounts.totalQueued)}

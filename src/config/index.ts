@@ -17,6 +17,16 @@ export const UPLOAD_MAX_INFLIGHT = 15
 export const UPLOAD_DATA_SHARDS = 10
 // Parity shards for uploads.
 export const UPLOAD_PARITY_SHARDS = 20
+// Sia protocol constant: sector size in bytes (4 MiB).
+export const SECTOR_SIZE = 4 * 1024 * 1024
+// Slab data capacity = SECTOR_SIZE × total shards.
+export const SLAB_SIZE =
+  SECTOR_SIZE * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS)
+// Packer idle timeout - flush partial slab after this delay.
+export const PACKER_IDLE_TIMEOUT = secondsInMs(5)
+// Minimum slab fill percentage before allowing flush (0.0 - 1.0).
+// Prevents flushing when we could pack more efficiently.
+export const SLAB_FILL_THRESHOLD = 0.9
 // Scan only if queued uploads are less than this factor times the max transfers.
 export const SCANNER_MAX_TOTAL_UPLOADS_FACTOR = 2
 // Max amount of files to add to the queue each scan as a factor of the max transfers.
