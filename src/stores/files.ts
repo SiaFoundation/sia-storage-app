@@ -204,6 +204,18 @@ export async function readAllFileRecordsCount(
   return row?.count ?? 0
 }
 
+export async function readAllFileRecordsStats(
+  opts: FileRecordsQueryOpts
+): Promise<{ count: number; totalBytes: number }> {
+  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
+
+  const row = await db().getFirstAsync<{ count: number; totalBytes: number }>(
+    `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
+    ...params
+  )
+  return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 }
+}
+
 export async function readAllFileRecords(
   opts: FileRecordsQueryOpts
 ): Promise<FileRecord[]> {
@@ -509,6 +521,21 @@ export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
   async ({ localOnly }: { localOnly: boolean }) => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsCount({
+      order: 'ASC',
+      pinned: {
+        indexerURL: currentIndexerURL,
+        isPinned: !localOnly,
+      },
+      fileExistsLocally: true,
+    })
+  }
+)
+
+export const [getFileStatsLocal, useFileStatsLocal] = createGetterAndSWRHook(
+  librarySwr.getKey('localStats'),
+  async ({ localOnly }: { localOnly: boolean }) => {
+    const currentIndexerURL = await getIndexerURL()
+    return readAllFileRecordsStats({
       order: 'ASC',
       pinned: {
         indexerURL: currentIndexerURL,

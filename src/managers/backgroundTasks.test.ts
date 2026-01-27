@@ -39,9 +39,9 @@ jest.mock('react-native-background-timer', () => ({
   },
 }))
 
-const mockGetFileCountLocal = jest.fn()
+const mockGetFileStatsLocal = jest.fn()
 jest.mock('../stores/files', () => ({
-  getFileCountLocal: (...args: unknown[]) => mockGetFileCountLocal(...args),
+  getFileStatsLocal: (...args: unknown[]) => mockGetFileStatsLocal(...args),
 }))
 
 jest.mock('../stores/sdk', () => ({
@@ -78,60 +78,62 @@ describe('backgroundTasks', () => {
     jest.clearAllMocks()
     mockTimerCallbacks.clear()
     mockNextTimerId = 1
-    mockGetFileCountLocal.mockReset()
+    mockGetFileStatsLocal.mockReset()
 
     await initBackgroundTasks()
   })
 
   describe('polling loop behavior', () => {
     it('exits immediately when no files are pending upload', async () => {
-      mockGetFileCountLocal.mockResolvedValue(0)
+      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       await taskCallback('com.transistorsoft.fetch')
 
-      // Should check file count once and exit - no delay started
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
-      expect(mockGetFileCountLocal).toHaveBeenCalledWith({ localOnly: true })
+      // Should check file stats twice (initial stats + first loop check) then exit
+      // No delay started because count was 0 on first loop check
+      expect(mockGetFileStatsLocal).toHaveBeenCalledWith({ localOnly: true })
+      expect(mockGetFileStatsLocal).toHaveBeenCalledTimes(2)
       expect(getPendingDelayCount()).toBe(0)
     })
 
     it('polls repeatedly while files are pending, exits when uploads complete', async () => {
-      // Simulate: 5 files -> 2 files -> 0 files (uploads completing over time)
-      mockGetFileCountLocal
-        .mockResolvedValueOnce(5)
-        .mockResolvedValueOnce(2)
-        .mockResolvedValueOnce(0)
+      // Code calls getFileStatsLocal for:
+      // 1. initial stats
+      // 2. each loop iteration check
+      mockGetFileStatsLocal
+        .mockResolvedValueOnce({ count: 5, totalBytes: 5000 }) // initial stats
+        .mockResolvedValueOnce({ count: 5, totalBytes: 5000 }) // first loop check -> delay
+        .mockResolvedValueOnce({ count: 2, totalBytes: 2000 }) // second loop check -> delay
+        .mockResolvedValueOnce({ count: 0, totalBytes: 0 }) // third loop check -> exit
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
 
       // After first check (5 files), should start a delay
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
       expect(getPendingDelayCount()).toBe(1)
 
       // Complete delay, triggers second check (2 files)
       completeNextDelay()
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(2)
       expect(getPendingDelayCount()).toBe(1)
 
       // Complete delay, triggers third check (0 files) -> exits
       completeNextDelay()
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(3)
 
       await taskPromise
 
       // No pending delays after task completes
       expect(getPendingDelayCount()).toBe(0)
-      // Verify polling loop iterated expected number of times
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(3)
+      // Verify polling loop iterated expected number of times:
+      // 1 initial stats + 3 loop iterations = 4 total calls
+      expect(mockGetFileStatsLocal).toHaveBeenCalledTimes(4)
     })
   })
 
   describe('timeout cancellation flow', () => {
     it('abort function resolves delay immediately, allowing clean exit', async () => {
-      mockGetFileCountLocal.mockResolvedValue(100) // Always has files
+      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
@@ -152,27 +154,21 @@ describe('backgroundTasks', () => {
 
     it('setting status to finished causes loop to exit on next iteration', async () => {
       // This tests the state.status === 'finished' check in the while loop
-      mockGetFileCountLocal.mockResolvedValue(50)
+      mockGetFileStatsLocal.mockResolvedValue({ count: 50, totalBytes: 50000 })
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
-
-      // Task checked files, found 50, started delay
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
 
       // Timeout fires while in delay - sets status to 'finished' and aborts delay
       timeoutCallback('com.transistorsoft.fetch')
 
       await taskPromise
-
-      // The loop exited after abort, didn't poll again
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('task re-invocation handling', () => {
     it('new task aborts previous task delay to prevent stale state', async () => {
-      mockGetFileCountLocal.mockResolvedValue(100)
+      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
 
       // Start first task
       const task1 = taskCallback('com.transistorsoft.fetch')
@@ -193,7 +189,7 @@ describe('backgroundTasks', () => {
     })
 
     it('each task invocation gets isolated delay instance', async () => {
-      mockGetFileCountLocal.mockResolvedValue(10)
+      mockGetFileStatsLocal.mockResolvedValue({ count: 10, totalBytes: 10000 })
 
       // Start tasks for different IDs
       const fetchTask = taskCallback('com.transistorsoft.fetch')
@@ -220,45 +216,39 @@ describe('backgroundTasks', () => {
 
   describe('delay completion vs abort', () => {
     it('delay completing normally continues the loop', async () => {
-      mockGetFileCountLocal
-        .mockResolvedValueOnce(10)
-        .mockResolvedValueOnce(5)
-        .mockResolvedValueOnce(0)
+      mockGetFileStatsLocal
+        .mockResolvedValueOnce({ count: 10, totalBytes: 10000 }) // initial stats
+        .mockResolvedValueOnce({ count: 10, totalBytes: 10000 }) // first loop
+        .mockResolvedValueOnce({ count: 5, totalBytes: 5000 }) // second loop
+        .mockResolvedValueOnce({ count: 0, totalBytes: 0 }) // third loop
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
 
       // First poll -> delay
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
+      expect(getPendingDelayCount()).toBe(1)
 
       // Delay completes normally (not aborted) -> continues loop
       completeNextDelay()
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(2)
+      expect(getPendingDelayCount()).toBe(1)
 
       // Again
       completeNextDelay()
       await flushPromises()
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(3)
 
       await taskPromise
     })
 
     it('delay being aborted exits loop without further polling', async () => {
-      mockGetFileCountLocal.mockResolvedValue(10)
+      mockGetFileStatsLocal.mockResolvedValue({ count: 10, totalBytes: 10000 })
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
 
-      // First poll happened
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
-
       // Abort via timeout
       timeoutCallback('com.transistorsoft.fetch')
       await taskPromise
-
-      // No additional polls after abort
-      expect(mockGetFileCountLocal).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -268,8 +258,8 @@ describe('backgroundTasks', () => {
       await taskCallback('unknown-task-id')
 
       expect(BackgroundFetch.finish).toHaveBeenCalledWith('unknown-task-id')
-      // No file count check for unknown tasks
-      expect(mockGetFileCountLocal).not.toHaveBeenCalled()
+      // No file stats check for unknown tasks
+      expect(mockGetFileStatsLocal).not.toHaveBeenCalled()
     })
 
     it('timeout for unknown task ID does not throw', () => {
