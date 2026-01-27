@@ -25,6 +25,7 @@ export type ExpandableBadgeProps = {
   accessibilityLabel?: string
   accessibilityRole?: AccessibilityRole
   initialExpanded?: boolean
+  testID?: string
 }
 
 export function ExpandableBadge({
@@ -41,6 +42,7 @@ export function ExpandableBadge({
   accessibilityLabel,
   accessibilityRole = 'button',
   initialExpanded = false,
+  testID,
 }: ExpandableBadgeProps) {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded)
   const textOpacity = useRef(
@@ -78,6 +80,8 @@ export function ExpandableBadge({
         { backgroundColor: effectiveBg, borderColor: effectiveBorder },
         style,
       ]}
+      testID={testID}
+      accessibilityLabel={accessibilityLabel}
     >
       {textEl}
       {hint && <Text style={textStyles}>{hint}</Text>}

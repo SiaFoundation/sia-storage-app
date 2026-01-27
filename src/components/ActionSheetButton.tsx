@@ -8,12 +8,14 @@ export function ActionSheetButton({
   children,
   icon,
   variant = 'primary',
+  testID,
 }: {
   disabled?: boolean
   onPress: () => void
   children: React.ReactNode
   variant?: 'primary' | 'danger'
   icon: React.ReactNode
+  testID?: string
 }) {
   const textStyle = disabled
     ? styles.disabledText
@@ -36,6 +38,7 @@ export function ActionSheetButton({
       accessibilityRole="button"
       style={styles.container}
       onPress={onPress}
+      testID={testID}
     >
       <Text style={iconStyle}>{renderedIcon}</Text>
       <Text style={textStyle}>{children}</Text>

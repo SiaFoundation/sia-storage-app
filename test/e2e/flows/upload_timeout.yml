@@ -2,8 +2,9 @@ appId: sia.storage.dev
 env:
   E2E_CONNECT_KEY: "${E2E_CONNECT_KEY}"
 ---
-# Sia Storage - File Upload E2E Test
-# Tests single file upload via photo picker
+# Sia Storage - Upload Timeout Auto-Flush E2E Test
+# Tests that uploads are flushed after the idle timeout
+# This verifies partial slabs are uploaded even without filling them
 
 # iOS: Clear keychain to remove saved seed
 - runFlow:
@@ -134,7 +135,7 @@ env:
 - assertVisible:
     text: "0 items"
 
-# Add test image to simulator's photo library
+# Add a test image to simulator's photo library
 - addMedia:
   - ../assets/test-image-1.png
 
@@ -168,7 +169,7 @@ env:
           text: "Dismiss"
       - waitForAnimationToEnd
 
-# Select the first photo in the grid
+# Select one photo
 # iOS photos are at y=30% (first row after clearing stock photos), Android at y=45%
 - runFlow:
     when:
@@ -208,7 +209,7 @@ env:
       text: "Library"
     timeout: 15000
 
-# Verify exactly 1 file was added
+# Verify file was added
 - assertVisible:
     text: "1 item"
 
