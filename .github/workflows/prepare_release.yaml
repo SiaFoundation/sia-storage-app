@@ -1,0 +1,34 @@
+# Creates/updates a release PR on every push to main.
+# The PR bumps package.json version and updates CHANGELOG.md based on changesets.
+name: Prepare Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prepare-release:
+    if: "!contains(github.event.head_commit.message, 'chore: release')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config user.email github-actions[bot]@users.noreply.github.com
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Knope
+        uses: knope-dev/action@v0.4.3
+
+      - name: Prepare Release
+        run: knope prepare-release --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+        continue-on-error: true

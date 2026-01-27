@@ -10,11 +10,23 @@ repo = "sia-mobile"
 name = "prepare-release"
 
 [[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
 type = "PrepareRelease"
 
 [[workflows.steps]]
 type = "Command"
-command = "bun run sync-app-version"
+command = "bun scripts/syncAppVersion.ts"
+
+[[workflows.steps]]
+type = "Command"
+command = "git add -A && git commit -m \"chore: release v$version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
 
 [[workflows.steps]]
 type = "CreatePullRequest"
@@ -30,7 +42,7 @@ template = """
 $changelog
 
 ---
-Merging this PR will trigger app store deployments.
+Merging this PR will create a GitHub release.
 """
 
 [[workflows]]
@@ -38,3 +50,9 @@ name = "release"
 
 [[workflows.steps]]
 type = "Release"
+
+[[workflows]]
+name = "document-change"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
