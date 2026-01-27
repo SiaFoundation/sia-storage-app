@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { logger } from '../lib/logger'
-import { acquireUploadSlot } from '../managers/uploadsPool'
 import { createGetterAndSelector } from '../lib/selectors'
 
-export type UploadStatus = 'queued' | 'running' | 'done' | 'error'
+export type UploadStatus =
+  | 'queued' // In queue, waiting to be added to packer
+  | 'packing' // Being streamed to packer
+  | 'packed' // Added to packer, waiting for batch finalize
+  | 'uploading' // Batch finalizing (uploading slabs to network)
+  | 'done' // Complete
+  | 'error' // Failed
 
 export type UploadState = {
   id: string
@@ -11,6 +16,8 @@ export type UploadState = {
   status: UploadStatus
   progress: number
   error?: string
+  batchId?: string // Which batch this file belongs to
+  batchFileCount?: number // Number of files in the current batch
 }
 
 type UploadsStore = {
@@ -21,7 +28,7 @@ export const useUploadsStore = create<UploadsStore>(() => ({ uploads: {} }))
 
 const { getState, setState } = useUploadsStore
 
-function registerUpload(id: string): AbortController {
+export function registerUpload(id: string): AbortController {
   const controller = new AbortController()
   setState((state) => {
     const next: UploadState = {
@@ -35,29 +42,68 @@ function registerUpload(id: string): AbortController {
   return controller
 }
 
-function setUploadState(
-  id: string,
-  status: UploadStatus,
-  progress: number,
-  err?: string
-) {
+export function setUploadStatus(id: string, status: UploadStatus) {
   setState((state) => {
     const prev = state.uploads[id]
+    if (!prev) return state
     const next: UploadState = {
-      id,
-      controller: prev.controller,
+      ...prev,
       status,
-      progress,
-      error: status === 'error' ? err ?? prev.error ?? '' : undefined,
+      error: status === 'error' ? prev.error : undefined,
     }
     return { uploads: { ...state.uploads, [id]: next } }
   })
 }
 
-function removeUpload(id: string) {
+export function setUploadError(id: string, error: string) {
+  setState((state) => {
+    const prev = state.uploads[id]
+    if (!prev) return state
+    const next: UploadState = {
+      ...prev,
+      status: 'error',
+      error,
+    }
+    return { uploads: { ...state.uploads, [id]: next } }
+  })
+}
+
+export function setUploadBatchInfo(
+  id: string,
+  batchId: string,
+  batchFileCount: number
+) {
+  setState((state) => {
+    const prev = state.uploads[id]
+    if (!prev) return state
+    const next: UploadState = {
+      ...prev,
+      batchId,
+      batchFileCount,
+    }
+    return { uploads: { ...state.uploads, [id]: next } }
+  })
+}
+
+export function removeUpload(id: string) {
   setState((state) => {
     const { [id]: _, ...rest } = state.uploads
     return { uploads: rest }
+  })
+}
+
+/**
+ * Remove multiple uploads in a single state update.
+ * This prevents UI flickering when batch uploads complete.
+ */
+export function removeUploads(ids: string[]) {
+  if (ids.length === 0) return
+  setState((state) => {
+    const next = { ...state.uploads }
+    for (const id of ids) {
+      delete next[id]
+    }
+    return { uploads: next }
   })
 }
 
@@ -89,44 +135,25 @@ export type UploadCounts = {
   totalQueued: number
 }
 
+// Active statuses for counting uploads in progress
+const ACTIVE_STATUSES: UploadStatus[] = [
+  'packing',
+  'packed',
+  'uploading',
+]
+
 export const [getUploadCounts, useUploadCounts] = createGetterAndSelector(
   useUploadsStore,
   (state): UploadCounts => {
     const counts: UploadCounts = { total: 0, totalActive: 0, totalQueued: 0 }
     for (const rec of Object.values(state.uploads)) {
-      if (rec.status === 'running') counts.totalActive += 1
+      if (ACTIVE_STATUSES.includes(rec.status)) counts.totalActive += 1
       if (rec.status === 'queued') counts.totalQueued += 1
     }
     counts.total = counts.totalActive + counts.totalQueued
     return counts
   }
 )
-
-export async function runUploadWithSlot<T>(params: {
-  id: string
-  task: (signal: AbortSignal) => Promise<T>
-}): Promise<T> {
-  const { id, task } = params
-  const controller = registerUpload(id)
-  setUploadState(id, 'queued', 0)
-  const release = await acquireUploadSlot()
-  try {
-    logger.debug('uploads', 'upload running', id)
-    setUploadState(id, 'running', 0)
-    const result = await task(controller.signal)
-    logger.debug('uploads', 'upload success', id)
-    removeUpload(id)
-    return result
-  } catch (e) {
-    logger.error('uploads', 'upload error', id, e)
-    const message = e instanceof Error ? e.message : String(e)
-    setUploadState(id, 'error', 0, message)
-    throw e
-  } finally {
-    release()
-    removeUpload(id)
-  }
-}
 
 export function updateUploadProgress(id: string, progress: number) {
   setState((state) => {
@@ -152,7 +179,7 @@ export const [getActiveUploads, useActiveUploads] = createGetterAndSelector(
   useUploadsStore,
   (state): UploadState[] => {
     return Object.values(state.uploads).filter((rec) =>
-      ['queued', 'running'].includes(rec.status)
+      ['queued', 'packing', 'packed', 'uploading'].includes(rec.status)
     )
   }
 )

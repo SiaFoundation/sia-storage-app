@@ -27,9 +27,9 @@ export function UploadStatusIcon({
 
   const label = useMemo(() => {
     if (status.isErrored) return status.errorText || 'Error'
-    if (status.isUploadQueued) return 'Upload queued'
+    if (status.isUploadQueued) return 'Queued'
     if (status.isDownloadQueued) return 'Download queued'
-    if (status.isUploading) return 'Uploading'
+    if (status.isUploading || status.isPacking) return 'Uploading'
     if (status.isDownloading) return 'Downloading'
     if (status.isUploaded && status.isDownloaded)
       return 'File on network and device'
@@ -40,7 +40,11 @@ export function UploadStatusIcon({
 
   const iconEL = status.isErrored ? (
     <CloudAlertIcon color={iconColor} size={size} />
+  ) : status.isUploadQueued || status.isPacking ? (
+    // Queued or packing states show spinner
+    <SpinnerIcon color={iconColor} size={size} />
   ) : status.isUploading ? (
+    // Uploading shows progress circle or spinner
     status.uploadProgress > 0 ? (
       <CircularProgress
         progress={status.uploadProgress}

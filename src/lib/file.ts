@@ -29,6 +29,8 @@ export type FileStatus = {
   downloadProgress: number
   isUploadQueued: boolean
   isDownloadQueued: boolean
+  isPacking: boolean
+  batchFileCount: number
   fileUri: string | null
   fileIsGone: boolean
   errorText: string | null
@@ -49,20 +51,25 @@ function computeFileStatus({
   fileUri: string | null
   errorText: string | null
 }) {
-  const isUploading =
-    uploadState?.status === 'running' || uploadState?.status === 'queued'
+  const uploadStatus = uploadState?.status
+  const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(
+    uploadStatus ?? ''
+  )
+  const isPacking = uploadStatus === 'packing' || uploadStatus === 'packed'
   const isDownloading =
     downloadState?.status === 'running' || downloadState?.status === 'queued'
   const hasSealedObject = fileHasASealedObject(file)
   return {
     isUploading,
     isDownloading,
-    isUploadQueued: uploadState?.status === 'queued',
+    isUploadQueued: uploadStatus === 'queued',
     isDownloadQueued: downloadState?.status === 'queued',
+    isPacking,
+    batchFileCount: uploadState?.batchFileCount ?? 0,
     isUploaded: hasSealedObject || !!isShared,
     isDownloaded: !!fileUri,
     isErrored:
-      uploadState?.status === 'error' || downloadState?.status === 'error',
+      uploadStatus === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,
     fileUri,

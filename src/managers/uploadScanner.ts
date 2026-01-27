@@ -4,19 +4,21 @@ import {
   getFilesLocalOnly,
   useFileCountAll,
   useFileCountLocal,
+  FileRecord,
 } from '../stores/files'
-import { queueUploadForFileId } from './uploader'
-import {
-  SCANNER_MAX_TOTAL_UPLOADS_FACTOR,
-  SCANNER_ADD_TO_QUEUE_FACTOR,
-  SCANNER_INTERVAL,
-} from '../config'
-import { getIsConnected } from '../stores/sdk'
-import { getAutoScanUploads, useAutoScanUploads } from '../stores/settings'
-import { getMaxUploads } from '../managers/uploadsPool'
+import { getUploadManager, FileEntry } from './uploader'
+import { SCANNER_INTERVAL, SLAB_SIZE } from '../config'
+import { getIsConnected, getSdk } from '../stores/sdk'
+import { getAutoScanUploads, useAutoScanUploads, getIndexerURL } from '../stores/settings'
 import { createServiceInterval } from '../lib/serviceInterval'
-import { FileRecord } from '../stores/files'
 import { humanUploadPercent } from '../lib/uploadPercent'
+import { getFsFileUri } from '../stores/fs'
+
+async function toFileEntry(file: FileRecord): Promise<FileEntry | null> {
+  const fileUri = await getFsFileUri(file)
+  if (!fileUri) return null
+  return { fileId: file.id, fileUri, file, size: file.size }
+}
 
 async function startUploadScanner(): Promise<void> {
   const isConnected = getIsConnected()
@@ -24,21 +26,68 @@ async function startUploadScanner(): Promise<void> {
     logger.debug('uploadScanner', 'not connected to indexer, skipping scan')
     return
   }
+
+  const sdk = getSdk()
+  if (!sdk) {
+    logger.debug('uploadScanner', 'SDK not initialized, skipping scan')
+    return
+  }
+
   logger.debug('uploadScanner', 'scanning...')
   try {
-    const maxUploads = await getMaxUploads()
-    const maxTotalUploads = SCANNER_MAX_TOTAL_UPLOADS_FACTOR * maxUploads
-    const maxToAdd = SCANNER_ADD_TO_QUEUE_FACTOR * maxUploads
-    if (getActiveUploads().length >= maxTotalUploads) {
-      return
+    const uploadManager = getUploadManager()
+    const indexerURL = await getIndexerURL()
+    uploadManager.initialize(sdk, indexerURL)
+
+    // Check how much space is left in current slab
+    const slabRemaining = await uploadManager.getSlabRemaining()
+
+    // Get candidate files, sorted by size ascending (small files first)
+    const candidateFiles = await getFilesLocalOnly({
+      limit: 50,
+      order: 'ASC',
+    })
+
+    // Filter out files already being uploaded
+    const activeUploads = getActiveUploads()
+    const available = candidateFiles.filter(
+      (f) => !activeUploads.some((u) => u.id === f.id)
+    )
+
+    // Select files that fit well in current slab
+    const toUpload: FileEntry[] = []
+    let batchSize = 0
+    const targetBatchSize = Number(
+      slabRemaining > 0n ? slabRemaining : BigInt(SLAB_SIZE)
+    )
+
+    for (const file of available) {
+      const entry = await toFileEntry(file)
+      if (!entry) continue
+
+      // Always include at least one file
+      if (toUpload.length === 0) {
+        toUpload.push(entry)
+        batchSize += file.size
+        continue
+      }
+
+      // Add more files if they fit well in the slab
+      if (batchSize + file.size <= targetBatchSize) {
+        toUpload.push(entry)
+        batchSize += file.size
+      }
+
+      // Stop if we've filled the slab target
+      if (batchSize >= targetBatchSize) break
     }
-    const files = await getNextUploads(maxToAdd)
-    if (files.length > 0) {
+
+    if (toUpload.length > 0) {
       logger.info(
         'uploadScanner',
-        `queuing ${files.length} uploads: ${files.map((f) => f.id).join(', ')}`
+        `queuing ${toUpload.length} files (${batchSize} bytes)`
       )
-      files.forEach((f) => queueUploadForFileId(f.id))
+      await uploadManager.queueFiles(toUpload)
     }
   } catch (e) {
     logger.error('uploadScanner', 'scan error', e)
@@ -83,11 +132,3 @@ export function useUploadScannerStatus(): {
   }
 }
 
-export async function getNextUploads(count: number): Promise<FileRecord[]> {
-  const localOnly = await getFilesLocalOnly({ limit: count, order: 'ASC' })
-  const activeUploads = getActiveUploads()
-  const files = localOnly
-    .filter((f) => !activeUploads.some((u) => u.id === f.id))
-    .slice(0, count)
-  return files
-}
