@@ -6,8 +6,9 @@ import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
 import { getFileStatsLocal } from '../stores/files'
 import { getIsConnected } from '../stores/sdk'
-import { hasCachedAppKey } from '../stores/appKey'
 import { createBackgroundDelay } from '../lib/backgroundDelay'
+import { getHasOnboarded } from '../stores/settings'
+import { getIsInitializing, getInitializationError } from '../stores/app'
 
 /**
  * Background tasks are scheduled by the operating system and run for about the following durations:
@@ -199,9 +200,40 @@ export async function initBackgroundTasks() {
 }
 
 /**
+ * Wait for app initialization to complete, polling every second.
+ * Returns 'ready' when init completes, 'timeout' after 30s, or 'aborted' if delay was aborted.
+ */
+async function waitForInitialization(
+  delayFn: (ms: number) => Promise<'completed' | 'aborted'>
+): Promise<'ready' | 'timeout' | 'aborted'> {
+  const maxWaitMs = secondsInMs(30)
+  const pollIntervalMs = secondsInMs(1)
+  let elapsed = 0
+
+  while (getIsInitializing() && elapsed < maxWaitMs) {
+    const result = await delayFn(pollIntervalMs)
+    if (result === 'aborted') {
+      return 'aborted'
+    }
+    elapsed += pollIntervalMs
+  }
+
+  if (getIsInitializing()) {
+    return 'timeout'
+  }
+  return 'ready'
+}
+
+/**
  * Run background work for a given task configuration and state. This function
  * works by simply checking if the resumed app has work to do. If it does, it
  * gives it time to complete. If it doesn't, it will finish the task and return.
+ *
+ * iOS background task start types:
+ * - Warm: App suspended in memory, iOS resumes it - init already complete
+ * - Cold: App terminated by system, iOS relaunches - init runs from scratch
+ * - Force quit: User swiped up - background tasks won't fire until manual open
+ *
  * Note: There is a small chance the two task types will run concurrently,
  * with the current implementation this is fine because both tasks are simply
  * allowing the app to continue already scheduled work. If we ever make the
@@ -214,19 +246,46 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const { delay: delayFn, abort } = createBackgroundDelay()
   state.abort = abort
 
-  // Detect cold start: if in-memory cache is empty, the process was restarted
-  const isColdStart = !hasCachedAppKey()
-  const isConnected = getIsConnected()
-  log(`starting... (connected=${isConnected}, coldStart=${isColdStart})`)
-
-  if (!isConnected) {
-    log('SDK not connected, uploads will wait for connection...')
+  // Check if user has onboarded - if not, there's nothing to do
+  const hasOnboarded = await getHasOnboarded()
+  if (!hasOnboarded) {
+    log('not onboarded, exiting')
+    return
   }
+
+  // Wait for app initialization to complete (handles both warm and cold starts)
+  // On warm start, init is already done. On cold start, initApp() runs the full
+  // initialization sequence including reconnectIndexer() and initUploadScanner().
+  const isInitializing = getIsInitializing()
+  if (isInitializing) {
+    log('waiting for app initialization to complete...')
+    const initResult = await waitForInitialization(delayFn)
+    if (initResult === 'timeout') {
+      log('initialization timed out, exiting')
+      return
+    }
+    if (initResult === 'aborted') {
+      log('wait aborted, exiting')
+      return
+    }
+  }
+
+  // Check if initialization failed
+  const initError = getInitializationError()
+  if (initError) {
+    log(`initialization failed: ${initError}, exiting`)
+    return
+  }
+
+  const isConnected = getIsConnected()
+  log(`app ready (connected=${isConnected})`)
 
   // Track initial stats to calculate delta at end
   const initialStats = await getFileStatsLocal({ localOnly: true })
   log(
-    `initial queue: ${initialStats.count} files, ${formatBytes(initialStats.totalBytes)}`
+    `initial queue: ${initialStats.count} files, ${formatBytes(
+      initialStats.totalBytes
+    )}`
   )
 
   while (true) {
@@ -235,9 +294,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const filesUploaded = initialStats.count - finalStats.count
       const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
-        `task is in finished state, breaking loop, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
-          state.startTime
-        )}`
+        `task is in finished state, breaking loop, uploaded: ${filesUploaded} files (${formatBytes(
+          bytesUploaded
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
       )
       return
     }
@@ -247,9 +306,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const filesUploaded = initialStats.count
       const bytesUploaded = initialStats.totalBytes
       log(
-        `stopping, reason: all files uploaded, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
-          state.startTime
-        )}`
+        `stopping, reason: all files uploaded, uploaded: ${filesUploaded} files (${formatBytes(
+          bytesUploaded
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
       )
       return
     }
@@ -259,9 +318,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const filesUploaded = initialStats.count - finalStats.count
       const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
-        `delay aborted, exiting, uploaded: ${filesUploaded} files (${formatBytes(bytesUploaded)}), elapsedTime: ${getElapsedTime(
-          state.startTime
-        )}`
+        `delay aborted, exiting, uploaded: ${filesUploaded} files (${formatBytes(
+          bytesUploaded
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
       )
       return
     }
