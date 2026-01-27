@@ -48,12 +48,17 @@ jest.mock('../stores/sdk', () => ({
   getIsConnected: jest.fn(() => true),
 }))
 
-jest.mock('../stores/appKey', () => ({
-  hasCachedAppKey: jest.fn(() => true),
-}))
-
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
+}))
+
+jest.mock('../stores/settings', () => ({
+  getHasOnboarded: jest.fn(() => true),
+}))
+
+jest.mock('../stores/app', () => ({
+  getIsInitializing: jest.fn(() => false),
+  getInitializationError: jest.fn(() => null),
 }))
 
 const mockTimer = jest.mocked(BackgroundTimer)
