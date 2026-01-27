@@ -5,9 +5,9 @@ import BackgroundFetch, {
 import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
 import { getFileCountLocal } from '../stores/files'
-import BackgroundTimer from 'react-native-background-timer'
 import { getIsConnected } from '../stores/sdk'
 import { hasCachedAppKey } from '../stores/appKey'
+import { createBackgroundDelay } from '../lib/backgroundDelay'
 
 /**
  * Background tasks are scheduled by the operating system and run for about the following durations:
@@ -31,6 +31,7 @@ type TaskConfig = {
 type TaskState = {
   startTime: number
   status: 'running' | 'finished'
+  abort?: () => void
 }
 const taskConfigs: Record<TaskId, TaskConfig> = {
   // This is the library's default task ID on Android.
@@ -68,20 +69,55 @@ const sharedConfig: BackgroundFetchConfig = {
 const taskStates: Record<TaskId, TaskState> = {
   'com.transistorsoft.fetch': {
     startTime: 0,
-    status: 'running',
+    status: 'finished',
+    abort: undefined,
   },
   'com.transistorsoft.processing': {
     startTime: 0,
-    status: 'running',
+    status: 'finished',
+    abort: undefined,
   },
   'react-native-background-fetch': {
     startTime: 0,
-    status: 'running',
+    status: 'finished',
+    abort: undefined,
   },
+}
+
+function createFreshTaskState(): TaskState {
+  return {
+    startTime: 0,
+    status: 'finished',
+    abort: undefined,
+  }
+}
+
+/**
+ * Reset a specific task's state, aborting any pending operations.
+ */
+function resetTaskState(taskId: TaskId) {
+  const state = taskStates[taskId]
+  // Abort any pending delay from previous invocation
+  state.abort?.()
+  // Reset to fresh state
+  Object.assign(state, createFreshTaskState())
+}
+
+/**
+ * Reset all task states, aborting any pending operations.
+ * Called on init to ensure clean startup.
+ */
+function resetAllTaskStates() {
+  for (const taskId of Object.keys(taskStates) as TaskId[]) {
+    resetTaskState(taskId)
+  }
 }
 
 export async function initBackgroundTasks() {
   logger.info('backgroundTask', 'init')
+
+  // Clean up any stale state from previous initialization
+  resetAllTaskStates()
 
   const status = await BackgroundFetch.configure(
     {
@@ -91,11 +127,16 @@ export async function initBackgroundTasks() {
     async (taskId: string) => {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
-      if (!config) {
+      if (!config || !state) {
         logger.warn('backgroundTask', `unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
+
+      // Reset state for this task to ensure fresh start,
+      // aborting any lingering operations from previous invocation
+      resetTaskState(taskId as TaskId)
+
       transitionTaskState(state, 'running')
       await runBackgroundWork(config, state)
       transitionTaskState(state, 'finished')
@@ -104,14 +145,21 @@ export async function initBackgroundTasks() {
     (taskId: string) => {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
-      transitionTaskState(state, 'finished')
-      if (!config) {
+      if (!config || !state) {
         logger.warn('backgroundTask', `unknown task id: ${taskId}`)
         BackgroundFetch.finish(taskId)
         return
       }
-      BackgroundFetch.finish(taskId)
-      logTask(config)(
+      const log = logTask(config)
+
+      log(`timeout callback fired, aborting delay and finishing task`)
+
+      // Abort any pending delay BEFORE setting status, so the while loop
+      // can exit cleanly when the Promise resolves.
+      state.abort?.()
+      transitionTaskState(state, 'finished')
+      BackgroundFetch.finish(config.id)
+      log(
         `finished, reason: timeout, elapsedTime: ${getElapsedTime(
           state.startTime
         )}`
@@ -158,6 +206,10 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   state.startTime = Date.now()
   const log = logTask(config)
 
+  // Create instance-based cancellable delay for this invocation
+  const { delay: delayFn, abort } = createBackgroundDelay()
+  state.abort = abort
+
   // Log diagnostic info to distinguish cold start vs resume
   const isConnected = getIsConnected()
   const hasCached = hasCachedAppKey()
@@ -190,20 +242,16 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       return
     }
     log(`waiting for uploads...`)
-    await delay(secondsInMs(10))
+    const result = await delayFn(secondsInMs(10))
+    if (result === 'aborted') {
+      log(`delay aborted, exiting cleanly`)
+      return
+    }
   }
 }
 
 function getElapsedTime(startTime: number) {
   return Date.now() - startTime
-}
-
-// It appears that setTimeout does not work in background tasks on Android,
-// so we use react-native-background-timer instead.
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    BackgroundTimer.setTimeout(() => resolve(true), ms)
-  })
 }
 
 function logTask(config: TaskConfig) {
