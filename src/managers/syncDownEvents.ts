@@ -18,8 +18,8 @@ import {
 } from '../encoding/fileMetadata'
 import {
   ObjectEvent,
+  ObjectsCursor,
   PinnedObjectInterface,
-  type ObjectsCursor,
 } from 'react-native-sia'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { z } from 'zod'
@@ -69,7 +69,7 @@ export async function syncDownEvents(): Promise<void> {
       const cursor = await getSyncDownCursor()
       logger.debug(
         'syncDownEvents',
-        `syncing from id=${cursor?.key} after=${cursor?.after}`
+        `syncing from id=${cursor?.id} after=${cursor?.after}`
       )
 
       const events = await sdk.objectEvents(cursor, batchSize)
@@ -91,7 +91,7 @@ export async function syncDownEvents(): Promise<void> {
       const nextTimestamp = lastEvent ? lastEvent.updatedAt.getTime() + 1 : 0
       if (lastEvent) {
         await setSyncDownCursor({
-          key: lastEvent.key,
+          id: lastEvent.id,
           after: new Date(nextTimestamp),
         })
       }
@@ -113,7 +113,7 @@ export async function syncDownEvents(): Promise<void> {
 }
 
 async function processBatch(events: ObjectEvent[], counts: Counts) {
-  for (const { object, deleted, key: id } of events) {
+  for (const { object, deleted, id } of events) {
     if (deleted) {
       await handleDeleteEvent(id, counts)
       continue
@@ -266,20 +266,22 @@ export const initSyncDownEvents = createServiceInterval({
 
 const objectsCursorCodec = z.codec(
   z.object({
-    key: z.string(),
+    // Accept both old `key` and new `id` format for migration
+    id: z.string().optional(),
+    key: z.string().optional(),
     after: z.number(),
   }),
   z.object({
-    key: z.string(),
+    id: z.string(),
     after: z.date(),
   }),
   {
     decode: (stored) => ({
-      key: stored.key,
+      id: stored.id ?? stored.key ?? '',
       after: isoToEpochCodec.decode(stored.after),
     }),
     encode: (cursor) => ({
-      key: cursor.key,
+      id: cursor.id,
       after: isoToEpochCodec.encode(cursor.after),
     }),
   }
@@ -290,7 +292,9 @@ export async function getSyncDownCursor(): Promise<ObjectsCursor | undefined> {
     'syncDownCursor',
     objectsCursorCodec
   )
-  return decoded == null ? undefined : (decoded as unknown as ObjectsCursor)
+  // Return undefined if no valid id (handles migration edge cases)
+  if (!decoded || !decoded.id) return undefined
+  return decoded
 }
 
 export async function setSyncDownCursor(value: ObjectsCursor | undefined) {
