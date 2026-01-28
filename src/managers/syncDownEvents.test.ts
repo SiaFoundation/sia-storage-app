@@ -97,13 +97,13 @@ function makeMockPinnedObject(
 }
 
 function makeObjectEvent(params: {
-  key: string
+  id: string
   updatedAt: Date
   deleted?: boolean
   object?: PinnedObjectInterface
 }): ObjectEvent {
   return {
-    key: params.key,
+    id: params.id,
     updatedAt: params.updatedAt,
     deleted: params.deleted ?? false,
     object: params.object,
@@ -179,12 +179,12 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(metadata1, 'obj-1'),
       }),
       makeObjectEvent({
-        key: 'obj-2',
+        id: 'obj-2',
         updatedAt: new Date(NOW_BASE + 1),
         object: makeMockPinnedObject(metadata2, 'obj-2'),
       }),
@@ -201,7 +201,7 @@ describe('syncDownEvents', () => {
     // Verify cursor was updated correctly.
     const cursor = await getSyncDownCursor()
     expect(cursor).toEqual({
-      key: 'obj-2',
+      id: 'obj-2',
       after: new Date(NOW_BASE + 1 + cursorIncrement),
     })
 
@@ -231,7 +231,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(metadata, 'obj-1'),
       }),
@@ -247,7 +247,7 @@ describe('syncDownEvents', () => {
     expect(getSdkMock).toHaveBeenCalledTimes(1)
     const cursor = await getSyncDownCursor()
     expect(cursor).toEqual({
-      key: 'obj-1',
+      id: 'obj-1',
       after: new Date(NOW_BASE + cursorIncrement),
     })
   })
@@ -280,7 +280,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE + 1),
         deleted: true,
       }),
@@ -342,7 +342,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE + 1),
         object: makeMockPinnedObject(updatedMetadata, 'obj-1'),
       }),
@@ -373,7 +373,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(metadata, 'obj-1'),
       }),
@@ -429,7 +429,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE + 100),
         object: makeMockPinnedObject(newerRemoteMetadata, 'obj-1'),
       }),
@@ -508,7 +508,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(olderRemoteMetadata, 'obj-1'),
       }),
@@ -549,7 +549,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(incompleteMetadata, 'obj-1'),
       }),
@@ -594,12 +594,12 @@ describe('syncDownEvents', () => {
     // First event will fail during delete.
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE + 1),
         deleted: true,
       }),
       makeObjectEvent({
-        key: 'obj-2',
+        id: 'obj-2',
         updatedAt: new Date(NOW_BASE + 2),
         deleted: true,
       }),
@@ -652,12 +652,12 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(metadata1, 'obj-1'),
       }),
       makeObjectEvent({
-        key: 'obj-2',
+        id: 'obj-2',
         updatedAt: new Date(NOW_BASE + 1),
         object: makeMockPinnedObject(metadata2, 'obj-2'),
       }),
@@ -695,7 +695,7 @@ describe('syncDownEvents', () => {
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-thumb',
+        id: 'obj-thumb',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(thumbnailMetadata, 'obj-thumb'),
       }),
@@ -726,7 +726,7 @@ describe('syncDownEvents', () => {
     }
     const events1: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-1',
+        id: 'obj-1',
         updatedAt: new Date(NOW_BASE),
         object: makeMockPinnedObject(metadata1, 'obj-1'),
       }),
@@ -746,7 +746,7 @@ describe('syncDownEvents', () => {
     // Second run should use cursor from first run.
     const events2: ObjectEvent[] = [
       makeObjectEvent({
-        key: 'obj-2',
+        id: 'obj-2',
         updatedAt: new Date(NOW_BASE + 1),
         object: makeMockPinnedObject(metadata2, 'obj-2'),
       }),
@@ -763,7 +763,7 @@ describe('syncDownEvents', () => {
     await syncDownEvents()
     const cursor1 = await getSyncDownCursor()
     expect(cursor1).toEqual({
-      key: 'obj-1',
+      id: 'obj-1',
       after: new Date(NOW_BASE + cursorIncrement),
     })
 
@@ -771,14 +771,14 @@ describe('syncDownEvents', () => {
     await syncDownEvents()
     const cursor2 = await getSyncDownCursor()
     expect(cursor2).toEqual({
-      key: 'obj-2',
+      id: 'obj-2',
       after: new Date(NOW_BASE + 1 + cursorIncrement),
     })
   })
 
   test('reset cursor clears saved cursor', async () => {
     await setSyncDownCursor({
-      key: 'obj-1',
+      id: 'obj-1',
       after: new Date(NOW_BASE),
     })
 
