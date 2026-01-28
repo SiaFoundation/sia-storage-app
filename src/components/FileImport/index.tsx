@@ -39,13 +39,13 @@ import { FileMetaImport } from './FileMetaImport'
 import { DownloadPrompt } from './DownloadPrompt'
 import { useFileStatus } from '../../lib/file'
 import { useDownloadState } from '../../stores/downloads'
-import { type SharedObjectInterface } from 'react-native-sia'
+import { type PinnedObjectInterface } from 'react-native-sia'
 import { SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD } from '../../config'
 
 // Helper function to detect file type from first few bytes.
 async function detectFileType(
   sdk: ReturnType<typeof useSdk>,
-  sharedObject: SharedObjectInterface,
+  sharedObject: PinnedObjectInterface,
   id: string
 ): Promise<string> {
   logger.debug(
@@ -273,11 +273,12 @@ export function FileImport({
 
       // Pin the shared object and create file record.
       const indexerURL = await getIndexerURL()
-      const pinnedObject = await sdk.pinShared(sharedObject.data)
+      // sharedObject.data is already a PinnedObjectInterface from sdk.sharedObject()
+      await sdk.pinObject(sharedObject.data)
       const localObject = await pinnedObjectToLocalObject(
         sharedFile.data.id,
         indexerURL,
-        pinnedObject
+        sharedObject.data
       )
       await createFileRecordWithLocalObject(sharedFile.data, localObject)
 

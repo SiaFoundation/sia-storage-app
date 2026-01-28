@@ -7,15 +7,14 @@ import {
   runDownloadWithSlot,
 } from '../stores/downloads'
 import { useSdk, getSdk } from '../stores/sdk'
-import { PinnedObject } from 'react-native-sia'
+import { PinnedObject, type Writer, type PinnedObjectInterface } from 'react-native-sia'
 import { useCallback } from 'react'
 import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
 import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { FileRecord } from '../stores/files'
-import { File } from 'expo-file-system'
-import { type SharedObjectInterface } from 'react-native-sia'
+import type { FileRecord } from '../stores/files'
+import type { File } from 'expo-file-system'
 
 /** Non-hook version for programmatic downloads (e.g., bulk operations) */
 export async function downloadFile(file: FileRecord): Promise<void> {
@@ -43,20 +42,21 @@ export async function downloadFile(file: FileRecord): Promise<void> {
       if (!appKey) {
         throw new Error(`No AppKey found for indexer: ${indexerURL}`)
       }
-      const downloader = await sdk.download(
-        PinnedObject.open(appKey, sealedObject),
-        {
-          maxInflight: DOWNLOAD_MAX_INFLIGHT,
-          offset: BigInt(0),
-          length: undefined,
-        }
-      )
+      const pinnedObject = PinnedObject.open(appKey, sealedObject)
+      const totalSize = Array.isArray(sealedObject.slabs)
+        ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
+        : undefined
+
       await streamToCache({
         file,
-        getNextChunk: () => downloader.readChunk({ signal }),
-        totalSize: Array.isArray(sealedObject.slabs)
-          ? sealedObject.slabs.reduce((acc, s) => acc + (s?.length ?? 0), 0)
-          : undefined,
+        pinnedObject,
+        totalSize,
+        download: (writer) =>
+          sdk.download(writer, pinnedObject, {
+            maxInflight: DOWNLOAD_MAX_INFLIGHT,
+            offset: BigInt(0),
+            length: undefined,
+          }, { signal }),
         onAfterClose: async (targetFile) => {
           await copyFileToFs(file, targetFile)
         },
@@ -107,18 +107,15 @@ export function useDownloadFromShareURL() {
         task: async (signal) => {
           if (!sdk) throw new Error('SDK not initialized')
           const sharedObject = await sdk.sharedObject(sharedUrl)
-          const downloader = await sdk.downloadShared(sharedObject, {
-            maxInflight: DOWNLOAD_MAX_INFLIGHT,
-            offset: BigInt(0),
-            length: undefined,
-          })
+          const totalSize = Number(sharedObject.size())
+
           // Create a minimal file record for downloading
           // The actual metadata will be extracted from the downloaded file
           const file: FileRecord = {
             id,
             name: 'Shared File',
             type: 'application/octet-stream',
-            size: Number(sharedObject.size()),
+            size: totalSize,
             hash: '',
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -126,10 +123,17 @@ export function useDownloadFromShareURL() {
             addedAt: Date.now(),
             objects: {},
           }
+
           await streamToCache({
             file,
-            getNextChunk: () => downloader.readChunk({ signal }),
-            totalSize: Number(sharedObject.size()),
+            pinnedObject: sharedObject,
+            totalSize,
+            download: (writer) =>
+              sdk.download(writer, sharedObject, {
+                maxInflight: DOWNLOAD_MAX_INFLIGHT,
+                offset: BigInt(0),
+                length: undefined,
+              }, { signal }),
             onAfterClose: async (targetFile) => {
               await copyFileToFs(file, targetFile)
             },
@@ -143,53 +147,77 @@ export function useDownloadFromShareURL() {
   )
 }
 
+/**
+ * Creates a Writer that writes to a file stream and tracks progress.
+ */
+function createFileWriter(params: {
+  fileId: string
+  writer: WritableStreamDefaultWriter<Uint8Array>
+  totalSize?: number
+}): Writer {
+  const { fileId, writer, totalSize } = params
+  let bytesWritten = 0
+  let chunks = 0
+
+  return {
+    async write(data: ArrayBuffer): Promise<void> {
+      const buf = new Uint8Array(data)
+      bytesWritten += buf.byteLength
+      chunks += 1
+      await writer.write(buf)
+
+      // Update progress
+      if (typeof totalSize === 'number' && totalSize > 0) {
+        updateDownloadProgress(fileId, Math.min(1, bytesWritten / totalSize))
+      } else if (chunks % 5 === 0) {
+        updateDownloadProgress(fileId, Math.min(0.99, (chunks % 20) / 20))
+      }
+
+      if (chunks % 10 === 0) {
+        logger.debug('streamToCache', 'downloaded', bytesWritten, 'bytes so far')
+      }
+    },
+  }
+}
+
 async function streamToCache(params: {
   file: FileRecord
+  pinnedObject: PinnedObjectInterface
   totalSize?: number
-  getNextChunk: () => Promise<ArrayBuffer | undefined>
+  download: (writer: Writer) => Promise<void>
   onAfterClose?: (targetFile: File) => Promise<void>
   signal: AbortSignal
 }): Promise<void> {
-  const { file, totalSize, getNextChunk, onAfterClose, signal } = params
+  const { file, totalSize, download, onAfterClose, signal } = params
   const targetFile = await getOrCreateTempDownloadFile(file)
   logger.debug('streamToCache', 'writing to cache path:', targetFile.uri)
-  const writer = targetFile.writableStream().getWriter()
-  let total = 0
-  let chunks = 0
+
+  const fileWriter = targetFile.writableStream().getWriter()
+
   try {
-    while (true) {
-      if (signal.aborted) {
-        logger.debug('streamToCache', 'abort received, stopping download...')
-        targetFile.delete()
-        break
-      }
-      const chunk = await getNextChunk()
-      if (!chunk || chunk.byteLength === 0) {
-        logger.debug(
-          'streamToCache',
-          'download stream ended. chunks=',
-          chunks,
-          'bytes=',
-          total
-        )
-        break
-      }
-      const buf = new Uint8Array(chunk as ArrayBuffer)
-      total += buf.byteLength
-      chunks += 1
-      await writer.write(buf)
-      if (typeof totalSize === 'number' && totalSize > 0) {
-        updateDownloadProgress(file.id, Math.min(1, total / totalSize))
-      } else if (chunks % 5 === 0) {
-        updateDownloadProgress(file.id, Math.min(0.99, (chunks % 20) / 20))
-      }
-      if (chunks % 10 === 0)
-        logger.debug('streamToCache', 'downloaded', total, 'bytes so far')
+    // Check for abort before starting
+    if (signal.aborted) {
+      logger.debug('streamToCache', 'abort received before download started')
+      await targetFile.delete()
+      return
     }
+
+    // Create a writer that writes to the file and tracks progress
+    const writer = createFileWriter({
+      fileId: file.id,
+      writer: fileWriter,
+      totalSize,
+    })
+
+    // Download writes chunks to our writer
+    await download(writer)
+
+    logger.debug('streamToCache', 'download stream ended')
   } finally {
-    await writer.close()
-    logger.debug('streamToCache', 'writer closed. Total bytes:', total)
+    await fileWriter.close()
+    logger.debug('streamToCache', 'writer closed')
   }
+
   if (onAfterClose) {
     await onAfterClose(targetFile)
   }
@@ -201,7 +229,7 @@ async function streamToCache(params: {
  */
 export async function downloadFirstBytesFromShared(
   sdk: ReturnType<typeof useSdk>,
-  sharedObject: SharedObjectInterface,
+  sharedObject: PinnedObjectInterface,
   byteCount: number
 ): Promise<Uint8Array> {
   if (!sdk) {
@@ -213,36 +241,38 @@ export async function downloadFirstBytesFromShared(
     `Downloading first ${byteCount} bytes`
   )
 
-  // Download only first N bytes for type detection.
-  const downloader = await sdk.downloadShared(sharedObject, {
-    maxInflight: DOWNLOAD_MAX_INFLIGHT,
-    offset: BigInt(0),
-    length: BigInt(byteCount),
-  })
-
-  // Read the bytes.
+  // Collect bytes into an array
   const chunks: Uint8Array[] = []
   let totalBytes = 0
   const abortController = new AbortController()
 
-  try {
-    while (totalBytes < byteCount) {
-      const chunk = await downloader.readChunk({
-        signal: abortController.signal,
-      })
-      if (!chunk || chunk.byteLength === 0) break
-
-      const buf = new Uint8Array(chunk)
+  const writer: Writer = {
+    async write(data: ArrayBuffer): Promise<void> {
+      const buf = new Uint8Array(data)
       chunks.push(buf)
       totalBytes += buf.length
-      if (totalBytes >= byteCount) break
-    }
-  } finally {
-    // Abort the download after we have enough bytes.
-    abortController.abort()
+
+      // Abort once we have enough bytes
+      if (totalBytes >= byteCount) {
+        abortController.abort()
+      }
+    },
   }
 
-  // Combine chunks and take only the requested number of bytes.
+  try {
+    await sdk.download(writer, sharedObject, {
+      maxInflight: DOWNLOAD_MAX_INFLIGHT,
+      offset: BigInt(0),
+      length: BigInt(byteCount),
+    }, { signal: abortController.signal })
+  } catch (e) {
+    // Ignore abort errors - we abort intentionally when we have enough bytes
+    if (e instanceof Error && e.name !== 'AbortError') {
+      throw e
+    }
+  }
+
+  // Combine chunks and take only the requested number of bytes
   const bytes = new Uint8Array(Math.min(totalBytes, byteCount))
   let offset = 0
   for (const chunk of chunks) {

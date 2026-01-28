@@ -494,7 +494,8 @@ export function getSdk(): SdkInterface | null {
 
 /**
  * Update the metadata of a pinned object.
- */ export async function updateMetadata(
+ */
+export async function updateMetadata(
   pinnedObject: PinnedObjectInterface,
   metadata: ArrayBuffer
 ): Promise<void> {
@@ -503,7 +504,7 @@ export function getSdk(): SdkInterface | null {
     throw new Error('SDK not initialized')
   }
   pinnedObject.updateMetadata(metadata)
-  await sdk.saveObject(pinnedObject)
+  await sdk.updateObjectMetadata(pinnedObject)
 }
 
 /**
