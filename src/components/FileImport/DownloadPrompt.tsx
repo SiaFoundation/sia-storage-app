@@ -1,3 +1,4 @@
+import { CloudDownloadIcon } from 'lucide-react-native'
 import {
   ActivityIndicator,
   StyleSheet,
@@ -5,9 +6,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { CloudDownloadIcon } from 'lucide-react-native'
-import { colors, palette } from '../../styles/colors'
 import { useDownloadState } from '../../stores/downloads'
+import { colors, palette } from '../../styles/colors'
 
 type DownloadPromptProps = {
   fileId: string

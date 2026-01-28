@@ -37,7 +37,9 @@ export interface ProcessResult {
  * 2. Used to update the progress indicator phase
  * 3. Accumulated for error detection
  */
-export async function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
+export async function runProcess(
+  options: RunProcessOptions,
+): Promise<ProcessResult> {
   const { command, cwd, target, label, onChunk } = options
 
   const progress = new ProgressIndicator()
@@ -59,7 +61,7 @@ export async function runProcess(options: RunProcessOptions): Promise<ProcessRes
   // Read both streams concurrently
   const readStream = async (
     reader: ReadableStreamDefaultReader<Uint8Array>,
-    isStderr = false
+    _isStderr = false,
   ) => {
     while (true) {
       const { done, value } = await reader.read()
@@ -91,7 +93,7 @@ export async function runProcess(options: RunProcessOptions): Promise<ProcessRes
  */
 export async function runSimpleCommand(
   command: string[],
-  options: { cwd?: string } = {}
+  options: { cwd?: string } = {},
 ): Promise<{ success: boolean; stdout: string; stderr: string }> {
   const proc = Bun.spawn(command, {
     cwd: options.cwd,

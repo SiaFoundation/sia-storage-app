@@ -13,29 +13,29 @@ jest.mock('../config', () => ({
   SLAB_FILL_THRESHOLD: 0.9,
 }))
 
-import { getUploadManager, FileEntry } from './uploader'
-import {
-  SdkInterface,
+import type {
   PackedUploadInterface,
   PinnedObjectInterface,
+  SdkInterface,
 } from 'react-native-sia'
 import {
-  useUploadsStore,
-  getActiveUploads,
-  getUploadState,
-} from '../stores/uploads'
-import { readLocalObjectsForFile } from '../stores/localObjects'
-import { createFileRecord, readFileRecord } from '../stores/files'
-import { initializeDB, resetDb } from '../db'
-import {
-  UPLOAD_MAX_INFLIGHT,
-  UPLOAD_DATA_SHARDS,
-  UPLOAD_PARITY_SHARDS,
-  SLAB_SIZE,
   PACKER_IDLE_TIMEOUT,
   SLAB_FILL_THRESHOLD,
+  SLAB_SIZE,
+  UPLOAD_DATA_SHARDS,
+  UPLOAD_MAX_INFLIGHT,
+  UPLOAD_PARITY_SHARDS,
 } from '../config'
-import { LocalObject } from '../encoding/localObject'
+import { initializeDB, resetDb } from '../db'
+import type { LocalObject } from '../encoding/localObject'
+import { createFileRecord, readFileRecord } from '../stores/files'
+import { readLocalObjectsForFile } from '../stores/localObjects'
+import {
+  getActiveUploads,
+  getUploadState,
+  useUploadsStore,
+} from '../stores/uploads'
+import { type FileEntry, getUploadManager } from './uploader'
 
 jest.mock('react-native-sia', () => ({}))
 
@@ -68,7 +68,7 @@ jest.mock('../lib/localObjects', () => ({
       metadataSignature: new ArrayBuffer(64),
       createdAt: new Date(),
       updatedAt: new Date(),
-    })
+    }),
   ),
 }))
 
@@ -140,7 +140,7 @@ function createMockPinnedObject(): jest.Mocked<PinnedObjectInterface> {
 }
 
 function createMockPacker(
-  pinnedObject: jest.Mocked<PinnedObjectInterface>
+  pinnedObject: jest.Mocked<PinnedObjectInterface>,
 ): jest.Mocked<PackedUploadInterface> {
   return {
     add: jest.fn().mockResolvedValue(BigInt(1000)),
@@ -150,7 +150,7 @@ function createMockPacker(
 }
 
 function createMockSdk(
-  packer: jest.Mocked<PackedUploadInterface>
+  packer: jest.Mocked<PackedUploadInterface>,
 ): jest.Mocked<SdkInterface> {
   return {
     uploadPacked: jest.fn().mockResolvedValue(packer),
@@ -423,7 +423,7 @@ describe('UploadManager', () => {
       // Fill exactly to threshold (90%)
       const file1 = createFileEntry(
         'file1',
-        Math.floor(SLAB_SIZE * SLAB_FILL_THRESHOLD)
+        Math.floor(SLAB_SIZE * SLAB_FILL_THRESHOLD),
       )
       await manager.queueFiles([file1])
       expect(mockPacker.finalize).not.toHaveBeenCalled()

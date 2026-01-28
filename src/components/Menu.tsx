@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import type React from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Pressable,
+  type StyleProp,
   StyleSheet,
   View,
   type ViewStyle,
-  type StyleProp,
 } from 'react-native'
-import { palette, overlay } from '../styles/colors'
+import { overlay, palette } from '../styles/colors'
 
 type Props = {
   isOpen: boolean
@@ -34,11 +35,11 @@ export function Menu({
 
   const openTiming = useMemo(
     () => ({ toValue: 1, duration: 140, useNativeDriver: true }),
-    []
+    [],
   )
   const closeTiming = useMemo(
     () => ({ toValue: 0, duration: 120, useNativeDriver: true }),
-    []
+    [],
   )
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function Menu({
     if (!isOpen) return
     const ref = anchorRef?.current
     if (ref && typeof ref.measureInWindow === 'function') {
-      ref.measureInWindow((x: number, y: number, width: number) => {
+      ref.measureInWindow((_x: number, y: number, width: number) => {
         // Position menu aligned to the right of the anchor.
         setPosition({ top: y + (width ? 32 : 24), right: Math.max(8, 8) })
       })

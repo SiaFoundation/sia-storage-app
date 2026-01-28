@@ -1,11 +1,11 @@
-import { Switch, View, Text, Pressable, StyleSheet } from 'react-native'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import type { MenuStackParamList } from '../stacks/types'
 import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
+import { colors, palette } from '../styles/colors'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
 

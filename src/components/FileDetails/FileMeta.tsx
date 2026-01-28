@@ -1,20 +1,20 @@
 import { Fragment, useMemo } from 'react'
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native'
-import { colors, palette } from '../../styles/colors'
-import { updateFileRecord, type FileRecord } from '../../stores/files'
-import { FileStatus } from '../../lib/file'
-import { InfoCard } from '../InfoCard'
-import { LabeledValueRow } from '../LabeledValueRow'
-import { RowGroup } from '../Group'
-import { humanSize } from '../../lib/humanSize'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import useSWR from 'swr'
 import { decodeFileMetadata } from '../../encoding/fileMetadata'
-import { useShowAdvanced } from '../../stores/settings'
-import { InputRow } from '../InputRow'
 import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
-import useSWR from 'swr'
-import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
+import type { FileStatus } from '../../lib/file'
+import { humanSize } from '../../lib/humanSize'
+import { type FileRecord, updateFileRecord } from '../../stores/files'
 import { getFsFileUri } from '../../stores/fs'
+import { useShowAdvanced } from '../../stores/settings'
+import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
+import { colors, palette } from '../../styles/colors'
+import { RowGroup } from '../Group'
+import { InfoCard } from '../InfoCard'
+import { InputRow } from '../InputRow'
+import { LabeledValueRow } from '../LabeledValueRow'
 import { FileMap } from './FileMap'
 
 export function FileMeta({
@@ -44,9 +44,9 @@ export function FileMeta({
         records.map(async (thumb) => ({
           record: thumb,
           uri: await getFsFileUri(thumb),
-        }))
+        })),
       )
-    }
+    },
   )
   const { height: windowHeight } = useWindowDimensions()
   return (
@@ -195,7 +195,7 @@ export function FileMeta({
                     value={JSON.stringify(
                       decodeFileMetadata(pinnedObject.metadata()),
                       null,
-                      2
+                      2,
                     )}
                     numberOfLines={10}
                     isMonospace

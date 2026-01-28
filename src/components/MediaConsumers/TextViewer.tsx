@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ScrollView,
-  Text,
-  StyleSheet,
-  ViewStyle,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
   View,
+  type ViewStyle,
 } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'

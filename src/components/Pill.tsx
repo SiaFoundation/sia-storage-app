@@ -1,6 +1,6 @@
-import React from 'react'
+import type React from 'react'
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
-import { overlay, whiteA, palette } from '../styles/colors'
+import { overlay, palette, whiteA } from '../styles/colors'
 
 export function Pill({
   selected = false,

@@ -1,10 +1,10 @@
+import { THUMBNAIL_SCANNER_INTERVAL } from '../config'
+import { db } from '../db'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
-import { db } from '../db'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
-import { readThumbnailSizesForHash } from '../stores/thumbnails'
 import { getFsFileUri } from '../stores/fs'
-import { THUMBNAIL_SCANNER_INTERVAL } from '../config'
+import { readThumbnailSizesForHash } from '../stores/thumbnails'
 import { ensureThumbnailForSize } from './thumbnailer'
 
 const MAX_THUMBS_PER_TICK = 10
@@ -40,12 +40,12 @@ export type ThumbnailScannerResult = {
 async function logOverallProgress() {
   try {
     const originalsRow = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND thumbForHash IS NULL`
+      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND thumbForHash IS NULL`,
     )
     const thumbsRow = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NOT NULL AND thumbSize IN (${ThumbSizes.join(
-        ','
-      )})`
+        ',',
+      )})`,
     )
     const originals = originalsRow?.count ?? 0
     const thumbs = thumbsRow?.count ?? 0
@@ -55,8 +55,8 @@ async function logOverallProgress() {
     logger.debug(
       'thumbnailScanner',
       `overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
-        percent * 100
-      )}%`
+        percent * 100,
+      )}%`,
     )
   } catch (e) {
     logger.error('thumbnailScanner', 'progress error', e)
@@ -78,7 +78,7 @@ type CandidateCursor = {
 
 async function queryCandidateOriginals(
   limit: number,
-  excludeIds?: Set<string>
+  excludeIds?: Set<string>,
 ): Promise<CandidateRow[]> {
   const results: CandidateRow[] = []
   const seenIds = excludeIds ?? new Set<string>()
@@ -108,7 +108,7 @@ async function queryCandidateOriginals(
        HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
        ORDER BY f.createdAt DESC, f.id DESC
        LIMIT ?`,
-      ...params
+      ...params,
     )
 
     if (batch.length === 0) {
@@ -163,7 +163,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
         // Determine missing sizes for this original so we don't attempt existing ones.
         const existingSizes = await readThumbnailSizesForHash(c.hash)
         const missingSizes = ThumbSizes.filter(
-          (s) => !existingSizes.includes(s)
+          (s) => !existingSizes.includes(s),
         )
         if (missingSizes.length === 0) {
           summary.skippedFullyCovered.push({ fileId: c.id, hash: c.hash })
@@ -188,15 +188,15 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
           `candidate id=${c.id} hash=${
             c.hash
           } existingSizes=${existingSizes.join(
-            ','
-          )} missingSizes=${missingSizes.join(',')}`
+            ',',
+          )} missingSizes=${missingSizes.join(',')}`,
         )
 
         for (const size of missingSizes) {
           if (producedCount >= MAX_THUMBS_PER_TICK) break
           logger.debug(
             'thumbnailScanner',
-            `attempt size id=${c.id} size=${size}`
+            `attempt size id=${c.id} size=${size}`,
           )
           summary.attempts.push({
             originalId: c.id,
@@ -240,7 +240,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
     }
     logger.info(
       'thumbnailScanner',
-      `batch produced=${summary.produced.length}/${summary.processedCandidates} skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates} skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates} errors=${summary.errors.length}/${summary.processedCandidates} deduplicated=${summary.deduplicated.length}/${summary.processedCandidates}`
+      `batch produced=${summary.produced.length}/${summary.processedCandidates} skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates} skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates} errors=${summary.errors.length}/${summary.processedCandidates} deduplicated=${summary.deduplicated.length}/${summary.processedCandidates}`,
     )
     await logOverallProgress()
   } catch (e) {

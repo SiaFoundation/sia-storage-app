@@ -1,6 +1,6 @@
-import { Text, View, StyleSheet, ActivityIndicator } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import type { SWRResponse } from 'swr'
 import { colors, palette } from '../styles/colors'
-import { SWRResponse } from 'swr'
 
 export function SWROverlay<T>({
   response,

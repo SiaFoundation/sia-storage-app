@@ -7,7 +7,7 @@ import { logger } from './logger'
  */
 export async function readFileBytes(
   uri: string,
-  byteCount: number
+  byteCount: number,
 ): Promise<Uint8Array | null> {
   try {
     const file = new File(uri)

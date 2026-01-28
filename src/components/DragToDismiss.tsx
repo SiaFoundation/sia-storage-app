@@ -1,12 +1,12 @@
-import React, { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  runOnJS,
   interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated'
 
 type Props = {
@@ -62,13 +62,13 @@ export function DragToDismiss({
       translateY.value,
       [0, dismissThreshold],
       [1, 0.75],
-      'clamp'
+      'clamp',
     )
     const borderRadius = interpolate(
       translateY.value,
       [0, 50],
       [0, 24],
-      'clamp'
+      'clamp',
     )
     return {
       transform: [{ translateY: translateY.value }, { scale }],

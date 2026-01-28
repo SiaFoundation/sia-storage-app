@@ -1,7 +1,11 @@
-import React from 'react'
-import { Pressable, StyleSheet } from 'react-native'
+import type React from 'react'
+import {
+  Pressable,
+  type StyleProp,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native'
 import { palette, whiteA } from '../styles/colors'
-import { type StyleProp, type ViewStyle } from 'react-native'
 
 type Props = {
   onPress?: () => void

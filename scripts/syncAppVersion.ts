@@ -10,4 +10,5 @@
  */
 
 import pkg from '../package.json'
+
 console.log(`Version synced: ${pkg.version}`)

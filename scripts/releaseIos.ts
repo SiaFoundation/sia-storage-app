@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * iOS Release Build & Distribution
  *
@@ -12,8 +13,8 @@
  *   APP_STORE_CONNECT_API_KEY_JSON - App Store Connect API key
  */
 
-import { $ } from 'bun'
 import path from 'node:path'
+import { $ } from 'bun'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 

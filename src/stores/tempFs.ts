@@ -24,7 +24,7 @@ function getTempDownloadFileForId(file: TempFsFileInfo): File {
 }
 
 export async function getOrCreateTempDownloadFile(
-  file: TempFsFileInfo
+  file: TempFsFileInfo,
 ): Promise<File> {
   const f = getTempDownloadFileForId(file)
   const info = f.info()
@@ -35,7 +35,7 @@ export async function getOrCreateTempDownloadFile(
 }
 
 export async function removeTempDownloadFile(
-  file: TempFsFileInfo
+  file: TempFsFileInfo,
 ): Promise<void> {
   const f = getTempDownloadFileForId(file)
   const info = f.info()

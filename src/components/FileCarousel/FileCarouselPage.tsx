@@ -1,11 +1,11 @@
-import React, { memo } from 'react'
-import { StyleSheet, Pressable } from 'react-native'
-import { FileViewer } from '../FileViewer'
-import { type FileRecord } from '../../stores/files'
+import { memo } from 'react'
+import { Pressable, StyleSheet } from 'react-native'
 import {
-  useAutoDownload,
   detailsShouldAutoDownload,
+  useAutoDownload,
 } from '../../hooks/useAutoDownload'
+import type { FileRecord } from '../../stores/files'
+import { FileViewer } from '../FileViewer'
 
 type Props = {
   file: FileRecord

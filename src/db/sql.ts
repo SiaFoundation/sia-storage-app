@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite'
+import type * as SQLite from 'expo-sqlite'
 import { db } from '.'
 
 type SqlValue = string | number | boolean | null | undefined
@@ -24,11 +24,11 @@ type InsertOptions = {
 }
 
 export async function sqlInsert<
-  T extends Record<string, string | number | boolean | null | undefined>
+  T extends Record<string, string | number | boolean | null | undefined>,
 >(
   table: string,
   row: T,
-  options?: InsertOptions
+  options?: InsertOptions,
 ): Promise<SQLite.SQLiteRunResult> {
   const columns = Object.keys(row)
   const valuesSql: string[] = []
@@ -49,7 +49,7 @@ export async function sqlInsert<
     : 'INSERT'
 
   const sql = `${verb} INTO ${table} (${columns.join(
-    ', '
+    ', ',
   )}) VALUES (${valuesSql.join(', ')})`
   return await runSql(sql, params)
 }
@@ -57,7 +57,7 @@ export async function sqlInsert<
 function normalizeSqlValue(value: SqlValue): string | number {
   if (value === null || value === undefined) {
     throw new Error(
-      'Attempted to bind nullish SQL parameter. Inline NULL in the statement instead.'
+      'Attempted to bind nullish SQL parameter. Inline NULL in the statement instead.',
     )
   }
   if (typeof value === 'boolean') {
@@ -71,7 +71,7 @@ function normalizeSqlValue(value: SqlValue): string | number {
 
 export async function runSql(
   sql: string,
-  params: SqlValue[] = []
+  params: SqlValue[] = [],
 ): Promise<SQLite.SQLiteRunResult> {
   const normalized = params.map((value) => normalizeSqlValue(value))
   return await db().runAsync(sql, ...normalized)
@@ -106,7 +106,7 @@ function buildSqlAssignments(fields: Record<string, SqlValue>): SqlFragment {
 }
 
 function buildSqlWhereClause(
-  conditions?: Record<string, SqlValue>
+  conditions?: Record<string, SqlValue>,
 ): SqlFragment {
   if (!conditions) {
     return { clause: '', params: [] }
@@ -136,7 +136,7 @@ function buildSqlWhereClause(
 export async function sqlUpdate(
   table: string,
   fields: Record<string, SqlValue>,
-  conditions: Record<string, SqlValue>
+  conditions: Record<string, SqlValue>,
 ): Promise<SQLite.SQLiteRunResult> {
   const { clause: assignments, params: setParams } = buildSqlAssignments(fields)
   if (!assignments) {
@@ -150,7 +150,7 @@ export async function sqlUpdate(
 
 export async function sqlDelete(
   table: string,
-  conditions?: Record<string, SqlValue>
+  conditions?: Record<string, SqlValue>,
 ): Promise<SQLite.SQLiteRunResult> {
   const { clause, params } = buildSqlWhereClause(conditions)
   const sql = `DELETE FROM ${table}${clause}`

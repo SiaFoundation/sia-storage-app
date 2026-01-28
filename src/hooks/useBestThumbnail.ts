@@ -1,12 +1,12 @@
+import { useEffect } from 'react'
 import useSWR from 'swr'
-import { useIsInitializing } from '../stores/app'
-import { useIsConnected } from '../stores/sdk'
 import { useFileStatus } from '../lib/file'
 import { useDownload } from '../managers/downloader'
-import { useEffect } from 'react'
-import { readBestThumbnailByHash, thumbnailSwr } from '../stores/thumbnails'
-import { FileRecord, ThumbSize } from '../stores/files'
+import { useIsInitializing } from '../stores/app'
+import type { FileRecord, ThumbSize } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
+import { useIsConnected } from '../stores/sdk'
+import { readBestThumbnailByHash, thumbnailSwr } from '../stores/thumbnails'
 
 /**
  * useBestThumbnailUri returns the local URI of the best available thumbnail for a file.
@@ -20,12 +20,12 @@ import { getFsFileUri } from '../stores/fs'
  */
 export function useBestThumbnailUri(
   file?: FileRecord,
-  thumbSize: ThumbSize = 512
+  thumbSize: ThumbSize = 512,
 ) {
   // Fetch the best thumbnail record.
   const thumbRecord = useSWR(
     file ? thumbnailSwr.getKey(`${file.hash}/${thumbSize}/record`) : null,
-    () => (file ? readBestThumbnailByHash(file.hash, thumbSize) : null)
+    () => (file ? readBestThumbnailByHash(file.hash, thumbSize) : null),
   )
 
   // Auto-download the chosen thumbnail.
@@ -41,7 +41,7 @@ export function useBestThumbnailUri(
     if (status.data?.isDownloaded) return
     if (status.data?.isDownloading) return
     download()
-  }, [isInitializing, isConnected, thumbRecord.data, status.data])
+  }, [isInitializing, isConnected, thumbRecord.data, status.data, download])
 
   // Get the URI for the thumbnail.
   const response = useSWR(
@@ -49,9 +49,10 @@ export function useBestThumbnailUri(
     async () => {
       if (!thumbRecord.data) return null
       return await getFsFileUri(thumbRecord.data)
-    }
+    },
   )
   // Update when status changes so the thumbnail is re-rendered when the uri becomes available.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: status.data triggers mutate intentionally
   useEffect(() => {
     response.mutate()
   }, [status.data])

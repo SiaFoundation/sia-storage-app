@@ -9,7 +9,7 @@ let timeoutCallback: (taskId: string) => void
 jest.mock('react-native-background-fetch', () => ({
   __esModule: true,
   default: {
-    configure: jest.fn((config, onTask, onTimeout) => {
+    configure: jest.fn((_config, onTask, onTimeout) => {
       taskCallback = onTask
       timeoutCallback = onTimeout
       return Promise.resolve(0)
@@ -22,7 +22,7 @@ jest.mock('react-native-background-fetch', () => ({
 
 // Track timer state to simulate BackgroundTimer behavior
 // Variables must be prefixed with 'mock' to be accessible inside jest.mock()
-let mockTimerCallbacks: Map<number, () => void> = new Map()
+const mockTimerCallbacks: Map<number, () => void> = new Map()
 let mockNextTimerId = 1
 
 jest.mock('react-native-background-timer', () => ({
@@ -67,8 +67,9 @@ const mockTimer = jest.mocked(BackgroundTimer)
 const flushPromises = () => new Promise(setImmediate)
 
 function completeNextDelay() {
-  const [id, cb] = mockTimerCallbacks.entries().next().value || []
-  if (cb) {
+  const entry = mockTimerCallbacks.entries().next().value
+  if (entry) {
+    const [id, cb] = entry
     mockTimerCallbacks.delete(id)
     cb()
   }
@@ -138,7 +139,10 @@ describe('backgroundTasks', () => {
 
   describe('timeout cancellation flow', () => {
     it('abort function resolves delay immediately, allowing clean exit', async () => {
-      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
+      mockGetFileStatsLocal.mockResolvedValue({
+        count: 100,
+        totalBytes: 100000,
+      })
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
@@ -173,7 +177,10 @@ describe('backgroundTasks', () => {
 
   describe('task re-invocation handling', () => {
     it('new task aborts previous task delay to prevent stale state', async () => {
-      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
+      mockGetFileStatsLocal.mockResolvedValue({
+        count: 100,
+        totalBytes: 100000,
+      })
 
       // Start first task
       const task1 = taskCallback('com.transistorsoft.fetch')

@@ -3,14 +3,14 @@ import { db } from '../db'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import {
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
+import {
   deleteFsFileMetadata,
   fsTriggerRefresh,
   listFilesInFsStorageDirectory,
 } from '../stores/fs'
-import {
-  getAsyncStorageNumber,
-  setAsyncStorageNumber,
-} from '../stores/asyncStore'
 
 function extractFileIdFromName(name: string): string | null {
   const dotIndex = name.lastIndexOf('.')
@@ -51,12 +51,12 @@ export async function runFsOrphanScanner(): Promise<
         await fsTriggerRefresh(fileId)
         logger.info(
           'fsOrphanScanner',
-          `removed unindexed file fileId=${fileId} uri=${file.uri}`
+          `removed unindexed file fileId=${fileId} uri=${file.uri}`,
         )
       } catch (error) {
         logger.error(
           'fsOrphanScanner',
-          `failed to delete file fileId=${fileId} uri=${file.uri} error=${error}`
+          `failed to delete file fileId=${fileId} uri=${file.uri} error=${error}`,
         )
       }
     }
@@ -83,7 +83,7 @@ export async function isFsFileOrphaned(fileId: string): Promise<boolean> {
         EXISTS(SELECT 1 FROM fs WHERE fileId = ?) AS hasFs,
         EXISTS(SELECT 1 FROM files WHERE id = ?) AS hasFile`,
     fileId,
-    fileId
+    fileId,
   )
   return !(row?.hasFs === 1 && row?.hasFile === 1)
 }

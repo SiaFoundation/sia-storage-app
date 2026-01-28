@@ -8,7 +8,7 @@ export async function setAsyncStorageBoolean(key: string, value: boolean) {
 
 export async function getAsyncStorageBoolean(
   key: string,
-  initialValue = false
+  initialValue = false,
 ) {
   return retry('getAsyncStorageBoolean', async () => {
     const found = await AsyncStorage.getItem(key)
@@ -46,7 +46,7 @@ export async function getAsyncStorageNumber(key: string, initialValue = 0) {
 
 export async function setAsyncStorageString<T extends string>(
   key: string,
-  value: T
+  value: T,
 ) {
   validateKey(key)
   return AsyncStorage.setItem(key, value)
@@ -54,7 +54,7 @@ export async function setAsyncStorageString<T extends string>(
 
 export async function getAsyncStorageString<T extends string>(
   key: string,
-  initialValue: T
+  initialValue: T,
 ): Promise<T> {
   return retry('getAsyncStorageString', async () => {
     const found = await AsyncStorage.getItem(key)
@@ -74,7 +74,7 @@ export type JsonCodec<TStorage, TDomain> = {
 export async function setAsyncStorageJSON<TStorage, TDomain>(
   key: string,
   value: TDomain | undefined,
-  codec: JsonCodec<TStorage, TDomain>
+  codec: JsonCodec<TStorage, TDomain>,
 ) {
   validateKey(key)
   if (value == null) {
@@ -92,7 +92,7 @@ export async function setAsyncStorageJSON<TStorage, TDomain>(
 export async function getAsyncStorageJSON<TStorage, TDomain>(
   key: string,
   codec: JsonCodec<TStorage, TDomain>,
-  initialValue?: TDomain
+  initialValue?: TDomain,
 ): Promise<TDomain | undefined> {
   const storedValue = await retry('getAsyncStorageJSON', async () => {
     const found = await AsyncStorage.getItem(key)
@@ -113,7 +113,7 @@ export async function getAsyncStorageJSON<TStorage, TDomain>(
 export function validateKey(key: string) {
   if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
     throw new Error(
-      'AsyncStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
+      'AsyncStore key must contain only alphanumeric characters, dots, hyphens, and underscores',
     )
   }
 }

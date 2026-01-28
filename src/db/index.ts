@@ -1,8 +1,8 @@
 import * as SQLite from 'expo-sqlite'
-import { runMigrations } from './migrations'
-import { type MigrationProgressHandler } from './migrations/types'
 import { logger } from '../lib/logger'
 import { Mutex } from '../lib/mutex'
+import { runMigrations } from './migrations'
+import type { MigrationProgressHandler } from './migrations/types'
 
 export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
@@ -22,12 +22,12 @@ export async function initializeDB(options?: {
 export async function resetDb() {
   await database.withTransactionAsync(async () => {
     const rows = await database.getAllAsync<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
     )
     logger.debug(
       'db',
       'dropping tables',
-      rows.map((r) => r.name)
+      rows.map((r) => r.name),
     )
     for (let i = 0; i < rows.length; i++) {
       const table = rows[i].name

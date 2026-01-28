@@ -1,6 +1,6 @@
+import { Buffer } from 'buffer'
 import RNFS from 'react-native-fs'
 import QuickCrypto from 'react-native-quick-crypto'
-import { Buffer } from 'buffer'
 
 export type HashResult = `sha256:${string}`
 
@@ -9,7 +9,7 @@ export type HashResult = `sha256:${string}`
  * - Raw byte SHA-256 for exact file identity.
  */
 export async function calculateContentHash(
-  uri: string
+  uri: string,
 ): Promise<HashResult | null> {
   if (!uri || uri === '') {
     return null

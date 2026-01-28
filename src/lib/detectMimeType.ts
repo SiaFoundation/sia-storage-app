@@ -1,4 +1,4 @@
-import { type MimeType } from './fileTypes'
+import type { MimeType } from './fileTypes'
 import { logger } from './logger'
 import { readFileBytes } from './readFileBytes'
 
@@ -9,7 +9,7 @@ export const MAGIC_BYTES_LENGTH = 32
  * Reads first 32 bytes from a file URI and checks against known signatures.
  */
 export async function detectMimeType(
-  uri: string | undefined
+  uri: string | undefined,
 ): Promise<MimeType | null> {
   if (!uri) return null
 

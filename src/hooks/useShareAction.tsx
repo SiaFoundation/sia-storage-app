@@ -1,12 +1,12 @@
-import { useCallback } from 'react'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useToast } from '../lib/toastContext'
-import { useSdk } from '../stores/sdk'
-import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
-import { useFileDetails } from '../stores/files'
+import { useCallback } from 'react'
 import Share from 'react-native-share'
+import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
 import { logger } from '../lib/logger'
 import { generateSiaShareUrl } from '../lib/shareUrl'
+import { useToast } from '../lib/toastContext'
+import { useFileDetails } from '../stores/files'
+import { useSdk } from '../stores/sdk'
 
 export function useShareAction({ fileId }: { fileId: string }) {
   const toast = useToast()
@@ -22,7 +22,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
     if (!result) return
     const pinnedObject = await getPinnedObject(
       result.indexerURL,
-      result.sealedObject
+      result.sealedObject,
     )
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)

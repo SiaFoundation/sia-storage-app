@@ -1,12 +1,11 @@
 import { File, Paths } from 'expo-file-system'
-import { logger } from './logger'
-import { readFileRecordByContentHash } from '../stores/files'
-import { uniqueId } from './uniqueId'
-import { calculateContentHash } from './contentHash'
-import { copyFileToFs } from '../stores/fs'
-import { createFileRecord } from '../stores/files'
 import { queueUploadForFileId } from '../managers/uploader'
+import { createFileRecord, readFileRecordByContentHash } from '../stores/files'
+import { copyFileToFs } from '../stores/fs'
 import { readLogs, useLogsStore } from '../stores/logs'
+import { calculateContentHash } from './contentHash'
+import { logger } from './logger'
+import { uniqueId } from './uniqueId'
 
 /** Export logs to a library file. */
 export async function exportLogs(): Promise<string | null> {
@@ -25,7 +24,7 @@ export async function exportLogs(): Promise<string | null> {
         (entry) =>
           `${entry.timestamp} ${entry.level.toUpperCase()} [${entry.scope}] ${
             entry.message
-          }`
+          }`,
       )
       .join('\n')
 
@@ -53,7 +52,7 @@ export async function exportLogs(): Promise<string | null> {
     // Copy temp file to FS storage.
     const fsFileUri = await copyFileToFs(
       { id: fileId, type: 'text/plain' },
-      tempFile
+      tempFile,
     )
 
     // Clean up temp file.

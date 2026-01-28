@@ -15,7 +15,7 @@ function withBackgroundFetchMaven(config) {
     // Skip if already present.
     if (
       buildGradle.includes(
-        "project(':react-native-background-fetch').projectDir}/libs"
+        "project(':react-native-background-fetch').projectDir}/libs",
       )
     ) {
       return config

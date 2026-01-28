@@ -1,9 +1,8 @@
-import React from 'react'
-import { FlatList, ActivityIndicator, Platform } from 'react-native'
-import { FileRecord } from '../stores/files'
+import { ActivityIndicator, FlatList, Platform } from 'react-native'
+import { useFlatListControls } from '../hooks/useFlatListControls'
+import type { FileRecord } from '../stores/files'
 import { useFileList } from '../stores/library'
 import { FileListItem } from './FileListItem'
-import { useFlatListControls } from '../hooks/useFlatListControls'
 
 type Props = {
   onPressItem: (item: FileRecord) => void

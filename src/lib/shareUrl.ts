@@ -1,9 +1,9 @@
-import { PinnedObjectInterface, SdkInterface } from 'react-native-sia'
+import type { PinnedObjectInterface, SdkInterface } from 'react-native-sia'
 
 export function generateSiaShareUrl(
   sdk: SdkInterface,
   pinnedObject: PinnedObjectInterface,
-  expiresAt: Date
+  expiresAt: Date,
 ) {
   const shareUrl = sdk.shareObject(pinnedObject, expiresAt)
   return shareUrl.replace(/https?:\/\//, 'sia://')

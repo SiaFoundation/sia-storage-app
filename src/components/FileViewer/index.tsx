@@ -1,12 +1,12 @@
-import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
-import { useCallback, useMemo } from 'react'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
+import { useCallback, useMemo } from 'react'
+import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
 import { useDownload } from '../../managers/downloader'
 import { useDownloadState } from '../../stores/downloads'
+import type { FileRecord } from '../../stores/files'
 import { colors } from '../../styles/colors'
-import { FileRecord } from '../../stores/files'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
 import { ImageViewer } from '../MediaConsumers/ImageViewer'
 import { JSONViewer } from '../MediaConsumers/JSONViewer'
@@ -91,11 +91,11 @@ export function FileViewer({
       </View>
     )
   }, [
-    baseMediaStyle,
     isDownloading,
     isQueued,
     onDownloadPress,
     fileDownloadState?.progress,
+    file.size,
   ])
 
   const mediaContent = useMemo(() => {
@@ -188,7 +188,6 @@ export function FileViewer({
     )
   }, [
     DownloadPanel,
-    baseMediaStyle,
     fileUri,
     isDownloaded,
     lowerCasedFileName,
@@ -200,6 +199,7 @@ export function FileViewer({
     onViewerControlPress,
     onSwipeLeft,
     onSwipeRight,
+    onImageZoomChange,
   ])
 
   return <View style={styles.container}>{mediaContent}</View>

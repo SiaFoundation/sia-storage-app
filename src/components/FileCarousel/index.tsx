@@ -1,36 +1,37 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import {
-  View,
-  StyleSheet,
-  Text,
-  AccessibilityInfo,
-  Pressable,
-  LayoutChangeEvent,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Clipboard from '@react-native-clipboard/clipboard'
-import Share from 'react-native-share'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { EyeIcon, EyeOffIcon } from 'lucide-react-native'
-import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel'
-
-import { palette } from '../../styles/colors'
-import BlocksLoader from '../BlocksLoader'
-import { useVirtualFileList } from '../../stores/fileCarousel'
-import { FileRecord } from '../../stores/files'
-import { FileCarouselHeader } from './FileCarouselHeader'
-import { FileCarouselControlBar } from './FileCarouselControlBar'
-import { FileCarouselPage } from './FileCarouselPage'
-import { FileDetails } from '../FileDetails'
-import { useSdk } from '../../stores/sdk'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AccessibilityInfo,
+  type LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import Carousel, {
+  type ICarouselInstance,
+} from 'react-native-reanimated-carousel'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Share from 'react-native-share'
 import {
   getOneSealedObject,
   getPinnedObject,
   useFileStatus,
 } from '../../lib/file'
-import { generateSiaShareUrl } from '../../lib/shareUrl'
 import { logger } from '../../lib/logger'
+import { generateSiaShareUrl } from '../../lib/shareUrl'
 import { useToast } from '../../lib/toastContext'
+import { useVirtualFileList } from '../../stores/fileCarousel'
+import type { FileRecord } from '../../stores/files'
+import { useSdk } from '../../stores/sdk'
+import { palette } from '../../styles/colors'
+import BlocksLoader from '../BlocksLoader'
+import { FileDetails } from '../FileDetails'
+import { FileCarouselControlBar } from './FileCarouselControlBar'
+import { FileCarouselHeader } from './FileCarouselHeader'
+import { FileCarouselPage } from './FileCarouselPage'
 
 type Props = {
   initialId: string
@@ -68,9 +69,12 @@ export function FileCarousel({
     onClose()
   }, [onClose, toast])
 
-  const handleFileUpdated = useCallback((message: string) => {
-    toast.show(message)
-  }, [toast])
+  const handleFileUpdated = useCallback(
+    (message: string) => {
+      toast.show(message)
+    },
+    [toast],
+  )
 
   const {
     totalCount,
@@ -108,11 +112,11 @@ export function FileCarousel({
   // Unlock screen orientation.
   useEffect(() => {
     ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.DEFAULT
+      ScreenOrientation.OrientationLock.DEFAULT,
     ).catch(() => {})
     return () => {
       ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.PORTRAIT_UP
+        ScreenOrientation.OrientationLock.PORTRAIT_UP,
       ).catch(() => {})
     }
   }, [])
@@ -121,7 +125,7 @@ export function FileCarousel({
     AccessibilityInfo.isScreenReaderEnabled().then(setIsScreenReaderEnabled)
     const sub = AccessibilityInfo.addEventListener(
       'screenReaderChanged',
-      setIsScreenReaderEnabled
+      setIsScreenReaderEnabled,
     )
     return () => {
       sub.remove()
@@ -135,7 +139,7 @@ export function FileCarousel({
       if (!result) return
       const pinnedObject = await getPinnedObject(
         result.indexerURL,
-        result.sealedObject
+        result.sealedObject,
       )
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + 1)
@@ -180,7 +184,7 @@ export function FileCarousel({
       setIsZoomed(zoomed)
       onZoomChange?.(zoomed)
     },
-    [onZoomChange]
+    [onZoomChange],
   )
 
   const handleSnapToItem = useCallback(
@@ -188,7 +192,7 @@ export function FileCarousel({
       setCurrentIndex(index)
       setIsZoomed(false)
     },
-    [setCurrentIndex]
+    [setCurrentIndex],
   )
 
   const goToPrev = useCallback(() => {
@@ -249,7 +253,7 @@ export function FileCarousel({
       goToPrev,
       viewStyle,
       navigationProxy,
-    ]
+    ],
   )
 
   return (

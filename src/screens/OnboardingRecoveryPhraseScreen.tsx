@@ -1,28 +1,28 @@
-import React, { useState } from 'react'
+import Clipboard from '@react-native-clipboard/clipboard'
+import type { RouteProp } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useState } from 'react'
 import {
-  StyleSheet,
-  View,
-  Text,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { RouteProp } from '@react-navigation/native'
-import type { OnboardingStackParamList } from '../stacks/types'
-import { palette } from '../styles/colors'
+import { generateRecoveryPhrase } from 'react-native-sia'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
-import { useToast } from '../lib/toastContext'
-import { generateRecoveryPhrase } from 'react-native-sia'
-import Clipboard from '@react-native-clipboard/clipboard'
-import { logger } from '../lib/logger'
 import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
-import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
 import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistration'
+import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
+import { logger } from '../lib/logger'
+import { useToast } from '../lib/toastContext'
+import type { OnboardingStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
   const nav =
@@ -92,7 +92,9 @@ export default function OnboardingRecoveryPhraseScreen() {
                 ringStart={0}
               />
             </View>
-            <Text testID="recovery-title" style={styles.title}>Recovery Phrase</Text>
+            <Text testID="recovery-title" style={styles.title}>
+              Recovery Phrase
+            </Text>
           </View>
 
           <Text style={styles.subtitle}>
@@ -108,7 +110,11 @@ export default function OnboardingRecoveryPhraseScreen() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text testID="recovery-phrase-text" style={styles.phraseText} selectable>
+                  <Text
+                    testID="recovery-phrase-text"
+                    style={styles.phraseText}
+                    selectable
+                  >
                     {recoveryPhrase ?? ''}
                   </Text>
                 </ScrollView>
@@ -136,7 +142,10 @@ export default function OnboardingRecoveryPhraseScreen() {
                 </Button>
               </View>
 
-              <Pressable testID="recovery-toggle-manual" onPress={() => setMode('manual')}>
+              <Pressable
+                testID="recovery-toggle-manual"
+                onPress={() => setMode('manual')}
+              >
                 <Text style={styles.toggleText}>
                   Already have a recovery phrase?
                 </Text>
@@ -153,7 +162,10 @@ export default function OnboardingRecoveryPhraseScreen() {
                 editable={!isSubmitting}
               />
 
-              <Pressable testID="recovery-toggle-generated" onPress={() => setMode('generated')}>
+              <Pressable
+                testID="recovery-toggle-generated"
+                onPress={() => setMode('generated')}
+              >
                 <Text style={styles.toggleText}>
                   Generate a new recovery phrase instead.
                 </Text>

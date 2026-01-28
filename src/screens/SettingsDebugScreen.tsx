@@ -1,8 +1,8 @@
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { useMenuHeader } from '../hooks/useMenuHeader'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { SettingsDebugHash } from '../components/SettingsDebugHash'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { useMenuHeader } from '../hooks/useMenuHeader'
+import type { MenuStackParamList } from '../stacks/types'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Debug'>
 

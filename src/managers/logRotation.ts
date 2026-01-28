@@ -16,7 +16,7 @@ export async function runLogRotation(): Promise<void> {
     }
     // Count total logs.
     const countResult = await db().getFirstAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM logs'
+      'SELECT COUNT(*) as count FROM logs',
     )
     const count = countResult?.count ?? 0
 
@@ -30,7 +30,7 @@ export async function runLogRotation(): Promise<void> {
       `DELETE FROM logs WHERE id IN (
         SELECT id FROM logs ORDER BY createdAt ASC, id ASC LIMIT ?
       )`,
-      toDelete
+      toDelete,
     )
     logger.debug('logRotation', `Rotated ${toDelete} log entries`)
   } catch (error) {

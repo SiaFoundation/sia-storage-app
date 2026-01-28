@@ -5,7 +5,7 @@ export const setItemAsync = jest.fn(async (key: string, value: string) => {
 })
 
 export const getItemAsync = jest.fn(async (key: string) => {
-  return store.has(key) ? store.get(key) ?? null : null
+  return store.has(key) ? (store.get(key) ?? null) : null
 })
 
 export const deleteItemAsync = jest.fn(async (key: string) => {

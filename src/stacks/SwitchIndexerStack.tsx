@@ -1,13 +1,12 @@
-import React from 'react'
-import { Pressable, StyleSheet } from 'react-native'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { X } from 'lucide-react-native'
-import { type SwitchIndexerStackParamList } from './types'
+import { Pressable, StyleSheet } from 'react-native'
+import { SwitchFinishedScreen } from '../screens/SwitchFinishedScreen'
 import { SwitchIndexerScreen } from '../screens/SwitchIndexerScreen'
 import { SwitchRecoveryPhraseScreen } from '../screens/SwitchRecoveryPhraseScreen'
-import { SwitchFinishedScreen } from '../screens/SwitchFinishedScreen'
 import { palette } from '../styles/colors'
+import type { SwitchIndexerStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<SwitchIndexerStackParamList>()
 

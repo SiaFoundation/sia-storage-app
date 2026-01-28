@@ -1,9 +1,8 @@
-import React from 'react'
+import { TriangleAlertIcon } from 'lucide-react-native'
 import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { TriangleAlertIcon } from 'lucide-react-native'
-import { palette } from '../styles/colors'
 import { useCurrentInitStep, useInitializationError } from '../stores/app'
+import { palette } from '../styles/colors'
 import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'
 

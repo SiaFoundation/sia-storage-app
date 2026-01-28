@@ -1,13 +1,13 @@
-import { SlotPool } from '../lib/slotPool'
-import { settingsSwr } from '../stores/settings'
-import { SingleInit } from '../lib/singleflight'
-import {
-  setAsyncStorageNumber,
-  getAsyncStorageNumber,
-} from '../stores/asyncStore'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import { logger } from '../lib/logger'
 import { DEFAULT_MAX_DOWNLOADS } from '../config'
+import { logger } from '../lib/logger'
+import { createGetterAndSWRHook } from '../lib/selectors'
+import { SingleInit } from '../lib/singleflight'
+import { SlotPool } from '../lib/slotPool'
+import {
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
+import { settingsSwr } from '../stores/settings'
 
 let downloadPool: SlotPool | null = null
 const initDownloadOnce = new SingleInit()
@@ -47,5 +47,5 @@ export async function setMaxDownloads(value: number) {
 
 export const [getMaxDownloads, useMaxDownloads] = createGetterAndSWRHook(
   settingsSwr.getKey('maxDownloads'),
-  () => getAsyncStorageNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS)
+  () => getAsyncStorageNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS),
 )

@@ -1,10 +1,10 @@
-import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import * as MediaLibrary from 'expo-media-library'
+import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 import {
-  initSyncPhotosArchive,
   getPhotosArchiveCursor,
+  initSyncPhotosArchive,
   restartPhotosArchiveCursor,
   setAutoSyncPhotosArchive,
 } from './syncPhotosArchive'
@@ -60,7 +60,7 @@ function asset(id: string, name: string, time: number): MediaLibrary.Asset {
 }
 
 function page(
-  a: MediaLibrary.Asset[]
+  a: MediaLibrary.Asset[],
 ): MediaLibrary.PagedInfo<MediaLibrary.Asset> {
   return {
     assets: a,
@@ -77,7 +77,7 @@ describe('syncPhotosArchive', () => {
 
   it('iterates backward adding files until exhausting the archive', async () => {
     const ensureMediaLibraryPermissionMock = jest.mocked(
-      ensureMediaLibraryPermission
+      ensureMediaLibraryPermission,
     )
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
     const processAssetsMock = jest.mocked(processAssets)
@@ -87,7 +87,7 @@ describe('syncPhotosArchive', () => {
 
     getAssetsAsyncMock.mockImplementation(
       async (
-        opts?: MediaLibrary.AssetsOptions
+        opts?: MediaLibrary.AssetsOptions,
       ): Promise<MediaLibrary.PagedInfo<MediaLibrary.Asset>> => {
         const t = opts?.createdBefore
           ? new Date(opts.createdBefore).getTime()
@@ -99,7 +99,7 @@ describe('syncPhotosArchive', () => {
           ])
         if (t >= 4_999) return page([asset('b3', 'three.jpg', 1_000)])
         return page([])
-      }
+      },
     )
 
     processAssetsMock

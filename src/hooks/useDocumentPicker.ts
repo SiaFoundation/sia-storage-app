@@ -1,10 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker'
 import { useCallback, useRef } from 'react'
 import { logger } from '../lib/logger'
+import { processAssets } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
-import { processAssets } from '../lib/processAssets'
-import { FileRecord } from '../stores/files'
+import type { FileRecord } from '../stores/files'
 
 export function useDocumentPicker() {
   const toast = useToast()
@@ -36,7 +36,7 @@ export function useDocumentPicker() {
           type: a.mimeType,
           timestamp: new Date(a.lastModified).toISOString(),
           sourceUri: a.uri,
-        }))
+        })),
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))
@@ -49,7 +49,7 @@ export function useDocumentPicker() {
     } finally {
       isPickingRef.current = false
     }
-  }, [])
+  }, [toast.show])
 }
 
 export function useDocumentPickerAndUpload() {

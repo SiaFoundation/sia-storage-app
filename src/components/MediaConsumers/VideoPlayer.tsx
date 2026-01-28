@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
-import { Pressable, StyleSheet, View, ViewStyle } from 'react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { PlayIcon } from 'lucide-react-native'
-import { palette } from '../../styles/colors'
+import { useCallback, useRef, useState } from 'react'
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { logger } from '../../lib/logger'
+import { palette } from '../../styles/colors'
 
 export function VideoPlayer({
   source,
@@ -27,7 +27,7 @@ export function VideoPlayer({
     } catch (error) {
       logger.error('VideoPlayer', 'Failed to enter fullscreen:', error)
     }
-  }, [onViewerControlPress, player])
+  }, [player])
 
   const handlePressIn = useCallback(() => {
     onViewerControlPress?.()

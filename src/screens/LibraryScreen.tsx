@@ -1,39 +1,46 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, Image, ActivityIndicator, Animated } from 'react-native'
-import { colors, overlay, whiteA, palette } from '../styles/colors'
-import { Gradient } from '../components/Gradient'
-import { ScreenHeader } from '../components/ScreenHeader'
-import { FileGallery } from '../components/FileGallery'
-import { type MainStackParamList } from '../stacks/types'
-import {
-  useFileList,
-  useLibrary,
-  type Category,
-  useLibraryCount,
-} from '../stores/library'
-import { FileRecord } from '../stores/files'
-import { FileList } from '../components/FileList'
-import { AddFileActionSheet } from '../components/AddFileActionSheet'
-import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
-import { useLibraryViewMode } from '../stores/settings'
-import { LibraryControlBar } from '../components/LibraryControlBar'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { IconButton } from '../components/IconButton'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { MenuIcon } from 'lucide-react-native'
-import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
-import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
-import { FileActionsSheet } from '../components/FileActionsSheet'
-import { openSheet } from '../stores/sheets'
-import { FileCarousel } from '../components/FileCarousel'
-import { DragToDismiss } from '../components/DragToDismiss'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
+  Animated,
+  Image,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import { AddFileActionSheet } from '../components/AddFileActionSheet'
+import { DragToDismiss } from '../components/DragToDismiss'
+import { FileActionsSheet } from '../components/FileActionsSheet'
+import { FileCarousel } from '../components/FileCarousel'
+import { FileGallery } from '../components/FileGallery'
+import { FileList } from '../components/FileList'
+import { Gradient } from '../components/Gradient'
+import { IconButton } from '../components/IconButton'
+import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
+import { LibraryControlBar } from '../components/LibraryControlBar'
+import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
+import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
+import { ScreenHeader } from '../components/ScreenHeader'
+import type { MainStackParamList } from '../stacks/types'
+import {
+  enterSelectionMode,
+  exitSelectionMode,
+  selectFile,
+  toggleFileSelection,
   useIsSelectionMode,
   useSelectedFileIds,
-  toggleFileSelection,
-  enterSelectionMode,
-  selectFile,
-  exitSelectionMode,
 } from '../stores/fileSelection'
+import type { FileRecord } from '../stores/files'
+import {
+  type Category,
+  useFileList,
+  useLibrary,
+  useLibraryCount,
+} from '../stores/library'
+import { useLibraryViewMode } from '../stores/settings'
+import { openSheet } from '../stores/sheets'
+import { colors, overlay, palette, whiteA } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -45,7 +52,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(() => {
     const openFileId = route.params?.openFileId
     if (!openFileId) return null
-    return files.data?.find(f => f.id === openFileId) ?? null
+    return files.data?.find((f) => f.id === openFileId) ?? null
   })
   const [isCarouselZoomed, setIsCarouselZoomed] = useState(false)
   const [isDraggingToDismiss, setIsDraggingToDismiss] = useState(false)
@@ -57,21 +64,27 @@ export function LibraryScreen({ route, navigation }: Props) {
   const selectedFileIds = useSelectedFileIds()
 
   // Handle item press - opens carousel or toggles selection
-  const handlePressItem = useCallback((file: FileRecord) => {
-    if (isSelectionMode) {
-      toggleFileSelection(file.id)
-    } else {
-      setSelectedFile(file)
-    }
-  }, [isSelectionMode])
+  const handlePressItem = useCallback(
+    (file: FileRecord) => {
+      if (isSelectionMode) {
+        toggleFileSelection(file.id)
+      } else {
+        setSelectedFile(file)
+      }
+    },
+    [isSelectionMode],
+  )
 
   // Handle long press - enters selection mode with file selected
-  const handleLongPressItem = useCallback((file: FileRecord) => {
-    if (!isSelectionMode) {
-      enterSelectionMode()
-    }
-    selectFile(file.id)
-  }, [isSelectionMode])
+  const handleLongPressItem = useCallback(
+    (file: FileRecord) => {
+      if (!isSelectionMode) {
+        enterSelectionMode()
+      }
+      selectFile(file.id)
+    },
+    [isSelectionMode],
+  )
 
   // Handle opening the action sheet from carousel
   const handleShowCarouselActions = useCallback(() => {
@@ -124,8 +137,8 @@ export function LibraryScreen({ route, navigation }: Props) {
   const actionSheetFileIds = isSelectionMode
     ? Array.from(selectedFileIds)
     : selectedFile
-    ? [selectedFile.id]
-    : []
+      ? [selectedFile.id]
+      : []
 
   return (
     <View style={styles.container}>
@@ -187,9 +200,9 @@ export function LibraryScreen({ route, navigation }: Props) {
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
         </View>
-      ) : !!fileCount.data ? (
+      ) : fileCount.data ? (
         files.data && files.data.length > 0 ? (
-          viewMode.data == 'gallery' ? (
+          viewMode.data === 'gallery' ? (
             <FileGallery
               onPressItem={handlePressItem}
               onLongPressItem={handleLongPressItem}

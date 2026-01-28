@@ -1,9 +1,9 @@
-import { type Region } from 'react-native-maps'
 import { useMemo } from 'react'
+import type { Region } from 'react-native-maps'
+import { useHosts } from '../stores/hosts'
 import Map from './Map/Map'
 import { MapMarker } from './Map/MapMarker'
 import { determineBestRegion } from './Map/mapHelpers'
-import { useHosts } from '../stores/hosts'
 import { SWROverlay } from './SWROverlay'
 
 export default function HostsMap({

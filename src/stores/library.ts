@@ -1,10 +1,10 @@
-import { db } from '../db'
-import { create } from 'zustand'
-import useSWRInfinite from 'swr/infinite'
-import { FileRecord, FileRecordRow, transformRow } from './files'
-import { readLocalObjectsForFiles } from './localObjects'
-import { buildSWRHelpers } from '../lib/swr'
 import useSWR from 'swr'
+import useSWRInfinite from 'swr/infinite'
+import { create } from 'zustand'
+import { db } from '../db'
+import { buildSWRHelpers } from '../lib/swr'
+import { type FileRecord, type FileRecordRow, transformRow } from './files'
+import { readLocalObjectsForFiles } from './localObjects'
 
 export const librarySwr = buildSWRHelpers('library')
 
@@ -25,7 +25,7 @@ type FileOrderParams = {
 }
 
 async function readOrderedFileRecords(
-  opts?: FileOrderParams
+  opts?: FileOrderParams,
 ): Promise<FileRecord[]> {
   const {
     sortBy = 'DATE',
@@ -55,7 +55,7 @@ async function readOrderedFileRecords(
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,
-    ...params
+    ...params,
   )
 
   const fileIds = rows.map((r) => r.id)
@@ -75,7 +75,7 @@ export function useFileList() {
     : ''
 
   const base = librarySwr.getKey(
-    `list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`
+    `list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`,
   )
 
   const fetcher = async (key: string) => {
@@ -98,7 +98,7 @@ export function useFileList() {
       return `${base}|page=${pageIndex}`
     },
     fetcher,
-    { revalidateOnFocus: false, revalidateAll: true }
+    { revalidateOnFocus: false, revalidateAll: true },
   )
 
   librarySwr.addChangeCallback('infiniteList', swr.mutate)
@@ -120,7 +120,7 @@ export function useFileList() {
 export function useLibraryCount() {
   return useSWR(librarySwr.getKey('countWithoutThumbs'), async () => {
     const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NULL`
+      `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NULL`,
     )
     return row?.count ?? 0
   })
@@ -139,7 +139,7 @@ export function buildLibraryQueryParts(
     categories?: Category[]
     query?: string
     tableAlias?: string
-  } = {}
+  } = {},
 ): {
   where: string
   params: (string | number)[]
@@ -155,7 +155,7 @@ export function buildLibraryQueryParts(
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const mediaCategories = categories.filter(
-    (c): c is MediaCategory => c in MEDIA_PREFIXES
+    (c): c is MediaCategory => c in MEDIA_PREFIXES,
   )
   const includesFiles = categories.includes('Files')
   const hasQuery = typeof query === 'string' && query.trim().length > 0
@@ -189,9 +189,7 @@ export function buildLibraryQueryParts(
     whereParts.push(`(${categoryConditions.join(' OR ')})`)
   }
   if (hasQuery) {
-    whereParts.push(
-      `${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE "\\"`
-    )
+    whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE "\\"`)
     const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
     params.push(`%${escaped}%`)
   }

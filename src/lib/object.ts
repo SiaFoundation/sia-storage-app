@@ -16,11 +16,11 @@ type Cleaned<T> = {
  * @returns The cleaned object.
  */
 export function removeEmptyValues<T extends Record<string, unknown>>(
-  obj: T
+  obj: T,
 ): Cleaned<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(
-      ([_, value]) => value !== null && value !== undefined
-    )
+      ([_, value]) => value !== null && value !== undefined,
+    ),
   ) as Cleaned<T>
 }

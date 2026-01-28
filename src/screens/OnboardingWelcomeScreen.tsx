@@ -1,12 +1,12 @@
-import React, { useEffect, useRef } from 'react'
-import { StyleSheet, View, Animated, Easing, Text } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { OnboardingStackParamList } from '../stacks/types'
-import { Button } from '../components/Button'
+import { useEffect, useRef } from 'react'
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import { SHAPES } from '../components/BlocksShape'
+import { Button } from '../components/Button'
+import type { OnboardingStackParamList } from '../stacks/types'
 
 const typeFadeDurationMs = 1000
 const typeFadeStaggerMs = 500
@@ -74,7 +74,9 @@ export default function OnboardingWelcomeScreen() {
       >
         <View style={styles.card}>
           <View style={styles.center}>
-            <Text testID="welcome-title" style={styles.title}>Sia Storage</Text>
+            <Text testID="welcome-title" style={styles.title}>
+              Sia Storage
+            </Text>
           </View>
         </View>
       </Animated.View>

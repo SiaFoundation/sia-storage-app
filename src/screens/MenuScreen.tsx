@@ -1,10 +1,10 @@
-import React from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { colors, palette } from '../styles/colors'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { useMenuHeader } from '../hooks/useMenuHeader'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import type React from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { useMenuHeader } from '../hooks/useMenuHeader'
+import type { MenuStackParamList } from '../stacks/types'
+import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'MenuHome'>
 

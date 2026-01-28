@@ -1,15 +1,15 @@
+import { useCallback, useState } from 'react'
 import {
+  ActivityIndicator,
+  FlatList,
+  type ListRenderItem,
+  RefreshControl,
+  StyleSheet,
   Text,
   View,
-  StyleSheet,
-  FlatList,
-  ActivityIndicator,
-  RefreshControl,
-  ListRenderItem,
 } from 'react-native'
+import type { SWRResponse } from 'swr'
 import { colors, palette } from '../styles/colors'
-import { useCallback, useState } from 'react'
-import { SWRResponse } from 'swr'
 
 export function SWRList<T>({
   keyField,

@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native'
-import { overlay, palette } from '../styles/colors'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useAppStatus } from '../hooks/useAppStatus'
 import { openSheet } from '../stores/sheets'
+import { overlay, palette } from '../styles/colors'
 
 export function LibraryAppStatusIcon() {
   const appStatus = useAppStatus()

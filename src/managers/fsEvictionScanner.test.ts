@@ -1,17 +1,17 @@
-import { daysInMs } from '../lib/time'
-import { runFsEvictionScanner } from './fsEvictionScanner'
 import { initializeDB, resetDb } from '../db'
+import type { LocalObject } from '../encoding/localObject'
+import { daysInMs } from '../lib/time'
+import {
+  getAsyncStorageNumber,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
 import {
   createFileRecord,
   createFileRecordWithLocalObject,
   type FileRecord,
 } from '../stores/files'
-import { type LocalObject } from '../encoding/localObject'
 import { readFsFileMetadata, upsertFsFileMetadata } from '../stores/fs'
-import {
-  getAsyncStorageNumber,
-  setAsyncStorageNumber,
-} from '../stores/asyncStore'
+import { runFsEvictionScanner } from './fsEvictionScanner'
 
 jest.mock('../config', () => {
   const daysInMs = jest.requireActual('../lib/time').daysInMs

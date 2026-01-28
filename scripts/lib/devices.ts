@@ -169,7 +169,9 @@ export function parseSimctlOutput(stdout: string): Device[] {
  * List all booted iOS simulators.
  */
 async function listIosSimulators(): Promise<Device[]> {
-  const result = await $`xcrun simctl list devices booted --json`.quiet().nothrow()
+  const result = await $`xcrun simctl list devices booted --json`
+    .quiet()
+    .nothrow()
   if (result.exitCode !== 0) {
     return []
   }
@@ -235,7 +237,7 @@ async function listAndroidDevices(): Promise<Device[]> {
  */
 export async function listDevices(
   platform: Platform,
-  type?: DeviceType
+  type?: DeviceType,
 ): Promise<Device[]> {
   let devices: Device[]
 
@@ -267,7 +269,7 @@ export async function listDevices(
  */
 export async function selectDevice(
   platform: Platform,
-  type: DeviceType
+  type: DeviceType,
 ): Promise<Device | null> {
   const devices = await listDevices(platform, type)
 
@@ -291,7 +293,7 @@ export interface InstallResult {
  */
 export async function installIosApp(
   device: Device,
-  appPath: string
+  appPath: string,
 ): Promise<InstallResult> {
   const result = await runSimpleCommand([
     'xcrun',
@@ -331,7 +333,7 @@ export async function installIosApp(
  */
 export async function launchIosApp(
   device: Device,
-  bundleId: string
+  bundleId: string,
 ): Promise<InstallResult> {
   const result = await runSimpleCommand([
     'xcrun',
@@ -366,7 +368,7 @@ export async function launchIosApp(
  */
 export async function installAndroidApp(
   device: Device,
-  apkPath: string
+  apkPath: string,
 ): Promise<InstallResult> {
   const result = await $`adb -s ${device.id} install -r ${apkPath}`
     .quiet()
@@ -389,7 +391,7 @@ export async function installAndroidApp(
 export async function launchAndroidApp(
   device: Device,
   packageName: string,
-  activityName = '.MainActivity'
+  activityName = '.MainActivity',
 ): Promise<InstallResult> {
   const result =
     await $`adb -s ${device.id} shell am start -n ${packageName}/${packageName}${activityName}`

@@ -27,7 +27,7 @@ export type BatchInfo = {
 export function calculateFileProgress(
   batch: BatchInfo,
   batchProgress: number,
-  fileId: string
+  fileId: string,
 ): number {
   // Verify the file exists in the batch
   const fileExists = batch.files.some((f) => f.fileId === fileId)
@@ -43,7 +43,7 @@ export function calculateFileProgress(
  */
 export function calculateAllFileProgress(
   batch: BatchInfo,
-  batchProgress: number
+  batchProgress: number,
 ): Record<string, number> {
   const result: Record<string, number> = {}
   for (const file of batch.files) {

@@ -1,11 +1,15 @@
-import { StyleSheet, TextInput, Platform, View, Text } from 'react-native'
-import { colors, palette } from '../styles/colors'
 import {
-  type TextInputProps,
+  Platform,
   type StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  type TextInputProps,
   type TextStyle,
+  View,
   type ViewStyle,
 } from 'react-native'
+import { colors, palette } from '../styles/colors'
 
 type Props = Omit<TextInputProps, 'style' | 'placeholderTextColor'> & {
   label: string

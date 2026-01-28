@@ -1,8 +1,8 @@
 import { registerRootComponent } from 'expo'
 import './polyfills'
-import { Root } from './src/Root'
 import { initSia, setLogger } from 'react-native-sia'
 import { logger, rustLogger } from './src/lib/logger'
+import { Root } from './src/Root'
 
 logger.info('app', 'initSia and uniffi...')
 

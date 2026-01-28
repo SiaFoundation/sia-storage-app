@@ -25,15 +25,15 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
           logger.debug(
             'recoveryPhraseValidation',
             'Recovery phrase validation failed:',
-            e
+            e,
           )
 
         const message =
           e instanceof Error
             ? e.message
             : typeof e === 'string'
-            ? e
-            : 'Invalid recovery phrase.'
+              ? e
+              : 'Invalid recovery phrase.'
 
         return { isValid: false, error: message }
       }

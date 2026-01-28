@@ -1,21 +1,20 @@
-import { Linking, StyleSheet, Switch } from 'react-native'
-import { InfoCard } from './InfoCard'
-import { LabeledValueRow } from './LabeledValueRow'
-import { Button } from './Button'
-import { RowGroup } from './Group'
+import { Linking, StyleSheet, Switch, Text } from 'react-native'
+import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import {
   toggleAutoSyncNewPhotos,
   useAutoSyncNewPhotos,
 } from '../managers/syncNewPhotos'
 import {
-  usePhotosArchiveCursor,
   restartPhotosArchiveCursor,
-  useAutoSyncPhotosArchive,
   toggleAutoSyncPhotosArchive,
+  useAutoSyncPhotosArchive,
+  usePhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
-import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
-import { Text } from 'react-native'
 import { colors } from '../styles/colors'
+import { Button } from './Button'
+import { RowGroup } from './Group'
+import { InfoCard } from './InfoCard'
+import { LabeledValueRow } from './LabeledValueRow'
 
 export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
@@ -82,8 +81,8 @@ export function SettingsSyncPhotos() {
               !autoSyncPhotosArchive.data
                 ? '(paused)'
                 : photosArchiveInProgress
-                ? '(in progress)'
-                : ''
+                  ? '(in progress)'
+                  : ''
             }`}</Text>
           )
         : null}

@@ -7,6 +7,6 @@ export type MaybeError<T> = [T, null] | [null, Error]
  */
 export function keysOf<T>() {
   return <K extends readonly (keyof T)[]>(
-    keys: K & Record<Exclude<keyof T, K[number]>, never>
+    keys: K & Record<Exclude<keyof T, K[number]>, never>,
   ) => keys
 }

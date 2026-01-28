@@ -1,26 +1,26 @@
-import {
-  syncDownEvents,
-  getSyncDownCursor,
-  setSyncDownCursor,
-  resetSyncDownCursor,
-} from './syncDownEvents'
+import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
+import { encodeFileMetadata } from '../encoding/fileMetadata'
+import type { LocalObject } from '../encoding/localObject'
+import { getAppKeyForIndexer } from '../stores/appKey'
 import {
   createFileRecordWithLocalObject,
-  readFileRecordByObjectId,
-  type FileRecord,
   type FileMetadata,
+  type FileRecord,
+  readFileRecordByObjectId,
 } from '../stores/files'
-import { type LocalObject } from '../encoding/localObject'
-import { type ObjectEvent, type PinnedObjectInterface } from 'react-native-sia'
-import { encodeFileMetadata } from '../encoding/fileMetadata'
+import { removeFsFile } from '../stores/fs'
 import { readLocalObjectsForFile } from '../stores/localObjects'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
-import { removeFsFile } from '../stores/fs'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { cancelUpload } from '../stores/uploads'
-import { getAppKeyForIndexer } from '../stores/appKey'
+import {
+  getSyncDownCursor,
+  resetSyncDownCursor,
+  setSyncDownCursor,
+  syncDownEvents,
+} from './syncDownEvents'
 
 jest.mock('../stores/sdk', () => ({
   getIsConnected: jest.fn(),
@@ -69,7 +69,7 @@ function makeMockPinnedObject(
   metadata: FileMetadata,
   objectId: string = 'obj-id',
   createdAt: Date = new Date(),
-  updatedAt: Date = new Date()
+  updatedAt: Date = new Date(),
 ): PinnedObjectInterface {
   const encodedMetadata = encodeFileMetadata(metadata)
   return {
@@ -79,7 +79,7 @@ function makeMockPinnedObject(
     size: () => BigInt(metadata.size),
     createdAt: () => createdAt,
     updatedAt: () => updatedAt,
-    updateMetadata: (newMetadata: ArrayBuffer) => {
+    updateMetadata: (_newMetadata: ArrayBuffer) => {
       // Not used in tests
     },
     seal: () => ({
@@ -275,7 +275,7 @@ describe('syncDownEvents', () => {
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
-      })
+      }),
     )
 
     const events: ObjectEvent[] = [
@@ -293,10 +293,10 @@ describe('syncDownEvents', () => {
     await syncDownEvents()
 
     expect(removeFsFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-1' })
+      expect.objectContaining({ id: 'file-1' }),
     )
     expect(removeTempDownloadFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-1' })
+      expect.objectContaining({ id: 'file-1' }),
     )
 
     const deletedFile = await readFileRecordByObjectId('obj-1')
@@ -326,7 +326,7 @@ describe('syncDownEvents', () => {
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
-      })
+      }),
     )
 
     const updatedMetadata: FileMetadata = {
@@ -412,7 +412,7 @@ describe('syncDownEvents', () => {
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
-      })
+      }),
     )
 
     // Remote has newer metadata with different values.
@@ -452,7 +452,7 @@ describe('syncDownEvents', () => {
         hash: 'hash-1',
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE + 100,
-      })
+      }),
     )
 
     // Verify object was updated in objects table.
@@ -464,7 +464,7 @@ describe('syncDownEvents', () => {
           id: 'obj-1',
           indexerURL: INDEXER_URL,
         }),
-      ])
+      ]),
     )
   })
 
@@ -491,7 +491,7 @@ describe('syncDownEvents', () => {
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE + 100,
-      })
+      }),
     )
 
     // Remote has older metadata with different values.
@@ -527,7 +527,7 @@ describe('syncDownEvents', () => {
       expect.objectContaining({
         name: 'newer-name.jpg',
         updatedAt: NOW_BASE + 100,
-      })
+      }),
     )
 
     // Verify object was still updated in objects table.
@@ -588,7 +588,7 @@ describe('syncDownEvents', () => {
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
-      })
+      }),
     )
 
     // First event will fail during delete.

@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Animated, Easing, View } from 'react-native'
-import { palette } from '../styles/colors'
 import Svg, { Circle } from 'react-native-svg'
-import { memo } from 'react'
+import { palette } from '../styles/colors'
 
 type Props = {
   size?: number
@@ -27,7 +26,7 @@ function SpinnerIconInner({
         duration: 900,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     )
     loop.start()
     return () => {

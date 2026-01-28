@@ -1,7 +1,7 @@
-import * as MediaLibrary from 'expo-media-library'
-import { Linking, Platform } from 'react-native'
-import { useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
+import * as MediaLibrary from 'expo-media-library'
+import { useCallback, useMemo } from 'react'
+import { Linking, Platform } from 'react-native'
 import useSWR from 'swr'
 import { palette } from '../styles/colors'
 import { buildSWRHelpers } from './swr'
@@ -17,18 +17,18 @@ export async function getMediaLibraryPermissions(): Promise<boolean> {
 }
 
 export const mediaLibraryPermissionsSwr = buildSWRHelpers(
-  'mediaLibraryPermissions'
+  'mediaLibraryPermissions',
 )
 
 export function useMediaLibraryPermissions() {
   const perms = useSWR(mediaLibraryPermissionsSwr.getKey(), () =>
-    MediaLibrary.getPermissionsAsync()
+    MediaLibrary.getPermissionsAsync(),
   )
 
   useFocusEffect(
     useCallback(() => {
       void perms.mutate()
-    }, [perms.mutate])
+    }, [perms.mutate]),
   )
 
   const photosAccess: 'all' | 'limited' | 'none' | 'unknown' = useMemo(() => {
@@ -45,18 +45,18 @@ export function useMediaLibraryPermissions() {
     photosAccess === 'all'
       ? 'Full access'
       : photosAccess === 'limited'
-      ? 'Access limited (selected photos)'
-      : photosAccess === 'none'
-      ? 'No access, tap to grant access'
-      : 'Unknown access'
+        ? 'Access limited (selected photos)'
+        : photosAccess === 'none'
+          ? 'No access, tap to grant access'
+          : 'Unknown access'
   const color =
     photosAccess === 'all'
       ? palette.blue[400]
       : photosAccess === 'limited'
-      ? palette.yellow[400]
-      : photosAccess === 'none'
-      ? palette.red[500]
-      : palette.gray[500]
+        ? palette.yellow[400]
+        : photosAccess === 'none'
+          ? palette.red[500]
+          : palette.gray[500]
 
   const manageAccess = useCallback(async () => {
     // Open app settings to adjust photo access for this app.

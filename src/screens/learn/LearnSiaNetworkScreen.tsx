@@ -1,7 +1,11 @@
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { Text, StyleSheet, Linking } from 'react-native'
-import { type MenuStackParamList } from '../../stacks/types'
-import { LearnScreen, LearnSection, LearnText } from '../../components/LearnScreen'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { Linking, StyleSheet, Text } from 'react-native'
+import {
+  LearnScreen,
+  LearnSection,
+  LearnText,
+} from '../../components/LearnScreen'
+import type { MenuStackParamList } from '../../stacks/types'
 import { palette } from '../../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'LearnSiaNetwork'>

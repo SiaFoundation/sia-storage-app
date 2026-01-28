@@ -1,14 +1,14 @@
-import { processAssets } from './processAssets'
-import { calculateContentHash } from './contentHash'
+import { setExpoFileSystemMockMethods } from '../../mocks/expo-file-system'
+import { initializeDB, resetDb } from '../db'
 import {
   createFileRecord,
   readAllFileRecords,
   readFileRecord,
 } from '../stores/files'
-import { initializeDB, resetDb } from '../db'
 import { copyFileToFs, readFsFileMetadata } from '../stores/fs'
+import { calculateContentHash } from './contentHash'
 import { getMediaLibraryUri } from './mediaLibrary'
-import { setExpoFileSystemMockMethods } from '../../mocks/expo-file-system'
+import { processAssets } from './processAssets'
 
 jest.mock('./mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
@@ -74,7 +74,7 @@ describe('processAssets', () => {
         hash: '',
         addedAt: 1,
       },
-      false
+      false,
     )
 
     jest
@@ -119,7 +119,7 @@ describe('processAssets', () => {
         localId: null,
         addedAt: 1,
       },
-      false
+      false,
     )
 
     jest
@@ -146,7 +146,7 @@ describe('processAssets', () => {
     expect(copyFileToFs).toHaveBeenCalledTimes(1)
     expect(copyFileToFs).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'existing' }),
-      expect.objectContaining({ uri: 'file://same-hash.jpg' })
+      expect.objectContaining({ uri: 'file://same-hash.jpg' }),
     )
   })
   it('dedupes on hash within new files', async () => {
@@ -206,7 +206,7 @@ describe('processAssets', () => {
     expect(copyFileToFs).toHaveBeenCalledTimes(1)
     expect(copyFileToFs).toHaveBeenCalledWith(
       expect.objectContaining({ id: files[0].id, type: 'image/jpeg' }),
-      expect.objectContaining({ uri: 'file:///full-quality.jpg' })
+      expect.objectContaining({ uri: 'file:///full-quality.jpg' }),
     )
   })
   it('uses sourceUri when localId is not valid', async () => {

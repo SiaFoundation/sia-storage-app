@@ -1,14 +1,14 @@
-import {
-  getSyncUpCursor,
-  setSyncUpCursor,
-  runSyncUpMetadata,
-} from './syncUpMetadata'
 import { initializeDB, resetDb } from '../db'
+import type { LocalObject } from '../encoding/localObject'
 import {
   createFileRecordWithLocalObject,
   type FileRecord,
 } from '../stores/files'
-import { type LocalObject } from '../encoding/localObject'
+import {
+  getSyncUpCursor,
+  runSyncUpMetadata,
+  setSyncUpCursor,
+} from './syncUpMetadata'
 
 jest.mock('../stores/sdk', () => ({
   getIsConnected: jest.fn(),
@@ -89,7 +89,7 @@ describe('syncUpMetadata', () => {
         indexerURL: INDEXER_URL,
         createdAt: 100,
         updatedAt: 200,
-      })
+      }),
     )
 
     // File B: local updatedAt=100, remote updatedAt=200 -> REMOTE NEWER -> should SKIP
@@ -114,7 +114,7 @@ describe('syncUpMetadata', () => {
         indexerURL: INDEXER_URL,
         createdAt: 110,
         updatedAt: 100,
-      })
+      }),
     )
 
     sdk.getPinnedObject.mockImplementation(async (_objectId: string) => {
@@ -151,7 +151,7 @@ describe('syncUpMetadata', () => {
     expect(sdk.updateMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
-      expect.objectContaining(localA)
+      expect.objectContaining(localA),
     )
   })
 
@@ -192,7 +192,7 @@ describe('syncUpMetadata', () => {
           indexerURL: INDEXER_URL,
           createdAt: NOW_BASE + i,
           updatedAt: NOW_BASE + i,
-        })
+        }),
       )
     }
 
@@ -230,7 +230,7 @@ describe('syncUpMetadata', () => {
           indexerURL: INDEXER_URL,
           createdAt: NOW_BASE + i,
           updatedAt: NOW_BASE + i,
-        })
+        }),
       )
     }
 
@@ -297,7 +297,7 @@ describe('syncUpMetadata', () => {
           indexerURL: INDEXER_URL,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
-        })
+        }),
       )
     }
 

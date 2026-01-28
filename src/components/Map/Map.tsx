@@ -1,4 +1,4 @@
-import MapView, { Region } from 'react-native-maps'
+import MapView, { type Region } from 'react-native-maps'
 
 type Props = {
   children?: React.ReactNode

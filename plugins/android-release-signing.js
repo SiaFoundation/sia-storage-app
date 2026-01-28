@@ -42,7 +42,7 @@ function ensureProperty(modResults, key, value) {
   }
 
   const existing = modResults.find(
-    (item) => item.type === 'property' && item.key === key
+    (item) => item.type === 'property' && item.key === key,
   )
 
   if (existing) {
@@ -180,13 +180,13 @@ function ensureBlockSigningConfig(contents, blockName, targetConfig) {
   if (signingRegex.test(inside)) {
     nextInside = inside.replace(
       signingRegex,
-      `signingConfig signingConfigs.${targetConfig}`
+      `signingConfig signingConfigs.${targetConfig}`,
     )
   } else {
     const lineStart = contents.lastIndexOf('\n', blockStart) + 1
     const indentMatch = contents.slice(lineStart, blockStart).match(/^\s*/)
     const baseIndent = indentMatch ? indentMatch[0] : ''
-    const innerIndent = baseIndent + '    '
+    const innerIndent = `${baseIndent}    `
     nextInside =
       inside +
       `\n${innerIndent}signingConfig signingConfigs.${targetConfig}\n${baseIndent}`
@@ -236,7 +236,7 @@ function stripSigningConfigAssignments(contents) {
 
   const cleanedInside = inside.replace(
     /\s*signingConfig\s+signingConfigs\.\w+\s*/g,
-    ''
+    '',
   )
 
   return before + cleanedInside + after
@@ -260,14 +260,14 @@ function withAndroidReleaseSigning(config, rawOptions = {}) {
       ensureProperty(
         modResults,
         options.storePasswordProperty,
-        options.storePassword
+        options.storePassword,
       )
     }
     if (options.keyPassword !== undefined) {
       ensureProperty(
         modResults,
         options.keyPasswordProperty,
-        options.keyPassword
+        options.keyPassword,
       )
     }
     return innerConfig

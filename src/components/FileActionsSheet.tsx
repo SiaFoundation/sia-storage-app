@@ -1,35 +1,38 @@
-import { useCallback } from 'react'
-import { Text, StyleSheet } from 'react-native'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MainStackParamList } from '../stacks/types'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
-  Trash2Icon,
+  ArrowDownToLineIcon,
   CloudOffIcon,
-  EraserIcon,
   CloudUploadIcon,
-  ShareIcon,
+  EraserIcon,
   LinkIcon,
+  ShareIcon,
+  Trash2Icon,
 } from 'lucide-react-native'
+import { useCallback } from 'react'
+import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
-import { useToast } from '../lib/toastContext'
-import { ArrowDownToLineIcon } from 'lucide-react-native'
-import { removeFsFile, getFsFileUri } from '../stores/fs'
-import { useDownload } from '../managers/downloader'
-import { fileHasASealedObject, useFileStatus } from '../lib/file'
-import { useReuploadFile, queueUploadForFileId } from '../managers/uploader'
-import { ActionSheetButton } from './ActionSheetButton'
-import { ActionSheet } from './ActionSheet'
-import { FileRecord, readFileRecord, useFileDetails } from '../stores/files'
-import { useSheetOpen, closeSheet } from '../stores/sheets'
 import { useShareAction } from '../hooks/useShareAction'
-import { logger } from '../lib/logger'
 import {
+  deleteFileFromNetwork,
   permanentlyDeleteFile,
   permanentlyDeleteFiles,
-  deleteFileFromNetwork,
 } from '../lib/deleteFile'
-import { downloadFile } from '../managers/downloader'
+import { fileHasASealedObject, useFileStatus } from '../lib/file'
+import { logger } from '../lib/logger'
+import { useToast } from '../lib/toastContext'
+import { downloadFile, useDownload } from '../managers/downloader'
+import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
+import type { MainStackParamList } from '../stacks/types'
+import {
+  type FileRecord,
+  readFileRecord,
+  useFileDetails,
+} from '../stores/files'
+import { getFsFileUri, removeFsFile } from '../stores/fs'
+import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette } from '../styles/colors'
+import { ActionSheet } from './ActionSheet'
+import { ActionSheetButton } from './ActionSheetButton'
 
 type Props = {
   sheetName?: string
@@ -93,7 +96,7 @@ function SingleFileActionsSheet({
       closeSheet()
       void action()
     },
-    []
+    [],
   )
 
   const handleRemoveLocalFile = useCallback(async () => {
@@ -106,7 +109,7 @@ function SingleFileActionsSheet({
       logger.error('FileActionsSheet', 'failed to remove local file', e)
       toast.show('Failed to remove from device')
     }
-  }, [file?.id, file?.type, toast, onComplete])
+  }, [file?.id, file?.type, toast, onComplete, file])
 
   const reupload = useReuploadFile()
   const handleReupload = useCallback(async () => {
@@ -119,7 +122,7 @@ function SingleFileActionsSheet({
       logger.error('FileActionsSheet', 'failed to reupload file', e)
       toast.show('Failed to reupload file')
     }
-  }, [file?.id, toast, onComplete])
+  }, [file?.id, toast, onComplete, file, reupload])
 
   const handleRemoveFromNetwork = useCallback(async () => {
     if (!file) return
@@ -131,7 +134,7 @@ function SingleFileActionsSheet({
       logger.error('FileActionsSheet', 'failed to remove from network', e)
       toast.show('Failed to remove from network')
     }
-  }, [file?.id, toast, onComplete])
+  }, [file?.id, toast, onComplete, file])
 
   const handleDelete = useCallback(async () => {
     if (!file) return
@@ -280,7 +283,7 @@ function BulkFileActionsSheet({
 
   const { data: counts } = useSWR(
     isOpen ? ['bulkCounts', ...fileIds] : null,
-    () => fetchBulkCounts(fileIds)
+    () => fetchBulkCounts(fileIds),
   )
 
   const handlePressAndClose = useCallback(
@@ -288,7 +291,7 @@ function BulkFileActionsSheet({
       closeSheet()
       void action()
     },
-    []
+    [],
   )
 
   const handleDownloadToDevice = useCallback(async () => {

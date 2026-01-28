@@ -1,5 +1,11 @@
 import { cloneElement, isValidElement, type ReactElement } from 'react'
-import { Pressable, StyleProp, StyleSheet, Text, TextStyle } from 'react-native'
+import {
+  Pressable,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  type TextStyle,
+} from 'react-native'
 import { palette } from '../styles/colors'
 
 export function ActionSheetButton({
@@ -20,13 +26,13 @@ export function ActionSheetButton({
   const textStyle = disabled
     ? styles.disabledText
     : variant === 'primary'
-    ? styles.primaryText
-    : styles.dangerText
+      ? styles.primaryText
+      : styles.dangerText
   const iconStyle = disabled
     ? styles.disabledIcon
     : variant === 'primary'
-    ? styles.primaryIcon
-    : styles.dangerIcon
+      ? styles.primaryIcon
+      : styles.dangerIcon
   const renderedIcon = isValidElement(icon)
     ? cloneElement(icon as ReactElement<{ style?: StyleProp<TextStyle> }>, {
         style: iconStyle,

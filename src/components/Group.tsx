@@ -1,4 +1,10 @@
-import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native'
+import {
+  type StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { palette } from '../styles/colors'
 
 export function GroupTitle({

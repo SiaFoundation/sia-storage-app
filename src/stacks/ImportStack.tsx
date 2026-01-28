@@ -1,7 +1,6 @@
-import React from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { ImportFileScreen } from '../screens/ImportFileScreen'
-import { type ImportStackParamList } from './types'
+import type { ImportStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<ImportStackParamList>()
 

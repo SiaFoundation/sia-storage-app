@@ -1,10 +1,10 @@
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { LogView } from '../components/LogView'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { useMenuHeader } from '../hooks/useMenuHeader'
-import { SettingsLogsControlBar } from '../components/SettingsLogsControlBar'
 import { SettingsFullLayout } from '../components/SettingsLayout'
+import { SettingsLogsControlBar } from '../components/SettingsLogsControlBar'
 import { logsSwr } from '../hooks/useLogs'
+import { useMenuHeader } from '../hooks/useMenuHeader'
+import type { MenuStackParamList } from '../stacks/types'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'>
 

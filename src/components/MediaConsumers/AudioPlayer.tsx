@@ -5,7 +5,7 @@ import {
   PlayIcon,
   Undo2Icon,
 } from 'lucide-react-native'
-import { StyleSheet, Text, View, ViewStyle } from 'react-native'
+import { StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 function formatPlayTime(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds))

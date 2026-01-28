@@ -1,7 +1,7 @@
+import { useAccount } from '../hooks/useAccount'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
-import { useAccount } from '../hooks/useAccount'
 
 export function SettingsAdvancedAccount() {
   const account = useAccount()

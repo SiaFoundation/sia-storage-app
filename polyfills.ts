@@ -5,6 +5,7 @@ import { polyfillGlobal } from 'react-native/Libraries/Utilities/PolyfillFunctio
 
 // Use a WHATWG-compliant ReadableStream for File.stream().
 import { ReadableStream } from 'web-streams-polyfill'
+
 polyfillGlobal('ReadableStream', () => ReadableStream)
 
 import '@azure/core-asynciterator-polyfill'

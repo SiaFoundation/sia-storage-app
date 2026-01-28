@@ -1,15 +1,13 @@
-import React from 'react'
 import {
+  FullscreenIcon,
+  LinkIcon,
   MoreVerticalIcon,
   ShareIcon,
-  LinkIcon,
-  FullscreenIcon,
   TextAlignStart,
 } from 'lucide-react-native'
-import { iconColors } from '../BottomControlBar'
-import { View, useWindowDimensions } from 'react-native'
+import { useWindowDimensions, View } from 'react-native'
+import { BottomControlBar, iconColors } from '../BottomControlBar'
 import { IconButton } from '../IconButton'
-import { BottomControlBar } from '../BottomControlBar'
 
 type Props = {
   viewStyle: 'consume' | 'detail'

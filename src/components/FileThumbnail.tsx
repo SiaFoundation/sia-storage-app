@@ -1,5 +1,3 @@
-import { Image, StyleSheet, View } from 'react-native'
-import { FileRecord, type ThumbSize } from '../stores/files'
 import {
   FileAudioIcon,
   FileIcon,
@@ -8,8 +6,10 @@ import {
   ImageIcon,
   PlayIcon,
 } from 'lucide-react-native'
-import { palette } from '../styles/colors'
+import { Image, StyleSheet, View } from 'react-native'
 import { useBestThumbnailUri } from '../hooks/useBestThumbnail'
+import type { FileRecord, ThumbSize } from '../stores/files'
+import { palette } from '../styles/colors'
 
 export function FileThumbnail({
   file,

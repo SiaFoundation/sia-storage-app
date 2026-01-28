@@ -1,8 +1,8 @@
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useCallback } from 'react'
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native'
-import { colors, palette } from '../styles/colors'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useToast } from '../lib/toastContext'
+import { colors, palette } from '../styles/colors'
 
 type Props = {
   label: string

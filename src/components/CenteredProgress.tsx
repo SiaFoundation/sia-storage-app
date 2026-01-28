@@ -1,6 +1,6 @@
+import { StyleSheet, View } from 'react-native'
+import type { FileStatus } from '../lib/file'
 import { CircularProgress } from './CircularProgress'
-import { FileStatus } from '../lib/file'
-import { View, StyleSheet } from 'react-native'
 
 export function CenteredProgress({
   status,

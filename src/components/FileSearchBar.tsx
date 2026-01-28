@@ -1,17 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { SearchIcon, XIcon } from 'lucide-react-native'
+import { useEffect, useRef, useState } from 'react'
 import {
-  View,
-  TextInput,
-  Pressable,
-  StyleSheet,
+  type EmitterSubscription,
   Keyboard,
   Platform,
-  EmitterSubscription,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
 } from 'react-native'
-import { SearchIcon, XIcon } from 'lucide-react-native'
-import { palette, whiteA } from '../styles/colors'
-import { clearSearchQuery, setSearchQuery, useLibrary } from '../stores/library'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { clearSearchQuery, setSearchQuery, useLibrary } from '../stores/library'
+import { palette, whiteA } from '../styles/colors'
 
 export function FileSearchBar({ onExit }: { onExit: () => void }) {
   const { searchQuery } = useLibrary()

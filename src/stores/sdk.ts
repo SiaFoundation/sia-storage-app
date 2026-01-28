@@ -17,24 +17,24 @@
  *   existing account with the indexer.
  */
 
-import { create } from 'zustand'
 import {
-  Builder,
-  type PinnedObjectInterface,
   type AppKey,
+  Builder,
   type BuilderInterface,
+  type PinnedObjectInterface,
   type SdkInterface,
 } from 'react-native-sia'
-import { openAuthURL } from '../lib/openAuthUrl'
+import { create } from 'zustand'
+import { APP_KEY } from '../config'
+import { hexToUint8 } from '../lib/hex'
 import { logger } from '../lib/logger'
-import { getIndexerURL, setIndexerURL } from './settings'
+import { openAuthURL } from '../lib/openAuthUrl'
+import { err, ok, type Result } from '../lib/result'
+import { createGetterAndSelector } from '../lib/selectors'
+import { withTimeout } from '../lib/timeout'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
 import { setMnemonicHash, validateMnemonic } from './mnemonic'
-import { createGetterAndSelector } from '../lib/selectors'
-import { hexToUint8 } from '../lib/hex'
-import { withTimeout } from '../lib/timeout'
-import { type Result, ok, err } from '../lib/result'
-import { APP_KEY } from '../config'
+import { getIndexerURL, setIndexerURL } from './settings'
 
 export type SdkState = {
   sdk: SdkInterface | null
@@ -135,7 +135,7 @@ export async function reconnectIndexer(): Promise<boolean> {
       })
     }
     return connected
-  } catch (e) {
+  } catch (_e) {
     setState({
       isConnected: false,
       connectionError: 'Failed to connect to indexer',
@@ -178,7 +178,7 @@ export type SwitchResult = Result<void, SwitchError>
  * If new user: runs browser auth, saves pendingApproval, and returns `alreadyConnected: false`.
  */
 export async function authenticateIndexer(
-  indexerURL: string
+  indexerURL: string,
 ): Promise<AuthenticateResult> {
   logger.info('sdk', `Authenticating with ${indexerURL}...`)
 
@@ -248,7 +248,7 @@ export function setSdk(sdk: SdkInterface | null) {
  * @returns success if connected, `needsReauth` if mnemonic entry required
  */
 export async function switchIndexer(
-  newIndexerURL: string
+  newIndexerURL: string,
 ): Promise<SwitchResult> {
   logger.info('sdk', `Attempting to switch to ${newIndexerURL}...`)
 
@@ -258,7 +258,7 @@ export async function switchIndexer(
     const builder = new Builder(newIndexerURL)
     const [sdk, connectedErr] = await builderConnected(
       builder,
-      appKeyForIndexer
+      appKeyForIndexer,
     )
 
     if (connectedErr) {
@@ -290,7 +290,7 @@ export async function switchIndexer(
  */
 export async function registerWithIndexer(
   mnemonic: string,
-  indexerURL: string
+  indexerURL: string,
 ): Promise<RegisterResult> {
   setState({ isAuthing: true })
 
@@ -350,13 +350,13 @@ export async function registerWithIndexer(
  */
 async function builderConnected(
   builder: Builder,
-  appKey: AppKey
+  appKey: AppKey,
 ): Promise<Result<SdkInterface | null>> {
   try {
     logger.debug('sdk', 'Attempting builder.connected...')
     const sdk = await withTimeout(
       builder.connected(appKey),
-      CONNECTION_TIMEOUT_MS
+      CONNECTION_TIMEOUT_MS,
     )
     return ok(sdk ?? null)
   } catch (e) {
@@ -368,7 +368,7 @@ async function builderConnected(
  * Requests app connection from the indexer.
  */
 async function builderRequestConnection(
-  builder: Builder
+  builder: Builder,
 ): Promise<Result<BuilderInterface>> {
   try {
     logger.debug('sdk', 'Requesting app connection...')
@@ -381,7 +381,7 @@ async function builderRequestConnection(
         callbackUrl: 'sia://callback',
         logoUrl: 'https://sia.storage/logo.png',
       }),
-      CONNECTION_TIMEOUT_MS
+      CONNECTION_TIMEOUT_MS,
     )
     return ok(result)
   } catch (e) {
@@ -393,13 +393,13 @@ async function builderRequestConnection(
  * Waits for the indexer to confirm app approval.
  */
 async function builderWaitForApproval(
-  builder: BuilderInterface
+  builder: BuilderInterface,
 ): Promise<Result<BuilderInterface>> {
   try {
     logger.debug('sdk', 'Waiting for approval...')
     const result = await withTimeout(
       builder.waitForApproval(),
-      CONNECTION_TIMEOUT_MS
+      CONNECTION_TIMEOUT_MS,
     )
     return ok(result)
   } catch (e) {
@@ -412,13 +412,13 @@ async function builderWaitForApproval(
  */
 async function builderRegister(
   builder: BuilderInterface,
-  mnemonic: string
+  mnemonic: string,
 ): Promise<Result<SdkInterface>> {
   try {
     logger.info('sdk', 'Registering with mnemonic...')
     const result = await withTimeout(
       builder.register(mnemonic),
-      CONNECTION_TIMEOUT_MS
+      CONNECTION_TIMEOUT_MS,
     )
     return ok(result)
   } catch (e) {
@@ -431,7 +431,7 @@ async function builderRegister(
  * Returns { type: 'cancelled' } if user closes browser.
  */
 async function waitForUserApproval(
-  builder: BuilderInterface
+  builder: BuilderInterface,
 ): Promise<Result<BuilderInterface, AuthError>> {
   const responseUrl = builder.responseUrl()
   const authCompleted = await openAuthURL(responseUrl)
@@ -452,19 +452,17 @@ async function waitForUserApproval(
  * Returns the builder after approval, or an error if cancelled/failed.
  */
 async function runBrowserAuthFlow(
-  builder: Builder
+  builder: Builder,
 ): Promise<Result<BuilderInterface, AuthError>> {
-  const [builderAfterRequest, requestErr] = await builderRequestConnection(
-    builder
-  )
+  const [builderAfterRequest, requestErr] =
+    await builderRequestConnection(builder)
   if (requestErr) {
     logger.error('sdk', 'Error requesting connection', requestErr)
     return err({ type: 'error', message: requestErr.message })
   }
 
-  const [builderAfterApproval, approvalErr] = await waitForUserApproval(
-    builderAfterRequest
-  )
+  const [builderAfterApproval, approvalErr] =
+    await waitForUserApproval(builderAfterRequest)
   if (approvalErr) {
     if (approvalErr.type === 'cancelled') {
       logger.info('sdk', 'App authorization cancelled by user')
@@ -481,7 +479,7 @@ async function runBrowserAuthFlow(
 
 export const [getIsConnected, useIsConnected] = createGetterAndSelector(
   useSdkStore,
-  (s) => s.isConnected
+  (s) => s.isConnected,
 )
 
 export function useIsAuthing(): boolean {
@@ -497,7 +495,7 @@ export function getSdk(): SdkInterface | null {
  */
 export async function updateMetadata(
   pinnedObject: PinnedObjectInterface,
-  metadata: ArrayBuffer
+  metadata: ArrayBuffer,
 ): Promise<void> {
   const sdk = getSdk()
   if (!sdk) {
@@ -511,7 +509,7 @@ export async function updateMetadata(
  * Fetch a pinned object by id.
  */
 export async function getPinnedObject(
-  objectId: string
+  objectId: string,
 ): Promise<PinnedObjectInterface> {
   const sdk = getSdk()
   if (!sdk) {

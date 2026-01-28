@@ -1,4 +1,4 @@
-import { type LocalObject } from '../encoding/localObject'
+import type { LocalObject } from '../encoding/localObject'
 import {
   deleteFileRecordAndThumbnails,
   deleteManyFileRecordsAndThumbnails,
@@ -18,7 +18,7 @@ import { tryCatch } from './result'
 async function tryStep<T>(
   step: string,
   id: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<void> {
   const [, err] = await tryCatch(fn)
   if (err) {
@@ -29,22 +29,22 @@ async function tryStep<T>(
 export async function permanentlyDeleteFile(file: FileRecord) {
   cancelUpload(file.id)
   await tryStep('deleteFileRecord', file.id, () =>
-    deleteFileRecordAndThumbnails(file.id)
+    deleteFileRecordAndThumbnails(file.id),
   )
   await tryStep('deleteAllIndexerObjects', file.id, () =>
-    deleteAllIndexerObjects(file)
+    deleteAllIndexerObjects(file),
   )
   await tryStep('deleteLocalObjects', file.id, () =>
-    deleteLocalObjects(file.id)
+    deleteLocalObjects(file.id),
   )
   await tryStep('removeFsFile', file.id, () => removeFsFile(file))
   await tryStep('removeTempDownloadFile', file.id, () =>
-    removeTempDownloadFile(file)
+    removeTempDownloadFile(file),
   )
 }
 
 export async function permanentlyDeleteFiles(
-  files: FileRecord[]
+  files: FileRecord[],
 ): Promise<void> {
   if (files.length === 0) return
 
@@ -64,12 +64,12 @@ export async function permanentlyDeleteFiles(
 
   // Filesystem deletions in parallel
   await Promise.all(
-    files.flatMap((f) => [removeFsFile(f), removeTempDownloadFile(f)])
+    files.flatMap((f) => [removeFsFile(f), removeTempDownloadFile(f)]),
   )
 }
 
 async function deleteAllIndexerObjectsForFiles(
-  files: FileRecord[]
+  files: FileRecord[],
 ): Promise<void> {
   const sdk = getSdk()
   if (!sdk) return
@@ -77,7 +77,7 @@ async function deleteAllIndexerObjectsForFiles(
   const objectIds = files.flatMap((f) =>
     Object.values(f.objects ?? {})
       .map((o) => o.id)
-      .filter(Boolean)
+      .filter(Boolean),
   )
 
   // Fire off all deletions in parallel (best effort)
@@ -85,17 +85,17 @@ async function deleteAllIndexerObjectsForFiles(
     objectIds.map((id) =>
       sdk.deleteObject(id).catch(() => {
         // Swallow errors - best effort deletion
-      })
-    )
+      }),
+    ),
   )
 }
 
 export async function deleteFileFromNetwork(file: FileRecord) {
   await tryStep('deleteAllIndexerObjects', file.id, () =>
-    deleteAllIndexerObjects(file)
+    deleteAllIndexerObjects(file),
   )
   await tryStep('deleteLocalObjects', file.id, () =>
-    deleteLocalObjects(file.id)
+    deleteLocalObjects(file.id),
   )
 }
 
@@ -110,7 +110,7 @@ export async function deleteAllIndexerObjects(file: {
   for (const [_, object] of Object.entries(file.objects)) {
     if (object.id) {
       await tryStep('sdk.deleteObject', object.id, () =>
-        sdk.deleteObject(object.id)
+        sdk.deleteObject(object.id),
       )
     }
   }

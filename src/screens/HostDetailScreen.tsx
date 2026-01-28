@@ -1,16 +1,16 @@
-import { Text, StyleSheet, ActivityIndicator, View } from 'react-native'
-import { colors, palette } from '../styles/colors'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { useHost } from '../stores/hosts'
-import { determineBestRegion } from '../components/Map/mapHelpers'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useMemo } from 'react'
-import { MapMarker } from '../components/Map/MapMarker'
-import Map from '../components/Map/Map'
-import { InfoCard } from '../components/InfoCard'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { RowGroup } from '../components/Group'
+import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
+import Map from '../components/Map/Map'
+import { MapMarker } from '../components/Map/MapMarker'
+import { determineBestRegion } from '../components/Map/mapHelpers'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
+import type { MenuStackParamList } from '../stacks/types'
+import { useHost } from '../stores/hosts'
+import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'HostDetail'>
 
@@ -19,7 +19,7 @@ export function HostDetailScreen({ route }: Props) {
   const host = useHost(publicKey)
   const region = useMemo(
     () => determineBestRegion(host.data ? [host.data] : []),
-    [host.data]
+    [host.data],
   )
   if (!host.data) {
     if (host.isValidating) {

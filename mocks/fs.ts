@@ -1,6 +1,6 @@
-import { extFromMime } from '../src/lib/fileTypes'
-import { FsFileInfo } from '../src/stores/fs'
 import { File } from 'expo-file-system'
+import { extFromMime } from '../src/lib/fileTypes'
+import type { FsFileInfo } from '../src/stores/fs'
 
 type FsMock = {
   getFsFileUri: jest.Mock
@@ -17,7 +17,7 @@ function buildMockPath(file: FsFileInfo) {
   return `fs://files/${file.id}.${extFromMime(file.type)}`
 }
 
-let current = {
+const current = {
   mock: buildFsMock(),
 }
 

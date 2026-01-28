@@ -1,10 +1,10 @@
-import * as ImagePicker from 'react-native-image-picker'
 import { useCallback, useRef } from 'react'
+import * as ImagePicker from 'react-native-image-picker'
 import { logger } from '../lib/logger'
+import { processAssets } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
-import { processAssets } from '../lib/processAssets'
-import { FileRecord } from '../stores/files'
+import type { FileRecord } from '../stores/files'
 
 export function useImagePicker() {
   const toast = useToast()
@@ -35,7 +35,7 @@ export function useImagePicker() {
       if (result.errorCode) {
         logger.warn(
           'imagePicker',
-          `error: ${result.errorMessage ?? result.errorCode}`
+          `error: ${result.errorMessage ?? result.errorCode}`,
         )
         return []
       }
@@ -48,7 +48,7 @@ export function useImagePicker() {
           type: a.type,
           timestamp: a.timestamp,
           sourceUri: a.uri,
-        }))
+        })),
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))
@@ -60,7 +60,7 @@ export function useImagePicker() {
     } finally {
       isPickingRef.current = false
     }
-  }, [])
+  }, [toast.show])
 }
 
 export function useImagePickerAndUpload() {

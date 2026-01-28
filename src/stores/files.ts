@@ -1,17 +1,17 @@
-import {
-  type LocalObject,
-  localObjectFromStorageRow,
-} from '../encoding/localObject'
-import { upsertLocalObject, readLocalObjectsForFile } from './localObjects'
-import { logger } from '../lib/logger'
+import useSWR from 'swr'
 import { db, withTransactionLock } from '../db'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
-import useSWR from 'swr'
+import {
+  type LocalObject,
+  type LocalObjectRow,
+  localObjectFromStorageRow,
+} from '../encoding/localObject'
+import { logger } from '../lib/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { LocalObjectRow } from '../encoding/localObject'
-import { getIndexerURL } from './settings'
-import { librarySwr } from './library'
 import { keysOf } from '../lib/types'
+import { librarySwr } from './library'
+import { readLocalObjectsForFile, upsertLocalObject } from './localObjects'
+import { getIndexerURL } from './settings'
 
 /** Valid thumbnail sizes in pixels. */
 export type ThumbSize = 64 | 512
@@ -68,7 +68,7 @@ export type FileRecord = FileRecordRow & {
 
 export async function createFileRecord(
   fileRecord: Omit<FileRecord, 'objects'>,
-  triggerUpdate: boolean = true
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   const {
     id,
@@ -102,7 +102,7 @@ export async function createFileRecord(
 }
 
 export async function createManyFileRecords(
-  files: FileRecord[]
+  files: FileRecord[],
 ): Promise<void> {
   await withTransactionLock(async () => {
     for (const fr of files) {
@@ -130,7 +130,7 @@ type FileRecordsQueryOpts = {
 
 function buildFileRecordsQuery(
   opts: FileRecordsQueryOpts,
-  tableAlias: string = 'files'
+  tableAlias: string = 'files',
 ): {
   where: string
   params: (string | number)[]
@@ -147,11 +147,11 @@ function buildFileRecordsQuery(
   if (after) {
     if (order === 'ASC') {
       whereClauses.push(
-        `((${tableAlias}.${sortColumn} > ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id > ?))`
+        `((${tableAlias}.${sortColumn} > ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id > ?))`,
       )
     } else {
       whereClauses.push(
-        `((${tableAlias}.${sortColumn} < ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id < ?))`
+        `((${tableAlias}.${sortColumn} < ?) OR (${tableAlias}.${sortColumn} = ? AND ${tableAlias}.id < ?))`,
       )
     }
     params.push(after.value, after.value, after.id)
@@ -168,11 +168,11 @@ function buildFileRecordsQuery(
   if (fileExistsLocally !== undefined) {
     if (fileExistsLocally) {
       whereClauses.push(
-        `EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`
+        `EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
       )
     } else {
       whereClauses.push(
-        `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`
+        `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
       )
     }
   }
@@ -193,35 +193,35 @@ function buildFileRecordsQuery(
 }
 
 export async function readAllFileRecordsCount(
-  opts: FileRecordsQueryOpts
+  opts: FileRecordsQueryOpts,
 ): Promise<number> {
   const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
 
   const row = await db().getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
-    ...params
+    ...params,
   )
   return row?.count ?? 0
 }
 
 export async function readAllFileRecordsStats(
-  opts: FileRecordsQueryOpts
+  opts: FileRecordsQueryOpts,
 ): Promise<{ count: number; totalBytes: number }> {
   const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
 
   const row = await db().getFirstAsync<{ count: number; totalBytes: number }>(
     `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
-    ...params
+    ...params,
   )
   return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 }
 }
 
 export async function readAllFileRecords(
-  opts: FileRecordsQueryOpts
+  opts: FileRecordsQueryOpts,
 ): Promise<FileRecord[]> {
   const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(
     opts,
-    'f'
+    'f',
   )
 
   const joined = await db().getAllAsync<
@@ -241,7 +241,7 @@ export async function readAllFileRecords(
      LEFT JOIN objects o ON o.fileId = f.id
      ${where}
      ORDER BY ${orderExpr}${limitExpr}`,
-    ...params
+    ...params,
   )
 
   const byId: Map<string, FileRecordRow> = new Map()
@@ -259,7 +259,7 @@ export async function readAllFileRecords(
           id: r.objectId,
           createdAt: r.objectCreatedAt,
           updatedAt: r.objectUpdatedAt,
-        })
+        }),
       )
       objectsById.set(r.id, arr)
     }
@@ -271,11 +271,11 @@ export async function readAllFileRecords(
 }
 
 export async function readFileRecordByObjectId(
-  objectId: string
+  objectId: string,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
-    objectId
+    objectId,
   )
   if (!row) return null
   const objects = await readLocalObjectsForFile(row.id)
@@ -287,7 +287,7 @@ export async function readFileRecordsByLocalIds(localIds: string[]) {
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
-    ...localIds
+    ...localIds,
   )
   return rows.map((row) => transformRow(row)) as (FileRecord & {
     localId: string
@@ -299,7 +299,7 @@ export async function readFileRecordsByContentHashes(contentHashes: string[]) {
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
-    ...contentHashes
+    ...contentHashes,
   )
   return rows.map((row) => transformRow(row)) as (FileRecord & {
     hash: string
@@ -309,7 +309,7 @@ export async function readFileRecordsByContentHashes(contentHashes: string[]) {
 export async function readFileRecordByContentHash(hash: string) {
   const row = await db().getFirstAsync<FileRecordRow>(
     'SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE hash = ?',
-    hash
+    hash,
   )
   if (!row) {
     logger.debug('db', 'file not found by hash', hash)
@@ -322,7 +322,7 @@ export async function readFileRecordByContentHash(hash: string) {
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     'SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize FROM files WHERE id = ?',
-    id
+    id,
   )
   if (!row) {
     logger.debug('db', 'file not found', id)
@@ -336,7 +336,7 @@ export async function readFileRecord(id: string): Promise<FileRecord | null> {
 export async function updateFileRecord(
   update: Partial<FileRecordRow> & { id: string },
   triggerUpdate: boolean = true,
-  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
 ): Promise<void> {
   const { id } = update
   const assignments: Record<string, string | number | boolean | null> = {}
@@ -377,7 +377,7 @@ export async function updateFileRecord(
 
 export async function updateManyFileRecords(
   updates: Partial<FileRecordRow> & { id: string }[],
-  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
 ): Promise<void> {
   await withTransactionLock(async () => {
     for (const update of updates) {
@@ -391,7 +391,7 @@ export async function updateManyFileRecords(
 
 export async function deleteFileRecord(
   id: string,
-  triggerUpdate: boolean = true
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   await sqlDelete('files', { id })
   if (triggerUpdate) {
@@ -424,7 +424,7 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
 /** Delete multiple files and all their associated thumbnails. */
 export async function deleteManyFileRecordsAndThumbnails(
   ids: string[],
-  hashes: string[]
+  hashes: string[],
 ): Promise<void> {
   if (ids.length === 0) return
   await withTransactionLock(async () => {
@@ -449,7 +449,7 @@ export async function deleteAllFileRecords(): Promise<void> {
 /** Commit a file record and a local object in a single transaction. */
 export async function createFileRecordWithLocalObject(
   fileRecord: Omit<FileRecord, 'objects'>,
-  localObject: LocalObject
+  localObject: LocalObject,
 ): Promise<void> {
   try {
     await withTransactionLock(async () => {
@@ -467,7 +467,7 @@ export async function createFileRecordWithLocalObject(
 export async function updateFileRecordWithLocalObject(
   fileRecord: Omit<FileRecord, 'objects'>,
   localObject: LocalObject,
-  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false }
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
 ): Promise<void> {
   try {
     await withTransactionLock(async () => {
@@ -483,7 +483,7 @@ export async function updateFileRecordWithLocalObject(
 
 export function transformRow(
   row: FileRecordRow,
-  objects?: LocalObject[]
+  objects?: LocalObject[],
 ): FileRecord {
   const objectsMap: Record<string, LocalObject> = {}
   for (const o of objects || []) {
@@ -511,7 +511,7 @@ export function useFileCountAll() {
       limit: undefined,
       after: undefined,
       order: 'ASC',
-    })
+    }),
   )
 }
 
@@ -529,7 +529,7 @@ export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
       },
       fileExistsLocally: true,
     })
-  }
+  },
 )
 
 export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
@@ -544,7 +544,7 @@ export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
       },
       fileExistsLocally: false,
     })
-  }
+  },
 )
 
 export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
@@ -559,7 +559,7 @@ export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
       },
       fileExistsLocally: true,
     })
-  }
+  },
 )
 
 export const [getFileStatsLocal, useFileStatsLocal] = createGetterAndSWRHook(
@@ -574,7 +574,7 @@ export const [getFileStatsLocal, useFileStatsLocal] = createGetterAndSWRHook(
       },
       fileExistsLocally: true,
     })
-  }
+  },
 )
 
 export function useFileDetails(id: string) {

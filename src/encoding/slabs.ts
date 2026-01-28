@@ -1,5 +1,5 @@
+import type { PinnedSector, Slab } from 'react-native-sia'
 import { z } from 'zod'
-import { type Slab, type PinnedSector } from 'react-native-sia'
 import { hexArrayBufferCodec } from './arrayBuffer'
 
 export const pinnedSectorSchema = z.object({
@@ -58,7 +58,7 @@ export const slabsStorageCodec = z.codec(z.string(), z.array(slabSchema), {
   },
   encode: (domain: Slab[]): string => {
     const storageSlabs: SlabStorage[] = (domain ?? []).map((slab) =>
-      slabCodec.encode(slab)
+      slabCodec.encode(slab),
     )
     return JSON.stringify(storageSlabs)
   },

@@ -6,7 +6,7 @@ import * as MediaLibrary from 'expo-media-library'
  * the network if it is not already cached.
  */
 export async function getMediaLibraryUri(
-  localId: string | null
+  localId: string | null,
 ): Promise<string | null> {
   if (!localId) return null
   try {
@@ -14,7 +14,7 @@ export async function getMediaLibraryUri(
       shouldDownloadFromNetwork: true,
     })
     return normalizeUri(asset.localUri)
-  } catch (e) {
+  } catch (_e) {
     return null
   }
 }

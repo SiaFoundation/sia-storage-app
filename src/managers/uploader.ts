@@ -1,37 +1,37 @@
 import { useCallback, useEffect } from 'react'
-import {
+import type {
   PackedUploadInterface,
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
-import { logger } from '../lib/logger'
-import { createFileReader } from '../lib/fileReader'
-import { calculateFileProgress } from '../lib/uploadProgress'
-import { encodeFileMetadata } from '../encoding/fileMetadata'
-import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import { upsertLocalObject } from '../stores/localObjects'
-import { FileRecordRow, readFileRecord } from '../stores/files'
-import { useSdk, getSdk } from '../stores/sdk'
-import { getIndexerURL, useIndexerURL } from '../stores/settings'
-import { getFsFileUri } from '../stores/fs'
 import {
-  registerUpload,
-  setUploadStatus,
-  setUploadError,
-  setUploadBatchInfo,
-  updateUploadProgress,
-  removeUpload,
-  removeUploads,
-} from '../stores/uploads'
-import {
-  UPLOAD_MAX_INFLIGHT,
-  UPLOAD_DATA_SHARDS,
-  UPLOAD_PARITY_SHARDS,
-  SLAB_SIZE,
   PACKER_IDLE_TIMEOUT,
   SLAB_FILL_THRESHOLD,
+  SLAB_SIZE,
+  UPLOAD_DATA_SHARDS,
+  UPLOAD_MAX_INFLIGHT,
+  UPLOAD_PARITY_SHARDS,
 } from '../config'
+import { encodeFileMetadata } from '../encoding/fileMetadata'
+import { createFileReader } from '../lib/fileReader'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
+import { logger } from '../lib/logger'
 import { uniqueId } from '../lib/uniqueId'
+import { calculateFileProgress } from '../lib/uploadProgress'
+import { type FileRecordRow, readFileRecord } from '../stores/files'
+import { getFsFileUri } from '../stores/fs'
+import { upsertLocalObject } from '../stores/localObjects'
+import { getSdk, useSdk } from '../stores/sdk'
+import { getIndexerURL, useIndexerURL } from '../stores/settings'
+import {
+  registerUpload,
+  removeUpload,
+  removeUploads,
+  setUploadBatchInfo,
+  setUploadError,
+  setUploadStatus,
+  updateUploadProgress,
+} from '../stores/uploads'
 
 export type FileEntry = {
   fileId: string
@@ -101,8 +101,8 @@ class UploadManager {
         logger.info(
           'uploadManager',
           `Slab ${Math.round(
-            fillPercent * 100
-          )}% full, flushing before adding ${entry.size} byte file`
+            fillPercent * 100,
+          )}% full, flushing before adding ${entry.size} byte file`,
         )
         await this.flush()
       }
@@ -128,23 +128,23 @@ class UploadManager {
       setUploadStatus(entry.fileId, 'packing')
       logger.info(
         'uploadManager',
-        `Adding file ${entry.fileId} to packer (${entry.size} bytes)`
+        `Adding file ${entry.fileId} to packer (${entry.size} bytes)`,
       )
 
       const reader = createFileReader(entry.fileUri)
       await this.packer.add(reader)
 
       // Update batch state
-      this.currentBatch!.files.push(entry)
+      this.currentBatch?.files.push(entry)
       this.currentBatch!.totalSize += entry.size
 
       // Update batch info for all files in the batch
       const batchFileCount = this.currentBatch!.files.length
-      for (const file of this.currentBatch!.files) {
+      for (const file of this.currentBatch?.files ?? []) {
         setUploadBatchInfo(
           file.fileId,
           this.currentBatch!.batchId,
-          batchFileCount
+          batchFileCount,
         )
       }
 
@@ -159,8 +159,8 @@ class UploadManager {
         `File ${
           entry.fileId
         } packed. Batch: ${batchFileCount} files, ${slabsFilled} slab(s), ${Math.round(
-          this.getCurrentSlabFillPercent() * 100
-        )}% of current slab`
+          this.getCurrentSlabFillPercent() * 100,
+        )}% of current slab`,
       )
 
       // Reset idle timer
@@ -182,7 +182,7 @@ class UploadManager {
     const currentFill = this.getCurrentSlabFillPercent()
     const currentSlabs = Math.floor(this.currentBatch.totalSize / SLAB_SIZE)
     const newSlabs = Math.floor(
-      (this.currentBatch.totalSize + fileSize) / SLAB_SIZE
+      (this.currentBatch.totalSize + fileSize) / SLAB_SIZE,
     )
     const wouldCrossBoundary = newSlabs > currentSlabs
 
@@ -221,7 +221,7 @@ class UploadManager {
       const fileProgress = calculateFileProgress(
         batchInfo,
         batchProgress,
-        entry.fileId
+        entry.fileId,
       )
       updateUploadProgress(entry.fileId, fileProgress)
     }
@@ -269,7 +269,7 @@ class UploadManager {
 
     logger.info(
       'uploadManager',
-      `Flushing batch ${batch.batchId} with ${batch.files.length} files`
+      `Flushing batch ${batch.batchId} with ${batch.files.length} files`,
     )
 
     try {
@@ -283,7 +283,7 @@ class UploadManager {
 
       logger.info(
         'uploadManager',
-        `Batch ${batch.batchId} finalized with ${pinnedObjects.length} objects`
+        `Batch ${batch.batchId} finalized with ${pinnedObjects.length} objects`,
       )
 
       // Match objects to files and save
@@ -295,14 +295,14 @@ class UploadManager {
 
       logger.info(
         'uploadManager',
-        `Batch ${batch.batchId} completed successfully`
+        `Batch ${batch.batchId} completed successfully`,
       )
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       logger.error(
         'uploadManager',
         `Error finalizing batch ${batch.batchId}`,
-        e
+        e,
       )
 
       // Mark all files in the batch as errored
@@ -319,13 +319,13 @@ class UploadManager {
    */
   private async saveBatchObjects(
     batch: BatchState,
-    pinnedObjects: PinnedObjectInterface[]
+    pinnedObjects: PinnedObjectInterface[],
   ): Promise<void> {
     // Objects are returned in add-order
     if (pinnedObjects.length !== batch.files.length) {
       logger.warn(
         'uploadManager',
-        `Object count mismatch: ${pinnedObjects.length} objects for ${batch.files.length} files`
+        `Object count mismatch: ${pinnedObjects.length} objects for ${batch.files.length} files`,
       )
     }
 
@@ -336,7 +336,7 @@ class UploadManager {
       if (!pinnedObject) {
         logger.error(
           'uploadManager',
-          `No pinned object for file ${entry.fileId} at index ${i}`
+          `No pinned object for file ${entry.fileId} at index ${i}`,
         )
         setUploadError(entry.fileId, 'No pinned object returned')
         continue
@@ -350,7 +350,7 @@ class UploadManager {
         const localObject = await pinnedObjectToLocalObject(
           entry.fileId,
           this.indexerURL,
-          pinnedObject
+          pinnedObject,
         )
         await upsertLocalObject(localObject)
 
@@ -360,7 +360,7 @@ class UploadManager {
         logger.error(
           'uploadManager',
           `Error saving object for file ${entry.fileId}`,
-          e
+          e,
         )
         setUploadError(entry.fileId, message)
       }
@@ -379,7 +379,7 @@ class UploadManager {
     if (this.currentBatch) {
       logger.info(
         'uploadManager',
-        `Cancelling batch ${this.currentBatch.batchId}`
+        `Cancelling batch ${this.currentBatch.batchId}`,
       )
       for (const entry of this.currentBatch.files) {
         removeUpload(entry.fileId)
@@ -460,7 +460,7 @@ export function useUploader() {
         await getUploadManager().queueFiles(entries)
       }
     },
-    [sdk]
+    [sdk],
   )
 }
 

@@ -6,5 +6,5 @@ import { openAuthWebView } from '../stores/authWebView'
  */
 export async function openAuthURL(authURL: string): Promise<boolean> {
   const callbackUrl = await openAuthWebView(authURL)
-  return callbackUrl !== null && callbackUrl.startsWith('sia://')
+  return callbackUrl?.startsWith('sia://') ?? false
 }

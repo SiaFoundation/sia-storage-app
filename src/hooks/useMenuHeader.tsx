@@ -1,16 +1,14 @@
-import { palette } from '../styles/colors'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { HomeIcon } from 'lucide-react-native'
 import { useLayoutEffect } from 'react'
-import { type MenuStackParamList } from '../stacks/types'
-import { useNavigation } from '@react-navigation/native'
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { IconButton } from '../components/IconButton'
+import type { MenuStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 export function useMenuHeader() {
   const navigation =
-    useNavigation<
-      NativeStackNavigationProp<MenuStackParamList, 'MenuHome'>
-    >()
+    useNavigation<NativeStackNavigationProp<MenuStackParamList, 'MenuHome'>>()
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (

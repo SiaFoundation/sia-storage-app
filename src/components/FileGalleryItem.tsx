@@ -1,11 +1,11 @@
-import { View, Pressable, StyleSheet } from 'react-native'
-import { colors, palette, whiteA } from '../styles/colors'
-import { type FileRecord } from '../stores/files'
-import { FileThumbnail } from './FileThumbnail'
+import { CircleCheckIcon, CircleIcon } from 'lucide-react-native'
 import { memo } from 'react'
+import { Pressable, StyleSheet, View } from 'react-native'
 import { useFileStatus } from '../lib/file'
+import type { FileRecord } from '../stores/files'
+import { colors, palette, whiteA } from '../styles/colors'
+import { FileThumbnail } from './FileThumbnail'
 import { UploadStatusIcon } from './UploadStatusIcon'
-import { CircleIcon, CircleCheckIcon } from 'lucide-react-native'
 
 type Props = {
   file: FileRecord
@@ -29,9 +29,7 @@ function FileGalleryItemComponent({
         accessibilityRole="button"
         onPress={() => onPressItem(file)}
         style={styles.thumbPress}
-        onLongPress={
-          onLongPressItem ? () => onLongPressItem(file) : undefined
-        }
+        onLongPress={onLongPressItem ? () => onLongPressItem(file) : undefined}
       >
         <FileThumbnail file={file} iconSize={24} thumbSize={512} />
         {isSelectionMode ? (

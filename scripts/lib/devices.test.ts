@@ -1,7 +1,7 @@
 import {
+  parseAdbOutput,
   parseDevicectlOutput,
   parseSimctlOutput,
-  parseAdbOutput,
 } from './devices'
 
 /**
@@ -296,7 +296,9 @@ describe('parseDevicectlOutput', () => {
   })
 
   test('parses device with connected tunnel state (USB connection)', () => {
-    const devices = parseDevicectlOutput(DEVICECTL_LIST_DEVICES_CONNECTED_OUTPUT)
+    const devices = parseDevicectlOutput(
+      DEVICECTL_LIST_DEVICES_CONNECTED_OUTPUT,
+    )
 
     expect(devices).toHaveLength(1)
     expect(devices[0]).toEqual({
@@ -342,7 +344,9 @@ describe('parseSimctlOutput', () => {
   })
 
   test('parses multiple booted simulators across runtimes', () => {
-    const devices = parseSimctlOutput(SIMCTL_LIST_DEVICES_MULTIPLE_BOOTED_OUTPUT)
+    const devices = parseSimctlOutput(
+      SIMCTL_LIST_DEVICES_MULTIPLE_BOOTED_OUTPUT,
+    )
 
     expect(devices).toHaveLength(3)
     expect(devices.map((d) => d.name)).toEqual([

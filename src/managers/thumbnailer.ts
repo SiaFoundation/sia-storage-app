@@ -1,24 +1,24 @@
-import { logger } from '../lib/logger'
 import { File } from 'expo-file-system'
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
+import { calculateContentHash } from '../lib/contentHash'
+import { getMimeType } from '../lib/fileTypes'
+import { logger } from '../lib/logger'
+import { uniqueId } from '../lib/uniqueId'
 import {
-  readFileRecordByContentHash,
   createFileRecord,
+  type FileRecord,
+  readFileRecordByContentHash,
   type ThumbSize,
   ThumbSizes,
-  FileRecord,
 } from '../stores/files'
+import { copyFileToFs, getFsFileUri } from '../stores/fs'
 import {
   readThumbnailSizesForHash,
   thumbnailExistsForHashAndSize,
   thumbnailSwr,
 } from '../stores/thumbnails'
-import { getFsFileUri, copyFileToFs } from '../stores/fs'
-import { calculateContentHash } from '../lib/contentHash'
-import { getMimeType } from '../lib/fileTypes'
-import { uniqueId } from '../lib/uniqueId'
 
 /**
  * Generate thumbnails for a file record.
@@ -27,7 +27,7 @@ import { uniqueId } from '../lib/uniqueId'
  * @returns Promise that resolves when thumbnails are generated.
  */
 export async function generateThumbnailsForFile(
-  fileRecord: FileRecord
+  fileRecord: FileRecord,
 ): Promise<void> {
   // Only generate thumbnails for image and video files.
   if (
@@ -202,7 +202,7 @@ export async function ensureThumbnailForSize(params: {
         thumbForHash: fileHash,
         thumbSize: size,
       },
-      true
+      true,
     )
     logger.debug('thumbnailer', 'created thumbnail record', {
       thumbId,
@@ -235,7 +235,7 @@ type TargetDimensions = {
 function computeTargetDimensions(
   sourceWidth: number | null | undefined,
   sourceHeight: number | null | undefined,
-  size: ThumbSize
+  size: ThumbSize,
 ): TargetDimensions {
   if (
     typeof sourceWidth === 'number' &&
@@ -249,7 +249,7 @@ function computeTargetDimensions(
         targetWidth: size,
         targetHeight: Math.max(
           1,
-          Math.round((sourceHeight * size) / sourceWidth)
+          Math.round((sourceHeight * size) / sourceWidth),
         ),
       }
     }
@@ -269,13 +269,13 @@ type ThumbnailInfo = {
 }
 
 async function getImageSize(
-  uri: string
+  uri: string,
 ): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
     Image.getSize(
       uri,
       (w, h) => resolve({ width: w, height: h }),
-      () => resolve(null)
+      () => resolve(null),
     )
   })
 }
@@ -283,13 +283,13 @@ async function getImageSize(
 /** Prepare image input frame and target dimensions for resizing. */
 async function prepareImageThumbnail(
   sourceUri: string,
-  size: ThumbSize
+  size: ThumbSize,
 ): Promise<ThumbnailInfo> {
   const imgSize = await getImageSize(sourceUri)
   const { targetWidth, targetHeight } = computeTargetDimensions(
     imgSize?.width,
     imgSize?.height,
-    size
+    size,
   )
 
   return {
@@ -302,7 +302,7 @@ async function prepareImageThumbnail(
 /** Prepare video frame and target dimensions for resizing. */
 async function prepareVideoThumbnail(
   sourceUri: string,
-  size: ThumbSize
+  size: ThumbSize,
 ): Promise<ThumbnailInfo> {
   const thumb = await VideoThumbnails.getThumbnailAsync(sourceUri, {
     time: 1000,
@@ -314,7 +314,7 @@ async function prepareVideoThumbnail(
   const { targetWidth, targetHeight } = computeTargetDimensions(
     baseWidth,
     baseHeight,
-    size
+    size,
   )
 
   return {

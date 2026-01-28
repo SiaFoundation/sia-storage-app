@@ -1,15 +1,11 @@
 import { create } from 'zustand'
-import { createGetterAndSelector } from '../lib/selectors'
-import { deleteAllFileRecords } from './files'
-import { getHasOnboarded, setHasOnboarded } from './settings'
-import { reconnectIndexer, resetSdk } from './sdk'
-import { initUploadScanner } from '../managers/uploadScanner'
-import { cancelAllUploads } from './uploads'
-import { cancelAllDownloads } from './downloads'
-import { initLogger } from './logs'
-import { ensureFsStorageDirectory } from './fs'
-import { ensureTempFsStorageDirectory } from './tempFs'
 import { initializeDB, resetDb } from '../db'
+import { createGetterAndSelector } from '../lib/selectors'
+import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
+import { initBackgroundTasks } from '../managers/backgroundTasks'
+import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
+import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
+import { initLogRotation } from '../managers/logRotation'
 import {
   initSyncDownEvents,
   resetSyncDownCursor,
@@ -22,15 +18,19 @@ import {
   initSyncPhotosArchive,
   resetPhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
-import { initBackgroundTasks } from '../managers/backgroundTasks'
 import { initSyncUpMetadata } from '../managers/syncUpMetadata'
 import { initThumbnailScanner } from '../managers/thumbnailScanner'
-import { initFsOrphanScanner } from '../managers/fsOrphanScanner'
-import { initFsEvictionScanner } from '../managers/fsEvictionScanner'
-import { initLogRotation } from '../managers/logRotation'
-import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
+import { initUploadScanner } from '../managers/uploadScanner'
 import { clearAppKeys, migrateKeychainAccessibility } from './appKey'
+import { cancelAllDownloads } from './downloads'
+import { deleteAllFileRecords } from './files'
+import { ensureFsStorageDirectory } from './fs'
+import { initLogger } from './logs'
 import { clearMnemonicHash } from './mnemonic'
+import { reconnectIndexer, resetSdk } from './sdk'
+import { getHasOnboarded, setHasOnboarded } from './settings'
+import { ensureTempFsStorageDirectory } from './tempFs'
+import { cancelAllUploads } from './uploads'
 
 export type InitStep = {
   id: string
@@ -172,7 +172,7 @@ export const [getInitSteps, useInitSteps] = createGetterAndSelector(
   (state) => {
     const steps = Array.from(state.steps.values())
     return steps.sort((a, b) => a.startedAt - b.startedAt)
-  }
+  },
 )
 
 export const [getCurrentInitStep, useCurrentInitStep] = createGetterAndSelector(
@@ -180,7 +180,7 @@ export const [getCurrentInitStep, useCurrentInitStep] = createGetterAndSelector(
   (state) => {
     const steps = Array.from(state.steps.values())
     return steps.sort((a, b) => a.startedAt - b.startedAt).at(-1)
-  }
+  },
 )
 
 export const [getInitializationError, useInitializationError] =
@@ -188,12 +188,12 @@ export const [getInitializationError, useInitializationError] =
 
 export const [getIsInitializing, useIsInitializing] = createGetterAndSelector(
   useAppInitStore,
-  (s) => s.isInitializing
+  (s) => s.isInitializing,
 )
 
 export const [getShowSplash, useShowSplash] = createGetterAndSelector(
   useAppInitStore,
-  (s) => s.isInitializing || s.initializationError
+  (s) => s.isInitializing || s.initializationError,
 )
 
 // helpers

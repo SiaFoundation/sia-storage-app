@@ -1,16 +1,16 @@
 import { useCallback } from 'react'
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  Platform,
   ActivityIndicator,
+  FlatList,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native'
-import { palette } from '../styles/colors'
-import { type LogEntry } from '../lib/logger'
-import { getScopeColorHex, getLevelColorHex } from '../lib/logColors'
 import { useLogs } from '../hooks/useLogs'
+import { getLevelColorHex, getScopeColorHex } from '../lib/logColors'
+import type { LogEntry } from '../lib/logger'
+import { palette } from '../styles/colors'
 
 export function LogView() {
   const { data: logs = [], isLoading, error } = useLogs()
@@ -38,7 +38,7 @@ export function LogView() {
         </Text>
       )
     },
-    []
+    [],
   )
 
   if (isLoading) {

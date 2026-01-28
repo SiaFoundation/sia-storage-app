@@ -1,5 +1,5 @@
-import React, { memo } from 'react'
-import { View, StyleSheet, ViewStyle } from 'react-native'
+import { memo } from 'react'
+import { StyleSheet, View, type ViewStyle } from 'react-native'
 
 export type Pt = { x: number; y: number }
 export type GlyphShape = Pt[]
@@ -77,12 +77,12 @@ export const normalize = (s: GlyphShape): GlyphShape => {
 
 export function getTransformedShapePoints(
   shape: ShapeId,
-  options: { rotation?: 0 | 90 | 180 | 270; mirror?: boolean } = {}
+  options: { rotation?: 0 | 90 | 180 | 270; mirror?: boolean } = {},
 ): GlyphShape {
   const { rotation = 0, mirror = false } = options
   const base = SHAPES[shape]
   const transformed = normalize(
-    rotateTimes(mirror ? mirrorX(base) : base, rotation)
+    rotateTimes(mirror ? mirrorX(base) : base, rotation),
   )
   return transformed
 }

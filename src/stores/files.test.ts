@@ -250,7 +250,7 @@ describe('updateFileRecord', () => {
         name: 'new name',
       },
       false,
-      { includeUpdatedAt: true }
+      { includeUpdatedAt: true },
     )
     const record = await readFileRecord('file-new')
     expect(record).toMatchObject({ name: 'new name', updatedAt: 4444 })

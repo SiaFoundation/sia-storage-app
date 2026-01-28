@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Android Release Build & Distribution
  *
@@ -15,8 +16,8 @@
  *   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON - Google Play service account key
  */
 
-import { $ } from 'bun'
 import path from 'node:path'
+import { $ } from 'bun'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 

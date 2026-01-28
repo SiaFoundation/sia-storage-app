@@ -1,13 +1,13 @@
-import React, { useCallback } from 'react'
-import { StyleSheet, View, Text } from 'react-native'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SwitchIndexerStackParamList } from '../stacks/types'
-import { palette } from '../styles/colors'
-import { Button } from '../components/Button'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useCallback } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import BlocksLoader from '../components/BlocksLoader'
-import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { Button } from '../components/Button'
 import { IndexerSelector } from '../components/IndexerSelector'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import type { SwitchIndexerStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<
   SwitchIndexerStackParamList,

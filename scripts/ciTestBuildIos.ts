@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * CI iOS Test Build
  *
@@ -9,8 +10,8 @@
  *   bun scripts/ciTestBuildIos.ts
  */
 
-import { $ } from 'bun'
 import path from 'node:path'
+import { $ } from 'bun'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 

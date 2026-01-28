@@ -1,6 +1,6 @@
 import { Dimensions } from 'react-native'
 import type { Region } from 'react-native-maps'
-import { Host } from 'react-native-sia'
+import type { Host } from 'react-native-sia'
 
 type Pt = { latitude: number; longitude: number }
 
@@ -42,7 +42,7 @@ export function determineBestRegion(
   opts?: {
     minDeltaDeg?: number
     paddingFactor?: number
-  }
+  },
 ): Region | undefined {
   const valid = points.filter(isValid)
   if (valid.length === 0) return undefined

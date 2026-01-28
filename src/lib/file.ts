@@ -1,19 +1,16 @@
 import { useEffect } from 'react'
-import { type UploadState } from '../stores/uploads'
-import { type DownloadState } from '../stores/downloads'
-import { FileRecord } from '../stores/files'
-import { useDownloadState } from '../stores/downloads'
-import { useUploadState } from '../stores/uploads'
-import { useFsFileUri } from '../stores/fs'
 import {
   PinnedObject,
-  PinnedObjectInterface,
-  SealedObject,
+  type PinnedObjectInterface,
+  type SealedObject,
 } from 'react-native-sia'
-import { LocalObject } from '../encoding/localObject'
+import useSWR, { type SWRResponse } from 'swr'
+import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { SWRResponse } from 'swr'
-import useSWR from 'swr'
+import { type DownloadState, useDownloadState } from '../stores/downloads'
+import type { FileRecord } from '../stores/files'
+import { useFsFileUri } from '../stores/fs'
+import { type UploadState, useUploadState } from '../stores/uploads'
 
 export function fileHasASealedObject(file?: FileRecord): boolean {
   return !!Object.keys(file?.objects ?? {}).length
@@ -53,7 +50,7 @@ function computeFileStatus({
 }) {
   const uploadStatus = uploadState?.status
   const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(
-    uploadStatus ?? ''
+    uploadStatus ?? '',
   )
   const isPacking = uploadStatus === 'packing' || uploadStatus === 'packed'
   const isDownloading =
@@ -68,8 +65,7 @@ function computeFileStatus({
     batchFileCount: uploadState?.batchFileCount ?? 0,
     isUploaded: hasSealedObject || !!isShared,
     isDownloaded: !!fileUri,
-    isErrored:
-      uploadStatus === 'error' || downloadState?.status === 'error',
+    isErrored: uploadStatus === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,
     fileUri,
@@ -80,7 +76,7 @@ function computeFileStatus({
 
 export function useFileStatus(
   file?: FileRecord,
-  isShared?: boolean
+  isShared?: boolean,
 ): SWRResponse<FileStatus, Error> {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
@@ -93,9 +89,10 @@ export function useFileStatus(
       downloadState,
       fileUri: fileUri.data ?? null,
       errorText: uploadState?.error || downloadState?.error || null,
-    })
+    }),
   )
   // Immediately update when there are changes to data or transfer progress.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these deps trigger mutate intentionally
   useEffect(() => {
     response.mutate()
   }, [file, uploadState, downloadState, fileUri.data])
@@ -103,17 +100,17 @@ export function useFileStatus(
 }
 
 export function getFileTypeName(
-  file: FileRecord
+  file: FileRecord,
 ): 'photo' | 'video' | 'audio' | 'document' | 'other' {
   return file.type?.startsWith('image')
     ? 'photo'
     : file.type?.startsWith('video')
-    ? 'video'
-    : file.type?.startsWith('audio')
-    ? 'audio'
-    : file.type?.startsWith('application')
-    ? 'document'
-    : 'other'
+      ? 'video'
+      : file.type?.startsWith('audio')
+        ? 'audio'
+        : file.type?.startsWith('application')
+          ? 'document'
+          : 'other'
 }
 
 export function getOneSealedObject(file: {
@@ -127,7 +124,7 @@ export function getOneSealedObject(file: {
 
 export async function getPinnedObject(
   indexerURL: string,
-  sealedObject: SealedObject
+  sealedObject: SealedObject,
 ): Promise<PinnedObjectInterface> {
   const appKey = await getAppKeyForIndexer(indexerURL)
   if (!appKey) {

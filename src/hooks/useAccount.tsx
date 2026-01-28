@@ -1,6 +1,6 @@
 import useSWR from 'swr'
-import { useSdk } from '../stores/sdk'
 import { logger } from '../lib/logger'
+import { useSdk } from '../stores/sdk'
 
 export function useAccount() {
   const sdk = useSdk()

@@ -65,7 +65,9 @@ export class ProgressIndicator {
     const elapsed = formatElapsed(Date.now() - this.startTime)
     const spinner = SPINNER_FRAMES[this.frameIndex]
     // \x1b[K clears from cursor to end of line (prevents leftover characters)
-    process.stdout.write(`\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${elapsed}`)
+    process.stdout.write(
+      `\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${elapsed}`,
+    )
   }
 
   stop(success: boolean): void {

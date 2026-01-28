@@ -1,8 +1,8 @@
-import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
-import { initSyncNewPhotos, setAutoSyncNewPhotos } from './syncNewPhotos'
 import * as MediaLibrary from 'expo-media-library'
+import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
+import { initSyncNewPhotos, setAutoSyncNewPhotos } from './syncNewPhotos'
 
 jest.useFakeTimers()
 
@@ -55,7 +55,7 @@ function asset(id: string, name: string, time: number): MediaLibrary.Asset {
 }
 
 function page(
-  a: MediaLibrary.Asset[]
+  a: MediaLibrary.Asset[],
 ): MediaLibrary.PagedInfo<MediaLibrary.Asset> {
   return {
     assets: a,
@@ -72,7 +72,7 @@ describe('syncNewPhotos', () => {
 
   it('iterates forward adding all new files', async () => {
     const ensureMediaLibraryPermissionMock = jest.mocked(
-      ensureMediaLibraryPermission
+      ensureMediaLibraryPermission,
     )
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
     const processAssetsMock = jest.mocked(processAssets)
@@ -81,7 +81,7 @@ describe('syncNewPhotos', () => {
     await setAutoSyncNewPhotos(true)
     getAssetsAsyncMock
       .mockResolvedValueOnce(
-        page([asset('a1', '1.jpg', 1000), asset('a2', '2.jpg', 2000)])
+        page([asset('a1', '1.jpg', 1000), asset('a2', '2.jpg', 2000)]),
       )
       .mockResolvedValueOnce(page([asset('a3', '3.jpg', 2500)]))
       .mockResolvedValueOnce(page([]))

@@ -1,13 +1,12 @@
-import React from 'react'
-import { View, Text, ScrollView } from 'react-native'
-import { ArrowUp, ArrowDown, XIcon } from 'lucide-react-native'
+import { ArrowDown, ArrowUp, XIcon } from 'lucide-react-native'
+import { ScrollView, Text, View } from 'react-native'
 import {
-  clearCategories,
-  toggleCategory,
-  useLibrary,
-  setSortCategory,
-  toggleDir,
   categories,
+  clearCategories,
+  setSortCategory,
+  toggleCategory,
+  toggleDir,
+  useLibrary,
 } from '../stores/library'
 import { palette, whiteA } from '../styles/colors'
 import { Pill } from './Pill'

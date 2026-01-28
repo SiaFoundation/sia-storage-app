@@ -1,10 +1,10 @@
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../../stacks/types'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   LearnScreen,
   LearnSection,
   LearnText,
 } from '../../components/LearnScreen'
+import type { MenuStackParamList } from '../../stacks/types'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'LearnRecoveryPhrase'>
 

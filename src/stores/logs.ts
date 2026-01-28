@@ -1,10 +1,10 @@
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { useState, useEffect } from 'react'
-import { logger, type LogLevel, type LogEntry } from '../lib/logger'
-import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 import { db, dbInitialized } from '../db'
 import { sqlInsert } from '../db/sql'
+import { type LogEntry, type LogLevel, logger } from '../lib/logger'
+import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
 export type LogsState = {
   logLevel: LogLevel
@@ -149,7 +149,7 @@ function getLevelsForFilter(minLevel: LogLevel): LogLevel[] {
 /** Read logs from database with optional filters. */
 export async function readLogs(
   logLevel?: LogLevel,
-  logScopes?: string[]
+  logScopes?: string[],
 ): Promise<LogEntry[]> {
   try {
     if (!dbInitialized) {

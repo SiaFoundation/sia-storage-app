@@ -1,4 +1,5 @@
-import React, {
+import type React from 'react'
+import {
   createContext,
   useCallback,
   useContext,
@@ -58,7 +59,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         setMessage(null)
       })
     },
-    [anim]
+    [anim],
   )
 
   const ctx = useMemo(() => ({ show }), [show])

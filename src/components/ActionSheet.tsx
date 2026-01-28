@@ -1,20 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  LayoutChangeEvent,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-  useWindowDimensions,
-} from 'react-native'
 import {
   BottomSheetBackdrop,
-  BottomSheetModal as GorhomBottomSheetModal,
-  BottomSheetScrollView,
   type BottomSheetBackdropProps,
   type BottomSheetModal,
+  BottomSheetScrollView,
   BottomSheetView,
+  BottomSheetModal as GorhomBottomSheetModal,
 } from '@gorhom/bottom-sheet'
+import type React from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type LayoutChangeEvent,
+  type StyleProp,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { palette } from '../styles/colors'
 
@@ -96,7 +97,7 @@ export function ActionSheet({
   const { snapHeights, resolvedInitialIndex } = useMemo(() => {
     const configuredHeights = calculateConfiguredHeights(
       snapPoints,
-      availableHeight
+      availableHeight,
     )
 
     const totalContentHeight =
@@ -105,13 +106,13 @@ export function ActionSheet({
     const finalSnapHeights = buildFinalSnapHeights(
       configuredHeights,
       totalContentHeight,
-      availableHeight
+      availableHeight,
     )
 
     const initialIndex = resolveInitialSnapIndex(
       initialSnapIndex,
       finalSnapHeights,
-      totalContentHeight
+      totalContentHeight,
     )
 
     return {
@@ -130,7 +131,7 @@ export function ActionSheet({
         opacity={backdropOpacity}
       />
     ),
-    [backdropOpacity]
+    [backdropOpacity],
   )
 
   const contentContainerStyle = useMemo<ViewStyle>(() => {
@@ -150,7 +151,7 @@ export function ActionSheet({
     const clampedIndex = clampIndex(currentIndex, snapHeights.length - 1)
     const atFullScreen = isAtFullScreenHeight(
       snapHeights[clampedIndex],
-      availableHeight
+      availableHeight,
     )
 
     return atFullScreen && totalContentHeight > availableHeight
@@ -239,7 +240,7 @@ export function ActionSheet({
  */
 function convertSnapPointToPixels(
   point: number | string,
-  availableHeight: number
+  availableHeight: number,
 ): number | null {
   if (typeof point === 'number' && Number.isFinite(point)) {
     return Math.min(point, availableHeight)
@@ -258,7 +259,7 @@ function convertSnapPointToPixels(
  */
 function calculateConfiguredHeights(
   snapPoints: Array<number | string> | undefined,
-  availableHeight: number
+  availableHeight: number,
 ): number[] {
   const rawPoints =
     snapPoints && snapPoints.length > 0 ? snapPoints : DEFAULT_SNAP_POINTS
@@ -278,7 +279,7 @@ function calculateConfiguredHeights(
 function buildFinalSnapHeights(
   configuredHeights: number[],
   totalContentHeight: number | null,
-  availableHeight: number
+  availableHeight: number,
 ): number[] {
   if (totalContentHeight === null) {
     return configuredHeights.length > 0
@@ -288,12 +289,12 @@ function buildFinalSnapHeights(
 
   const maxHeight = Math.min(totalContentHeight, availableHeight)
   const allowedHeights = configuredHeights.filter(
-    (h) => h <= maxHeight + SNAP_POINT_TOLERANCE
+    (h) => h <= maxHeight + SNAP_POINT_TOLERANCE,
   )
 
   const snapSet = new Set(allowedHeights)
   const isDuplicate = allowedHeights.some(
-    (h) => Math.abs(h - maxHeight) <= SNAP_POINT_TOLERANCE
+    (h) => Math.abs(h - maxHeight) <= SNAP_POINT_TOLERANCE,
   )
   if (!isDuplicate || allowedHeights.length === 0) {
     snapSet.add(maxHeight)
@@ -309,7 +310,7 @@ function buildFinalSnapHeights(
 function resolveInitialSnapIndex(
   initialSnapIndex: number | undefined,
   finalSnapHeights: number[],
-  totalContentHeight: number | null
+  totalContentHeight: number | null,
 ): number {
   if (
     typeof initialSnapIndex === 'number' &&
@@ -324,7 +325,7 @@ function resolveInitialSnapIndex(
     totalContentHeight <= finalSnapHeights[0] + SNAP_POINT_TOLERANCE
   ) {
     const naturalIndex = finalSnapHeights.findIndex(
-      (h) => Math.abs(h - totalContentHeight) <= SNAP_POINT_TOLERANCE
+      (h) => Math.abs(h - totalContentHeight) <= SNAP_POINT_TOLERANCE,
     )
     if (naturalIndex >= 0) {
       return naturalIndex
@@ -340,7 +341,7 @@ function clampIndex(index: number, maxIndex: number): number {
 
 function isAtFullScreenHeight(
   snapHeight: number,
-  availableHeight: number
+  availableHeight: number,
 ): boolean {
   return Math.abs(snapHeight - availableHeight) <= SNAP_POINT_TOLERANCE
 }

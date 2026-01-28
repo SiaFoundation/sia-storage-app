@@ -15,7 +15,7 @@ export function createServiceInterval({
   interval,
 }: {
   name: string
-  worker: () => void | number | Promise<void | number>
+  worker: () => void | undefined | number | Promise<void | undefined | number>
   getState: () => Promise<boolean>
   interval: number
 }): () => void {

@@ -21,7 +21,7 @@ export type UploadStats = {
 
 async function counts(
   where: string,
-  indexerURL: string
+  indexerURL: string,
 ): Promise<{
   total: number
   remaining: number
@@ -30,7 +30,7 @@ async function counts(
   percentDecimal: number
 }> {
   const totalRow = await db().getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE ${where}`
+    `SELECT COUNT(*) as count FROM files f WHERE ${where}`,
   )
   const remainingRow = await db().getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count
@@ -40,7 +40,7 @@ async function counts(
          SELECT 1 FROM objects o
          WHERE o.fileId = f.id AND o.indexerURL = ?
        )`,
-    indexerURL
+    indexerURL,
   )
   const total = totalRow?.count ?? 0
   const remaining = remainingRow?.count ?? 0

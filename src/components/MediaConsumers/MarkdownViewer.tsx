@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import MarkdownIt from 'markdown-it'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  View,
-  ViewStyle,
-  StyleSheet,
-  Pressable,
-  Text,
   Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
 } from 'react-native'
 import { WebView } from 'react-native-webview'
-import MarkdownIt from 'markdown-it'
+import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 import { readFileAsText } from '../../lib/readFileAsText'
-import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 import BlocksLoader from '../BlocksLoader'
 
 type Mode = 'preview' | 'raw'
@@ -39,7 +39,7 @@ export function MarkdownViewer({
         typographer: true,
         breaks: false,
       }),
-    []
+    [],
   )
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function MarkdownViewer({
       }
       return false
     },
-    []
+    [],
   )
 
   const setModeWithBlock = useCallback(
@@ -89,7 +89,7 @@ export function MarkdownViewer({
       onViewerControlPress?.()
       setMode(nextMode)
     },
-    [onViewerControlPress]
+    [onViewerControlPress],
   )
 
   return (

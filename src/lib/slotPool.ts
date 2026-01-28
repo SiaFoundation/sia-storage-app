@@ -34,7 +34,7 @@ export class SlotPool {
   setMaxSlots(nextMax: number): void {
     const newMax = Math.max(
       1,
-      Math.floor(Number.isFinite(nextMax) ? nextMax : 1)
+      Math.floor(Number.isFinite(nextMax) ? nextMax : 1),
     )
     this.maxSlots = newMax
     this.drain()
@@ -47,7 +47,7 @@ export class SlotPool {
         'slotPool',
         `acquired: inUse=${this.inUseCount + 1}/${
           this.maxSlots
-        } queued=${Math.max(0, this.waitQueue.length - 1)}`
+        } queued=${Math.max(0, this.waitQueue.length - 1)}`,
       )
       // Immediate acquisition.
       this.inUseCount += 1
@@ -63,7 +63,7 @@ export class SlotPool {
     // Wait for a slot to free up.
     logger.debug(
       'slotPool',
-      `waiting: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
+      `waiting: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`,
     )
     return await new Promise<() => void>((resolve) => {
       const grant = () => {
@@ -71,7 +71,7 @@ export class SlotPool {
           'slotPool',
           `acquired: inUse=${this.inUseCount + 1}/${
             this.maxSlots
-          } queued=${Math.max(0, this.waitQueue.length - 1)}`
+          } queued=${Math.max(0, this.waitQueue.length - 1)}`,
         )
         this.inUseCount += 1
         let released = false
@@ -81,7 +81,7 @@ export class SlotPool {
           this.inUseCount -= 1
           logger.debug(
             'slotPool',
-            `released: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`
+            `released: inUse=${this.inUseCount}/${this.maxSlots} queued=${this.waitQueue.length}`,
           )
           this.drain()
         }

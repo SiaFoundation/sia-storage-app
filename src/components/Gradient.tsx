@@ -1,6 +1,5 @@
-import React from 'react'
-import { View, StyleSheet, type ColorValue, type ViewProps } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { type ColorValue, StyleSheet, View, type ViewProps } from 'react-native'
 
 type Props = ViewProps & {
   fadeTo?: 'top' | 'bottom'

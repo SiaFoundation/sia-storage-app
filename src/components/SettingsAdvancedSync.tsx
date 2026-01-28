@@ -1,15 +1,15 @@
-import { Switch, Alert } from 'react-native'
-import { InfoCard } from './InfoCard'
-import { LabeledValueRow } from './LabeledValueRow'
-import { RowGroup } from './Group'
-import { Button } from './Button'
+import { Alert, Switch } from 'react-native'
+import { resetSyncDownCursor } from '../managers/syncDownEvents'
 import {
   toggleAutoScanUploads,
   toggleAutoSyncDownEvents,
   useAutoScanUploads,
   useAutoSyncDownEvents,
 } from '../stores/settings'
-import { resetSyncDownCursor } from '../managers/syncDownEvents'
+import { Button } from './Button'
+import { RowGroup } from './Group'
+import { InfoCard } from './InfoCard'
+import { LabeledValueRow } from './LabeledValueRow'
 
 export function SettingsAdvancedSync() {
   const autoScan = useAutoScanUploads()
@@ -56,7 +56,7 @@ export function SettingsAdvancedSync() {
                       style: 'destructive',
                       onPress: () => resetSyncDownCursor(),
                     },
-                  ]
+                  ],
                 )
               }}
             >

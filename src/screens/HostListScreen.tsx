@@ -1,12 +1,12 @@
-import { View, StyleSheet, Pressable } from 'react-native'
-import { palette, colors } from '../styles/colors'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ListIcon, MapIcon } from 'lucide-react-native'
+import { useLayoutEffect, useState } from 'react'
+import { Pressable, StyleSheet, View } from 'react-native'
 import { HostsList } from '../components/HostsList'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { useState, useLayoutEffect } from 'react'
 import HostsMap from '../components/HostsMap'
 import { SettingsFullLayout } from '../components/SettingsLayout'
+import type { MenuStackParamList } from '../stacks/types'
+import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Hosts'>
 

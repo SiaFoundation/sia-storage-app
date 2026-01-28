@@ -60,7 +60,7 @@ export async function getSecureStoreNumber(key: string, initialValue = 0) {
 
 export async function setSecureStoreString<T extends string>(
   key: string,
-  value: T
+  value: T,
 ) {
   validateKey(key)
   return setItem(key, value)
@@ -68,7 +68,7 @@ export async function setSecureStoreString<T extends string>(
 
 export async function getSecureStoreString<T extends string>(
   key: string,
-  initialValue: T
+  initialValue: T,
 ): Promise<T> {
   return retry('getSecureStoreString', async () => {
     const found = await getItem(key)
@@ -88,7 +88,7 @@ export type JsonCodec<TStorage, TDomain> = {
 export async function setSecureStoreJSON<TStorage, TDomain>(
   key: string,
   value: TDomain | undefined,
-  codec: JsonCodec<TStorage, TDomain>
+  codec: JsonCodec<TStorage, TDomain>,
 ) {
   validateKey(key)
   if (value == null) {
@@ -106,7 +106,7 @@ export async function setSecureStoreJSON<TStorage, TDomain>(
 export async function getSecureStoreJSON<TStorage, TDomain>(
   key: string,
   codec: JsonCodec<TStorage, TDomain>,
-  initialValue?: TDomain
+  initialValue?: TDomain,
 ): Promise<TDomain | undefined> {
   const storedValue = await retry('getSecureStoreJSON', async () => {
     const found = await getItem(key)
@@ -127,7 +127,7 @@ export async function getSecureStoreJSON<TStorage, TDomain>(
 export function validateKey(key: string) {
   if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
     throw new Error(
-      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores'
+      'SecureStore key must contain only alphanumeric characters, dots, hyphens, and underscores',
     )
   }
 }

@@ -38,7 +38,7 @@ const localObjectStorageCodec = z.codec(
       slabs: slabsStorageCodec.decode(stored.slabs),
       encryptedDataKey: hexArrayBufferCodec.decode(stored.encryptedDataKey),
       encryptedMetadataKey: hexArrayBufferCodec.decode(
-        stored.encryptedMetadataKey
+        stored.encryptedMetadataKey,
       ),
       encryptedMetadata: hexArrayBufferCodec.decode(stored.encryptedMetadata),
       dataSignature: hexArrayBufferCodec.decode(stored.dataSignature),
@@ -59,7 +59,7 @@ const localObjectStorageCodec = z.codec(
       createdAt: isoToEpochCodec.encode(po.createdAt),
       updatedAt: isoToEpochCodec.encode(po.updatedAt),
     }),
-  }
+  },
 )
 
 export type LocalObject = ReturnType<typeof localObjectStorageCodec.decode>
