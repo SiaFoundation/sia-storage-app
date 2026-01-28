@@ -1,6 +1,9 @@
+import {
+  ImageZoom,
+  type ImageZoomRef,
+} from '@likashefqet/react-native-image-zoom'
 import { useCallback, useRef } from 'react'
-import { ViewStyle, StyleSheet } from 'react-native'
-import { ImageZoom, ImageZoomRef } from '@likashefqet/react-native-image-zoom'
+import { StyleSheet, type ViewStyle } from 'react-native'
 
 export function ImageViewer({
   uri,

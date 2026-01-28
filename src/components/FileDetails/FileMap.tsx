@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { AddressProtocol, Host } from 'react-native-sia'
-import { type FileRecord } from '../../stores/files'
-import { useHosts } from '../../stores/hosts'
+import { AddressProtocol, type Host } from 'react-native-sia'
 import { getOneSealedObject } from '../../lib/file'
+import type { FileRecord } from '../../stores/files'
+import { useHosts } from '../../stores/hosts'
 import Map from '../Map/Map'
 import { MapMarker } from '../Map/MapMarker'
 import { determineBestRegion } from '../Map/mapHelpers'
@@ -40,9 +40,9 @@ export function FileMap({ file }: { file: FileRecord }) {
               coordinate={{ latitude: h.latitude, longitude: h.longitude }}
               title={
                 hosts.data
-                  ? h.addresses.find(
-                      (a) => a.protocol === AddressProtocol.SiaMux
-                    )?.address ?? h.publicKey
+                  ? (h.addresses.find(
+                      (a) => a.protocol === AddressProtocol.SiaMux,
+                    )?.address ?? h.publicKey)
                   : h.publicKey
               }
             />

@@ -4,7 +4,7 @@
  * Interactive prompts and user feedback for build scripts.
  */
 
-import * as readline from 'readline'
+import * as readline from 'node:readline'
 
 /**
  * Wait for user to press Enter.

@@ -19,7 +19,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       (err) => {
         clearTimeout(timer)
         reject(err)
-      }
+      },
     )
   })
 }

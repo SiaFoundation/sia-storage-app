@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * E2E Test Runner with Smart Build Caching
  *
@@ -25,18 +26,18 @@
  *   On CI, also set MAESTRO_DRIVER_STARTUP_TIMEOUT for slower VMs.
  */
 
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { $ } from 'bun'
-import { existsSync, readdirSync, mkdirSync } from 'fs'
-import { join } from 'path'
 import {
-  PROJECT_ROOT,
   type BuildTarget,
+  ensureCacheDir,
+  getBuildLogTail,
   getTargetPaths,
   needsRebuild,
+  PROJECT_ROOT,
   saveBuildHash,
-  ensureCacheDir,
   writeBuildLog,
-  getBuildLogTail,
 } from '../../scripts/buildCache'
 
 const E2E_DIR = import.meta.dir
@@ -49,8 +50,8 @@ const ANDROID_PACKAGE = 'sia.storage.dev'
 
 // Parse args
 const args = process.argv.slice(2)
-const platformArg = args.find(a => a === 'ios' || a === 'android')
-const flow = args.find(a => a.endsWith('.yml')) || 'onboarding.yml'
+const platformArg = args.find((a) => a === 'ios' || a === 'android')
+const flow = args.find((a) => a.endsWith('.yml')) || 'onboarding.yml'
 const forceRebuild = args.includes('--rebuild')
 const skipInstall = args.includes('--skip-install')
 const headless = args.includes('--headless')
@@ -69,12 +70,14 @@ if (!platformArg) {
   console.error('  --headless      Run simulator/emulator without UI')
   console.error('')
   console.error('Example:')
-  console.error('  E2E_CONNECT_KEY="..." bun test/e2e/runLocal.ts ios onboarding.yml')
+  console.error(
+    '  E2E_CONNECT_KEY="..." bun test/e2e/runLocal.ts ios onboarding.yml',
+  )
   process.exit(1)
 }
 
 const platform = platformArg
-const target: BuildTarget = platform === 'android' ? 'e2e-android' : 'e2e-ios'
+const target: BuildTarget = platform === 'android' ? 'android' : 'ios-sim'
 
 const paths = getTargetPaths(target)
 
@@ -111,12 +114,14 @@ async function bootIosSimulator(): Promise<void> {
   }
 
   // Wait for boot
-  await new Promise(resolve => setTimeout(resolve, 3000))
+  await new Promise((resolve) => setTimeout(resolve, 3000))
 }
 
 // Check if Android emulator is running
 async function isAndroidEmulatorRunning(): Promise<boolean> {
-  const result = await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
+  const result = await $`adb shell getprop sys.boot_completed 2>/dev/null`
+    .quiet()
+    .nothrow()
   return result.stdout.toString().trim() === '1'
 }
 
@@ -130,7 +135,8 @@ async function bootAndroidEmulator(): Promise<void> {
   console.log('🤖 Booting Android Emulator...')
   const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
   const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
-  if (avds.length === 0) throw new Error('No Android AVD found. Create one in Android Studio.')
+  if (avds.length === 0)
+    throw new Error('No Android AVD found. Create one in Android Studio.')
 
   const avd = avds[0]
   console.log(`   Using AVD: ${avd}`)
@@ -150,9 +156,11 @@ async function bootAndroidEmulator(): Promise<void> {
   await $`adb wait-for-device`
 
   for (let i = 0; i < 60; i++) {
-    const result = await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
+    const result = await $`adb shell getprop sys.boot_completed 2>/dev/null`
+      .quiet()
+      .nothrow()
     if (result.stdout.toString().trim() === '1') break
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 2000))
   }
 
   console.log('   Emulator booted')
@@ -170,7 +178,9 @@ async function buildIos(): Promise<void> {
   const iosDir = join(PROJECT_ROOT, 'ios')
   if (!existsSync(iosDir)) {
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`
+      .quiet()
+      .nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
     if (prebuildResult.exitCode !== 0) {
       console.error('❌ Prebuild failed. Last 30 lines:')
@@ -189,14 +199,19 @@ async function buildIos(): Promise<void> {
     -arch arm64 \
     -derivedDataPath ${paths.derivedData} \
     build \
-    CODE_SIGNING_ALLOWED=NO 2>&1`.quiet().nothrow()
+    CODE_SIGNING_ALLOWED=NO 2>&1`
+    .quiet()
+    .nothrow()
 
   writeBuildLog(target, `=== XCODEBUILD ===\n${buildResult.stdout}`, true)
 
-  if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
+  if (
+    buildResult.exitCode !== 0 ||
+    buildResult.stdout.toString().includes('BUILD FAILED')
+  ) {
     console.error('❌ Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
-    throw new Error('iOS build failed - see ' + paths.buildLog)
+    throw new Error(`iOS build failed - see ${paths.buildLog}`)
   }
 
   saveBuildHash(target)
@@ -215,7 +230,9 @@ async function buildAndroid(): Promise<void> {
   const androidDir = join(PROJECT_ROOT, 'android')
   if (!existsSync(androidDir)) {
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`
+      .quiet()
+      .nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
     if (prebuildResult.exitCode !== 0) {
       console.error('❌ Prebuild failed. Last 30 lines:')
@@ -227,14 +244,19 @@ async function buildAndroid(): Promise<void> {
   // Build debug APK
   console.log('   Compiling (this may take a while)...')
   $.cwd(join(PROJECT_ROOT, 'android'))
-  const buildResult = await $`./gradlew assembleDebug --no-daemon 2>&1`.quiet().nothrow()
+  const buildResult = await $`./gradlew assembleDebug --no-daemon 2>&1`
+    .quiet()
+    .nothrow()
   $.cwd(PROJECT_ROOT)
   writeBuildLog(target, `=== GRADLE ===\n${buildResult.stdout}`, true)
 
-  if (buildResult.exitCode !== 0 || buildResult.stdout.toString().includes('BUILD FAILED')) {
+  if (
+    buildResult.exitCode !== 0 ||
+    buildResult.stdout.toString().includes('BUILD FAILED')
+  ) {
     console.error('❌ Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
-    throw new Error('Android build failed - see ' + paths.buildLog)
+    throw new Error(`Android build failed - see ${paths.buildLog}`)
   }
 
   saveBuildHash(target)
@@ -247,7 +269,10 @@ async function findIosApp(): Promise<string> {
     throw new Error('iOS app not found. Run with --rebuild')
   }
 
-  const result = await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphonesimulator*" -type d 2>/dev/null`.quiet().nothrow()
+  const result =
+    await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphonesimulator*" -type d 2>/dev/null`
+      .quiet()
+      .nothrow()
   const found = result.stdout.toString().trim().split('\n').filter(Boolean)[0]
   if (!found) {
     throw new Error('iOS app not found in DerivedData. Run with --rebuild')
@@ -258,7 +283,10 @@ async function findIosApp(): Promise<string> {
 // Find Android APK path
 async function findAndroidApk(): Promise<string> {
   const androidDir = join(PROJECT_ROOT, 'android')
-  const result = await $`find ${androidDir} -name "*.apk" -path "*debug*" 2>/dev/null`.quiet().nothrow()
+  const result =
+    await $`find ${androidDir} -name "*.apk" -path "*debug*" 2>/dev/null`
+      .quiet()
+      .nothrow()
   const apkPath = result.stdout.toString().trim().split('\n').filter(Boolean)[0]
   if (!apkPath) throw new Error('Android APK not found. Run with --rebuild')
   return apkPath
@@ -266,13 +294,18 @@ async function findAndroidApk(): Promise<string> {
 
 // Check if iOS app is installed on simulator
 async function isIosAppInstalled(): Promise<boolean> {
-  const result = await $`xcrun simctl listapps booted 2>/dev/null`.quiet().nothrow()
+  const result = await $`xcrun simctl listapps booted 2>/dev/null`
+    .quiet()
+    .nothrow()
   return result.stdout.toString().includes(IOS_BUNDLE_ID)
 }
 
 // Check if Android app is installed on emulator
 async function isAndroidAppInstalled(): Promise<boolean> {
-  const result = await $`adb shell pm list packages ${ANDROID_PACKAGE} 2>/dev/null`.quiet().nothrow()
+  const result =
+    await $`adb shell pm list packages ${ANDROID_PACKAGE} 2>/dev/null`
+      .quiet()
+      .nothrow()
   return result.stdout.toString().includes(ANDROID_PACKAGE)
 }
 
@@ -344,7 +377,7 @@ async function ensureMetroRunning(): Promise<void> {
       console.log('✅ Metro ready')
       return
     }
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 2000))
   }
 
   throw new Error('Metro failed to start')
@@ -354,9 +387,9 @@ async function ensureMetroRunning(): Promise<void> {
 function findLatestScreenshots(): string | null {
   if (!existsSync(OUTPUT_DIR)) return null
   const folders = readdirSync(OUTPUT_DIR)
-    .filter(f => {
+    .filter((f) => {
       const dir = join(OUTPUT_DIR, f)
-      return existsSync(dir) && readdirSync(dir).some(f => f.endsWith('.png'))
+      return existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.png'))
     })
     .sort()
     .reverse()
@@ -369,7 +402,9 @@ async function main() {
   console.log(`   Platform: ${platform}`)
   console.log(`   Flow: ${flow}`)
   console.log(`   Cache: .build-cache/${target}/`)
-  console.log(`   Flags: ${[forceRebuild && '--rebuild', skipInstall && '--skip-install', headless && '--headless'].filter(Boolean).join(' ') || 'none'}`)
+  console.log(
+    `   Flags: ${[forceRebuild && '--rebuild', skipInstall && '--skip-install', headless && '--headless'].filter(Boolean).join(' ') || 'none'}`,
+  )
   console.log('')
 
   try {
@@ -437,7 +472,6 @@ async function main() {
 
     console.log('\n✅ E2E test passed!')
     process.exit(0)
-
   } catch (error) {
     console.error('\n❌ Error:', error instanceof Error ? error.message : error)
     process.exit(1)

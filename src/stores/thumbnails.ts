@@ -1,39 +1,39 @@
 import { db } from '../db'
+import { buildSWRHelpers } from '../lib/swr'
 import {
-  FileRecord,
-  FileRecordRow,
-  ThumbSize,
+  type FileRecord,
+  type FileRecordRow,
+  type ThumbSize,
   ThumbSizes,
   transformRow,
 } from './files'
 import { readLocalObjectsForFile } from './localObjects'
-import { buildSWRHelpers } from '../lib/swr'
 
 export const thumbnailSwr = buildSWRHelpers('thumbnails')
 
 /** Read all thumbnails associated with an original file content hash. */
 export async function readThumbnailsByHash(
-  hash: string
+  hash: string,
 ): Promise<FileRecord[]> {
   const rows = await db().getAllAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
      FROM files
      WHERE thumbForHash = ?
      ORDER BY COALESCE(thumbSize, 0) ASC, id ASC`,
-    hash
+    hash,
   )
   return rows.map((row) => transformRow(row))
 }
 
 export async function readThumbnailRecordByThumbForHashAndSize(
   thumbForHash: string,
-  size: ThumbSize
+  size: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
      FROM files WHERE thumbForHash = ? AND thumbSize = ?`,
     thumbForHash,
-    size
+    size,
   )
   if (!row) return null
   const objects = await readLocalObjectsForFile(row.id)
@@ -42,16 +42,16 @@ export async function readThumbnailRecordByThumbForHashAndSize(
 
 /** Read all existing thumbnail sizes for a given original hash. */
 export async function readThumbnailSizesForHash(
-  hash: string
+  hash: string,
 ): Promise<ThumbSize[]> {
   const rows = await db().getAllAsync<{ thumbSize: number | null }>(
     `SELECT thumbSize FROM files WHERE thumbForHash = ?`,
-    hash
+    hash,
   )
   return rows
     .map((r) => (typeof r.thumbSize === 'number' ? r.thumbSize : null))
     .filter(
-      (n): n is ThumbSize => n !== null && ThumbSizes.includes(n as ThumbSize)
+      (n): n is ThumbSize => n !== null && ThumbSizes.includes(n as ThumbSize),
     )
     .sort((a, b) => a - b)
 }
@@ -66,7 +66,7 @@ export async function readThumbnailSizesForHash(
  */
 export async function readBestThumbnailByHash(
   hash: string,
-  requiredSize: ThumbSize
+  requiredSize: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
@@ -77,7 +77,7 @@ export async function readBestThumbnailByHash(
        id ASC
      LIMIT 1`,
     hash,
-    requiredSize
+    requiredSize,
   )
   if (!row) return null
   const objects = await readLocalObjectsForFile(row.id)
@@ -87,12 +87,12 @@ export async function readBestThumbnailByHash(
 /** Check if a thumbnail exists for an original hash and exact size. */
 export async function thumbnailExistsForHashAndSize(
   hash: string,
-  size: ThumbSize
+  size: ThumbSize,
 ): Promise<boolean> {
   const row = await db().getFirstAsync<{ id: string }>(
     `SELECT id FROM files WHERE thumbForHash = ? AND thumbSize = ? LIMIT 1`,
     hash,
-    size
+    size,
   )
   return !!row
 }

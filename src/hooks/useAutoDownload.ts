@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useFileStatus } from '../lib/file'
-import { useIsInitializing } from '../stores/app'
-import { useIsConnected } from '../stores/sdk'
 import { useDownload, useDownloadFromShareURL } from '../managers/downloader'
-import { FileRecord } from '../stores/files'
+import { useIsInitializing } from '../stores/app'
+import type { FileRecord } from '../stores/files'
+import { useIsConnected } from '../stores/sdk'
 
 /**
  * When a file is rendered in a detail view, auto download it if:
@@ -22,7 +22,7 @@ export function detailsShouldAutoDownload(file: FileRecord): boolean {
  */
 export function useAutoDownload(
   file: FileRecord,
-  shouldDownload: (file: FileRecord) => boolean
+  shouldDownload: (file: FileRecord) => boolean,
 ): void {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
@@ -39,13 +39,13 @@ export function useAutoDownload(
     if (file.localId) return
     if (!shouldDownload(file)) return
     download()
-  }, [isInitializing, isConnected, status.data])
+  }, [isInitializing, isConnected, status.data, download, file, shouldDownload])
 }
 
 export function useAutoDownloadFromShareURL(
   file: FileRecord,
   shouldDownload: (file: FileRecord) => boolean,
-  shareUrl: string
+  shareUrl: string,
 ): void {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
@@ -61,5 +61,14 @@ export function useAutoDownloadFromShareURL(
     if (status.data.isDownloading) return
     if (!shouldDownload(file)) return
     download(file.id, shareUrl)
-  }, [file.id, shareUrl, isInitializing, isConnected, status.data])
+  }, [
+    file.id,
+    shareUrl,
+    isInitializing,
+    isConnected,
+    status.data,
+    download,
+    file,
+    shouldDownload,
+  ])
 }

@@ -1,12 +1,12 @@
+import { CircleCheckIcon, CircleIcon, DotIcon } from 'lucide-react-native'
+import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { whiteA, palette } from '../styles/colors'
-import { FileRecord } from '../stores/files'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
-import { DotIcon, CircleIcon, CircleCheckIcon } from 'lucide-react-native'
-import { UploadStatusIcon } from './UploadStatusIcon'
+import type { FileRecord } from '../stores/files'
+import { palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
-import { memo } from 'react'
+import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = {
   file: FileRecord
@@ -29,9 +29,7 @@ function FileListItemComponent({
       collapsable={false}
       style={[styles.container, isSelected && styles.containerSelected]}
       onPress={() => onPressItem(file)}
-      onLongPress={
-        onLongPressItem ? () => onLongPressItem(file) : undefined
-      }
+      onLongPress={onLongPressItem ? () => onLongPressItem(file) : undefined}
     >
       <View style={styles.thumbnailContainer}>
         <FileThumbnail file={file} thumbSize={64} />

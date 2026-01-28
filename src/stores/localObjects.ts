@@ -9,19 +9,19 @@ import {
 import { librarySwr } from './library'
 
 export async function readLocalObjectsForFile(
-  fileId: string
+  fileId: string,
 ): Promise<LocalObject[]> {
   const rows = await db().getAllAsync<LocalObjectRow>(
     `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId = ?`,
-    fileId
+    fileId,
   )
   return rows.map(localObjectFromStorageRow)
 }
 
 export async function upsertLocalObject(
   object: LocalObject,
-  triggerUpdate: boolean = true
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   const e = localObjectToStorageRow(object)
   await sqlInsert(
@@ -39,7 +39,7 @@ export async function upsertLocalObject(
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
     },
-    { conflictClause: 'OR REPLACE' }
+    { conflictClause: 'OR REPLACE' },
   )
   if (triggerUpdate) {
     await librarySwr.triggerChange()
@@ -48,7 +48,7 @@ export async function upsertLocalObject(
 
 export async function deleteLocalObjects(
   fileId: string,
-  triggerUpdate: boolean = true
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   await sqlDelete('objects', { fileId })
   if (triggerUpdate) {
@@ -65,14 +65,14 @@ export async function deleteManyLocalObjects(fileIds: string[]): Promise<void> {
 }
 
 export async function readLocalObjectsForFiles(
-  fileIds: string[]
+  fileIds: string[],
 ): Promise<Record<string, LocalObject[]>> {
   if (fileIds.length === 0) return {}
   const placeholders = fileIds.map(() => '?').join(',')
   const rows = await db().getAllAsync<LocalObjectRow>(
     `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId IN (${placeholders})`,
-    ...fileIds
+    ...fileIds,
   )
   const map: Record<string, LocalObject[]> = {}
   for (const r of rows) {

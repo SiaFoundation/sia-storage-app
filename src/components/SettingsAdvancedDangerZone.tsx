@@ -1,7 +1,7 @@
-import { View, Alert } from 'react-native'
+import { Alert, View } from 'react-native'
 import { resetApp } from '../stores/app'
-import { GroupTitle } from './Group'
 import { Button } from './Button'
+import { GroupTitle } from './Group'
 
 export function SettingsAdvancedDangerZone() {
   return (
@@ -20,7 +20,7 @@ export function SettingsAdvancedDangerZone() {
                 style: 'destructive',
                 onPress: () => resetApp(),
               },
-            ]
+            ],
           )
         }}
       >

@@ -1,13 +1,13 @@
-import { renderHook, act, waitFor } from '@testing-library/react-native'
-import { initializeDB, resetDb, db } from '../db'
-import { createFileRecord } from './files'
+import { act, renderHook, waitFor } from '@testing-library/react-native'
+import { db, initializeDB, resetDb } from '../db'
 import {
-  fetchTotalCount,
   fetchFilePosition,
   fetchFilesAtIndices,
+  fetchTotalCount,
   useVirtualFileList,
 } from './fileCarousel'
-import { Category } from './library'
+import { createFileRecord } from './files'
+import type { Category } from './library'
 
 // Track registered change callbacks so tests can trigger them.
 // Prefixed with "mock" to satisfy Jest's module factory variable restriction.
@@ -251,7 +251,11 @@ describe('fileCarousel virtual list functions', () => {
         })
 
         // NAME ASC with same name, order by ID ASC: file-a(0), file-b(1), file-c(2)
-        const params = { ...defaultParams, sortBy: 'NAME' as const, sortDir: 'ASC' as const }
+        const params = {
+          ...defaultParams,
+          sortBy: 'NAME' as const,
+          sortDir: 'ASC' as const,
+        }
         const positionA = await fetchFilePosition('file-a', params)
         const positionB = await fetchFilePosition('file-b', params)
         const positionC = await fetchFilePosition('file-c', params)
@@ -417,7 +421,11 @@ describe('fileCarousel virtual list functions', () => {
 
     test('handles files with null names', async () => {
       await createRecord({ id: 'file-null', name: null, createdAt: base })
-      await createRecord({ id: 'file-named', name: 'named.jpg', createdAt: base + 10 })
+      await createRecord({
+        id: 'file-named',
+        name: 'named.jpg',
+        createdAt: base + 10,
+      })
 
       const count = await fetchTotalCount({
         ...defaultParams,
@@ -473,7 +481,10 @@ describe('useVirtualFileList hook', () => {
     await db().runAsync('DELETE FROM files WHERE id = ?', id)
   }
 
-  async function updateRecord(id: string, updates: { name?: string; updatedAt?: number }) {
+  async function updateRecord(
+    id: string,
+    updates: { name?: string; updatedAt?: number },
+  ) {
     const setClauses: string[] = []
     const params: (string | number)[] = []
     if (updates.name !== undefined) {
@@ -485,7 +496,10 @@ describe('useVirtualFileList hook', () => {
       params.push(updates.updatedAt)
     }
     params.push(id)
-    await db().runAsync(`UPDATE files SET ${setClauses.join(', ')} WHERE id = ?`, ...params)
+    await db().runAsync(
+      `UPDATE files SET ${setClauses.join(', ')} WHERE id = ?`,
+      ...params,
+    )
   }
 
   function triggerSyncChange() {
@@ -502,7 +516,7 @@ describe('useVirtualFileList hook', () => {
         useVirtualFileList({
           initialId: 'file-2',
           onDeleted,
-        })
+        }),
       )
 
       // Wait for hook to initialize
@@ -524,14 +538,18 @@ describe('useVirtualFileList hook', () => {
     })
 
     test('calls onUpdated when file metadata changes', async () => {
-      await createRecord({ id: 'file-1', name: 'original.jpg', createdAt: base })
+      await createRecord({
+        id: 'file-1',
+        name: 'original.jpg',
+        createdAt: base,
+      })
 
       const onUpdated = jest.fn()
       const { result } = renderHook(() =>
         useVirtualFileList({
           initialId: 'file-1',
           onUpdated,
-        })
+        }),
       )
 
       await waitFor(() => {
@@ -541,7 +559,10 @@ describe('useVirtualFileList hook', () => {
       expect(result.current.currentFile?.name).toBe('original.jpg')
 
       // Update the file's name and trigger sync
-      await updateRecord('file-1', { name: 'renamed.jpg', updatedAt: base + 100 })
+      await updateRecord('file-1', {
+        name: 'renamed.jpg',
+        updatedAt: base + 100,
+      })
       await act(async () => {
         triggerSyncChange()
         await new Promise((r) => setTimeout(r, 50))
@@ -558,7 +579,7 @@ describe('useVirtualFileList hook', () => {
       const { result } = renderHook(() =>
         useVirtualFileList({
           initialId: 'file-2',
-        })
+        }),
       )
 
       await waitFor(() => {

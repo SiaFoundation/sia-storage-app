@@ -4,17 +4,17 @@
  * Common build logic for dev.ts and e2e.ts scripts.
  */
 
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { $ } from 'bun'
-import { existsSync } from 'fs'
-import { join } from 'path'
 import {
-  PROJECT_ROOT,
   type BuildTarget,
-  getTargetPaths,
-  saveBuildHash,
   ensureCacheDir,
-  writeBuildLog,
   getBuildLogTail,
+  getTargetPaths,
+  PROJECT_ROOT,
+  saveBuildHash,
+  writeBuildLog,
 } from './buildCache'
 import { runProcess } from './lib/process'
 
@@ -59,8 +59,9 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult =
-      await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`
+      .quiet()
+      .nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -100,7 +101,7 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
   if (!result.success) {
     console.error('   Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
-    throw new Error('iOS build failed - see ' + paths.buildLog)
+    throw new Error(`iOS build failed - see ${paths.buildLog}`)
   }
 
   saveBuildHash(target)
@@ -129,8 +130,9 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult =
-      await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`
+      .quiet()
+      .nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -143,7 +145,9 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   // Get the team ID from environment
   const teamId = process.env.APPLE_TEAM_ID
   if (!teamId) {
-    throw new Error('APPLE_TEAM_ID environment variable is required for device builds')
+    throw new Error(
+      'APPLE_TEAM_ID environment variable is required for device builds',
+    )
   }
 
   // Build for device using xcodebuild directly (no fastlane)
@@ -176,7 +180,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   if (!result.success) {
     console.error('   Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
-    throw new Error('iOS device build failed - see ' + paths.buildLog)
+    throw new Error(`iOS device build failed - see ${paths.buildLog}`)
   }
 
   saveBuildHash(target)
@@ -204,8 +208,9 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult =
-      await $`bunx expo prebuild --platform android 2>&1`.quiet().nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`
+      .quiet()
+      .nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -228,7 +233,7 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
   if (!result.success) {
     console.error('   Build failed. Last 50 lines:')
     console.error(getBuildLogTail(target, 50))
-    throw new Error('Android build failed - see ' + paths.buildLog)
+    throw new Error(`Android build failed - see ${paths.buildLog}`)
   }
 
   saveBuildHash(target)
@@ -237,7 +242,9 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
 /**
  * Find the built iOS app for device in DerivedData.
  */
-export async function findIosDeviceApp(target: BuildTarget): Promise<string | null> {
+export async function findIosDeviceApp(
+  target: BuildTarget,
+): Promise<string | null> {
   const paths = getTargetPaths(target)
   const result =
     await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphoneos*" -type d 2>/dev/null`

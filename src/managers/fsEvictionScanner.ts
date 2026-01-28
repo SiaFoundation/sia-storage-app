@@ -1,21 +1,21 @@
 import {
-  FS_MAX_BYTES,
-  FS_EVICTION_FREQUENCY,
   FS_EVICTABLE_MIN_AGE,
+  FS_EVICTION_FREQUENCY,
+  FS_MAX_BYTES,
 } from '../config'
 import { db } from '../db'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import {
-  calcFsFilesMetadataTotalSize,
-  removeFsFile,
-  type FsFileInfo,
-  FsMetaRow,
-} from '../stores/fs'
-import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
+import {
+  calcFsFilesMetadataTotalSize,
+  type FsFileInfo,
+  type FsMetaRow,
+  removeFsFile,
+} from '../stores/fs'
 
 /**
  * fsEvictionScanner evicts stale files from the file system under the following rules:
@@ -45,7 +45,7 @@ export async function runFsEvictionScanner(): Promise<
     let currentSize = totalSize
     logger.warn(
       'fsEvictionScanner',
-      `total size over limit totalSize=${totalSize}`
+      `total size over limit totalSize=${totalSize}`,
     )
 
     let processedRows = 0
@@ -74,7 +74,7 @@ export async function runFsEvictionScanner(): Promise<
         } catch (error) {
           logger.error(
             'fsEvictionScanner',
-            `failed to remove file fileId=${row.fileId} error=${error}`
+            `failed to remove file fileId=${row.fileId} error=${error}`,
           )
         }
       }
@@ -93,7 +93,7 @@ export async function runFsEvictionScanner(): Promise<
     }
     logger.info(
       'fsEvictionScanner',
-      `summary processedRows=${processedRows} evicted=${evicted} currentSize=${currentSize}`
+      `summary processedRows=${processedRows} evicted=${evicted} currentSize=${currentSize}`,
     )
     return results
   } catch (error) {
@@ -132,7 +132,7 @@ export async function readFsEvictionCandidates(params: {
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     maxUsedAt,
-    limit
+    limit,
   )
 }
 

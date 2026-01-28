@@ -16,6 +16,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun run typecheck
+
   test:
     runs-on: tenki-standard-autoscale
     if: github.event.action != 'closed'

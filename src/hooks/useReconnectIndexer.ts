@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
 import NetInfo from '@react-native-community/netinfo'
-import { reconnectIndexer, getIsConnected, useIsConnected } from '../stores/sdk'
+import { useEffect } from 'react'
 import { logger } from '../lib/logger'
-import { getIsOnline, useIsOnline } from './useIsOnline'
 import { getIsInitializing, useIsInitializing } from '../stores/app'
+import { getIsConnected, reconnectIndexer, useIsConnected } from '../stores/sdk'
+import { getIsOnline, useIsOnline } from './useIsOnline'
 
 export function useReconnectIndexer() {
   // Try to reconnect to the indexer when the app reconnects to the internet.
@@ -34,7 +34,7 @@ export function useReconnectIndexer() {
         if (isOnline && !isIndexerConnected) {
           logger.info(
             'netinfo',
-            'app is online but not connected to indexer, reconnecting...'
+            'app is online but not connected to indexer, reconnecting...',
           )
           reconnectIndexer()
         }
@@ -45,5 +45,5 @@ export function useReconnectIndexer() {
         clearInterval(interval)
       }
     }
-  }, [isOnline, isIndexerConnected])
+  }, [isOnline, isIndexerConnected, isInitializing])
 }

@@ -1,7 +1,7 @@
-import { Button } from './Button'
 import { Alert } from 'react-native'
 import { resetData } from '../stores/app'
 import { librarySwr } from '../stores/library'
+import { Button } from './Button'
 
 /**
  * Button to reset the database and resync from the indexer.
@@ -28,7 +28,7 @@ export function LibraryLocalResetButton() {
                 librarySwr.triggerChange()
               },
             },
-          ]
+          ],
         )
       }}
     >

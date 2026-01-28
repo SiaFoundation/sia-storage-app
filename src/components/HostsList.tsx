@@ -1,8 +1,8 @@
-import { Text, View, StyleSheet, Platform, Pressable } from 'react-native'
 import { ChevronRightIcon } from 'lucide-react-native'
-import { colors, palette } from '../styles/colors'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
 import { useSdk } from '../stores/sdk'
+import { colors, palette } from '../styles/colors'
 import { SWRList } from './SWRList'
 
 export function HostsList({
@@ -11,7 +11,7 @@ export function HostsList({
   onSelectHost: (host: string) => void
 }) {
   const sdk = useSdk()
-  const response = useSWR(sdk ? ['hosts', sdk] : null, async () => sdk!.hosts())
+  const response = useSWR(sdk ? ['hosts', sdk] : null, () => sdk!.hosts())
 
   return (
     <SWRList

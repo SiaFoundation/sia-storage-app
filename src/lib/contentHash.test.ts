@@ -35,7 +35,7 @@ describe('calculateContentHash', () => {
     const { rnfs } = getMocks()
     rnfs.rnfsHash.mockRejectedValueOnce(new Error('hash not supported'))
     rnfs.rnfsReadFile.mockResolvedValueOnce(
-      Buffer.from('foobar').toString('base64')
+      Buffer.from('foobar').toString('base64'),
     )
 
     const res = await calculateContentHash('file:///video.mov')

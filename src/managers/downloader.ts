@@ -1,20 +1,24 @@
-import { useToast } from '../lib/toastContext'
-import { copyFileToFs } from '../stores/fs'
-import { getOrCreateTempDownloadFile } from '../stores/tempFs'
-import {
-  getDownloadState,
-  updateDownloadProgress,
-  runDownloadWithSlot,
-} from '../stores/downloads'
-import { useSdk, getSdk } from '../stores/sdk'
-import { PinnedObject, type Writer, type PinnedObjectInterface } from 'react-native-sia'
+import type { File } from 'expo-file-system'
 import { useCallback } from 'react'
+import {
+  PinnedObject,
+  type PinnedObjectInterface,
+  type Writer,
+} from 'react-native-sia'
+import { DOWNLOAD_MAX_INFLIGHT } from '../config'
 import { getOneSealedObject } from '../lib/file'
 import { logger } from '../lib/logger'
-import { DOWNLOAD_MAX_INFLIGHT } from '../config'
+import { useToast } from '../lib/toastContext'
 import { getAppKeyForIndexer } from '../stores/appKey'
+import {
+  getDownloadState,
+  runDownloadWithSlot,
+  updateDownloadProgress,
+} from '../stores/downloads'
 import type { FileRecord } from '../stores/files'
-import type { File } from 'expo-file-system'
+import { copyFileToFs } from '../stores/fs'
+import { getSdk, useSdk } from '../stores/sdk'
+import { getOrCreateTempDownloadFile } from '../stores/tempFs'
 
 /** Non-hook version for programmatic downloads (e.g., bulk operations) */
 export async function downloadFile(file: FileRecord): Promise<void> {
@@ -52,11 +56,16 @@ export async function downloadFile(file: FileRecord): Promise<void> {
         pinnedObject,
         totalSize,
         download: (writer) =>
-          sdk.download(writer, pinnedObject, {
-            maxInflight: DOWNLOAD_MAX_INFLIGHT,
-            offset: BigInt(0),
-            length: undefined,
-          }, { signal }),
+          sdk.download(
+            writer,
+            pinnedObject,
+            {
+              maxInflight: DOWNLOAD_MAX_INFLIGHT,
+              offset: BigInt(0),
+              length: undefined,
+            },
+            { signal },
+          ),
         onAfterClose: async (targetFile) => {
           await copyFileToFs(file, targetFile)
         },
@@ -97,7 +106,7 @@ export function useDownloadFromShareURL() {
         logger.debug(
           'useDownloadFromShareURL',
           'download already in progress',
-          id
+          id,
         )
         return id
       }
@@ -129,11 +138,16 @@ export function useDownloadFromShareURL() {
             pinnedObject: sharedObject,
             totalSize,
             download: (writer) =>
-              sdk.download(writer, sharedObject, {
-                maxInflight: DOWNLOAD_MAX_INFLIGHT,
-                offset: BigInt(0),
-                length: undefined,
-              }, { signal }),
+              sdk.download(
+                writer,
+                sharedObject,
+                {
+                  maxInflight: DOWNLOAD_MAX_INFLIGHT,
+                  offset: BigInt(0),
+                  length: undefined,
+                },
+                { signal },
+              ),
             onAfterClose: async (targetFile) => {
               await copyFileToFs(file, targetFile)
             },
@@ -143,7 +157,7 @@ export function useDownloadFromShareURL() {
         },
       })
     },
-    [sdk]
+    [sdk],
   )
 }
 
@@ -174,7 +188,12 @@ function createFileWriter(params: {
       }
 
       if (chunks % 10 === 0) {
-        logger.debug('streamToCache', 'downloaded', bytesWritten, 'bytes so far')
+        logger.debug(
+          'streamToCache',
+          'downloaded',
+          bytesWritten,
+          'bytes so far',
+        )
       }
     },
   }
@@ -230,7 +249,7 @@ async function streamToCache(params: {
 export async function downloadFirstBytesFromShared(
   sdk: ReturnType<typeof useSdk>,
   sharedObject: PinnedObjectInterface,
-  byteCount: number
+  byteCount: number,
 ): Promise<Uint8Array> {
   if (!sdk) {
     throw new Error('SDK not initialized')
@@ -238,7 +257,7 @@ export async function downloadFirstBytesFromShared(
 
   logger.debug(
     'downloadFirstBytesFromShared',
-    `Downloading first ${byteCount} bytes`
+    `Downloading first ${byteCount} bytes`,
   )
 
   // Collect bytes into an array
@@ -260,11 +279,16 @@ export async function downloadFirstBytesFromShared(
   }
 
   try {
-    await sdk.download(writer, sharedObject, {
-      maxInflight: DOWNLOAD_MAX_INFLIGHT,
-      offset: BigInt(0),
-      length: BigInt(byteCount),
-    }, { signal: abortController.signal })
+    await sdk.download(
+      writer,
+      sharedObject,
+      {
+        maxInflight: DOWNLOAD_MAX_INFLIGHT,
+        offset: BigInt(0),
+        length: BigInt(byteCount),
+      },
+      { signal: abortController.signal },
+    )
   } catch (e) {
     // Ignore abort errors - we abort intentionally when we have enough bytes
     if (e instanceof Error && e.name !== 'AbortError') {
@@ -284,7 +308,7 @@ export async function downloadFirstBytesFromShared(
 
   logger.debug(
     'downloadFirstBytesFromShared',
-    `Downloaded ${bytes.length} bytes`
+    `Downloaded ${bytes.length} bytes`,
   )
   return bytes
 }

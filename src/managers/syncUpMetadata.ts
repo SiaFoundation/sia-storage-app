@@ -1,29 +1,29 @@
-import { logger } from '../lib/logger'
-import {
-  fileMetadataKeys,
-  readAllFileRecords,
-  type FileMetadata,
-} from '../stores/files'
-import { getIndexerURL } from '../stores/settings'
-import { getIsConnected, getPinnedObject, updateMetadata } from '../stores/sdk'
-import { createServiceInterval } from '../lib/serviceInterval'
-import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { z } from 'zod'
 import {
-  SYNC_UP_METADATA_INTERVAL,
   SYNC_UP_METADATA_BATCH_SIZE,
+  SYNC_UP_METADATA_INTERVAL,
 } from '../config'
 import {
-  encodeFileMetadata,
   decodeFileMetadata,
+  encodeFileMetadata,
 } from '../encoding/fileMetadata'
+import { logger } from '../lib/logger'
+import { createServiceInterval } from '../lib/serviceInterval'
+import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
+import {
+  type FileMetadata,
+  fileMetadataKeys,
+  readAllFileRecords,
+} from '../stores/files'
+import { getIsConnected, getPinnedObject, updateMetadata } from '../stores/sdk'
+import { getIndexerURL } from '../stores/settings'
 
 type DiffEntry = { local: unknown; remote: unknown }
 type DiffResult = Record<keyof FileMetadata, DiffEntry>
 
 export function diffFileMetadata(
   localMeta: FileMetadata,
-  remoteMeta: FileMetadata
+  remoteMeta: FileMetadata,
 ): Partial<DiffResult> {
   const diffs: Partial<DiffResult> = {}
   for (const key of fileMetadataKeys) {
@@ -48,7 +48,7 @@ export function diffFileMetadata(
  */
 export function formatMetadataDiff(
   diffs: Partial<DiffResult>,
-  isLocalNewer: boolean
+  isLocalNewer: boolean,
 ): string {
   const lines: string[] = []
   const keys = Object.keys(diffs) as (keyof FileMetadata)[]
@@ -90,10 +90,10 @@ function formatDiff(params: {
   const { fileId, objectId, localMeta, remoteMeta, diffs, isLocalNewer } =
     params
   const headerLeft = `local (l) updated at ${formatTimestamp(
-    localMeta.updatedAt
+    localMeta.updatedAt,
   )}`
   const headerRight = `remote (r) updated at ${formatTimestamp(
-    remoteMeta.updatedAt
+    remoteMeta.updatedAt,
   )}`
   const status = isLocalNewer ? 'local newer' : 'remote newer'
   const diff = formatMetadataDiff(diffs, isLocalNewer)
@@ -121,7 +121,7 @@ const syncUpCursorCodec = z.codec(
   {
     decode: (stored) => stored,
     encode: (domain) => domain,
-  }
+  },
 )
 
 type SyncUpCursor = {
@@ -134,7 +134,7 @@ export async function getSyncUpCursor(): Promise<SyncUpCursor | undefined> {
 }
 
 export async function setSyncUpCursor(
-  value: SyncUpCursor | undefined
+  value: SyncUpCursor | undefined,
 ): Promise<void> {
   await setAsyncStorageJSON('syncUpCursor', value, syncUpCursorCodec)
 }
@@ -154,7 +154,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   const after = await getSyncUpCursor()
   logger.debug(
     'syncUpMetadata',
-    `service tick: from ${after?.id ?? 'begin'} after=${after?.updatedAt}`
+    `service tick: from ${after?.id ?? 'begin'} after=${after?.updatedAt}`,
   )
   const batch = await readAllFileRecords({
     order: 'ASC',
@@ -190,7 +190,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
           remoteMeta,
           diffs,
           isLocalNewer,
-        })
+        }),
       )
       if (isLocalNewer) {
         await updateMetadata(remote, encodeFileMetadata(f))

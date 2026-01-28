@@ -1,6 +1,6 @@
-import React, { memo } from 'react'
+import { memo } from 'react'
 import { View } from 'react-native'
-import { Marker, type LatLng } from 'react-native-maps'
+import { type LatLng, Marker } from 'react-native-maps'
 
 type DotMarkerProps = {
   coordinate: LatLng

@@ -1,12 +1,12 @@
-import { InfoCard } from './InfoCard'
-import { LabeledValueRow } from './LabeledValueRow'
-import { cancelAllUploads, useUploadCounts } from '../stores/uploads'
-import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
-import { Button } from './Button'
-import { RowGroup } from './Group'
-import { InputRow } from './InputRow'
 import { useInputValue } from '../hooks/useInputValue'
 import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
+import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
+import { cancelAllUploads, useUploadCounts } from '../stores/uploads'
+import { Button } from './Button'
+import { RowGroup } from './Group'
+import { InfoCard } from './InfoCard'
+import { InputRow } from './InputRow'
+import { LabeledValueRow } from './LabeledValueRow'
 
 export function SettingsAdvancedTransfers() {
   const uploadCounts = useUploadCounts()

@@ -1,11 +1,11 @@
-import * as ImagePicker from 'react-native-image-picker'
 import { useCallback, useRef } from 'react'
+import * as ImagePicker from 'react-native-image-picker'
 import { extFromMime, getMimeType } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
-import { useToast } from '../lib/toastContext'
-import { FileRecord } from '../stores/files'
-import { useUploader } from '../managers/uploader'
 import { processAssets } from '../lib/processAssets'
+import { useToast } from '../lib/toastContext'
+import { useUploader } from '../managers/uploader'
+import type { FileRecord } from '../stores/files'
 
 export function useCameraCapture() {
   const toast = useToast()
@@ -35,7 +35,7 @@ export function useCameraCapture() {
       if (result.errorCode) {
         logger.warn(
           'cameraCapture',
-          `error: ${result.errorMessage ?? result.errorCode}`
+          `error: ${result.errorMessage ?? result.errorCode}`,
         )
         return []
       }
@@ -56,14 +56,14 @@ export function useCameraCapture() {
                 type: a.type,
                 name: a.fileName,
                 uri: a.uri,
-              })
+              }),
             ),
             size: a.fileSize,
             type: a.type,
             sourceUri: a.uri,
             timestamp: a.timestamp,
-          }))
-        )
+          })),
+        ),
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))
@@ -95,7 +95,7 @@ export function useCameraCaptureAndUpload() {
  */
 function buildDateFileName(
   timestamp: string | undefined,
-  mime: string | undefined
+  mime: string | undefined,
 ): string {
   const d = timestamp ? new Date(timestamp) : new Date()
 

@@ -1,8 +1,8 @@
-import { PinnedObject, PinnedObjectInterface } from 'react-native-sia'
-import { getAppKeyForIndexer } from '../stores/appKey'
+import { PinnedObject, type PinnedObjectInterface } from 'react-native-sia'
 import useSWR from 'swr'
-import { FileRecord } from '../stores/files'
 import { logger } from '../lib/logger'
+import { getAppKeyForIndexer } from '../stores/appKey'
+import type { FileRecord } from '../stores/files'
 
 export function usePinnedObjects(file: FileRecord) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(
@@ -16,7 +16,7 @@ export function usePinnedObjects(file: FileRecord) {
             // TODO: Figure out how to handle this situation.
             logger.warn(
               'usePinnedObjects',
-              `fileId=${file.id} indexerURL=${indexerURL} No AppKey found`
+              `fileId=${file.id} indexerURL=${indexerURL} No AppKey found`,
             )
             return null
           }
@@ -24,9 +24,9 @@ export function usePinnedObjects(file: FileRecord) {
             indexerURL,
             pinnedObject: PinnedObject.open(appKey, so),
           }
-        })
+        }),
       )
       return results.filter((o) => o !== null)
-    }
+    },
   )
 }

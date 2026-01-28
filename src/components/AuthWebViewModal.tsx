@@ -1,16 +1,16 @@
-import React, { useRef, useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
-  Modal,
-  View,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-  Text,
   ActivityIndicator,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native'
 import { WebView, type WebViewNavigation } from 'react-native-webview'
-import { palette } from '../styles/colors'
 import { useAuthWebViewStore } from '../stores/authWebView'
+import { palette } from '../styles/colors'
 
 export function AuthWebViewModal() {
   const webViewRef = useRef<WebView>(null)
@@ -23,7 +23,7 @@ export function AuthWebViewModal() {
         callback(navState.url)
       }
     },
-    [callback]
+    [callback],
   )
 
   const handleShouldStartLoadWithRequest = useCallback(
@@ -34,7 +34,7 @@ export function AuthWebViewModal() {
       }
       return true
     },
-    [callback]
+    [callback],
   )
 
   return (

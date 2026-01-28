@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system'
-import { Reader } from 'react-native-sia'
+import type { Reader } from 'react-native-sia'
 
 /**
  * Creates a Reader interface that wraps a file stream for use with the SDK's
@@ -20,7 +20,7 @@ export function createFileReader(fileUri: string): Reader {
       // Convert Uint8Array to ArrayBuffer
       return value.buffer.slice(
         value.byteOffset,
-        value.byteOffset + value.byteLength
+        value.byteOffset + value.byteLength,
       )
     },
   }

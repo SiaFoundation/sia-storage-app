@@ -1,5 +1,4 @@
-import React from 'react'
-import { StyleSheet, View, Text, TextInput, Platform } from 'react-native'
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native'
 import { palette } from '../styles/colors'
 
 type RecoveryPhraseInputProps = {
@@ -29,8 +28,8 @@ export function RecoveryPhraseInput({
           isValid
             ? styles.inputBoxValid
             : normalizedValue
-            ? styles.inputBoxInvalid
-            : styles.inputBoxNeutral,
+              ? styles.inputBoxInvalid
+              : styles.inputBoxNeutral,
         ]}
       >
         <TextInput
@@ -59,7 +58,7 @@ export function RecoveryPhraseInput({
         >
           {isValid
             ? 'Recovery phrase is valid.'
-            : validationError ?? 'Invalid recovery phrase.'}
+            : (validationError ?? 'Invalid recovery phrase.')}
         </Text>
       ) : null}
     </>

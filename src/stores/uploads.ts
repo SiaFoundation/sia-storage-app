@@ -71,7 +71,7 @@ export function setUploadError(id: string, error: string) {
 export function setUploadBatchInfo(
   id: string,
   batchId: string,
-  batchFileCount: number
+  batchFileCount: number,
 ) {
   setState((state) => {
     const prev = state.uploads[id]
@@ -136,11 +136,7 @@ export type UploadCounts = {
 }
 
 // Active statuses for counting uploads in progress
-const ACTIVE_STATUSES: UploadStatus[] = [
-  'packing',
-  'packed',
-  'uploading',
-]
+const ACTIVE_STATUSES: UploadStatus[] = ['packing', 'packed', 'uploading']
 
 export const [getUploadCounts, useUploadCounts] = createGetterAndSelector(
   useUploadsStore,
@@ -152,7 +148,7 @@ export const [getUploadCounts, useUploadCounts] = createGetterAndSelector(
     }
     counts.total = counts.totalActive + counts.totalQueued
     return counts
-  }
+  },
 )
 
 export function updateUploadProgress(id: string, progress: number) {
@@ -172,14 +168,14 @@ export function updateUploadProgress(id: string, progress: number) {
 
 export const [getUploadState, useUploadState] = createGetterAndSelector(
   useUploadsStore,
-  (state, id: string): UploadState | undefined => state.uploads[id]
+  (state, id: string): UploadState | undefined => state.uploads[id],
 )
 
 export const [getActiveUploads, useActiveUploads] = createGetterAndSelector(
   useUploadsStore,
   (state): UploadState[] => {
     return Object.values(state.uploads).filter((rec) =>
-      ['queued', 'packing', 'packed', 'uploading'].includes(rec.status)
+      ['queued', 'packing', 'packed', 'uploading'].includes(rec.status),
     )
-  }
+  },
 )

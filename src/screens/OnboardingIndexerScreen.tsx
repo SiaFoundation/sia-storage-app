@@ -1,16 +1,16 @@
-import React, { useState } from 'react'
-import { StyleSheet, View, Text } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { palette } from '../styles/colors'
 import BlocksGrid from '../components/BlocksGrid'
-import { Button } from '../components/Button'
-import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import BlocksLoader from '../components/BlocksLoader'
 import BlocksShape from '../components/BlocksShape'
-import { useNavigation } from '@react-navigation/native'
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { OnboardingStackParamList } from '../stacks/types'
+import { Button } from '../components/Button'
 import { IndexerSelector } from '../components/IndexerSelector'
+import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import type { OnboardingStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 export default function OnboardingIndexerScreen() {
   const nav =
@@ -79,7 +79,9 @@ export default function OnboardingIndexerScreen() {
                   style={styles.titleIconGlyph}
                 />
               </View>
-              <Text testID="indexer-title" style={styles.title}>Connect to a provider</Text>
+              <Text testID="indexer-title" style={styles.title}>
+                Connect to a provider
+              </Text>
             </View>
             <Text style={styles.subtitle}>
               Use our provider or link whichever one you prefer. This can be

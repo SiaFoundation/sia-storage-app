@@ -1,12 +1,12 @@
-import { StyleSheet, Text, View, ActivityIndicator } from 'react-native'
-import { useState } from 'react'
-import RNFS from 'react-native-fs'
 import { Buffer } from 'buffer'
+import { useState } from 'react'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import RNFS from 'react-native-fs'
+import { quickcryptoHash, rnfsHash } from '../lib/contentHash'
 import { colors, palette } from '../styles/colors'
+import { Button } from './Button'
 import { GroupTitle } from './Group'
 import { InfoCard } from './InfoCard'
-import { Button } from './Button'
-import { rnfsHash, quickcryptoHash } from '../lib/contentHash'
 
 /**
  * Hash testing component for debugging and E2E testing.
@@ -146,12 +146,12 @@ export function SettingsDebugHash() {
     useState<TestState>('idle')
 
   const [smallRnfsResult, setSmallRnfsResult] = useState<HashResult | null>(
-    null
+    null,
   )
   const [smallQuickCryptoResult, setSmallQuickCryptoResult] =
     useState<HashResult | null>(null)
   const [largeRnfsResult, setLargeRnfsResult] = useState<HashResult | null>(
-    null
+    null,
   )
   const [largeQuickCryptoResult, setLargeQuickCryptoResult] =
     useState<HashResult | null>(null)

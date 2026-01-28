@@ -1,15 +1,11 @@
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useNavigation, type NavigationProp } from '@react-navigation/native'
-import React from 'react'
+import { type NavigationProp, useNavigation } from '@react-navigation/native'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { StyleSheet, View } from 'react-native'
-import {
-  type ImportStackParamList,
-  type RootTabParamList,
-} from '../stacks/types'
 import { FileCarouselHeader } from '../components/FileCarousel/FileCarouselHeader'
-import { colors } from '../styles/colors'
-import { convertSiaShareUrlToHttp } from '../lib/shareUrl'
 import { FileImport } from '../components/FileImport'
+import { convertSiaShareUrlToHttp } from '../lib/shareUrl'
+import type { ImportStackParamList, RootTabParamList } from '../stacks/types'
+import { colors } from '../styles/colors'
 
 type Props = NativeStackScreenProps<ImportStackParamList, 'ImportFile'>
 

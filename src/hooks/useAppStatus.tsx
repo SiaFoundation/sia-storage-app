@@ -1,14 +1,14 @@
-import React from 'react'
 import {
   CircleCheckIcon,
   TriangleAlertIcon,
   UploadCloudIcon,
 } from 'lucide-react-native'
-import { palette } from '../styles/colors'
-import { useIsConnected } from '../stores/sdk'
-import { useIsInitializing } from '../stores/app'
-import { useHasOnboarded } from '../stores/settings'
+import type React from 'react'
 import { useUploadScannerStatus } from '../managers/uploadScanner'
+import { useIsInitializing } from '../stores/app'
+import { useIsConnected } from '../stores/sdk'
+import { useHasOnboarded } from '../stores/settings'
+import { palette } from '../styles/colors'
 import { useIsOnline } from './useIsOnline'
 
 export type AppStatus = {

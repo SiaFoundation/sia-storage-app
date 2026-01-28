@@ -1,11 +1,10 @@
-import React from 'react'
-import { CameraIcon, ImageIcon, FileIcon } from 'lucide-react-native'
-import { ActionSheet } from './ActionSheet'
-import { ActionSheetButton } from './ActionSheetButton'
-import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { useImagePickerAndUpload } from '../hooks/useImagePicker'
+import { CameraIcon, FileIcon, ImageIcon } from 'lucide-react-native'
 import { useCameraCaptureAndUpload } from '../hooks/useCameraCapture'
 import { useDocumentPickerAndUpload } from '../hooks/useDocumentPicker'
+import { useImagePickerAndUpload } from '../hooks/useImagePicker'
+import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { ActionSheet } from './ActionSheet'
+import { ActionSheetButton } from './ActionSheetButton'
 
 export function AddFileActionSheet() {
   const isOpen = useSheetOpen('addFile')

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * CI Android Test Build
  *
@@ -9,8 +10,8 @@
  *   bun scripts/ciTestBuildAndroid.ts
  */
 
-import { $ } from 'bun'
 import path from 'node:path'
+import { $ } from 'bun'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 

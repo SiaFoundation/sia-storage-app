@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Android Gradle Task Runner
  *
@@ -18,17 +19,17 @@
  *   SIA_RELEASE_KEY_PASSWORD   - Key password
  */
 
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import { spawnSync } from 'node:child_process'
 
 const projectRoot = path.resolve(__dirname, '..')
 
 const task = process.argv[2]
 if (!task) {
   console.error(
-    'Missing Gradle task argument (e.g. signingReport or bundleRelease).'
+    'Missing Gradle task argument (e.g. signingReport or bundleRelease).',
   )
   process.exit(1)
 }
@@ -45,8 +46,8 @@ const missing = requiredEnvKeys.filter((key) => !process.env[key])
 if (missing.length > 0) {
   console.error(
     `Missing required environment variables: ${missing.join(
-      ', '
-    )}. Ensure they are defined in your .env file or shell.`
+      ', ',
+    )}. Ensure they are defined in your .env file or shell.`,
   )
   process.exit(1)
 }
@@ -84,7 +85,7 @@ const result = spawnSync(
     cwd: androidDir,
     stdio: 'inherit',
     env: finalEnv,
-  }
+  },
 )
 
 if (result.error) {

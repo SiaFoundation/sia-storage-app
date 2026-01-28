@@ -1,22 +1,22 @@
 import * as MediaLibrary from 'expo-media-library'
-import { logger } from '../lib/logger'
-import { settingsSwr } from '../stores/settings'
-import { processAssets } from '../lib/processAssets'
-import { librarySwr } from '../stores/library'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import {
-  getAsyncStorageNumber,
-  setAsyncStorageNumber,
-  getAsyncStorageBoolean,
-  setAsyncStorageBoolean,
-} from '../stores/asyncStore'
-import { createServiceInterval } from '../lib/serviceInterval'
 import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
+import { logger } from '../lib/logger'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
   mediaLibraryPermissionsSwr,
 } from '../lib/mediaLibraryPermissions'
+import { processAssets } from '../lib/processAssets'
+import { createGetterAndSWRHook } from '../lib/selectors'
+import { createServiceInterval } from '../lib/serviceInterval'
+import {
+  getAsyncStorageBoolean,
+  getAsyncStorageNumber,
+  setAsyncStorageBoolean,
+  setAsyncStorageNumber,
+} from '../stores/asyncStore'
+import { librarySwr } from '../stores/library'
+import { settingsSwr } from '../stores/settings'
 
 const PAGE_SIZE = 1
 
@@ -52,7 +52,7 @@ export async function workBackward() {
         type: undefined,
         size: undefined,
         timestamp: new Date(asset.creationTime).toISOString(),
-      }))
+      })),
     )
     if (files.length > 0) {
       await librarySwr.triggerChange()
@@ -76,7 +76,7 @@ const defaultValue = 0
 
 export const [getAutoSyncPhotosArchive, useAutoSyncPhotosArchive] =
   createGetterAndSWRHook(settingsSwr.getKey('autoSyncPhotosArchive'), () =>
-    getAsyncStorageBoolean('autoSyncPhotosArchive', false)
+    getAsyncStorageBoolean('autoSyncPhotosArchive', false),
   )
 
 export async function setAutoSyncPhotosArchive(value: boolean) {
@@ -96,7 +96,7 @@ export async function toggleAutoSyncPhotosArchive() {
 
 export const [getPhotosArchiveCursor, usePhotosArchiveCursor] =
   createGetterAndSWRHook(settingsSwr.getKey('photosArchiveCursor'), () =>
-    getAsyncStorageNumber('photosArchiveCursor', defaultValue)
+    getAsyncStorageNumber('photosArchiveCursor', defaultValue),
   )
 
 export async function setPhotosArchiveCursor(value: number) {

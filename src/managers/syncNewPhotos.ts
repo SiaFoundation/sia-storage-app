@@ -1,22 +1,22 @@
 import * as MediaLibrary from 'expo-media-library'
-import { logger } from '../lib/logger'
-import { createServiceInterval } from '../lib/serviceInterval'
-import { settingsSwr } from '../stores/settings'
-import { processAssets } from '../lib/processAssets'
-import { librarySwr } from '../stores/library'
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
+import { logger } from '../lib/logger'
+import {
+  ensureMediaLibraryPermission,
+  getMediaLibraryPermissions,
+  mediaLibraryPermissionsSwr,
+} from '../lib/mediaLibraryPermissions'
+import { processAssets } from '../lib/processAssets'
 import { createGetterAndSWRHook } from '../lib/selectors'
+import { createServiceInterval } from '../lib/serviceInterval'
 import {
   getAsyncStorageBoolean,
   getAsyncStorageNumber,
   setAsyncStorageBoolean,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
-import {
-  ensureMediaLibraryPermission,
-  getMediaLibraryPermissions,
-  mediaLibraryPermissionsSwr,
-} from '../lib/mediaLibraryPermissions'
+import { librarySwr } from '../stores/library'
+import { settingsSwr } from '../stores/settings'
 
 const PAGE_SIZE = 200
 
@@ -51,7 +51,7 @@ async function workForward(): Promise<void> {
         type: undefined,
         size: undefined,
         timestamp: new Date(asset.creationTime).toISOString(),
-      }))
+      })),
     )
     if (files.length > 0) await librarySwr.triggerChange()
   } catch (e) {
@@ -70,7 +70,7 @@ export const initSyncNewPhotos = createServiceInterval({
 
 export const [getAutoSyncNewPhotos, useAutoSyncNewPhotos] =
   createGetterAndSWRHook(settingsSwr.getKey('autoSyncNewPhotos'), () =>
-    getAsyncStorageBoolean('autoSyncNewPhotos', false)
+    getAsyncStorageBoolean('autoSyncNewPhotos', false),
   )
 
 export async function setAutoSyncNewPhotos(value: boolean) {
@@ -88,11 +88,11 @@ export async function toggleAutoSyncNewPhotos() {
   await setAutoSyncNewPhotos(next)
 }
 
-const defaultValue = new Date().getTime()
+const defaultValue = Date.now()
 
 export const [getPhotosNewCursor, usePhotosNewCursor] = createGetterAndSWRHook(
   settingsSwr.getKey('photosNewCursor'),
-  () => getAsyncStorageNumber('photosNewCursor', defaultValue)
+  () => getAsyncStorageNumber('photosNewCursor', defaultValue),
 )
 
 export async function setPhotosNewCursor(value: number) {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Smart Development Build Runner
  *
@@ -22,24 +23,29 @@
  *   .build-cache/android/       - Android builds
  */
 
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { $ } from 'bun'
-import { rmSync } from 'fs'
-import { join } from 'path'
 import {
-  PROJECT_ROOT,
+  buildAndroid,
+  buildIosDevice,
+  buildIosSim,
+  findIosDeviceApp,
+} from './build'
+import {
   type BuildTarget,
   getTargetPaths,
   needsRebuild,
+  PROJECT_ROOT,
 } from './buildCache'
-import { buildIosSim, buildIosDevice, buildAndroid, findIosDeviceApp } from './build'
 import {
+  type Device,
+  installAndroidApp,
+  installIosApp,
+  launchAndroidApp,
+  launchIosApp,
   listDevices,
   selectDevice,
-  installIosApp,
-  launchIosApp,
-  installAndroidApp,
-  launchAndroidApp,
-  type Device,
 } from './lib/devices'
 import { waitForDeviceUnlock } from './lib/ui'
 
@@ -68,7 +74,9 @@ function getTarget(): BuildTarget {
       console.error('  android      Build & run on Android emulator/device')
       console.error('')
       console.error('Flags:')
-      console.error('  --rebuild    Full clean build (delete platform dir, prebuild, build)')
+      console.error(
+        '  --rebuild    Full clean build (delete platform dir, prebuild, build)',
+      )
       console.error("  --no-run     Build only, don't launch the app")
       process.exit(1)
   }
@@ -83,7 +91,7 @@ const paths = getTargetPaths(target)
 console.log(`\n🚀 Smart Dev Build`)
 console.log(`   Target: ${targetArg}`)
 console.log(
-  `   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`
+  `   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`,
 )
 console.log(`   Cache: .build-cache/${target}/`)
 console.log('')
@@ -110,7 +118,9 @@ if (isDevice) {
     console.error('')
     console.error('   No iOS device connected')
     console.error('')
-    console.error('   Please connect your iPhone with a USB cable and unlock it.')
+    console.error(
+      '   Please connect your iPhone with a USB cable and unlock it.',
+    )
     console.error('   Run `xcrun devicectl list devices` to verify.')
     process.exit(1)
   }
@@ -230,7 +240,9 @@ async function runIosSimulator(): Promise<void> {
   }
 
   // Boot simulator if needed
-  const bootedResult = await $`xcrun simctl list devices booted`.quiet().nothrow()
+  const bootedResult = await $`xcrun simctl list devices booted`
+    .quiet()
+    .nothrow()
   if (!bootedResult.stdout.toString().includes('iPhone')) {
     console.log('   Booting simulator...')
     const devices = await $`xcrun simctl list devices available`.text()
@@ -255,7 +267,9 @@ async function runAndroid(): Promise<void> {
 
   // Find APK
   const apkDir = join(PROJECT_ROOT, 'android/app/build/outputs/apk/debug')
-  const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`.quiet().nothrow()
+  const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`
+    .quiet()
+    .nothrow()
   const apkPath = apkResult.stdout
     .toString()
     .trim()
@@ -274,13 +288,11 @@ async function runAndroid(): Promise<void> {
   if (!device) {
     console.log('   No device connected. Starting emulator...')
     const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
-    const avds = avdsResult.stdout
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
+    const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
     if (avds.length === 0) {
-      console.error('   No Android emulator found. Create one in Android Studio.')
+      console.error(
+        '   No Android emulator found. Create one in Android Studio.',
+      )
       process.exit(1)
     }
     Bun.spawn(['sh', '-c', `emulator -avd ${avds[0]} &`], {
@@ -292,7 +304,9 @@ async function runAndroid(): Promise<void> {
     // Wait for boot
     for (let i = 0; i < 60; i++) {
       const bootResult =
-        await $`adb shell getprop sys.boot_completed 2>/dev/null`.quiet().nothrow()
+        await $`adb shell getprop sys.boot_completed 2>/dev/null`
+          .quiet()
+          .nothrow()
       if (bootResult.stdout.toString().trim() === '1') break
       await new Promise((r) => setTimeout(r, 2000))
     }

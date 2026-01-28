@@ -1,17 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  View,
-  StyleSheet,
-  LayoutChangeEvent,
   Animated,
   Easing,
-  ViewStyle,
+  type LayoutChangeEvent,
+  StyleSheet,
+  View,
+  type ViewStyle,
 } from 'react-native'
 import BlocksShape, {
   BLOCK_COLORS,
-  ShapeId,
-  GlyphShape,
+  type GlyphShape,
   getTransformedShapePoints,
+  type ShapeId,
 } from './BlocksShape'
 
 type AnimationMode = 'none' | 'typeFade' | 'swap'
@@ -109,7 +109,7 @@ export default function BlocksGrid({
       ORDER_BASE.map((s) => [
         s,
         new Animated.Value(animation === 'typeFade' ? 0 : 1),
-      ])
+      ]),
     ) as Record<ShapeId, Animated.Value>
     return d
   }, [animation])
@@ -211,7 +211,7 @@ export default function BlocksGrid({
           const localTile = Math.min(
             Math.floor(baseTile),
             Math.floor(usableW / unitsW),
-            Math.floor(usableH / unitsH)
+            Math.floor(usableH / unitsH),
           )
           const tileSize = Math.max(1, localTile)
 
@@ -241,7 +241,7 @@ export default function BlocksGrid({
               />
             </Animated.View>
           )
-        })
+        }),
       )}
     </View>
   )

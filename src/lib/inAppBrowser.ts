@@ -14,7 +14,7 @@ export type InAppBrowserOptions<T = boolean> = {
  */
 export async function openInAppBrowser<T = boolean>(
   url: string,
-  options?: InAppBrowserOptions<T>
+  options?: InAppBrowserOptions<T>,
 ): Promise<T | null> {
   if (await InAppBrowser.isAvailable()) {
     const { onResponseURL } = options || {}
@@ -27,7 +27,7 @@ export async function openInAppBrowser<T = boolean>(
           result = onResponseURL(received)
           InAppBrowser.close()
         }
-      }
+      },
     )
 
     try {

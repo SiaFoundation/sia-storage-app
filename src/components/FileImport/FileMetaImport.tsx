@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
-import { View, StyleSheet, Text } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import type { FileStatus } from '../../lib/file'
+import type { FileRecord } from '../../stores/files'
+import { useShowAdvanced } from '../../stores/settings'
 import { colors } from '../../styles/colors'
-import { type FileStatus } from '../../lib/file'
+import { RowGroup } from '../Group'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
-import { RowGroup } from '../Group'
-import { useShowAdvanced } from '../../stores/settings'
-import { FileRecord } from '../../stores/files'
 
 export function FileMetaImport({
   file,
@@ -42,7 +42,7 @@ export function FileMetaImport({
             label="Size"
             value={
               hasValidSize ? (
-                humanSize ?? '—'
+                (humanSize ?? '—')
               ) : (
                 <View style={styles.unknownValue}>
                   <Text style={styles.unknownText}>unknown</Text>

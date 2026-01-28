@@ -1,5 +1,5 @@
 import { logger } from '../lib/logger'
-import { FileMetadata } from '../stores/files'
+import type { FileMetadata } from '../stores/files'
 
 export function transformFileMetadata(metadata: FileMetadata): FileMetadata {
   return {
@@ -26,7 +26,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
     logger.error(
       'fileMetadata',
       'Error converting file metadata from buffer',
-      e
+      e,
     )
     return {
       name: '',

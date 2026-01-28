@@ -1,11 +1,10 @@
-import React from 'react'
-import { View, StyleSheet, Text } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useFileStatus } from '../../lib/file'
+import type { FileRecord } from '../../stores/files'
 import { overlay, palette } from '../../styles/colors'
 import { IconButton } from '../IconButton'
-import { FileRecord } from '../../stores/files'
-import { useFileStatus } from '../../lib/file'
 import { UploadStatusIcon } from '../UploadStatusIcon'
 
 type Props = {

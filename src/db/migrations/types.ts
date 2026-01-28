@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite'
+import type * as SQLite from 'expo-sqlite'
 
 export type MigrationProgressEvent = {
   id: string
@@ -12,6 +12,6 @@ export type Migration = {
   description: string
   up: (
     db: SQLite.SQLiteDatabase,
-    onProgress?: MigrationProgressHandler
+    onProgress?: MigrationProgressHandler,
   ) => Promise<void>
 }

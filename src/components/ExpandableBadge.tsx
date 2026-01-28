@@ -1,15 +1,16 @@
-import React, { useMemo, useRef, useState } from 'react'
+import type React from 'react'
+import { useMemo, useRef, useState } from 'react'
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native'
 import {
-  View,
-  StyleSheet,
-  Pressable,
-  LayoutAnimation,
+  type AccessibilityRole,
   Animated,
-  AccessibilityRole,
+  LayoutAnimation,
+  Pressable,
+  StyleSheet,
   Text,
+  View,
 } from 'react-native'
 import { palette } from '../styles/colors'
-import type { StyleProp, ViewStyle, TextStyle } from 'react-native'
 
 export type ExpandableBadgeProps = {
   label?: string
@@ -46,7 +47,7 @@ export function ExpandableBadge({
 }: ExpandableBadgeProps) {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded)
   const textOpacity = useRef(
-    new Animated.Value(initialExpanded ? 1 : 0)
+    new Animated.Value(initialExpanded ? 1 : 0),
   ).current
 
   const effectiveBg = backgroundColor ?? 'rgba(36,41,47,1)'
@@ -58,7 +59,7 @@ export function ExpandableBadge({
       { fontSize: size * 0.75, color: effectiveText },
       textStyle,
     ]
-  }, [size, effectiveText, textOpacity, textStyle])
+  }, [size, effectiveText, textStyle])
 
   const textEl = useMemo(() => {
     if (!expanded || !label) return null
@@ -70,7 +71,7 @@ export function ExpandableBadge({
         {label}
       </Animated.Text>
     )
-  }, [expanded, label, size, effectiveText, textOpacity, textStyles])
+  }, [expanded, label, textOpacity, textStyles])
 
   const content = (
     <View
@@ -101,7 +102,11 @@ export function ExpandableBadge({
           // Snap open; text fades in during second half.
           textOpacity.setValue(0)
           LayoutAnimation.configureNext(
-            LayoutAnimation.create(EXPAND_MS, 'easeInEaseOut', 'opacity') as any
+            LayoutAnimation.create(
+              EXPAND_MS,
+              'easeInEaseOut',
+              'opacity',
+            ) as any,
           )
           setExpanded(true)
           Animated.timing(textOpacity, {
@@ -121,8 +126,8 @@ export function ExpandableBadge({
               LayoutAnimation.create(
                 COLLAPSE_MS,
                 'easeInEaseOut',
-                'opacity'
-              ) as any
+                'opacity',
+              ) as any,
             )
             setExpanded(false)
           })

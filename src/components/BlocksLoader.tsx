@@ -1,5 +1,11 @@
-import React, { useEffect, useMemo, useRef } from 'react'
-import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native'
+import { useEffect, useMemo, useRef } from 'react'
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import BlocksShape, { BLOCK_COLORS } from './BlocksShape'
 
 type Props = {
@@ -25,7 +31,7 @@ export default function BlocksLoader({
         duration: 2600,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     )
     loop.start()
     return () => t.stopAnimation()
@@ -34,9 +40,9 @@ export default function BlocksLoader({
   const colors = useMemo(
     () =>
       [0, 1, 2].map(
-        (i) => BLOCK_COLORS[(colorStart + i) % BLOCK_COLORS.length]
+        (i) => BLOCK_COLORS[(colorStart + i) % BLOCK_COLORS.length],
       ),
-    [colorStart]
+    [colorStart],
   )
 
   const base = 0.25

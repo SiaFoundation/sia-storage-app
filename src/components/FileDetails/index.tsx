@@ -1,8 +1,8 @@
-import React from 'react'
-import { View, StyleSheet, ScrollView } from 'react-native'
-import { colors, palette } from '../../styles/colors'
-import { type FileRecord } from '../../stores/files'
+import type React from 'react'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
+import type { FileRecord } from '../../stores/files'
+import { colors, palette } from '../../styles/colors'
 import { FileMeta } from './FileMeta'
 
 export function FileDetails({

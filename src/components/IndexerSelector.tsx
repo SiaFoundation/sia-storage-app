@@ -1,9 +1,8 @@
-import React from 'react'
-import { StyleSheet, View, Text, Pressable } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { DEFAULT_INDEXER_URL } from '../config'
 import { palette } from '../styles/colors'
 import { InfoCard } from './InfoCard'
 import { InputRow } from './InputRow'
-import { DEFAULT_INDEXER_URL } from '../config'
 
 type IndexerSelectorProps = {
   value: string

@@ -1,13 +1,9 @@
-import {
-  type AppKey,
-  type SdkInterface,
-  type BuilderInterface,
-} from 'react-native-sia'
-import * as sdkStore from './sdk'
+import type { AppKey, BuilderInterface, SdkInterface } from 'react-native-sia'
+import { openAuthURL } from '../lib/openAuthUrl'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
 import { setMnemonicHash, validateMnemonic } from './mnemonic'
+import * as sdkStore from './sdk'
 import { getIndexerURL, setIndexerURL } from './settings'
-import { openAuthURL } from '../lib/openAuthUrl'
 
 // Builder method mocks
 let mockConnected: jest.Mock<Promise<SdkInterface | null>>
@@ -185,7 +181,7 @@ describe('sdk store', () => {
       expect(result).toBe(false)
       expect(sdkStore.getIsConnected()).toBe(false)
       expect(sdkStore.useSdkStore.getState().connectionError).toBe(
-        'Failed to connect to indexer'
+        'Failed to connect to indexer',
       )
       expect(sdkStore.useSdkStore.getState().isReconnecting).toBe(false)
     })
@@ -198,7 +194,7 @@ describe('sdk store', () => {
       expect(result).toBe(false)
       expect(sdkStore.getIsConnected()).toBe(false)
       expect(sdkStore.useSdkStore.getState().connectionError).toBe(
-        'Failed to connect to indexer'
+        'Failed to connect to indexer',
       )
     })
 
@@ -218,7 +214,7 @@ describe('sdk store', () => {
     it('returns false immediately if already reconnecting', async () => {
       mockGetAppKey.mockImplementation(
         () =>
-          new Promise((resolve) => setTimeout(() => resolve(mockAppKey), 50))
+          new Promise((resolve) => setTimeout(() => resolve(mockAppKey), 50)),
       )
       mockConnected.mockResolvedValue(mockSdk)
 
@@ -421,7 +417,7 @@ describe('sdk store', () => {
       it('uses pending approval, skips browser auth, registers', async () => {
         const [, error] = await sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
 
         expect(error).toBeNull()
@@ -433,7 +429,7 @@ describe('sdk store', () => {
         // Credentials saved.
         expect(mockSetAppKeyForIndexer).toHaveBeenCalledWith(
           testIndexerURL,
-          expect.anything()
+          expect.anything(),
         )
         expect(mockSetMnemonicHash).toHaveBeenCalledWith(mnemonic)
         expect(mockSetIndexerURL).toHaveBeenCalledWith(testIndexerURL)
@@ -449,7 +445,7 @@ describe('sdk store', () => {
 
         const [, error] = await sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
 
         expect(error?.type).toBe('mnemonicMismatch')
@@ -464,7 +460,7 @@ describe('sdk store', () => {
       it('runs browser auth when no pending approval', async () => {
         const [, error] = await sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
 
         expect(error).toBeNull()
@@ -489,7 +485,7 @@ describe('sdk store', () => {
 
         const [, error] = await sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
 
         expect(error).toBeNull()
@@ -508,7 +504,7 @@ describe('sdk store', () => {
 
         const [, error] = await sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
 
         expect(error?.type).toBe('cancelled')
@@ -524,7 +520,7 @@ describe('sdk store', () => {
 
       const [, error] = await sdkStore.registerWithIndexer(
         mnemonic,
-        testIndexerURL
+        testIndexerURL,
       )
 
       expect(error?.type).toBe('error')
@@ -545,7 +541,7 @@ describe('sdk store', () => {
 
         const registerPromise = sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
         await jest.advanceTimersByTimeAsync(10_000)
         const [, error] = await registerPromise
@@ -571,7 +567,7 @@ describe('sdk store', () => {
 
         const registerPromise = sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
         await jest.advanceTimersByTimeAsync(10_000)
         const [, error] = await registerPromise
@@ -597,7 +593,7 @@ describe('sdk store', () => {
 
         const registerPromise = sdkStore.registerWithIndexer(
           mnemonic,
-          testIndexerURL
+          testIndexerURL,
         )
         await jest.advanceTimersByTimeAsync(10_000)
         const [, error] = await registerPromise

@@ -1,18 +1,22 @@
+import { SCANNER_INTERVAL, SLAB_SIZE } from '../config'
 import { logger } from '../lib/logger'
-import { getActiveUploads, useActiveUploads } from '../stores/uploads'
+import { createServiceInterval } from '../lib/serviceInterval'
+import { humanUploadPercent } from '../lib/uploadPercent'
 import {
+  type FileRecord,
   getFilesLocalOnly,
   useFileCountAll,
   useFileCountLocal,
-  FileRecord,
 } from '../stores/files'
-import { getUploadManager, FileEntry } from './uploader'
-import { SCANNER_INTERVAL, SLAB_SIZE } from '../config'
-import { getIsConnected, getSdk } from '../stores/sdk'
-import { getAutoScanUploads, useAutoScanUploads, getIndexerURL } from '../stores/settings'
-import { createServiceInterval } from '../lib/serviceInterval'
-import { humanUploadPercent } from '../lib/uploadPercent'
 import { getFsFileUri } from '../stores/fs'
+import { getIsConnected, getSdk } from '../stores/sdk'
+import {
+  getAutoScanUploads,
+  getIndexerURL,
+  useAutoScanUploads,
+} from '../stores/settings'
+import { getActiveUploads, useActiveUploads } from '../stores/uploads'
+import { type FileEntry, getUploadManager } from './uploader'
 
 async function toFileEntry(file: FileRecord): Promise<FileEntry | null> {
   const fileUri = await getFsFileUri(file)
@@ -51,14 +55,14 @@ async function startUploadScanner(): Promise<void> {
     // Filter out files already being uploaded
     const activeUploads = getActiveUploads()
     const available = candidateFiles.filter(
-      (f) => !activeUploads.some((u) => u.id === f.id)
+      (f) => !activeUploads.some((u) => u.id === f.id),
     )
 
     // Select files that fit well in current slab
     const toUpload: FileEntry[] = []
     let batchSize = 0
     const targetBatchSize = Number(
-      slabRemaining > 0n ? slabRemaining : BigInt(SLAB_SIZE)
+      slabRemaining > 0n ? slabRemaining : BigInt(SLAB_SIZE),
     )
 
     for (const file of available) {
@@ -85,7 +89,7 @@ async function startUploadScanner(): Promise<void> {
     if (toUpload.length > 0) {
       logger.info(
         'uploadScanner',
-        `queuing ${toUpload.length} files (${batchSize} bytes)`
+        `queuing ${toUpload.length} files (${batchSize} bytes)`,
       )
       await uploadManager.queueFiles(toUpload)
     }
@@ -131,4 +135,3 @@ export function useUploadScannerStatus(): {
     total: total.data ?? 0,
   }
 }
-

@@ -25,7 +25,7 @@ function hashMnemonic(mnemonic: string): string {
 async function getMnemonicHash(): Promise<string | null> {
   const hash = await getSecureStoreString<string>(
     MNEMONIC_HASH_SECURE_STORE_KEY,
-    ''
+    '',
   )
   return hash || null
 }
@@ -44,7 +44,7 @@ export async function setMnemonicHash(mnemonic: string): Promise<void> {
  * Returns null if no hash is stored (new user).
  */
 export async function validateMnemonic(
-  mnemonic: string
+  mnemonic: string,
 ): Promise<'valid' | 'invalid' | 'none'> {
   const storedHash = await getMnemonicHash()
   if (!storedHash) {

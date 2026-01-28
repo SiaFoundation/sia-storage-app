@@ -18,6 +18,9 @@
     "release:android:production": "bun scripts/releaseAndroid.ts production",
     "release:ios:internal": "bun scripts/releaseIos.ts testflight",
     "release:ios:production": "bun scripts/releaseIos.ts appstore",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
     "test": "jest && bun test scripts/",
     "e2e:ios": "bun scripts/e2e.ts ios",
     "e2e:android": "bun scripts/e2e.ts android",
@@ -80,6 +83,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@biomejs/biome": "^2.3.13",
     "@testing-library/react-native": "^13.3.3",
     "@types/bun": "^1.2.7",
     "@types/jest": "29.5.14",

@@ -1,10 +1,10 @@
-import React from 'react'
-import { View, StyleSheet } from 'react-native'
 import { SearchIcon } from 'lucide-react-native'
-import { palette } from '../styles/colors'
+import type React from 'react'
+import { StyleSheet, View } from 'react-native'
 import { useLibrary } from '../stores/library'
-import { IconButton } from './IconButton'
+import { palette } from '../styles/colors'
 import { iconColors } from './BottomControlBar'
+import { IconButton } from './IconButton'
 
 export function FileSearchButton({
   onOpen,

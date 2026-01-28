@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
 import { useShareIntentContext } from 'expo-share-intent'
-import { useHasOnboarded } from '../stores/settings'
-import { processAssets } from '../lib/processAssets'
-import { useUploader } from '../managers/uploader'
-import { useToast } from '../lib/toastContext'
+import { useEffect } from 'react'
 import { logger } from '../lib/logger'
+import { processAssets } from '../lib/processAssets'
+import { useToast } from '../lib/toastContext'
+import { useUploader } from '../managers/uploader'
+import { useHasOnboarded } from '../stores/settings'
 
 export function ShareIntentConsumer() {
   const { data: hasOnboarded } = useHasOnboarded()
@@ -37,7 +37,7 @@ export function ShareIntentConsumer() {
             type: file.mimeType,
             timestamp: new Date().toISOString(),
             sourceUri: file.path,
-          }))
+          })),
         )
 
         if (warnings.length > 0) {

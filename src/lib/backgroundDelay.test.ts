@@ -27,7 +27,7 @@ describe('createBackgroundDelay', () => {
     expect(await delay(1000)).toBe('completed')
     expect(mockTimer.setTimeout).toHaveBeenCalledWith(
       expect.any(Function),
-      1000
+      1000,
     )
   })
 

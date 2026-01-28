@@ -10,9 +10,15 @@
  * - Cache stored in .build-cache/ directory (survives rimraf ios/android)
  */
 
-import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs'
-import { createHash } from 'crypto'
-import { join } from 'path'
+import { createHash } from 'node:crypto'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
+import { join } from 'node:path'
 import { Glob } from 'bun'
 
 // Project paths
@@ -22,9 +28,9 @@ export const BUILD_CACHE_DIR = join(PROJECT_ROOT, '.build-cache')
 // Build targets - each has isolated cache
 // Note: E2E uses the same targets as dev since builds are identical
 export type BuildTarget =
-  | 'ios-sim'      // iOS Simulator builds (dev and e2e)
-  | 'ios-device'   // iOS real device builds
-  | 'android'      // Android builds (dev and e2e)
+  | 'ios-sim' // iOS Simulator builds (dev and e2e)
+  | 'ios-device' // iOS real device builds
+  | 'android' // Android builds (dev and e2e)
 
 // Get paths for a specific build target
 export function getTargetPaths(target: BuildTarget) {
@@ -43,22 +49,21 @@ export function getTargetPaths(target: BuildTarget) {
  */
 export function computeBuildHash(): string {
   // Core config files that affect native builds
-  const coreFiles = [
-    'package.json',
-    'bun.lock',
-    'app.config.js',
-    'eas.json',
-  ]
+  const coreFiles = ['package.json', 'bun.lock', 'app.config.js', 'eas.json']
 
   // Find all plugin files (custom native code)
   const pluginGlob = new Glob('plugins/*.js')
-  const pluginFiles = Array.from(pluginGlob.scanSync({ cwd: PROJECT_ROOT })).sort()
+  const pluginFiles = Array.from(
+    pluginGlob.scanSync({ cwd: PROJECT_ROOT }),
+  ).sort()
 
   const allFiles = [...coreFiles, ...pluginFiles]
-  const content = allFiles.map(f => {
-    const path = join(PROJECT_ROOT, f)
-    return existsSync(path) ? readFileSync(path, 'utf-8') : ''
-  }).join('')
+  const content = allFiles
+    .map((f) => {
+      const path = join(PROJECT_ROOT, f)
+      return existsSync(path) ? readFileSync(path, 'utf-8') : ''
+    })
+    .join('')
 
   return createHash('md5').update(content).digest('hex').slice(0, 12)
 }
@@ -69,7 +74,7 @@ export function computeBuildHash(): string {
  */
 export function needsRebuild(
   target: BuildTarget,
-  options: { forceRebuild?: boolean } = {}
+  options: { forceRebuild?: boolean } = {},
 ): [boolean, string] {
   if (options.forceRebuild) {
     return [true, '--rebuild flag specified']
@@ -139,7 +144,11 @@ export function ensureCacheDir(target: BuildTarget): void {
 /**
  * Write to build log file (instead of flooding stdout).
  */
-export function writeBuildLog(target: BuildTarget, content: string, append = false): void {
+export function writeBuildLog(
+  target: BuildTarget,
+  content: string,
+  append = false,
+): void {
   const paths = getTargetPaths(target)
   mkdirSync(paths.dir, { recursive: true })
   if (append && existsSync(paths.buildLog)) {

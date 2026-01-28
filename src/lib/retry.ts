@@ -15,7 +15,7 @@ export async function retry<T>(
   name: string,
   operation: () => Promise<T>,
   maxAttempts = 5,
-  delayMs = 500
+  delayMs = 500,
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -24,20 +24,20 @@ export async function retry<T>(
       // Log the retry attempt.
       const exponentialDelay = Math.min(
         delayMs * 2 ** (attempt - 1),
-        MAX_BACKOFF_MS
+        MAX_BACKOFF_MS,
       )
       // Jitter spreads out retries occurring at the same time a little bit.
       const jitterOffset =
         exponentialDelay * JITTER_RATIO * (Math.random() * 2 - 1)
       const delayWithJitter = Math.max(
         0,
-        Math.round(exponentialDelay + jitterOffset)
+        Math.round(exponentialDelay + jitterOffset),
       )
       logger.warn(
         'retry',
         `${name} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayWithJitter}ms... error: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       )
 
       // If this was the last attempt, do not delay, just throw.

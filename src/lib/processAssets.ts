@@ -1,18 +1,18 @@
-import { uniqueId } from './uniqueId'
-import { logger } from './logger'
+import { File } from 'expo-file-system'
+import { generateThumbnails } from '../managers/thumbnailer'
 import {
   createManyFileRecords,
-  FileRecord,
+  type FileRecord,
   readFileRecordsByContentHashes,
   readFileRecordsByLocalIds,
   updateManyFileRecords,
 } from '../stores/files'
-import { MimeType, getMimeType } from './fileTypes'
-import { calculateContentHash } from './contentHash'
 import { copyFileToFs } from '../stores/fs'
-import { File } from 'expo-file-system'
-import { generateThumbnails } from '../managers/thumbnailer'
+import { calculateContentHash } from './contentHash'
+import { getMimeType, type MimeType } from './fileTypes'
+import { logger } from './logger'
 import { getMediaLibraryUri } from './mediaLibrary'
+import { uniqueId } from './uniqueId'
 
 type Asset = {
   id: string | undefined
@@ -60,7 +60,7 @@ type CandidateFileRecord = {
  */
 export async function processAssets(
   assets: Asset[] | undefined,
-  defaultFileName: string = 'file'
+  defaultFileName: string = 'file',
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => ({
@@ -79,13 +79,13 @@ export async function processAssets(
       hash: null,
       status: 'new',
       statusDetails: null,
-    }))
+    })),
   )
 
   // Update the status of the files that are found by localId.
   // This is quick but will only detect duplicates from the same device.
   const existingLocalIds = await readFileRecordsByLocalIds(
-    candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!)
+    candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!),
   )
   for (const f of existingLocalIds) {
     const validFile = candidateFiles.find((v) => v.localId === f.localId)
@@ -139,14 +139,14 @@ export async function processAssets(
           return
         }
         f.size = size
-      })
+      }),
   )
 
   // Check for duplicates by content hash.
   const existingContentHashes = await readFileRecordsByContentHashes(
     candidateFiles
       .filter((f) => f.status === 'new' && f.hash !== null)
-      .map((f) => f.hash!)
+      .map((f) => f.hash!),
   )
 
   // Update the status of the files that are found by content hash.
@@ -162,7 +162,7 @@ export async function processAssets(
   // Mark any hash-based duplicates within the new files as existing.
   const hashSet = new Set<string>()
   for (const f of candidateFiles.filter(
-    (f) => f.status === 'new' && f.hash !== null
+    (f) => f.status === 'new' && f.hash !== null,
   )) {
     const exists = hashSet.has(f.hash!)
     if (exists) {
@@ -188,7 +188,7 @@ export async function processAssets(
       objects: {},
     }))
   const incompleteFiles = candidateFiles.filter(
-    (f) => f.status === 'incomplete'
+    (f) => f.status === 'incomplete',
   )
   const existingFiles = candidateFiles.filter((f) => f.status === 'existing')
 
@@ -197,7 +197,7 @@ export async function processAssets(
   const existingFilesByContentHashCount = existingContentHashes.length
   logger.debug(
     'processAssets',
-    `result: picked=${candidateFiles.length}, new=${newFiles.length}, incomplete=${incompleteFiles.length}, existing=${existingFiles.length}`
+    `result: picked=${candidateFiles.length}, new=${newFiles.length}, incomplete=${incompleteFiles.length}, existing=${existingFiles.length}`,
   )
   if (existingFilesByLocalIdCount > 0 || existingFilesByContentHashCount > 0) {
     warnings.push('Some files were duplicates and were not included.')
@@ -209,7 +209,7 @@ export async function processAssets(
   // Generate thumbnails for new image and video files.
   logger.debug(
     'processAssets',
-    `generating thumbnails for ${newFiles.length} new files`
+    `generating thumbnails for ${newFiles.length} new files`,
   )
 
   // Generate thumbnails for new files, this will run in the background.

@@ -1,14 +1,14 @@
-import { logger } from '../lib/logger'
-import BackgroundFetch, {
-  BackgroundFetchConfig,
-} from 'react-native-background-fetch'
-import { minutesInMs, secondsInMs } from '../lib/time'
 import { Platform } from 'react-native'
+import BackgroundFetch, {
+  type BackgroundFetchConfig,
+} from 'react-native-background-fetch'
+import { createBackgroundDelay } from '../lib/backgroundDelay'
+import { logger } from '../lib/logger'
+import { minutesInMs, secondsInMs } from '../lib/time'
+import { getInitializationError, getIsInitializing } from '../stores/app'
 import { getFileStatsLocal } from '../stores/files'
 import { getIsConnected } from '../stores/sdk'
-import { createBackgroundDelay } from '../lib/backgroundDelay'
 import { getHasOnboarded } from '../stores/settings'
-import { getIsInitializing, getInitializationError } from '../stores/app'
 
 /**
  * Background tasks are scheduled by the operating system and run for about the following durations:
@@ -167,10 +167,10 @@ export async function initBackgroundTasks() {
       BackgroundFetch.finish(config.id)
       log(
         `finished, reason: timeout, elapsedTime: ${getElapsedTime(
-          state.startTime
-        )}`
+          state.startTime,
+        )}`,
       )
-    }
+    },
   )
 
   logger.info('backgroundTask', `configure status: ${status}`)
@@ -187,13 +187,13 @@ export async function initBackgroundTasks() {
       })
       logger.info(
         'backgroundTask',
-        `scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`
+        `scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`,
       )
     } catch (error) {
       logger.error(
         'backgroundTask',
         `scheduleTask failed for ${bgProcessingTaskConfig.id}:`,
-        error
+        error,
       )
     }
   }
@@ -204,7 +204,7 @@ export async function initBackgroundTasks() {
  * Returns 'ready' when init completes, 'timeout' after 30s, or 'aborted' if delay was aborted.
  */
 async function waitForInitialization(
-  delayFn: (ms: number) => Promise<'completed' | 'aborted'>
+  delayFn: (ms: number) => Promise<'completed' | 'aborted'>,
 ): Promise<'ready' | 'timeout' | 'aborted'> {
   const maxWaitMs = secondsInMs(30)
   const pollIntervalMs = secondsInMs(1)
@@ -284,8 +284,8 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const initialStats = await getFileStatsLocal({ localOnly: true })
   log(
     `initial queue: ${initialStats.count} files, ${formatBytes(
-      initialStats.totalBytes
-    )}`
+      initialStats.totalBytes,
+    )}`,
   )
 
   while (true) {
@@ -295,8 +295,8 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
         `task is in finished state, breaking loop, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
+          bytesUploaded,
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
       )
       return
     }
@@ -307,8 +307,8 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const bytesUploaded = initialStats.totalBytes
       log(
         `stopping, reason: all files uploaded, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
+          bytesUploaded,
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
       )
       return
     }
@@ -319,8 +319,8 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
         `delay aborted, exiting, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`
+          bytesUploaded,
+        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
       )
       return
     }
@@ -335,7 +335,7 @@ function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const value = bytes / Math.pow(1024, i)
+  const value = bytes / 1024 ** i
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
@@ -350,7 +350,7 @@ function logTask(config: TaskConfig, state: TaskState) {
 
 function transitionTaskState(
   state: TaskState,
-  newStatus: 'running' | 'finished'
+  newStatus: 'running' | 'finished',
 ) {
   if (newStatus === 'running') {
     state.startTime = Date.now()

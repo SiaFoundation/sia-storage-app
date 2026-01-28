@@ -1,16 +1,15 @@
-import React from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { palette } from '../styles/colors'
-import { ArrowUp, ArrowDown, SortAsc, SortDesc } from 'lucide-react-native'
+import { ArrowDown, ArrowUp, SortAsc, SortDesc } from 'lucide-react-native'
+import type React from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActionSheet } from '../components/ActionSheet'
 import {
+  type SortBy,
   setSortCategory,
-  SortBy,
   toggleDir,
   useLibrary,
 } from '../stores/library'
-import { ActionSheet } from '../components/ActionSheet'
-import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { openSheet } from '../stores/sheets'
+import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
+import { palette } from '../styles/colors'
 
 export function FileSorter(): React.ReactElement {
   const { sortBy, sortDir } = useLibrary()

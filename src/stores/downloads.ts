@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { logger } from '../lib/logger'
-import { acquireDownloadSlot } from '../managers/downloadsPool'
 import { createGetterAndSelector } from '../lib/selectors'
+import { acquireDownloadSlot } from '../managers/downloadsPool'
 
 export type DownloadStatus = 'queued' | 'running' | 'done' | 'error'
 
@@ -41,7 +41,7 @@ function setDownloadState(
   id: string,
   status: DownloadStatus,
   progress: number,
-  err?: string
+  err?: string,
 ) {
   setState((state) => {
     const prev = state.downloads[id]
@@ -50,7 +50,7 @@ function setDownloadState(
       controller: prev.controller,
       status,
       progress,
-      error: status === 'error' ? err ?? prev.error ?? '' : undefined,
+      error: status === 'error' ? (err ?? prev.error ?? '') : undefined,
     }
     return { downloads: { ...state.downloads, [id]: next } }
   })
@@ -92,7 +92,7 @@ export const [getDownloadCounts, useDownloadCounts] = createGetterAndSelector(
     }
     counts.total = counts.totalActive + counts.totalQueued
     return counts
-  }
+  },
 )
 
 export async function runDownloadWithSlot<T>(params: {
@@ -138,5 +138,5 @@ export function updateDownloadProgress(id: string, progress: number) {
 
 export const [getDownloadState, useDownloadState] = createGetterAndSelector(
   useDownloadsStore,
-  (state, id: string): DownloadState | undefined => state.downloads[id]
+  (state, id: string): DownloadState | undefined => state.downloads[id],
 )

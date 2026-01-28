@@ -1,8 +1,7 @@
-import React from 'react'
-import { FlatList, StyleSheet, ActivityIndicator, Platform } from 'react-native'
-import { type FileRecord } from '../stores/files'
-import { useFileList } from '../stores/library'
+import { ActivityIndicator, FlatList, Platform, StyleSheet } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
+import type { FileRecord } from '../stores/files'
+import { useFileList } from '../stores/library'
 import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {

@@ -4,11 +4,11 @@ import {
   CloudDownloadIcon,
   CloudUploadIcon,
 } from 'lucide-react-native'
-import { FileStatus } from '../lib/file'
-import { overlay, palette } from '../styles/colors'
 import { useMemo } from 'react'
-import { ExpandableBadge } from './ExpandableBadge'
+import type { FileStatus } from '../lib/file'
+import { overlay, palette } from '../styles/colors'
 import { CircularProgress } from './CircularProgress'
+import { ExpandableBadge } from './ExpandableBadge'
 import { SpinnerIcon } from './SpinnerIcon'
 
 export function UploadStatusIcon({
@@ -82,14 +82,14 @@ export function UploadStatusIcon({
         status.isErrored
           ? 'error'
           : status.isUploadQueued
-          ? 'queued'
-          : status.isPacking
-          ? 'packing'
-          : status.isUploading
-          ? 'uploading'
-          : status.isUploaded
-          ? 'uploaded'
-          : 'local'
+            ? 'queued'
+            : status.isPacking
+              ? 'packing'
+              : status.isUploading
+                ? 'uploading'
+                : status.isUploaded
+                  ? 'uploaded'
+                  : 'local'
       }`}
     >
       {iconEL}

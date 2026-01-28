@@ -22,16 +22,16 @@ module.exports = function withIosTarget16(config) {
         const leadingNewline = m[1] || ''
         const indent = m[2] || '' // indentation before post_install
         const body = m[3] || '' // content inside post_install
-        const ind2 = indent + '  '
+        const ind2 = `${indent}  `
         const inj = `\n${ind2}# ${marker}\n${ind2}installer.pods_project.targets.each do |t|\n${ind2}  t.build_configurations.each { |c| c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }\n${ind2}end\n${ind2}installer.aggregate_targets.each do |agg|\n${ind2}  agg.user_project.native_targets.each do |nt|\n${ind2}    nt.build_configurations.each { |c| c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }\n${ind2}  end\n${ind2}end\n`
         contents = contents.replace(
           postInstallBlock,
-          `${leadingNewline}${indent}post_install do |installer|${body}${inj}${indent}end\n`
+          `${leadingNewline}${indent}post_install do |installer|${body}${inj}${indent}end\n`,
         )
       }
 
       cfg.modResults.contents = contents
-    } catch (e) {
+    } catch (_e) {
       // If anything goes wrong, leave file untouched; users can still build.
     }
     return cfg

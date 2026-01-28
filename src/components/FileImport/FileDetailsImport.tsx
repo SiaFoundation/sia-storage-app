@@ -1,10 +1,10 @@
-import { View, StyleSheet, ScrollView } from 'react-native'
-import { colors } from '../../styles/colors'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
-import { FileMetaImport } from './FileMetaImport'
-import { FileViewer } from '../FileViewer'
 import { useDownloadFromShareURL } from '../../managers/downloader'
-import { FileRecord } from '../../stores/files'
+import type { FileRecord } from '../../stores/files'
+import { colors } from '../../styles/colors'
+import { FileViewer } from '../FileViewer'
+import { FileMetaImport } from './FileMetaImport'
 
 export function FileDetailsImport({
   file,

@@ -1,12 +1,16 @@
 export type ExpoFileSystemMock = {
-  File: new (...args: any[]) => {
+  File: new (
+    ...args: any[]
+  ) => {
     uri: string
     name: string
     info: jest.Mock
     delete: jest.Mock
     copy: jest.Mock
   }
-  Directory: new (...args: any[]) => {
+  Directory: new (
+    ...args: any[]
+  ) => {
     uri: string
     info: jest.Mock
     list: jest.Mock
@@ -52,7 +56,7 @@ type ExpoFileSystemMockMethods = {
 }
 
 function buildExpoFileSystemMockMethods(
-  customMocks: CustomMocks = {}
+  customMocks: CustomMocks = {},
 ): ExpoFileSystemMockMethods {
   return {
     File: {
@@ -64,7 +68,7 @@ function buildExpoFileSystemMockMethods(
       ...customMocks.File,
     },
     Directory: {
-      info: jest.fn((uri: string) => ({ exists: true })),
+      info: jest.fn((_uri: string) => ({ exists: true })),
       list: jest.fn(() => []),
       create: jest.fn(() => {}),
       delete: jest.fn(() => {}),
@@ -127,7 +131,7 @@ export function setExpoFileSystemMock(): ExpoFileSystemMock {
 }
 
 export function setExpoFileSystemMockMethods(
-  customMocks: CustomMocks = {}
+  customMocks: CustomMocks = {},
 ): ExpoFileSystemMockMethods {
   methods = buildExpoFileSystemMockMethods(customMocks)
   return methods

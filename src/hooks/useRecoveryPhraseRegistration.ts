@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
-import { registerWithIndexer } from '../stores/sdk'
-import { useToast } from '../lib/toastContext'
+import { useCallback, useState } from 'react'
 import { logger } from '../lib/logger'
+import { useToast } from '../lib/toastContext'
+import { registerWithIndexer } from '../stores/sdk'
 
 export function useRecoveryPhraseRegistration() {
   const toast = useToast()
@@ -10,12 +10,12 @@ export function useRecoveryPhraseRegistration() {
   const register = useCallback(
     async (
       phrase: string,
-      indexerURL: string
+      indexerURL: string,
     ): Promise<{ success: boolean }> => {
       if (!phrase) {
         logger.warn(
           'recoveryPhraseRegistration',
-          'No recovery phrase available'
+          'No recovery phrase available',
         )
         return { success: false }
       }
@@ -31,7 +31,7 @@ export function useRecoveryPhraseRegistration() {
       logger.error(
         'recoveryPhraseRegistration',
         'Failed to register with mnemonic:',
-        error
+        error,
       )
       switch (error.type) {
         case 'cancelled':
@@ -39,7 +39,7 @@ export function useRecoveryPhraseRegistration() {
           break
         case 'mnemonicMismatch':
           toast.show(
-            'Recovery phrase does not match. Please enter the same recovery phrase you used before.'
+            'Recovery phrase does not match. Please enter the same recovery phrase you used before.',
           )
           break
         case 'error':
@@ -48,7 +48,7 @@ export function useRecoveryPhraseRegistration() {
       }
       return { success: false }
     },
-    [toast]
+    [toast],
   )
 
   return {

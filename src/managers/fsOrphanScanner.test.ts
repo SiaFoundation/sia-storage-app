@@ -1,20 +1,20 @@
+import type { File } from 'expo-file-system'
 import { FS_ORPHAN_FREQUENCY } from '../config'
-import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initializeDB, resetDb } from '../db'
-import {
-  readFsFileMetadata,
-  upsertFsFileMetadata,
-  listFilesInFsStorageDirectory,
-} from '../stores/fs'
-import { createFileRecord } from '../stores/files'
 import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
-import { File } from 'expo-file-system'
+import { createFileRecord } from '../stores/files'
+import {
+  listFilesInFsStorageDirectory,
+  readFsFileMetadata,
+  upsertFsFileMetadata,
+} from '../stores/fs'
+import { runFsOrphanScanner } from './fsOrphanScanner'
 
 const listFilesInFsStorageDirectoryMock = jest.mocked(
-  listFilesInFsStorageDirectory
+  listFilesInFsStorageDirectory,
 )
 
 function makeFile(name: string): jest.Mocked<File> {
@@ -44,14 +44,14 @@ describe('fsOrphanScanner', () => {
   it('skips run when last run was recent', async () => {
     await setAsyncStorageNumber(
       'fsOrphanLastRun',
-      now - FS_ORPHAN_FREQUENCY / 2
+      now - FS_ORPHAN_FREQUENCY / 2,
     )
 
     const result = await runFsOrphanScanner()
 
     expect(listFilesInFsStorageDirectoryMock).not.toHaveBeenCalled()
     expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(
-      now - FS_ORPHAN_FREQUENCY / 2
+      now - FS_ORPHAN_FREQUENCY / 2,
     )
     expect(result).toBeUndefined()
   })

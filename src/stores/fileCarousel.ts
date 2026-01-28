@@ -1,16 +1,16 @@
-import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { db } from '../db'
-import { FileRecord, FileRecordRow, transformRow } from './files'
-import { readLocalObjectsForFiles } from './localObjects'
+import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import {
-  SortBy,
-  SortDir,
-  Category,
-  useLibrary,
   buildLibraryQueryParts,
+  type Category,
   librarySwr,
+  type SortBy,
+  type SortDir,
+  useLibrary,
 } from './library'
+import { readLocalObjectsForFiles } from './localObjects'
 
 const FILE_COLUMNS =
   'f.id, f.name, f.size, f.createdAt, f.updatedAt, f.addedAt, f.type, f.localId, f.hash, f.thumbForHash, f.thumbSize'
@@ -24,7 +24,7 @@ function buildDateCursorClause(
   direction: 'before' | 'after',
   alias: string,
   anchorValue: number,
-  anchorId: string
+  anchorId: string,
 ) {
   const isBefore = direction === 'before'
   const op = dir === 'ASC' ? (isBefore ? '<' : '>') : isBefore ? '>' : '<'
@@ -41,7 +41,7 @@ function buildNameCursorClause(
   direction: 'before' | 'after',
   alias: string,
   anchorName: string | null,
-  anchorId: string
+  anchorId: string,
 ) {
   const nullExpr = `${alias}.name IS NULL`
   const nameExpr = `${alias}.name COLLATE NOCASE`
@@ -103,7 +103,7 @@ function buildOrderExpr(sortBy: SortBy, sortDir: SortDir, alias: string = 'f') {
 
 // Returns the total number of files matching the current filters.
 export async function fetchTotalCount(
-  params: VirtualListQueryParams
+  params: VirtualListQueryParams,
 ): Promise<number> {
   const { where, params: queryParams } = buildLibraryQueryParts({
     sortBy: params.sortBy,
@@ -115,7 +115,7 @@ export async function fetchTotalCount(
 
   const result = await db().getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f ${where ?? ''}`,
-    ...queryParams
+    ...queryParams,
   )
 
   return result?.count ?? 0
@@ -125,7 +125,7 @@ export async function fetchTotalCount(
 // Used to determine where to start the carousel when opening a specific file.
 export async function fetchFilePosition(
   fileId: string,
-  params: VirtualListQueryParams
+  params: VirtualListQueryParams,
 ): Promise<number> {
   const { where, params: queryParams } = buildLibraryQueryParts({
     sortBy: params.sortBy,
@@ -140,7 +140,7 @@ export async function fetchFilePosition(
       where ? `${where} AND f.id = ?` : 'WHERE f.id = ?'
     } LIMIT 1`,
     ...queryParams,
-    fileId
+    fileId,
   )
 
   if (!anchorRow) return 0
@@ -152,14 +152,14 @@ export async function fetchFilePosition(
           'before',
           'f',
           anchorRow.name ?? null,
-          anchorRow.id
+          anchorRow.id,
         )
       : buildDateCursorClause(
           params.sortDir,
           'before',
           'f',
           anchorRow.createdAt,
-          anchorRow.id
+          anchorRow.id,
         )
 
   const result = await db().getFirstAsync<{ count: number }>(
@@ -169,7 +169,7 @@ export async function fetchFilePosition(
         : `WHERE ${beforeCursor.clause}`
     }`,
     ...queryParams,
-    ...beforeCursor.params
+    ...beforeCursor.params,
   )
 
   return result?.count ?? 0
@@ -182,7 +182,7 @@ type FileRecordRowWithIndex = FileRecordRow & { __virtual_index: number }
 // them together so we only make one database round-trip.
 export async function fetchFilesAtIndices(
   indices: number[],
-  params: VirtualListQueryParams
+  params: VirtualListQueryParams,
 ): Promise<Map<number, FileRecord>> {
   const result = new Map<number, FileRecord>()
   if (indices.length === 0) return result
@@ -207,7 +207,7 @@ export async function fetchFilesAtIndices(
     selectStatements.push(
       `SELECT *, ? as __virtual_index FROM (SELECT ${FILE_COLUMNS} FROM files f ${
         where ?? ''
-      } ORDER BY ${orderExpr} LIMIT 1 OFFSET ?)`
+      } ORDER BY ${orderExpr} LIMIT 1 OFFSET ?)`,
     )
     // Parameter order: virtual index tag, then WHERE params, then OFFSET value
     allParams.push(index, ...queryParams, index)
@@ -237,7 +237,7 @@ export async function fetchFilesAtIndices(
 async function fetchFileByID(fileID: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
     `SELECT ${FILE_COLUMNS} FROM files f WHERE f.id = ? LIMIT 1`,
-    fileID
+    fileID,
   )
 
   if (!row) return null
@@ -249,7 +249,7 @@ async function fetchFileByID(fileID: string): Promise<FileRecord | null> {
 async function fileExists(fileID: string): Promise<boolean> {
   const result = await db().getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files WHERE id = ?`,
-    fileID
+    fileID,
   )
   return (result?.count ?? 0) > 0
 }
@@ -313,7 +313,7 @@ export function useVirtualFileList({
       Array.from(selectedCategories ?? new Set())
         .sort()
         .join(','),
-    [selectedCategories]
+    [selectedCategories],
   )
 
   const queryParams = useMemo<VirtualListQueryParams>(
@@ -323,7 +323,7 @@ export function useVirtualFileList({
       categories: categoriesKey ? (categoriesKey.split(',') as Category[]) : [],
       searchQuery: searchQuery ?? '',
     }),
-    [sortBy, sortingDir, categoriesKey, searchQuery]
+    [sortBy, sortingDir, categoriesKey, searchQuery],
   )
 
   // Initialize: find the starting position and prefetch nearby files
@@ -361,7 +361,7 @@ export function useVirtualFileList({
 
         const fetched = await fetchFilesAtIndices(
           indicesToFetch.filter((i) => !cacheRef.current.has(i)),
-          queryParams
+          queryParams,
         )
 
         if (cancelled) return
@@ -421,10 +421,10 @@ export function useVirtualFileList({
           const entries = Array.from(cacheRef.current.entries())
           entries.sort(
             (a, b) =>
-              Math.abs(a[0] - currentIndex) - Math.abs(b[0] - currentIndex)
+              Math.abs(a[0] - currentIndex) - Math.abs(b[0] - currentIndex),
           )
           const toKeep = new Set(
-            entries.slice(0, maxCacheSize).map(([idx]) => idx)
+            entries.slice(0, maxCacheSize).map(([idx]) => idx),
           )
           for (const [idx] of entries) {
             if (!toKeep.has(idx)) {
@@ -454,6 +454,7 @@ export function useVirtualFileList({
   ])
 
   const currentFileIDRef = useRef<string | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces re-run when cache updates
   useEffect(() => {
     const file = cacheRef.current.get(currentIndex)
     currentFileIDRef.current = file?.id ?? null
@@ -507,7 +508,7 @@ export function useVirtualFileList({
               if (nameChanged && sortBy === 'NAME') {
                 const updatedPosition = await fetchFilePosition(
                   currentFileID,
-                  queryParams
+                  queryParams,
                 )
                 if (updatedPosition !== currentIndex) {
                   setCurrentIndexState(updatedPosition)
@@ -519,7 +520,7 @@ export function useVirtualFileList({
             }
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // Silently ignore errors during sync handling.
       }
     }
@@ -541,12 +542,12 @@ export function useVirtualFileList({
     onUpdated,
   ])
 
-  // cacheVersion in deps forces a new function reference when cache updates.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when cache updates
   const getFileAtIndex = useCallback(
     (index: number): FileRecord | null => {
       return cacheRef.current.get(index) ?? null
     },
-    [cacheVersion]
+    [cacheVersion],
   )
 
   const setCurrentIndex = useCallback(
@@ -555,7 +556,7 @@ export function useVirtualFileList({
         setCurrentIndexState(index)
       }
     },
-    [totalCount]
+    [totalCount],
   )
 
   const currentFile = getFileAtIndex(currentIndex)

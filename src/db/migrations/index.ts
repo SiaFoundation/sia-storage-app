@@ -16,27 +16,27 @@
  * - Do not swallow errors inside migrations; log and rethrow so the runner can roll back.
  * - For breaking schema changes, prefer rebuild-copy-rename to preserve data.
  */
-import * as SQLite from 'expo-sqlite'
+import type * as SQLite from 'expo-sqlite'
 import { logger } from '../../lib/logger'
-import { type Migration, type MigrationProgressHandler } from './types'
 import { migration_0001_init_schema } from './0001_init_schema'
+import type { Migration, MigrationProgressHandler } from './types'
 
 const migrations: Migration[] = [migration_0001_init_schema]
 
 export async function runMigrations(
   db: SQLite.SQLiteDatabase,
-  onProgress?: MigrationProgressHandler
+  onProgress?: MigrationProgressHandler,
 ): Promise<void> {
   logger.debug('db', 'checking migrations...')
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS migrations (
       id TEXT PRIMARY KEY,
       appliedAt INTEGER NOT NULL
-    );`
+    );`,
   )
 
   const appliedRows = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM migrations'
+    'SELECT id FROM migrations',
   )
   const applied = new Set(appliedRows.map((r) => r.id))
 
@@ -46,7 +46,7 @@ export async function runMigrations(
       'db',
       'need to apply',
       migrations.length - applied.size,
-      'migrations'
+      'migrations',
     )
   }
   for (const m of migrations) {
@@ -63,7 +63,7 @@ export async function runMigrations(
       await db.runAsync(
         'INSERT INTO migrations (id, appliedAt) VALUES (?, ?)',
         m.id,
-        Date.now()
+        Date.now(),
       )
     })
   }

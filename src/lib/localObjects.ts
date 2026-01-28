@@ -1,11 +1,11 @@
-import { PinnedObjectInterface } from 'react-native-sia'
+import type { PinnedObjectInterface } from 'react-native-sia'
+import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { LocalObject } from '../encoding/localObject'
 
 export async function pinnedObjectToLocalObject(
   fileId: string,
   indexerURL: string,
-  pinnedObject: PinnedObjectInterface
+  pinnedObject: PinnedObjectInterface,
 ): Promise<LocalObject> {
   const appKey = await getAppKeyForIndexer(indexerURL)
   if (!appKey) {

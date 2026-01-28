@@ -1,19 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  StyleSheet,
-  View,
-  Text,
+  AccessibilityInfo,
   Animated,
   Easing,
-  AccessibilityInfo,
+  StyleSheet,
+  Text,
   useWindowDimensions,
+  View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Button } from '../components/Button'
 import BlocksGrid from '../components/BlocksGrid'
+import BlocksShape from '../components/BlocksShape'
+import { Button } from '../components/Button'
 import { setHasOnboarded } from '../stores/settings'
 import { palette } from '../styles/colors'
-import BlocksShape from '../components/BlocksShape'
 
 export default function OnboardingFinishedScreen() {
   const { height: screenHeight } = useWindowDimensions()
@@ -28,7 +28,7 @@ export default function OnboardingFinishedScreen() {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
     sub = AccessibilityInfo.addEventListener?.(
       'reduceMotionChanged',
-      setReduceMotion
+      setReduceMotion,
     )
     return () => {
       sub?.remove?.()
@@ -117,7 +117,10 @@ export default function OnboardingFinishedScreen() {
                 rotation={90}
               />
             </View>
-            <Animated.Text testID="finished-title" style={[styles.title, { opacity: fadeInValue }]}>
+            <Animated.Text
+              testID="finished-title"
+              style={[styles.title, { opacity: fadeInValue }]}
+            >
               All set!
             </Animated.Text>
           </View>

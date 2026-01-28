@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import type React from 'react'
+import { useEffect, useState } from 'react'
 import {
-  View,
-  StyleSheet,
-  StyleProp,
-  ViewStyle,
   Keyboard,
-  Platform,
   type KeyboardEvent,
+  Platform,
+  type StyleProp,
+  StyleSheet,
+  View,
+  type ViewStyle,
 } from 'react-native'
-import { colors, overlay, whiteA, palette } from '../styles/colors'
+import { colors, overlay, palette, whiteA } from '../styles/colors'
 import { Gradient } from './Gradient'
 
 type Props = {

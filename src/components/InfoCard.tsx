@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react'
-import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native'
+import type { ReactNode } from 'react'
+import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { colors } from '../styles/colors'
 
 export function InfoCard({

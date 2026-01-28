@@ -1,11 +1,11 @@
-import React, { useCallback } from 'react'
-import { StyleSheet, View, Text } from 'react-native'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SwitchIndexerStackParamList } from '../stacks/types'
-import { palette } from '../styles/colors'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useCallback } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../components/Button'
-import { useToast } from '../lib/toastContext'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { useToast } from '../lib/toastContext'
+import type { SwitchIndexerStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<
   SwitchIndexerStackParamList,

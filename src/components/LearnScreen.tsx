@@ -1,8 +1,8 @@
-import React from 'react'
-import { View, Text, ScrollView, StyleSheet } from 'react-native'
+import type React from 'react'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import BlocksGrid from './BlocksGrid'
 import { colors, palette } from '../styles/colors'
+import BlocksGrid from './BlocksGrid'
 
 const BACKGROUND_OPACITY = 0.08
 

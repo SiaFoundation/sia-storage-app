@@ -1,10 +1,10 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import useSWR from 'swr'
+import { db } from '../db'
+import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { extFromMime } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
 import { buildSWRHelpers } from '../lib/swr'
-import { db } from '../db'
-import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 
 /**
  * Persistent file system used for storing local copies of files.
@@ -103,7 +103,7 @@ export async function removeFsFile(file: FsFileInfo): Promise<void> {
 
 export async function copyFileToFs(
   file: FsFileInfo,
-  sourceFile: File
+  sourceFile: File,
 ): Promise<string> {
   logger.debug('fs', `copyFile ${file.id} from ${sourceFile.uri}`)
   const target = getFsFileForId(file)
@@ -143,7 +143,7 @@ export async function upsertFsFileMetadata(row: FsMetaRow): Promise<void> {
       addedAt: row.addedAt,
       usedAt: row.usedAt,
     },
-    { conflictClause: 'OR REPLACE' }
+    { conflictClause: 'OR REPLACE' },
   )
 }
 
@@ -152,24 +152,24 @@ export async function deleteFsFileMetadata(fileId: string): Promise<void> {
 }
 
 export async function readFsFileMetadata(
-  fileId: string
+  fileId: string,
 ): Promise<FsMetaRow | null> {
   return db().getFirstAsync<FsMetaRow>(
     `SELECT fileId, size, addedAt, usedAt FROM ${fsMetadataTable} WHERE fileId = ?`,
-    fileId
+    fileId,
   )
 }
 
 export async function updateFsFileMetadataUsedAt(
   fileId: string,
-  usedAt: number = Date.now()
+  usedAt: number = Date.now(),
 ): Promise<void> {
   await sqlUpdate(fsMetadataTable, { usedAt }, { fileId })
 }
 
 export async function calcFsFilesMetadataTotalSize(): Promise<number> {
   const result = await db().getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(size), 0) AS total FROM ${fsMetadataTable}`
+    `SELECT COALESCE(SUM(size), 0) AS total FROM ${fsMetadataTable}`,
   )
   return result?.total ?? 0
 }

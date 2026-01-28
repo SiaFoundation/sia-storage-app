@@ -1,6 +1,7 @@
-import { type NavigationProp } from '@react-navigation/native'
+import type { NavigationProp } from '@react-navigation/native'
+import { File } from 'expo-file-system'
+import { PlusIcon } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import useSWR from 'swr'
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,49 +9,48 @@ import {
   Text,
   View,
 } from 'react-native'
-import { type RootTabParamList } from '../../stacks/types'
-import { useToast } from '../../lib/toastContext'
-import { useSdk } from '../../stores/sdk'
-import {
-  FileRecord,
-  readFileRecordByContentHash,
-  createFileRecordWithLocalObject,
-} from '../../stores/files'
-import { FileViewer } from '../FileViewer'
-import { logger } from '../../lib/logger'
-import { BottomActionButton } from '../BottomActionButton'
-import { PlusIcon } from 'lucide-react-native'
-import { colors } from '../../styles/colors'
-import { File } from 'expo-file-system'
-import { getMimeType } from '../../lib/fileTypes'
+import type { PinnedObjectInterface } from 'react-native-sia'
+import useSWR from 'swr'
+import { SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD } from '../../config'
+import { calculateContentHash } from '../../lib/contentHash'
 import {
   detectMimeTypeFromBytes,
   MAGIC_BYTES_LENGTH,
 } from '../../lib/detectMimeType'
-import {
-  useDownloadFromShareURL,
-  downloadFirstBytesFromShared,
-} from '../../managers/downloader'
-import { getIndexerURL } from '../../stores/settings'
-import { pinnedObjectToLocalObject } from '../../lib/localObjects'
-import { getFsFileUri, copyFileToFs } from '../../stores/fs'
-import { calculateContentHash } from '../../lib/contentHash'
-import { FileMetaImport } from './FileMetaImport'
-import { DownloadPrompt } from './DownloadPrompt'
 import { useFileStatus } from '../../lib/file'
+import { getMimeType } from '../../lib/fileTypes'
+import { pinnedObjectToLocalObject } from '../../lib/localObjects'
+import { logger } from '../../lib/logger'
+import { useToast } from '../../lib/toastContext'
+import {
+  downloadFirstBytesFromShared,
+  useDownloadFromShareURL,
+} from '../../managers/downloader'
+import type { RootTabParamList } from '../../stacks/types'
 import { useDownloadState } from '../../stores/downloads'
-import { type PinnedObjectInterface } from 'react-native-sia'
-import { SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD } from '../../config'
+import {
+  createFileRecordWithLocalObject,
+  type FileRecord,
+  readFileRecordByContentHash,
+} from '../../stores/files'
+import { copyFileToFs, getFsFileUri } from '../../stores/fs'
+import { useSdk } from '../../stores/sdk'
+import { getIndexerURL } from '../../stores/settings'
+import { colors } from '../../styles/colors'
+import { BottomActionButton } from '../BottomActionButton'
+import { FileViewer } from '../FileViewer'
+import { DownloadPrompt } from './DownloadPrompt'
+import { FileMetaImport } from './FileMetaImport'
 
 // Helper function to detect file type from first few bytes.
 async function detectFileType(
   sdk: ReturnType<typeof useSdk>,
   sharedObject: PinnedObjectInterface,
-  id: string
+  id: string,
 ): Promise<string> {
   logger.debug(
     'FileImport',
-    `Detecting type from first ${MAGIC_BYTES_LENGTH} bytes ${id}`
+    `Detecting type from first ${MAGIC_BYTES_LENGTH} bytes ${id}`,
   )
   try {
     if (!sdk || !sharedObject) {
@@ -60,7 +60,7 @@ async function detectFileType(
     const bytes = await downloadFirstBytesFromShared(
       sdk,
       sharedObject,
-      MAGIC_BYTES_LENGTH
+      MAGIC_BYTES_LENGTH,
     )
 
     if (bytes.length === 0) {
@@ -81,7 +81,7 @@ async function detectFileType(
 async function downloadAndProcessFile(
   id: string,
   shareUrl: string,
-  downloadFromShareURL: ReturnType<typeof useDownloadFromShareURL>
+  downloadFromShareURL: ReturnType<typeof useDownloadFromShareURL>,
 ): Promise<FileRecord> {
   logger.debug('FileImport', `SWR function starting for ${id}`)
   try {
@@ -126,7 +126,7 @@ async function downloadAndProcessFile(
 
     logger.info(
       'FileImport',
-      `file ready type=${type} size=${size} hash=${hash}`
+      `file ready type=${type} size=${size} hash=${hash}`,
     )
 
     return {
@@ -172,7 +172,7 @@ export function FileImport({
         logger.error('FileImport', 'Error getting shared object', e)
         return null
       }
-    }
+    },
   )
 
   // Check if file requires confirmation - auto-download if less than 5MB.
@@ -191,7 +191,7 @@ export function FileImport({
         throw new Error('Missing SDK or shared object')
       }
       return detectFileType(sdk, sharedObject.data, id)
-    }
+    },
   )
 
   // Download and build file metadata. Auto-download if file is small, otherwise require confirmation.
@@ -207,7 +207,7 @@ export function FileImport({
           shouldAutoDownload,
         ]
       : null,
-    () => downloadAndProcessFile(id, shareUrl, downloadFromShareURL)
+    () => downloadAndProcessFile(id, shareUrl, downloadFromShareURL),
   )
 
   // Create a preview FileRecord for the confirmation screen.
@@ -231,8 +231,7 @@ export function FileImport({
 
   // Check if metadata is complete (required fields: hash, type, size).
   const isMetadataComplete =
-    sharedFile.data &&
-    sharedFile.data.hash &&
+    sharedFile.data?.hash &&
     sharedFile.data.type !== 'application/octet-stream' &&
     sharedFile.data.size > 0
 
@@ -259,7 +258,7 @@ export function FileImport({
     // Check for duplicates before setting loading state.
     if (sharedFile.data.hash) {
       const existingFile = await readFileRecordByContentHash(
-        sharedFile.data.hash
+        sharedFile.data.hash,
       )
       if (existingFile) {
         toast.show('File already exists in library')
@@ -278,7 +277,7 @@ export function FileImport({
       const localObject = await pinnedObjectToLocalObject(
         sharedFile.data.id,
         indexerURL,
-        sharedObject.data
+        sharedObject.data,
       )
       await createFileRecordWithLocalObject(sharedFile.data, localObject)
 

@@ -1,9 +1,9 @@
 import {
   ScrollView,
-  StyleProp,
+  type StyleProp,
   StyleSheet,
   View,
-  ViewStyle,
+  type ViewStyle,
 } from 'react-native'
 import { colors } from '../styles/colors'
 

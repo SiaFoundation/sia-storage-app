@@ -1,5 +1,5 @@
-import React from 'react'
-import { View, StyleSheet, type ViewStyle, Platform } from 'react-native'
+import type React from 'react'
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 type Props = {

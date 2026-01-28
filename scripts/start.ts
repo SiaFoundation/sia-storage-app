@@ -18,7 +18,7 @@ if (pids) {
 
 // Start Expo dev server with inherited stdio for interactive menu
 const proc = Bun.spawn(['bunx', 'expo', 'start', '--dev-client'], {
-  cwd: import.meta.dir + '/..',
+  cwd: `${import.meta.dir}/..`,
   stdio: ['inherit', 'inherit', 'inherit'],
   env: process.env,
 })

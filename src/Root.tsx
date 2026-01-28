@@ -1,27 +1,33 @@
-import React, { useEffect, useRef } from 'react'
-import { StyleSheet, Platform, StatusBar, AppState, AppStateStatus } from 'react-native'
-import { palette } from './styles/colors'
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 import {
   DarkTheme,
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native'
 import * as ScreenOrientation from 'expo-screen-orientation'
+import { ShareIntentProvider } from 'expo-share-intent'
+import { useEffect, useRef } from 'react'
+import {
+  AppState,
+  type AppStateStatus,
+  Platform,
+  StatusBar,
+  StyleSheet,
+} from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
-import { ToastProvider } from './lib/toastContext'
-import { initApp, shutdownApp, useShowSplash } from './stores/app'
+import { AppSplash } from './components/AppSplash'
+import { AuthWebViewModal } from './components/AuthWebViewModal'
+import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
-import { RootTabs } from './stacks/RootTabs'
-import { uniqueId } from './lib/uniqueId'
-import { useHasOnboarded } from './stores/settings'
-import { ShareIntentProvider } from 'expo-share-intent'
-import { ShareIntentConsumer } from './components/ShareIntentConsumer'
-import { AppSplash } from './components/AppSplash'
-import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
-import { AuthWebViewModal } from './components/AuthWebViewModal'
 import { logger } from './lib/logger'
+import { ToastProvider } from './lib/toastContext'
+import { uniqueId } from './lib/uniqueId'
+import { RootTabs } from './stacks/RootTabs'
+import { initApp, shutdownApp, useShowSplash } from './stores/app'
+import { useHasOnboarded } from './stores/settings'
+import { palette } from './styles/colors'
 
 const darkNavigationTheme = {
   ...DarkTheme,
@@ -58,10 +64,10 @@ export function Root() {
       (nextAppState: AppStateStatus) => {
         logger.info(
           'appState',
-          `state changed: ${appStateRef.current} -> ${nextAppState}`
+          `state changed: ${appStateRef.current} -> ${nextAppState}`,
         )
         appStateRef.current = nextAppState
-      }
+      },
     )
 
     return () => subscription.remove()
@@ -69,7 +75,7 @@ export function Root() {
 
   useEffect(() => {
     ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.PORTRAIT_UP
+      ScreenOrientation.OrientationLock.PORTRAIT_UP,
     ).catch(() => {
       // Ignore failures caused by platform limitations or missing permissions.
     })
@@ -81,7 +87,7 @@ export function Root() {
 
     try {
       new URL(shareUrl)
-    } catch (error) {
+    } catch (_error) {
       // Ignore invalid URLs.
       return
     }

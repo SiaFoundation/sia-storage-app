@@ -1,15 +1,15 @@
-import React from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { colors, palette, whiteA } from '../styles/colors'
-import { Square, CheckSquare, Filter as FilterIcon } from 'lucide-react-native'
+import { CheckSquare, Filter as FilterIcon, Square } from 'lucide-react-native'
+import type React from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActionSheet } from '../components/ActionSheet'
 import {
   type Category,
   clearCategories,
   toggleCategory,
   useLibrary,
 } from '../stores/library'
-import { ActionSheet } from '../components/ActionSheet'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
+import { colors, palette, whiteA } from '../styles/colors'
 
 const CATEGORIES: Category[] = ['Video', 'Image', 'Audio', 'Files']
 

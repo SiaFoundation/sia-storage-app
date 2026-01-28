@@ -1,35 +1,32 @@
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
-  useLogLevel,
-  useLogScopes,
-  useAvailableScopes,
-  setLogLevel,
-  setLogScopes,
-  toggleLogScope,
-  clearLogs,
-} from '../stores/logs'
-import { exportLogs } from '../lib/exportLogs'
-import { type LogLevel } from '../lib/logger'
-import { logger } from '../lib/logger'
-import { logsSwr } from '../hooks/useLogs'
-import { Alert } from 'react-native'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { iconColors } from './BottomControlBar'
-import {
-  FilterIcon,
-  DownloadIcon,
   ChevronDownIcon,
+  DownloadIcon,
+  FilterIcon,
   RefreshCwIcon,
   Trash2Icon,
 } from 'lucide-react-native'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
-import { IconButton } from './IconButton'
-import { useToast } from '../lib/toastContext'
-import { BottomControlBar } from './BottomControlBar'
-import { ActionSheet } from './ActionSheet'
-import { closeSheet, useSheetOpen, openSheet } from '../stores/sheets'
-import { palette } from '../styles/colors'
 import { useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { logsSwr } from '../hooks/useLogs'
+import { exportLogs } from '../lib/exportLogs'
+import { type LogLevel, logger } from '../lib/logger'
+import { useToast } from '../lib/toastContext'
+import type { MenuStackParamList } from '../stacks/types'
+import {
+  clearLogs,
+  setLogLevel,
+  setLogScopes,
+  toggleLogScope,
+  useAvailableScopes,
+  useLogLevel,
+  useLogScopes,
+} from '../stores/logs'
+import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
+import { palette } from '../styles/colors'
+import { ActionSheet } from './ActionSheet'
+import { BottomControlBar, iconColors } from './BottomControlBar'
+import { IconButton } from './IconButton'
 import { SpinnerIcon } from './SpinnerIcon'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'> & {
@@ -89,7 +86,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
     toast.show(
       newScopes.length > 0
         ? `Showing ${newScopes.length} scope(s)`
-        : 'Showing all scopes'
+        : 'Showing all scopes',
     )
   }
 
@@ -119,7 +116,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
             }
           },
         },
-      ]
+      ],
     )
   }
 

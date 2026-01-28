@@ -1,20 +1,20 @@
-import { useCallback, useState } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
-import { palette } from '../styles/colors'
-import { useIsConnected, reconnectIndexer } from '../stores/sdk'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { DotIcon } from 'lucide-react-native'
-import { RowGroup } from '../components/Group'
+import { useCallback, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../components/Button'
+import { RowGroup } from '../components/Group'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
-import { useIndexerURL } from '../stores/settings'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { useAccount } from '../hooks/useAccount'
 import { useMenuHeader } from '../hooks/useMenuHeader'
 import { humanSize } from '../lib/humanSize'
-import { useAccount } from '../hooks/useAccount'
 import { useToast } from '../lib/toastContext'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type MenuStackParamList } from '../stacks/types'
-import { SettingsScrollLayout } from '../components/SettingsLayout'
+import type { MenuStackParamList } from '../stacks/types'
+import { reconnectIndexer, useIsConnected } from '../stores/sdk'
+import { useIndexerURL } from '../stores/settings'
+import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Indexer'>
 
@@ -68,10 +68,6 @@ export function SettingsIndexerScreen({ navigation }: Props) {
               <LabeledValueRow
                 label="Account Key"
                 value={account.data.accountKey}
-              />
-              <LabeledValueRow
-                label="Description"
-                value={account.data.description}
               />
               <LabeledValueRow
                 label="Used Storage"

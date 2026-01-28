@@ -1,13 +1,13 @@
-import React, { useState, useCallback } from 'react'
-import { StyleSheet, View, Text } from 'react-native'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { type SwitchIndexerStackParamList } from '../stacks/types'
-import { palette } from '../styles/colors'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useCallback, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../components/Button'
-import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
-import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
+import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistration'
+import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
+import type { SwitchIndexerStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<
   SwitchIndexerStackParamList,

@@ -1,19 +1,19 @@
-import { runThumbnailScanner } from './thumbnailScanner'
+import {
+  ImageManipulator,
+  type ImageManipulatorContext,
+} from 'expo-image-manipulator'
+import * as VideoThumbnails from 'expo-video-thumbnails'
+import { Image } from 'react-native'
 import { initializeDB, resetDb } from '../db'
+import { calculateContentHash } from '../lib/contentHash'
 import {
   createFileRecord,
   readAllFileRecordsCount,
   ThumbSizes,
 } from '../stores/files'
-import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { calculateContentHash } from '../lib/contentHash'
-import { Image } from 'react-native'
-import * as VideoThumbnails from 'expo-video-thumbnails'
-import {
-  ImageManipulator,
-  type ImageManipulatorContext,
-} from 'expo-image-manipulator'
 import { getFsFileUri } from '../stores/fs'
+import { readThumbnailSizesForHash } from '../stores/thumbnails'
+import { runThumbnailScanner } from './thumbnailScanner'
 
 jest.mock('expo-image-manipulator', () => ({
   ImageManipulator: { manipulate: jest.fn() },
@@ -37,7 +37,7 @@ beforeEach(async () => {
   getFsFileUriMock.mockResolvedValue('file://source.jpg')
   let hashCounter = 0
   calculateContentHashMock.mockImplementation(
-    async () => `sha256:thumb-hash-${++hashCounter}`
+    async () => `sha256:thumb-hash-${++hashCounter}`,
   )
 
   imageGetSizeMock.mockImplementation((_, ok) => {
@@ -249,7 +249,7 @@ describe('thumbnailScanner', () => {
     expect(
       result.skippedNoSource
         .map((s) => s.fileId)
-        .sort((a, b) => a.localeCompare(b))
+        .sort((a, b) => a.localeCompare(b)),
     ).toEqual([...noSourceIds].sort((a, b) => a.localeCompare(b)))
   })
 
@@ -323,7 +323,7 @@ describe('thumbnailScanner', () => {
           size: 64,
           existingThumbId: 'existing-thumb',
         }),
-      ])
+      ]),
     )
     const sizes = await readThumbnailSizesForHash('hash1')
     expect(sizes).not.toContain(64)
@@ -345,7 +345,7 @@ describe('thumbnailScanner', () => {
     })
     let counter = 0
     calculateContentHashMock.mockImplementation(
-      async () => `sha256:video-thumb-${++counter}`
+      async () => `sha256:video-thumb-${++counter}`,
     )
 
     const result = await runThumbnailScanner()
@@ -378,7 +378,7 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     let counter = 0
     calculateContentHashMock.mockImplementation(
-      async () => `sha256:thumb-hash-${++counter}`
+      async () => `sha256:thumb-hash-${++counter}`,
     )
     const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(10)
@@ -413,7 +413,7 @@ describe('thumbnailScanner', () => {
       }),
     }
     imageManipulatorMock.mockReturnValue(
-      ctx as unknown as ImageManipulatorContext
+      ctx as unknown as ImageManipulatorContext,
     )
     calculateContentHashMock.mockResolvedValue('sha256:thumb-hash')
     await runThumbnailScanner()

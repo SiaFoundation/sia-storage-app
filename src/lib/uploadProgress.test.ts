@@ -1,7 +1,7 @@
 import {
-  calculateFileProgress,
+  type BatchInfo,
   calculateAllFileProgress,
-  BatchInfo,
+  calculateFileProgress,
 } from '../lib/uploadProgress'
 
 describe('uploadProgress', () => {

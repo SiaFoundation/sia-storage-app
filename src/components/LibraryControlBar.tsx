@@ -1,29 +1,29 @@
-import React, { useState } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   Grid2X2Icon,
-  ListIcon,
-  PlusIcon,
   ListChecksIcon,
-  XIcon,
+  ListIcon,
   MoreVerticalIcon,
+  PlusIcon,
+  XIcon,
 } from 'lucide-react-native'
-import { BottomControlBar, iconColors } from './BottomControlBar'
-import { FileSearchButton } from './FileSearchButton'
-import { FileSearchBar } from './FileSearchBar'
-import { toggleLibraryViewMode, useLibraryViewMode } from '../stores/settings'
-import { openSheet } from '../stores/sheets'
-import { IconButton } from './IconButton'
-import { type NativeStackScreenProps } from '@react-navigation/native-stack'
-import { MainStackParamList } from '../stacks/types'
-import { LibraryControlsSearchMenus } from './LibraryControlsSearchMenus'
+import { useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import type { MainStackParamList } from '../stacks/types'
 import {
-  useIsSelectionMode,
-  useSelectedCount,
   enterSelectionMode,
   exitSelectionMode,
+  useIsSelectionMode,
+  useSelectedCount,
 } from '../stores/fileSelection'
+import { toggleLibraryViewMode, useLibraryViewMode } from '../stores/settings'
+import { openSheet } from '../stores/sheets'
 import { palette } from '../styles/colors'
+import { BottomControlBar, iconColors } from './BottomControlBar'
+import { FileSearchBar } from './FileSearchBar'
+import { FileSearchButton } from './FileSearchButton'
+import { IconButton } from './IconButton'
+import { LibraryControlsSearchMenus } from './LibraryControlsSearchMenus'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'> & {
   onOpenSelectionActions?: () => void
@@ -41,17 +41,12 @@ export function LibraryControlBar({
 
   if (isSelectionMode) {
     return (
-      <BottomControlBar
-        keyboardAware
-        style={{ width: '90%', maxWidth: 600 }}
-      >
+      <BottomControlBar keyboardAware style={{ width: '90%', maxWidth: 600 }}>
         <View style={styles.selectionContainer}>
           <IconButton onPress={exitSelectionMode}>
             <XIcon color={iconColors.white} />
           </IconButton>
-          <Text style={styles.selectionCount}>
-            {selectedCount} selected
-          </Text>
+          <Text style={styles.selectionCount}>{selectedCount} selected</Text>
           <IconButton
             onPress={onOpenSelectionActions}
             disabled={selectedCount === 0}

@@ -1,7 +1,12 @@
-import { StyleSheet, useWindowDimensions, View, ViewStyle } from 'react-native'
+import {
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { runOnJS } from 'react-native-reanimated'
 import Pdf from 'react-native-pdf'
+import Animated, { runOnJS } from 'react-native-reanimated'
 import { blackA } from '../../styles/colors'
 
 const EDGE_ZONE_WIDTH = 40
@@ -68,7 +73,7 @@ export function PDFViewer({ source, style, onSwipeLeft, onSwipeRight }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  pdf: { flex: 1, backgroundColor: blackA['a20'] },
+  pdf: { flex: 1, backgroundColor: blackA.a20 },
   edgeZone: {
     position: 'absolute',
     top: 0,

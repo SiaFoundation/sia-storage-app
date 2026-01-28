@@ -1,7 +1,7 @@
 import { appendLog } from '../stores/logs'
 import {
-  ANSI_RESET,
   ANSI_BOLD,
+  ANSI_RESET,
   getLevelColorAnsi,
   getScopeColorAnsi,
 } from './logColors'

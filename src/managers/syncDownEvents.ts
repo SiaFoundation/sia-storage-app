@@ -1,36 +1,36 @@
-import { logger } from '../lib/logger'
+import type {
+  ObjectEvent,
+  ObjectsCursor,
+  PinnedObjectInterface,
+} from 'react-native-sia'
+import { z } from 'zod'
 import { SYNC_EVENTS_INTERVAL } from '../config'
-import { getIsConnected, getSdk } from '../stores/sdk'
-import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
-import {
-  readFileRecordByObjectId,
-  deleteFileRecord,
-  createFileRecordWithLocalObject,
-  updateFileRecordWithLocalObject,
-  readFileRecordByContentHash,
-  FileRecord,
-  FileMetadata,
-} from '../stores/files'
+import { isoToEpochCodec } from '../encoding/date'
 import {
   decodeFileMetadata,
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
-import {
-  ObjectEvent,
-  ObjectsCursor,
-  PinnedObjectInterface,
-} from 'react-native-sia'
-import { createServiceInterval } from '../lib/serviceInterval'
-import { z } from 'zod'
-import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
-import { isoToEpochCodec } from '../encoding/date'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import { removeFsFile } from '../stores/fs'
-import { removeTempDownloadFile } from '../stores/tempFs'
+import { logger } from '../lib/logger'
+import { createServiceInterval } from '../lib/serviceInterval'
 import { uniqueId } from '../lib/uniqueId'
-import { cancelUpload } from '../stores/uploads'
+import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
+import {
+  createFileRecordWithLocalObject,
+  deleteFileRecord,
+  type FileMetadata,
+  type FileRecord,
+  readFileRecordByContentHash,
+  readFileRecordByObjectId,
+  updateFileRecordWithLocalObject,
+} from '../stores/files'
+import { removeFsFile } from '../stores/fs'
+import { getIsConnected, getSdk } from '../stores/sdk'
+import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
+import { removeTempDownloadFile } from '../stores/tempFs'
 import { readThumbnailRecordByThumbForHashAndSize } from '../stores/thumbnails'
+import { cancelUpload } from '../stores/uploads'
 
 const batchSize = 100
 
@@ -69,7 +69,7 @@ export async function syncDownEvents(): Promise<void> {
       const cursor = await getSyncDownCursor()
       logger.debug(
         'syncDownEvents',
-        `syncing from id=${cursor?.id} after=${cursor?.after}`
+        `syncing from id=${cursor?.id} after=${cursor?.after}`,
       )
 
       const events = await sdk.objectEvents(cursor, batchSize)
@@ -78,7 +78,7 @@ export async function syncDownEvents(): Promise<void> {
       if (events.length === 1) {
         logger.debug(
           'syncDownEvents',
-          `batch size=${events.length}, no new events found`
+          `batch size=${events.length}, no new events found`,
         )
       } else {
         logger.info('syncDownEvents', `batch size=${events.length}`)
@@ -108,7 +108,7 @@ export async function syncDownEvents(): Promise<void> {
 
   logger.info(
     'syncDownEvents',
-    `synced, existingCount=${counts.existing}, addedCount=${counts.added}, deletedCount=${counts.deleted}`
+    `synced, existingCount=${counts.existing}, addedCount=${counts.added}, deletedCount=${counts.deleted}`,
   )
 }
 
@@ -143,7 +143,7 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
     } else {
       logger.debug(
         'syncDownEvents',
-        `no file record found for object id=${id}, skipping delete`
+        `no file record found for object id=${id}, skipping delete`,
       )
     }
   } catch (e) {
@@ -155,7 +155,7 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
 async function handleUpdateEvent(
   id: string,
   object: PinnedObjectInterface,
-  counts: Counts
+  counts: Counts,
 ): Promise<void> {
   try {
     const indexerURL = await getIndexerURL()
@@ -163,7 +163,7 @@ async function handleUpdateEvent(
     if (hasCompleteThumbnailMetadata(metadata)) {
       const existingThumbnail = await readThumbnailRecordByThumbForHashAndSize(
         metadata.thumbForHash!,
-        metadata.thumbSize!
+        metadata.thumbSize!,
       )
       await handleFileRecord(
         'thumbnail',
@@ -171,7 +171,7 @@ async function handleUpdateEvent(
         indexerURL,
         object,
         metadata,
-        counts
+        counts,
       )
       return
     }
@@ -183,7 +183,7 @@ async function handleUpdateEvent(
         indexerURL,
         object,
         metadata,
-        counts
+        counts,
       )
       return
     }
@@ -200,7 +200,7 @@ async function handleFileRecord(
   indexerURL: string,
   object: PinnedObjectInterface,
   metadata: FileMetadata,
-  counts: Counts
+  counts: Counts,
 ) {
   if (existingFile) {
     if (type === 'file') {
@@ -208,13 +208,13 @@ async function handleFileRecord(
     } else {
       logger.debug(
         'syncDownEvents',
-        `updating thumbnail thumbForHash=${existingFile.thumbForHash}`
+        `updating thumbnail thumbForHash=${existingFile.thumbForHash}`,
       )
     }
     const localObject = await pinnedObjectToLocalObject(
       existingFile.id,
       indexerURL,
-      object
+      object,
     )
     await updateFileRecordWithLocalObject(
       {
@@ -222,7 +222,7 @@ async function handleFileRecord(
         ...(metadata.updatedAt >= existingFile.updatedAt ? metadata : {}),
       },
       localObject,
-      { includeUpdatedAt: true }
+      { includeUpdatedAt: true },
     )
     // Cancel any inflight upload for this file since we now have a pinned object.
     cancelUpload(existingFile.id)
@@ -233,14 +233,14 @@ async function handleFileRecord(
     } else {
       logger.info(
         'syncDownEvents',
-        `creating thumbnail thumbForHash=${metadata.thumbForHash}`
+        `creating thumbnail thumbForHash=${metadata.thumbForHash}`,
       )
     }
     const fileId = uniqueId()
     const localObject = await pinnedObjectToLocalObject(
       fileId,
       indexerURL,
-      object
+      object,
     )
     await createFileRecordWithLocalObject(
       {
@@ -249,7 +249,7 @@ async function handleFileRecord(
         localId: null,
         addedAt: Date.now(),
       },
-      localObject
+      localObject,
     )
     counts.added++
   }
@@ -284,13 +284,13 @@ const objectsCursorCodec = z.codec(
       id: cursor.id,
       after: isoToEpochCodec.encode(cursor.after),
     }),
-  }
+  },
 )
 
 export async function getSyncDownCursor(): Promise<ObjectsCursor | undefined> {
   const decoded = await getAsyncStorageJSON(
     'syncDownCursor',
-    objectsCursorCodec
+    objectsCursorCodec,
   )
   // Return undefined if no valid id (handles migration edge cases)
   if (!decoded || !decoded.id) return undefined

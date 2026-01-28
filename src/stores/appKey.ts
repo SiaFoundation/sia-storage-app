@@ -1,10 +1,10 @@
-import { AppKey, AppKeyInterface } from 'react-native-sia'
-import { getSecureStoreJSON, setSecureStoreJSON } from './secureStore'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import { buildSWRHelpers } from '../lib/swr'
-import { getIndexerURL } from './settings'
+import { AppKey, type AppKeyInterface } from 'react-native-sia'
 import { hexArrayBufferCodec } from '../encoding/arrayBuffer'
 import { logger } from '../lib/logger'
+import { createGetterAndSWRHook } from '../lib/selectors'
+import { buildSWRHelpers } from '../lib/swr'
+import { getSecureStoreJSON, setSecureStoreJSON } from './secureStore'
+import { getIndexerURL } from './settings'
 
 const appKeySwr = buildSWRHelpers('appKey')
 
@@ -17,7 +17,7 @@ const appKeySwr = buildSWRHelpers('appKey')
 const APP_KEYS_SECURE_STORE_KEY = 'appKeys'
 
 // In-memory cache of appKeys map for background task access.
-let cachedAppKeys: Map<string, ArrayBuffer> = new Map()
+const cachedAppKeys: Map<string, ArrayBuffer> = new Map()
 
 /**
  * Check if the AppKey cache is populated (for diagnostic logging).
@@ -41,7 +41,7 @@ type AppKeysStorageMap = Record<string, string>
  * Get the AppKey for a specific indexer URL.
  */
 export async function getAppKeyForIndexer(
-  indexerURL: string
+  indexerURL: string,
 ): Promise<AppKey | undefined> {
   // Check cache first.
   const cached = cachedAppKeys.get(indexerURL)
@@ -76,7 +76,7 @@ export const [getAppKey, useAppKey] = createGetterAndSWRHook<AppKey>(
       throw new Error('AppKey not found for active indexer')
     }
     return appKey
-  }
+  },
 )
 
 /**
@@ -84,7 +84,7 @@ export const [getAppKey, useAppKey] = createGetterAndSWRHook<AppKey>(
  */
 export async function setAppKeyForIndexer(
   indexerURL: string,
-  appKey: AppKeyInterface
+  appKey: AppKeyInterface,
 ): Promise<void> {
   const exported = appKey.export_()
   cachedAppKeys.set(indexerURL, exported)
@@ -99,7 +99,7 @@ export async function setAppKeyForIndexer(
  * Check if an AppKey exists for a specific indexer.
  */
 export async function hasAppKeyForIndexer(
-  indexerURL: string
+  indexerURL: string,
 ): Promise<boolean> {
   const appKeysMap = await getAppKeysMap()
   return indexerURL in appKeysMap
@@ -181,14 +181,14 @@ export async function migrateKeychainAccessibility(): Promise<void> {
 
     logger.info(
       'appKey',
-      `Keychain accessibility migration complete: migrated ${keyCount} key(s)`
+      `Keychain accessibility migration complete: migrated ${keyCount} key(s)`,
     )
   } catch (error) {
     // This can fail in background mode - that's expected
     logger.warn(
       'appKey',
       'Keychain accessibility migration failed (expected if in background):',
-      error
+      error,
     )
   }
 }

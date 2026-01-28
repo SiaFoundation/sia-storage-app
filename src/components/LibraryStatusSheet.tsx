@@ -1,16 +1,16 @@
-import { View, Text, StyleSheet } from 'react-native'
-import { ActionSheet } from './ActionSheet'
-import { InfoCard } from './InfoCard'
-import { RowGroup } from './Group'
-import { LabeledValueRow } from './LabeledValueRow'
-import { palette } from '../styles/colors'
-import { useIsConnected } from '../stores/sdk'
-import { useIsOnline } from '../hooks/useIsOnline'
-import { getUploadStats } from '../stores/fileStats'
-import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
+import { useIsOnline } from '../hooks/useIsOnline'
 import { humanUploadPercent } from '../lib/uploadPercent'
+import { getUploadStats } from '../stores/fileStats'
 import { useFileCountLocal, useFileCountLost } from '../stores/files'
+import { useIsConnected } from '../stores/sdk'
+import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { palette } from '../styles/colors'
+import { ActionSheet } from './ActionSheet'
+import { RowGroup } from './Group'
+import { InfoCard } from './InfoCard'
+import { LabeledValueRow } from './LabeledValueRow'
 
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
@@ -21,7 +21,7 @@ export function LibraryStatusSheet() {
     () => getUploadStats(),
     {
       refreshInterval: 5_000,
-    }
+    },
   )
   const lostCount = useFileCountLost()
   const localCount = useFileCountLocal({ localOnly: false })
@@ -93,7 +93,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.overall.percentDecimal,
-                      stats.data?.overall.percent
+                      stats.data?.overall.percent,
                     )}
                   </Text>
                 </View>
@@ -113,7 +113,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.photos.percentDecimal,
-                      stats.data?.photos.percent
+                      stats.data?.photos.percent,
                     )}
                   </Text>
                 </View>
@@ -134,7 +134,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.videos.percentDecimal,
-                      stats.data?.videos.percent
+                      stats.data?.videos.percent,
                     )}
                   </Text>
                 </View>
@@ -155,7 +155,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.audio.percentDecimal,
-                      stats.data?.audio.percent
+                      stats.data?.audio.percent,
                     )}
                   </Text>
                 </View>
@@ -176,7 +176,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.docs.percentDecimal,
-                      stats.data?.docs.percent
+                      stats.data?.docs.percent,
                     )}
                   </Text>
                 </View>
@@ -197,7 +197,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.other.percentDecimal,
-                      stats.data?.other.percent
+                      stats.data?.other.percent,
                     )}
                   </Text>
                 </View>
@@ -218,7 +218,7 @@ export function LibraryStatusSheet() {
                   <Text style={styles.valuePercent}>
                     {humanUploadPercent(
                       stats.data?.thumbnails.percentDecimal,
-                      stats.data?.thumbnails.percent
+                      stats.data?.thumbnails.percent,
                     )}
                   </Text>
                 </View>
