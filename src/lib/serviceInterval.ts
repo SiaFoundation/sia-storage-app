@@ -8,6 +8,39 @@ type SchedulerState = {
 
 const schedulerStateMap = new Map<string, SchedulerState>()
 
+// Pause/resume state for testing
+let paused = false
+const pausedCallbacks: Array<() => void> = []
+
+/**
+ * Pauses all service intervals. Scheduled ticks will be deferred until resume.
+ * Used by the test harness for pause/resume functionality.
+ */
+export function pauseAllServiceIntervals(): void {
+  paused = true
+  logger.debug('serviceInterval', 'all services paused')
+}
+
+/**
+ * Resumes all service intervals. Any deferred ticks will be executed.
+ */
+export function resumeAllServiceIntervals(): void {
+  paused = false
+  logger.debug('serviceInterval', 'all services resumed')
+  const callbacks = [...pausedCallbacks]
+  pausedCallbacks.length = 0
+  for (const cb of callbacks) {
+    cb()
+  }
+}
+
+/**
+ * Checks if service intervals are currently paused.
+ */
+export function areServiceIntervalsPaused(): boolean {
+  return paused
+}
+
 export function createServiceInterval({
   name,
   worker,
@@ -63,6 +96,13 @@ export function createServiceInterval({
       // Only schedule if this init remains the latest.
       const current = schedulerStateMap.get(name)
       if (!current || current.token !== token) return
+
+      if (paused) {
+        // Defer the tick until resumed
+        pausedCallbacks.push(() => scheduleNextRun(interval))
+        return
+      }
+
       const timeoutId = setTimeout(runTick, interval)
       schedulerStateMap.set(name, { token, timeoutId })
     }

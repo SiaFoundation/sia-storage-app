@@ -35,7 +35,7 @@ import {
   PROJECT_ROOT,
 } from './buildCache'
 
-const E2E_DIR = join(PROJECT_ROOT, 'test/e2e')
+const E2E_DIR = join(PROJECT_ROOT, 'e2e')
 const FLOWS_DIR = join(E2E_DIR, 'flows')
 const OUTPUT_DIR = join(E2E_DIR, '.maestro/tests')
 
