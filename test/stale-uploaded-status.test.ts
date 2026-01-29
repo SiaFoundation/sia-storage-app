@@ -1,12 +1,8 @@
 /**
- * Bug 1: Stale `isUploaded` Status (d007bd4c)
+ * Verify that file upload status reflects database state correctly.
  *
- * Problem: After upload completes, `useFileStatus` returned stale data
- * because it used `file.objects` from props instead of querying fresh
- * data from the database.
- *
- * Symptom: `isUploaded: false` immediately after upload completes,
- * even though object exists in DB.
+ * After an upload completes, the file should be marked as uploaded based
+ * on the presence of a sealed object in the database, not stale props data.
  */
 
 import './utils/setup'
@@ -23,7 +19,7 @@ import {
 } from './utils/harness'
 import { waitForCondition } from './utils/waitFor'
 
-describe('Regression: Stale isUploaded Status', () => {
+describe('Upload Status Reflects Database State', () => {
   let harness: AppCoreHarness
 
   beforeEach(async () => {
@@ -53,7 +49,6 @@ describe('Regression: Stale isUploaded Status', () => {
     await harness.waitForNoActiveUploads(15_000)
 
     // Query file status immediately - should show uploaded
-    // BUG: Without fix, file.objects is stale, so isUploaded = false
     const file = await readFileRecord(fileId)
     expect(file).not.toBeNull()
 

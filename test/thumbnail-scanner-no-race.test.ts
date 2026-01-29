@@ -1,13 +1,9 @@
 /**
- * Bug 5: Thumbnail Race Condition (967b29dd)
+ * Verify that concurrent thumbnail generation doesn't create duplicates.
  *
- * Problem: `generateThumbnailsForFile()` and `thumbnailScanner` can
- * process same file simultaneously.
- *
- * Symptom: Duplicate thumbnail generation, potential corruption.
- *
- * Note: This test verifies that concurrent thumbnail generation
- * doesn't create duplicates.
+ * When generateThumbnailsForFile() is called multiple times for the same
+ * file (e.g., from both direct call and scanner), only one set of thumbnails
+ * should be created.
  */
 
 import './utils/setup'
@@ -24,7 +20,7 @@ import {
 import { TEST_ASSETS_DIR } from './utils/setup'
 import { sleep } from './utils/waitFor'
 
-describe('Regression: Thumbnail Scanner Race Condition', () => {
+describe('Thumbnail Scanner No Duplicates', () => {
   let harness: AppCoreHarness
 
   beforeEach(async () => {
@@ -52,9 +48,7 @@ describe('Regression: Thumbnail Scanner Race Condition', () => {
     // Start manual thumbnail generation
     const manualPromise = generateThumbnailsForFile(fileRecord!)
 
-    // Immediately wait a bit to let scanner potentially also start
-    // BUG: Without fix, scanner might also start generating
-    // resulting in race condition
+    // Wait a bit to let scanner potentially also start
     await sleep(500)
 
     await manualPromise
