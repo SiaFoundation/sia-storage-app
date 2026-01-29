@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { create } from 'zustand'
@@ -101,7 +102,10 @@ export function useFileList() {
     { revalidateOnFocus: false, revalidateAll: true },
   )
 
-  librarySwr.addChangeCallback('infiniteList', swr.mutate)
+  useEffect(() => {
+    librarySwr.addChangeCallback('infiniteList', swr.mutate)
+    return () => librarySwr.removeChangeCallback('infiniteList')
+  }, [swr.mutate])
 
   const pages = swr.data
   const flat = pages ? pages.flat() : undefined

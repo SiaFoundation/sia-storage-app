@@ -10,8 +10,6 @@ import { getAppKeyForIndexer } from '../stores/appKey'
 import { type DownloadState, useDownloadState } from '../stores/downloads'
 import type { FileRecord } from '../stores/files'
 import { useFsFileUri } from '../stores/fs'
-import { librarySwr } from '../stores/library'
-import { readLocalObjectsForFile } from '../stores/localObjects'
 import { type UploadState, useUploadState } from '../stores/uploads'
 
 export function fileHasASealedObject(file?: FileRecord): boolean {
@@ -83,52 +81,21 @@ export function useFileStatus(
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFsFileUri(file)
-
-  // Query objects directly from DB to ensure we have fresh data after uploads.
-  // This avoids the timing issue where file.objects from props may be stale.
-  const objectsSwr = useSWR(
-    file?.id ? librarySwr.getKey(`objects/${file.id}`) : null,
-    async () => {
-      if (!file?.id) return {}
-      const objects = await readLocalObjectsForFile(file.id)
-      const map: Record<string, LocalObject> = {}
-      for (const obj of objects) {
-        map[obj.indexerURL] = obj
-      }
-      return map
-    },
+  const response = useSWR(fileUri.isLoading ? null : [file?.id, 'status'], () =>
+    computeFileStatus({
+      file,
+      isShared,
+      uploadState,
+      downloadState,
+      fileUri: fileUri.data ?? null,
+      errorText: uploadState?.error || downloadState?.error || null,
+    }),
   )
-
-  const response = useSWR(
-    fileUri.isLoading || objectsSwr.isLoading
-      ? null
-      : [file?.id, 'status', objectsSwr.data],
-    () =>
-      computeFileStatus({
-        file: file
-          ? { ...file, objects: objectsSwr.data ?? file.objects }
-          : undefined,
-        isShared,
-        uploadState,
-        downloadState,
-        fileUri: fileUri.data ?? null,
-        errorText: uploadState?.error || downloadState?.error || null,
-      }),
-  )
-
   // Immediately update when there are changes to data or transfer progress.
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to update when the upload or download state changes
   useEffect(() => {
     response.mutate()
   }, [uploadState, downloadState])
-
-  // Refetch objects when library changes (e.g., after upload completes).
-  useEffect(() => {
-    const callback = () => objectsSwr.mutate()
-    librarySwr.addChangeCallback(`fileStatus/${file?.id}`, callback)
-    return () => librarySwr.removeChangeCallback(`fileStatus/${file?.id}`)
-  }, [file?.id, objectsSwr.mutate])
-
   return response
 }
 
