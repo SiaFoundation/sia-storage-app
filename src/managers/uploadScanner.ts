@@ -38,63 +38,59 @@ async function startUploadScanner(): Promise<void> {
   }
 
   logger.debug('uploadScanner', 'scanning...')
-  try {
-    const uploadManager = getUploadManager()
-    const indexerURL = await getIndexerURL()
-    uploadManager.initialize(sdk, indexerURL)
+  const uploadManager = getUploadManager()
+  const indexerURL = await getIndexerURL()
+  uploadManager.initialize(sdk, indexerURL)
 
-    // Check how much space is left in current slab
-    const slabRemaining = await uploadManager.getSlabRemaining()
+  // Check how much space is left in current slab
+  const slabRemaining = await uploadManager.getSlabRemaining()
 
-    // Get candidate files, sorted by size ascending (small files first)
-    const candidateFiles = await getFilesLocalOnly({
-      limit: 50,
-      order: 'ASC',
-    })
+  // Get candidate files, sorted by size ascending (small files first)
+  const candidateFiles = await getFilesLocalOnly({
+    limit: 50,
+    order: 'ASC',
+  })
 
-    // Filter out files already being uploaded
-    const activeUploads = getActiveUploads()
-    const available = candidateFiles.filter(
-      (f) => !activeUploads.some((u) => u.id === f.id),
-    )
+  // Filter out files already being uploaded
+  const activeUploads = getActiveUploads()
+  const available = candidateFiles.filter(
+    (f) => !activeUploads.some((u) => u.id === f.id),
+  )
 
-    // Select files that fit well in current slab
-    const toUpload: FileEntry[] = []
-    let batchSize = 0
-    const targetBatchSize = Number(
-      slabRemaining > 0n ? slabRemaining : BigInt(SLAB_SIZE),
-    )
+  // Select files that fit well in current slab
+  const toUpload: FileEntry[] = []
+  let batchSize = 0
+  const targetBatchSize = Number(
+    slabRemaining > 0n ? slabRemaining : BigInt(SLAB_SIZE),
+  )
 
-    for (const file of available) {
-      const entry = await toFileEntry(file)
-      if (!entry) continue
+  for (const file of available) {
+    const entry = await toFileEntry(file)
+    if (!entry) continue
 
-      // Always include at least one file
-      if (toUpload.length === 0) {
-        toUpload.push(entry)
-        batchSize += file.size
-        continue
-      }
-
-      // Add more files if they fit well in the slab
-      if (batchSize + file.size <= targetBatchSize) {
-        toUpload.push(entry)
-        batchSize += file.size
-      }
-
-      // Stop if we've filled the slab target
-      if (batchSize >= targetBatchSize) break
+    // Always include at least one file
+    if (toUpload.length === 0) {
+      toUpload.push(entry)
+      batchSize += file.size
+      continue
     }
 
-    if (toUpload.length > 0) {
-      logger.info(
-        'uploadScanner',
-        `queuing ${toUpload.length} files (${batchSize} bytes)`,
-      )
-      await uploadManager.queueFiles(toUpload)
+    // Add more files if they fit well in the slab
+    if (batchSize + file.size <= targetBatchSize) {
+      toUpload.push(entry)
+      batchSize += file.size
     }
-  } catch (e) {
-    logger.error('uploadScanner', 'scan error', e)
+
+    // Stop if we've filled the slab target
+    if (batchSize >= targetBatchSize) break
+  }
+
+  if (toUpload.length > 0) {
+    logger.info(
+      'uploadScanner',
+      `queuing ${toUpload.length} files (${batchSize} bytes)`,
+    )
+    await uploadManager.queueFiles(toUpload)
   }
 }
 
