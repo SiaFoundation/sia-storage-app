@@ -12,7 +12,6 @@ export type UploadStatus =
 
 export type UploadState = {
   id: string
-  controller: AbortController
   status: UploadStatus
   progress: number
   error?: string
@@ -28,18 +27,15 @@ export const useUploadsStore = create<UploadsStore>(() => ({ uploads: {} }))
 
 const { getState, setState } = useUploadsStore
 
-export function registerUpload(id: string): AbortController {
-  const controller = new AbortController()
+export function registerUpload(id: string): void {
   setState((state) => {
     const next: UploadState = {
       id,
-      controller,
       status: 'queued',
       progress: 0,
     }
     return { uploads: { ...state.uploads, [id]: next } }
   })
-  return controller
 }
 
 export function setUploadStatus(id: string, status: UploadStatus) {
@@ -108,24 +104,12 @@ export function removeUploads(ids: string[]) {
 }
 
 export function cancelAllUploads() {
-  const current = getState().uploads
-  Object.values(current).forEach((r) => {
-    try {
-      logger.debug('uploads', 'aborting upload', r.id)
-      r.controller?.abort()
-    } catch (e) {
-      logger.error('uploads', 'error aborting upload', r.id, e)
-    }
-  })
+  logger.debug('uploads', 'cancelling all uploads')
   useUploadsStore.setState({ uploads: {} })
 }
 
 export function cancelUpload(id: string) {
-  const current = getState().uploads
-  const rec = current[id]
-  if (!rec) return
-  logger.debug('uploads', 'aborting upload', id)
-  rec.controller?.abort()
+  logger.debug('uploads', 'cancelling upload', id)
   removeUpload(id)
 }
 
@@ -156,11 +140,8 @@ export function updateUploadProgress(id: string, progress: number) {
     const prev = state.uploads[id]
     if (!prev) return state
     const next: UploadState = {
-      id,
-      controller: prev.controller,
-      status: prev.status,
+      ...prev,
       progress,
-      error: prev.error,
     }
     return { uploads: { ...state.uploads, [id]: next } }
   })
