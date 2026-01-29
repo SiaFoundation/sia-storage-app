@@ -6,16 +6,32 @@ import type { MigrationProgressHandler } from './migrations/types'
 
 export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
-const dbName = 'app.db'
+let dbName = 'app.db'
 
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
+  /** Custom database name (for test isolation) */
+  databaseName?: string
 }): Promise<void> {
-  logger.info('db', 'initializing database...')
-  database = await SQLite.openDatabaseAsync(dbName)
+  const name = options?.databaseName ?? dbName
+  logger.info('db', `initializing database: ${name}`)
+  database = await SQLite.openDatabaseAsync(name)
   await runMigrations(database, options?.onProgress)
   dbInitialized = true
+  dbName = name
   logger.info('db', 'database initialized')
+}
+
+/** Close the database connection (for test cleanup) */
+export async function closeDb(): Promise<void> {
+  if (database && dbInitialized) {
+    try {
+      await database.closeAsync()
+    } catch (e) {
+      logger.debug('db', 'error closing database', e)
+    }
+    dbInitialized = false
+  }
 }
 
 // Drop all tables and run migrations again
