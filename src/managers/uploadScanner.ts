@@ -37,8 +37,8 @@ async function startUploadScanner(): Promise<void> {
     return
   }
 
-  logger.debug('uploadScanner', 'scanning...')
   try {
+    logger.debug('uploadScanner', 'scanning...')
     const uploadManager = getUploadManager()
     const indexerURL = await getIndexerURL()
     uploadManager.initialize(sdk, indexerURL)
