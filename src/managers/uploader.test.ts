@@ -1,6 +1,6 @@
 // Mock config MUST be at the very top before any imports
 // Constants must be inlined in jest.mock due to hoisting
-const MOCK_SLAB_SIZE = 4 * 1024 * 1024 * 30 // 120 MiB (SECTOR_SIZE * DATA_SHARDS)
+const MOCK_SLAB_SIZE = 4 * 1024 * 1024 * 30 // 120 MiB (SECTOR_SIZE * TOTAL_SHARDS)
 
 jest.mock('../config', () => ({
   __esModule: true,
@@ -214,12 +214,15 @@ describe('UploadManager', () => {
 
       await manager.queueFiles([createFileEntry('file1')])
 
-      expect(mockSdk.uploadPacked).toHaveBeenCalledWith({
-        maxInflight: UPLOAD_MAX_INFLIGHT,
-        dataShards: UPLOAD_DATA_SHARDS,
-        parityShards: UPLOAD_PARITY_SHARDS,
-        progressCallback: expect.any(Object),
-      })
+      expect(mockSdk.uploadPacked).toHaveBeenCalledWith(
+        {
+          maxInflight: UPLOAD_MAX_INFLIGHT,
+          dataShards: UPLOAD_DATA_SHARDS,
+          parityShards: UPLOAD_PARITY_SHARDS,
+          progressCallback: expect.any(Object),
+        },
+        { signal: expect.any(AbortSignal) },
+      )
     })
 
     it('reuses packer for subsequent files in same batch', async () => {
@@ -256,16 +259,17 @@ describe('UploadManager', () => {
     })
 
     it('removes completed uploads from store after success', async () => {
+      // Use createTestFile to create actual DB records, required for upsertLocalObject to succeed
+      const entry1 = await createTestFile('file1')
+      const entry2 = await createTestFile('file2')
+
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
       ])
 
-      await manager.queueFiles([
-        createFileEntry('file1'),
-        createFileEntry('file2'),
-      ])
+      await manager.queueFiles([entry1, entry2])
 
       // Before flush, uploads should be in store
       expect(getActiveUploads()).toHaveLength(2)
@@ -318,6 +322,29 @@ describe('UploadManager', () => {
       const upload = getUploadState('file1')
       expect(upload?.status).toBe('error')
       expect(upload?.error).toBe('Network error')
+    })
+
+    it('keeps errored files in store when some files fail during save', async () => {
+      // file1 has a DB record (will succeed), file2 does not (will fail with FK error)
+      const entry1 = await createTestFile('file1')
+      const entry2 = createFileEntry('file2-no-db-record')
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      mockPacker.finalize.mockResolvedValueOnce([
+        mockPinnedObject,
+        mockPinnedObject,
+      ])
+
+      await manager.queueFiles([entry1, entry2])
+      await manager.flush()
+
+      // file1 should be removed (success)
+      expect(getUploadState('file1')).toBeUndefined()
+
+      // file2 should remain with error status (failed to save)
+      const upload2 = getUploadState('file2-no-db-record')
+      expect(upload2).toBeDefined()
+      expect(upload2?.status).toBe('error')
     })
 
     it('creates new packer for files added after flush', async () => {
@@ -465,6 +492,31 @@ describe('UploadManager', () => {
 
       jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT + 1000)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
+    })
+
+    it('aborts batch operations via AbortSignal', async () => {
+      let capturedSignal: AbortSignal | undefined
+
+      // Capture the abort signal passed to uploadPacked
+      mockSdk.uploadPacked.mockImplementation(
+        async (_opts: any, asyncOpts: any) => {
+          capturedSignal = asyncOpts?.signal
+          return mockPacker
+        },
+      )
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      await manager.queueFiles([createFileEntry('file1')])
+
+      // Signal should not be aborted yet
+      expect(capturedSignal).toBeDefined()
+      expect(capturedSignal?.aborted).toBe(false)
+
+      // Cancel the batch
+      manager.cancelBatch()
+
+      // Signal should now be aborted
+      expect(capturedSignal?.aborted).toBe(true)
     })
   })
 

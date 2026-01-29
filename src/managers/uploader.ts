@@ -45,12 +45,14 @@ type BatchState = {
   files: FileEntry[]
   totalSize: number
   slabsFilled: number // Number of slabs filled so far in this batch
+  abortController: AbortController // For cancelling batch operations
 }
 
 class UploadManager {
   private sdk: SdkInterface | null = null
   private packer: PackedUploadInterface | null = null
   private currentBatch: BatchState | null = null
+  private uploadingBatch: BatchState | null = null // Batch currently being uploaded
   private idleTimer: NodeJS.Timeout | null = null
   private isProcessing = false
   private indexerURL: string = ''
@@ -110,18 +112,29 @@ class UploadManager {
       // Initialize packer if needed
       if (!this.packer) {
         logger.info('uploadManager', 'Creating new packer')
-        this.packer = await this.sdk.uploadPacked({
-          maxInflight: UPLOAD_MAX_INFLIGHT,
-          dataShards: UPLOAD_DATA_SHARDS,
-          parityShards: UPLOAD_PARITY_SHARDS,
-          progressCallback: { progress: this.onProgress },
-        })
-        this.currentBatch = {
+        // Create batch first so we can capture it in the progress callback closure
+        const batch: BatchState = {
           batchId: uniqueId(),
           files: [],
           totalSize: 0,
           slabsFilled: 0,
+          abortController: new AbortController(),
         }
+        this.currentBatch = batch
+        this.packer = await this.sdk.uploadPacked(
+          {
+            maxInflight: UPLOAD_MAX_INFLIGHT,
+            dataShards: UPLOAD_DATA_SHARDS,
+            parityShards: UPLOAD_PARITY_SHARDS,
+            // Capture batch reference in closure so progress updates work even after
+            // this.currentBatch is set to null during flush
+            progressCallback: {
+              progress: (uploaded, total) =>
+                this.onProgress(batch, uploaded, total),
+            },
+          },
+          { signal: batch.abortController.signal },
+        )
       }
 
       // Add file to packer
@@ -132,7 +145,9 @@ class UploadManager {
       )
 
       const reader = createFileReader(entry.fileUri)
-      await this.packer.add(reader)
+      await this.packer.add(reader, {
+        signal: this.currentBatch!.abortController.signal,
+      })
 
       // Update batch state
       this.currentBatch?.files.push(entry)
@@ -198,26 +213,29 @@ class UploadManager {
   }
 
   /**
-   * Progress callback for the packer
+   * Progress callback for the packer. Takes batch as parameter to avoid stale
+   * closure issues when this.currentBatch is set to null during flush.
    */
-  private onProgress = (uploaded: bigint, encodedTotal: bigint) => {
-    if (!this.currentBatch) return
-
+  private onProgress(
+    batch: BatchState,
+    uploaded: bigint,
+    encodedTotal: bigint,
+  ): void {
     // Calculate batch progress as a ratio
     const batchProgress =
       encodedTotal > 0n ? Number(uploaded) / Number(encodedTotal) : 0
 
     // Calculate batch info for progress calculation
     const batchInfo = {
-      files: this.currentBatch.files.map((f) => ({
+      files: batch.files.map((f) => ({
         fileId: f.fileId,
         size: f.size,
       })),
-      totalSize: this.currentBatch.totalSize,
+      totalSize: batch.totalSize,
     }
 
     // Update progress for each file
-    for (const entry of this.currentBatch.files) {
+    for (const entry of batch.files) {
       const fileProgress = calculateFileProgress(
         batchInfo,
         batchProgress,
@@ -234,9 +252,17 @@ class UploadManager {
     if (this.idleTimer) {
       clearTimeout(this.idleTimer)
     }
-    this.idleTimer = setTimeout(() => {
+    this.idleTimer = setTimeout(async () => {
       logger.info('uploadManager', 'Idle timeout reached, flushing batch')
-      this.flush()
+      try {
+        await this.flush()
+      } catch (error) {
+        logger.error(
+          'uploadManager',
+          'Error flushing batch after idle timeout',
+          error,
+        )
+      }
     }, PACKER_IDLE_TIMEOUT)
   }
 
@@ -263,6 +289,9 @@ class UploadManager {
     const batch = this.currentBatch
     const packer = this.packer
 
+    // Track uploading batch so it can be cancelled
+    this.uploadingBatch = batch
+
     // Clear state immediately so new files go to a new batch
     this.packer = null
     this.currentBatch = null
@@ -279,19 +308,24 @@ class UploadManager {
       }
 
       // Finalize the packer - this uploads all slabs to the network
-      const pinnedObjects = await packer.finalize()
+      const pinnedObjects = await packer.finalize({
+        signal: batch.abortController.signal,
+      })
 
       logger.info(
         'uploadManager',
         `Batch ${batch.batchId} finalized with ${pinnedObjects.length} objects`,
       )
 
-      // Match objects to files and save
-      await this.saveBatchObjects(batch, pinnedObjects)
+      // Match objects to files and save, returns IDs of successfully saved files
+      const successfulFileIds = await this.saveBatchObjects(
+        batch,
+        pinnedObjects,
+      )
 
-      // Remove all uploads from store atomically (success)
-      // This ensures all files in the batch show as complete at the same time
-      removeUploads(batch.files.map((entry) => entry.fileId))
+      // Remove only successful uploads from store
+      // Files that errored during saveBatchObjects remain visible with error state
+      removeUploads(successfulFileIds)
 
       logger.info(
         'uploadManager',
@@ -311,16 +345,37 @@ class UploadManager {
       }
     } finally {
       this.isProcessing = false
+      this.uploadingBatch = null
+      // Check if a new batch was queued while we were processing.
+      // Its idle timer may have fired and been ignored, so flush it now.
+      this.flushPendingBatch()
     }
   }
 
   /**
-   * Save all objects from a batch
+   * Flush any pending batch that may have been queued during processing.
+   * This handles the case where files were added while a batch was uploading,
+   * and their idle timer fired but flush() was skipped due to isProcessing=true.
+   */
+  private flushPendingBatch(): void {
+    if (this.currentBatch && this.currentBatch.files.length > 0) {
+      logger.info(
+        'uploadManager',
+        `Found pending batch after processing, flushing`,
+      )
+      this.flush()
+    }
+  }
+
+  /**
+   * Save all objects from a batch. Returns array of file IDs that were saved successfully.
    */
   private async saveBatchObjects(
     batch: BatchState,
     pinnedObjects: PinnedObjectInterface[],
-  ): Promise<void> {
+  ): Promise<string[]> {
+    const successfulFileIds: string[] = []
+
     // Objects are returned in add-order
     if (pinnedObjects.length !== batch.files.length) {
       logger.warn(
@@ -355,6 +410,7 @@ class UploadManager {
         await upsertLocalObject(localObject)
 
         logger.debug('uploadManager', `Saved object for file ${entry.fileId}`)
+        successfulFileIds.push(entry.fileId)
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
         logger.error(
@@ -365,10 +421,14 @@ class UploadManager {
         setUploadError(entry.fileId, message)
       }
     }
+
+    return successfulFileIds
   }
 
   /**
-   * Cancel current batch
+   * Cancel current and uploading batches by aborting network operations and
+   * removing files from the upload store. This will abort any in-progress packer
+   * operations including file reads and network uploads.
    */
   cancelBatch(): void {
     if (this.idleTimer) {
@@ -376,12 +436,26 @@ class UploadManager {
       this.idleTimer = null
     }
 
+    // Cancel batch being packed
     if (this.currentBatch) {
       logger.info(
         'uploadManager',
         `Cancelling batch ${this.currentBatch.batchId}`,
       )
+      this.currentBatch.abortController.abort()
       for (const entry of this.currentBatch.files) {
+        removeUpload(entry.fileId)
+      }
+    }
+
+    // Cancel batch being uploaded
+    if (this.uploadingBatch) {
+      logger.info(
+        'uploadManager',
+        `Cancelling uploading batch ${this.uploadingBatch.batchId}`,
+      )
+      this.uploadingBatch.abortController.abort()
+      for (const entry of this.uploadingBatch.files) {
         removeUpload(entry.fileId)
       }
     }
@@ -410,6 +484,7 @@ class UploadManager {
     }
     this.packer = null
     this.currentBatch = null
+    this.uploadingBatch = null
     this.isProcessing = false
     this.sdk = null
     this.indexerURL = ''
@@ -460,7 +535,7 @@ export function useUploader() {
         await getUploadManager().queueFiles(entries)
       }
     },
-    [sdk],
+    [sdk, indexerURL.data],
   )
 }
 
