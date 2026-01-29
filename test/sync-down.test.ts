@@ -2,15 +2,18 @@
  * Sync Down Integration Test
  *
  * Tests that server events sync down correctly.
+ *
+ * These tests let the app's service intervals naturally run rather than
+ * manually calling sync functions, verifying the full system works together.
  */
 
 import './utils/setup'
 
-import { syncDownEvents } from '../src/managers/syncDownEvents'
 import { readAllFileRecords } from '../src/stores/files'
 import { type AppCoreHarness, createHarness } from './utils/harness'
 import { generateMockFileMetadata } from './utils/mockSdk'
 import { sleep } from './utils/testHelpers'
+import { waitForCondition } from './utils/waitFor'
 
 describe('Sync Down Integration', () => {
   let harness: AppCoreHarness
@@ -29,13 +32,14 @@ describe('Sync Down Integration', () => {
     const metadata = generateMockFileMetadata(1, { name: 'from-server.jpg' })
     harness.sdk.injectObject({ metadata })
 
-    // Manually trigger sync (or wait for service)
-    await syncDownEvents()
-
-    // Assert: File record created in local DB
-    const files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(1)
-    expect(files[0].name).toBe('from-server.jpg')
+    // Wait for syncDownEvents service to pick up the object (runs every 2s)
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 1 && files[0].name === 'from-server.jpg'
+      },
+      { timeout: 10_000, message: 'File to sync from server' },
+    )
   })
 
   it('syncs multiple objects from server', async () => {
@@ -50,11 +54,16 @@ describe('Sync Down Integration', () => {
       metadata: generateMockFileMetadata(3, { name: 'file3.jpg' }),
     })
 
-    await syncDownEvents()
+    // Wait for syncDownEvents service to sync all files
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 3
+      },
+      { timeout: 10_000, message: 'All 3 files to sync' },
+    )
 
     const files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(3)
-
     const names = files.map((f) => f.name).sort()
     expect(names).toContain('file1.jpg')
     expect(names).toContain('file2.jpg')
@@ -66,21 +75,26 @@ describe('Sync Down Integration', () => {
     const metadata = generateMockFileMetadata(1, { name: 'original.jpg' })
     const stored = harness.sdk.injectObject({ metadata })
 
-    await syncDownEvents()
-
-    // Verify initial sync
-    let files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(1)
-    expect(files[0].name).toBe('original.jpg')
+    // Wait for initial sync
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 1 && files[0].name === 'original.jpg'
+      },
+      { timeout: 10_000, message: 'Initial file to sync' },
+    )
 
     // Inject metadata change
     harness.sdk.injectMetadataChange(stored.id, { name: 'renamed.jpg' })
 
-    await syncDownEvents()
-
-    // Verify update
-    files = await readAllFileRecords({ order: 'ASC' })
-    expect(files[0].name).toBe('renamed.jpg')
+    // Wait for update to sync
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 1 && files[0].name === 'renamed.jpg'
+      },
+      { timeout: 10_000, message: 'Renamed file to sync' },
+    )
   })
 
   it('handles delete events from server', async () => {
@@ -88,19 +102,26 @@ describe('Sync Down Integration', () => {
     const metadata = generateMockFileMetadata(1, { name: 'to-delete.jpg' })
     const stored = harness.sdk.injectObject({ metadata })
 
-    await syncDownEvents()
-
-    const files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(1)
+    // Wait for initial sync
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 1
+      },
+      { timeout: 10_000, message: 'File to sync initially' },
+    )
 
     // Inject delete event
     harness.sdk.injectDeleteEvent(stored.id)
 
-    // Verify delete event exists
-    const events = harness.sdk.getAllEvents()
-    const deleteEvent = events.find((e) => e.id === stored.id && e.deleted)
-    expect(deleteEvent).toBeDefined()
-    expect(deleteEvent?.deleted).toBe(true)
+    // Wait for delete to sync
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 0
+      },
+      { timeout: 10_000, message: 'File to be deleted' },
+    )
   })
 
   it('respects event ordering', async () => {
@@ -115,10 +136,14 @@ describe('Sync Down Integration', () => {
       metadata: generateMockFileMetadata(2, { name: 'second.jpg' }),
     })
 
-    await syncDownEvents()
-
-    const files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(2)
+    // Wait for both files to sync
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 2
+      },
+      { timeout: 10_000, message: 'Both files to sync' },
+    )
 
     // Events should be processed in order
     const events = harness.sdk.getAllEvents()

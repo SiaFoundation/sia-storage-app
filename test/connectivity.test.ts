@@ -3,12 +3,14 @@
  *
  * Tests offline/online transitions and upload behavior.
  *
- * Timing: Scanner runs every 1s, idle flush after 1s
+ * These tests let the app's service intervals naturally run rather than
+ * manually calling sync functions, verifying the full system works together.
+ *
+ * Timing: Scanner runs every 1s, sync runs every 2s
  */
 
 import './utils/setup'
 
-import { syncDownEvents } from '../src/managers/syncDownEvents'
 import { readAllFileRecords } from '../src/stores/files'
 import { setIsConnected } from '../src/stores/sdk'
 import { getUploadCounts } from '../src/stores/uploads'
@@ -73,28 +75,29 @@ describe('Connectivity Integration', () => {
       metadata: generateMockFileMetadata(1, { name: 'sync-test.jpg' }),
     })
 
-    // Go offline
+    // Go offline before sync can happen
     harness.sdk.setConnected(false)
+    setIsConnected(false)
 
-    // Sync should fail or skip
-    try {
-      await syncDownEvents()
-    } catch {
-      // Expected - network unavailable
-    }
+    // Wait for sync interval to pass while offline - sync should skip
+    await sleep(3000)
 
-    // No files should be synced
-    const files = await readAllFileRecords({ order: 'ASC' })
-    expect(files.length).toBe(0)
+    // No files should be synced while offline
+    const filesOffline = await readAllFileRecords({ order: 'ASC' })
+    expect(filesOffline.length).toBe(0)
 
     // Come back online
     harness.sdk.setConnected(true)
+    setIsConnected(true)
 
-    // Now sync should work
-    await syncDownEvents()
-
-    const filesAfter = await readAllFileRecords({ order: 'ASC' })
-    expect(filesAfter.length).toBe(1)
+    // Wait for syncDownEvents service to naturally sync the file (runs every 2s)
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        return files.length === 1
+      },
+      { timeout: 10_000, message: 'File to sync after coming online' },
+    )
   })
 
   it('handles intermittent connectivity', async () => {
