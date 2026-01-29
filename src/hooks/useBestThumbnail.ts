@@ -51,10 +51,11 @@ export function useBestThumbnailUri(
       return await getFsFileUri(thumbRecord.data)
     },
   )
+
   // Update when status changes so the thumbnail is re-rendered when the uri becomes available.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: status.data triggers mutate intentionally
+  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to update when the status changes
   useEffect(() => {
     response.mutate()
-  }, [status.data])
+  }, [status.data?.isDownloaded])
   return response
 }
