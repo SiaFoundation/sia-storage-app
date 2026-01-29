@@ -5,7 +5,7 @@ import { createServiceInterval } from '../lib/serviceInterval'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { ensureThumbnailForSize } from './thumbnailer'
+import { ensureThumbnailForSize, isFileBeingProcessed } from './thumbnailer'
 
 const MAX_THUMBS_PER_TICK = 10
 
@@ -159,6 +159,12 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
       for (const c of batch) {
         if (producedCount >= MAX_THUMBS_PER_TICK) break
         processedThisRun.add(c.id)
+
+        // Skip files currently being processed by generateThumbnailsForFile.
+        if (isFileBeingProcessed(c.id)) {
+          continue
+        }
+
         summary.processedCandidates += 1
         // Determine missing sizes for this original so we don't attempt existing ones.
         const existingSizes = await readThumbnailSizesForHash(c.hash)
