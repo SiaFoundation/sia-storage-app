@@ -21,8 +21,7 @@ import {
   generateTestFiles,
 } from './utils/harness'
 import { generateMockFileMetadata } from './utils/mockSdk'
-import { sleep } from './utils/testHelpers'
-import { waitForCondition } from './utils/waitFor'
+import { sleep, waitForCondition } from './utils/waitFor'
 
 describe('Connectivity Integration', () => {
   let harness: AppCoreHarness

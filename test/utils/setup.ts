@@ -236,5 +236,8 @@ console.warn = (...args: unknown[]) => {
   originalConsoleWarn(...args)
 }
 
-// Test assets directory
-export const TEST_ASSETS_DIR = path.join(__dirname, '..', 'assets')
+// Test assets directories
+// E2E assets (test images used by multiple tests)
+export const TEST_ASSETS_DIR = path.join(__dirname, '..', '..', 'e2e', 'assets')
+// Core test specific assets
+export const CORE_TEST_ASSETS_DIR = path.join(__dirname, '..', 'assets')

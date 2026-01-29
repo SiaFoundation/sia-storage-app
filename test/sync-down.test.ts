@@ -12,8 +12,7 @@ import './utils/setup'
 import { readAllFileRecords } from '../src/stores/files'
 import { type AppCoreHarness, createHarness } from './utils/harness'
 import { generateMockFileMetadata } from './utils/mockSdk'
-import { sleep } from './utils/testHelpers'
-import { waitForCondition } from './utils/waitFor'
+import { sleep, waitForCondition } from './utils/waitFor'
 
 describe('Sync Down Integration', () => {
   let harness: AppCoreHarness
