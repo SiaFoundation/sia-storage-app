@@ -15,7 +15,11 @@ import {
   getIndexerURL,
   useAutoScanUploads,
 } from '../stores/settings'
-import { getActiveUploads, useActiveUploads } from '../stores/uploads'
+import {
+  getActiveUploads,
+  getUploadState,
+  useActiveUploads,
+} from '../stores/uploads'
 import { type FileEntry, getUploadManager } from './uploader'
 
 async function toFileEntry(file: FileRecord): Promise<FileEntry | null> {
@@ -51,11 +55,17 @@ async function startUploadScanner(): Promise<void> {
     order: 'ASC',
   })
 
-  // Filter out files already being uploaded
+  // Filter out files that are already being uploaded or in error state
+  // Files in error state should not be re-queued automatically
   const activeUploads = getActiveUploads()
-  const available = candidateFiles.filter(
-    (f) => !activeUploads.some((u) => u.id === f.id),
-  )
+  const available = candidateFiles.filter((f) => {
+    // Skip if already in active upload queue
+    if (activeUploads.some((u) => u.id === f.id)) return false
+    // Skip if in error state (user must retry manually)
+    const uploadState = getUploadState(f.id)
+    if (uploadState?.status === 'error') return false
+    return true
+  })
 
   // Select files that fit well in current slab
   const toUpload: FileEntry[] = []
