@@ -20,6 +20,14 @@ import {
   thumbnailSwr,
 } from '../stores/thumbnails'
 
+// Track files currently being processed to prevent race conditions
+// between generateThumbnailsForFile and thumbnailScanner.
+const processingFiles = new Set<string>()
+
+export function isFileBeingProcessed(fileId: string): boolean {
+  return processingFiles.has(fileId)
+}
+
 /**
  * Generate thumbnails for a file record.
  * This will generate all missing thumbnail sizes for the given file.
@@ -37,44 +45,54 @@ export async function generateThumbnailsForFile(
     return
   }
 
-  // Get the source URI for the file.
-  const sourceUri = await getFsFileUri({
-    id: fileRecord.id,
-    type: fileRecord.type,
-  })
-  if (!sourceUri) {
-    logger.warn('generateThumbnailsForFile', 'no source URI', {
-      fileId: fileRecord.id,
+  // Mark file as being processed to prevent scanner from picking it up.
+  processingFiles.add(fileRecord.id)
+  try {
+    // Get the source URI for the file.
+    const sourceUri = await getFsFileUri({
+      id: fileRecord.id,
+      type: fileRecord.type,
     })
-    return
-  }
+    if (!sourceUri) {
+      logger.warn('generateThumbnailsForFile', 'no source URI', {
+        fileId: fileRecord.id,
+      })
+      return
+    }
 
-  // Check which sizes already exist.
-  const existingSizes = await readThumbnailSizesForHash(fileRecord.hash)
-  const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
+    // Check which sizes already exist.
+    const existingSizes = await readThumbnailSizesForHash(fileRecord.hash)
+    const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
 
-  if (missingSizes.length === 0) {
-    logger.debug('generateThumbnailsForFile', 'all thumbnails already exist', {
+    if (missingSizes.length === 0) {
+      logger.debug(
+        'generateThumbnailsForFile',
+        'all thumbnails already exist',
+        {
+          fileId: fileRecord.id,
+        },
+      )
+      return
+    }
+
+    // Generate missing thumbnails.
+    logger.debug('generateThumbnailsForFile', 'generating thumbnails', {
       fileId: fileRecord.id,
+      missingSizes,
     })
-    return
-  }
 
-  // Generate missing thumbnails.
-  logger.debug('generateThumbnailsForFile', 'generating thumbnails', {
-    fileId: fileRecord.id,
-    missingSizes,
-  })
-
-  for (const size of missingSizes) {
-    await ensureThumbnailForSize({
-      fileId: fileRecord.id,
-      fileHash: fileRecord.hash,
-      fileType: fileRecord.type,
-      fileLocalId: fileRecord.localId,
-      size,
-      sourceUri,
-    })
+    for (const size of missingSizes) {
+      await ensureThumbnailForSize({
+        fileId: fileRecord.id,
+        fileHash: fileRecord.hash,
+        fileType: fileRecord.type,
+        fileLocalId: fileRecord.localId,
+        size,
+        sourceUri,
+      })
+    }
+  } finally {
+    processingFiles.delete(fileRecord.id)
   }
 }
 
