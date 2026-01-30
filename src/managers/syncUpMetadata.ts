@@ -108,6 +108,21 @@ export type MetadataSyncResult = {
   failed: number
 }
 
+type LogContext = { fileId: string; objectId: string; fileName: string }
+
+async function tryWithLog<T>(
+  fn: () => T | Promise<T>,
+  operation: string,
+  ctx: LogContext,
+): Promise<T | null> {
+  try {
+    return await fn()
+  } catch (e) {
+    logger.error('syncUpMetadata', `${operation} failed`, { ...ctx, error: e })
+    return null
+  }
+}
+
 // Persistent cursor saved for next batch.
 const syncUpCursorCodec = z.codec(
   z.object({
@@ -175,28 +190,45 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   for (const f of batch) {
     const obj = f.objects[indexerURL]
     if (!obj || !obj.id) continue
-    try {
-      const remote = await getPinnedObject(obj.id)
-      const remoteMeta = decodeFileMetadata(remote.metadata())
-      const diffs = diffFileMetadata(f, remoteMeta)
-      if (Object.keys(diffs).length === 0) continue
-      const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
-      logger.info(
-        'syncUpMetadata',
-        formatDiff({
-          fileId: f.id,
-          objectId: obj.id,
-          localMeta: f,
-          remoteMeta,
-          diffs,
-          isLocalNewer,
-        }),
+
+    const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
+
+    const remote = await tryWithLog(
+      () => getPinnedObject(obj.id),
+      'getPinnedObject',
+      ctx,
+    )
+    if (!remote) continue
+
+    const remoteMeta = await tryWithLog(
+      () => decodeFileMetadata(remote.metadata()),
+      'decodeFileMetadata',
+      ctx,
+    )
+    if (!remoteMeta) continue
+
+    const diffs = diffFileMetadata(f, remoteMeta)
+    if (Object.keys(diffs).length === 0) continue
+
+    const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
+    logger.info(
+      'syncUpMetadata',
+      formatDiff({
+        fileId: f.id,
+        objectId: obj.id,
+        localMeta: f,
+        remoteMeta,
+        diffs,
+        isLocalNewer,
+      }),
+    )
+
+    if (isLocalNewer) {
+      await tryWithLog(
+        () => updateMetadata(remote, encodeFileMetadata(f)),
+        'updateMetadata',
+        ctx,
       )
-      if (isLocalNewer) {
-        await updateMetadata(remote, encodeFileMetadata(f))
-      }
-    } catch (e) {
-      logger.error('syncUpMetadata', 'error', e)
     }
   }
   const last = batch[batch.length - 1]
