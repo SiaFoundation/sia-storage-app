@@ -5,7 +5,11 @@ import { createServiceInterval } from '../lib/serviceInterval'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { readThumbnailSizesForHash } from '../stores/thumbnails'
-import { ensureThumbnailForSize, isFileBeingProcessed } from './thumbnailer'
+import {
+  ensureThumbnailForSize,
+  isFileBeingProcessed,
+  isFileInErrorCooldown,
+} from './thumbnailer'
 
 const MAX_THUMBS_PER_TICK = 10
 
@@ -34,6 +38,7 @@ export type ThumbnailScannerResult = {
   deduplicated: DeduplicatedThumbnail[]
   skippedNoSource: Array<{ fileId: string; hash: string }>
   skippedFullyCovered: Array<{ fileId: string; hash: string }>
+  skippedErrorCooldown: Array<{ fileId: string; hash: string }>
   errors: ThumbnailGenerationError[]
 }
 
@@ -142,6 +147,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
     deduplicated: [],
     skippedNoSource: [],
     skippedFullyCovered: [],
+    skippedErrorCooldown: [],
     errors: [],
   }
   let producedCount = 0
@@ -162,6 +168,12 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
 
         // Skip files currently being processed by generateThumbnailsForFile.
         if (isFileBeingProcessed(c.id)) {
+          continue
+        }
+
+        // Skip files that recently errored (cooldown period).
+        if (isFileInErrorCooldown(c.id)) {
+          summary.skippedErrorCooldown.push({ fileId: c.id, hash: c.hash })
           continue
         }
 
@@ -244,10 +256,15 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
         }
       }
     }
-    logger.info(
-      'thumbnailScanner',
-      `batch produced=${summary.produced.length}/${summary.processedCandidates} skippedNoSource=${summary.skippedNoSource.length}/${summary.processedCandidates} skippedFullyCovered=${summary.skippedFullyCovered.length}/${summary.processedCandidates} errors=${summary.errors.length}/${summary.processedCandidates} deduplicated=${summary.deduplicated.length}/${summary.processedCandidates}`,
-    )
+    logger.info('thumbnailScanner', 'batch complete', {
+      produced: summary.produced.length,
+      skippedNoSource: summary.skippedNoSource.length,
+      skippedFullyCovered: summary.skippedFullyCovered.length,
+      skippedErrorCooldown: summary.skippedErrorCooldown.length,
+      errors: summary.errors.length,
+      deduplicated: summary.deduplicated.length,
+      total: summary.processedCandidates + summary.skippedErrorCooldown.length,
+    })
     await logOverallProgress()
   } catch (e) {
     logger.error('thumbnailScanner', 'scan error', e)

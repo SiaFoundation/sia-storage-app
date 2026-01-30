@@ -3,6 +3,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
 import { calculateContentHash } from '../lib/contentHash'
+import { detectMimeType } from '../lib/detectMimeType'
 import { getMimeType } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
 import { uniqueId } from '../lib/uniqueId'
@@ -24,8 +25,27 @@ import {
 // between generateThumbnailsForFile and thumbnailScanner.
 const processingFiles = new Set<string>()
 
+// Maps fileId to last error timestamp. Files are skipped for ERROR_COOLDOWN_MS.
+const erroredFiles = new Map<string, number>()
+const ERROR_COOLDOWN_MS = 60 * 60 * 1000 // 1 hour
+
 export function isFileBeingProcessed(fileId: string): boolean {
   return processingFiles.has(fileId)
+}
+
+export function isFileInErrorCooldown(fileId: string): boolean {
+  const lastError = erroredFiles.get(fileId)
+  if (!lastError) return false
+  const elapsed = Date.now() - lastError
+  if (elapsed >= ERROR_COOLDOWN_MS) {
+    erroredFiles.delete(fileId)
+    return false
+  }
+  return true
+}
+
+function markFileErrored(fileId: string): void {
+  erroredFiles.set(fileId, Date.now())
 }
 
 /**
@@ -136,12 +156,45 @@ export async function ensureThumbnailForSize(params: {
     return { status: 'exists' }
   }
 
-  logger.debug('thumbnailer', 'source uri', { fileId, uri: sourceUri })
+  // Detect actual MIME type from file content using magic bytes.
+  const detectedType = await detectMimeType(sourceUri)
+  const actualType = detectedType ?? fileType
+
+  // Log if there's a mismatch between stored and detected types.
+  if (detectedType && detectedType !== fileType) {
+    logger.warn('thumbnailer', 'type mismatch detected', {
+      fileId,
+      storedType: fileType,
+      detectedType,
+      sourceUri,
+    })
+  }
+
+  // Skip unsupported formats early.
+  if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
+    logger.error('thumbnailer', 'unsupported format', {
+      fileId,
+      fileHash,
+      size,
+      storedType: fileType,
+      detectedType,
+      sourceUri,
+    })
+    markFileErrored(fileId)
+    return { status: 'error', error: new Error('Unsupported format') }
+  }
+
+  logger.debug('thumbnailer', 'source uri', {
+    fileId,
+    uri: sourceUri,
+    storedType: fileType,
+    detectedType,
+  })
 
   // Compute input and target aspect-preserving dimensions for thumb size = size.
   let info: ThumbnailInfo | null = null
   try {
-    if (fileType?.startsWith('video/')) {
+    if (actualType?.startsWith('video/')) {
       info = await prepareVideoThumbnail(sourceUri, size)
       logger.debug('thumbnailer', 'video base frame prepared', {
         fileId,
@@ -157,7 +210,16 @@ export async function ensureThumbnailForSize(params: {
       })
     }
   } catch (e) {
-    logger.error('thumbnailer', 'error preparing source', e)
+    logger.error('thumbnailer', 'error preparing source', {
+      fileId,
+      fileHash,
+      size,
+      storedType: fileType,
+      detectedType,
+      sourceUri,
+      error: e,
+    })
+    markFileErrored(fileId)
     return { status: 'error', error: e }
   }
 
@@ -189,6 +251,7 @@ export async function ensureThumbnailForSize(params: {
     const thumbHash = await calculateContentHash(fileUri)
     if (!thumbHash) {
       logger.error('thumbnailer', 'failed to calculate hash', { fileId, size })
+      markFileErrored(fileId)
       return { status: 'error', error: new Error('Missing thumbnail hash') }
     }
 
@@ -239,7 +302,17 @@ export async function ensureThumbnailForSize(params: {
       height: result.height ?? null,
     }
   } catch (e) {
-    logger.error('thumbnailer', 'error generating thumbnail', e)
+    logger.error('thumbnailer', 'error generating thumbnail', {
+      fileId,
+      fileHash,
+      size,
+      storedType: fileType,
+      detectedType,
+      sourceUri,
+      inputUri: info.inputUri,
+      error: e,
+    })
+    markFileErrored(fileId)
     return { status: 'error', error: e }
   }
 }
