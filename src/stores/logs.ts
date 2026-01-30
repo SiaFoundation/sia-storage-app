@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { db, dbInitialized } from '../db'
 import { sqlInsert } from '../db/sql'
+import { setLogAppender } from '../lib/logAppender'
 import { type LogEntry, type LogLevel, logger } from '../lib/logger'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
@@ -24,6 +25,9 @@ export async function initLogger(): Promise<void> {
   if (hasInit) {
     return
   }
+
+  // Register the log appender to persist logs to the database.
+  setLogAppender(appendLogToDb)
 
   // Now we can log.
   logger.info('logs', 'initLogger called')
@@ -119,8 +123,8 @@ export async function toggleLogScope(scope: string): Promise<void> {
   await setLogScopes(newScopes)
 }
 
-/** Append log entry directly to database. */
-export async function appendLog(entry: LogEntry): Promise<void> {
+/** Append log entry directly to database (internal, registered as appender). */
+async function appendLogToDb(entry: LogEntry): Promise<void> {
   try {
     if (!dbInitialized) {
       // Database not fully initialized (migrations not run), skip DB write.

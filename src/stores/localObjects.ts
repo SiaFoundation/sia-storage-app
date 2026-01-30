@@ -6,7 +6,7 @@ import {
   localObjectFromStorageRow,
   localObjectToStorageRow,
 } from '../encoding/localObject'
-import { librarySwr } from './library'
+import { librarySwr } from './librarySwr'
 
 export async function readLocalObjectsForFile(
   fileId: string,

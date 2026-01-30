@@ -1,5 +1,5 @@
 import { Alert, View } from 'react-native'
-import { resetApp } from '../stores/app'
+import { resetApp } from '../managers/app'
 import { Button } from './Button'
 import { GroupTitle } from './Group'
 
