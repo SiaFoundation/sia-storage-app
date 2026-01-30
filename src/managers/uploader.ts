@@ -532,7 +532,7 @@ export function useUploader() {
         await getUploadManager().queueFiles(entries)
       }
     },
-    [sdk, indexerURL.data],
+    [sdk],
   )
 }
 

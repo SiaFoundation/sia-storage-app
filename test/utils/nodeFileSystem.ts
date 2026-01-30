@@ -86,8 +86,8 @@ export function pathToUri(filePath: string): string {
 /**
  * Mock expo-file-system exports
  */
-export const documentDirectory = 'file://' + initTempDirectory() + '/documents/'
-export const cacheDirectory = 'file://' + initTempDirectory() + '/cache/'
+export const documentDirectory = `file://${initTempDirectory()}/documents/`
+export const cacheDirectory = `file://${initTempDirectory()}/cache/`
 
 export async function getInfoAsync(
   uri: string,
@@ -279,10 +279,10 @@ export class Directory {
  */
 export const Paths = {
   get document(): string {
-    return initTempDirectory() + '/documents'
+    return `${initTempDirectory()}/documents`
   },
   get cache(): string {
-    return initTempDirectory() + '/cache'
+    return `${initTempDirectory()}/cache`
   },
 }
 

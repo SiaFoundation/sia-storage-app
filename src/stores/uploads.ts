@@ -25,7 +25,7 @@ type UploadsStore = {
 
 export const useUploadsStore = create<UploadsStore>(() => ({ uploads: {} }))
 
-const { getState, setState } = useUploadsStore
+const { setState } = useUploadsStore
 
 export function registerUpload(id: string): void {
   setState((state) => {
