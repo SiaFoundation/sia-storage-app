@@ -9,7 +9,7 @@ import {
 import { logger } from '../lib/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { keysOf } from '../lib/types'
-import { librarySwr } from './library'
+import { librarySwr } from './librarySwr'
 import { readLocalObjectsForFile, upsertLocalObject } from './localObjects'
 import { getIndexerURL } from './settings'
 

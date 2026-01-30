@@ -1,5 +1,5 @@
 import { Alert } from 'react-native'
-import { resetData } from '../stores/app'
+import { resetData } from '../managers/app'
 import { librarySwr } from '../stores/library'
 import { Button } from './Button'
 

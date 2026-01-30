@@ -2,11 +2,11 @@ import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { create } from 'zustand'
 import { db } from '../db'
-import { buildSWRHelpers } from '../lib/swr'
 import { type FileRecord, type FileRecordRow, transformRow } from './files'
+import { librarySwr } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
 
-export const librarySwr = buildSWRHelpers('library')
+export { librarySwr }
 
 type MediaCategory = 'Video' | 'Image' | 'Audio'
 const MEDIA_PREFIXES: Record<MediaCategory, string> = {

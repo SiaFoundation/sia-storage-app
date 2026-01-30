@@ -1,4 +1,4 @@
-import { appendLog } from '../stores/logs'
+import { appendLog } from './logAppender'
 import {
   ANSI_BOLD,
   ANSI_RESET,
