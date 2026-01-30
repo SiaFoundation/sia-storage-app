@@ -175,3 +175,29 @@ export function getBuildLogTail(target: BuildTarget, lines = 50): string {
   const content = readFileSync(paths.buildLog, 'utf-8')
   return content.split('\n').slice(-lines).join('\n')
 }
+
+/**
+ * Save build duration after a successful build.
+ */
+export function saveBuildDuration(
+  target: BuildTarget,
+  durationMs: number,
+): void {
+  const paths = getTargetPaths(target)
+  const durationFile = join(paths.dir, 'build-duration')
+  mkdirSync(paths.dir, { recursive: true })
+  writeFileSync(durationFile, String(durationMs))
+}
+
+/**
+ * Load previous build duration for time estimates.
+ * Returns null if no previous duration exists.
+ */
+export function loadBuildDuration(target: BuildTarget): number | null {
+  const paths = getTargetPaths(target)
+  const durationFile = join(paths.dir, 'build-duration')
+  if (!existsSync(durationFile)) return null
+  const content = readFileSync(durationFile, 'utf-8').trim()
+  const duration = parseInt(content, 10)
+  return Number.isNaN(duration) ? null : duration
+}

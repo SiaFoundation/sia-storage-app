@@ -69,6 +69,19 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
       console.error(getBuildLogTail(target, 30))
       throw new Error('iOS prebuild failed')
     }
+  } else {
+    // ios/ exists - run pod install to ensure native deps are synced
+    console.log('   Running pod install...')
+    const podResult = await $`cd ${iosDir} && pod install 2>&1`
+      .quiet()
+      .nothrow()
+    writeBuildLog(target, `=== POD INSTALL ===\n${podResult.stdout}\n`)
+
+    if (podResult.exitCode !== 0) {
+      console.error('   Pod install failed. Last 30 lines:')
+      console.error(getBuildLogTail(target, 30))
+      throw new Error('iOS pod install failed')
+    }
   }
 
   // Build for simulator using unified process runner
@@ -139,6 +152,19 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
       console.error('   Prebuild failed. Last 30 lines:')
       console.error(getBuildLogTail(target, 30))
       throw new Error('iOS prebuild failed')
+    }
+  } else {
+    // ios/ exists - run pod install to ensure native deps are synced
+    console.log('   Running pod install...')
+    const podResult = await $`cd ${iosDir} && pod install 2>&1`
+      .quiet()
+      .nothrow()
+    writeBuildLog(target, `=== POD INSTALL ===\n${podResult.stdout}\n`)
+
+    if (podResult.exitCode !== 0) {
+      console.error('   Pod install failed. Last 30 lines:')
+      console.error(getBuildLogTail(target, 30))
+      throw new Error('iOS pod install failed')
     }
   }
 
