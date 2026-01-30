@@ -41,12 +41,14 @@ export class ProgressIndicator {
   private interval: ReturnType<typeof setInterval> | null = null
   private currentPhase = 'Building'
   private label = ''
+  private estimatedDurationMs: number | null = null
 
-  start(label: string): void {
+  start(label: string, estimatedDurationMs?: number | null): void {
     this.label = label
     this.startTime = Date.now()
     this.frameIndex = 0
     this.currentPhase = 'Building'
+    this.estimatedDurationMs = estimatedDurationMs ?? null
     this.render()
     this.interval = setInterval(() => {
       this.frameIndex = (this.frameIndex + 1) % SPINNER_FRAMES.length
@@ -61,12 +63,29 @@ export class ProgressIndicator {
     }
   }
 
+  getElapsedMs(): number {
+    return Date.now() - this.startTime
+  }
+
   private render(): void {
-    const elapsed = formatElapsed(Date.now() - this.startTime)
+    const elapsedMs = Date.now() - this.startTime
+    const elapsed = formatElapsed(elapsedMs)
     const spinner = SPINNER_FRAMES[this.frameIndex]
+
+    let timeInfo = elapsed
+    if (this.estimatedDurationMs !== null) {
+      const percent = Math.min(
+        99,
+        Math.round((elapsedMs / this.estimatedDurationMs) * 100),
+      )
+      const remaining = Math.max(0, this.estimatedDurationMs - elapsedMs)
+      const remainingStr = formatElapsed(remaining)
+      timeInfo = `${elapsed} / ~${formatElapsed(this.estimatedDurationMs)} (${percent}%, ~${remainingStr} left)`
+    }
+
     // \x1b[K clears from cursor to end of line (prevents leftover characters)
     process.stdout.write(
-      `\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${elapsed}`,
+      `\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${timeInfo}`,
     )
   }
 

@@ -6,7 +6,11 @@
  */
 
 import type { BuildTarget } from '../buildCache'
-import { appendBuildLog } from '../buildCache'
+import {
+  appendBuildLog,
+  loadBuildDuration,
+  saveBuildDuration,
+} from '../buildCache'
 import { ProgressIndicator } from '../progress'
 
 export interface RunProcessOptions {
@@ -42,8 +46,11 @@ export async function runProcess(
 ): Promise<ProcessResult> {
   const { command, cwd, target, label, onChunk } = options
 
+  // Load previous build duration for time estimate
+  const estimatedDuration = loadBuildDuration(target)
+
   const progress = new ProgressIndicator()
-  progress.start(label)
+  progress.start(label, estimatedDuration)
 
   const proc = Bun.spawn(command, {
     cwd,
@@ -81,6 +88,11 @@ export async function runProcess(
   // Check for failure - non-zero exit code OR "BUILD FAILED" in output
   const hasBuildFailed = output.includes('BUILD FAILED')
   const success = exitCode === 0 && !hasBuildFailed
+
+  // Save build duration on success for future estimates
+  if (success) {
+    saveBuildDuration(target, progress.getElapsedMs())
+  }
 
   progress.stop(success)
 
