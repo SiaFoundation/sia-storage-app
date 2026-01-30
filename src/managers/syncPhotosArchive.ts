@@ -18,7 +18,7 @@ import {
 import { librarySwr } from '../stores/library'
 import { settingsSwr } from '../stores/settings'
 
-const PAGE_SIZE = 1
+const PAGE_SIZE = 50
 
 export async function workBackward() {
   if (!(await getMediaLibraryPermissions())) return
