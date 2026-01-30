@@ -2,12 +2,12 @@ import { useCallback, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Modal,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView, type WebViewNavigation } from 'react-native-webview'
 import { useAuthWebViewStore } from '../stores/authWebView'
 import { palette } from '../styles/colors'
