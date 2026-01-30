@@ -14,6 +14,19 @@ import { logger } from './logger'
 import { getMediaLibraryUri } from './mediaLibrary'
 import { uniqueId } from './uniqueId'
 
+const BATCH_SIZE = 10
+
+async function processInBatches<T>(
+  items: T[],
+  batchSize: number,
+  processor: (item: T) => Promise<void>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    await Promise.all(batch.map(processor))
+  }
+}
+
 type Asset = {
   id: string | undefined
   sourceUri: string | undefined
@@ -98,48 +111,49 @@ export async function processAssets(
 
   // Copy files to the app's file cache.
   // Add content hash and file size to files that are still new.
-  await Promise.all(
-    candidateFiles
-      .filter((f) => f.status === 'new')
-      .map(async (f) => {
-        // Verify that the localId is a valid Media Library or MediaStore ID.
-        const localUri = await getMediaLibraryUri(f.localId)
-        if (!localUri) {
-          f.localId = null
-        }
+  // Process in batches to limit memory pressure from large files.
+  await processInBatches(
+    candidateFiles.filter((f) => f.status === 'new'),
+    BATCH_SIZE,
+    async (f) => {
+      // Verify that the localId is a valid Media Library or MediaStore ID.
+      const localUri = await getMediaLibraryUri(f.localId)
+      if (!localUri) {
+        f.localId = null
+      }
 
-        // Verify we have a URI.
-        const bestUri = localUri ?? f.sourceUri
-        if (!bestUri) {
-          f.status = 'incomplete'
-          f.statusDetails = 'noUri'
-          return
-        }
+      // Verify we have a URI.
+      const bestUri = localUri ?? f.sourceUri
+      if (!bestUri) {
+        f.status = 'incomplete'
+        f.statusDetails = 'noUri'
+        return
+      }
 
-        // Copy the file to the app's file cache.
-        const fileUri = await copyFileToFs(f, new File(bestUri))
-        if (!fileUri) {
-          f.status = 'incomplete'
-          f.statusDetails = 'invalidUri'
-          return
-        }
+      // Copy the file to the app's file cache.
+      const fileUri = await copyFileToFs(f, new File(bestUri))
+      if (!fileUri) {
+        f.status = 'incomplete'
+        f.statusDetails = 'invalidUri'
+        return
+      }
 
-        const hash = await calculateContentHash(fileUri)
-        if (!hash) {
-          f.status = 'incomplete'
-          f.statusDetails = 'noContentHash'
-          return
-        }
-        f.hash = hash
+      const hash = await calculateContentHash(fileUri)
+      if (!hash) {
+        f.status = 'incomplete'
+        f.statusDetails = 'noContentHash'
+        return
+      }
+      f.hash = hash
 
-        const size = getFileSize(fileUri)
-        if (!size) {
-          f.status = 'incomplete'
-          f.statusDetails = 'noFileSize'
-          return
-        }
-        f.size = size
-      }),
+      const size = getFileSize(fileUri)
+      if (!size) {
+        f.status = 'incomplete'
+        f.statusDetails = 'noFileSize'
+        return
+      }
+      f.size = size
+    },
   )
 
   // Check for duplicates by content hash.

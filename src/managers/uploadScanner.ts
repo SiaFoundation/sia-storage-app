@@ -48,7 +48,7 @@ async function startUploadScanner(): Promise<void> {
 
     // Get candidate files, sorted by size ascending (small files first)
     const candidateFiles = await getFilesLocalOnly({
-      limit: 50,
+      limit: 200,
       order: 'ASC',
     })
 

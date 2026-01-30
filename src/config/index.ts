@@ -23,7 +23,7 @@ export const SECTOR_SIZE = 4 * 1024 * 1024
 export const SLAB_SIZE =
   SECTOR_SIZE * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS)
 // Packer idle timeout - flush partial slab after this delay.
-export const PACKER_IDLE_TIMEOUT = secondsInMs(5)
+export const PACKER_IDLE_TIMEOUT = secondsInMs(10)
 // Minimum slab fill percentage before allowing flush (0.0 - 1.0).
 // Prevents flushing when we could pack more efficiently.
 export const SLAB_FILL_THRESHOLD = 0.9
@@ -32,7 +32,7 @@ export const SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
-export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(30) // 30 seconds
+export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(5) // 5 seconds
 // Sync archive photos interval.
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = secondsInMs(5) // 5 seconds
 // Thumbnail scanner interval.
