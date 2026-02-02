@@ -109,6 +109,31 @@ export function FileCarousel({
     return Array.from({ length: totalCount }, (_, i) => i)
   }, [totalCount])
 
+  // Scroll to the file's position once we know it. The carousel's defaultIndex
+  // only works on mount, but currentIndex is determined asynchronously after
+  // querying the DB for the file's position in the sorted list. Once totalCount
+  // transitions from placeholder (0 or 1) to the real count, scroll to position.
+  const hasScrolledToInitialPosition = useRef(false)
+  const previousTotalCount = useRef(totalCount)
+
+  useEffect(() => {
+    const wasInitial = previousTotalCount.current <= 1
+    const isNowReal = totalCount > 1
+    const carousel = carouselRef.current
+    const carouselReady = viewerSize.width > 0 && carousel
+
+    if (
+      wasInitial &&
+      isNowReal &&
+      carouselReady &&
+      !hasScrolledToInitialPosition.current
+    ) {
+      hasScrolledToInitialPosition.current = true
+      carousel.scrollTo({ index: currentIndex, animated: false })
+    }
+    previousTotalCount.current = totalCount
+  }, [totalCount, currentIndex, viewerSize.width])
+
   // Unlock screen orientation.
   useEffect(() => {
     ScreenOrientation.lockAsync(
@@ -282,6 +307,7 @@ export function FileCarousel({
               onSnapToItem={handleSnapToItem}
               loop={false}
               enabled={!isZoomed}
+              windowSize={5}
               onConfigurePanGesture={(gesture) => {
                 gesture.activeOffsetX([-10, 10])
               }}

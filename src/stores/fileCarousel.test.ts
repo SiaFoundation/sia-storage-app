@@ -9,9 +9,22 @@ import {
 import { createFileRecord } from './files'
 import type { Category } from './library'
 
-// Track registered change callbacks so tests can trigger them.
-// Prefixed with "mock" to satisfy Jest's module factory variable restriction.
 const mockChangeCallbacks = new Map<string, () => void>()
+
+jest.mock('./librarySwr', () => ({
+  librarySwr: {
+    triggerChange: jest.fn(() => {
+      mockChangeCallbacks.forEach((callback) => callback())
+    }),
+    addChangeCallback: jest.fn((key: string, callback: () => void) => {
+      mockChangeCallbacks.set(key, callback)
+    }),
+    removeChangeCallback: jest.fn((key: string) => {
+      mockChangeCallbacks.delete(key)
+    }),
+    getKey: jest.fn((key: string) => key),
+  },
+}))
 
 jest.mock('./library', () => {
   const actual = jest.requireActual('./library')
@@ -23,16 +36,6 @@ jest.mock('./library', () => {
       selectedCategories: new Set(),
       searchQuery: '',
     }),
-    librarySwr: {
-      triggerChange: jest.fn(),
-      addChangeCallback: jest.fn((key: string, cb: () => void) => {
-        mockChangeCallbacks.set(key, cb)
-      }),
-      removeChangeCallback: jest.fn((key: string) => {
-        mockChangeCallbacks.delete(key)
-      }),
-      getKey: jest.fn((key: string) => key),
-    },
   }
 })
 
@@ -503,7 +506,7 @@ describe('useVirtualFileList hook', () => {
   }
 
   function triggerSyncChange() {
-    mockChangeCallbacks.forEach((cb) => cb())
+    mockChangeCallbacks.forEach((callback) => callback())
   }
 
   describe('sync event handling', () => {
@@ -601,6 +604,119 @@ describe('useVirtualFileList hook', () => {
         expect(result.current.totalCount).toBe(2)
       })
       expect(result.current.currentIndex).toBe(0)
+    })
+  })
+
+  describe('cache duplicate bug - opening file at position N', () => {
+    test('opening 3rd file and navigating back shows unique files', async () => {
+      // DESC order: file-6(0), file-5(1), file-4(2), file-3(3), file-2(4), file-1(5)
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+      await createRecord({ id: 'file-4', name: 'd.jpg', createdAt: base + 30 })
+      await createRecord({ id: 'file-5', name: 'e.jpg', createdAt: base + 40 })
+      await createRecord({ id: 'file-6', name: 'f.jpg', createdAt: base + 50 })
+
+      const initialFile = {
+        id: 'file-3',
+        name: 'c.jpg',
+        type: 'image/jpeg',
+        size: 100,
+        hash: 'hash-file-3',
+        createdAt: base + 20,
+        updatedAt: base + 20,
+        localId: null,
+        addedAt: base + 20,
+        thumbForHash: undefined,
+        thumbSize: undefined,
+        objects: {},
+        objectsHash: '',
+      }
+
+      // file-3 is at position 3, prefetchRadius: 1 means positions 2-4 are fetched
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-3',
+          initialFile,
+          prefetchRadius: 1,
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+        expect(result.current.currentIndex).toBe(3)
+      })
+
+      expect(result.current.currentFile?.id).toBe('file-3')
+      expect(result.current.totalCount).toBe(6)
+
+      // Position 0 should not have a cached file (not in prefetch range)
+      const file0 = result.current.getFileAtIndex(0)
+      expect(file0).toBeNull()
+    })
+
+    test('opening 5th file shows unique files across all positions', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+      await createRecord({ id: 'file-4', name: 'd.jpg', createdAt: base + 30 })
+      await createRecord({ id: 'file-5', name: 'e.jpg', createdAt: base + 40 })
+      await createRecord({ id: 'file-6', name: 'f.jpg', createdAt: base + 50 })
+
+      // User taps on file-2 (which is at position 4 in DESC order)
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-2',
+          prefetchRadius: 5,
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.currentIndex).toBe(4)
+
+      // Get all files
+      const files = []
+      for (let i = 0; i < 6; i++) {
+        files.push(result.current.getFileAtIndex(i))
+      }
+
+      // All 6 positions should have unique files
+      const ids = files.map((f) => f?.id).filter(Boolean)
+      expect(new Set(ids).size).toBe(6)
+
+      // Verify correct order (DESC by createdAt)
+      expect(files[0]?.id).toBe('file-6')
+      expect(files[1]?.id).toBe('file-5')
+      expect(files[2]?.id).toBe('file-4')
+      expect(files[3]?.id).toBe('file-3')
+      expect(files[4]?.id).toBe('file-2')
+      expect(files[5]?.id).toBe('file-1')
+    })
+
+    test('opening first file (position 0) keeps file at index 0', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+
+      // User taps on file-3 (which is at position 0 in DESC order)
+      const { result } = renderHook(() =>
+        useVirtualFileList({
+          initialId: 'file-3',
+          prefetchRadius: 2,
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.currentIndex).toBe(0)
+      expect(result.current.getFileAtIndex(0)?.id).toBe('file-3')
+      expect(result.current.getFileAtIndex(1)?.id).toBe('file-2')
+      expect(result.current.getFileAtIndex(2)?.id).toBe('file-1')
     })
   })
 })

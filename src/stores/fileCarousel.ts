@@ -5,11 +5,11 @@ import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import {
   buildLibraryQueryParts,
   type Category,
-  librarySwr,
   type SortBy,
   type SortDir,
   useLibrary,
 } from './library'
+import { librarySwr } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
 
 const FILE_COLUMNS =
@@ -143,7 +143,9 @@ export async function fetchFilePosition(
     fileId,
   )
 
-  if (!anchorRow) return 0
+  if (!anchorRow) {
+    return 0
+  }
 
   const beforeCursor =
     params.sortBy === 'NAME'
@@ -175,17 +177,15 @@ export async function fetchFilePosition(
   return result?.count ?? 0
 }
 
-type FileRecordRowWithIndex = FileRecordRow & { __virtual_index: number }
-
-// Fetches multiple files by their sorted position in a single query.
-// We build one SELECT per index, tag each with its position, then UNION ALL
-// them together so we only make one database round-trip.
+// Fetches files at the given indices by querying the contiguous range they span.
 export async function fetchFilesAtIndices(
   indices: number[],
   params: VirtualListQueryParams,
 ): Promise<Map<number, FileRecord>> {
   const result = new Map<number, FileRecord>()
-  if (indices.length === 0) return result
+  if (indices.length === 0) {
+    return result
+  }
 
   const { where, params: queryParams } = buildLibraryQueryParts({
     sortBy: params.sortBy,
@@ -197,34 +197,30 @@ export async function fetchFilesAtIndices(
 
   const orderExpr = buildOrderExpr(params.sortBy, params.sortDir)
 
-  // Build a UNION ALL query: one SELECT per index, each tagged with its index.
-  // Each sub-SELECT is wrapped in a subquery so ORDER BY/LIMIT/OFFSET apply
-  // to each individually (SQLite requires ORDER BY after UNION otherwise).
-  const selectStatements: string[] = []
-  const allParams: (string | number | null)[] = []
+  // Find the range of indices we need
+  const minIndex = Math.min(...indices)
+  const maxIndex = Math.max(...indices)
+  const rangeSize = maxIndex - minIndex + 1
 
-  for (const index of indices) {
-    selectStatements.push(
-      `SELECT *, ? as __virtual_index FROM (SELECT ${FILE_COLUMNS} FROM files f ${
-        where ?? ''
-      } ORDER BY ${orderExpr} LIMIT 1 OFFSET ?)`,
-    )
-    // Parameter order: virtual index tag, then WHERE params, then OFFSET value
-    allParams.push(index, ...queryParams, index)
-  }
-
-  const sql = selectStatements.join(' UNION ALL ')
-  const rows = await db().getAllAsync<FileRecordRowWithIndex>(sql, ...allParams)
+  // Single query: fetch the entire range with one LIMIT/OFFSET
+  // This is O(n) instead of O(n*m) for m indices
+  const sql = `SELECT ${FILE_COLUMNS} FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`
+  const rows = await db().getAllAsync<FileRecordRow>(
+    sql,
+    ...queryParams,
+    rangeSize,
+    minIndex,
+  )
 
   // Hydrate all rows in one batch
   const hydratedFiles = await hydrateRows(rows)
 
-  // Map each file back to its index using the tagged __virtual_index
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const file = hydratedFiles[i]
-    if (file) {
-      result.set(row.__virtual_index, file)
+  // Map each file to its absolute index
+  const indicesSet = new Set(indices)
+  for (let i = 0; i < hydratedFiles.length; i++) {
+    const absoluteIndex = minIndex + i
+    if (indicesSet.has(absoluteIndex)) {
+      result.set(absoluteIndex, hydratedFiles[i])
     }
   }
 
@@ -296,18 +292,17 @@ export function useVirtualFileList({
   const sortingDir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const [currentIndex, setCurrentIndexState] = useState<number>(0)
-  // Seed with 1 if we have initialFile so carousel can render before count loads.
   const [totalCount, setTotalCount] = useState<number>(initialFile ? 1 : 0)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(!initialFile)
 
-  const cacheRef = useRef<Map<number, FileRecord>>(new Map())
+  const cacheRef = useRef<Map<number, FileRecord>>(
+    initialFile ? new Map([[0, initialFile]]) : new Map(),
+  )
   const fetchingRef = useRef<Set<number>>(new Set())
   const [cacheVersion, setCacheVersion] = useState(0)
 
-  // Store initialFile in a ref so it doesn't cause re-init when reference changes
   const initialFileRef = useRef(initialFile)
 
-  // Serialize categories to a stable string to avoid re-init when Set reference changes
   const categoriesKey = useMemo(
     () =>
       Array.from(selectedCategories ?? new Set())
@@ -331,8 +326,12 @@ export function useVirtualFileList({
     let cancelled = false
 
     async function init() {
-      setIsLoading(true)
-      cacheRef.current.clear()
+      // If we have initialFile, don't show loading state - render immediately
+      // while we fetch position/count in the background
+      if (!initialFileRef.current) {
+        setIsLoading(true)
+        cacheRef.current.clear()
+      }
       fetchingRef.current.clear()
 
       try {
@@ -342,6 +341,14 @@ export function useVirtualFileList({
         ])
 
         if (cancelled) return
+
+        // Move initialFile from index 0 to its actual position.
+        if (initialFileRef.current) {
+          if (position !== 0) {
+            cacheRef.current.delete(0)
+          }
+          cacheRef.current.set(position, initialFileRef.current)
+        }
 
         setTotalCount(count)
         setCurrentIndexState(position)
@@ -353,10 +360,6 @@ export function useVirtualFileList({
           i++
         ) {
           indicesToFetch.push(i)
-        }
-
-        if (initialFileRef.current) {
-          cacheRef.current.set(position, initialFileRef.current)
         }
 
         const fetched = await fetchFilesAtIndices(
@@ -460,87 +463,84 @@ export function useVirtualFileList({
     currentFileIDRef.current = file?.id ?? null
   }, [currentIndex, cacheVersion])
 
-  useEffect(() => {
+  const handleLibraryChange = useCallback(async () => {
     if (isLoading) return
 
-    const handleChange = async () => {
-      const currentFileID = currentFileIDRef.current
-      if (!currentFileID) return
+    const currentFileID = currentFileIDRef.current
+    if (!currentFileID) return
 
-      try {
-        const exists = await fileExists(currentFileID)
-        if (!exists) {
-          onDeleted?.()
-          return
-        }
+    try {
+      const exists = await fileExists(currentFileID)
+      if (!exists) {
+        onDeleted?.()
+        return
+      }
 
-        const [newCount, newPosition] = await Promise.all([
-          fetchTotalCount(queryParams),
-          fetchFilePosition(currentFileID, queryParams),
-        ])
+      const [newCount, newPosition] = await Promise.all([
+        fetchTotalCount(queryParams),
+        fetchFilePosition(currentFileID, queryParams),
+      ])
 
-        if (newCount !== totalCount || newPosition !== currentIndex) {
-          setTotalCount(newCount)
-          setCurrentIndexState(newPosition)
-          cacheRef.current.clear()
-          fetchingRef.current.clear()
-          setCacheVersion((v) => v + 1)
-        }
+      if (newCount !== totalCount || newPosition !== currentIndex) {
+        setTotalCount(newCount)
+        setCurrentIndexState(newPosition)
+        cacheRef.current.clear()
+        fetchingRef.current.clear()
+        setCacheVersion((v) => v + 1)
+      }
 
-        const cachedFile = cacheRef.current.get(currentIndex)
-        if (cachedFile && cachedFile.id === currentFileID) {
-          const freshFile = await fetchFileByID(currentFileID)
-          if (freshFile) {
-            const nameChanged = cachedFile.name !== freshFile.name
-            const metadataChanged =
-              nameChanged ||
-              cachedFile.updatedAt !== freshFile.updatedAt ||
-              cachedFile.size !== freshFile.size ||
-              cachedFile.type !== freshFile.type
+      const cachedFile = cacheRef.current.get(currentIndex)
+      if (cachedFile && cachedFile.id === currentFileID) {
+        const freshFile = await fetchFileByID(currentFileID)
+        if (freshFile) {
+          const nameChanged = cachedFile.name !== freshFile.name
+          const metadataChanged =
+            nameChanged ||
+            cachedFile.updatedAt !== freshFile.updatedAt ||
+            cachedFile.size !== freshFile.size ||
+            cachedFile.type !== freshFile.type
 
-            if (metadataChanged) {
-              cacheRef.current.set(currentIndex, freshFile)
-              setCacheVersion((v) => v + 1)
+          if (metadataChanged) {
+            cacheRef.current.set(currentIndex, freshFile)
+            setCacheVersion((v) => v + 1)
 
-              const message = nameChanged ? 'File renamed' : 'File info updated'
-              onUpdated?.(message)
+            const message = nameChanged ? 'File renamed' : 'File info updated'
+            onUpdated?.(message)
 
-              if (nameChanged && sortBy === 'NAME') {
-                const updatedPosition = await fetchFilePosition(
-                  currentFileID,
-                  queryParams,
-                )
-                if (updatedPosition !== currentIndex) {
-                  setCurrentIndexState(updatedPosition)
-                  cacheRef.current.clear()
-                  fetchingRef.current.clear()
-                  setCacheVersion((v) => v + 1)
-                }
+            if (nameChanged && sortBy === 'NAME') {
+              const updatedPosition = await fetchFilePosition(
+                currentFileID,
+                queryParams,
+              )
+              if (updatedPosition !== currentIndex) {
+                setCurrentIndexState(updatedPosition)
+                cacheRef.current.clear()
+                fetchingRef.current.clear()
+                setCacheVersion((v) => v + 1)
               }
             }
           }
         }
-      } catch (_e) {
-        // Silently ignore errors during sync handling.
       }
-    }
-
-    const callbackKey = `virtualFileList-${initialId}`
-    librarySwr.addChangeCallback(callbackKey, handleChange)
-
-    return () => {
-      librarySwr.removeChangeCallback(callbackKey)
+    } catch (_e) {
+      // Silently ignore errors during sync handling.
     }
   }, [
     isLoading,
-    initialId,
+    onDeleted,
     queryParams,
     totalCount,
     currentIndex,
     sortBy,
-    onDeleted,
     onUpdated,
   ])
+
+  useEffect(() => {
+    librarySwr.addChangeCallback('carousel', handleLibraryChange)
+    return () => {
+      librarySwr.removeChangeCallback('carousel')
+    }
+  }, [handleLibraryChange])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when cache updates
   const getFileAtIndex = useCallback(
