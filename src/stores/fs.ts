@@ -127,7 +127,7 @@ export async function copyFileToFs(
     addedAt: previous?.addedAt ?? Date.now(),
     usedAt: Date.now(),
   })
-  fsTriggerRefresh(file.id)
+  await fsTriggerRefresh(file.id)
   return target.uri
 }
 

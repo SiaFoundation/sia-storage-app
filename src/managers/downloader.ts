@@ -34,9 +34,10 @@ export async function downloadFile(file: FileRecord): Promise<void> {
   const downloadState = getDownloadState(file.id)
   if (
     downloadState?.status === 'running' ||
-    downloadState?.status === 'queued'
+    downloadState?.status === 'queued' ||
+    downloadState?.status === 'done'
   ) {
-    return // Already downloading
+    return // Already downloading or just completed
   }
 
   await runDownloadWithSlot({
@@ -87,9 +88,7 @@ export function useDownload(file?: FileRecord | null) {
       toast.show('No slabs available for this file')
       return
     }
-    // Fire and forget - queue the download
     downloadFile(file)
-    toast.show('Download queued')
   }, [sdk, file, toast])
 }
 

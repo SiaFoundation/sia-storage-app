@@ -56,6 +56,8 @@ function computeFileStatus({
   const isDownloading =
     downloadState?.status === 'running' || downloadState?.status === 'queued'
   const hasSealedObject = fileHasASealedObject(file)
+  // Treat as downloaded if we have the URI OR download just finished ('done')
+  const isDownloaded = !!fileUri || downloadState?.status === 'done'
   return {
     isUploading,
     isDownloading,
@@ -64,7 +66,7 @@ function computeFileStatus({
     isPacking,
     batchFileCount: uploadState?.batchFileCount ?? 0,
     isUploaded: hasSealedObject || !!isShared,
-    isDownloaded: !!fileUri,
+    isDownloaded,
     isErrored: uploadStatus === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,

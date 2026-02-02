@@ -79,7 +79,7 @@ export function FileViewer({
         ) : null}
 
         {isQueued ? (
-          <Text style={{ color: colors.textPrimary }}>Queued</Text>
+          <Text style={{ color: colors.textPrimary }}>Download queued</Text>
         ) : null}
 
         {isDownloading && !isQueued ? (
