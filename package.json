@@ -4,9 +4,10 @@
   "scripts": {
     "fresh": "bunx rimraf .expo android ios node_modules && bun install",
     "start": "bun scripts/start.ts",
-    "dev:ios": "bun scripts/dev.ts ios",
+    "dev:ios:simulator": "bun scripts/dev.ts ios:simulator",
     "dev:ios:device": "bun scripts/dev.ts ios:device",
-    "dev:android": "bun scripts/dev.ts android",
+    "dev:android:emulator": "bun scripts/dev.ts android:emulator",
+    "dev:android:device": "bun scripts/dev.ts android:device",
     "fastlane:ios:build-ipa": "fastlane ios build_ipa",
     "fastlane:android:distribute-play-store": "fastlane android distribute_play_store",
     "fastlane:android:distribute-internal": "fastlane android distribute_internal",

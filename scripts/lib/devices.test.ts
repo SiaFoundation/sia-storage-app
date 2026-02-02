@@ -1,7 +1,11 @@
 import {
+  type Device,
+  parseAdbInstallError,
   parseAdbOutput,
   parseDevicectlOutput,
   parseSimctlOutput,
+  selectAndroidDevice,
+  selectAndroidEmulator,
 } from './devices'
 
 /**
@@ -424,5 +428,153 @@ describe('parseAdbOutput', () => {
     const devices = parseAdbOutput(ADB_DEVICES_PHYSICAL_OUTPUT)
     // model:SM_G965U should be used, not device:starqltesq
     expect(devices[0].name).toBe('SM_G965U')
+  })
+})
+
+describe('selectAndroidEmulator', () => {
+  test('selects emulator when only emulators available', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_EMULATOR_OUTPUT)
+    const selected = selectAndroidEmulator(devices)
+
+    expect(selected).toBeDefined()
+    expect(selected?.type).toBe('simulator')
+    expect(selected?.id).toBe('emulator-5554')
+  })
+
+  test('ignores physical devices, returns undefined when only physical devices', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_PHYSICAL_OUTPUT)
+    const selected = selectAndroidEmulator(devices)
+
+    expect(selected).toBeUndefined()
+  })
+
+  test('selects only emulator when both emulators and physical devices present', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_MULTIPLE_OUTPUT)
+    const selected = selectAndroidEmulator(devices)
+
+    expect(selected).toBeDefined()
+    expect(selected?.type).toBe('simulator')
+    expect(selected?.id).toBe('emulator-5554')
+  })
+
+  test('returns undefined when no devices', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_NONE_OUTPUT)
+    const selected = selectAndroidEmulator(devices)
+
+    expect(selected).toBeUndefined()
+  })
+
+  test('ignores unavailable emulators', () => {
+    const devices: Device[] = [
+      {
+        id: 'emulator-5554',
+        name: 'Pixel_7',
+        platform: 'android',
+        type: 'simulator',
+        state: 'unavailable',
+      },
+    ]
+    const selected = selectAndroidEmulator(devices)
+
+    expect(selected).toBeUndefined()
+  })
+})
+
+describe('selectAndroidDevice', () => {
+  test('selects physical device when only physical devices available', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_PHYSICAL_OUTPUT)
+    const selected = selectAndroidDevice(devices)
+
+    expect(selected).toBeDefined()
+    expect(selected?.type).toBe('device')
+    expect(selected?.id).toBe('RFXXXXXXXX')
+  })
+
+  test('ignores emulators, returns undefined when only emulators', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_EMULATOR_OUTPUT)
+    const selected = selectAndroidDevice(devices)
+
+    expect(selected).toBeUndefined()
+  })
+
+  test('selects only physical device when both emulators and physical devices present', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_MULTIPLE_OUTPUT)
+    const selected = selectAndroidDevice(devices)
+
+    expect(selected).toBeDefined()
+    expect(selected?.type).toBe('device')
+    expect(selected?.id).toBe('RFXXXXXXXX')
+  })
+
+  test('returns undefined when no devices', () => {
+    const devices = parseAdbOutput(ADB_DEVICES_NONE_OUTPUT)
+    const selected = selectAndroidDevice(devices)
+
+    expect(selected).toBeUndefined()
+  })
+
+  test('ignores unavailable physical devices', () => {
+    const devices: Device[] = [
+      {
+        id: 'RFXXXXXXXX',
+        name: 'SM_G965U',
+        platform: 'android',
+        type: 'device',
+        state: 'unavailable',
+      },
+    ]
+    const selected = selectAndroidDevice(devices)
+
+    expect(selected).toBeUndefined()
+  })
+})
+
+describe('parseAdbInstallError', () => {
+  test('detects device offline error', () => {
+    const result = parseAdbInstallError(
+      'error: device offline\nadb: failed to install app.apk',
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('not_found')
+    expect(result.message).toBe('Device disconnected')
+  })
+
+  test('detects no devices error', () => {
+    const result = parseAdbInstallError(
+      'error: no devices/emulators found\nadb: failed to install app.apk',
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('not_found')
+    expect(result.message).toBe('Device disconnected')
+  })
+
+  test('detects device not found error', () => {
+    const result = parseAdbInstallError(
+      "error: device 'RFXXXXXXXX' not found\nadb: failed to install app.apk",
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('not_found')
+    expect(result.message).toBe('Device disconnected')
+  })
+
+  test('returns unknown error for other failures', () => {
+    const result = parseAdbInstallError(
+      'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]',
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('unknown')
+    expect(result.message).toBe('Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]')
+  })
+
+  test('returns default message for empty output', () => {
+    const result = parseAdbInstallError('')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('unknown')
+    expect(result.message).toBe('Install failed')
   })
 })
