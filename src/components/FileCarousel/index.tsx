@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
   type LayoutChangeEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -28,6 +29,7 @@ import type { FileRecord } from '../../stores/files'
 import { useSdk } from '../../stores/sdk'
 import { palette } from '../../styles/colors'
 import BlocksLoader from '../BlocksLoader'
+import { useDragToDismissGesture } from '../DragToDismiss'
 import { FileDetails } from '../FileDetails'
 import { FileCarouselControlBar } from './FileCarouselControlBar'
 import { FileCarouselHeader } from './FileCarouselHeader'
@@ -97,6 +99,7 @@ export function FileCarousel({
   const insets = useSafeAreaInsets()
   const sdk = useSdk()
   const carouselRef = useRef<ICarouselInstance>(null)
+  const dragToDismissGesture = useDragToDismissGesture()
 
   const handleViewerLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout
@@ -310,6 +313,10 @@ export function FileCarousel({
               windowSize={5}
               onConfigurePanGesture={(gesture) => {
                 gesture.activeOffsetX([-10, 10])
+                // On Android, coordinate with DragToDismiss gesture to allow both to work
+                if (Platform.OS === 'android' && dragToDismissGesture) {
+                  gesture.simultaneousWithExternalGesture(dragToDismissGesture)
+                }
               }}
             />
           )}
