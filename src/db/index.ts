@@ -36,6 +36,8 @@ export async function closeDb(): Promise<void> {
 
 // Drop all tables and run migrations again
 export async function resetDb() {
+  // Disable log appender before dropping tables to prevent "no such table: logs" errors
+  dbInitialized = false
   await database.withTransactionAsync(async () => {
     const rows = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
