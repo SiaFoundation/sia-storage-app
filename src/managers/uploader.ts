@@ -6,6 +6,8 @@ import type {
 } from 'react-native-sia'
 import {
   PACKER_IDLE_TIMEOUT,
+  PACKER_MAX_BATCH_DURATION,
+  PACKER_MAX_SLABS,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
   UPLOAD_DATA_SHARDS,
@@ -45,6 +47,7 @@ type BatchState = {
   files: FileEntry[]
   totalSize: number
   slabsFilled: number // Number of slabs filled so far in this batch
+  startedAt: number // Timestamp when batch was created
   abortController: AbortController // For cancelling batch operations
 }
 
@@ -54,8 +57,10 @@ class UploadManager {
   private currentBatch: BatchState | null = null
   private uploadingBatch: BatchState | null = null // Batch currently being uploaded
   private idleTimer: NodeJS.Timeout | null = null
+  private durationTimer: NodeJS.Timeout | null = null // Max duration timer
   private isProcessing = false
   private indexerURL: string = ''
+  private pendingFiles: FileEntry[] = [] // Files queued while a batch is finalizing
 
   /**
    * Set SDK instance and indexer URL
@@ -66,7 +71,8 @@ class UploadManager {
   }
 
   /**
-   * Queue multiple files at once (smart batching)
+   * Queue multiple files at once (smart batching).
+   * If a batch is currently finalizing, files are queued and processed after.
    */
   async queueFiles(files: FileEntry[]): Promise<void> {
     if (!this.sdk) {
@@ -77,6 +83,16 @@ class UploadManager {
     // Register all files as queued
     for (const file of files) {
       registerUpload(file.fileId)
+    }
+
+    // If currently finalizing a batch, queue files for later to avoid concurrent uploads
+    if (this.isProcessing) {
+      logger.info(
+        'uploadManager',
+        `Batch finalizing, queuing ${files.length} files for later`,
+      )
+      this.pendingFiles.push(...files)
+      return
     }
 
     // Process each file sequentially
@@ -99,14 +115,7 @@ class UploadManager {
       // Check if we should flush before adding this file.
       // Flush if: current slab is >= threshold full AND adding this file would overflow.
       if (this.currentBatch && this.shouldFlushBeforeAdding(entry.size)) {
-        const fillPercent = this.getCurrentSlabFillPercent()
-        logger.info(
-          'uploadManager',
-          `Slab ${Math.round(
-            fillPercent * 100,
-          )}% full, flushing before adding ${entry.size} byte file`,
-        )
-        await this.flush()
+        await this.flush('slab_threshold')
       }
 
       // Initialize packer if needed
@@ -117,9 +126,11 @@ class UploadManager {
           files: [],
           totalSize: 0,
           slabsFilled: 0,
+          startedAt: Date.now(),
           abortController: new AbortController(),
         }
         this.currentBatch = batch
+        this.startDurationTimer()
         this.packer = await this.sdk.uploadPacked(
           {
             maxInflight: UPLOAD_MAX_INFLIGHT,
@@ -175,6 +186,12 @@ class UploadManager {
         )}% of current slab`,
       )
 
+      // Check if we've hit max slabs limit
+      if (this.shouldFlushDueToLimits()) {
+        await this.flush('max_slabs')
+        return
+      }
+
       // Reset idle timer
       this.resetIdleTimer()
     } catch (e) {
@@ -182,6 +199,14 @@ class UploadManager {
       logger.error('uploadManager', `Error processing file ${entry.fileId}`, e)
       setUploadError(entry.fileId, message)
     }
+  }
+
+  /**
+   * Check if batch limits have been exceeded (max slabs).
+   */
+  private shouldFlushDueToLimits(): boolean {
+    if (!this.currentBatch) return false
+    return this.currentBatch.slabsFilled >= PACKER_MAX_SLABS
   }
 
   /**
@@ -250,9 +275,8 @@ class UploadManager {
       clearTimeout(this.idleTimer)
     }
     this.idleTimer = setTimeout(async () => {
-      logger.info('uploadManager', 'Idle timeout reached, flushing batch')
       try {
-        await this.flush()
+        await this.flush('idle_timeout')
       } catch (error) {
         logger.error(
           'uploadManager',
@@ -264,12 +288,44 @@ class UploadManager {
   }
 
   /**
-   * Flush current packer (finalize and save objects)
+   * Start the max duration timer for the current batch
    */
-  async flush(): Promise<void> {
+  private startDurationTimer(): void {
+    if (this.durationTimer) {
+      clearTimeout(this.durationTimer)
+    }
+    this.durationTimer = setTimeout(async () => {
+      try {
+        await this.flush('max_duration')
+      } catch (error) {
+        logger.error(
+          'uploadManager',
+          'Error flushing batch after duration timeout',
+          error,
+        )
+      }
+    }, PACKER_MAX_BATCH_DURATION)
+  }
+
+  /**
+   * Flush current packer (finalize and save objects)
+   * @param reason - What triggered the flush (for logging)
+   */
+  async flush(
+    reason:
+      | 'idle_timeout'
+      | 'max_duration'
+      | 'max_slabs'
+      | 'slab_threshold'
+      | 'manual' = 'manual',
+  ): Promise<void> {
     if (this.idleTimer) {
       clearTimeout(this.idleTimer)
       this.idleTimer = null
+    }
+    if (this.durationTimer) {
+      clearTimeout(this.durationTimer)
+      this.durationTimer = null
     }
 
     if (!this.packer || !this.currentBatch) {
@@ -293,10 +349,21 @@ class UploadManager {
     this.packer = null
     this.currentBatch = null
 
-    logger.info(
-      'uploadManager',
-      `Flushing batch ${batch.batchId} with ${batch.files.length} files`,
-    )
+    // Calculate efficiency metrics
+    const durationMs = Date.now() - batch.startedAt
+    const durationSec = (durationMs / 1000).toFixed(1)
+    const slabCapacity = (batch.slabsFilled + 1) * SLAB_SIZE
+    const fillPercent = Math.round((batch.totalSize / slabCapacity) * 100)
+
+    logger.info('uploadManager', 'Flushing batch', {
+      reason,
+      batchId: batch.batchId,
+      files: batch.files.length,
+      totalSize: batch.totalSize,
+      slabsFilled: batch.slabsFilled,
+      fillPercent: `${fillPercent}%`,
+      durationSec,
+    })
 
     try {
       // Set all files to uploading status
@@ -304,7 +371,7 @@ class UploadManager {
         setUploadStatus(entry.fileId, 'uploading')
       }
 
-      // Finalize the packer - this uploads all slabs to the network
+      // Finalize the packer - completes any partial slab upload and waits for all uploads
       const pinnedObjects = await packer.finalize({
         signal: batch.abortController.signal,
       })
@@ -343,24 +410,30 @@ class UploadManager {
     } finally {
       this.isProcessing = false
       this.uploadingBatch = null
-      // Check if a new batch was queued while we were processing.
-      // Its idle timer may have fired and been ignored, so flush it now.
-      this.flushPendingBatch()
+      // Process any files that were queued while we were finalizing
+      await this.processPendingFiles()
     }
   }
 
   /**
-   * Flush any pending batch that may have been queued during processing.
-   * This handles the case where files were added while a batch was uploading,
-   * and their idle timer fired but flush() was skipped due to isProcessing=true.
+   * Process any files that were queued while a batch was finalizing.
+   * This ensures uploads are serialized - only one packer uploads at a time.
    */
-  private flushPendingBatch(): void {
-    if (this.currentBatch && this.currentBatch.files.length > 0) {
-      logger.info(
-        'uploadManager',
-        `Found pending batch after processing, flushing`,
-      )
-      this.flush()
+  private async processPendingFiles(): Promise<void> {
+    if (this.pendingFiles.length === 0) {
+      return
+    }
+
+    const files = this.pendingFiles
+    this.pendingFiles = []
+
+    logger.info(
+      'uploadManager',
+      `Processing ${files.length} files queued during finalize`,
+    )
+
+    for (const entry of files) {
+      await this.processFile(entry)
     }
   }
 
@@ -398,6 +471,9 @@ class UploadManager {
         // Update metadata on the pinned object
         pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
 
+        // Pin the object to the indexer (this saves slabs + object metadata)
+        await this.sdk!.pinObject(pinnedObject)
+
         // Convert to local object and save
         const localObject = await pinnedObjectToLocalObject(
           entry.fileId,
@@ -432,6 +508,10 @@ class UploadManager {
       clearTimeout(this.idleTimer)
       this.idleTimer = null
     }
+    if (this.durationTimer) {
+      clearTimeout(this.durationTimer)
+      this.durationTimer = null
+    }
 
     // Cancel batch being packed
     if (this.currentBatch) {
@@ -457,6 +537,12 @@ class UploadManager {
       }
     }
 
+    // Clear pending files
+    for (const entry of this.pendingFiles) {
+      removeUpload(entry.fileId)
+    }
+    this.pendingFiles = []
+
     this.packer = null
     this.currentBatch = null
   }
@@ -479,10 +565,15 @@ class UploadManager {
       clearTimeout(this.idleTimer)
       this.idleTimer = null
     }
+    if (this.durationTimer) {
+      clearTimeout(this.durationTimer)
+      this.durationTimer = null
+    }
     this.packer = null
     this.currentBatch = null
     this.uploadingBatch = null
     this.isProcessing = false
+    this.pendingFiles = []
     this.sdk = null
     this.indexerURL = ''
   }

@@ -19,11 +19,14 @@ export const UPLOAD_DATA_SHARDS = 10
 export const UPLOAD_PARITY_SHARDS = 20
 // Sia protocol constant: sector size in bytes (4 MiB).
 export const SECTOR_SIZE = 4 * 1024 * 1024
-// Slab data capacity = SECTOR_SIZE × total shards.
-export const SLAB_SIZE =
-  SECTOR_SIZE * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS)
+// Slab data capacity = SECTOR_SIZE × data shards.
+export const SLAB_SIZE = SECTOR_SIZE * UPLOAD_DATA_SHARDS
 // Packer idle timeout - flush partial slab after this delay.
 export const PACKER_IDLE_TIMEOUT = secondsInMs(10)
+// Max batch duration before forcing flush (limits time data is unpinned).
+export const PACKER_MAX_BATCH_DURATION = secondsInMs(60)
+// Max slabs before forcing flush (limits unpinned data, ~400 MiB at 10 slabs).
+export const PACKER_MAX_SLABS = 10
 // Minimum slab fill percentage before allowing flush (0.0 - 1.0).
 // Prevents flushing when we could pack more efficiently.
 export const SLAB_FILL_THRESHOLD = 0.9

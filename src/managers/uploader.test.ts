@@ -1,15 +1,17 @@
 // Mock config MUST be at the very top before any imports
 // Constants must be inlined in jest.mock due to hoisting
-const MOCK_SLAB_SIZE = 4 * 1024 * 1024 * 30 // 120 MiB (SECTOR_SIZE * TOTAL_SHARDS)
+const MOCK_SLAB_SIZE = 4 * 1024 * 1024 * 10 // 40 MiB (SECTOR_SIZE * DATA_SHARDS)
 
 jest.mock('../config', () => ({
   __esModule: true,
   UPLOAD_MAX_INFLIGHT: 15,
   UPLOAD_DATA_SHARDS: 10,
-  UPLOAD_PARITY_SHARDS: 20,
+  UPLOAD_PARITY_SHARDS: 0,
   SECTOR_SIZE: 4 * 1024 * 1024,
-  SLAB_SIZE: 4 * 1024 * 1024 * 30, // 120 MiB
+  SLAB_SIZE: 4 * 1024 * 1024 * 10, // 40 MiB (SECTOR_SIZE * DATA_SHARDS)
   PACKER_IDLE_TIMEOUT: 5000,
+  PACKER_MAX_BATCH_DURATION: 60000, // 60 seconds
+  PACKER_MAX_SLABS: 10,
   SLAB_FILL_THRESHOLD: 0.9,
 }))
 
@@ -155,6 +157,7 @@ function createMockSdk(
 ): jest.Mocked<SdkInterface> {
   return {
     uploadPacked: jest.fn().mockResolvedValue(packer),
+    pinObject: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<SdkInterface>
 }
 
@@ -348,6 +351,59 @@ describe('UploadManager', () => {
       expect(upload2?.status).toBe('error')
     })
 
+    it('sets error when pinObject fails and does not save to local DB', async () => {
+      const entry = await createTestFile('pin-fail-file')
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
+      mockSdk.pinObject.mockRejectedValueOnce(new Error('Indexer unavailable'))
+
+      await manager.queueFiles([entry])
+      await manager.flush()
+
+      // File should have error status
+      const upload = getUploadState('pin-fail-file')
+      expect(upload).toBeDefined()
+      expect(upload?.status).toBe('error')
+      expect(upload?.error).toBe('Indexer unavailable')
+
+      // No local object should be created
+      const localObjects = await readLocalObjectsForFile('pin-fail-file')
+      expect(localObjects).toHaveLength(0)
+    })
+
+    it('only saves successfully pinned files when some pinObject calls fail', async () => {
+      const entry1 = await createTestFile('pin-success')
+      const entry2 = await createTestFile('pin-fail')
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      mockPacker.finalize.mockResolvedValueOnce([
+        mockPinnedObject,
+        mockPinnedObject,
+      ])
+      // First call succeeds, second fails
+      mockSdk.pinObject
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Pin failed'))
+
+      await manager.queueFiles([entry1, entry2])
+      await manager.flush()
+
+      // pin-success should be removed from uploads (completed successfully)
+      expect(getUploadState('pin-success')).toBeUndefined()
+
+      // pin-fail should have error status
+      const upload2 = getUploadState('pin-fail')
+      expect(upload2).toBeDefined()
+      expect(upload2?.status).toBe('error')
+      expect(upload2?.error).toBe('Pin failed')
+
+      // Only pin-success should have local object
+      const objects1 = await readLocalObjectsForFile('pin-success')
+      const objects2 = await readLocalObjectsForFile('pin-fail')
+      expect(objects1).toHaveLength(1)
+      expect(objects2).toHaveLength(0)
+    })
+
     it('creates new packer for files added after flush', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
@@ -388,7 +444,7 @@ describe('UploadManager', () => {
   })
 
   describe('threshold-based flush', () => {
-    // At 90% threshold with 120 MiB slab, threshold is 108 MiB
+    // At 90% threshold with 40 MiB slab, threshold is 36 MiB
 
     it('does NOT flush when below threshold', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
@@ -593,6 +649,136 @@ describe('UploadManager', () => {
       expect(objects2).toHaveLength(1)
       expect(objects1[0].fileId).toBe('batch-file-1')
       expect(objects2[0].fileId).toBe('batch-file-2')
+    })
+  })
+
+  describe('upload serialization', () => {
+    it('queues files added during finalize and processes them after', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Make finalize take some time
+      let resolveFinalize: () => void
+      mockPacker.finalize.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveFinalize = () => resolve([mockPinnedObject])
+          }),
+      )
+
+      await manager.queueFiles([createFileEntry('file1')])
+
+      // Start flush (will block on finalize)
+      const flushPromise = manager.flush()
+
+      // Queue more files while finalize is in progress
+      await manager.queueFiles([createFileEntry('file2')])
+
+      // Should not have created a second packer yet
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
+
+      // Complete the finalize
+      resolveFinalize!()
+      await flushPromise
+
+      // Now the pending file should be processed with a new packer
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
+      expect(mockPacker.add).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not create concurrent packers', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      let resolveFinalize: () => void
+      mockPacker.finalize.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveFinalize = () => resolve([mockPinnedObject])
+          }),
+      )
+
+      await manager.queueFiles([createFileEntry('file1')])
+      const flushPromise = manager.flush()
+
+      // Queue multiple files during finalize
+      await manager.queueFiles([createFileEntry('file2')])
+      await manager.queueFiles([createFileEntry('file3')])
+
+      // Still only one packer
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
+
+      resolveFinalize!()
+      await flushPromise
+
+      // After finalize, pending files processed with new packer
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
+      // file1 on first packer, file2 and file3 on second packer
+      expect(mockPacker.add).toHaveBeenCalledTimes(3)
+    })
+
+    it('cancels pending files when cancelBatch is called', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Make finalize hang so we can test cancellation mid-flight
+      mockPacker.finalize.mockImplementation(() => new Promise(() => {}))
+
+      await manager.queueFiles([createFileEntry('file1')])
+      manager.flush() // Don't await
+
+      // Queue file during finalize
+      await manager.queueFiles([createFileEntry('pending-file')])
+
+      // Cancel everything
+      manager.cancelBatch()
+
+      // Pending file should be removed from uploads
+      expect(getUploadState('pending-file')).toBeUndefined()
+    })
+  })
+
+  describe('batch limits', () => {
+    const MB = 1024 * 1024
+    // 40 MiB slab, 10 slabs max = 400 MiB absolute limit
+
+    it('max slabs limit triggers flush at 400MB', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Add files to fill exactly 10 slabs (400 MiB)
+      // Using 40 MiB files = exactly 1 slab each
+      for (let i = 0; i < 10; i++) {
+        const file = createFileEntry(`slab-file-${i}`, MOCK_SLAB_SIZE)
+        await manager.queueFiles([file])
+      }
+
+      // After 10 slabs (400 MiB), max slabs limit should trigger flush
+      expect(mockPacker.finalize).toHaveBeenCalled()
+    })
+
+    it('duration timer triggers flush after 60 seconds', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Add data under max slabs limit
+      for (let i = 0; i < 5; i++) {
+        const file = createFileEntry(`duration-file-${i}`, MOCK_SLAB_SIZE)
+        await manager.queueFiles([file])
+      }
+
+      expect(mockPacker.finalize).not.toHaveBeenCalled()
+
+      // Duration timer (60 seconds) fires - forces flush
+      jest.advanceTimersByTime(60000 + 100)
+      expect(mockPacker.finalize).toHaveBeenCalled()
+    })
+
+    it('many small photos hit max slabs limit before 400MB', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // 2MB photos: 20 per slab, 200 photos = 10 slabs = 400 MiB
+      for (let i = 0; i < 200; i++) {
+        const file = createFileEntry(`photo-${i}`, 2 * MB)
+        await manager.queueFiles([file])
+      }
+
+      expect(mockPacker.finalize).toHaveBeenCalled()
     })
   })
 })
