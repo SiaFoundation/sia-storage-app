@@ -23,6 +23,25 @@ export const useDownloadsStore = create<DownloadsStore>(() => ({
 
 const { getState, setState } = useDownloadsStore
 
+const pendingDownloadProgress = new Map<string, number>()
+let downloadRafScheduled = false
+
+function flushDownloadProgress() {
+  if (pendingDownloadProgress.size === 0) return
+  setState((state) => {
+    const downloads = { ...state.downloads }
+    for (const [id, progress] of pendingDownloadProgress) {
+      const prev = downloads[id]
+      if (prev) {
+        downloads[id] = { ...prev, progress }
+      }
+    }
+    pendingDownloadProgress.clear()
+    downloadRafScheduled = false
+    return { downloads }
+  })
+}
+
 function registerDownload(id: string): AbortController {
   const controller = new AbortController()
   setState((state) => {
@@ -122,18 +141,11 @@ export async function runDownloadWithSlot<T>(params: {
 }
 
 export function updateDownloadProgress(id: string, progress: number) {
-  setState((state) => {
-    const prev = state.downloads[id]
-    if (!prev) return state
-    const next: DownloadState = {
-      id,
-      controller: prev.controller,
-      status: prev.status,
-      progress,
-      error: prev.error,
-    }
-    return { downloads: { ...state.downloads, [id]: next } }
-  })
+  pendingDownloadProgress.set(id, progress)
+  if (!downloadRafScheduled) {
+    downloadRafScheduled = true
+    requestAnimationFrame(flushDownloadProgress)
+  }
 }
 
 export const [getDownloadState, useDownloadState] = createGetterAndSelector(
