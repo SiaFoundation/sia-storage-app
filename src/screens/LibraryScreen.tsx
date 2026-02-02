@@ -63,28 +63,30 @@ export function LibraryScreen({ route, navigation }: Props) {
   const isSelectionMode = useIsSelectionMode()
   const selectedFileIds = useSelectedFileIds()
 
+  // Ref to track selection mode for stable callbacks
+  const isSelectionModeRef = useRef(isSelectionMode)
+  useEffect(() => {
+    isSelectionModeRef.current = isSelectionMode
+  }, [isSelectionMode])
+
   // Handle item press - opens carousel or toggles selection
-  const handlePressItem = useCallback(
-    (file: FileRecord) => {
-      if (isSelectionMode) {
-        toggleFileSelection(file.id)
-      } else {
-        setSelectedFile(file)
-      }
-    },
-    [isSelectionMode],
-  )
+  // Using ref for isSelectionMode to keep callback reference stable
+  const handlePressItem = useCallback((file: FileRecord) => {
+    if (isSelectionModeRef.current) {
+      toggleFileSelection(file.id)
+    } else {
+      setSelectedFile(file)
+    }
+  }, [])
 
   // Handle long press - enters selection mode with file selected
-  const handleLongPressItem = useCallback(
-    (file: FileRecord) => {
-      if (!isSelectionMode) {
-        enterSelectionMode()
-      }
-      selectFile(file.id)
-    },
-    [isSelectionMode],
-  )
+  // Using ref for isSelectionMode to keep callback reference stable
+  const handleLongPressItem = useCallback((file: FileRecord) => {
+    if (!isSelectionModeRef.current) {
+      enterSelectionMode()
+    }
+    selectFile(file.id)
+  }, [])
 
   // Handle opening the action sheet from carousel
   const handleShowCarouselActions = useCallback(() => {
@@ -206,15 +208,11 @@ export function LibraryScreen({ route, navigation }: Props) {
             <FileGallery
               onPressItem={handlePressItem}
               onLongPressItem={handleLongPressItem}
-              isSelectionMode={isSelectionMode}
-              selectedFileIds={selectedFileIds}
             />
           ) : (
             <FileList
               onPressItem={handlePressItem}
               onLongPressItem={handleLongPressItem}
-              isSelectionMode={isSelectionMode}
-              selectedFileIds={selectedFileIds}
             />
           )
         ) : (

@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { ActivityIndicator, FlatList, Platform, StyleSheet } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import type { FileRecord } from '../stores/files'
@@ -8,16 +9,12 @@ type Props = {
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
   numColumns?: number
-  isSelectionMode?: boolean
-  selectedFileIds?: Set<string>
 }
 
 export function FileGallery({
   onPressItem,
   onLongPressItem,
   numColumns = 3,
-  isSelectionMode = false,
-  selectedFileIds,
 }: Props) {
   const { data: files, size, setSize, isValidating, hasMore } = useFileList()
   const { isLoadingMore, handleEndReached } = useFlatListControls({
@@ -27,6 +24,19 @@ export function FileGallery({
     isValidating,
     hasMore,
   })
+
+  const renderItem = useCallback(
+    ({ item }: { item: FileRecord }) => {
+      return (
+        <FileGalleryItem
+          file={item}
+          onPressItem={onPressItem}
+          onLongPressItem={onLongPressItem}
+        />
+      )
+    },
+    [onPressItem, onLongPressItem],
+  )
 
   return (
     <FlatList
@@ -39,15 +49,7 @@ export function FileGallery({
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={styles.galleryContent}
-      renderItem={({ item }) => (
-        <FileGalleryItem
-          file={item}
-          onPressItem={onPressItem}
-          onLongPressItem={onLongPressItem}
-          isSelectionMode={isSelectionMode}
-          isSelected={selectedFileIds?.has(item.id) ?? false}
-        />
-      )}
+      renderItem={renderItem}
       onEndReachedThreshold={0.95}
       onEndReached={handleEndReached}
       initialNumToRender={36}
