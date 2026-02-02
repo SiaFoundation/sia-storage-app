@@ -4,9 +4,10 @@
  * Smart Development Build Runner
  *
  * Usage:
- *   bun scripts/dev.ts ios          # Build & run on iOS Simulator
- *   bun scripts/dev.ts ios:device   # Build & run on real iOS device
- *   bun scripts/dev.ts android      # Build & run on Android emulator/device
+ *   bun scripts/dev.ts ios:simulator    # Build & run on iOS Simulator
+ *   bun scripts/dev.ts ios:device       # Build & run on real iOS device
+ *   bun scripts/dev.ts android:emulator # Build & run on Android emulator
+ *   bun scripts/dev.ts android:device   # Build & run on real Android device
  *
  * Flags:
  *   --rebuild    Full clean build (delete platform dir, prebuild, build)
@@ -14,13 +15,13 @@
  *
  * How caching works:
  *   - Computes hash from package.json, bun.lock, app.config.js, eas.json, plugins/*.js
- *   - Each target (ios, ios:device, android) has isolated cache in .build-cache/
+ *   - Each target has isolated cache in .build-cache/
  *   - Skips rebuild if hash matches and artifacts exist
  *
  * Cache locations:
- *   .build-cache/ios-sim/       - iOS Simulator builds
- *   .build-cache/ios-device/    - iOS device builds
- *   .build-cache/android/       - Android builds
+ *   .build-cache/ios-sim/    - iOS Simulator builds
+ *   .build-cache/ios-device/ - iOS device builds
+ *   .build-cache/android/    - Android builds (shared by emulator and device)
  */
 
 import { rmSync } from 'node:fs'
@@ -45,6 +46,8 @@ import {
   launchAndroidApp,
   launchIosApp,
   listDevices,
+  selectAndroidDevice,
+  selectAndroidEmulator,
   selectDevice,
 } from './lib/devices'
 import { waitForDeviceUnlock } from './lib/ui'
@@ -58,20 +61,24 @@ const noRun = args.includes('--no-run')
 // Map CLI arg to build target
 function getTarget(): BuildTarget {
   switch (targetArg) {
-    case 'ios':
+    case 'ios:simulator':
     case 'ios:sim':
       return 'ios-sim'
     case 'ios:device':
       return 'ios-device'
-    case 'android':
+    case 'android:emulator':
+    case 'android:emu':
       return 'android'
+    case 'android:device':
+      return 'android' // Same build as emulator, just different device selection
     default:
       console.error('Usage: bun scripts/dev.ts <target> [flags]')
       console.error('')
       console.error('Targets:')
-      console.error('  ios          Build & run on iOS Simulator')
-      console.error('  ios:device   Build & run on real iOS device')
-      console.error('  android      Build & run on Android emulator/device')
+      console.error('  ios:simulator    Build & run on iOS Simulator')
+      console.error('  ios:device       Build & run on real iOS device')
+      console.error('  android:emulator Build & run on Android emulator')
+      console.error('  android:device   Build & run on real Android device')
       console.error('')
       console.error('Flags:')
       console.error(
@@ -84,7 +91,7 @@ function getTarget(): BuildTarget {
 
 const target = getTarget()
 const platform = target.includes('ios') ? 'ios' : 'android'
-const isDevice = target === 'ios-device'
+const isDevice = target === 'ios-device' || targetArg === 'android:device'
 const paths = getTargetPaths(target)
 
 // Print header
@@ -108,9 +115,9 @@ if (forceRebuild) {
   console.log('')
 }
 
-// For device builds, check for connected device first
+// For iOS device builds, check for connected device first (before building)
 let selectedDevice: Device | null = null
-if (isDevice) {
+if (target === 'ios-device') {
   console.log('📱 Checking for iOS device...')
   selectedDevice = await selectDevice('ios', 'device')
 
@@ -263,9 +270,15 @@ async function runIosSimulator(): Promise<void> {
 
 // === Run Android App ===
 async function runAndroid(): Promise<void> {
-  console.log('🤖 Running on Android...')
+  if (isDevice) {
+    await runAndroidDevice()
+  } else {
+    await runAndroidEmulator()
+  }
+}
 
-  // Find APK
+// Find Android APK
+async function findAndroidApk(): Promise<string> {
   const apkDir = join(PROJECT_ROOT, 'android/app/build/outputs/apk/debug')
   const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`
     .quiet()
@@ -280,48 +293,11 @@ async function runAndroid(): Promise<void> {
     console.error('   Could not find APK')
     process.exit(1)
   }
+  return apkPath
+}
 
-  // Check for connected device/emulator
-  const devices = await listDevices('android')
-  let device = devices.find((d) => d.state === 'available')
-
-  if (!device) {
-    console.log('   No device connected. Starting emulator...')
-    const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
-    const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
-    if (avds.length === 0) {
-      console.error(
-        '   No Android emulator found. Create one in Android Studio.',
-      )
-      process.exit(1)
-    }
-    Bun.spawn(['sh', '-c', `emulator -avd ${avds[0]} &`], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-    })
-    console.log('   Waiting for emulator...')
-    await $`adb wait-for-device`
-    // Wait for boot
-    for (let i = 0; i < 60; i++) {
-      const bootResult =
-        await $`adb shell getprop sys.boot_completed 2>/dev/null`
-          .quiet()
-          .nothrow()
-      if (bootResult.stdout.toString().trim() === '1') break
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-
-    // Get the device again
-    const updatedDevices = await listDevices('android')
-    device = updatedDevices.find((d) => d.state === 'available')
-  }
-
-  if (!device) {
-    console.error('   Could not connect to Android device')
-    process.exit(1)
-  }
-
-  // Install and launch
+// Install and launch Android app (used by emulator path)
+async function installAndLaunchAndroid(device: Device, apkPath: string) {
   console.log('   Installing APK...')
   const installResult = await installAndroidApp(device, apkPath)
   if (!installResult.success) {
@@ -336,7 +312,131 @@ async function runAndroid(): Promise<void> {
     process.exit(1)
   }
 
-  console.log('✅ App launched')
+  console.log('✅ App launched on emulator')
+}
+
+// === Run Android on Physical Device ===
+async function runAndroidDevice(): Promise<void> {
+  console.log('🤖 Running on Android device...')
+
+  const apkPath = await findAndroidApk()
+
+  // Look only for physical devices (not emulators)
+  console.log('   Looking for connected device...')
+  let devices = await listDevices('android')
+  let device = selectAndroidDevice(devices)
+
+  // If no device found, restart adb and try again (helps with flaky USB connections)
+  if (!device) {
+    console.log('   No device detected, restarting adb server...')
+    await $`adb kill-server`.quiet().nothrow()
+    await $`adb start-server`.quiet().nothrow()
+    await new Promise((r) => setTimeout(r, 2000))
+    devices = await listDevices('android')
+    device = selectAndroidDevice(devices)
+  }
+
+  if (!device) {
+    console.error('')
+    console.error('   No Android device connected.')
+    console.error('')
+    console.error('   Connect a device via USB and enable USB debugging.')
+    console.error('   Run `adb devices` to verify.')
+    process.exit(1)
+  }
+
+  console.log(`   Found: ${device.name} (${device.id})`)
+
+  // Install with retry for flaky USB connections
+  console.log('   Installing APK... (keep device connected)')
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const installResult = await installAndroidApp(device, apkPath)
+
+    if (installResult.success) {
+      break
+    }
+
+    if (installResult.error === 'not_found' && attempt < 3) {
+      console.log(
+        `   Device disconnected, reconnecting... (attempt ${attempt + 1}/3)`,
+      )
+      await $`adb kill-server`.quiet().nothrow()
+      await $`adb start-server`.quiet().nothrow()
+      await new Promise((r) => setTimeout(r, 2000))
+
+      // Refresh device (only physical devices)
+      const refreshedDevices = await listDevices('android')
+      const refreshedDevice = selectAndroidDevice(refreshedDevices)
+      if (refreshedDevice) {
+        device = refreshedDevice
+        console.log(`   Reconnected: ${device.name} (${device.id})`)
+        console.log('   Retrying install...')
+        continue
+      }
+    }
+
+    console.error('')
+    console.error(`   Install failed: ${installResult.message}`)
+    process.exit(1)
+  }
+
+  console.log('   Launching app...')
+  const launchResult = await launchAndroidApp(device, 'sia.storage.dev')
+  if (!launchResult.success) {
+    console.error(`   Launch failed: ${launchResult.message}`)
+    process.exit(1)
+  }
+
+  console.log('✅ App launched on device')
+}
+
+// === Run Android on Emulator ===
+async function runAndroidEmulator(): Promise<void> {
+  console.log('🤖 Running on Android Emulator...')
+
+  const apkPath = await findAndroidApk()
+
+  // Look only for emulators (not physical devices)
+  console.log('   Looking for running emulator...')
+  const devices = await listDevices('android')
+  let device = selectAndroidEmulator(devices)
+
+  if (!device) {
+    console.log('   No emulator running, starting one...')
+    const avdsResult = await $`emulator -list-avds`.quiet().nothrow()
+    const avds = avdsResult.stdout.toString().trim().split('\n').filter(Boolean)
+    if (avds.length === 0) {
+      console.error('')
+      console.error('   No Android emulator found.')
+      console.error('   Create one in Android Studio > Device Manager.')
+      process.exit(1)
+    }
+    console.log(`   Starting: ${avds[0]}`)
+    Bun.spawn(['sh', '-c', `emulator -avd ${avds[0]} &`], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
+    console.log('   Waiting for emulator to boot...')
+    for (let i = 0; i < 60; i++) {
+      const updatedDevices = await listDevices('android')
+      const emulator = selectAndroidEmulator(updatedDevices)
+      if (emulator) {
+        device = emulator
+        break
+      }
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+  }
+
+  if (!device) {
+    console.error('')
+    console.error('   Emulator failed to start within 2 minutes.')
+    console.error('   Try starting it manually from Android Studio.')
+    process.exit(1)
+  }
+
+  console.log(`   Found: ${device.name} (${device.id})`)
+  await installAndLaunchAndroid(device, apkPath)
 }
 
 // Find iOS Simulator app in DerivedData

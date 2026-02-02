@@ -27,10 +27,11 @@ export const BUILD_CACHE_DIR = join(PROJECT_ROOT, '.build-cache')
 
 // Build targets - each has isolated cache
 // Note: E2E uses the same targets as dev since builds are identical
+// Note: Android emulator and device share the same build (same APK works for both)
 export type BuildTarget =
   | 'ios-sim' // iOS Simulator builds (dev and e2e)
   | 'ios-device' // iOS real device builds
-  | 'android' // Android builds (dev and e2e)
+  | 'android' // Android builds (emulator and device share same APK)
 
 // Get paths for a specific build target
 export function getTargetPaths(target: BuildTarget) {

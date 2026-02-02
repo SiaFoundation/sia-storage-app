@@ -282,6 +282,22 @@ export async function selectDevice(
   return available || devices[0]
 }
 
+/**
+ * Select an Android emulator from a list of devices.
+ * Only considers devices with type 'simulator', ignores physical devices.
+ */
+export function selectAndroidEmulator(devices: Device[]): Device | undefined {
+  return devices.find((d) => d.state === 'available' && d.type === 'simulator')
+}
+
+/**
+ * Select an Android physical device from a list of devices.
+ * Only considers devices with type 'device', ignores emulators.
+ */
+export function selectAndroidDevice(devices: Device[]): Device | undefined {
+  return devices.find((d) => d.state === 'available' && d.type === 'device')
+}
+
 export interface InstallResult {
   success: boolean
   error?: 'locked' | 'not_found' | 'unknown'
@@ -378,10 +394,32 @@ export async function installAndroidApp(
     return { success: true }
   }
 
+  const output = result.stdout.toString() + result.stderr.toString()
+  return parseAdbInstallError(output)
+}
+
+/**
+ * Parse adb install error output to determine the error type.
+ * Exported for testing.
+ */
+export function parseAdbInstallError(output: string): InstallResult {
+  // Device disconnected during install
+  if (
+    output.includes('device offline') ||
+    output.includes('no devices') ||
+    output.includes('not found')
+  ) {
+    return {
+      success: false,
+      error: 'not_found',
+      message: 'Device disconnected',
+    }
+  }
+
   return {
     success: false,
     error: 'unknown',
-    message: result.stderr.toString(),
+    message: output || 'Install failed',
   }
 }
 
