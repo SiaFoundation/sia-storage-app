@@ -31,6 +31,7 @@ import type { LocalObject } from '../encoding/localObject'
 import { createFileRecord, readFileRecord } from '../stores/files'
 import { readLocalObjectsForFile } from '../stores/localObjects'
 import {
+  flushPendingUploadProgress,
   getActiveUploads,
   getUploadState,
   useUploadsStore,
@@ -561,6 +562,9 @@ describe('UploadManager', () => {
 
       // Simulate progress update (50%)
       progressCallback!(BigInt(50), BigInt(100))
+
+      // Flush the RAF-batched progress update
+      flushPendingUploadProgress()
 
       // Progress should be updated in store
       const uploadAfter = getUploadState('file1')

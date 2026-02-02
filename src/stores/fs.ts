@@ -50,15 +50,18 @@ function getFsFileForId(file: FsFileInfo): File {
   return new File(fsStorageDirectory, `${file.id}${extFromMime(file.type)}`)
 }
 
+// Throttle usedAt updates to reduce DB writes during browsing.
+const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+
 export async function getFsFileUri(file: FsFileInfo): Promise<string | null> {
   const existingMeta = await readFsFileMetadata(file.id)
   const fsFile = getFsFileForId(file)
   const info = fsFile.info()
+
   if (!info.exists) {
     // If the file no longer exists, remove the metadata.
     if (existingMeta) {
       await deleteFsFileMetadata(file.id)
-      await fsTriggerRefresh(file.id)
     }
     return null
   }
@@ -74,10 +77,12 @@ export async function getFsFileUri(file: FsFileInfo): Promise<string | null> {
       addedAt: now,
       usedAt: now,
     })
-    await fsTriggerRefresh(file.id)
   } else {
-    // If the file exists, update the last used timestamp.
-    await updateFsFileMetadataUsedAt(file.id, now)
+    // File exists and is tracked - only update usedAt if it's stale
+    const timeSinceLastUse = now - existingMeta.usedAt
+    if (timeSinceLastUse > USED_AT_UPDATE_INTERVAL_MS) {
+      await updateFsFileMetadataUsedAt(file.id, now)
+    }
   }
 
   return fsFile.uri

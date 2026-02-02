@@ -1,7 +1,9 @@
+import { useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { create } from 'zustand'
 import { db } from '../db'
+import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import { librarySwr } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
@@ -101,10 +103,20 @@ export function useFileList() {
     { revalidateOnFocus: false, revalidateAll: true },
   )
 
-  librarySwr.addChangeCallback('infiniteList', swr.mutate)
+  const debouncedMutate = useDebouncedCallback(() => swr.mutate(), 100)
+
+  useEffect(() => {
+    librarySwr.addChangeCallback('infiniteList', debouncedMutate)
+    return () => {
+      librarySwr.removeChangeCallback('infiniteList')
+    }
+  }, [debouncedMutate])
 
   const pages = swr.data
-  const flat = pages ? pages.flat() : undefined
+
+  const flat = useMemo(() => {
+    return pages ? pages.flat() : undefined
+  }, [pages])
 
   const lastPage = pages?.[pages.length - 1]
   const hasMore = !!lastPage && lastPage.length === PAGE_SIZE

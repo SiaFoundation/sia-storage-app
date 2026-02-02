@@ -27,6 +27,33 @@ export const useUploadsStore = create<UploadsStore>(() => ({ uploads: {} }))
 
 const { setState } = useUploadsStore
 
+const pendingUploadProgress = new Map<string, number>()
+let uploadRafScheduled = false
+
+function flushUploadProgress() {
+  if (pendingUploadProgress.size === 0) return
+  setState((state) => {
+    const uploads = { ...state.uploads }
+    for (const [id, progress] of pendingUploadProgress) {
+      const prev = uploads[id]
+      if (prev) {
+        uploads[id] = { ...prev, progress }
+      }
+    }
+    pendingUploadProgress.clear()
+    uploadRafScheduled = false
+    return { uploads }
+  })
+}
+
+/**
+ * Immediately flush any pending progress updates.
+ * Primarily used for testing where RAF may not work correctly.
+ */
+export function flushPendingUploadProgress(): void {
+  flushUploadProgress()
+}
+
 export function registerUpload(id: string): void {
   setState((state) => {
     const next: UploadState = {
@@ -136,15 +163,11 @@ export const [getUploadCounts, useUploadCounts] = createGetterAndSelector(
 )
 
 export function updateUploadProgress(id: string, progress: number) {
-  setState((state) => {
-    const prev = state.uploads[id]
-    if (!prev) return state
-    const next: UploadState = {
-      ...prev,
-      progress,
-    }
-    return { uploads: { ...state.uploads, [id]: next } }
-  })
+  pendingUploadProgress.set(id, progress)
+  if (!uploadRafScheduled) {
+    uploadRafScheduled = true
+    requestAnimationFrame(flushUploadProgress)
+  }
 }
 
 export const [getUploadState, useUploadState] = createGetterAndSelector(
