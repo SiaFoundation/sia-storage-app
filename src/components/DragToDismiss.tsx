@@ -1,6 +1,10 @@
-import type { ReactNode } from 'react'
-import { StyleSheet, useWindowDimensions, View } from 'react-native'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { createContext, type ReactNode, useContext } from 'react'
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import {
+  Gesture,
+  GestureDetector,
+  type GestureType,
+} from 'react-native-gesture-handler'
 import Animated, {
   interpolate,
   runOnJS,
@@ -17,6 +21,12 @@ type Props = {
   dismissThreshold?: number
 }
 
+const DragToDismissGestureContext = createContext<GestureType | null>(null)
+
+export function useDragToDismissGesture() {
+  return useContext(DragToDismissGestureContext)
+}
+
 export function DragToDismiss({
   children,
   onDismiss,
@@ -27,11 +37,45 @@ export function DragToDismiss({
   const { height: screenHeight } = useWindowDimensions()
   const translateY = useSharedValue(0)
   const hasFiredDragStart = useSharedValue(false)
+  const startX = useSharedValue(0)
+  const startY = useSharedValue(0)
+  const isActivated = useSharedValue(false)
 
   const panGesture = Gesture.Pan()
     .enabled(enabled)
-    .activeOffsetY([10, 10])
-    .failOffsetX([-10, 10])
+    .manualActivation(true)
+    .onTouchesDown((event) => {
+      const touch = event.allTouches[0]
+      if (touch) {
+        startX.value = touch.absoluteX
+        startY.value = touch.absoluteY
+        isActivated.value = false
+      }
+    })
+    .onTouchesMove((event, stateManager) => {
+      if (isActivated.value) return
+
+      const touch = event.allTouches[0]
+      if (!touch) return
+
+      const dx = touch.absoluteX - startX.value
+      const dy = touch.absoluteY - startY.value
+      const absX = Math.abs(dx)
+      const absY = Math.abs(dy)
+
+      const threshold = 10
+
+      if (absX > threshold || absY > threshold) {
+        if (absY > absX && dy > 0) {
+          // Vertical downward movement - activate for dismiss
+          isActivated.value = true
+          stateManager.activate()
+        } else {
+          // Horizontal or upward movement - fail to allow carousel/children
+          stateManager.fail()
+        }
+      }
+    })
     .onStart(() => {
       hasFiredDragStart.value = false
     })
@@ -77,15 +121,24 @@ export function DragToDismiss({
     }
   })
 
+  // On Android, wrap content with a native gesture to allow children to receive touches
+  const nativeGesture = Gesture.Native()
+  const composedGesture =
+    Platform.OS === 'android'
+      ? Gesture.Simultaneous(panGesture, nativeGesture)
+      : panGesture
+
   return (
-    <View style={styles.container}>
-      <Animated.View style={[styles.backdrop, backdropStyle]} />
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.content, contentStyle]}>
-          {children}
-        </Animated.View>
-      </GestureDetector>
-    </View>
+    <DragToDismissGestureContext.Provider value={panGesture}>
+      <View style={styles.container}>
+        <Animated.View style={[styles.backdrop, backdropStyle]} />
+        <GestureDetector gesture={composedGesture}>
+          <Animated.View style={[styles.content, contentStyle]}>
+            {children}
+          </Animated.View>
+        </GestureDetector>
+      </View>
+    </DragToDismissGestureContext.Provider>
   )
 }
 
