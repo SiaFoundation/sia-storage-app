@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
+import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
 import type { FileRecord } from '../stores/files'
 import { palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
@@ -12,17 +13,11 @@ type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
-  isSelectionMode?: boolean
-  isSelected?: boolean
 }
 
-function FileListItemComponent({
-  file,
-  onPressItem,
-  onLongPressItem,
-  isSelectionMode = false,
-  isSelected = false,
-}: Props) {
+function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
+  const isSelectionMode = useIsSelectionMode()
+  const isSelected = useIsFileSelected(file.id)
   const status = useFileStatus(file)
   return (
     <Pressable
@@ -84,9 +79,7 @@ export const FileListItem = memo(FileListItemComponent, (prev, next) => {
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
     prev.onPressItem === next.onPressItem &&
-    prev.onLongPressItem === next.onLongPressItem &&
-    prev.isSelectionMode === next.isSelectionMode &&
-    prev.isSelected === next.isSelected
+    prev.onLongPressItem === next.onLongPressItem
   )
 })
 

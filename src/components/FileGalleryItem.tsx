@@ -2,6 +2,7 @@ import { CircleCheckIcon, CircleIcon } from 'lucide-react-native'
 import { memo } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import { useFileStatus } from '../lib/file'
+import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
 import type { FileRecord } from '../stores/files'
 import { colors, palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
@@ -11,17 +12,16 @@ type Props = {
   file: FileRecord
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
-  isSelectionMode?: boolean
-  isSelected?: boolean
 }
 
 function FileGalleryItemComponent({
   file,
   onPressItem,
   onLongPressItem,
-  isSelectionMode = false,
-  isSelected = false,
 }: Props) {
+  const isSelectionMode = useIsSelectionMode()
+  const isSelected = useIsFileSelected(file.id)
+
   const status = useFileStatus(file)
   return (
     <View collapsable={false} style={styles.thumbCell}>
@@ -67,9 +67,7 @@ export const FileGalleryItem = memo(FileGalleryItemComponent, (prev, next) => {
     prev.file.updatedAt === next.file.updatedAt &&
     prev.file.objects === next.file.objects &&
     prev.onPressItem === next.onPressItem &&
-    prev.onLongPressItem === next.onLongPressItem &&
-    prev.isSelectionMode === next.isSelectionMode &&
-    prev.isSelected === next.isSelected
+    prev.onLongPressItem === next.onLongPressItem
   )
 })
 
