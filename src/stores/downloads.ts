@@ -127,7 +127,10 @@ export async function runDownloadWithSlot<T>(params: {
     setDownloadState(id, 'running', 0)
     const result = await task(controller.signal)
     logger.debug('downloads', 'download success', id)
-    removeDownload(id)
+    // Set 'done' status and delay removal to prevent re-triggering downloads
+    // while components may not have fetched the new file uri yet.
+    setDownloadState(id, 'done', 1)
+    setTimeout(() => removeDownload(id), 5000)
     return result
   } catch (e) {
     logger.error('downloads', 'download error', id, e)
@@ -136,7 +139,6 @@ export async function runDownloadWithSlot<T>(params: {
     throw e
   } finally {
     release()
-    removeDownload(id)
   }
 }
 

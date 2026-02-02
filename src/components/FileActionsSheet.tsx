@@ -297,17 +297,13 @@ function BulkFileActionsSheet({
   const handleDownloadToDevice = useCallback(async () => {
     if (!counts) return
     try {
-      let queued = 0
       for (const file of counts.files) {
         const hasSealed = fileHasASealedObject(file)
         const uri = await getFsFileUri(file)
         if (hasSealed && !uri) {
-          // Fire and forget - don't await, just queue the download
           void downloadFile(file)
-          queued++
         }
       }
-      toast.show(`Queued ${queued} downloads`)
       onComplete?.()
     } catch (e) {
       logger.error('FileActionsSheet', 'failed to queue downloads', e)
