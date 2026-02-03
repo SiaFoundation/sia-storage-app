@@ -15,14 +15,6 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
-### ios dev_device
-
-```sh
-[bundle exec] fastlane ios dev_device
-```
-
-Build and install dev build on connected iOS device
-
 ### ios build_ipa
 
 ```sh
