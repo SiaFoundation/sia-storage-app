@@ -1,12 +1,14 @@
+import Clipboard from '@react-native-clipboard/clipboard'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   ChevronDownIcon,
+  CopyIcon,
   DownloadIcon,
   FilterIcon,
   RefreshCwIcon,
   Trash2Icon,
 } from 'lucide-react-native'
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { logsSwr } from '../hooks/useLogs'
 import { exportLogs } from '../lib/exportLogs'
@@ -15,18 +17,20 @@ import { useToast } from '../lib/toastContext'
 import type { MenuStackParamList } from '../stacks/types'
 import {
   clearLogs,
+  readLogs,
   setLogLevel,
   setLogScopes,
   toggleLogScope,
   useAvailableScopes,
   useLogLevel,
   useLogScopes,
+  useLogsStore,
 } from '../stores/logs'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { palette } from '../styles/colors'
 import { ActionSheet } from './ActionSheet'
 import { BottomControlBar, iconColors } from './BottomControlBar'
-import { IconButton } from './IconButton'
+import { type OverflowAction, OverflowActions } from './OverflowActions'
 import { SpinnerIcon } from './SpinnerIcon'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'> & {
@@ -44,7 +48,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
   const toast = useToast()
   const [isExporting, setIsExporting] = useState(false)
 
-  const handleExportLogs = async () => {
+  const handleExportLogs = useCallback(async () => {
     if (isExporting) {
       return
     }
@@ -70,7 +74,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
     } finally {
       setIsExporting(false)
     }
-  }
+  }, [isExporting, navigation, toast])
 
   const handleLevelSelect = async (level: LogLevel) => {
     await setLogLevel(level)
@@ -96,7 +100,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
     toast.show('Showing all scopes')
   }
 
-  const handleClearLogs = () => {
+  const handleClearLogs = useCallback(() => {
     Alert.alert(
       'Clear All Logs',
       'This will permanently delete all log entries. This cannot be undone.',
@@ -118,7 +122,69 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
         },
       ],
     )
-  }
+  }, [toast])
+
+  const handleCopyLogs = useCallback(async () => {
+    try {
+      const state = useLogsStore.getState()
+      const logs = await readLogs(state.logLevel, state.logScopes)
+      if (logs.length === 0) {
+        toast.show('No logs to copy')
+        return
+      }
+      const content = logs
+        .map(
+          (entry) =>
+            `${entry.timestamp} ${entry.level.toUpperCase()} [${entry.scope}] ${entry.message}`,
+        )
+        .join('\n')
+      Clipboard.setString(content)
+      toast.show('Logs copied')
+    } catch (error) {
+      logger.error('logs', 'Failed to copy logs', error)
+      toast.show('Failed to copy logs')
+    }
+  }, [toast])
+
+  const actions: OverflowAction[] = useMemo(
+    () => [
+      {
+        key: 'copy',
+        icon: <CopyIcon color={iconColors.white} />,
+        label: 'Copy to Clipboard',
+        onPress: handleCopyLogs,
+      },
+      ...(onRefresh
+        ? [
+            {
+              key: 'refresh',
+              icon: <RefreshCwIcon color={iconColors.white} />,
+              label: 'Refresh',
+              onPress: onRefresh,
+            },
+          ]
+        : []),
+      {
+        key: 'export',
+        icon: isExporting ? (
+          <SpinnerIcon size={20} color={iconColors.white} />
+        ) : (
+          <DownloadIcon color={iconColors.white} />
+        ),
+        label: 'Save to Library',
+        onPress: handleExportLogs,
+        disabled: isExporting,
+      },
+      {
+        key: 'clear',
+        icon: <Trash2Icon color={iconColors.white} />,
+        label: 'Clear Logs',
+        onPress: handleClearLogs,
+        variant: 'danger' as const,
+      },
+    ],
+    [handleClearLogs, handleCopyLogs, handleExportLogs, isExporting, onRefresh],
+  )
 
   return (
     <>
@@ -151,21 +217,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
             </Text>
             <ChevronDownIcon size={16} color={iconColors.white} />
           </Pressable>
-          {onRefresh && (
-            <IconButton onPress={onRefresh}>
-              <RefreshCwIcon color={iconColors.white} />
-            </IconButton>
-          )}
-          <IconButton onPress={handleExportLogs} disabled={isExporting}>
-            {isExporting ? (
-              <SpinnerIcon size={20} color={iconColors.white} />
-            ) : (
-              <DownloadIcon color={iconColors.white} />
-            )}
-          </IconButton>
-          <IconButton onPress={handleClearLogs}>
-            <Trash2Icon color={iconColors.white} />
-          </IconButton>
+          <OverflowActions actions={actions} sheetName="logActions" />
         </View>
       </BottomControlBar>
 
