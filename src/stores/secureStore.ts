@@ -1,6 +1,5 @@
 import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
-import { retry } from '../lib/retry'
 
 // Use AFTER_FIRST_UNLOCK on iOS to allow keychain access in background mode
 // when the device is locked (after it has been unlocked once since boot).
@@ -33,18 +32,15 @@ export async function setSecureStoreBoolean(key: string, value: boolean) {
 }
 
 export async function getSecureStoreBoolean(key: string, initialValue = false) {
-  return retry('getSecureStoreBoolean', async () => {
-    const found = await getItem(key)
-    if (typeof found === 'string') {
-      if (found === 'true') {
-        return true
-      } else {
-        return false
-      }
+  const found = await getItem(key)
+  if (typeof found === 'string') {
+    if (found === 'true') {
+      return true
     }
-    await setSecureStoreBoolean(key, initialValue)
-    return initialValue
-  })
+    return false
+  }
+  await setSecureStoreBoolean(key, initialValue)
+  return initialValue
 }
 
 export async function setSecureStoreNumber(key: string, value: number) {
@@ -54,17 +50,15 @@ export async function setSecureStoreNumber(key: string, value: number) {
 }
 
 export async function getSecureStoreNumber(key: string, initialValue = 0) {
-  return retry('getSecureStoreNumber', async () => {
-    const found = await getItem(key)
-    if (typeof found === 'string' && found.trim().length > 0) {
-      const n = Number(found)
-      if (Number.isFinite(n)) {
-        return n
-      }
-      await setSecureStoreNumber(key, initialValue)
+  const found = await getItem(key)
+  if (typeof found === 'string' && found.trim().length > 0) {
+    const n = Number(found)
+    if (Number.isFinite(n)) {
+      return n
     }
-    return initialValue
-  })
+    await setSecureStoreNumber(key, initialValue)
+  }
+  return initialValue
 }
 
 export async function setSecureStoreString<T extends string>(
@@ -79,14 +73,12 @@ export async function getSecureStoreString<T extends string>(
   key: string,
   initialValue: T,
 ): Promise<T> {
-  return retry('getSecureStoreString', async () => {
-    const found = await getItem(key)
-    if (typeof found === 'string' && found.trim().length > 0) {
-      return found as T
-    }
-    await setSecureStoreString(key, initialValue)
-    return initialValue
-  })
+  const found = await getItem(key)
+  if (typeof found === 'string' && found.trim().length > 0) {
+    return found as T
+  }
+  await setSecureStoreString(key, initialValue)
+  return initialValue
 }
 
 export type JsonCodec<TStorage, TDomain> = {
@@ -117,20 +109,13 @@ export async function getSecureStoreJSON<TStorage, TDomain>(
   codec: JsonCodec<TStorage, TDomain>,
   initialValue?: TDomain,
 ): Promise<TDomain | undefined> {
-  const storedValue = await retry('getSecureStoreJSON', async () => {
-    const found = await getItem(key)
-    if (typeof found !== 'string' || found.trim().length === 0) {
-      return undefined
-    }
-    return found
-  })
-  if (storedValue) {
-    const parsed = JSON.parse(storedValue) as TStorage
+  const found = await getItem(key)
+  if (typeof found === 'string' && found.trim().length > 0) {
+    const parsed = JSON.parse(found) as TStorage
     return codec.decode(parsed)
-  } else {
-    await setSecureStoreJSON(key, initialValue, codec)
-    return initialValue
   }
+  await setSecureStoreJSON(key, initialValue, codec)
+  return initialValue
 }
 
 export function validateKey(key: string) {
