@@ -18,6 +18,15 @@ async function setItem(key: string, value: string): Promise<void> {
   return SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS)
 }
 
+/**
+ * Delete an item from SecureStore. Used by migration to force re-creation
+ * of items with updated accessibility settings.
+ */
+export async function deleteSecureStoreItem(key: string): Promise<void> {
+  validateKey(key)
+  await SecureStore.deleteItemAsync(key, SECURE_STORE_OPTIONS)
+}
+
 export async function setSecureStoreBoolean(key: string, value: boolean) {
   validateKey(key)
   return setItem(key, value ? 'true' : 'false')

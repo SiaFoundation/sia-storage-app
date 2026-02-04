@@ -19,9 +19,13 @@
 import type * as SQLite from 'expo-sqlite'
 import { logger } from '../../lib/logger'
 import { migration_0001_init_schema } from './0001_init_schema'
+import { migration_0002_keychain_accessibility } from './0002_keychain_accessibility'
 import type { Migration, MigrationProgressHandler } from './types'
 
-const migrations: Migration[] = [migration_0001_init_schema]
+const migrations: Migration[] = [
+  migration_0001_init_schema,
+  migration_0002_keychain_accessibility,
+]
 
 export async function runMigrations(
   db: SQLite.SQLiteDatabase,
