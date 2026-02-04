@@ -1,7 +1,7 @@
 import { initializeDB, resetDb } from '../db'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { type InitStep, setAppState } from '../stores/app'
-import { clearAppKeys, migrateKeychainAccessibility } from '../stores/appKey'
+import { clearAppKeys } from '../stores/appKey'
 import { cancelAllDownloads } from '../stores/downloads'
 import { deleteAllFileRecords } from '../stores/files'
 import { ensureFsStorageDirectory } from '../stores/fs'
@@ -38,9 +38,6 @@ export async function initApp(): Promise<void> {
       runner: async () => {
         ensureFsStorageDirectory()
         ensureTempFsStorageDirectory()
-        // Migrate keychain items to use AFTER_FIRST_UNLOCK accessibility
-        // so they can be accessed in background mode.
-        await migrateKeychainAccessibility()
       },
     },
     {
