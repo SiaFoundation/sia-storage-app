@@ -1,6 +1,8 @@
 name: Release
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       platform:
@@ -27,7 +29,7 @@ concurrency:
 
 jobs:
   release-android:
-    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    if: ${{ github.event_name == 'release' || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: tenki-standard-autoscale
     steps:
       - name: Checkout
@@ -66,11 +68,11 @@ jobs:
           SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
           CI: true
-        run: bun scripts/releaseAndroid.ts ${{ inputs.track }}
+        run: bun scripts/releaseAndroid.ts ${{ inputs.track || 'internal' }}
         shell: bash
 
   release-ios:
-    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    if: ${{ github.event_name == 'release' || inputs.platform == 'ios' || inputs.platform == 'both' }}
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -134,7 +136,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           CI: true
         run: |
-          TRACK="${{ inputs.track }}"
+          TRACK="${{ inputs.track || 'internal' }}"
           if [[ "$TRACK" == "internal" ]]; then
             bun scripts/releaseIos.ts testflight
           else
