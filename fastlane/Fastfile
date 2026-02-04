@@ -80,12 +80,33 @@ platform :ios do
     # This does the same as:
     # 1. Product > Archive (builds both SiaStorage and ShareExtension)
     # 2. Export > App Store Connect (creates signed IPA)
-    
+
     team_id = ENV["APPLE_TEAM_ID"]
     if team_id.nil? || team_id.empty?
       UI.user_error!("APPLE_TEAM_ID environment variable is required")
     end
-    
+
+    # Set per-target signing settings before building.
+    # expo prebuild regenerates the project, so we must configure signing here.
+    # This sets PROVISIONING_PROFILE_SPECIFIER for each target in the Xcode project.
+    update_code_signing_settings(
+      path: File.expand_path("../ios/SiaStorage.xcodeproj", __dir__),
+      use_automatic_signing: false,
+      team_id: team_id,
+      code_sign_identity: "iPhone Distribution",
+      profile_name: "Sia Storage Distribution",
+      targets: ["SiaStorage"]
+    )
+
+    update_code_signing_settings(
+      path: File.expand_path("../ios/SiaStorage.xcodeproj", __dir__),
+      use_automatic_signing: false,
+      team_id: team_id,
+      code_sign_identity: "iPhone Distribution",
+      profile_name: "Sia Storage Share Extension Distribution",
+      targets: ["ShareExtension"]
+    )
+
     build_app(
       workspace: IOS_WORKSPACE_PATH,
       scheme: "SiaStorage",
@@ -94,13 +115,18 @@ platform :ios do
       output_directory: File.expand_path("../ios/build", __dir__),
       output_name: "SiaStorage.ipa",
       export_team_id: team_id,
-      # Set DEVELOPMENT_TEAM during build phase (export_team_id only applies during export).
-      # expo prebuild regenerates the project, so the team isn't saved in the Xcode project file.
-      # Alternative: create an Expo config plugin to set the team during prebuild.
-      xcargs: "DEVELOPMENT_TEAM=#{team_id}",
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{team_id}",
+        "CODE_SIGN_STYLE=Manual",
+        "'CODE_SIGN_IDENTITY=iPhone Distribution'"
+      ].join(" "),
       export_options: {
         method: "app-store",
-        signingStyle: "automatic"
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "sia.storage" => "Sia Storage Distribution",
+          "sia.storage.share-extension" => "Sia Storage Share Extension Distribution"
+        }
       },
       include_bitcode: false,
       include_symbols: true,
