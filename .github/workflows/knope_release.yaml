@@ -22,4 +22,4 @@ jobs:
       - name: Create GitHub Release
         run: knope release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
