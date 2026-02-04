@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.2.0 (2026-02-04)
+
+### Features
+
+- Added copy to clipboard action and adaptive overflow menu to logs screen.
+
+### Fixes
+
+- Upgraded the SDK to fix a bug in upload packing that could corrupt objects in certain situations.
+- iOS builds now use iOS 26 SDK to meet Apple's April 2026 App Store requirement.
+
 ## 1.1.0 (2026-02-03)
 
 ### Features
