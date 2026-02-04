@@ -592,6 +592,7 @@ describe('useVirtualFileList hook', () => {
       // file-2 is at position 1 (DESC: file-3, file-2, file-1)
       expect(result.current.totalCount).toBe(3)
       expect(result.current.currentIndex).toBe(1)
+      expect(result.current.currentFile?.id).toBe('file-2')
 
       // Delete file-3 (the one before file-2), so file-2 moves to position 0
       await deleteRecord('file-3')
@@ -604,6 +605,9 @@ describe('useVirtualFileList hook', () => {
         expect(result.current.totalCount).toBe(2)
       })
       expect(result.current.currentIndex).toBe(0)
+      // Current file should remain available (not null) after position change
+      expect(result.current.currentFile).not.toBeNull()
+      expect(result.current.currentFile?.id).toBe('file-2')
     })
   })
 

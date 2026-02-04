@@ -481,15 +481,30 @@ export function useVirtualFileList({
         fetchFilePosition(currentFileID, queryParams),
       ])
 
-      if (newCount !== totalCount || newPosition !== currentIndex) {
+      // Clear cache when position or count changes
+      const positionChanged =
+        newCount !== totalCount || newPosition !== currentIndex
+      if (positionChanged) {
+        // Preserve the current file to avoid a flash or loading state.
+        const currentFile = cacheRef.current.get(currentIndex)
+
         setTotalCount(newCount)
         setCurrentIndexState(newPosition)
         cacheRef.current.clear()
         fetchingRef.current.clear()
+
+        if (currentFile) {
+          cacheRef.current.set(newPosition, currentFile)
+        }
+
         setCacheVersion((v) => v + 1)
       }
 
-      const cachedFile = cacheRef.current.get(currentIndex)
+      // Use newPosition for cache lookups when position changed, since
+      // state updates are async and currentIndex is stale in this callback.
+      const effectiveIndex = positionChanged ? newPosition : currentIndex
+
+      const cachedFile = cacheRef.current.get(effectiveIndex)
       if (cachedFile && cachedFile.id === currentFileID) {
         const freshFile = await fetchFileByID(currentFileID)
         if (freshFile) {
@@ -501,7 +516,7 @@ export function useVirtualFileList({
             cachedFile.type !== freshFile.type
 
           if (metadataChanged) {
-            cacheRef.current.set(currentIndex, freshFile)
+            cacheRef.current.set(effectiveIndex, freshFile)
             setCacheVersion((v) => v + 1)
 
             const message = nameChanged ? 'File renamed' : 'File info updated'
@@ -512,7 +527,7 @@ export function useVirtualFileList({
                 currentFileID,
                 queryParams,
               )
-              if (updatedPosition !== currentIndex) {
+              if (updatedPosition !== effectiveIndex) {
                 setCurrentIndexState(updatedPosition)
                 cacheRef.current.clear()
                 fetchingRef.current.clear()
