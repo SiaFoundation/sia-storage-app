@@ -1,4 +1,4 @@
-import useSWR, { type SWRResponse } from 'swr'
+import useSWR, { type SWRConfiguration, type SWRResponse } from 'swr'
 import type { StoreApi, UseBoundStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -48,10 +48,15 @@ export function createGetterAndSWRHook<T, Args extends any[] = []>(
   fetcher: (...args: Args) => Promise<T>,
 ): [
   (...args: Args) => Promise<T>,
-  (...args: Args) => SWRResponse<T, any, any>,
+  (...args: [...Args, SWRConfiguration?]) => SWRResponse<T, any, any>,
 ] {
+  const argCount = fetcher.length
   return [
     (...args: Args) => fetcher(...args),
-    (...args: Args) => useSWR([...key, ...args], () => fetcher(...args)),
+    (...argsAndConfig: [...Args, SWRConfiguration?]) => {
+      const args = argsAndConfig.slice(0, argCount) as unknown as Args
+      const config = argsAndConfig[argCount] as SWRConfiguration | undefined
+      return useSWR([...key, ...args], () => fetcher(...args), config)
+    },
   ]
 }
