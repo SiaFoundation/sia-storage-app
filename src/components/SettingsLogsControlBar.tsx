@@ -5,7 +5,6 @@ import {
   CopyIcon,
   DownloadIcon,
   FilterIcon,
-  RefreshCwIcon,
   Trash2Icon,
 } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
@@ -33,13 +32,11 @@ import { BottomControlBar, iconColors } from './BottomControlBar'
 import { type OverflowAction, OverflowActions } from './OverflowActions'
 import { SpinnerIcon } from './SpinnerIcon'
 
-type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'> & {
-  onRefresh?: () => void
-}
+type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'>
 
 const LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error']
 
-export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
+export function SettingsLogsControlBar({ navigation }: Props) {
   const logLevel = useLogLevel()
   const logScopes = useLogScopes()
   const availableScopes = useAvailableScopes()
@@ -154,16 +151,6 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
         label: 'Copy to Clipboard',
         onPress: handleCopyLogs,
       },
-      ...(onRefresh
-        ? [
-            {
-              key: 'refresh',
-              icon: <RefreshCwIcon color={iconColors.white} />,
-              label: 'Refresh',
-              onPress: onRefresh,
-            },
-          ]
-        : []),
       {
         key: 'export',
         icon: isExporting ? (
@@ -183,7 +170,7 @@ export function SettingsLogsControlBar({ navigation, onRefresh }: Props) {
         variant: 'danger' as const,
       },
     ],
-    [handleClearLogs, handleCopyLogs, handleExportLogs, isExporting, onRefresh],
+    [handleClearLogs, handleCopyLogs, handleExportLogs, isExporting],
   )
 
   return (
