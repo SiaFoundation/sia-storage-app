@@ -12,6 +12,8 @@ import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
 
+const refreshInterval = 5_000
+
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
   const isOnline = useIsOnline()
@@ -20,12 +22,18 @@ export function LibraryStatusSheet() {
     ['upload-stats', isOpen ?? null],
     () => getUploadStats(),
     {
-      refreshInterval: 5_000,
+      refreshInterval,
     },
   )
-  const lostCount = useFileCountLost()
-  const localCount = useFileCountLocal({ localOnly: false })
-  const localOnlyCount = useFileCountLocal({ localOnly: true })
+  const lostCount = useFileCountLost({ refreshInterval })
+  const localCount = useFileCountLocal(
+    { localOnly: false },
+    { refreshInterval },
+  )
+  const localOnlyCount = useFileCountLocal(
+    { localOnly: true },
+    { refreshInterval },
+  )
 
   return (
     <ActionSheet
