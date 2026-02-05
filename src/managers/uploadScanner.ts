@@ -10,11 +10,7 @@ import {
 } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { getIsConnected, getSdk } from '../stores/sdk'
-import {
-  getAutoScanUploads,
-  getIndexerURL,
-  useAutoScanUploads,
-} from '../stores/settings'
+import { getAutoScanUploads, useAutoScanUploads } from '../stores/settings'
 import { getActiveUploads, useActiveUploads } from '../stores/uploads'
 import { type FileEntry, getUploadManager } from './uploader'
 
@@ -40,8 +36,6 @@ async function startUploadScanner(): Promise<void> {
   try {
     logger.debug('uploadScanner', 'scanning...')
     const uploadManager = getUploadManager()
-    const indexerURL = await getIndexerURL()
-    uploadManager.initialize(sdk, indexerURL)
 
     // Check how much space is left in current slab
     const slabRemaining = await uploadManager.getSlabRemaining()

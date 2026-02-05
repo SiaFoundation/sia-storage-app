@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
@@ -24,7 +24,6 @@ import { type FileRecordRow, readFileRecord } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { upsertLocalObject } from '../stores/localObjects'
 import { getSdk, useSdk } from '../stores/sdk'
-import { getIndexerURL, useIndexerURL } from '../stores/settings'
 import {
   registerUpload,
   removeUpload,
@@ -499,11 +498,10 @@ class UploadManager {
   }
 
   /**
-   * Cancel current and uploading batches by aborting network operations and
-   * removing files from the upload store. This will abort any in-progress packer
-   * operations including file reads and network uploads.
+   * Shutdown the upload manager, cancelling all uploads.
+   * Called when SDK is replaced or reset.
    */
-  cancelBatch(): void {
+  shutdown(): void {
     if (this.idleTimer) {
       clearTimeout(this.idleTimer)
       this.idleTimer = null
@@ -590,17 +588,11 @@ export function getUploadManager(): UploadManager {
 }
 
 /**
- * Hook to initialize the upload manager and provide an upload function
+ * Hook to provide an upload function.
+ * Uploader is initialized when SDK is created (in sdk.ts).
  */
 export function useUploader() {
   const sdk = useSdk()
-  const indexerURL = useIndexerURL()
-
-  useEffect(() => {
-    if (sdk && indexerURL.data) {
-      getUploadManager().initialize(sdk, indexerURL.data)
-    }
-  }, [sdk, indexerURL.data])
 
   return useCallback(
     async (files: FileRecordRow[]) => {
@@ -640,9 +632,6 @@ export async function reuploadFile(fileId: string): Promise<void> {
   const fileUri = await getFsFileUri(file)
   if (!fileUri) throw new Error('File not available locally')
 
-  const indexerURL = await getIndexerURL()
-  getUploadManager().initialize(sdk, indexerURL)
-
   await getUploadManager().queueFiles([
     { fileId: file.id, fileUri, file, size: file.size },
   ])
@@ -669,9 +658,6 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
 
   const fileUri = await getFsFileUri(file)
   if (!fileUri) return
-
-  const indexerURL = await getIndexerURL()
-  getUploadManager().initialize(sdk, indexerURL)
 
   await getUploadManager().queueFiles([
     { fileId: file.id, fileUri, file, size: file.size },

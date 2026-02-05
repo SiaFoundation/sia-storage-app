@@ -32,6 +32,7 @@ import { openAuthURL } from '../lib/openAuthUrl'
 import { err, ok, type Result } from '../lib/result'
 import { createGetterAndSelector } from '../lib/selectors'
 import { withTimeout } from '../lib/timeout'
+import { getUploadManager } from '../managers/uploader'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
 import { setMnemonicHash, validateMnemonic } from './mnemonic'
 import { getIndexerURL, setIndexerURL } from './settings'
@@ -70,6 +71,25 @@ const { getState, setState } = useSdkStore
 const CONNECTION_TIMEOUT_MS = 10_000
 
 /**
+ * Sets SDK and manages uploader lifecycle.
+ * Shuts down existing uploader when SDK changes, initializes with new SDK.
+ * Exported for use by test harness.
+ */
+export async function setSdkWithUploader(
+  sdk: SdkInterface | null,
+): Promise<void> {
+  const currentSdk = getState().sdk
+  if (currentSdk && currentSdk !== sdk) {
+    getUploadManager().shutdown()
+  }
+  setState({ sdk })
+  if (sdk) {
+    const indexerURL = await getIndexerURL()
+    getUploadManager().initialize(sdk, indexerURL)
+  }
+}
+
+/**
  * Initializes the SDK only if it has already been authenticated with the indexer.
  *
  * @returns SDK if connected, null if not
@@ -87,7 +107,7 @@ export async function connectSdk(): Promise<SdkInterface | null> {
     }
 
     if (sdk) {
-      setState({ sdk })
+      await setSdkWithUploader(sdk)
       return sdk
     }
 
@@ -195,8 +215,9 @@ export async function authenticateIndexer(
     }
     if (sdk) {
       logger.info('sdk', 'Already registered, connected.')
-      setState({ sdk, isConnected: true, isAuthing: false })
       setIndexerURL(indexerURL)
+      await setSdkWithUploader(sdk)
+      setState({ isAuthing: false, isConnected: true })
       return ok({ alreadyConnected: true })
     }
     setState({ isAuthing: false })
@@ -268,8 +289,9 @@ export async function switchIndexer(
 
     if (sdk) {
       logger.info('sdk', 'Connected using stored AppKey for this indexer.')
-      setState({ sdk, isConnected: true })
       setIndexerURL(newIndexerURL)
+      await setSdkWithUploader(sdk)
+      setState({ isConnected: true })
       return ok(undefined)
     }
   }
@@ -340,7 +362,8 @@ export async function registerWithIndexer(
   await setMnemonicHash(mnemonic)
   await setIndexerURL(indexerURL)
 
-  setState({ sdk, isConnected: true, isAuthing: false, pendingApproval: null })
+  await setSdkWithUploader(sdk)
+  setState({ isAuthing: false, isConnected: true, pendingApproval: null })
   return ok(undefined)
 }
 
@@ -519,9 +542,10 @@ export async function getPinnedObject(
 }
 
 /**
- * Resets the SDK state.
+ * Resets the SDK state and shuts down uploader.
  */
 export async function resetSdk() {
+  getUploadManager().shutdown()
   setState({
     sdk: null,
     isConnected: false,
