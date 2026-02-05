@@ -30,7 +30,7 @@ import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { readThumbnailRecordByThumbForHashAndSize } from '../stores/thumbnails'
-import { cancelUpload } from '../stores/uploads'
+import { removeUpload } from '../stores/uploads'
 
 const batchSize = 100
 
@@ -225,7 +225,7 @@ async function handleFileRecord(
       { includeUpdatedAt: true },
     )
     // Cancel any inflight upload for this file since we now have a pinned object.
-    cancelUpload(existingFile.id)
+    removeUpload(existingFile.id)
     counts.existing++
   } else {
     if (type === 'file') {

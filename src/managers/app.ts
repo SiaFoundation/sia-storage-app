@@ -10,7 +10,7 @@ import { clearMnemonicHash } from '../stores/mnemonic'
 import { reconnectIndexer, resetSdk } from '../stores/sdk'
 import { getHasOnboarded, setHasOnboarded } from '../stores/settings'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
-import { cancelAllUploads } from '../stores/uploads'
+import { clearAllUploads } from '../stores/uploads'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initFsEvictionScanner } from './fsEvictionScanner'
 import { initFsOrphanScanner } from './fsOrphanScanner'
@@ -23,6 +23,7 @@ import {
 } from './syncPhotosArchive'
 import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
+import { getUploadManager } from './uploader'
 import { initUploadScanner } from './uploadScanner'
 
 export async function initApp(): Promise<void> {
@@ -93,7 +94,8 @@ export async function initApp(): Promise<void> {
 }
 
 function cancelAllTransfers() {
-  cancelAllUploads()
+  getUploadManager().shutdown()
+  clearAllUploads()
   cancelAllDownloads()
 }
 

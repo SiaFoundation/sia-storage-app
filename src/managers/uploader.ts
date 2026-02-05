@@ -467,6 +467,17 @@ class UploadManager {
       }
 
       try {
+        // Check if file still exists (may have been deleted while batch was in-flight)
+        const fileRecord = await readFileRecord(entry.fileId)
+        if (!fileRecord) {
+          logger.warn(
+            'uploadManager',
+            `File ${entry.fileId} deleted during upload, skipping pin`,
+          )
+          successfulFileIds.push(entry.fileId)
+          continue
+        }
+
         // Update metadata on the pinned object
         pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
 

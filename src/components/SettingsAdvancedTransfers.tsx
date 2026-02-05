@@ -1,7 +1,8 @@
 import { useInputValue } from '../hooks/useInputValue'
 import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
+import { getUploadManager } from '../managers/uploader'
 import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
-import { cancelAllUploads, useUploadCounts } from '../stores/uploads'
+import { clearAllUploads, useUploadCounts } from '../stores/uploads'
 import { Button } from './Button'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
@@ -40,7 +41,8 @@ export function SettingsAdvancedTransfers() {
           style={{ marginTop: 10 }}
           disabled={uploadCounts.total === 0}
           onPress={() => {
-            cancelAllUploads()
+            getUploadManager().shutdown()
+            clearAllUploads()
           }}
         >
           Cancel uploads

@@ -11,7 +11,7 @@ import {
 } from '../stores/localObjects'
 import { getSdk } from '../stores/sdk'
 import { removeTempDownloadFile } from '../stores/tempFs'
-import { cancelUpload } from '../stores/uploads'
+import { removeUploads } from '../stores/uploads'
 import { logger } from './logger'
 import { tryCatch } from './result'
 
@@ -27,7 +27,7 @@ async function tryStep<T>(
 }
 
 export async function permanentlyDeleteFile(file: FileRecord) {
-  cancelUpload(file.id)
+  removeUploads([file.id])
   await tryStep('deleteFileRecord', file.id, () =>
     deleteFileRecordAndThumbnails(file.id),
   )
@@ -51,8 +51,7 @@ export async function permanentlyDeleteFiles(
   const ids = files.map((f) => f.id)
   const hashes = files.map((f) => f.hash).filter(Boolean)
 
-  // Cancel uploads synchronously (fast, in-memory)
-  ids.forEach((id) => void cancelUpload(id))
+  removeUploads(ids)
 
   // Batch DB deletes (single transaction, single SWR trigger)
   // Also delete thumbnails for these files

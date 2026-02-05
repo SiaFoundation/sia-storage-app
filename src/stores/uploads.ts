@@ -130,14 +130,9 @@ export function removeUploads(ids: string[]) {
   })
 }
 
-export function cancelAllUploads() {
+export function clearAllUploads() {
   logger.debug('uploads', 'cancelling all uploads')
   useUploadsStore.setState({ uploads: {} })
-}
-
-export function cancelUpload(id: string) {
-  logger.debug('uploads', 'cancelling upload', id)
-  removeUpload(id)
 }
 
 export type UploadCounts = {
