@@ -521,7 +521,7 @@ describe('UploadManager', () => {
     })
   })
 
-  describe('cancelBatch', () => {
+  describe('shutdown', () => {
     it('removes all files from upload store', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
@@ -533,7 +533,7 @@ describe('UploadManager', () => {
       // Before cancel, files should be in store
       expect(getActiveUploads()).toHaveLength(2)
 
-      manager.cancelBatch()
+      manager.shutdown()
 
       // After cancel, all uploads should be removed
       expect(getActiveUploads()).toHaveLength(0)
@@ -545,7 +545,7 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
       await manager.queueFiles([createFileEntry('file1')])
-      manager.cancelBatch()
+      manager.shutdown()
 
       jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT + 1000)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
@@ -570,7 +570,7 @@ describe('UploadManager', () => {
       expect(capturedSignal?.aborted).toBe(false)
 
       // Cancel the batch
-      manager.cancelBatch()
+      manager.shutdown()
 
       // Signal should now be aborted
       expect(capturedSignal?.aborted).toBe(true)
@@ -715,7 +715,7 @@ describe('UploadManager', () => {
       expect(mockPacker.add).toHaveBeenCalledTimes(3)
     })
 
-    it('cancels pending files when cancelBatch is called', async () => {
+    it('cancels pending files when shutdown is called', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
       // Make finalize hang so we can test cancellation mid-flight
@@ -728,7 +728,7 @@ describe('UploadManager', () => {
       await manager.queueFiles([createFileEntry('pending-file')])
 
       // Cancel everything
-      manager.cancelBatch()
+      manager.shutdown()
 
       // Pending file should be removed from uploads
       expect(getUploadState('pending-file')).toBeUndefined()

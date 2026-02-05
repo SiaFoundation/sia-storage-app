@@ -39,7 +39,11 @@ import {
   ensureFsStorageDirectory,
   fsStorageDirectory,
 } from '../../src/stores/fs'
-import { setIsConnected, setSdk } from '../../src/stores/sdk'
+import {
+  setIsConnected,
+  setSdk,
+  setSdkWithUploader,
+} from '../../src/stores/sdk'
 import { getIndexerURL } from '../../src/stores/settings'
 import { readThumbnailsByHash } from '../../src/stores/thumbnails'
 import {
@@ -122,6 +126,7 @@ interface HarnessOptions {
 }
 
 let testCounter = 0
+let fileIdCounter = 0
 
 class AppCoreHarnessImpl implements AppCoreHarness {
   sdk: MockSdk
@@ -159,15 +164,15 @@ class AppCoreHarnessImpl implements AppCoreHarness {
     // Ensure the fs storage directory exists
     ensureFsStorageDirectory()
 
-    // Set up SDK
+    // Set up SDK and initialize uploader
     if (!this.options.skipSdkConnection) {
-      // Type assertion because setSdk expects the full SdkInterface
-      setSdk(this.sdk as unknown as Parameters<typeof setSdk>[0])
-      setIsConnected(true)
-
-      // Set up app key for the test indexer
+      // Set up app key for the test indexer first
       const indexerURL = await getIndexerURL()
       await setAppKeyForIndexer(indexerURL, this.sdk.appKey())
+      await setSdkWithUploader(
+        this.sdk as unknown as Parameters<typeof setSdkWithUploader>[0],
+      )
+      setIsConnected(true)
     }
 
     // Initialize services
@@ -406,10 +411,12 @@ export function generateTestFilesFromAssets(
   assetDir: string,
   fileNames: string[],
 ): ((harness: AppCoreHarness) => TestFileInput)[] {
-  return fileNames.map((fileName, i) => {
+  return fileNames.map((fileName) => {
     return (harness: AppCoreHarness): TestFileInput => {
+      // Increment counter when factory is called to ensure unique IDs across tests
+      fileIdCounter++
+      const fileId = `test-file-${fileIdCounter}`
       const srcPath = path.join(assetDir, fileName)
-      const fileId = `test-file-${i + 1}`
 
       // Determine type from extension
       const ext = path.extname(fileName).toLowerCase()
