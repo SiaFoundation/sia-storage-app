@@ -150,6 +150,33 @@ function getLevelsForFilter(minLevel: LogLevel): LogLevel[] {
   return levelOrder.slice(minIndex)
 }
 
+/** Build WHERE clause and params for log queries. */
+function buildLogFilterQuery(
+  logLevel?: LogLevel,
+  logScopes?: string[],
+): { whereClause: string; params: (string | number)[] } {
+  const conditions: string[] = []
+  const params: (string | number)[] = []
+
+  if (logLevel) {
+    const allowedLevels = getLevelsForFilter(logLevel)
+    const placeholders = allowedLevels.map(() => '?').join(',')
+    conditions.push(`level IN (${placeholders})`)
+    params.push(...allowedLevels)
+  }
+
+  if (logScopes && logScopes.length > 0) {
+    const placeholders = logScopes.map(() => '?').join(',')
+    conditions.push(`scope IN (${placeholders})`)
+    params.push(...logScopes)
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  return { whereClause, params }
+}
+
 /** Read logs from database with optional filters. */
 export async function readLogs(
   logLevel?: LogLevel,
@@ -159,27 +186,8 @@ export async function readLogs(
     if (!dbInitialized) {
       return []
     }
-    const conditions: string[] = []
-    const params: (string | number)[] = []
 
-    // Filter by level.
-    if (logLevel) {
-      const allowedLevels = getLevelsForFilter(logLevel)
-      const placeholders = allowedLevels.map(() => '?').join(',')
-      conditions.push(`level IN (${placeholders})`)
-      params.push(...allowedLevels)
-    }
-
-    // Filter by scope.
-    if (logScopes && logScopes.length > 0) {
-      const placeholders = logScopes.map(() => '?').join(',')
-      conditions.push(`scope IN (${placeholders})`)
-      params.push(...logScopes)
-    }
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
+    const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
     const query = `SELECT timestamp, level, scope, message FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC`
 
     const rows = await db().getAllAsync<{
@@ -198,6 +206,26 @@ export async function readLogs(
   } catch (error) {
     console.error('[logs] Failed to read logs:', error)
     return []
+  }
+}
+
+/** Count logs matching the current filters. */
+export async function countLogs(
+  logLevel?: LogLevel,
+  logScopes?: string[],
+): Promise<number> {
+  try {
+    if (!dbInitialized) {
+      return 0
+    }
+
+    const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
+    const query = `SELECT COUNT(*) as count FROM logs ${whereClause}`
+    const result = await db().getFirstAsync<{ count: number }>(query, ...params)
+    return result?.count ?? 0
+  } catch (error) {
+    console.error('[logs] Failed to count logs:', error)
+    return 0
   }
 }
 

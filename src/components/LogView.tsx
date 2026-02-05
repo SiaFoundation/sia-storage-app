@@ -1,7 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   StyleSheet,
   Text,
@@ -12,8 +14,40 @@ import { getLevelColorHex, getScopeColorHex } from '../lib/logColors'
 import type { LogEntry } from '../lib/logger'
 import { palette } from '../styles/colors'
 
-export function LogView() {
+type LogViewProps = {
+  isFollowing?: boolean
+  onLogCountChange?: (count: number) => void
+  onScrollAwayFromBottom?: () => void
+}
+
+export function LogView({
+  isFollowing,
+  onLogCountChange,
+  onScrollAwayFromBottom,
+}: LogViewProps) {
   const { data: logs = [], isLoading, error } = useLogs()
+  const flatListRef = useRef<FlatList<LogEntry>>(null)
+
+  const logCount = logs.length
+  useEffect(() => {
+    onLogCountChange?.(logCount)
+  }, [logCount, onLogCountChange])
+
+  useEffect(() => {
+    if (isFollowing && logCount > 0) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
+    }
+  }, [isFollowing, logCount])
+
+  const handleScrollBeginDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y
+      if (offsetY > 10) {
+        onScrollAwayFromBottom?.()
+      }
+    },
+    [onScrollAwayFromBottom],
+  )
 
   const renderLogItem = useCallback(
     ({ item, index }: { item: LogEntry; index: number }) => {
@@ -69,6 +103,7 @@ export function LogView() {
   return (
     <View style={styles.container}>
       <FlatList
+        ref={flatListRef}
         data={logs}
         renderItem={renderLogItem}
         keyExtractor={(item, index) =>
@@ -77,9 +112,7 @@ export function LogView() {
         inverted
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-        }}
+        onScrollBeginDrag={handleScrollBeginDrag}
       />
     </View>
   )
