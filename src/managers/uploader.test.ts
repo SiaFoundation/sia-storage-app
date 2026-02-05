@@ -329,7 +329,33 @@ describe('UploadManager', () => {
     })
 
     it('keeps errored files in store when some files fail during save', async () => {
-      // file1 has a DB record (will succeed), file2 does not (will fail with FK error)
+      const entry1 = await createTestFile('file1')
+      const entry2 = await createTestFile('file2')
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      mockPacker.finalize.mockResolvedValueOnce([
+        mockPinnedObject,
+        mockPinnedObject,
+      ])
+      // pinObject succeeds for file1, fails for file2
+      mockSdk.pinObject
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Pin failed'))
+
+      await manager.queueFiles([entry1, entry2])
+      await manager.flush()
+
+      // file1 should be removed (success)
+      expect(getUploadState('file1')).toBeUndefined()
+
+      // file2 should remain with error status (failed to save)
+      const upload2 = getUploadState('file2')
+      expect(upload2).toBeDefined()
+      expect(upload2?.status).toBe('error')
+    })
+
+    it('skips pinning for files deleted during upload', async () => {
+      // file1 has a DB record (will succeed), file2 does not (deleted during upload)
       const entry1 = await createTestFile('file1')
       const entry2 = createFileEntry('file2-no-db-record')
 
@@ -345,10 +371,11 @@ describe('UploadManager', () => {
       // file1 should be removed (success)
       expect(getUploadState('file1')).toBeUndefined()
 
-      // file2 should remain with error status (failed to save)
-      const upload2 = getUploadState('file2-no-db-record')
-      expect(upload2).toBeDefined()
-      expect(upload2?.status).toBe('error')
+      // file2 should be removed (skipped because file was deleted)
+      expect(getUploadState('file2-no-db-record')).toBeUndefined()
+
+      // pinObject should only be called once (for file1, not file2)
+      expect(mockSdk.pinObject).toHaveBeenCalledTimes(1)
     })
 
     it('sets error when pinObject fails and does not save to local DB', async () => {

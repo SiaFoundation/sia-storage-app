@@ -14,7 +14,7 @@ import { readLocalObjectsForFile } from '../stores/localObjects'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
 import { removeTempDownloadFile } from '../stores/tempFs'
-import { cancelUpload } from '../stores/uploads'
+import { removeUpload } from '../stores/uploads'
 import {
   getSyncDownCursor,
   resetSyncDownCursor,
@@ -37,7 +37,7 @@ jest.mock('../stores/tempFs', () => ({
   removeTempDownloadFile: jest.fn(),
 }))
 jest.mock('../stores/uploads', () => ({
-  cancelUpload: jest.fn(),
+  removeUpload: jest.fn(),
 }))
 jest.mock('../stores/appKey', () => ({
   getAppKeyForIndexer: jest.fn(),
@@ -114,7 +114,7 @@ const getSdkMock = jest.mocked(getSdk)
 const getIndexerURLMock = jest.mocked(getIndexerURL)
 const removeFsFileMock = jest.mocked(removeFsFile)
 const removeTempDownloadFileMock = jest.mocked(removeTempDownloadFile)
-const cancelUploadMock = jest.mocked(cancelUpload)
+const removeUploadMock = jest.mocked(removeUpload)
 const getAppKeyForIndexerMock = jest.mocked(getAppKeyForIndexer)
 const getIsConnectedMock = jest.mocked(getIsConnected)
 
@@ -132,7 +132,7 @@ describe('syncDownEvents', () => {
     getIndexerURLMock.mockResolvedValue(INDEXER_URL)
     removeFsFileMock.mockResolvedValue(undefined)
     removeTempDownloadFileMock.mockResolvedValue(undefined)
-    cancelUploadMock.mockReturnValue(undefined)
+    removeUploadMock.mockReturnValue(undefined)
     getAppKeyForIndexerMock.mockResolvedValue({} as any)
   })
 
@@ -354,7 +354,7 @@ describe('syncDownEvents', () => {
 
     await syncDownEvents()
 
-    expect(cancelUploadMock).toHaveBeenCalledWith('file-1')
+    expect(removeUploadMock).toHaveBeenCalledWith('file-1')
     const updatedFile = await readFileRecordByObjectId('obj-1')
     expect(updatedFile).not.toBeNull()
   })
