@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.3.0 (2026-02-05)
+
+### Features
+
+- Added a floating "New logs" button with auto-follow mode to the logs screen.
+
+### Fixes
+
+- Fixed keychain migration to delete items before re-adding with new accessibility permissions, enabling background task access when device is locked.
+- Improved packed uploader cleanup when SDK is reset.
+- Removed pointless retries from SecureStore that cannot help when keychain is inaccessible.
+
 ## 1.2.0 (2026-02-04)
 
 ### Features
