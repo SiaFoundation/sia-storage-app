@@ -191,7 +191,9 @@ export function FileCarousel({
         subject: `Sia Storage - ${currentFile.type}`,
       })
     } catch (e) {
-      if (typeof e === 'string' && !e.includes('User did not share')) {
+      const msg =
+        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      if (!msg.includes('User did not share')) {
         logger.error('FileCarousel', 'File sharing failed', e)
       }
     }
