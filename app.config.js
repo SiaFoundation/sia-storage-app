@@ -108,6 +108,7 @@ export default {
           ],
         },
       ],
+      './plugins/android-share-file-provider',
       [
         './plugins/android-release-signing',
         {

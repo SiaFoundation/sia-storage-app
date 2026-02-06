@@ -51,7 +51,9 @@ export function useShareAction({ fileId }: { fileId: string }) {
         subject: `Sia Storage - ${file.type}`,
       })
     } catch (e) {
-      if (typeof e === 'string' && !e.includes('User did not share')) {
+      const msg =
+        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      if (!msg.includes('User did not share')) {
         logger.error('shareAction', 'File sharing failed:', e)
       }
     }
