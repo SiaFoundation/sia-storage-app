@@ -12,6 +12,7 @@
  * Flags:
  *   --rebuild    Full clean build (delete platform dir, prebuild, build)
  *   --no-run     Build only, don't launch the app
+ *   --release    Build with Release config (bundles JS, no dev server needed)
  *
  * How caching works:
  *   - Computes hash from package.json, bun.lock, app.config.js, eas.json, plugins/*.js
@@ -19,9 +20,11 @@
  *   - Skips rebuild if hash matches and artifacts exist
  *
  * Cache locations:
- *   .build-cache/ios-sim/    - iOS Simulator builds
- *   .build-cache/ios-device/ - iOS device builds
- *   .build-cache/android/    - Android builds (shared by emulator and device)
+ *   .build-cache/ios-sim/            - iOS Simulator builds
+ *   .build-cache/ios-device/         - iOS device builds (debug)
+ *   .build-cache/ios-device-release/ - iOS device builds (release)
+ *   .build-cache/android/            - Android builds (debug, shared by emulator and device)
+ *   .build-cache/android-release/    - Android release builds
  */
 
 import { rmSync } from 'node:fs'
@@ -57,6 +60,7 @@ const args = process.argv.slice(2)
 const targetArg = args.find((a) => !a.startsWith('-'))
 const forceRebuild = args.includes('--rebuild')
 const noRun = args.includes('--no-run')
+const release = args.includes('--release')
 
 // Map CLI arg to build target
 function getTarget(): BuildTarget {
@@ -65,12 +69,12 @@ function getTarget(): BuildTarget {
     case 'ios:sim':
       return 'ios-sim'
     case 'ios:device':
-      return 'ios-device'
+      return release ? 'ios-device-release' : 'ios-device'
     case 'android:emulator':
     case 'android:emu':
-      return 'android'
+      return release ? 'android-release' : 'android'
     case 'android:device':
-      return 'android' // Same build as emulator, just different device selection
+      return release ? 'android-release' : 'android'
     default:
       console.error('Usage: bun scripts/dev.ts <target> [flags]')
       console.error('')
@@ -85,20 +89,26 @@ function getTarget(): BuildTarget {
         '  --rebuild    Full clean build (delete platform dir, prebuild, build)',
       )
       console.error("  --no-run     Build only, don't launch the app")
+      console.error(
+        '  --release    Build with Release config (standalone, no dev server)',
+      )
       process.exit(1)
   }
 }
 
 const target = getTarget()
 const platform = target.includes('ios') ? 'ios' : 'android'
-const isDevice = target === 'ios-device' || targetArg === 'android:device'
+const isDevice =
+  target === 'ios-device' ||
+  target === 'ios-device-release' ||
+  targetArg === 'android:device'
 const paths = getTargetPaths(target)
 
 // Print header
 console.log(`\n🚀 Smart Dev Build`)
 console.log(`   Target: ${targetArg}`)
 console.log(
-  `   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run'].filter(Boolean).join(' ') || 'none'}`,
+  `   Flags: ${[forceRebuild && '--rebuild', noRun && '--no-run', release && '--release'].filter(Boolean).join(' ') || 'none'}`,
 )
 console.log(`   Cache: .build-cache/${target}/`)
 console.log('')
@@ -117,7 +127,7 @@ if (forceRebuild) {
 
 // For iOS device builds, check for connected device first (before building)
 let selectedDevice: Device | null = null
-if (target === 'ios-device') {
+if (target === 'ios-device' || target === 'ios-device-release') {
   console.log('📱 Checking for iOS device...')
   selectedDevice = await selectDevice('ios', 'device')
 
@@ -136,8 +146,11 @@ if (target === 'ios-device') {
   console.log('')
 }
 
-// Check if rebuild needed
-const [rebuildNeeded, reason] = needsRebuild(target, { forceRebuild })
+// Release builds always rebuild to ensure the JS bundle is fresh.
+// Debug builds use the cache since JS loads from Metro.
+const [rebuildNeeded, reason] = release
+  ? [true, 'release build (always rebuilds)']
+  : needsRebuild(target, { forceRebuild })
 
 if (rebuildNeeded) {
   console.log(`🔨 Build needed: ${reason}`)
@@ -145,12 +158,12 @@ if (rebuildNeeded) {
   // Platform-specific build
   if (platform === 'ios') {
     if (isDevice) {
-      await buildIosDevice({ target })
+      await buildIosDevice({ target, release })
     } else {
       await buildIosSim({ target })
     }
   } else {
-    await buildAndroid({ target })
+    await buildAndroid({ target, release })
   }
 
   console.log('✅ Build complete')
@@ -182,7 +195,7 @@ async function runIosDevice(): Promise<void> {
   console.log('📱 Installing on iOS device...')
 
   // Find the built app
-  const appPath = await findIosDeviceApp(target)
+  const appPath = await findIosDeviceApp(target, { release })
   if (!appPath) {
     console.error('   Could not find built app')
     process.exit(1)
@@ -279,7 +292,11 @@ async function runAndroid(): Promise<void> {
 
 // Find Android APK
 async function findAndroidApk(): Promise<string> {
-  const apkDir = join(PROJECT_ROOT, 'android/app/build/outputs/apk/debug')
+  const apkVariant = release ? 'release' : 'debug'
+  const apkDir = join(
+    PROJECT_ROOT,
+    `android/app/build/outputs/apk/${apkVariant}`,
+  )
   const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`
     .quiet()
     .nothrow()

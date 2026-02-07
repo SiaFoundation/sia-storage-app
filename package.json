@@ -8,6 +8,8 @@
     "dev:ios:device": "bun scripts/dev.ts ios:device",
     "dev:android:emulator": "bun scripts/dev.ts android:emulator",
     "dev:android:device": "bun scripts/dev.ts android:device",
+    "dev:ios:device:release": "bun scripts/dev.ts ios:device --release",
+    "dev:android:device:release": "bun scripts/dev.ts android:device --release",
     "fastlane:ios:build-ipa": "fastlane ios build_ipa",
     "fastlane:android:distribute-play-store": "fastlane android distribute_play_store",
     "fastlane:android:distribute-internal": "fastlane android distribute_internal",

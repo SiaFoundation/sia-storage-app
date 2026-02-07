@@ -22,6 +22,8 @@ export interface BuildOptions {
   target: BuildTarget
   /** Always clean and prebuild, even if platform dir exists */
   alwaysClean?: boolean
+  /** Build with Release configuration (bundles JS, no dev server needed) */
+  release?: boolean
 }
 
 /**
@@ -33,7 +35,9 @@ async function killExistingBuilds(platform: 'ios' | 'android'): Promise<void> {
     await $`pkill -f "xcodebuild.*SiaStorageDev" 2>/dev/null`.quiet().nothrow()
   } else {
     // Kill gradle processes for this project
-    await $`pkill -f "gradlew.*assembleDebug" 2>/dev/null`.quiet().nothrow()
+    await $`pkill -f "gradlew.*assemble(Debug|Release)" 2>/dev/null`
+      .quiet()
+      .nothrow()
   }
 }
 
@@ -125,7 +129,7 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
  * Note: Installation is handled separately in dev.ts using devicectl.
  */
 export async function buildIosDevice(options: BuildOptions): Promise<void> {
-  const { target, alwaysClean = false } = options
+  const { target, alwaysClean = false, release = false } = options
   const paths = getTargetPaths(target)
 
   console.log(`   Build log: ${paths.buildLog}`)
@@ -177,7 +181,8 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   }
 
   // Build for device using xcodebuild directly (no fastlane)
-  writeBuildLog(target, '=== XCODEBUILD (device) ===\n', true)
+  const configuration = release ? 'Release' : 'Debug'
+  writeBuildLog(target, `=== XCODEBUILD (device, ${configuration}) ===\n`, true)
 
   const result = await runProcess({
     command: [
@@ -187,7 +192,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
       '-scheme',
       'SiaStorageDev',
       '-configuration',
-      'Debug',
+      configuration,
       '-sdk',
       'iphoneos',
       '-arch',
@@ -200,7 +205,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
     ],
     cwd: PROJECT_ROOT,
     target,
-    label: 'Building iOS (device)',
+    label: `Building iOS (device, ${configuration})`,
   })
 
   if (!result.success) {
@@ -216,7 +221,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
  * Build Android app
  */
 export async function buildAndroid(options: BuildOptions): Promise<void> {
-  const { target, alwaysClean = false } = options
+  const { target, alwaysClean = false, release = false } = options
   const paths = getTargetPaths(target)
 
   console.log(`   Build log: ${paths.buildLog}`)
@@ -246,14 +251,31 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
     }
   }
 
+  // Validate signing env vars for release builds
+  if (release) {
+    const requiredVars = [
+      'SIA_RELEASE_STORE_FILE',
+      'SIA_RELEASE_STORE_PASSWORD',
+      'SIA_RELEASE_KEY_ALIAS',
+      'SIA_RELEASE_KEY_PASSWORD',
+    ]
+    const missing = requiredVars.filter((v) => !process.env[v])
+    if (missing.length > 0) {
+      throw new Error(
+        `Android release build requires signing env vars: ${missing.join(', ')}`,
+      )
+    }
+  }
+
   // Build APK using unified process runner
-  writeBuildLog(target, '=== GRADLE ===\n', true)
+  const gradleTask = release ? 'assembleRelease' : 'assembleDebug'
+  writeBuildLog(target, `=== GRADLE (${gradleTask}) ===\n`, true)
 
   const result = await runProcess({
-    command: ['./gradlew', 'assembleDebug', '--no-daemon'],
+    command: ['./gradlew', gradleTask, '--no-daemon'],
     cwd: join(PROJECT_ROOT, 'android'),
     target,
-    label: 'Building Android',
+    label: `Building Android (${gradleTask})`,
   })
 
   if (!result.success) {
@@ -270,10 +292,12 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
  */
 export async function findIosDeviceApp(
   target: BuildTarget,
+  options: { release?: boolean } = {},
 ): Promise<string | null> {
   const paths = getTargetPaths(target)
+  const config = options.release ? 'Release' : 'Debug'
   const result =
-    await $`find ${paths.derivedData} -name "*.app" -path "*Debug-iphoneos*" -type d 2>/dev/null`
+    await $`find ${paths.derivedData} -name "*.app" -path "*${config}-iphoneos*" -type d 2>/dev/null`
       .quiet()
       .nothrow()
   const found = result.stdout.toString().trim().split('\n').filter(Boolean)[0]
