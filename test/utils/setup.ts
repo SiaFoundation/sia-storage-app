@@ -23,7 +23,7 @@ import * as path from 'path'
 // Note: Values are inlined in jest.mock because jest.mock is hoisted
 jest.mock('../../src/config', () => ({
   ...jest.requireActual('../../src/config'),
-  SCANNER_INTERVAL: 1000,
+  PACKER_POLL_INTERVAL: 1000,
   PACKER_IDLE_TIMEOUT: 1000,
   SLAB_SIZE: 10 * 1024,
   SLAB_FILL_THRESHOLD: 0.9,

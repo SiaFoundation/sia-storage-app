@@ -24,7 +24,6 @@ import {
 import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
-import { initUploadScanner } from './uploadScanner'
 
 export async function initApp(): Promise<void> {
   startInitState()
@@ -75,7 +74,6 @@ export async function initApp(): Promise<void> {
     label: 'Starting background services',
     message: 'Launching background services...',
     runner: async () => {
-      initUploadScanner()
       initSyncDownEvents()
       initSyncNewPhotos()
       initSyncPhotosArchive()

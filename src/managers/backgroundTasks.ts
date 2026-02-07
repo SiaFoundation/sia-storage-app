@@ -9,6 +9,7 @@ import { getInitializationError, getIsInitializing } from '../stores/app'
 import { getFileStatsLocal } from '../stores/files'
 import { getIsConnected } from '../stores/sdk'
 import { getHasOnboarded } from '../stores/settings'
+import { getUploadManager } from './uploader'
 
 /**
  * Background tasks are scheduled by the operating system and run for about the following durations:
@@ -166,9 +167,7 @@ export async function initBackgroundTasks() {
       transitionTaskState(state, 'finished')
       BackgroundFetch.finish(config.id)
       log(
-        `finished, reason: timeout, elapsedTime: ${getElapsedTime(
-          state.startTime,
-        )}`,
+        `finished, reason: timeout, elapsed ${formatElapsedTime(state.startTime)}`,
       )
     },
   )
@@ -255,7 +254,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
 
   // Wait for app initialization to complete (handles both warm and cold starts)
   // On warm start, init is already done. On cold start, initApp() runs the full
-  // initialization sequence including reconnectIndexer() and initUploadScanner().
+  // initialization sequence including reconnectIndexer().
   const isInitializing = getIsInitializing()
   if (isInitializing) {
     log('waiting for app initialization to complete...')
@@ -280,61 +279,122 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isConnected = getIsConnected()
   log(`app ready (connected=${isConnected})`)
 
-  // Track initial stats to calculate delta at end
+  const manager = getUploadManager()
   const initialStats = await getFileStatsLocal({ localOnly: true })
+  const initialSnapshot: UploadSnapshot = {
+    packed: manager.packedCount,
+    packedBytes: manager.packedBytes,
+    uploaded: manager.uploadedCount,
+    uploadedBytes: manager.uploadedBytes,
+  }
   log(
-    `initial queue: ${initialStats.count} files, ${formatBytes(
-      initialStats.totalBytes,
-    )}`,
+    `files awaiting upload: ${initialStats.count} (${formatBytes(initialStats.totalBytes)} total)`,
   )
 
   while (true) {
     if (state.status === 'finished') {
       const finalStats = await getFileStatsLocal({ localOnly: true })
-      const filesUploaded = initialStats.count - finalStats.count
-      const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
-        `task is in finished state, breaking loop, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded,
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
+        logSummary(
+          'timed out',
+          initialStats,
+          finalStats,
+          initialSnapshot,
+          manager,
+          state,
+        ),
       )
       return
     }
     const stats = await getFileStatsLocal({ localOnly: true })
-    log(`pending: ${stats.count} files (${formatBytes(stats.totalBytes)})`)
+    log(
+      `still uploading: ${stats.count} files remaining (${formatBytes(stats.totalBytes)}), elapsed ${formatElapsedTime(state.startTime)}`,
+    )
     if (stats.count === 0) {
-      const filesUploaded = initialStats.count
-      const bytesUploaded = initialStats.totalBytes
       log(
-        `stopping, reason: all files uploaded, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded,
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
+        logSummary(
+          'all uploaded',
+          initialStats,
+          { count: 0, totalBytes: 0 },
+          initialSnapshot,
+          manager,
+          state,
+        ),
       )
       return
     }
     const result = await delayFn(secondsInMs(10))
     if (result === 'aborted') {
       const finalStats = await getFileStatsLocal({ localOnly: true })
-      const filesUploaded = initialStats.count - finalStats.count
-      const bytesUploaded = initialStats.totalBytes - finalStats.totalBytes
       log(
-        `delay aborted, exiting, uploaded: ${filesUploaded} files (${formatBytes(
-          bytesUploaded,
-        )}), elapsedTime: ${getElapsedTime(state.startTime)}`,
+        logSummary(
+          'aborted',
+          initialStats,
+          finalStats,
+          initialSnapshot,
+          manager,
+          state,
+        ),
       )
       return
     }
   }
 }
 
-function getElapsedTime(startTime: number) {
-  return Date.now() - startTime
+type UploadSnapshot = {
+  packed: number
+  packedBytes: number
+  uploaded: number
+  uploadedBytes: number
+}
+
+function logSummary(
+  reason: string,
+  initialStats: { count: number; totalBytes: number },
+  finalStats: { count: number; totalBytes: number },
+  initial: UploadSnapshot,
+  manager: {
+    packedCount: number
+    packedBytes: number
+    uploadedCount: number
+    uploadedBytes: number
+  },
+  state: TaskState,
+): string {
+  const filesPacked = manager.packedCount - initial.packed
+  const bytesPacked = manager.packedBytes - initial.packedBytes
+  const filesUploaded = manager.uploadedCount - initial.uploaded
+  const bytesUploaded = manager.uploadedBytes - initial.uploadedBytes
+  const filesAdded = finalStats.count - initialStats.count + filesUploaded
+  const parts = [
+    `finished (${reason})`,
+    `packed ${filesPacked} files (${formatBytes(bytesPacked)})`,
+    `uploaded ${filesUploaded} files (${formatBytes(bytesUploaded)})`,
+    `${filesAdded} new files added to library`,
+    `${finalStats.count} files remaining (${formatBytes(finalStats.totalBytes)})`,
+    `elapsed ${formatElapsedTime(state.startTime)}`,
+  ]
+  return parts.join(', ')
+}
+
+function formatElapsedTime(startTime: number): string {
+  const ms = Date.now() - startTime
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`
+  }
+  return `${seconds}s`
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
+  if (bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  )
   const value = bytes / 1024 ** i
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }

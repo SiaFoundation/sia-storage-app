@@ -126,6 +126,7 @@ type FileRecordsQueryOpts = {
     isPinned: boolean
   }
   fileExistsLocally?: boolean
+  excludeIds?: string[]
 }
 
 function buildFileRecordsQuery(
@@ -137,7 +138,15 @@ function buildFileRecordsQuery(
   orderExpr: string
   limitExpr: string
 } {
-  const { limit, after, order, pinned, orderBy, fileExistsLocally } = opts
+  const {
+    limit,
+    after,
+    order,
+    pinned,
+    orderBy,
+    fileExistsLocally,
+    excludeIds,
+  } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
   const params: (string | number)[] = []
@@ -175,6 +184,12 @@ function buildFileRecordsQuery(
         `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
       )
     }
+  }
+
+  if (excludeIds && excludeIds.length > 0) {
+    const placeholders = excludeIds.map(() => '?').join(', ')
+    whereClauses.push(`${tableAlias}.id NOT IN (${placeholders})`)
+    params.push(...excludeIds)
   }
 
   const where =
@@ -517,12 +532,24 @@ export function useFileCountAll() {
 
 export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
   librarySwr.getKey('localOnly'),
-  async ({ limit, order }: { limit?: number; order: 'ASC' | 'DESC' }) => {
+  async ({
+    limit,
+    order,
+    orderBy,
+    excludeIds,
+  }: {
+    limit?: number
+    order: 'ASC' | 'DESC'
+    orderBy?: FileRecordCursorColumn
+    excludeIds?: string[]
+  }) => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecords({
       limit,
       after: undefined,
       order,
+      orderBy,
+      excludeIds,
       pinned: {
         indexerURL: currentIndexerURL,
         isPinned: false,

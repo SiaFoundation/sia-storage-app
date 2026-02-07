@@ -4,10 +4,10 @@ import {
   UploadCloudIcon,
 } from 'lucide-react-native'
 import type React from 'react'
-import { useUploadScannerStatus } from '../managers/uploadScanner'
 import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
 import { useHasOnboarded } from '../stores/settings'
+import { useUploadProgress } from '../stores/uploads'
 import { palette } from '../styles/colors'
 import { useIsOnline } from './useIsOnline'
 
@@ -22,7 +22,7 @@ export function useAppStatus(): AppStatus {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const hasOnboarded = useHasOnboarded()
-  const uploadsProgress = useUploadScannerStatus()
+  const uploadsProgress = useUploadProgress()
   const isOnline = useIsOnline()
 
   if (!hasOnboarded || isInitializing) {

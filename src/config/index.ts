@@ -30,8 +30,8 @@ export const PACKER_MAX_SLABS = 10
 // Minimum slab fill percentage before allowing flush (0.0 - 1.0).
 // Prevents flushing when we could pack more efficiently.
 export const SLAB_FILL_THRESHOLD = 0.9
-// Scan interval.
-export const SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
+// Packer DB poll interval.
+export const PACKER_POLL_INTERVAL = secondsInMs(5) // 5 seconds
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
