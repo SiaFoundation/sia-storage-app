@@ -61,6 +61,15 @@ jest.mock('../stores/app', () => ({
   getInitializationError: jest.fn(() => null),
 }))
 
+jest.mock('./uploader', () => ({
+  getUploadManager: jest.fn(() => ({
+    packedCount: 0,
+    packedBytes: 0,
+    uploadedCount: 0,
+    uploadedBytes: 0,
+  })),
+}))
+
 const mockTimer = jest.mocked(BackgroundTimer)
 
 // Helpers

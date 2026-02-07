@@ -143,8 +143,8 @@ export class MockPacker implements MockPackerInterface {
     this.files.push({ data: fullData, size: totalRead })
     this.totalSize += totalRead
 
-    // Don't send progress during add - progress is sent during finalize
-    // which simulates the real SDK behavior where upload happens during finalize
+    // Progress is sent during finalize in the mock for simplicity.
+    // The real SDK sends progress during add() as slabs upload.
 
     return totalRead
   }

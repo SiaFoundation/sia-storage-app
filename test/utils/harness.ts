@@ -27,7 +27,6 @@ import {
 import { initSyncUpMetadata } from '../../src/managers/syncUpMetadata'
 import { initThumbnailScanner } from '../../src/managers/thumbnailScanner'
 import { getUploadManager } from '../../src/managers/uploader'
-import { initUploadScanner } from '../../src/managers/uploadScanner'
 import { setAppKeyForIndexer } from '../../src/stores/appKey'
 import {
   createFileRecord,
@@ -176,7 +175,6 @@ class AppCoreHarnessImpl implements AppCoreHarness {
     }
 
     // Initialize services
-    initUploadScanner()
     initSyncDownEvents()
     initSyncUpMetadata()
     initThumbnailScanner()

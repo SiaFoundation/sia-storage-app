@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { logger } from '../lib/logger'
 import { createGetterAndSelector } from '../lib/selectors'
+import { humanUploadPercent } from '../lib/uploadPercent'
+import { useFileCountAll, useFileCountLocal } from './files'
+import { useAutoScanUploads } from './settings'
 
 export type UploadStatus =
   | 'queued' // In queue, waiting to be added to packer
@@ -178,3 +181,34 @@ export const [getActiveUploads, useActiveUploads] = createGetterAndSelector(
     )
   },
 )
+
+export function useUploadProgress(): {
+  show: boolean
+  enabled: boolean
+  remaining: number
+  percentComplete: string
+  total: number
+} {
+  const total = useFileCountAll()
+  const localOnly = useFileCountLocal({ localOnly: true })
+  const enabled = useAutoScanUploads()
+  const activeUploads = useActiveUploads()
+  const totalCount = total.data ?? 0
+  const localOnlyCount = localOnly.data ?? 0
+  const uploadedCount = totalCount - localOnlyCount
+  const isEnabled = enabled.data ?? false
+  const activeProgress = activeUploads
+    .map((u) => u.progress)
+    .reduce((a, b) => a + b, 0)
+  const percentComplete = totalCount
+    ? (activeProgress + uploadedCount) / totalCount
+    : 0
+
+  return {
+    show: isEnabled && !!localOnlyCount,
+    enabled: isEnabled,
+    remaining: localOnlyCount,
+    percentComplete: humanUploadPercent(percentComplete),
+    total: total.data ?? 0,
+  }
+}

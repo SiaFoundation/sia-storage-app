@@ -13,6 +13,7 @@ jest.mock('../config', () => ({
   PACKER_MAX_BATCH_DURATION: 60000, // 60 seconds
   PACKER_MAX_SLABS: 10,
   SLAB_FILL_THRESHOLD: 0.9,
+  PACKER_POLL_INTERVAL: 5000,
 }))
 
 import type {
@@ -30,8 +31,14 @@ import {
 } from '../config'
 import { initializeDB, resetDb } from '../db'
 import type { LocalObject } from '../encoding/localObject'
-import { createFileRecord, readFileRecord } from '../stores/files'
+import {
+  createFileRecord,
+  getFilesLocalOnly,
+  readFileRecord,
+} from '../stores/files'
 import { readLocalObjectsForFile } from '../stores/localObjects'
+import { getIsConnected } from '../stores/sdk'
+import { getAutoScanUploads } from '../stores/settings'
 import {
   flushPendingUploadProgress,
   getActiveUploads,
@@ -45,11 +52,28 @@ jest.mock('react-native-sia', () => ({}))
 jest.mock('../stores/sdk', () => ({
   useSdk: jest.fn(),
   getSdk: jest.fn(),
+  getIsConnected: jest.fn(() => false),
 }))
 
 jest.mock('../stores/settings', () => ({
   useIndexerURL: jest.fn(() => ({ data: 'https://test.indexer' })),
   getIndexerURL: jest.fn(() => 'https://test.indexer'),
+  getAutoScanUploads: jest.fn(() => false),
+  useAutoScanUploads: jest.fn(() => ({ data: false })),
+}))
+
+jest.mock('../stores/files', () => {
+  const actual = jest.requireActual('../stores/files')
+  return {
+    ...actual,
+    getFilesLocalOnly: jest.fn(() => []),
+    useFileCountAll: jest.fn(() => ({ data: 0 })),
+    useFileCountLocal: jest.fn(() => ({ data: 0 })),
+  }
+})
+
+jest.mock('../stores/fs', () => ({
+  getFsFileUri: jest.fn((file: any) => `file://${file.id}`),
 }))
 
 jest.mock('../lib/fileReader', () => ({
@@ -147,7 +171,6 @@ function createMockPacker(
 ): jest.Mocked<PackedUploadInterface> {
   return {
     add: jest.fn().mockResolvedValue(BigInt(1000)),
-    remaining: jest.fn().mockResolvedValue(BigInt(MOCK_SLAB_SIZE - 1000)),
     finalize: jest.fn().mockResolvedValue([pinnedObject]),
   } as unknown as jest.Mocked<PackedUploadInterface>
 }
@@ -195,11 +218,11 @@ describe('UploadManager', () => {
     resetUploadsStore()
   })
 
-  describe('queueFiles', () => {
+  describe('__testProcessFiles (test helper)', () => {
     it('adds files to packer and sets status to packed', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([
+      await manager.__testProcessFiles([
         createFileEntry('file1'),
         createFileEntry('file2'),
       ])
@@ -212,11 +235,11 @@ describe('UploadManager', () => {
     })
   })
 
-  describe('processFile', () => {
+  describe('processEntry', () => {
     it('creates packer on first file', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
 
       expect(mockSdk.uploadPacked).toHaveBeenCalledWith(
         {
@@ -232,8 +255,8 @@ describe('UploadManager', () => {
     it('reuses packer for subsequent files in same batch', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
-      await manager.queueFiles([createFileEntry('file2')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file2')])
 
       expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
       expect(mockPacker.add).toHaveBeenCalledTimes(2)
@@ -243,7 +266,7 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
 
       // Verify error state in upload store
       const upload = getUploadState('file1')
@@ -256,7 +279,7 @@ describe('UploadManager', () => {
     it('calls finalize on packer', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
 
       expect(mockPacker.finalize).toHaveBeenCalled()
@@ -273,7 +296,7 @@ describe('UploadManager', () => {
         mockPinnedObject,
       ])
 
-      await manager.queueFiles([entry1, entry2])
+      await manager.__testProcessFiles([entry1, entry2])
 
       // Before flush, uploads should be in store
       expect(getActiveUploads()).toHaveLength(2)
@@ -291,7 +314,7 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
-      await manager.queueFiles([entry])
+      await manager.__testProcessFiles([entry])
       await manager.flush()
 
       // Verify local object was created in DB
@@ -306,7 +329,7 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
-      await manager.queueFiles([entry])
+      await manager.__testProcessFiles([entry])
       await manager.flush()
 
       // Verify file record still exists
@@ -319,7 +342,7 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       mockPacker.finalize.mockRejectedValueOnce(new Error('Network error'))
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
 
       // Verify error state
@@ -342,7 +365,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Pin failed'))
 
-      await manager.queueFiles([entry1, entry2])
+      await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
 
       // file1 should be removed (success)
@@ -365,7 +388,7 @@ describe('UploadManager', () => {
         mockPinnedObject,
       ])
 
-      await manager.queueFiles([entry1, entry2])
+      await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
 
       // file1 should be removed (success)
@@ -384,7 +407,7 @@ describe('UploadManager', () => {
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
       mockSdk.pinObject.mockRejectedValueOnce(new Error('Indexer unavailable'))
 
-      await manager.queueFiles([entry])
+      await manager.__testProcessFiles([entry])
       await manager.flush()
 
       // File should have error status
@@ -412,7 +435,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Pin failed'))
 
-      await manager.queueFiles([entry1, entry2])
+      await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
 
       // pin-success should be removed from uploads (completed successfully)
@@ -434,38 +457,58 @@ describe('UploadManager', () => {
     it('creates new packer for files added after flush', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
-      await manager.queueFiles([createFileEntry('file2')])
+      await manager.__testProcessFiles([createFileEntry('file2')])
 
       expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
     })
   })
 
-  describe('idle timeout', () => {
+  describe('idle timeout via loop', () => {
     it('flushes batch after idle timeout', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
+      // Let the loop start and enter its initial poll wait
+      await jest.advanceTimersByTimeAsync(0)
+
+      manager.enqueue([createFileEntry('file1')])
+
+      // Let the loop wake, process the entry, poll DB, and enter idle wait
+      await jest.advanceTimersByTimeAsync(0)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT + 100)
+      // Advance past idle timeout
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
       expect(mockPacker.finalize).toHaveBeenCalled()
     })
 
-    it('resets timer when new file is added', async () => {
+    it('resets idle timer when new file is enqueued', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
+      // Flush microtasks so the loop starts, polls DB (empty), and enters wait
+      await jest.advanceTimersByTimeAsync(0)
 
-      await manager.queueFiles([createFileEntry('file1')])
-      jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT - 1000)
+      manager.enqueue([createFileEntry('file1')])
+      // Flush microtasks so the loop wakes, processes file1, and enters idle wait
+      await jest.advanceTimersByTimeAsync(0)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      await manager.queueFiles([createFileEntry('file2')])
-      jest.advanceTimersByTime(1000) // Original timeout would fire here
+      // Advance partway through idle timeout
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT - 1000)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT) // New timeout fires
+      // Enqueue another file — this wakes the loop, resetting the idle cycle
+      manager.enqueue([createFileEntry('file2')])
+      // Flush microtasks so the loop wakes, processes file2, and re-enters idle wait
+      await jest.advanceTimersByTimeAsync(0)
+
+      // Original timeout would have fired by now but shouldn't
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockPacker.finalize).not.toHaveBeenCalled()
+
+      // New full idle timeout fires
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.finalize).toHaveBeenCalled()
     })
   })
@@ -478,7 +521,7 @@ describe('UploadManager', () => {
 
       // 80% of slab = 96 MiB, below 90% threshold
       const file = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.8))
-      await manager.queueFiles([file])
+      await manager.__testProcessFiles([file])
 
       expect(mockPacker.finalize).not.toHaveBeenCalled()
     })
@@ -488,12 +531,12 @@ describe('UploadManager', () => {
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
-      await manager.queueFiles([file1])
+      await manager.__testProcessFiles([file1])
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
       // Adding 5% more won't overflow (total 96%)
       const file2 = createFileEntry('file2', Math.floor(SLAB_SIZE * 0.05))
-      await manager.queueFiles([file2])
+      await manager.__testProcessFiles([file2])
       expect(mockPacker.finalize).not.toHaveBeenCalled()
     })
 
@@ -502,12 +545,12 @@ describe('UploadManager', () => {
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
-      await manager.queueFiles([file1])
+      await manager.__testProcessFiles([file1])
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
       // Adding 15% would overflow (91 + 15 = 106% > 100%)
       const file2 = createFileEntry('file2', Math.floor(SLAB_SIZE * 0.15))
-      await manager.queueFiles([file2])
+      await manager.__testProcessFiles([file2])
 
       // Should have flushed BEFORE adding file2
       expect(mockPacker.finalize).toHaveBeenCalled()
@@ -518,11 +561,11 @@ describe('UploadManager', () => {
 
       // 50% of slab, below threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.5))
-      await manager.queueFiles([file1])
+      await manager.__testProcessFiles([file1])
 
       // Adding 60% would overflow, but we're below threshold
       const file2 = createFileEntry('file2', Math.floor(SLAB_SIZE * 0.6))
-      await manager.queueFiles([file2])
+      await manager.__testProcessFiles([file2])
 
       // Should NOT flush - below threshold, let packer handle slab boundary
       expect(mockPacker.finalize).not.toHaveBeenCalled()
@@ -536,12 +579,12 @@ describe('UploadManager', () => {
         'file1',
         Math.floor(SLAB_SIZE * SLAB_FILL_THRESHOLD),
       )
-      await manager.queueFiles([file1])
+      await manager.__testProcessFiles([file1])
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
       // Add file that pushes past slab boundary
       const file2 = createFileEntry('file2', Math.floor(SLAB_SIZE * 0.15))
-      await manager.queueFiles([file2])
+      await manager.__testProcessFiles([file2])
 
       // Should flush because fill >= threshold AND would overflow
       expect(mockPacker.finalize).toHaveBeenCalled()
@@ -552,7 +595,7 @@ describe('UploadManager', () => {
     it('removes all files from upload store', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([
+      await manager.__testProcessFiles([
         createFileEntry('file1'),
         createFileEntry('file2'),
       ])
@@ -568,13 +611,14 @@ describe('UploadManager', () => {
       expect(getUploadState('file2')).toBeUndefined()
     })
 
-    it('clears idle timer', async () => {
+    it('stops the loop', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
       manager.shutdown()
 
-      jest.advanceTimersByTime(PACKER_IDLE_TIMEOUT + 1000)
+      // Advancing timers should not trigger finalize since loop is stopped
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT + 1000)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
     })
 
@@ -590,7 +634,7 @@ describe('UploadManager', () => {
       )
 
       manager.initialize(mockSdk, TEST_INDEXER_URL)
-      await manager.queueFiles([createFileEntry('file1')])
+      await manager.__testProcessFiles([createFileEntry('file1')])
 
       // Signal should not be aborted yet
       expect(capturedSignal).toBeDefined()
@@ -602,25 +646,50 @@ describe('UploadManager', () => {
       // Signal should now be aborted
       expect(capturedSignal?.aborted).toBe(true)
     })
-  })
 
-  describe('getSlabRemaining', () => {
-    it('returns full slab size when no packer exists', async () => {
+    it('removes enqueued files from upload store', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      const remaining = await manager.getSlabRemaining()
+      // Enqueue files (they get registered in store)
+      manager.enqueue([createFileEntry('queued-file')])
 
-      expect(remaining).toBe(BigInt(SLAB_SIZE))
+      // Before shutdown, file should be in store
+      expect(getUploadState('queued-file')).toBeDefined()
+
+      manager.shutdown()
+
+      // After shutdown, queued file should be removed
+      expect(getUploadState('queued-file')).toBeUndefined()
     })
 
-    it('returns packer remaining when packer exists', async () => {
+    it('stops processing remaining files in the current batch', async () => {
+      let addCallCount = 0
+      mockPacker.add.mockImplementation(async () => {
+        addCallCount++
+        if (addCallCount === 2) {
+          manager.shutdown()
+        }
+        return BigInt(1000)
+      })
+
       manager.initialize(mockSdk, TEST_INDEXER_URL)
-      mockPacker.remaining.mockResolvedValue(BigInt(5000))
+      const files = Array.from({ length: 15 }, (_, i) =>
+        createFileEntry(`s-file${i}`),
+      )
+      manager.enqueue(files)
 
-      await manager.queueFiles([createFileEntry('file1')])
-      const remaining = await manager.getSlabRemaining()
+      // Flush #1: loop starts, pollDB returns 0, enters PACKER_POLL_INTERVAL wait.
+      await jest.advanceTimersByTimeAsync(0)
+      // Advance past poll interval so the loop wakes and re-polls (finds queued files).
+      await jest.advanceTimersByTimeAsync(5000)
+      // Flush microtasks so processEntries runs — add #2 triggers shutdown.
+      await jest.advanceTimersByTimeAsync(0)
 
-      expect(remaining).toBe(BigInt(5000))
+      // processEntry handles file 0 (creates packer, add #1).
+      // processWindow starts firing adds for files 1-10. Add #2 triggers
+      // shutdown which sets active=false. The fire loop checks active and
+      // stops — files 2-14 are never added to the packer.
+      expect(addCallCount).toBe(2)
     })
   })
 
@@ -635,7 +704,7 @@ describe('UploadManager', () => {
         return mockPacker
       })
 
-      await manager.queueFiles([createFileEntry('file1', 100)])
+      await manager.__testProcessFiles([createFileEntry('file1', 100)])
 
       expect(progressCallback).not.toBeNull()
 
@@ -665,7 +734,7 @@ describe('UploadManager', () => {
         mockPinnedObject,
       ])
 
-      await manager.queueFiles([entry1, entry2])
+      await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
 
       // Each file should have its own local object
@@ -680,8 +749,10 @@ describe('UploadManager', () => {
   })
 
   describe('upload serialization', () => {
-    it('queues files added during finalize and processes them after', async () => {
+    it('files enqueued during flush end up in a new batch', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      await manager.__testProcessFiles([createFileEntry('file1')])
 
       // Make finalize take some time
       let resolveFinalize: () => void
@@ -692,73 +763,21 @@ describe('UploadManager', () => {
           }),
       )
 
-      await manager.queueFiles([createFileEntry('file1')])
-
       // Start flush (will block on finalize)
       const flushPromise = manager.flush()
 
-      // Queue more files while finalize is in progress
-      await manager.queueFiles([createFileEntry('file2')])
+      // Add more files directly while flush is in progress
+      await manager.__testProcessFiles([createFileEntry('file2')])
 
-      // Should not have created a second packer yet
-      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
+      // Should have created a second packer since flush cleared the first
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
 
       // Complete the finalize
       resolveFinalize!()
       await flushPromise
 
-      // Now the pending file should be processed with a new packer
-      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
+      // Both files processed
       expect(mockPacker.add).toHaveBeenCalledTimes(2)
-    })
-
-    it('does not create concurrent packers', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
-
-      let resolveFinalize: () => void
-      mockPacker.finalize.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveFinalize = () => resolve([mockPinnedObject])
-          }),
-      )
-
-      await manager.queueFiles([createFileEntry('file1')])
-      const flushPromise = manager.flush()
-
-      // Queue multiple files during finalize
-      await manager.queueFiles([createFileEntry('file2')])
-      await manager.queueFiles([createFileEntry('file3')])
-
-      // Still only one packer
-      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
-
-      resolveFinalize!()
-      await flushPromise
-
-      // After finalize, pending files processed with new packer
-      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(2)
-      // file1 on first packer, file2 and file3 on second packer
-      expect(mockPacker.add).toHaveBeenCalledTimes(3)
-    })
-
-    it('cancels pending files when shutdown is called', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
-
-      // Make finalize hang so we can test cancellation mid-flight
-      mockPacker.finalize.mockImplementation(() => new Promise(() => {}))
-
-      await manager.queueFiles([createFileEntry('file1')])
-      manager.flush() // Don't await
-
-      // Queue file during finalize
-      await manager.queueFiles([createFileEntry('pending-file')])
-
-      // Cancel everything
-      manager.shutdown()
-
-      // Pending file should be removed from uploads
-      expect(getUploadState('pending-file')).toBeUndefined()
     })
   })
 
@@ -773,27 +792,110 @@ describe('UploadManager', () => {
       // Using 40 MiB files = exactly 1 slab each
       for (let i = 0; i < 10; i++) {
         const file = createFileEntry(`slab-file-${i}`, MOCK_SLAB_SIZE)
-        await manager.queueFiles([file])
+        await manager.__testProcessFiles([file])
       }
 
       // After 10 slabs (400 MiB), max slabs limit should trigger flush
       expect(mockPacker.finalize).toHaveBeenCalled()
     })
 
-    it('duration timer triggers flush after 60 seconds', async () => {
+    it('duration exceeded triggers flush on next loop iteration', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
-      // Add data under max slabs limit
-      for (let i = 0; i < 5; i++) {
-        const file = createFileEntry(`duration-file-${i}`, MOCK_SLAB_SIZE)
-        await manager.queueFiles([file])
+      // Enqueue files through the loop with gaps just under
+      // PACKER_IDLE_TIMEOUT so they count as active time.
+      // 16 files × 4s = 64s > 60s PACKER_MAX_BATCH_DURATION
+      const gap = PACKER_IDLE_TIMEOUT - 1000
+      for (let i = 0; i < 16; i++) {
+        manager.enqueue([createFileEntry(`duration-file-${i}`, 1000)])
+        // Flush microtasks so the loop wakes, processes the file, and enters idle wait
+        await jest.advanceTimersByTimeAsync(0)
+        // Advance clock synchronously — stays under idle timeout so no flush,
+        // but accumulates toward max batch duration
+        jest.advanceTimersByTime(gap)
       }
 
-      expect(mockPacker.finalize).not.toHaveBeenCalled()
+      // One more file triggers the duration check in processEntries
+      manager.enqueue([createFileEntry('duration-trigger', 1000)])
+      // Flush microtasks so processEntries runs and checks batchExceedsDuration()
+      await jest.advanceTimersByTimeAsync(0)
 
-      // Duration timer (60 seconds) fires - forces flush
-      jest.advanceTimersByTime(60000 + 100)
       expect(mockPacker.finalize).toHaveBeenCalled()
+      expect(manager.flushHistory[0].reason).toBe('max_duration')
+    })
+
+    it('duration exceeded mid-window triggers flush after window completes', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Flush microtasks so the loop starts, polls DB (empty), and enters poll wait
+      await jest.advanceTimersByTimeAsync(0)
+
+      // Enqueue one file to create the packer and batch
+      manager.enqueue([createFileEntry('setup', 1000)])
+      // Multiple flushes needed: the loop wakes, processes the file (creating
+      // packer+batch), polls DB again, and enters idle wait. Each async step
+      // (pollDB, processEntry, waitForWorkOrTimeout) requires a separate flush.
+      for (let i = 0; i < 10; i++) {
+        await jest.advanceTimersByTimeAsync(0)
+      }
+      expect(manager.packedCount).toBe(1)
+      expect(manager.flushHistory).toHaveLength(0)
+      expect((manager as any).batch).not.toBeNull()
+
+      // Backdate batch startedAt so the next window exceeds 60s.
+      // Set lastProcessedAt close to now so recordAdd won't treat
+      // subsequent adds as suspension gaps.
+      const mgr = manager as any
+      mgr.batch.startedAt = Date.now() - 61_000
+      mgr.batch.lastProcessedAt = Date.now()
+
+      // Enqueue 10 more files at once. The loop drains them all into
+      // processEntries → processWindow (pipelined path). Duration is checked
+      // after the window completes, so all 10 files are packed before flush.
+      const files = Array.from({ length: 10 }, (_, i) =>
+        createFileEntry(`window-dur-${i}`, 1000),
+      )
+      manager.enqueue(files)
+      // Multiple flushes needed: the loop wakes, drains queue into
+      // processEntries, which pipelines adds. Each awaited add and the
+      // post-window flush check require separate microtask flushes.
+      for (let i = 0; i < 15; i++) {
+        await jest.advanceTimersByTimeAsync(0)
+      }
+
+      expect(manager.flushHistory.length).toBeGreaterThanOrEqual(1)
+      expect(manager.flushHistory[0].reason).toBe('max_duration')
+      // All 11 files (setup + 10) are in the batch since duration is
+      // checked after the window, not mid-window.
+      expect(manager.flushHistory[0].fileCount).toBe(11)
+    })
+
+    it('app suspension does not count toward max batch duration', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Process first file to start a batch
+      manager.enqueue([createFileEntry('pre-suspend', 1000)])
+      // Flush microtasks so the loop wakes and processes the file
+      await jest.advanceTimersByTimeAsync(0)
+      expect(manager.flushHistory).toHaveLength(0)
+
+      // Simulate app suspension: advance clock 5 minutes (synchronous,
+      // so the idle timeout fires but no microtask flush yet)
+      jest.advanceTimersByTime(5 * 60 * 1000)
+
+      // Process another file — the 5min gap is detected as suspension
+      // and excluded from duration tracking, so no max_duration flush
+      manager.enqueue([createFileEntry('post-suspend', 1000)])
+      // Flush microtasks so the loop processes the file
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(manager.flushHistory).toHaveLength(0)
+
+      // The batch is still open — flush via idle timeout
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(manager.flushHistory).toHaveLength(1)
+      expect(manager.flushHistory[0].reason).toBe('idle_timeout')
+      expect(manager.flushHistory[0].fileCount).toBe(2)
     })
 
     it('many small photos hit max slabs limit before 400MB', async () => {
@@ -802,10 +904,208 @@ describe('UploadManager', () => {
       // 2MB photos: 20 per slab, 200 photos = 10 slabs = 400 MiB
       for (let i = 0; i < 200; i++) {
         const file = createFileEntry(`photo-${i}`, 2 * MB)
-        await manager.queueFiles([file])
+        await manager.__testProcessFiles([file])
       }
 
       expect(mockPacker.finalize).toHaveBeenCalled()
+    })
+  })
+
+  describe('loop with DB polling', () => {
+    function enablePolling() {
+      jest.mocked(getIsConnected).mockReturnValue(true)
+      jest.mocked(getAutoScanUploads).mockResolvedValue(true)
+    }
+
+    afterEach(() => {
+      jest.mocked(getIsConnected).mockReturnValue(false)
+      jest.mocked(getAutoScanUploads).mockResolvedValue(false as any)
+      jest.mocked(getFilesLocalOnly).mockResolvedValue([] as any)
+    })
+
+    function createDBFiles(
+      count: number,
+      opts: { prefix?: string; size?: number } = {},
+    ) {
+      const { prefix = 'db', size = 400 } = opts
+      return Array.from({ length: count }, (_, i) => ({
+        id: `${prefix}-${i}`,
+        name: `${prefix}-${i}.bin`,
+        size,
+        type: 'application/octet-stream',
+        hash: `hash-${prefix}-${i}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        localId: null,
+        addedAt: Date.now(),
+        objects: {},
+      })) as any
+    }
+
+    it('drains all polled files into one batch before idle flush', async () => {
+      enablePolling()
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(createDBFiles(20))
+        .mockResolvedValue([] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      // Flush microtasks: loop starts → pollDB finds 20 files →
+      // drainQueues → processEntries adds all 20
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(20)
+      expect(mockPacker.finalize).not.toHaveBeenCalled()
+
+      // Idle timeout triggers: loop re-polls (empty) → flushes
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
+      expect(manager.flushHistory).toHaveLength(1)
+      expect(manager.flushHistory[0].fileCount).toBe(20)
+      expect(manager.flushHistory[0].reason).toBe('idle_timeout')
+    })
+
+    it('re-polls DB and processes additional files found', async () => {
+      enablePolling()
+      const wave1 = createDBFiles(5, { prefix: 'w1' })
+      const wave2 = createDBFiles(5, { prefix: 'w2' })
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(wave1)
+        .mockResolvedValueOnce(wave2)
+        .mockResolvedValue([] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      // Flush microtasks: loop polls twice (wave1 → wave2) and processes all 10
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(10)
+
+      // Idle timeout → re-poll (empty) → flush
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
+      expect(manager.flushHistory[0].fileCount).toBe(10)
+    })
+
+    it('re-polls before idle flush catches late-arriving files', async () => {
+      enablePolling()
+      const wave1 = createDBFiles(3, { prefix: 'w1' })
+      const wave2 = createDBFiles(3, { prefix: 'w2' })
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(wave1)
+        .mockResolvedValueOnce([] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      await jest.advanceTimersByTimeAsync(0)
+      expect(mockPacker.add).toHaveBeenCalledTimes(3)
+
+      // Wave2 appears in DB during idle wait
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(wave2)
+        .mockResolvedValue([] as any)
+
+      // Idle timeout → re-poll → finds wave2 → processes them
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(mockPacker.add).toHaveBeenCalledTimes(6)
+      expect(mockPacker.finalize).not.toHaveBeenCalled()
+
+      // Second idle timeout → re-poll (all excluded) → flush
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
+      expect(manager.flushHistory[0].fileCount).toBe(6)
+    })
+
+    it('processes explicit and polled files together', async () => {
+      enablePolling()
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(createDBFiles(3))
+        .mockResolvedValue([] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.enqueue([createFileEntry('explicit-1')])
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(4)
+    })
+
+    it('does not poll when disconnected', async () => {
+      jest.mocked(getIsConnected).mockReturnValue(false)
+      jest.mocked(getAutoScanUploads).mockResolvedValue(true)
+      jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(getFilesLocalOnly).not.toHaveBeenCalled()
+    })
+
+    it('does not poll when auto-scan is disabled', async () => {
+      jest.mocked(getIsConnected).mockReturnValue(true)
+      jest.mocked(getAutoScanUploads).mockResolvedValue(false)
+      jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).not.toHaveBeenCalled()
+    })
+
+    it('excludeIds allows polling past the 200-file query limit', async () => {
+      // Without excludeIds, a second poll would return the same 200 files
+      // (still local-only until pin), JS filter removes them all, and idle
+      // timeout flushes a small batch. With excludeIds, the second poll
+      // skips already-active files and returns the next batch.
+      enablePolling()
+      const batch1 = createDBFiles(200, { prefix: 'a', size: 100 })
+      const batch2 = createDBFiles(100, { prefix: 'b', size: 100 })
+      jest
+        .mocked(getFilesLocalOnly)
+        .mockResolvedValueOnce(batch1)
+        .mockResolvedValueOnce(batch2)
+        .mockResolvedValue([] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(300)
+
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      const totalFiles = manager.flushHistory.reduce(
+        (sum, h) => sum + h.fileCount,
+        0,
+      )
+      expect(totalFiles).toBe(300)
+    })
+  })
+
+  describe('error recovery', () => {
+    it('loop continues processing after finalize error', async () => {
+      mockPacker.finalize
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValue([mockPinnedObject] as any)
+
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Batch 1 — finalize will fail
+      manager.enqueue([createFileEntry('fail-1', 100)])
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+
+      expect(manager.flushHistory).toHaveLength(1)
+      expect(getUploadState('fail-1')?.status).toBe('error')
+
+      // Batch 2 — loop should still be alive and process new files
+      manager.enqueue([createFileEntry('ok-1', 100)])
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+
+      expect(manager.flushHistory).toHaveLength(2)
+      expect(manager.flushHistory[1].fileCount).toBe(1)
+      expect(getUploadState('ok-1')).toBeUndefined()
     })
   })
 })

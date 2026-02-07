@@ -8,6 +8,7 @@ import {
   PACKER_IDLE_TIMEOUT,
   PACKER_MAX_BATCH_DURATION,
   PACKER_MAX_SLABS,
+  PACKER_POLL_INTERVAL,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
   UPLOAD_DATA_SHARDS,
@@ -20,11 +21,17 @@ import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { logger } from '../lib/logger'
 import { uniqueId } from '../lib/uniqueId'
 import { calculateFileProgress } from '../lib/uploadProgress'
-import { type FileRecordRow, readFileRecord } from '../stores/files'
+import {
+  type FileRecordRow,
+  getFilesLocalOnly,
+  readFileRecord,
+} from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { upsertLocalObject } from '../stores/localObjects'
-import { getSdk, useSdk } from '../stores/sdk'
+import { getIsConnected, getSdk, useSdk } from '../stores/sdk'
+import { getAutoScanUploads } from '../stores/settings'
 import {
+  getActiveUploads,
   registerUpload,
   removeUpload,
   removeUploads,
@@ -34,6 +41,7 @@ import {
   updateUploadProgress,
 } from '../stores/uploads'
 
+/** A file queued for upload with its resolved URI and size. */
 export type FileEntry = {
   fileId: string
   fileUri: string
@@ -41,69 +49,361 @@ export type FileEntry = {
   size: number
 }
 
+/**
+ * Mutable state for the current batch being packed.
+ *
+ * A batch accumulates files until a flush trigger fires:
+ * - slab_threshold: current slab ≥90% full and next file crosses boundary
+ * - max_slabs: total slabs in batch reached PACKER_MAX_SLABS
+ * - max_duration: batch has been open longer than PACKER_MAX_BATCH_DURATION
+ * - idle_timeout: no new files for PACKER_IDLE_TIMEOUT after DB re-poll
+ */
 type BatchState = {
   batchId: string
   files: FileEntry[]
+  /** Running total of all file sizes in this batch. */
   totalSize: number
-  slabsFilled: number // Number of slabs filled so far in this batch
-  startedAt: number // Timestamp when batch was created
-  abortController: AbortController // For cancelling batch operations
+  /** Number of complete slabs: floor(totalSize / SLAB_SIZE). */
+  slabsFilled: number
+  startedAt: number
+  /** Timestamp of last successful packer.add() — used to detect suspension gaps. */
+  lastProcessedAt: number
+  abortController: AbortController
 }
 
-class UploadManager {
-  private sdk: SdkInterface | null = null
-  private packer: PackedUploadInterface | null = null
-  private currentBatch: BatchState | null = null
-  private uploadingBatch: BatchState | null = null // Batch currently being uploaded
-  private idleTimer: NodeJS.Timeout | null = null
-  private durationTimer: NodeJS.Timeout | null = null // Max duration timer
-  private isProcessing = false
-  private indexerURL: string = ''
-  private pendingFiles: FileEntry[] = [] // Files queued while a batch is finalizing
+/** Recorded after each flush for efficiency analysis and testing. */
+export type FlushRecord = {
+  batchId: string
+  reason: string
+  fileCount: number
+  totalSize: number
+  slabsFilled: number
+  /** Percentage of allocated slab capacity used: round(totalSize / ((slabsFilled+1) * SLAB_SIZE) * 100). */
+  fillPercent: number
+}
 
-  /**
-   * Set SDK instance and indexer URL
-   */
+/**
+ * Manages packing files into slab-aligned batches and uploading them.
+ *
+ * Files arrive via two paths:
+ * 1. enqueue() — explicit queue from user actions (share sheet, manual upload)
+ * 2. pollDB() — background scan of local-only files (camera roll sync)
+ *
+ * The async loop (runLoop) pulls files from both sources and feeds them to
+ * processEntry(), which packs them into the current batch. Each packer.add()
+ * call packs data into the current slab and uploads full slabs to the
+ * network as they fill. When a flush trigger fires, finalize() uploads
+ * the last partial slab and returns pinned objects.
+ *
+ * DB polling returns files ordered by createdAt ASC so files are processed
+ * in the order they were added to the library. Photos arrive before their
+ * thumbnails (which are generated asynchronously), naturally mixing large
+ * and small files for efficient slab packing.
+ */
+class UploadManager {
+  /** SDK handle for network operations; set by initialize(). */
+  private sdk: SdkInterface | null = null
+  /** Native packed upload handle; null when no batch is open. */
+  private packer: PackedUploadInterface | null = null
+  /** The batch currently being packed (accumulating files). */
+  private batch: BatchState | null = null
+  /** The batch currently being finalized/uploaded (after flush, before pin). */
+  private uploadingBatch: BatchState | null = null
+  /** Base URL for the indexer service; used when saving pinned objects. */
+  private indexerURL: string = ''
+  /** Files added via enqueue() — processed before polled files. */
+  private explicitQueue: FileEntry[] = []
+  /** Files discovered by pollDB() — processed after explicit queue. */
+  private polledFiles: FileEntry[] = []
+  /** Whether the async loop is running; set false by shutdown() to exit. */
+  private active = false
+  /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
+  private wakeResolver: (() => void) | null = null
+  /** Recorded flush events for efficiency analysis and testing. */
+  private _flushHistory: FlushRecord[] = []
+  /** Cumulative count of files passed to packer.add(). */
+  private _packedCount = 0
+  /** Cumulative bytes passed to packer.add(). */
+  private _packedBytes = 0
+  /** Cumulative count of files successfully pinned and saved. */
+  private _uploadedCount = 0
+  /** Cumulative bytes successfully pinned and saved. */
+  private _uploadedBytes = 0
+
+  /** Connect to the SDK and start the async processing loop. */
   initialize(sdk: SdkInterface, indexerURL: string): void {
     this.sdk = sdk
     this.indexerURL = indexerURL
+    this.startLoop()
   }
 
-  /**
-   * Queue multiple files at once (smart batching).
-   * If a batch is currently finalizing, files are queued and processed after.
-   */
-  async queueFiles(files: FileEntry[]): Promise<void> {
-    if (!this.sdk) {
-      logger.warn('uploadManager', 'SDK not initialized, cannot queue files')
-      return
-    }
-
-    // Register all files as queued
+  /** Add files to the explicit queue and wake the loop. */
+  enqueue(files: FileEntry[]): void {
     for (const file of files) {
       registerUpload(file.fileId)
     }
+    this.explicitQueue.push(...files)
+    this.wake()
+  }
 
-    // If currently finalizing a batch, queue files for later to avoid concurrent uploads
-    if (this.isProcessing) {
-      logger.info(
-        'uploadManager',
-        `Batch finalizing, queuing ${files.length} files for later`,
-      )
-      this.pendingFiles.push(...files)
+  /**
+   * Finalize the current batch: upload the last partial slab and pin objects.
+   *
+   * Full slabs are already uploaded during packer.add() calls, so finalize
+   * only handles the remaining partial slab. Between the first add() and
+   * pinObject there is a risk window where data is uploaded but not yet
+   * pinned. Smaller batches reduce this exposure.
+   *
+   * Computes fillPercent — the fraction of allocated slab capacity used —
+   * and records it in flushHistory. Higher fillPercent means less wasted
+   * slab space (each partial slab is paid for in full on the Sia network).
+   */
+  async flush(
+    reason:
+      | 'idle_timeout'
+      | 'max_duration'
+      | 'max_slabs'
+      | 'slab_threshold'
+      | 'manual' = 'manual',
+  ): Promise<void> {
+    if (!this.packer || !this.batch) {
+      logger.debug('uploadManager', 'No packer to flush')
       return
     }
 
-    // Process each file sequentially
-    for (const entry of files) {
-      await this.processFile(entry)
+    const batch = this.batch
+    const packer = this.packer
+
+    // Move batch to uploadingBatch so shutdown() can cancel it separately
+    this.uploadingBatch = batch
+    this.packer = null
+    this.batch = null
+
+    const durationMs = Date.now() - batch.startedAt
+    const durationSec = (durationMs / 1000).toFixed(1)
+    const slabCapacity = (batch.slabsFilled + 1) * SLAB_SIZE
+    const fillPercent = Math.round((batch.totalSize / slabCapacity) * 100)
+
+    this._flushHistory.push({
+      batchId: batch.batchId,
+      reason,
+      fileCount: batch.files.length,
+      totalSize: batch.totalSize,
+      slabsFilled: batch.slabsFilled,
+      fillPercent,
+    })
+
+    logger.info('uploadManager', 'Flushing batch', {
+      reason,
+      batchId: batch.batchId,
+      files: batch.files.length,
+      totalSize: batch.totalSize,
+      slabsFilled: batch.slabsFilled,
+      fillPercent: `${fillPercent}%`,
+      durationSec,
+    })
+
+    try {
+      const fileCount = batch.files.length
+      for (const entry of batch.files) {
+        setUploadBatchInfo(entry.fileId, batch.batchId, fileCount)
+        setUploadStatus(entry.fileId, 'uploading')
+      }
+
+      const finalizeStart = Date.now()
+      const pinnedObjects = await packer.finalize({
+        signal: batch.abortController.signal,
+      })
+      logger.info('uploadManager', 'batch_finalized', {
+        batchId: batch.batchId,
+        objects: pinnedObjects.length,
+        finalizeMs: Date.now() - finalizeStart,
+      })
+
+      const saveStart = Date.now()
+      const successfulFileIds = await this.saveBatchObjects(
+        batch,
+        pinnedObjects,
+      )
+      removeUploads(successfulFileIds)
+      logger.info('uploadManager', 'batch_completed', {
+        batchId: batch.batchId,
+        files: successfulFileIds.length,
+        saveMs: Date.now() - saveStart,
+      })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      logger.error(
+        'uploadManager',
+        `Error finalizing batch ${batch.batchId}`,
+        e,
+      )
+
+      for (const entry of batch.files) {
+        setUploadError(entry.fileId, message)
+      }
+    } finally {
+      this.uploadingBatch = null
+    }
+  }
+
+  /** Stop the loop, abort in-flight batches, and clean up upload state. */
+  shutdown(): void {
+    this.active = false
+
+    if (this.batch) {
+      logger.info('uploadManager', `Cancelling batch ${this.batch.batchId}`)
+      this.batch.abortController.abort()
+      for (const entry of this.batch.files) {
+        removeUpload(entry.fileId)
+      }
+    }
+
+    if (this.uploadingBatch) {
+      logger.info(
+        'uploadManager',
+        `Cancelling uploading batch ${this.uploadingBatch.batchId}`,
+      )
+      this.uploadingBatch.abortController.abort()
+      for (const entry of this.uploadingBatch.files) {
+        removeUpload(entry.fileId)
+      }
+    }
+
+    for (const entry of this.explicitQueue) {
+      removeUpload(entry.fileId)
+    }
+    this.explicitQueue = []
+    this.polledFiles = []
+
+    this.packer = null
+    this.batch = null
+
+    this.wake()
+  }
+
+  get flushHistory(): FlushRecord[] {
+    return this._flushHistory
+  }
+
+  get packedCount(): number {
+    return this._packedCount
+  }
+
+  get packedBytes(): number {
+    return this._packedBytes
+  }
+
+  get uploadedCount(): number {
+    return this._uploadedCount
+  }
+
+  get uploadedBytes(): number {
+    return this._uploadedBytes
+  }
+
+  /** Full state reset for test isolation. */
+  reset(): void {
+    this.active = false
+    this.wake()
+    this.packer = null
+    this.batch = null
+    this.uploadingBatch = null
+    this.explicitQueue = []
+    this.polledFiles = []
+    this.sdk = null
+    this.indexerURL = ''
+    this._flushHistory = []
+    this._packedCount = 0
+    this._packedBytes = 0
+    this._uploadedCount = 0
+    this._uploadedBytes = 0
+  }
+
+  /**
+   * Test-only: feed files directly into processEntry(), bypassing the
+   * async loop. Allows deterministic control over file order and timing.
+   */
+  async __testProcessFiles(files: FileEntry[]): Promise<void> {
+    for (const file of files) {
+      registerUpload(file.fileId)
+      await this.processEntry(file)
+    }
+  }
+
+  private drainQueues(first: FileEntry): FileEntry[] {
+    const entries = [first]
+    for (;;) {
+      const next =
+        this.explicitQueue.shift() ?? this.polledFiles.shift() ?? undefined
+      if (!next) break
+      entries.push(next)
+    }
+    return entries
+  }
+
+  private startLoop(): void {
+    if (this.active) return
+    this.active = true
+    this.runLoop()
+  }
+
+  /**
+   * Main async loop. Pulls files from explicitQueue (priority) then
+   * polledFiles, packing each into the current batch via processEntry().
+   *
+   * When both queues are empty:
+   * - If a batch exists: poll DB, then idle-wait. On timeout, re-poll
+   *   once more (to catch files created during the wait), then flush.
+   * - If no batch: wait for PACKER_POLL_INTERVAL before re-polling.
+   *
+   * The idle-wait is cancelable via wake() so new enqueue() calls
+   * or shutdown() take effect immediately.
+   */
+  private async runLoop(): Promise<void> {
+    while (this.active) {
+      const next =
+        this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
+
+      if (next) {
+        await this.processEntries(this.drainQueues(next))
+        continue
+      }
+
+      const newFiles = await this.pollDB()
+      if (newFiles > 0) {
+        continue
+      }
+
+      if (this.batch) {
+        const result = await this.waitForWorkOrTimeout(PACKER_IDLE_TIMEOUT)
+        if (result === 'timeout') {
+          // Re-poll before flushing — other services (syncNewPhotos, etc.)
+          // may have created file records during the idle wait.
+          const newFilesBeforeFlush = await this.pollDB()
+          if (newFilesBeforeFlush > 0) continue
+          await this.flush('idle_timeout')
+        }
+      } else {
+        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL)
+      }
     }
   }
 
   /**
-   * Internal: process a single file
+   * Pack a single file into the current batch.
+   *
+   * Before adding, two pre-flush checks run:
+   * 1. Threshold flush: if the current slab is ≥90% full and this file
+   *    would cross into a new slab, flush now to avoid wasting the
+   *    well-filled slab by continuing to accumulate.
+   * 2. Oversized pre-flush: if this file is larger than SLAB_SIZE and
+   *    adding it would push the batch past PACKER_MAX_SLABS, flush the
+   *    existing batch first so the oversized file gets its own batch.
+   *
+   * After adding, if slabsFilled >= PACKER_MAX_SLABS, flush immediately.
    */
-  private async processFile(entry: FileEntry): Promise<void> {
+  private async processEntry(entry: FileEntry): Promise<void> {
     if (!this.sdk) {
       logger.error('uploadManager', 'SDK not initialized')
       setUploadError(entry.fileId, 'SDK not initialized')
@@ -111,13 +411,22 @@ class UploadManager {
     }
 
     try {
-      // Check if we should flush before adding this file.
-      // Flush if: current slab is >= threshold full AND adding this file would overflow.
-      if (this.currentBatch && this.shouldFlushBeforeAdding(entry.size)) {
+      if (this.batch && this.shouldFlushBeforeAdding(entry.size)) {
         await this.flush('slab_threshold')
       }
 
-      // Initialize packer if needed
+      // Oversized file pre-flush: if the batch already has files and adding
+      // this large file would exceed max slabs, flush the existing batch first.
+      // Only triggers for files > SLAB_SIZE to avoid splitting normal accumulation.
+      if (this.batch && this.batch.files.length > 0 && entry.size > SLAB_SIZE) {
+        const projectedSlabs = Math.floor(
+          (this.batch.totalSize + entry.size) / SLAB_SIZE,
+        )
+        if (projectedSlabs >= PACKER_MAX_SLABS) {
+          await this.flush('max_slabs')
+        }
+      }
+
       if (!this.packer) {
         logger.info('uploadManager', 'Creating new packer')
         const batch: BatchState = {
@@ -126,10 +435,10 @@ class UploadManager {
           totalSize: 0,
           slabsFilled: 0,
           startedAt: Date.now(),
+          lastProcessedAt: 0,
           abortController: new AbortController(),
         }
-        this.currentBatch = batch
-        this.startDurationTimer()
+        this.batch = batch
         this.packer = await this.sdk.uploadPacked(
           {
             maxInflight: UPLOAD_MAX_INFLIGHT,
@@ -144,55 +453,34 @@ class UploadManager {
         )
       }
 
-      // Add file to packer
       setUploadStatus(entry.fileId, 'packing')
-      logger.info(
+      logger.debug(
         'uploadManager',
         `Adding file ${entry.fileId} to packer (${entry.size} bytes)`,
       )
 
+      const t0 = Date.now()
       const reader = createFileReader(entry.fileUri)
+      const t1 = Date.now()
       await this.packer.add(reader, {
-        signal: this.currentBatch!.abortController.signal,
+        signal: this.batch!.abortController.signal,
+      })
+      const t2 = Date.now()
+      const slabsBefore = this.batch!.slabsFilled
+      this.recordAdd(entry)
+      logger.info('uploadManager', 'file_added', {
+        fileId: entry.fileId,
+        size: entry.size,
+        batchId: this.batch!.batchId,
+        readerMs: t1 - t0,
+        addMs: t2 - t1,
+        slabsBefore,
+        slabsAfter: this.batch!.slabsFilled,
       })
 
-      // Update batch state
-      this.currentBatch?.files.push(entry)
-      this.currentBatch!.totalSize += entry.size
-
-      // Update batch info for all files in the batch
-      const batchFileCount = this.currentBatch!.files.length
-      for (const file of this.currentBatch?.files ?? []) {
-        setUploadBatchInfo(
-          file.fileId,
-          this.currentBatch!.batchId,
-          batchFileCount,
-        )
-      }
-
-      setUploadStatus(entry.fileId, 'packed')
-
-      // Check how many complete slabs we've filled
-      const slabsFilled = Math.floor(this.currentBatch!.totalSize / SLAB_SIZE)
-      this.currentBatch!.slabsFilled = slabsFilled
-
-      logger.info(
-        'uploadManager',
-        `File ${
-          entry.fileId
-        } packed. Batch: ${batchFileCount} files, ${slabsFilled} slab(s), ${Math.round(
-          this.getCurrentSlabFillPercent() * 100,
-        )}% of current slab`,
-      )
-
-      // Check if we've hit max slabs limit
       if (this.shouldFlushDueToLimits()) {
         await this.flush('max_slabs')
-        return
       }
-
-      // Reset idle timer
-      this.resetIdleTimer()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       logger.error('uploadManager', `Error processing file ${entry.fileId}`, e)
@@ -201,52 +489,278 @@ class UploadManager {
   }
 
   /**
-   * Check if batch limits have been exceeded (max slabs).
+   * Process entries with pipelined packer.add() calls. The SDK serializes
+   * the actual pack+upload work, but firing multiple adds overlaps reader
+   * creation and FFI call setup with the previous call's I/O.
+   *
+   * Each iteration either:
+   * - Falls back to processEntry (creates packer, runs pre-flush checks)
+   * - Fires a window of adds concurrently, awaiting in order
+   *
+   * computeWindowEnd simulates adding files to determine how many can
+   * be added before a threshold/max_slabs flush would trigger.
    */
-  private shouldFlushDueToLimits(): boolean {
-    if (!this.currentBatch) return false
-    return this.currentBatch.slabsFilled >= PACKER_MAX_SLABS
+  private async processEntries(entries: FileEntry[]): Promise<void> {
+    let i = 0
+
+    while (i < entries.length && this.active) {
+      // computeWindowEnd needs a packer+batch — when neither exists or
+      // when the next file would trigger a pre-flush, fall back to
+      // processEntry which handles packer creation and pre-flush checks.
+      const windowEnd =
+        this.packer && this.batch ? this.computeWindowEnd(entries, i) : i
+
+      if (windowEnd === i) {
+        await this.processEntry(entries[i])
+        i++
+      } else {
+        await this.processWindow(entries, i, windowEnd)
+        i = windowEnd
+      }
+
+      if (this.batchExceedsDuration()) {
+        await this.flush('max_duration')
+      }
+    }
   }
 
   /**
-   * Check if we should flush before adding a file of the given size.
-   * Returns true if current slab is >= threshold full AND adding would overflow.
+   * Fire packer.add() for entries[from..end) concurrently, then await
+   * each in order updating batch state after each completes.
+   */
+  private async processWindow(
+    entries: FileEntry[],
+    from: number,
+    end: number,
+  ): Promise<void> {
+    const packer = this.packer!
+    const signal = this.batch!.abortController.signal
+
+    const inflight = []
+    for (let j = from; j < end; j++) {
+      if (!this.active) break
+      const entry = entries[j]
+      setUploadStatus(entry.fileId, 'packing')
+      logger.debug(
+        'uploadManager',
+        `Adding file ${entry.fileId} to packer (${entry.size} bytes)`,
+      )
+      const t0 = Date.now()
+      const reader = createFileReader(entry.fileUri)
+      inflight.push({
+        entry,
+        t0,
+        readerMs: Date.now() - t0,
+        promise: packer.add(reader, { signal }),
+      })
+    }
+
+    // Await each add in order. The SDK serializes the actual work, so
+    // t1→t2 measures this file's queue wait + processing + any slab upload.
+    for (const { entry, readerMs, promise } of inflight) {
+      try {
+        const t1 = Date.now()
+        await promise
+        if (!this.active || !this.batch) break
+        const t2 = Date.now()
+        const slabsBefore = this.batch.slabsFilled
+        this.recordAdd(entry)
+        logger.info('uploadManager', 'file_added', {
+          fileId: entry.fileId,
+          size: entry.size,
+          batchId: this.batch.batchId,
+          readerMs,
+          addMs: t2 - t1,
+          slabsBefore,
+          slabsAfter: this.batch.slabsFilled,
+        })
+
+        if (this.shouldFlushDueToLimits()) {
+          await this.flush('max_slabs')
+        }
+      } catch (e) {
+        if (!this.active) break
+        const message = e instanceof Error ? e.message : String(e)
+        logger.error(
+          'uploadManager',
+          `Error processing file ${entry.fileId}`,
+          e,
+        )
+        setUploadError(entry.fileId, message)
+      }
+    }
+  }
+
+  /**
+   * How many entries starting at `from` can be added to the current batch
+   * without triggering a threshold or max_slabs flush. Returns the
+   * exclusive end index, capped at from + 200.
+   */
+  private computeWindowEnd(entries: FileEntry[], from: number): number {
+    let simulatedSize = this.batch!.totalSize
+    const cap = Math.min(from + 200, entries.length)
+
+    for (let j = from; j < cap; j++) {
+      const size = entries[j].size
+      const currentSlabs = Math.floor(simulatedSize / SLAB_SIZE)
+      const newSlabs = Math.floor((simulatedSize + size) / SLAB_SIZE)
+      const fillPct = (simulatedSize % SLAB_SIZE) / SLAB_SIZE
+
+      // Would trigger threshold flush
+      if (fillPct >= SLAB_FILL_THRESHOLD && newSlabs > currentSlabs) return j
+      // Would trigger oversized pre-flush
+      if (size > SLAB_SIZE && newSlabs >= PACKER_MAX_SLABS) return j
+
+      simulatedSize += size
+
+      // Hit max_slabs — include this file but stop the window
+      if (Math.floor(simulatedSize / SLAB_SIZE) >= PACKER_MAX_SLABS)
+        return j + 1
+    }
+
+    return cap
+  }
+
+  /**
+   * Query DB for local-only files not yet being uploaded. Excludes files
+   * already registered as active uploads at the SQL level so the LIMIT
+   * returns actually-available files rather than re-fetching active ones.
+   * Returns files ordered by createdAt ASC so photos are processed before
+   * their thumbnails, naturally mixing sizes for efficient slab packing.
+   *
+   * @returns Number of new files added to the polledFiles queue.
+   */
+  private async pollDB(): Promise<number> {
+    if (!this.sdk) return 0
+
+    const isConnected = getIsConnected()
+    if (!isConnected) return 0
+
+    const autoScan = await getAutoScanUploads()
+    if (!autoScan) return 0
+
+    try {
+      const activeUploads = getActiveUploads()
+      const activeIds = activeUploads.map((u) => u.id)
+
+      const candidateFiles = await getFilesLocalOnly({
+        limit: 200,
+        order: 'ASC',
+        excludeIds: activeIds.length > 0 ? activeIds : undefined,
+      })
+
+      for (const file of candidateFiles) {
+        const fileUri = await getFsFileUri(file)
+        if (!fileUri) continue
+        const entry: FileEntry = {
+          fileId: file.id,
+          fileUri,
+          file,
+          size: file.size,
+        }
+        registerUpload(entry.fileId)
+        this.polledFiles.push(entry)
+      }
+
+      return this.polledFiles.length
+    } catch (e) {
+      logger.error('uploadManager', 'DB poll error', e)
+      return 0
+    }
+  }
+
+  /** Signal the loop to stop waiting and check queues immediately. */
+  private wake(): void {
+    if (this.wakeResolver) {
+      this.wakeResolver()
+      this.wakeResolver = null
+    }
+  }
+
+  /**
+   * Block until either wake() is called or the timeout elapses.
+   * Used by the loop to idle-wait between poll cycles or before flushing.
+   */
+  private waitForWorkOrTimeout(ms: number): Promise<'woken' | 'timeout'> {
+    return new Promise<'woken' | 'timeout'>((resolve) => {
+      const timer = setTimeout(() => {
+        this.wakeResolver = null
+        resolve('timeout')
+      }, ms)
+
+      this.wakeResolver = () => {
+        clearTimeout(timer)
+        resolve('woken')
+      }
+    })
+  }
+
+  /**
+   * Update batch state after a successful packer.add(). Detects suspension
+   * gaps (time between adds exceeding PACKER_IDLE_TIMEOUT) and adjusts
+   * startedAt so suspended time doesn't count toward max_duration.
+   */
+  private recordAdd(entry: FileEntry): void {
+    const now = Date.now()
+    if (this.batch!.lastProcessedAt > 0) {
+      const gap = now - this.batch!.lastProcessedAt
+      if (gap > PACKER_IDLE_TIMEOUT) {
+        this.batch!.startedAt += gap
+      }
+    }
+    this.batch!.lastProcessedAt = now
+
+    this.batch!.files.push(entry)
+    this.batch!.totalSize += entry.size
+    this._packedCount++
+    this._packedBytes += entry.size
+    setUploadStatus(entry.fileId, 'packed')
+    this.batch!.slabsFilled = Math.floor(this.batch!.totalSize / SLAB_SIZE)
+  }
+
+  private batchExceedsDuration(): boolean {
+    if (!this.batch) return false
+    return Date.now() - this.batch.startedAt >= PACKER_MAX_BATCH_DURATION
+  }
+
+  /** True when the batch has filled enough slabs to warrant flushing. */
+  private shouldFlushDueToLimits(): boolean {
+    if (!this.batch) return false
+    return this.batch.slabsFilled >= PACKER_MAX_SLABS
+  }
+
+  /**
+   * True when the current slab is well-filled (≥ SLAB_FILL_THRESHOLD) and
+   * adding fileSize bytes would cross into a new slab. Flushing at this
+   * point preserves the efficient packing of the current slab rather than
+   * letting the new file straddle a boundary and waste the remaining space.
    */
   private shouldFlushBeforeAdding(fileSize: number): boolean {
-    if (!this.currentBatch) return false
+    if (!this.batch) return false
 
     const currentFill = this.getCurrentSlabFillPercent()
-    const currentSlabs = Math.floor(this.currentBatch.totalSize / SLAB_SIZE)
-    const newSlabs = Math.floor(
-      (this.currentBatch.totalSize + fileSize) / SLAB_SIZE,
-    )
+    const currentSlabs = Math.floor(this.batch.totalSize / SLAB_SIZE)
+    const newSlabs = Math.floor((this.batch.totalSize + fileSize) / SLAB_SIZE)
     const wouldCrossBoundary = newSlabs > currentSlabs
 
     return currentFill >= SLAB_FILL_THRESHOLD && wouldCrossBoundary
   }
 
-  /**
-   * Get the fill percentage of the current partial slab (0.0 - 1.0).
-   */
+  /** How full the current (partial) slab is, as a fraction 0–1. */
   private getCurrentSlabFillPercent(): number {
-    if (!this.currentBatch) return 0
-    return (this.currentBatch.totalSize % SLAB_SIZE) / SLAB_SIZE
+    if (!this.batch) return 0
+    return (this.batch.totalSize % SLAB_SIZE) / SLAB_SIZE
   }
 
-  /**
-   * Progress callback for the packer. Takes batch as parameter to avoid stale
-   * closure issues when this.currentBatch is set to null during flush.
-   */
+  /** Distribute batch upload progress across individual files by size weight. */
   private onProgress(
     batch: BatchState,
     uploaded: bigint,
     encodedTotal: bigint,
   ): void {
-    // Calculate batch progress as a ratio
     const batchProgress =
       encodedTotal > 0n ? Number(uploaded) / Number(encodedTotal) : 0
 
-    // Calculate batch info for progress calculation
     const batchInfo = {
       files: batch.files.map((f) => ({
         fileId: f.fileId,
@@ -255,7 +769,6 @@ class UploadManager {
       totalSize: batch.totalSize,
     }
 
-    // Update progress for each file
     for (const entry of batch.files) {
       const fileProgress = calculateFileProgress(
         batchInfo,
@@ -267,177 +780,8 @@ class UploadManager {
   }
 
   /**
-   * Reset the idle timer
-   */
-  private resetIdleTimer(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer)
-    }
-    this.idleTimer = setTimeout(async () => {
-      try {
-        await this.flush('idle_timeout')
-      } catch (error) {
-        logger.error(
-          'uploadManager',
-          'Error flushing batch after idle timeout',
-          error,
-        )
-      }
-    }, PACKER_IDLE_TIMEOUT)
-  }
-
-  /**
-   * Start the max duration timer for the current batch
-   */
-  private startDurationTimer(): void {
-    if (this.durationTimer) {
-      clearTimeout(this.durationTimer)
-    }
-    this.durationTimer = setTimeout(async () => {
-      try {
-        await this.flush('max_duration')
-      } catch (error) {
-        logger.error(
-          'uploadManager',
-          'Error flushing batch after duration timeout',
-          error,
-        )
-      }
-    }, PACKER_MAX_BATCH_DURATION)
-  }
-
-  /**
-   * Flush current packer (finalize and save objects)
-   * @param reason - What triggered the flush (for logging)
-   */
-  async flush(
-    reason:
-      | 'idle_timeout'
-      | 'max_duration'
-      | 'max_slabs'
-      | 'slab_threshold'
-      | 'manual' = 'manual',
-  ): Promise<void> {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer)
-      this.idleTimer = null
-    }
-    if (this.durationTimer) {
-      clearTimeout(this.durationTimer)
-      this.durationTimer = null
-    }
-
-    if (!this.packer || !this.currentBatch) {
-      logger.debug('uploadManager', 'No packer to flush')
-      return
-    }
-
-    if (this.isProcessing) {
-      logger.debug('uploadManager', 'Already processing, skipping flush')
-      return
-    }
-
-    this.isProcessing = true
-    const batch = this.currentBatch
-    const packer = this.packer
-
-    // Track uploading batch so it can be cancelled
-    this.uploadingBatch = batch
-
-    // Clear state immediately so new files go to a new batch
-    this.packer = null
-    this.currentBatch = null
-
-    // Calculate efficiency metrics
-    const durationMs = Date.now() - batch.startedAt
-    const durationSec = (durationMs / 1000).toFixed(1)
-    const slabCapacity = (batch.slabsFilled + 1) * SLAB_SIZE
-    const fillPercent = Math.round((batch.totalSize / slabCapacity) * 100)
-
-    logger.info('uploadManager', 'Flushing batch', {
-      reason,
-      batchId: batch.batchId,
-      files: batch.files.length,
-      totalSize: batch.totalSize,
-      slabsFilled: batch.slabsFilled,
-      fillPercent: `${fillPercent}%`,
-      durationSec,
-    })
-
-    try {
-      // Set all files to uploading status
-      for (const entry of batch.files) {
-        setUploadStatus(entry.fileId, 'uploading')
-      }
-
-      // Finalize the packer - completes any partial slab upload and waits for all uploads
-      const pinnedObjects = await packer.finalize({
-        signal: batch.abortController.signal,
-      })
-
-      logger.info(
-        'uploadManager',
-        `Batch ${batch.batchId} finalized with ${pinnedObjects.length} objects`,
-      )
-
-      // Match objects to files and save, returns IDs of successfully saved files
-      const successfulFileIds = await this.saveBatchObjects(
-        batch,
-        pinnedObjects,
-      )
-
-      // Remove only successful uploads from store
-      // Files that errored during saveBatchObjects remain visible with error state
-      removeUploads(successfulFileIds)
-
-      logger.info(
-        'uploadManager',
-        `Batch ${batch.batchId} completed successfully`,
-      )
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      logger.error(
-        'uploadManager',
-        `Error finalizing batch ${batch.batchId}`,
-        e,
-      )
-
-      // Mark all files in the batch as errored
-      for (const entry of batch.files) {
-        setUploadError(entry.fileId, message)
-      }
-    } finally {
-      this.isProcessing = false
-      this.uploadingBatch = null
-      // Process any files that were queued while we were finalizing
-      await this.processPendingFiles()
-    }
-  }
-
-  /**
-   * Process any files that were queued while a batch was finalizing.
-   * This ensures uploads are serialized - only one packer uploads at a time.
-   */
-  private async processPendingFiles(): Promise<void> {
-    if (this.pendingFiles.length === 0) {
-      return
-    }
-
-    const files = this.pendingFiles
-    this.pendingFiles = []
-
-    logger.info(
-      'uploadManager',
-      `Processing ${files.length} files queued during finalize`,
-    )
-
-    for (const entry of files) {
-      await this.processFile(entry)
-    }
-  }
-
-  /**
-   * Save all objects from a batch. Returns array of file IDs that were saved successfully.
+   * After finalize, pin each object and save it locally. Files deleted
+   * during upload are skipped (their upload entry is still cleaned up).
    */
   private async saveBatchObjects(
     batch: BatchState,
@@ -445,7 +789,6 @@ class UploadManager {
   ): Promise<string[]> {
     const successfulFileIds: string[] = []
 
-    // Objects are returned in add-order
     if (pinnedObjects.length !== batch.files.length) {
       logger.warn(
         'uploadManager',
@@ -467,7 +810,6 @@ class UploadManager {
       }
 
       try {
-        // Check if file still exists (may have been deleted while batch was in-flight)
         const fileRecord = await readFileRecord(entry.fileId)
         if (!fileRecord) {
           logger.warn(
@@ -478,13 +820,9 @@ class UploadManager {
           continue
         }
 
-        // Update metadata on the pinned object
         pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
-
-        // Pin the object to the indexer (this saves slabs + object metadata)
         await this.sdk!.pinObject(pinnedObject)
 
-        // Convert to local object and save
         const localObject = await pinnedObjectToLocalObject(
           entry.fileId,
           this.indexerURL,
@@ -493,6 +831,8 @@ class UploadManager {
         await upsertLocalObject(localObject)
 
         logger.debug('uploadManager', `Saved object for file ${entry.fileId}`)
+        this._uploadedCount++
+        this._uploadedBytes += entry.size
         successfulFileIds.push(entry.fileId)
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
@@ -507,90 +847,11 @@ class UploadManager {
 
     return successfulFileIds
   }
-
-  /**
-   * Shutdown the upload manager, cancelling all uploads.
-   * Called when SDK is replaced or reset.
-   */
-  shutdown(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer)
-      this.idleTimer = null
-    }
-    if (this.durationTimer) {
-      clearTimeout(this.durationTimer)
-      this.durationTimer = null
-    }
-
-    // Cancel batch being packed
-    if (this.currentBatch) {
-      logger.info(
-        'uploadManager',
-        `Cancelling batch ${this.currentBatch.batchId}`,
-      )
-      this.currentBatch.abortController.abort()
-      for (const entry of this.currentBatch.files) {
-        removeUpload(entry.fileId)
-      }
-    }
-
-    // Cancel batch being uploaded
-    if (this.uploadingBatch) {
-      logger.info(
-        'uploadManager',
-        `Cancelling uploading batch ${this.uploadingBatch.batchId}`,
-      )
-      this.uploadingBatch.abortController.abort()
-      for (const entry of this.uploadingBatch.files) {
-        removeUpload(entry.fileId)
-      }
-    }
-
-    // Clear pending files
-    for (const entry of this.pendingFiles) {
-      removeUpload(entry.fileId)
-    }
-    this.pendingFiles = []
-
-    this.packer = null
-    this.currentBatch = null
-  }
-
-  /**
-   * Get bytes remaining in current slab
-   */
-  async getSlabRemaining(): Promise<bigint> {
-    if (!this.packer) {
-      return BigInt(SLAB_SIZE)
-    }
-    return this.packer.remaining()
-  }
-
-  /**
-   * Reset manager state (for testing)
-   */
-  reset(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer)
-      this.idleTimer = null
-    }
-    if (this.durationTimer) {
-      clearTimeout(this.durationTimer)
-      this.durationTimer = null
-    }
-    this.packer = null
-    this.currentBatch = null
-    this.uploadingBatch = null
-    this.isProcessing = false
-    this.pendingFiles = []
-    this.sdk = null
-    this.indexerURL = ''
-  }
 }
 
-// Singleton instance
 let uploadManager: UploadManager | null = null
 
+/** Returns the singleton UploadManager, creating it on first access. */
 export function getUploadManager(): UploadManager {
   if (!uploadManager) {
     uploadManager = new UploadManager()
@@ -598,10 +859,7 @@ export function getUploadManager(): UploadManager {
   return uploadManager
 }
 
-/**
- * Hook to provide an upload function.
- * Uploader is initialized when SDK is created (in sdk.ts).
- */
+/** React hook: returns a callback that enqueues files for upload. */
 export function useUploader() {
   const sdk = useSdk()
 
@@ -623,16 +881,14 @@ export function useUploader() {
       }
 
       if (entries.length > 0) {
-        await getUploadManager().queueFiles(entries)
+        getUploadManager().enqueue(entries)
       }
     },
     [sdk],
   )
 }
 
-/**
- * Re-upload a single file
- */
+/** Re-enqueue a single file for upload (e.g. after a previous failure). */
 export async function reuploadFile(fileId: string): Promise<void> {
   const sdk = getSdk()
   if (!sdk) throw new Error('SDK not initialized')
@@ -643,23 +899,19 @@ export async function reuploadFile(fileId: string): Promise<void> {
   const fileUri = await getFsFileUri(file)
   if (!fileUri) throw new Error('File not available locally')
 
-  await getUploadManager().queueFiles([
+  getUploadManager().enqueue([
     { fileId: file.id, fileUri, file, size: file.size },
   ])
 }
 
-/**
- * Hook to re-upload a single file by ID
- */
+/** React hook wrapper for reuploadFile. */
 export function useReuploadFile() {
   return useCallback(async (fileId: string) => {
     await reuploadFile(fileId)
   }, [])
 }
 
-/**
- * Queue upload for a single file ID (used by scanner)
- */
+/** Enqueue a file by ID if it exists locally and SDK is available. */
 export async function queueUploadForFileId(fileId: string): Promise<void> {
   const sdk = getSdk()
   if (!sdk) return
@@ -670,7 +922,7 @@ export async function queueUploadForFileId(fileId: string): Promise<void> {
   const fileUri = await getFsFileUri(file)
   if (!fileUri) return
 
-  await getUploadManager().queueFiles([
+  getUploadManager().enqueue([
     { fileId: file.id, fileUri, file, size: file.size },
   ])
 }
