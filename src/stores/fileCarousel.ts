@@ -177,16 +177,11 @@ export async function fetchFilePosition(
   return result?.count ?? 0
 }
 
-// Fetches files at the given indices by querying the contiguous range they span.
-export async function fetchFilesAtIndices(
-  indices: number[],
+export async function fetchSortedFileIds(
   params: VirtualListQueryParams,
-): Promise<Map<number, FileRecord>> {
-  const result = new Map<number, FileRecord>()
-  if (indices.length === 0) {
-    return result
-  }
-
+  limit: number,
+  offset: number,
+): Promise<string[]> {
   const { where, params: queryParams } = buildLibraryQueryParts({
     sortBy: params.sortBy,
     sortDir: params.sortDir,
@@ -196,70 +191,42 @@ export async function fetchFilesAtIndices(
   })
 
   const orderExpr = buildOrderExpr(params.sortBy, params.sortDir)
-
-  // Find the range of indices we need
-  const minIndex = Math.min(...indices)
-  const maxIndex = Math.max(...indices)
-  const rangeSize = maxIndex - minIndex + 1
-
-  // Single query: fetch the entire range with one LIMIT/OFFSET
-  // This is O(n) instead of O(n*m) for m indices
-  const sql = `SELECT ${FILE_COLUMNS} FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`
-  const rows = await db().getAllAsync<FileRecordRow>(
-    sql,
+  const rows = await db().getAllAsync<{ id: string }>(
+    `SELECT f.id FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`,
     ...queryParams,
-    rangeSize,
-    minIndex,
+    limit,
+    offset,
   )
+  return rows.map((r) => r.id)
+}
 
-  // Hydrate all rows in one batch
-  const hydratedFiles = await hydrateRows(rows)
+export async function fetchFilesByIDs(
+  ids: string[],
+): Promise<Map<string, FileRecord>> {
+  const result = new Map<string, FileRecord>()
+  if (ids.length === 0) return result
 
-  // Map each file to its absolute index
-  const indicesSet = new Set(indices)
-  for (let i = 0; i < hydratedFiles.length; i++) {
-    const absoluteIndex = minIndex + i
-    if (indicesSet.has(absoluteIndex)) {
-      result.set(absoluteIndex, hydratedFiles[i])
-    }
+  const placeholders = ids.map(() => '?').join(',')
+  const rows = await db().getAllAsync<FileRecordRow>(
+    `SELECT ${FILE_COLUMNS} FROM files f WHERE f.id IN (${placeholders})`,
+    ...ids,
+  )
+  const hydrated = await hydrateRows(rows)
+  for (const file of hydrated) {
+    result.set(file.id, file)
   }
-
   return result
 }
 
-// The carousel can't hold thousands of files in memory, so we give it placeholder
-// indices and fetch the actual file data as the user swipes nearby.
-
-async function fetchFileByID(fileID: string): Promise<FileRecord | null> {
-  const row = await db().getFirstAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS} FROM files f WHERE f.id = ? LIMIT 1`,
-    fileID,
-  )
-
-  if (!row) return null
-
-  const [file] = await hydrateRows([row])
-  return file ?? null
-}
-
-async function fileExists(fileID: string): Promise<boolean> {
-  const result = await db().getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE id = ?`,
-    fileID,
-  )
-  return (result?.count ?? 0) > 0
-}
-
-type UseVirtualFileListParams = {
+type UseFileCarouselParams = {
   initialId: string
   initialFile?: FileRecord
   prefetchRadius?: number
   maxCacheSize?: number
   onDeleted?: () => void
-  onUpdated?: (message: string) => void
 }
 
-type UseVirtualFileListReturn = {
+type UseFileCarouselReturn = {
   totalCount: number
   currentIndex: number
   currentFile: FileRecord | null
@@ -268,39 +235,60 @@ type UseVirtualFileListReturn = {
   isLoading: boolean
 }
 
+function windowIndices(
+  center: number,
+  count: number,
+  radius: number,
+): number[] {
+  const indices: number[] = []
+  for (
+    let i = Math.max(0, center - radius);
+    i <= Math.min(count - 1, center + radius);
+    i++
+  ) {
+    indices.push(i)
+  }
+  return indices
+}
+
+const ID_WINDOW_SIZE = 201
+const ID_WINDOW_HALF = Math.floor(ID_WINDOW_SIZE / 2)
+
 /**
- * Hook for virtualized file browsing in the carousel.
+ * Hook for file browsing in the carousel.
  *
- * Instead of loading all files into memory, this maintains a sparse cache
- * and fetches files on-demand as the user swipes. The carousel receives
- * placeholder indices and calls getFileAtIndex to get actual file data.
- *
- * @param initialId - The file ID to start viewing
- * @param initialFile - Optional pre-loaded file to avoid a flash of loading state
- * @param prefetchRadius - How many files to prefetch in each direction (default: 3)
- * @param maxCacheSize - Maximum files to keep in memory (default: 50)
+ * Uses a frozen ID window to prevent flickering and position shifts during sync:
+ * 1. At open time, captures ~201 sorted file IDs centered on the opened file.
+ * 2. Index→ID mappings are immutable for the session (append-only, never cleared).
+ * 3. Sync only monitors the current file for deletion.
+ * 4. File cache preserves references when data is identical (updatedAt + object count).
  */
-export function useVirtualFileList({
+export function useFileCarousel({
   initialId,
   initialFile,
   prefetchRadius = 3,
   maxCacheSize = 50,
   onDeleted,
-  onUpdated,
-}: UseVirtualFileListParams): UseVirtualFileListReturn {
+}: UseFileCarouselParams): UseFileCarouselReturn {
   const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
   const sortingDir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const [currentIndex, setCurrentIndexState] = useState<number>(0)
-  const [totalCount, setTotalCount] = useState<number>(initialFile ? 1 : 0)
+  const [currentIndex, _setCurrentIndex] = useState(0)
+  const [totalCount, setTotalCount] = useState(initialFile ? 1 : 0)
   const [isLoading, setIsLoading] = useState(!initialFile)
-
-  const cacheRef = useRef<Map<number, FileRecord>>(
-    initialFile ? new Map([[0, initialFile]]) : new Map(),
-  )
-  const fetchingRef = useRef<Set<number>>(new Set())
   const [cacheVersion, setCacheVersion] = useState(0)
 
+  // File data keyed by ID — persists across position changes
+  const fileCacheRef = useRef<Map<string, FileRecord>>(
+    initialFile ? new Map([[initialFile.id, initialFile]]) : new Map(),
+  )
+
+  // Index → file ID mapping — frozen at open time, append-only
+  const positionMapRef = useRef<Map<number, string>>(
+    initialFile ? new Map([[0, initialFile.id]]) : new Map(),
+  )
+
+  const currentFileIdRef = useRef(initialId)
   const initialFileRef = useRef(initialFile)
 
   const categoriesKey = useMemo(
@@ -321,58 +309,107 @@ export function useVirtualFileList({
     [sortBy, sortingDir, categoriesKey, searchQuery],
   )
 
-  // Initialize: find the starting position and prefetch nearby files
+  const populateCaches = useCallback(
+    (indexToFile: Map<number, FileRecord>): boolean => {
+      let changed = false
+      indexToFile.forEach((file, index) => {
+        positionMapRef.current.set(index, file.id)
+        const existing = fileCacheRef.current.get(file.id)
+        if (
+          existing &&
+          existing.updatedAt === file.updatedAt &&
+          Object.keys(existing.objects).length ===
+            Object.keys(file.objects).length
+        ) {
+          return
+        }
+        fileCacheRef.current.set(file.id, file)
+        changed = true
+      })
+      return changed
+    },
+    [],
+  )
+
+  const evictDistant = useCallback(
+    (centerIndex: number) => {
+      if (fileCacheRef.current.size <= maxCacheSize) return
+
+      const posEntries = Array.from(positionMapRef.current.entries())
+      posEntries.sort(
+        (a, b) => Math.abs(a[0] - centerIndex) - Math.abs(b[0] - centerIndex),
+      )
+      const keepIds = new Set(
+        posEntries.slice(0, maxCacheSize).map(([, id]) => id),
+      )
+      keepIds.add(currentFileIdRef.current)
+      for (const id of [...fileCacheRef.current.keys()]) {
+        if (!keepIds.has(id)) {
+          fileCacheRef.current.delete(id)
+        }
+      }
+    },
+    [maxCacheSize],
+  )
+
+  // Initialize: capture frozen ID window centered on the opened file
   useEffect(() => {
     let cancelled = false
 
     async function init() {
-      // If we have initialFile, don't show loading state - render immediately
-      // while we fetch position/count in the background
       if (!initialFileRef.current) {
         setIsLoading(true)
-        cacheRef.current.clear()
       }
-      fetchingRef.current.clear()
 
       try {
-        const [count, position] = await Promise.all([
-          fetchTotalCount(queryParams),
-          fetchFilePosition(initialId, queryParams),
-        ])
-
+        const position = await fetchFilePosition(initialId, queryParams)
         if (cancelled) return
 
-        // Move initialFile from index 0 to its actual position.
-        if (initialFileRef.current) {
-          if (position !== 0) {
-            cacheRef.current.delete(0)
-          }
-          cacheRef.current.set(position, initialFileRef.current)
-        }
-
-        setTotalCount(count)
-        setCurrentIndexState(position)
-
-        const indicesToFetch: number[] = []
-        for (
-          let i = Math.max(0, position - prefetchRadius);
-          i <= Math.min(count - 1, position + prefetchRadius);
-          i++
-        ) {
-          indicesToFetch.push(i)
-        }
-
-        const fetched = await fetchFilesAtIndices(
-          indicesToFetch.filter((i) => !cacheRef.current.has(i)),
+        const windowOffset = Math.max(0, position - ID_WINDOW_HALF)
+        const ids = await fetchSortedFileIds(
           queryParams,
+          ID_WINDOW_SIZE,
+          windowOffset,
         )
 
         if (cancelled) return
 
-        fetched.forEach((file, index) => {
-          cacheRef.current.set(index, file)
-        })
+        const relativePosition = position - windowOffset
 
+        for (let i = 0; i < ids.length; i++) {
+          positionMapRef.current.set(i, ids[i])
+        }
+
+        // When initialFile is provided, skip fetching visible files here.
+        // The prefetch effect runs immediately after and handles it.
+        if (!initialFileRef.current) {
+          const visibleIndices = windowIndices(
+            relativePosition,
+            ids.length,
+            prefetchRadius,
+          )
+          const visibleIds = visibleIndices
+            .map((i) => positionMapRef.current.get(i))
+            .filter((id): id is string => !!id && !fileCacheRef.current.has(id))
+
+          if (visibleIds.length > 0) {
+            const fileMap = await fetchFilesByIDs(visibleIds)
+            if (cancelled) return
+            const indexToFile = new Map<number, FileRecord>()
+            for (const i of visibleIndices) {
+              const id = positionMapRef.current.get(i)
+              if (id) {
+                const file = fileMap.get(id)
+                if (file) indexToFile.set(i, file)
+              }
+            }
+            populateCaches(indexToFile)
+          }
+        }
+
+        currentFileIdRef.current = initialId
+        setTotalCount(ids.length)
+        _setCurrentIndex(relativePosition)
         setCacheVersion((v) => v + 1)
       } finally {
         if (!cancelled) {
@@ -386,59 +423,39 @@ export function useVirtualFileList({
     return () => {
       cancelled = true
     }
-  }, [initialId, queryParams, prefetchRadius])
+  }, [initialId, queryParams, prefetchRadius, populateCaches])
 
-  // Prefetch: as the user swipes, fetch nearby files and evict distant ones
+  // Prefetch: as the user swipes, fetch nearby files by ID
   useEffect(() => {
     if (isLoading || totalCount === 0) return
 
     let cancelled = false
 
     async function prefetch() {
-      const indicesToFetch: number[] = []
+      const indices = windowIndices(currentIndex, totalCount, prefetchRadius)
+      const idsToFetch = indices
+        .map((i) => positionMapRef.current.get(i))
+        .filter((id): id is string => !!id && !fileCacheRef.current.has(id))
 
-      for (
-        let i = Math.max(0, currentIndex - prefetchRadius);
-        i <= Math.min(totalCount - 1, currentIndex + prefetchRadius);
-        i++
-      ) {
-        if (!cacheRef.current.has(i) && !fetchingRef.current.has(i)) {
-          indicesToFetch.push(i)
-          fetchingRef.current.add(i)
+      if (idsToFetch.length === 0) return
+
+      const fileMap = await fetchFilesByIDs(idsToFetch)
+
+      if (cancelled) return
+
+      const indexToFile = new Map<number, FileRecord>()
+      for (const i of indices) {
+        const id = positionMapRef.current.get(i)
+        if (id) {
+          const file = fileMap.get(id)
+          if (file) indexToFile.set(i, file)
         }
       }
 
-      if (indicesToFetch.length === 0) return
-
-      try {
-        const fetched = await fetchFilesAtIndices(indicesToFetch, queryParams)
-
-        if (cancelled) return
-
-        fetched.forEach((file, index) => {
-          cacheRef.current.set(index, file)
-        })
-
-        // Evict files furthest from current position to stay under maxCacheSize
-        if (cacheRef.current.size > maxCacheSize) {
-          const entries = Array.from(cacheRef.current.entries())
-          entries.sort(
-            (a, b) =>
-              Math.abs(a[0] - currentIndex) - Math.abs(b[0] - currentIndex),
-          )
-          const toKeep = new Set(
-            entries.slice(0, maxCacheSize).map(([idx]) => idx),
-          )
-          for (const [idx] of entries) {
-            if (!toKeep.has(idx)) {
-              cacheRef.current.delete(idx)
-            }
-          }
-        }
-
+      const changed = populateCaches(indexToFile)
+      evictDistant(currentIndex)
+      if (changed) {
         setCacheVersion((v) => v + 1)
-      } finally {
-        indicesToFetch.forEach((i) => fetchingRef.current.delete(i))
       }
     }
 
@@ -451,104 +468,29 @@ export function useVirtualFileList({
     currentIndex,
     totalCount,
     isLoading,
-    queryParams,
     prefetchRadius,
-    maxCacheSize,
+    evictDistant,
+    populateCaches,
   ])
-
-  const currentFileIDRef = useRef<string | null>(null)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces re-run when cache updates
-  useEffect(() => {
-    const file = cacheRef.current.get(currentIndex)
-    currentFileIDRef.current = file?.id ?? null
-  }, [currentIndex, cacheVersion])
 
   const handleLibraryChange = useCallback(async () => {
     if (isLoading) return
 
-    const currentFileID = currentFileIDRef.current
+    const currentFileID = currentFileIdRef.current
     if (!currentFileID) return
 
     try {
-      const exists = await fileExists(currentFileID)
-      if (!exists) {
+      const row = await db().getFirstAsync<{ id: string }>(
+        'SELECT id FROM files WHERE id = ? LIMIT 1',
+        currentFileID,
+      )
+      if (!row) {
         onDeleted?.()
-        return
-      }
-
-      const [newCount, newPosition] = await Promise.all([
-        fetchTotalCount(queryParams),
-        fetchFilePosition(currentFileID, queryParams),
-      ])
-
-      // Clear cache when position or count changes
-      const positionChanged =
-        newCount !== totalCount || newPosition !== currentIndex
-      if (positionChanged) {
-        // Preserve the current file to avoid a flash or loading state.
-        const currentFile = cacheRef.current.get(currentIndex)
-
-        setTotalCount(newCount)
-        setCurrentIndexState(newPosition)
-        cacheRef.current.clear()
-        fetchingRef.current.clear()
-
-        if (currentFile) {
-          cacheRef.current.set(newPosition, currentFile)
-        }
-
-        setCacheVersion((v) => v + 1)
-      }
-
-      // Use newPosition for cache lookups when position changed, since
-      // state updates are async and currentIndex is stale in this callback.
-      const effectiveIndex = positionChanged ? newPosition : currentIndex
-
-      const cachedFile = cacheRef.current.get(effectiveIndex)
-      if (cachedFile && cachedFile.id === currentFileID) {
-        const freshFile = await fetchFileByID(currentFileID)
-        if (freshFile) {
-          const nameChanged = cachedFile.name !== freshFile.name
-          const metadataChanged =
-            nameChanged ||
-            cachedFile.updatedAt !== freshFile.updatedAt ||
-            cachedFile.size !== freshFile.size ||
-            cachedFile.type !== freshFile.type
-
-          if (metadataChanged) {
-            cacheRef.current.set(effectiveIndex, freshFile)
-            setCacheVersion((v) => v + 1)
-
-            const message = nameChanged ? 'File renamed' : 'File info updated'
-            onUpdated?.(message)
-
-            if (nameChanged && sortBy === 'NAME') {
-              const updatedPosition = await fetchFilePosition(
-                currentFileID,
-                queryParams,
-              )
-              if (updatedPosition !== effectiveIndex) {
-                setCurrentIndexState(updatedPosition)
-                cacheRef.current.clear()
-                fetchingRef.current.clear()
-                setCacheVersion((v) => v + 1)
-              }
-            }
-          }
-        }
       }
     } catch (_e) {
       // Silently ignore errors during sync handling.
     }
-  }, [
-    isLoading,
-    onDeleted,
-    queryParams,
-    totalCount,
-    currentIndex,
-    sortBy,
-    onUpdated,
-  ])
+  }, [isLoading, onDeleted])
 
   useEffect(() => {
     librarySwr.addChangeCallback('carousel', handleLibraryChange)
@@ -557,10 +499,12 @@ export function useVirtualFileList({
     }
   }, [handleLibraryChange])
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when cache updates
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when caches update
   const getFileAtIndex = useCallback(
     (index: number): FileRecord | null => {
-      return cacheRef.current.get(index) ?? null
+      const fileId = positionMapRef.current.get(index)
+      if (!fileId) return null
+      return fileCacheRef.current.get(fileId) ?? null
     },
     [cacheVersion],
   )
@@ -568,7 +512,9 @@ export function useVirtualFileList({
   const setCurrentIndex = useCallback(
     (index: number) => {
       if (index >= 0 && index < totalCount) {
-        setCurrentIndexState(index)
+        _setCurrentIndex(index)
+        const fileId = positionMapRef.current.get(index)
+        if (fileId) currentFileIdRef.current = fileId
       }
     },
     [totalCount],

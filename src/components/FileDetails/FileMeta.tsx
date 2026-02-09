@@ -186,7 +186,7 @@ export function FileMeta({
                   />
                   <LabeledValueRow
                     label="Slabs"
-                    value={pinnedObject.slabs().length}
+                    value={String(pinnedObject.slabs().length)}
                     isMonospace
                     showDividerTop
                   />
