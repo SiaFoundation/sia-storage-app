@@ -54,3 +54,5 @@ export const SYNC_UP_METADATA_INTERVAL = secondsInMs(10) // 10 seconds
 export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files
 // Auto-download threshold for shared file imports.
 export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
+// Performance monitor logging interval.
+export const PERF_MONITOR_INTERVAL = secondsInMs(15)
