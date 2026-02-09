@@ -16,6 +16,7 @@ import { initBackgroundTasks } from './backgroundTasks'
 import { initFsEvictionScanner } from './fsEvictionScanner'
 import { initFsOrphanScanner } from './fsOrphanScanner'
 import { initLogRotation } from './logRotation'
+import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents, resetSyncDownCursor } from './syncDownEvents'
 import { initSyncNewPhotos, resetPhotosNewCursor } from './syncNewPhotos'
 import {
@@ -83,6 +84,7 @@ export async function initApp(): Promise<void> {
       initThumbnailScanner()
       initFsOrphanScanner()
       initFsEvictionScanner()
+      initPerfMonitor()
       await initLogRotation()
     },
   })
