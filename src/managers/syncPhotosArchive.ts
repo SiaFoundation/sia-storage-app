@@ -15,6 +15,7 @@ import {
   setAsyncStorageBoolean,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
+import { getFileCountLocal } from '../stores/files'
 import { librarySwr } from '../stores/library'
 import { settingsSwr } from '../stores/settings'
 
@@ -22,6 +23,14 @@ const PAGE_SIZE = 50
 
 export async function workBackward() {
   if (!(await getMediaLibraryPermissions())) return
+  const localOnlyCount = await getFileCountLocal({ localOnly: true })
+  if (localOnlyCount > 0) {
+    logger.info(
+      'syncPhotosArchive',
+      `waiting for ${localOnlyCount} local-only files to sync`,
+    )
+    return
+  }
   const cursor = await getPhotosArchiveCursor()
 
   try {

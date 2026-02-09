@@ -10,6 +10,7 @@ import {
   useAutoSyncPhotosArchive,
   usePhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
+import { useFileCountLocal } from '../stores/files'
 import { colors } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup } from './Group'
@@ -20,6 +21,7 @@ export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
   const autoSyncPhotosArchive = useAutoSyncPhotosArchive()
   const photosArchiveCursor = usePhotosArchiveCursor()
+  const localOnlyCount = useFileCountLocal({ localOnly: true })
   const cursorValue = photosArchiveCursor.data ?? 0
   const photosArchiveInProgress = cursorValue > 0
   const { isSomeAccess, accessLabel, color } = useMediaLibraryPermissions()
@@ -86,6 +88,13 @@ export function SettingsSyncPhotos() {
             }`}</Text>
           )
         : null}
+      {autoSyncPhotosArchive.data &&
+      photosArchiveInProgress &&
+      (localOnlyCount.data ?? 0) > 0 ? (
+        <Text
+          style={styles.info}
+        >{`Waiting for ${localOnlyCount.data} files to upload before continuing archive sync`}</Text>
+      ) : null}
       <Button
         style={{ marginTop: 10 }}
         disabled={syncPhotosArchiveControlsDisabled}
