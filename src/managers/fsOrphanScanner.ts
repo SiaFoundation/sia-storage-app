@@ -1,16 +1,18 @@
+import type { File } from 'expo-file-system'
 import { FS_ORPHAN_FREQUENCY } from '../config'
 import { db } from '../db'
 import { logger } from '../lib/logger'
-import { createServiceInterval } from '../lib/serviceInterval'
 import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
 import {
-  deleteFsFileMetadata,
+  deleteFsFileMetadataBatch,
   fsTriggerRefresh,
   listFilesInFsStorageDirectory,
 } from '../stores/fs'
+
+const BATCH_SIZE = 50
 
 function extractFileIdFromName(name: string): string | null {
   const dotIndex = name.lastIndexOf('.')
@@ -24,9 +26,9 @@ function extractFileIdFromName(name: string): string | null {
  * Files may be orphaned if they are from a different account, previous version of app,
  * left after an error, or other edge cases.
  */
-export async function runFsOrphanScanner(): Promise<
-  { removed: number } | undefined
-> {
+export async function runFsOrphanScanner(options?: {
+  onProgress?: (removed: number, total: number) => void
+}): Promise<{ removed: number } | undefined> {
   const lastRun = await getFsOrphanLastRun()
   if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {
     return
@@ -37,31 +39,47 @@ export async function runFsOrphanScanner(): Promise<
     if (files.length === 0) return
 
     let removed = 0
-    for (const file of files) {
-      const fileId = extractFileIdFromName(file.name)
-      if (!fileId) continue
 
-      const orphaned = await isFsFileOrphaned(fileId)
-      if (!orphaned) continue
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE)
 
-      try {
-        file.delete()
-        removed += 1
-        await deleteFsFileMetadata(fileId)
-        await fsTriggerRefresh(fileId)
-        logger.info(
-          'fsOrphanScanner',
-          `removed unindexed file fileId=${fileId} uri=${file.uri}`,
-        )
-      } catch (error) {
-        logger.error(
-          'fsOrphanScanner',
-          `failed to delete file fileId=${fileId} uri=${file.uri} error=${error}`,
-        )
+      const entries = batch
+        .map((f) => ({ file: f, fileId: extractFileIdFromName(f.name) }))
+        .filter((e): e is { file: File; fileId: string } => e.fileId !== null)
+
+      const orphanedIds = await findOrphanedFileIds(
+        entries.map((e) => e.fileId),
+      )
+
+      for (const entry of entries) {
+        if (!orphanedIds.has(entry.fileId)) continue
+        try {
+          entry.file.delete()
+          removed++
+          logger.info(
+            'fsOrphanScanner',
+            `removed unindexed file fileId=${entry.fileId} uri=${entry.file.uri}`,
+          )
+        } catch (error) {
+          logger.error(
+            'fsOrphanScanner',
+            `failed to delete file fileId=${entry.fileId} uri=${entry.file.uri} error=${error}`,
+          )
+        }
       }
+
+      if (orphanedIds.size > 0) {
+        await deleteFsFileMetadataBatch([...orphanedIds])
+      }
+
+      options?.onProgress?.(removed, files.length)
+
+      // Yield to event loop between batches
+      await new Promise((resolve) => setTimeout(resolve, 0))
     }
 
     if (removed > 0) {
+      await fsTriggerRefresh()
       logger.info('fsOrphanScanner', `summary removed=${removed}`)
     }
     return { removed }
@@ -72,30 +90,21 @@ export async function runFsOrphanScanner(): Promise<
   }
 }
 
-/**
- * isFsFileOrphaned checks if an fs file is orphaned:
- * - no longer represented in the fs metadata table, or
- * - still in the fs metadata table but missing from the files table.
- */
-export async function isFsFileOrphaned(fileId: string): Promise<boolean> {
-  const row = await db().getFirstAsync<{ hasFs: number; hasFile: number }>(
-    `SELECT
-        EXISTS(SELECT 1 FROM fs WHERE fileId = ?) AS hasFs,
-        EXISTS(SELECT 1 FROM files WHERE id = ?) AS hasFile`,
-    fileId,
-    fileId,
+export async function findOrphanedFileIds(
+  fileIds: string[],
+): Promise<Set<string>> {
+  if (fileIds.length === 0) return new Set()
+  const rows = await db().getAllAsync<{ fileId: string }>(
+    `SELECT value AS fileId FROM json_each(?)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM fs WHERE fs.fileId = value
+     ) OR NOT EXISTS (
+       SELECT 1 FROM files WHERE files.id = value
+     )`,
+    JSON.stringify(fileIds),
   )
-  return !(row?.hasFs === 1 && row?.hasFile === 1)
+  return new Set(rows.map((r) => r.fileId))
 }
-
-export const initFsOrphanScanner = createServiceInterval({
-  name: 'fsOrphanScanner',
-  worker: async () => {
-    await runFsOrphanScanner()
-  },
-  getState: async () => true,
-  interval: 30_000,
-})
 
 export async function setFsOrphanLastRun(): Promise<void> {
   await setAsyncStorageNumber('fsOrphanLastRun', Date.now())

@@ -13,8 +13,8 @@ import { getHasOnboarded, setHasOnboarded } from '../stores/settings'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { clearAllUploads } from '../stores/uploads'
 import { initBackgroundTasks } from './backgroundTasks'
-import { initFsEvictionScanner } from './fsEvictionScanner'
-import { initFsOrphanScanner } from './fsOrphanScanner'
+import { runFsEvictionScanner } from './fsEvictionScanner'
+import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents, resetSyncDownCursor } from './syncDownEvents'
@@ -69,6 +69,20 @@ export async function initApp(): Promise<void> {
         }
       },
     })
+
+    steps.push({
+      id: 'cleanup',
+      label: 'Cleaning up old files',
+      message: 'Cleaning up old files...',
+      runner: async (updateMessage) => {
+        await runFsOrphanScanner({
+          onProgress: (removed) => {
+            updateMessage(`Cleaning up old files... ${removed} removed`)
+          },
+        })
+        await runFsEvictionScanner()
+      },
+    })
   }
 
   steps.push({
@@ -82,8 +96,6 @@ export async function initApp(): Promise<void> {
       initBackgroundTasks()
       initSyncUpMetadata()
       initThumbnailScanner()
-      initFsOrphanScanner()
-      initFsEvictionScanner()
       initPerfMonitor()
       await initLogRotation()
     },

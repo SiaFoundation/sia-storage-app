@@ -11,7 +11,7 @@ import {
   readFsFileMetadata,
   upsertFsFileMetadata,
 } from '../stores/fs'
-import { runFsOrphanScanner } from './fsOrphanScanner'
+import { findOrphanedFileIds, runFsOrphanScanner } from './fsOrphanScanner'
 
 const listFilesInFsStorageDirectoryMock = jest.mocked(
   listFilesInFsStorageDirectory,
@@ -103,6 +103,7 @@ describe('fsOrphanScanner', () => {
     expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toEqual({ removed: 0 })
   })
+
   it('deletes files that have no associated files table row', async () => {
     const file = makeFile('file-1.jpg')
     listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
@@ -118,5 +119,79 @@ describe('fsOrphanScanner', () => {
     expect(file.delete).toHaveBeenCalledTimes(1)
     expect(await readFsFileMetadata('file-1')).toBeNull()
     expect(result).toEqual({ removed: 1 })
+  })
+
+  it('calls onProgress with correct removed/total counts', async () => {
+    const files = [makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')]
+    listFilesInFsStorageDirectoryMock.mockImplementation(() => files)
+    await createFileRecord({
+      id: 'b',
+      name: 'b.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-b',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: null,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'b',
+      size: 100,
+      addedAt: now,
+      usedAt: now,
+    })
+
+    const onProgress = jest.fn()
+    await runFsOrphanScanner({ onProgress })
+
+    expect(onProgress).toHaveBeenCalledWith(2, 3)
+  })
+
+  it('correctly identifies orphaned and non-orphaned files in batch', async () => {
+    await createFileRecord({
+      id: 'keep-1',
+      name: 'keep-1.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-keep-1',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: null,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'keep-1',
+      size: 100,
+      addedAt: now,
+      usedAt: now,
+    })
+
+    const orphaned = await findOrphanedFileIds([
+      'keep-1',
+      'orphan-1',
+      'orphan-2',
+    ])
+
+    expect(orphaned.has('keep-1')).toBe(false)
+    expect(orphaned.has('orphan-1')).toBe(true)
+    expect(orphaned.has('orphan-2')).toBe(true)
+    expect(orphaned.size).toBe(2)
+  })
+
+  it('yields between batches via setTimeout', async () => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+    const files = Array.from({ length: 60 }, (_, i) =>
+      makeFile(`file-${i}.jpg`),
+    )
+    listFilesInFsStorageDirectoryMock.mockImplementation(() => files)
+
+    const result = await runFsOrphanScanner()
+
+    // 60 files / 50 per batch = 2 batches, each yields via setTimeout
+    const yieldCalls = setTimeoutSpy.mock.calls.filter(([, ms]) => ms === 0)
+    expect(yieldCalls.length).toBe(2)
+    expect(result).toEqual({ removed: 60 })
+    setTimeoutSpy.mockRestore()
   })
 })

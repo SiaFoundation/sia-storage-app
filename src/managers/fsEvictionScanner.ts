@@ -5,7 +5,6 @@ import {
 } from '../config'
 import { db } from '../db'
 import { logger } from '../lib/logger'
-import { createServiceInterval } from '../lib/serviceInterval'
 import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
@@ -135,15 +134,6 @@ export async function readFsEvictionCandidates(params: {
     limit,
   )
 }
-
-export const initFsEvictionScanner = createServiceInterval({
-  name: 'fsEvictionScanner',
-  worker: async () => {
-    await runFsEvictionScanner()
-  },
-  getState: async () => true,
-  interval: 30_000,
-})
 
 export async function setFsEvictionLastRun(): Promise<void> {
   await setAsyncStorageNumber('fsEvictionLastRun', Date.now())

@@ -61,6 +61,16 @@ jest.mock('../stores/app', () => ({
   getInitializationError: jest.fn(() => null),
 }))
 
+const mockRunFsEvictionScanner = jest.fn(() => Promise.resolve(undefined))
+jest.mock('./fsEvictionScanner', () => ({
+  runFsEvictionScanner: () => mockRunFsEvictionScanner(),
+}))
+
+const mockRunFsOrphanScanner = jest.fn(() => Promise.resolve(undefined))
+jest.mock('./fsOrphanScanner', () => ({
+  runFsOrphanScanner: () => mockRunFsOrphanScanner(),
+}))
+
 jest.mock('./uploader', () => ({
   getUploadManager: jest.fn(() => ({
     packedCount: 0,
@@ -94,6 +104,8 @@ describe('backgroundTasks', () => {
     mockTimerCallbacks.clear()
     mockNextTimerId = 1
     mockGetFileStatsLocal.mockReset()
+    mockRunFsEvictionScanner.mockReset().mockResolvedValue(undefined)
+    mockRunFsOrphanScanner.mockReset().mockResolvedValue(undefined)
 
     await initBackgroundTasks()
   })
@@ -270,6 +282,24 @@ describe('backgroundTasks', () => {
       // Abort via timeout
       timeoutCallback('com.transistorsoft.fetch')
       await taskPromise
+    })
+  })
+
+  describe('scanners', () => {
+    it('runs fsOrphanScanner during background work', async () => {
+      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
+
+      await taskCallback('com.transistorsoft.fetch')
+
+      expect(mockRunFsOrphanScanner).toHaveBeenCalledTimes(1)
+    })
+
+    it('runs fsEvictionScanner during background work', async () => {
+      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
+
+      await taskCallback('com.transistorsoft.fetch')
+
+      expect(mockRunFsEvictionScanner).toHaveBeenCalledTimes(1)
     })
   })
 

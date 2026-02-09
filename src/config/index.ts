@@ -43,7 +43,7 @@ export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.
 export const FS_MAX_BYTES = 1_000_000_000 // 1 GB
 // File system orphaned file cleanup frequency.
-export const FS_ORPHAN_FREQUENCY = daysInMs(7) // 7 days
+export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 // File system file eviction frequency.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
 // Age threshold for considering files evictable.
