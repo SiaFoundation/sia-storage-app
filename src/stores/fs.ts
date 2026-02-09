@@ -156,6 +156,17 @@ export async function deleteFsFileMetadata(fileId: string): Promise<void> {
   await sqlDelete(fsMetadataTable, { fileId })
 }
 
+export async function deleteFsFileMetadataBatch(
+  fileIds: string[],
+): Promise<void> {
+  if (fileIds.length === 0) return
+  const placeholders = fileIds.map(() => '?').join(',')
+  await db().runAsync(
+    `DELETE FROM ${fsMetadataTable} WHERE fileId IN (${placeholders})`,
+    ...fileIds,
+  )
+}
+
 export async function readFsFileMetadata(
   fileId: string,
 ): Promise<FsMetaRow | null> {

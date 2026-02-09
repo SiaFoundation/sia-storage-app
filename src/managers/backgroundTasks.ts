@@ -9,6 +9,8 @@ import { getInitializationError, getIsInitializing } from '../stores/app'
 import { getFileStatsLocal } from '../stores/files'
 import { getIsConnected } from '../stores/sdk'
 import { getHasOnboarded } from '../stores/settings'
+import { runFsEvictionScanner } from './fsEvictionScanner'
+import { runFsOrphanScanner } from './fsOrphanScanner'
 import { getUploadManager } from './uploader'
 
 /**
@@ -278,6 +280,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
 
   const isConnected = getIsConnected()
   log(`app ready (connected=${isConnected})`)
+
+  await runFsOrphanScanner()
+  await runFsEvictionScanner()
 
   const manager = getUploadManager()
   const initialStats = await getFileStatsLocal({ localOnly: true })
