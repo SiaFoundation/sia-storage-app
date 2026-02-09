@@ -17,6 +17,7 @@ type Props = {
   children: ReactNode
   onDismiss: () => void
   onDragStart?: () => void
+  onDragCancel?: () => void
   enabled?: boolean
   dismissThreshold?: number
 }
@@ -31,8 +32,9 @@ export function DragToDismiss({
   children,
   onDismiss,
   onDragStart,
+  onDragCancel,
   enabled = true,
-  dismissThreshold = 150,
+  dismissThreshold = 100,
 }: Props) {
   const { height: screenHeight } = useWindowDimensions()
   const translateY = useSharedValue(0)
@@ -89,11 +91,18 @@ export function DragToDismiss({
       }
     })
     .onEnd((event) => {
-      if (event.translationY > dismissThreshold) {
+      // Dismiss on sufficient drag distance OR a quick downward flick,
+      // similar to iOS Photos.
+      const isDragged = event.translationY > dismissThreshold
+      const isFlicked = event.velocityY > 800
+      if (isDragged || isFlicked) {
         translateY.value = withSpring(screenHeight, { damping: 20 })
         runOnJS(onDismiss)()
       } else {
         translateY.value = withSpring(0)
+        if (onDragCancel) {
+          runOnJS(onDragCancel)()
+        }
       }
     })
 
@@ -121,18 +130,24 @@ export function DragToDismiss({
     }
   })
 
-  // On Android, wrap content with a native gesture to allow children to receive touches
-  const nativeGesture = Gesture.Native()
-  const composedGesture =
+  // Android: Gesture.Native() lets child native components (e.g. buttons)
+  // receive touches alongside the pan gesture. Not needed on iOS.
+  const androidNativeGesture = Gesture.Native()
+  const dismissGesture =
     Platform.OS === 'android'
-      ? Gesture.Simultaneous(panGesture, nativeGesture)
+      ? Gesture.Simultaneous(panGesture, androidNativeGesture)
       : panGesture
 
+  // GestureDetector must always stay mounted to keep the React tree stable.
+  // Conditionally removing it causes children to unmount/remount, resetting
+  // all state. Scrollable children (e.g. FileDetails) must use ScrollView
+  // from react-native-gesture-handler so they can negotiate with this
+  // GestureDetector on Android.
   return (
     <DragToDismissGestureContext.Provider value={panGesture}>
       <View style={styles.container}>
         <Animated.View style={[styles.backdrop, backdropStyle]} />
-        <GestureDetector gesture={composedGesture}>
+        <GestureDetector gesture={dismissGesture}>
           <Animated.View style={[styles.content, contentStyle]}>
             {children}
           </Animated.View>

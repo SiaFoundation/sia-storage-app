@@ -1,3 +1,4 @@
+import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { type InitStep, setAppState } from '../stores/app'
@@ -125,6 +126,7 @@ export async function resetApp() {
         await resetSdk()
         await resetPhotosNewCursor()
         await resetPhotosArchiveCursor()
+        await mutate(() => true, undefined, { revalidate: false })
       },
     },
   ])

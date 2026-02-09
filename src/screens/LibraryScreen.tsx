@@ -55,6 +55,7 @@ export function LibraryScreen({ route, navigation }: Props) {
     return files.data?.find((f) => f.id === openFileId) ?? null
   })
   const [isCarouselZoomed, setIsCarouselZoomed] = useState(false)
+  const [isCarouselDetail, setIsCarouselDetail] = useState(false)
   const [isDraggingToDismiss, setIsDraggingToDismiss] = useState(false)
   const fadeAnim = useRef(new Animated.Value(0)).current
   const scaleAnim = useRef(new Animated.Value(0.95)).current
@@ -262,13 +263,16 @@ export function LibraryScreen({ route, navigation }: Props) {
           ]}
           pointerEvents="box-none"
         >
+          {/* Disable drag-to-dismiss when zoomed into an image or viewing
+              file details, so the detail ScrollView can scroll freely. */}
           <DragToDismiss
             onDismiss={() => {
               setSelectedFile(null)
               setIsDraggingToDismiss(false)
             }}
             onDragStart={() => setIsDraggingToDismiss(true)}
-            enabled={!isCarouselZoomed}
+            onDragCancel={() => setIsDraggingToDismiss(false)}
+            enabled={!isCarouselZoomed && !isCarouselDetail}
           >
             <FileCarousel
               initialId={selectedFile.id}
@@ -276,6 +280,7 @@ export function LibraryScreen({ route, navigation }: Props) {
               onClose={() => setSelectedFile(null)}
               onShowActionSheet={handleShowCarouselActions}
               onZoomChange={setIsCarouselZoomed}
+              onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
               isDismissing={isDraggingToDismiss}
             />
           </DragToDismiss>

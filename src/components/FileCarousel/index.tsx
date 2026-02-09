@@ -8,7 +8,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native'
 import Carousel, {
@@ -24,7 +23,7 @@ import {
 import { logger } from '../../lib/logger'
 import { generateSiaShareUrl } from '../../lib/shareUrl'
 import { useToast } from '../../lib/toastContext'
-import { useVirtualFileList } from '../../stores/fileCarousel'
+import { useFileCarousel } from '../../stores/fileCarousel'
 import type { FileRecord } from '../../stores/files'
 import { useSdk } from '../../stores/sdk'
 import { palette } from '../../styles/colors'
@@ -41,6 +40,7 @@ type Props = {
   onClose: () => void
   onShowActionSheet?: () => void
   onZoomChange?: (isZoomed: boolean) => void
+  onViewStyleChange?: (viewStyle: 'consume' | 'detail') => void
   isDismissing?: boolean
 }
 
@@ -50,17 +50,24 @@ export function FileCarousel({
   onClose,
   onShowActionSheet,
   onZoomChange,
+  onViewStyleChange,
   isDismissing,
 }: Props) {
-  const [viewStyle, setViewStyle] = useState<'consume' | 'detail'>('consume')
-  const [showChrome, setShowChrome] = useState(false)
+  const [viewStyle, _setViewStyle] = useState<'consume' | 'detail'>('consume')
 
-  // Hide chrome during drag-to-dismiss
-  useEffect(() => {
-    if (isDismissing) {
-      setShowChrome(false)
-    }
-  }, [isDismissing])
+  const setViewStyle = useCallback(
+    (style: 'consume' | 'detail') => {
+      _setViewStyle(style)
+      onViewStyleChange?.(style)
+      // Keep controls visible when switching back from detail view,
+      // since the user just interacted with the control bar toggle.
+      if (style === 'consume') {
+        setShowChrome(true)
+      }
+    },
+    [onViewStyleChange],
+  )
+  const [showChrome, setShowChrome] = useState(false)
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false)
   const [isZoomed, setIsZoomed] = useState(false)
 
@@ -71,27 +78,18 @@ export function FileCarousel({
     onClose()
   }, [onClose, toast])
 
-  const handleFileUpdated = useCallback(
-    (message: string) => {
-      toast.show(message)
-    },
-    [toast],
-  )
-
   const {
     totalCount,
     currentIndex,
     currentFile,
     getFileAtIndex,
     setCurrentIndex,
-    isLoading,
-  } = useVirtualFileList({
+  } = useFileCarousel({
     initialId,
     initialFile,
     prefetchRadius: 3,
     maxCacheSize: 50,
     onDeleted: handleFileDeleted,
-    onUpdated: handleFileUpdated,
   })
 
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 })
@@ -112,30 +110,27 @@ export function FileCarousel({
     return Array.from({ length: totalCount }, (_, i) => i)
   }, [totalCount])
 
-  // Scroll to the file's position once we know it. The carousel's defaultIndex
-  // only works on mount, but currentIndex is determined asynchronously after
-  // querying the DB for the file's position in the sorted list. Once totalCount
-  // transitions from placeholder (0 or 1) to the real count, scroll to position.
-  const hasScrolledToInitialPosition = useRef(false)
-  const previousTotalCount = useRef(totalCount)
+  const isDetailView = viewStyle === 'detail'
+
+  // Opacity swap: render the initial file directly while the carousel mounts
+  // invisibly behind it, then atomically swap after 2 animation frames. This
+  // avoids a flicker where the carousel briefly shows index 0 before scrolling
+  // to the correct defaultIndex position.
+  const showCarousel = carouselData.length > 1 && viewerSize.width > 0
+  const [carouselReady, setCarouselReady] = useState(false)
 
   useEffect(() => {
-    const wasInitial = previousTotalCount.current <= 1
-    const isNowReal = totalCount > 1
-    const carousel = carouselRef.current
-    const carouselReady = viewerSize.width > 0 && carousel
-
-    if (
-      wasInitial &&
-      isNowReal &&
-      carouselReady &&
-      !hasScrolledToInitialPosition.current
-    ) {
-      hasScrolledToInitialPosition.current = true
-      carousel.scrollTo({ index: currentIndex, animated: false })
+    if (!showCarousel) return
+    let cancelled = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) setCarouselReady(true)
+      })
+    })
+    return () => {
+      cancelled = true
     }
-    previousTotalCount.current = totalCount
-  }, [totalCount, currentIndex, viewerSize.width])
+  }, [showCarousel])
 
   // Unlock screen orientation.
   useEffect(() => {
@@ -241,25 +236,9 @@ export function FileCarousel({
 
       if (!file) {
         return (
-          <View style={styles.center}>
+          <Pressable style={styles.center} onPress={toggleControlsVisibility}>
             <BlocksLoader size={20} />
-          </View>
-        )
-      }
-
-      if (viewStyle === 'detail') {
-        return (
-          <FileDetails
-            file={file}
-            header={
-              <FileCarouselHeader
-                file={file}
-                title={file.name ?? 'Details'}
-                navigation={navigationProxy}
-                icon="close"
-              />
-            }
-          />
+          </Pressable>
         )
       }
 
@@ -281,14 +260,12 @@ export function FileCarousel({
       handleImageZoomChange,
       goToNext,
       goToPrev,
-      viewStyle,
-      navigationProxy,
     ],
   )
 
   return (
     <View style={styles.container}>
-      {showChrome && viewStyle === 'consume' ? (
+      {showChrome && !isDetailView && !isDismissing ? (
         <View style={styles.headerOverlay} pointerEvents="box-none">
           <FileCarouselHeader
             file={currentFile ?? undefined}
@@ -301,38 +278,80 @@ export function FileCarousel({
 
       {currentFile ? (
         <View style={styles.viewer} onLayout={handleViewerLayout}>
-          {carouselData.length > 0 && viewerSize.width > 0 && (
-            <Carousel
-              ref={carouselRef}
-              data={carouselData}
-              renderItem={renderItem}
-              width={viewerSize.width}
-              height={viewerSize.height}
-              defaultIndex={currentIndex}
-              onSnapToItem={handleSnapToItem}
-              loop={false}
-              enabled={!isZoomed}
-              windowSize={5}
-              onConfigurePanGesture={(gesture) => {
-                gesture.activeOffsetX([-10, 10])
-                // On Android, coordinate with DragToDismiss gesture to allow both to work
-                if (Platform.OS === 'android' && dragToDismissGesture) {
-                  gesture.simultaneousWithExternalGesture(dragToDismissGesture)
-                }
-              }}
+          {/* Both views stay mounted to preserve state across toggles.
+              The inactive view is hidden with opacity:0 + pointerEvents:none. */}
+          <View
+            style={isDetailView ? styles.hiddenLayer : styles.activeLayer}
+            pointerEvents={isDetailView ? 'none' : 'auto'}
+          >
+            {/* Base layer: renders the initial file directly so there's no
+                gap frame while the carousel mounts invisibly. Hidden once the
+                carousel is ready, to prevent it showing through during swipes
+                or zoom/pan. */}
+            <View
+              style={carouselReady ? styles.hiddenLayer : styles.activeLayer}
+              pointerEvents={carouselReady ? 'none' : 'auto'}
+            >
+              {renderItem({ item: currentIndex })}
+            </View>
+            {showCarousel && (
+              <View
+                style={[
+                  styles.absoluteFill,
+                  !carouselReady && styles.transparent,
+                ]}
+                pointerEvents={carouselReady ? 'auto' : 'none'}
+              >
+                <Carousel
+                  ref={carouselRef}
+                  data={carouselData}
+                  renderItem={renderItem}
+                  width={viewerSize.width}
+                  height={viewerSize.height}
+                  defaultIndex={currentIndex}
+                  onSnapToItem={handleSnapToItem}
+                  loop={false}
+                  enabled={!isZoomed && !isDismissing}
+                  windowSize={5}
+                  onConfigurePanGesture={(gesture) => {
+                    gesture.activeOffsetX([-10, 10])
+                    // Android: carousel waits for DragToDismiss to fail
+                    // (horizontal movement) before activating. Prevents
+                    // diagonal drags from swiping the carousel sideways
+                    // during drag-to-dismiss.
+                    if (Platform.OS === 'android' && dragToDismissGesture) {
+                      gesture.requireExternalGestureToFail(dragToDismissGesture)
+                    }
+                  }}
+                />
+              </View>
+            )}
+          </View>
+          {/* Detail view uses RNGH ScrollView so it can scroll within the
+              DragToDismiss GestureDetector hierarchy on Android. */}
+          <View
+            style={[styles.absoluteFill, !isDetailView && styles.hiddenLayer]}
+            pointerEvents={isDetailView ? 'auto' : 'none'}
+          >
+            <FileDetails
+              file={currentFile}
+              header={
+                <FileCarouselHeader
+                  file={currentFile}
+                  title={currentFile.name ?? 'Details'}
+                  navigation={navigationProxy}
+                  icon="close"
+                />
+              }
             />
-          )}
-        </View>
-      ) : isLoading ? (
-        <View style={styles.center}>
-          <BlocksLoader size={20} />
+          </View>
         </View>
       ) : (
-        <View style={styles.center}>
-          <Text style={styles.text}>File not found</Text>
-        </View>
+        <Pressable style={styles.center} onPress={toggleControlsVisibility}>
+          <BlocksLoader size={20} />
+        </Pressable>
       )}
-      {currentFile && (showChrome || viewStyle === 'detail') ? (
+      {currentFile && (showChrome || isDetailView) && !isDismissing ? (
         <View
           style={[
             styles.controlBarOverlay,
@@ -380,10 +399,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  text: {
-    color: palette.gray[50],
-  },
   viewer: { flex: 1 },
+  activeLayer: { flex: 1 },
+  hiddenLayer: { flex: 1, opacity: 0 },
+  absoluteFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  transparent: { opacity: 0 },
   headerOverlay: {
     position: 'absolute',
     top: 0,

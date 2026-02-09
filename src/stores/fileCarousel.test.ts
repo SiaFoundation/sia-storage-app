@@ -2,9 +2,10 @@ import { act, renderHook, waitFor } from '@testing-library/react-native'
 import { db, initializeDB, resetDb } from '../db'
 import {
   fetchFilePosition,
-  fetchFilesAtIndices,
+  fetchFilesByIDs,
+  fetchSortedFileIds,
   fetchTotalCount,
-  useVirtualFileList,
+  useFileCarousel,
 } from './fileCarousel'
 import { createFileRecord } from './files'
 import type { Category } from './library'
@@ -327,85 +328,46 @@ describe('fileCarousel virtual list functions', () => {
     })
   })
 
-  describe('fetchFilesAtIndices', () => {
-    test('fetches files at specified indices', async () => {
+  describe('fetchSortedFileIds', () => {
+    test('returns IDs in sort order', async () => {
       await seedDateRecords()
-      // DESC order: file-e(0), file-d(1), file-c(2), file-b(3), file-a(4)
-
-      const files = await fetchFilesAtIndices([0, 2, 4], defaultParams)
-
-      expect(files.size).toBe(3)
-      expect(files.get(0)?.id).toBe('file-e')
-      expect(files.get(2)?.id).toBe('file-c')
-      expect(files.get(4)?.id).toBe('file-a')
+      // DESC order: file-e, file-d, file-c, file-b, file-a
+      const ids = await fetchSortedFileIds(defaultParams, 5, 0)
+      expect(ids).toEqual(['file-e', 'file-d', 'file-c', 'file-b', 'file-a'])
     })
 
-    test('returns empty map for empty indices array', async () => {
+    test('respects limit and offset', async () => {
       await seedDateRecords()
-      const files = await fetchFilesAtIndices([], defaultParams)
+      const ids = await fetchSortedFileIds(defaultParams, 2, 1)
+      expect(ids).toEqual(['file-d', 'file-c'])
+    })
+
+    test('returns empty array for empty database', async () => {
+      const ids = await fetchSortedFileIds(defaultParams, 10, 0)
+      expect(ids).toEqual([])
+    })
+  })
+
+  describe('fetchFilesByIDs', () => {
+    test('returns files keyed by ID', async () => {
+      await seedDateRecords()
+      const files = await fetchFilesByIDs(['file-a', 'file-c', 'file-e'])
+      expect(files.size).toBe(3)
+      expect(files.get('file-a')?.name).toBe('a.jpg')
+      expect(files.get('file-c')?.name).toBe('c.jpg')
+      expect(files.get('file-e')?.name).toBe('e.jpg')
+    })
+
+    test('returns empty map for empty ID list', async () => {
+      const files = await fetchFilesByIDs([])
       expect(files.size).toBe(0)
     })
 
-    test('skips out-of-bounds indices', async () => {
+    test('skips nonexistent IDs', async () => {
       await seedDateRecords()
-      const files = await fetchFilesAtIndices([0, 10, 100], defaultParams)
+      const files = await fetchFilesByIDs(['file-a', 'nonexistent'])
       expect(files.size).toBe(1)
-      expect(files.get(0)?.id).toBe('file-e')
-    })
-
-    test('fetches contiguous range', async () => {
-      await seedDateRecords()
-      const files = await fetchFilesAtIndices([1, 2, 3], defaultParams)
-
-      expect(files.size).toBe(3)
-      expect(files.get(1)?.id).toBe('file-d')
-      expect(files.get(2)?.id).toBe('file-c')
-      expect(files.get(3)?.id).toBe('file-b')
-    })
-
-    test('respects category filter', async () => {
-      await createRecord({
-        id: 'img-1',
-        name: 'photo1.jpg',
-        createdAt: base,
-        type: 'image/jpeg',
-      })
-      await createRecord({
-        id: 'vid-1',
-        name: 'video1.mp4',
-        createdAt: base + 10,
-        type: 'video/mp4',
-      })
-      await createRecord({
-        id: 'img-2',
-        name: 'photo2.jpg',
-        createdAt: base + 20,
-        type: 'image/jpeg',
-      })
-
-      const files = await fetchFilesAtIndices([0, 1], {
-        ...defaultParams,
-        categories: ['Image'],
-      })
-
-      // Images only DESC: img-2(0), img-1(1)
-      expect(files.size).toBe(2)
-      expect(files.get(0)?.id).toBe('img-2')
-      expect(files.get(1)?.id).toBe('img-1')
-    })
-
-    test('respects sort order', async () => {
-      await seedDateRecords()
-
-      const ascFiles = await fetchFilesAtIndices([0, 1, 2], {
-        ...defaultParams,
-        sortDir: 'ASC',
-      })
-
-      // ASC order: file-a(0), file-b(1), file-c(2)
-      expect(ascFiles.get(0)?.id).toBe('file-a')
-      expect(ascFiles.get(1)?.id).toBe('file-b')
-      expect(ascFiles.get(2)?.id).toBe('file-c')
+      expect(files.get('file-a')?.id).toBe('file-a')
     })
   })
 
@@ -415,11 +377,11 @@ describe('fileCarousel virtual list functions', () => {
 
       const count = await fetchTotalCount(defaultParams)
       const position = await fetchFilePosition('only-file', defaultParams)
-      const files = await fetchFilesAtIndices([0], defaultParams)
+      const files = await fetchFilesByIDs(['only-file'])
 
       expect(count).toBe(1)
       expect(position).toBe(0)
-      expect(files.get(0)?.id).toBe('only-file')
+      expect(files.get('only-file')?.id).toBe('only-file')
     })
 
     test('handles files with null names', async () => {
@@ -437,18 +399,13 @@ describe('fileCarousel virtual list functions', () => {
       })
       expect(count).toBe(2)
 
-      // NAME ASC: null names sort first (or last depending on impl), then alphabetical
-      const files = await fetchFilesAtIndices([0, 1], {
-        ...defaultParams,
-        sortBy: 'NAME',
-        sortDir: 'ASC',
-      })
+      const files = await fetchFilesByIDs(['file-null', 'file-named'])
       expect(files.size).toBe(2)
     })
   })
 })
 
-describe('useVirtualFileList hook', () => {
+describe('useFileCarousel hook', () => {
   const base = 2_000
 
   beforeEach(async () => {
@@ -484,27 +441,6 @@ describe('useVirtualFileList hook', () => {
     await db().runAsync('DELETE FROM files WHERE id = ?', id)
   }
 
-  async function updateRecord(
-    id: string,
-    updates: { name?: string; updatedAt?: number },
-  ) {
-    const setClauses: string[] = []
-    const params: (string | number)[] = []
-    if (updates.name !== undefined) {
-      setClauses.push('name = ?')
-      params.push(updates.name)
-    }
-    if (updates.updatedAt !== undefined) {
-      setClauses.push('updatedAt = ?')
-      params.push(updates.updatedAt)
-    }
-    params.push(id)
-    await db().runAsync(
-      `UPDATE files SET ${setClauses.join(', ')} WHERE id = ?`,
-      ...params,
-    )
-  }
-
   function triggerSyncChange() {
     mockChangeCallbacks.forEach((callback) => callback())
   }
@@ -516,7 +452,7 @@ describe('useVirtualFileList hook', () => {
 
       const onDeleted = jest.fn()
       const { result } = renderHook(() =>
-        useVirtualFileList({
+        useFileCarousel({
           initialId: 'file-2',
           onDeleted,
         }),
@@ -540,47 +476,13 @@ describe('useVirtualFileList hook', () => {
       expect(onDeleted).toHaveBeenCalled()
     })
 
-    test('calls onUpdated when file metadata changes', async () => {
-      await createRecord({
-        id: 'file-1',
-        name: 'original.jpg',
-        createdAt: base,
-      })
-
-      const onUpdated = jest.fn()
-      const { result } = renderHook(() =>
-        useVirtualFileList({
-          initialId: 'file-1',
-          onUpdated,
-        }),
-      )
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false)
-      })
-
-      expect(result.current.currentFile?.name).toBe('original.jpg')
-
-      // Update the file's name and trigger sync
-      await updateRecord('file-1', {
-        name: 'renamed.jpg',
-        updatedAt: base + 100,
-      })
-      await act(async () => {
-        triggerSyncChange()
-        await new Promise((r) => setTimeout(r, 50))
-      })
-
-      expect(onUpdated).toHaveBeenCalledWith('File renamed')
-    })
-
-    test('updates position when total count changes', async () => {
+    test('keeps frozen position when other files are deleted', async () => {
       await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
       await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
       await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
 
       const { result } = renderHook(() =>
-        useVirtualFileList({
+        useFileCarousel({
           initialId: 'file-2',
         }),
       )
@@ -594,20 +496,151 @@ describe('useVirtualFileList hook', () => {
       expect(result.current.currentIndex).toBe(1)
       expect(result.current.currentFile?.id).toBe('file-2')
 
-      // Delete file-3 (the one before file-2), so file-2 moves to position 0
+      // Delete file-3 — position map is frozen, so index stays at 1
       await deleteRecord('file-3')
       await act(async () => {
         triggerSyncChange()
         await new Promise((r) => setTimeout(r, 50))
       })
 
-      await waitFor(() => {
-        expect(result.current.totalCount).toBe(2)
-      })
-      expect(result.current.currentIndex).toBe(0)
-      // Current file should remain available (not null) after position change
+      // Position and count stay frozen
+      expect(result.current.currentIndex).toBe(1)
+      expect(result.current.totalCount).toBe(3)
       expect(result.current.currentFile).not.toBeNull()
       expect(result.current.currentFile?.id).toBe('file-2')
+    })
+
+    test('currentFile ID never changes during sync storm', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+
+      const renders: {
+        currentFile: { id: string } | null
+        isLoading: boolean
+      }[] = []
+      const { result } = renderHook(() => {
+        const hook = useFileCarousel({ initialId: 'file-2' })
+        renders.push({
+          currentFile: hook.currentFile ? { id: hook.currentFile.id } : null,
+          isLoading: hook.isLoading,
+        })
+        return hook
+      })
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      const initDoneIndex = renders.findIndex((r) => !r.isLoading)
+      expect(initDoneIndex).toBeGreaterThanOrEqual(0)
+
+      // Add DB delays to simulate real async behavior
+      const database = db()
+      const origFirst = database.getFirstAsync.bind(database)
+      const origAll = database.getAllAsync.bind(database)
+      jest
+        .spyOn(database, 'getFirstAsync')
+        .mockImplementation(async (...args: Parameters<typeof origFirst>) => {
+          await new Promise((r) => setTimeout(r, 5))
+          return origFirst(...args)
+        })
+      jest
+        .spyOn(database, 'getAllAsync')
+        .mockImplementation(async (...args: Parameters<typeof origAll>) => {
+          await new Promise((r) => setTimeout(r, 5))
+          return origAll(...args)
+        })
+
+      // Simulate a sync storm: add files one at a time, firing sync after each
+      for (let i = 4; i <= 10; i++) {
+        await createRecord({
+          id: `file-${i}`,
+          name: `${String.fromCharCode(96 + i)}.jpg`,
+          createdAt: base + i * 10,
+        })
+        await act(async () => {
+          triggerSyncChange()
+          await new Promise((r) => setTimeout(r, 30))
+        })
+      }
+
+      // Wait for everything to settle
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 200))
+      })
+
+      // Every render after init completed must have currentFile non-null
+      // and always showing the same file ID (frozen positions)
+      const postInitRenders = renders.slice(initDoneIndex)
+      const nullRenders = postInitRenders.filter((r) => r.currentFile === null)
+      expect(nullRenders).toEqual([])
+
+      const wrongFileRenders = postInitRenders.filter(
+        (r) => r.currentFile?.id !== 'file-2',
+      )
+      expect(wrongFileRenders).toEqual([])
+
+      // Position and count stay frozen at init values
+      expect(result.current.currentFile?.id).toBe('file-2')
+      expect(result.current.currentIndex).toBe(1)
+      expect(result.current.totalCount).toBe(3)
+
+      jest.restoreAllMocks()
+    })
+
+    test('preserves current file when rapid sync events interleave', async () => {
+      await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+      await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+      await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
+
+      const { result } = renderHook(() =>
+        useFileCarousel({
+          initialId: 'file-2',
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.currentIndex).toBe(1)
+      expect(result.current.currentFile?.id).toBe('file-2')
+
+      // Add async delays to DB methods to simulate real expo-sqlite behavior.
+      const database = db()
+      const origFirst = database.getFirstAsync.bind(database)
+      const origAll = database.getAllAsync.bind(database)
+      jest
+        .spyOn(database, 'getFirstAsync')
+        .mockImplementation(async (...args: Parameters<typeof origFirst>) => {
+          await new Promise((r) => setTimeout(r, 5))
+          return origFirst(...args)
+        })
+      jest
+        .spyOn(database, 'getAllAsync')
+        .mockImplementation(async (...args: Parameters<typeof origAll>) => {
+          await new Promise((r) => setTimeout(r, 5))
+          return origAll(...args)
+        })
+
+      // Add two files that would shift file-2's position in DB, then fire
+      // two sync events. With frozen positions, nothing should change.
+      await createRecord({ id: 'file-4', name: 'd.jpg', createdAt: base + 30 })
+      await createRecord({ id: 'file-5', name: 'e.jpg', createdAt: base + 40 })
+      await act(async () => {
+        triggerSyncChange()
+        triggerSyncChange()
+        await new Promise((r) => setTimeout(r, 200))
+      })
+
+      // Position and count stay frozen
+      expect(result.current.currentIndex).toBe(1)
+      expect(result.current.totalCount).toBe(3)
+      expect(result.current.currentFile).not.toBeNull()
+      expect(result.current.currentFile?.id).toBe('file-2')
+
+      jest.restoreAllMocks()
     })
   })
 
@@ -639,7 +672,7 @@ describe('useVirtualFileList hook', () => {
 
       // file-3 is at position 3, prefetchRadius: 1 means positions 2-4 are fetched
       const { result } = renderHook(() =>
-        useVirtualFileList({
+        useFileCarousel({
           initialId: 'file-3',
           initialFile,
           prefetchRadius: 1,
@@ -669,7 +702,7 @@ describe('useVirtualFileList hook', () => {
 
       // User taps on file-2 (which is at position 4 in DESC order)
       const { result } = renderHook(() =>
-        useVirtualFileList({
+        useFileCarousel({
           initialId: 'file-2',
           prefetchRadius: 5,
         }),
@@ -707,7 +740,7 @@ describe('useVirtualFileList hook', () => {
 
       // User taps on file-3 (which is at position 0 in DESC order)
       const { result } = renderHook(() =>
-        useVirtualFileList({
+        useFileCarousel({
           initialId: 'file-3',
           prefetchRadius: 2,
         }),
