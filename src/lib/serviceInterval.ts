@@ -18,7 +18,7 @@ const pausedCallbacks: Array<() => void> = []
  */
 export function pauseAllServiceIntervals(): void {
   paused = true
-  logger.debug('serviceInterval', 'all services paused')
+  logger.debug('serviceInterval', 'all_paused')
 }
 
 /**
@@ -26,7 +26,7 @@ export function pauseAllServiceIntervals(): void {
  */
 export function resumeAllServiceIntervals(): void {
   paused = false
-  logger.debug('serviceInterval', 'all services resumed')
+  logger.debug('serviceInterval', 'all_resumed')
   const callbacks = [...pausedCallbacks]
   pausedCallbacks.length = 0
   for (const cb of callbacks) {

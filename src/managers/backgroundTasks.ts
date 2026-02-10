@@ -137,7 +137,7 @@ export async function initBackgroundTasks() {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
       if (!config || !state) {
-        logger.warn('backgroundTask', `unknown task id: ${taskId}`)
+        logger.warn('backgroundTask', 'unknown_task_id', { taskId })
         BackgroundFetch.finish(taskId)
         return
       }
@@ -155,26 +155,24 @@ export async function initBackgroundTasks() {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
       if (!config || !state) {
-        logger.warn('backgroundTask', `unknown task id: ${taskId}`)
+        logger.warn('backgroundTask', 'unknown_task_id', { taskId })
         BackgroundFetch.finish(taskId)
         return
       }
       const log = logTask(config, state)
 
-      log(`timeout callback fired, aborting delay and finishing task`)
+      log('timeout')
 
       // Abort any pending delay BEFORE setting status, so the while loop
       // can exit cleanly when the Promise resolves.
       state.abort?.()
       transitionTaskState(state, 'finished')
       BackgroundFetch.finish(config.id)
-      log(
-        `finished, reason: timeout, elapsed ${formatElapsedTime(state.startTime)}`,
-      )
+      log('timeout_finished', { elapsedMs: Date.now() - state.startTime })
     },
   )
 
-  logger.info('backgroundTask', `configure status: ${status}`)
+  logger.info('backgroundTask', 'configured', { status })
 
   // Schedule custom background processing task on iOS.
   if (Platform.OS === 'ios') {
@@ -186,16 +184,15 @@ export async function initBackgroundTasks() {
         delay: minutesInMs(31),
         ...sharedConfig,
       })
-      logger.info(
-        'backgroundTask',
-        `scheduleTask status for ${bgProcessingTaskConfig.id}: ${scheduled}`,
-      )
+      logger.info('backgroundTask', 'task_scheduled', {
+        taskId: bgProcessingTaskConfig.id,
+        scheduled,
+      })
     } catch (error) {
-      logger.error(
-        'backgroundTask',
-        `scheduleTask failed for ${bgProcessingTaskConfig.id}:`,
-        error,
-      )
+      logger.error('backgroundTask', 'schedule_failed', {
+        taskId: bgProcessingTaskConfig.id,
+        error: error as Error,
+      })
     }
   }
 }
@@ -250,7 +247,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // Check if user has onboarded - if not, there's nothing to do
   const hasOnboarded = await getHasOnboarded()
   if (!hasOnboarded) {
-    log('not onboarded, exiting')
+    log('skipped', { reason: 'not_onboarded' })
     return
   }
 
@@ -259,14 +256,14 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // initialization sequence including reconnectIndexer().
   const isInitializing = getIsInitializing()
   if (isInitializing) {
-    log('waiting for app initialization to complete...')
+    log('waiting_for_init')
     const initResult = await waitForInitialization(delayFn)
     if (initResult === 'timeout') {
-      log('initialization timed out, exiting')
+      log('skipped', { reason: 'init_timeout' })
       return
     }
     if (initResult === 'aborted') {
-      log('wait aborted, exiting')
+      log('skipped', { reason: 'aborted' })
       return
     }
   }
@@ -274,12 +271,12 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // Check if initialization failed
   const initError = getInitializationError()
   if (initError) {
-    log(`initialization failed: ${initError}, exiting`)
+    log('skipped', { reason: 'init_failed', initError })
     return
   }
 
   const isConnected = getIsConnected()
-  log(`app ready (connected=${isConnected})`)
+  log('app_ready', { connected: isConnected })
 
   await runFsOrphanScanner()
   await runFsEvictionScanner()
@@ -292,15 +289,17 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
     uploaded: manager.uploadedCount,
     uploadedBytes: manager.uploadedBytes,
   }
-  log(
-    `files awaiting upload: ${initialStats.count} (${formatBytes(initialStats.totalBytes)} total)`,
-  )
+  log('awaiting_upload', {
+    count: initialStats.count,
+    totalBytes: initialStats.totalBytes,
+  })
 
   while (true) {
     if (state.status === 'finished') {
       const finalStats = await getFileStatsLocal({ localOnly: true })
       log(
-        logSummary(
+        'finished',
+        buildSummaryData(
           'timed out',
           initialStats,
           finalStats,
@@ -312,12 +311,15 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       return
     }
     const stats = await getFileStatsLocal({ localOnly: true })
-    log(
-      `still uploading: ${stats.count} files remaining (${formatBytes(stats.totalBytes)}), elapsed ${formatElapsedTime(state.startTime)}`,
-    )
+    log('still_uploading', {
+      filesRemaining: stats.count,
+      bytesRemaining: stats.totalBytes,
+      elapsedMs: Date.now() - state.startTime,
+    })
     if (stats.count === 0) {
       log(
-        logSummary(
+        'finished',
+        buildSummaryData(
           'all uploaded',
           initialStats,
           { count: 0, totalBytes: 0 },
@@ -332,7 +334,8 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
     if (result === 'aborted') {
       const finalStats = await getFileStatsLocal({ localOnly: true })
       log(
-        logSummary(
+        'finished',
+        buildSummaryData(
           'aborted',
           initialStats,
           finalStats,
@@ -353,7 +356,7 @@ type UploadSnapshot = {
   uploadedBytes: number
 }
 
-function logSummary(
+function buildSummaryData(
   reason: string,
   initialStats: { count: number; totalBytes: number },
   finalStats: { count: number; totalBytes: number },
@@ -365,51 +368,33 @@ function logSummary(
     uploadedBytes: number
   },
   state: TaskState,
-): string {
+): Record<string, unknown> {
   const filesPacked = manager.packedCount - initial.packed
   const bytesPacked = manager.packedBytes - initial.packedBytes
   const filesUploaded = manager.uploadedCount - initial.uploaded
   const bytesUploaded = manager.uploadedBytes - initial.uploadedBytes
   const filesAdded = finalStats.count - initialStats.count + filesUploaded
-  const parts = [
-    `finished (${reason})`,
-    `packed ${filesPacked} files (${formatBytes(bytesPacked)})`,
-    `uploaded ${filesUploaded} files (${formatBytes(bytesUploaded)})`,
-    `${filesAdded} new files added to library`,
-    `${finalStats.count} files remaining (${formatBytes(finalStats.totalBytes)})`,
-    `elapsed ${formatElapsedTime(state.startTime)}`,
-  ]
-  return parts.join(', ')
-}
-
-function formatElapsedTime(startTime: number): string {
-  const ms = Date.now() - startTime
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`
+  return {
+    reason,
+    filesPacked,
+    bytesPacked,
+    filesUploaded,
+    bytesUploaded,
+    filesAdded,
+    filesRemaining: finalStats.count,
+    bytesRemaining: finalStats.totalBytes,
+    elapsedMs: Date.now() - state.startTime,
   }
-  return `${seconds}s`
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
-  )
-  const value = bytes / 1024 ** i
-  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
 function logTask(config: TaskConfig, state: TaskState) {
-  const prefix = state.invocationId
-    ? `[${config.type}][${config.id}][${state.invocationId}]`
-    : `[${config.type}][${config.id}]`
-  return (message: string) => {
-    logger.debug('backgroundTask', `${prefix} ${message}`)
+  return (msg: string, data?: Record<string, unknown>) => {
+    logger.debug('backgroundTask', msg, {
+      taskType: config.type,
+      taskId: config.id,
+      invocationId: state.invocationId,
+      ...data,
+    })
   }
 }
 

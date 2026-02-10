@@ -57,14 +57,15 @@ async function logOverallProgress() {
     const targetThumbs = originals * ThumbSizes.length
     const remaining = Math.max(targetThumbs - thumbs, 0)
     const percent = targetThumbs > 0 ? Math.min(1, thumbs / targetThumbs) : 1
-    logger.debug(
-      'thumbnailScanner',
-      `overall originals=${originals} thumbs=${thumbs}/${targetThumbs} remaining=${remaining} percent=${Math.round(
-        percent * 100,
-      )}%`,
-    )
+    logger.debug('thumbnailScanner', 'progress', {
+      originals,
+      thumbs,
+      targetThumbs,
+      remaining,
+      percent: Math.round(percent * 100),
+    })
   } catch (e) {
-    logger.error('thumbnailScanner', 'progress error', e)
+    logger.error('thumbnailScanner', 'progress_error', { error: e as Error })
   }
 }
 
@@ -152,7 +153,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
   }
   let producedCount = 0
   try {
-    logger.debug('thumbnailScanner', 'scanning...')
+    logger.debug('thumbnailScanner', 'tick')
     const skippedNoSourceUri = new Set<string>()
     const processedThisRun = new Set<string>()
 
@@ -201,21 +202,16 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
           continue
         }
 
-        logger.debug(
-          'thumbnailScanner',
-          `candidate id=${c.id} hash=${
-            c.hash
-          } existingSizes=${existingSizes.join(
-            ',',
-          )} missingSizes=${missingSizes.join(',')}`,
-        )
+        logger.debug('thumbnailScanner', 'candidate', {
+          id: c.id,
+          hash: c.hash,
+          existingSizes: existingSizes.join(','),
+          missingSizes: missingSizes.join(','),
+        })
 
         for (const size of missingSizes) {
           if (producedCount >= MAX_THUMBS_PER_TICK) break
-          logger.debug(
-            'thumbnailScanner',
-            `attempt size id=${c.id} size=${size}`,
-          )
+          logger.debug('thumbnailScanner', 'attempt', { id: c.id, size })
           summary.attempts.push({
             originalId: c.id,
             originalHash: c.hash,
@@ -237,7 +233,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
               size,
               thumbId: outcome.thumbId,
             })
-            logger.info('thumbnailScanner', `produced id=${c.id} size=${size}`)
+            logger.info('thumbnailScanner', 'produced', { id: c.id, size })
           } else if (outcome.status === 'duplicate') {
             summary.deduplicated.push({
               originalId: c.id,
@@ -256,7 +252,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
         }
       }
     }
-    logger.info('thumbnailScanner', 'batch complete', {
+    logger.info('thumbnailScanner', 'batch_complete', {
       produced: summary.produced.length,
       skippedNoSource: summary.skippedNoSource.length,
       skippedFullyCovered: summary.skippedFullyCovered.length,
@@ -267,7 +263,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
     })
     await logOverallProgress()
   } catch (e) {
-    logger.error('thumbnailScanner', 'scan error', e)
+    logger.error('thumbnailScanner', 'scan_error', { error: e as Error })
   }
   return summary
 }

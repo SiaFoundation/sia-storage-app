@@ -9,7 +9,7 @@ export function useAccount() {
       const account = await sdk.account()
       return account
     } catch (e) {
-      logger.error('useAccount', 'error getting account', e)
+      logger.error('useAccount', 'error', { error: e as Error })
       throw e
     }
   })

@@ -33,12 +33,13 @@ export async function retry<T>(
         0,
         Math.round(exponentialDelay + jitterOffset),
       )
-      logger.warn(
-        'retry',
-        `${name} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayWithJitter}ms... error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
+      logger.warn('retry', 'attempt_failed', {
+        name,
+        attempt,
+        maxAttempts,
+        delayMs: delayWithJitter,
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
 
       // If this was the last attempt, do not delay, just throw.
       if (attempt === maxAttempts) {

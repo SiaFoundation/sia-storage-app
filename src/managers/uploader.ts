@@ -167,7 +167,7 @@ class UploadManager {
       | 'manual' = 'manual',
   ): Promise<void> {
     if (!this.packer || !this.batch) {
-      logger.debug('uploadManager', 'No packer to flush')
+      logger.debug('uploadManager', 'no_packer_to_flush')
       return
     }
 
@@ -193,7 +193,7 @@ class UploadManager {
       fillPercent,
     })
 
-    logger.info('uploadManager', 'Flushing batch', {
+    logger.info('uploadManager', 'batch_flush', {
       reason,
       batchId: batch.batchId,
       files: batch.files.length,
@@ -233,11 +233,10 @@ class UploadManager {
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      logger.error(
-        'uploadManager',
-        `Error finalizing batch ${batch.batchId}`,
-        e,
-      )
+      logger.error('uploadManager', 'batch_finalize_error', {
+        batchId: batch.batchId,
+        error: e as Error,
+      })
 
       for (const entry of batch.files) {
         setUploadError(entry.fileId, message)
@@ -252,7 +251,9 @@ class UploadManager {
     this.active = false
 
     if (this.batch) {
-      logger.info('uploadManager', `Cancelling batch ${this.batch.batchId}`)
+      logger.info('uploadManager', 'batch_cancel', {
+        batchId: this.batch.batchId,
+      })
       this.batch.abortController.abort()
       for (const entry of this.batch.files) {
         removeUpload(entry.fileId)
@@ -260,10 +261,9 @@ class UploadManager {
     }
 
     if (this.uploadingBatch) {
-      logger.info(
-        'uploadManager',
-        `Cancelling uploading batch ${this.uploadingBatch.batchId}`,
-      )
+      logger.info('uploadManager', 'uploading_batch_cancel', {
+        batchId: this.uploadingBatch.batchId,
+      })
       this.uploadingBatch.abortController.abort()
       for (const entry of this.uploadingBatch.files) {
         removeUpload(entry.fileId)
@@ -405,7 +405,7 @@ class UploadManager {
    */
   private async processEntry(entry: FileEntry): Promise<void> {
     if (!this.sdk) {
-      logger.error('uploadManager', 'SDK not initialized')
+      logger.error('uploadManager', 'sdk_not_initialized')
       setUploadError(entry.fileId, 'SDK not initialized')
       return
     }
@@ -428,7 +428,7 @@ class UploadManager {
       }
 
       if (!this.packer) {
-        logger.info('uploadManager', 'Creating new packer')
+        logger.info('uploadManager', 'packer_create')
         const batch: BatchState = {
           batchId: uniqueId(),
           files: [],
@@ -454,10 +454,10 @@ class UploadManager {
       }
 
       setUploadStatus(entry.fileId, 'packing')
-      logger.debug(
-        'uploadManager',
-        `Adding file ${entry.fileId} to packer (${entry.size} bytes)`,
-      )
+      logger.debug('uploadManager', 'file_packing', {
+        fileId: entry.fileId,
+        size: entry.size,
+      })
 
       const t0 = Date.now()
       const reader = createFileReader(entry.fileUri)
@@ -483,7 +483,10 @@ class UploadManager {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      logger.error('uploadManager', `Error processing file ${entry.fileId}`, e)
+      logger.error('uploadManager', 'file_process_error', {
+        fileId: entry.fileId,
+        error: e as Error,
+      })
       setUploadError(entry.fileId, message)
     }
   }
@@ -541,10 +544,10 @@ class UploadManager {
       if (!this.active) break
       const entry = entries[j]
       setUploadStatus(entry.fileId, 'packing')
-      logger.debug(
-        'uploadManager',
-        `Adding file ${entry.fileId} to packer (${entry.size} bytes)`,
-      )
+      logger.debug('uploadManager', 'file_packing', {
+        fileId: entry.fileId,
+        size: entry.size,
+      })
       const t0 = Date.now()
       const reader = createFileReader(entry.fileUri)
       inflight.push({
@@ -581,11 +584,10 @@ class UploadManager {
       } catch (e) {
         if (!this.active) break
         const message = e instanceof Error ? e.message : String(e)
-        logger.error(
-          'uploadManager',
-          `Error processing file ${entry.fileId}`,
-          e,
-        )
+        logger.error('uploadManager', 'file_process_error', {
+          fileId: entry.fileId,
+          error: e as Error,
+        })
         setUploadError(entry.fileId, message)
       }
     }
@@ -664,7 +666,7 @@ class UploadManager {
 
       return this.polledFiles.length
     } catch (e) {
-      logger.error('uploadManager', 'DB poll error', e)
+      logger.error('uploadManager', 'db_poll_error', { error: e as Error })
       return 0
     }
   }
@@ -790,10 +792,10 @@ class UploadManager {
     const successfulFileIds: string[] = []
 
     if (pinnedObjects.length !== batch.files.length) {
-      logger.warn(
-        'uploadManager',
-        `Object count mismatch: ${pinnedObjects.length} objects for ${batch.files.length} files`,
-      )
+      logger.warn('uploadManager', 'object_count_mismatch', {
+        objects: pinnedObjects.length,
+        files: batch.files.length,
+      })
     }
 
     for (let i = 0; i < batch.files.length; i++) {
@@ -801,10 +803,10 @@ class UploadManager {
       const pinnedObject = pinnedObjects[i]
 
       if (!pinnedObject) {
-        logger.error(
-          'uploadManager',
-          `No pinned object for file ${entry.fileId} at index ${i}`,
-        )
+        logger.error('uploadManager', 'no_pinned_object', {
+          fileId: entry.fileId,
+          index: i,
+        })
         setUploadError(entry.fileId, 'No pinned object returned')
         continue
       }
@@ -812,10 +814,9 @@ class UploadManager {
       try {
         const fileRecord = await readFileRecord(entry.fileId)
         if (!fileRecord) {
-          logger.warn(
-            'uploadManager',
-            `File ${entry.fileId} deleted during upload, skipping pin`,
-          )
+          logger.warn('uploadManager', 'file_deleted_during_upload', {
+            fileId: entry.fileId,
+          })
           successfulFileIds.push(entry.fileId)
           continue
         }
@@ -830,17 +831,16 @@ class UploadManager {
         )
         await upsertLocalObject(localObject)
 
-        logger.debug('uploadManager', `Saved object for file ${entry.fileId}`)
+        logger.debug('uploadManager', 'object_saved', { fileId: entry.fileId })
         this._uploadedCount++
         this._uploadedBytes += entry.size
         successfulFileIds.push(entry.fileId)
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
-        logger.error(
-          'uploadManager',
-          `Error saving object for file ${entry.fileId}`,
-          e,
-        )
+        logger.error('uploadManager', 'object_save_error', {
+          fileId: entry.fileId,
+          error: e as Error,
+        })
         setUploadError(entry.fileId, message)
       }
     }
@@ -866,7 +866,7 @@ export function useUploader() {
   return useCallback(
     async (files: FileRecordRow[]) => {
       if (!sdk) {
-        logger.warn('useUploader', 'SDK not initialized')
+        logger.warn('useUploader', 'sdk_not_initialized')
         return
       }
 
@@ -874,7 +874,7 @@ export function useUploader() {
       for (const file of files) {
         const fileUri = await getFsFileUri(file)
         if (!fileUri) {
-          logger.warn('useUploader', `File not available locally: ${file.id}`)
+          logger.warn('useUploader', 'file_not_local', { fileId: file.id })
           continue
         }
         entries.push({ fileId: file.id, fileUri, file, size: file.size })

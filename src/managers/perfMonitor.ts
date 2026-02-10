@@ -8,7 +8,7 @@ export const initPerfMonitor = createServiceInterval({
   worker: () => {
     const cpu = getCpuUsage()
     const mem = getMemoryUsage()
-    logger.info('perfMonitor', `cpu=${cpu}% mem=${mem}MB`)
+    logger.info('perfMonitor', 'tick', { cpu, mem })
   },
   getState: async () => true,
   interval: PERF_MONITOR_INTERVAL,

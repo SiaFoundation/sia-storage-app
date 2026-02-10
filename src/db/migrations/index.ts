@@ -20,18 +20,20 @@ import type * as SQLite from 'expo-sqlite'
 import { logger } from '../../lib/logger'
 import { migration_0001_init_schema } from './0001_init_schema'
 import { migration_0002_keychain_accessibility } from './0002_keychain_accessibility'
+import { migration_0003_logs_data_column } from './0003_logs_data_column'
 import type { Migration, MigrationProgressHandler } from './types'
 
 const migrations: Migration[] = [
   migration_0001_init_schema,
   migration_0002_keychain_accessibility,
+  migration_0003_logs_data_column,
 ]
 
 export async function runMigrations(
   db: SQLite.SQLiteDatabase,
   onProgress?: MigrationProgressHandler,
 ): Promise<void> {
-  logger.debug('db', 'checking migrations...')
+  logger.debug('db', 'checking_migrations')
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS migrations (
       id TEXT PRIMARY KEY,
@@ -46,18 +48,15 @@ export async function runMigrations(
 
   const needToApply = migrations.length - applied.size
   if (needToApply > 0) {
-    logger.info(
-      'db',
-      'need to apply',
-      migrations.length - applied.size,
-      'migrations',
-    )
+    logger.info('db', 'migrations_pending', {
+      count: migrations.length - applied.size,
+    })
   }
   for (const m of migrations) {
     if (applied.has(m.id)) {
       continue
     }
-    logger.info('db', 'applying migration', m.id)
+    logger.info('db', 'applying_migration', { id: m.id })
     onProgress?.({
       id: m.id,
       message: m.description,
@@ -71,5 +70,5 @@ export async function runMigrations(
       )
     })
   }
-  logger.info('db', 'all migrations applied')
+  logger.info('db', 'migrations_complete')
 }

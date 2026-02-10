@@ -13,10 +13,7 @@ export function useRecoveryPhraseRegistration() {
       indexerURL: string,
     ): Promise<{ success: boolean }> => {
       if (!phrase) {
-        logger.warn(
-          'recoveryPhraseRegistration',
-          'No recovery phrase available',
-        )
+        logger.warn('recoveryPhraseRegistration', 'no_phrase_available')
         return { success: false }
       }
 
@@ -28,11 +25,9 @@ export function useRecoveryPhraseRegistration() {
         return { success: true }
       }
 
-      logger.error(
-        'recoveryPhraseRegistration',
-        'Failed to register with mnemonic:',
-        error,
-      )
+      logger.error('recoveryPhraseRegistration', 'registration_failed', {
+        error: error as unknown as Error,
+      })
       switch (error.type) {
         case 'cancelled':
           toast.show('Authorization cancelled')

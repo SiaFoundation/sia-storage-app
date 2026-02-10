@@ -36,70 +36,6 @@ export function diffFileMetadata(
   return diffs
 }
 
-/**
- * Format field-level metadata diffs as git-style +/- lines.
- * '+' denotes the newer value, '-' denotes the older value. Side labels: 'l' = local, 'r' = remote.
- *
- * Example (newerSide = 'local'):
- * -r name: "old.jpg"
- * +l name: "new.jpg"
- * -r updatedAt: 1700000000000
- * +l updatedAt: 1700005000000
- */
-export function formatMetadataDiff(
-  diffs: Partial<DiffResult>,
-  isLocalNewer: boolean,
-): string {
-  const lines: string[] = []
-  const keys = Object.keys(diffs) as (keyof FileMetadata)[]
-  for (const key of keys) {
-    const entry = diffs[key]
-    if (!entry) continue
-    const oldVal = isLocalNewer ? entry.remote : entry.local
-    const newVal = isLocalNewer ? entry.local : entry.remote
-    const oldStr = JSON.stringify(oldVal)
-    const newStr = JSON.stringify(newVal)
-    const oldSide = isLocalNewer ? 'r' : 'l'
-    const newSide = isLocalNewer ? 'l' : 'r'
-    lines.push(`-${oldSide} ${String(key)}: ${oldStr}`)
-    lines.push(`+${newSide} ${String(key)}: ${newStr}`)
-  }
-  return lines.join('\n')
-}
-
-function formatTimestamp(ts?: number): string {
-  if (!ts || ts <= 0) return 'n/a'
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(ts))
-}
-
-function formatDiff(params: {
-  fileId: string
-  objectId: string
-  localMeta: FileMetadata
-  remoteMeta: FileMetadata
-  diffs: Partial<DiffResult>
-  isLocalNewer: boolean
-}): string {
-  const { fileId, objectId, localMeta, remoteMeta, diffs, isLocalNewer } =
-    params
-  const headerLeft = `local (l) updated at ${formatTimestamp(
-    localMeta.updatedAt,
-  )}`
-  const headerRight = `remote (r) updated at ${formatTimestamp(
-    remoteMeta.updatedAt,
-  )}`
-  const status = isLocalNewer ? 'local newer' : 'remote newer'
-  const diff = formatMetadataDiff(diffs, isLocalNewer)
-  return `[syncUpMetadata] fileId=${fileId} objectId=${objectId}\n${headerLeft}    ${headerRight}\n${status} • ${diff}`
-}
-
 export type MetadataSyncResult = {
   scanned: number
   withDiffs: number
@@ -118,7 +54,10 @@ async function tryWithLog<T>(
   try {
     return await fn()
   } catch (e) {
-    logger.error('syncUpMetadata', `${operation} failed`, { ...ctx, error: e })
+    logger.error('syncUpMetadata', `${operation}_failed`, {
+      ...ctx,
+      error: e as Error,
+    })
     return null
   }
 }
@@ -162,15 +101,15 @@ export async function setSyncUpCursor(
  */
 export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   if (!getIsConnected()) {
-    logger.debug('syncUpMetadata', 'not connected to indexer, skipping')
+    logger.debug('syncUpMetadata', 'skipped', { reason: 'not_connected' })
     return
   }
   const indexerURL = await getIndexerURL()
   const after = await getSyncUpCursor()
-  logger.debug(
-    'syncUpMetadata',
-    `service tick: from ${after?.id ?? 'begin'} after=${after?.updatedAt}`,
-  )
+  logger.debug('syncUpMetadata', 'tick', {
+    fromId: after?.id ?? 'begin',
+    afterUpdatedAt: after?.updatedAt,
+  })
   const batch = await readAllFileRecords({
     order: 'ASC',
     orderBy: 'updatedAt',
@@ -184,7 +123,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       : undefined,
   })
   if (batch.length === 0) {
-    logger.debug('syncUpMetadata', 'no new updates')
+    logger.debug('syncUpMetadata', 'no_updates')
     return
   }
   for (const f of batch) {
@@ -211,17 +150,14 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
     if (Object.keys(diffs).length === 0) continue
 
     const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
-    logger.info(
-      'syncUpMetadata',
-      formatDiff({
-        fileId: f.id,
-        objectId: obj.id,
-        localMeta: f,
-        remoteMeta,
-        diffs,
-        isLocalNewer,
-      }),
-    )
+    logger.info('syncUpMetadata', 'metadata_diff', {
+      fileId: f.id,
+      objectId: obj.id,
+      localUpdatedAt: f.updatedAt,
+      remoteUpdatedAt: remoteMeta.updatedAt,
+      newerSide: isLocalNewer ? 'local' : 'remote',
+      diffs,
+    })
 
     if (isLocalNewer) {
       await tryWithLog(
@@ -237,7 +173,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       updatedAt: last.updatedAt + 1,
       id: last.id,
     })
-    logger.debug('syncUpMetadata', 'end reached')
+    logger.debug('syncUpMetadata', 'end_reached')
   } else {
     await setSyncUpCursor({
       updatedAt: last.updatedAt,

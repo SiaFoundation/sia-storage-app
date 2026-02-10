@@ -42,10 +42,7 @@ export async function runFsEvictionScanner(): Promise<
     }
 
     let currentSize = totalSize
-    logger.warn(
-      'fsEvictionScanner',
-      `total size over limit totalSize=${totalSize}`,
-    )
+    logger.warn('fsEvictionScanner', 'over_limit', { totalSize })
 
     let processedRows = 0
     let evicted = 0
@@ -71,10 +68,10 @@ export async function runFsEvictionScanner(): Promise<
           currentSize -= row.size
           evicted += 1
         } catch (error) {
-          logger.error(
-            'fsEvictionScanner',
-            `failed to remove file fileId=${row.fileId} error=${error}`,
-          )
+          logger.error('fsEvictionScanner', 'remove_failed', {
+            fileId: row.fileId,
+            error: error as Error,
+          })
         }
       }
 
@@ -90,13 +87,14 @@ export async function runFsEvictionScanner(): Promise<
       evicted,
       currentSize,
     }
-    logger.info(
-      'fsEvictionScanner',
-      `summary processedRows=${processedRows} evicted=${evicted} currentSize=${currentSize}`,
-    )
+    logger.info('fsEvictionScanner', 'summary', {
+      processedRows,
+      evicted,
+      currentSize,
+    })
     return results
   } catch (error) {
-    logger.error('fsEvictionScanner', 'error during scan', error)
+    logger.error('fsEvictionScanner', 'scan_error', { error: error as Error })
   } finally {
     await setFsEvictionLastRun()
   }

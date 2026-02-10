@@ -74,7 +74,7 @@ export async function generateThumbnailsForFile(
       type: fileRecord.type,
     })
     if (!sourceUri) {
-      logger.warn('generateThumbnailsForFile', 'no source URI', {
+      logger.warn('generateThumbnailsForFile', 'no_source_uri', {
         fileId: fileRecord.id,
       })
       return
@@ -85,18 +85,14 @@ export async function generateThumbnailsForFile(
     const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
 
     if (missingSizes.length === 0) {
-      logger.debug(
-        'generateThumbnailsForFile',
-        'all thumbnails already exist',
-        {
-          fileId: fileRecord.id,
-        },
-      )
+      logger.debug('generateThumbnailsForFile', 'all_exist', {
+        fileId: fileRecord.id,
+      })
       return
     }
 
     // Generate missing thumbnails.
-    logger.debug('generateThumbnailsForFile', 'generating thumbnails', {
+    logger.debug('generateThumbnailsForFile', 'generating', {
       fileId: fileRecord.id,
       missingSizes,
     })
@@ -121,9 +117,9 @@ export async function generateThumbnails(files: FileRecord[]) {
     try {
       await generateThumbnailsForFile(file)
     } catch (error) {
-      logger.error('generateThumbnails', 'thumbnail generation error', {
+      logger.error('generateThumbnails', 'generation_error', {
         fileId: file.id,
-        error,
+        error: error as Error,
       })
     }
   }
@@ -162,7 +158,7 @@ export async function ensureThumbnailForSize(params: {
 
   // Log if there's a mismatch between stored and detected types.
   if (detectedType && detectedType !== fileType) {
-    logger.warn('thumbnailer', 'type mismatch detected', {
+    logger.warn('thumbnailer', 'type_mismatch', {
       fileId,
       storedType: fileType,
       detectedType,
@@ -172,7 +168,7 @@ export async function ensureThumbnailForSize(params: {
 
   // Skip unsupported formats early.
   if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
-    logger.error('thumbnailer', 'unsupported format', {
+    logger.error('thumbnailer', 'unsupported_format', {
       fileId,
       fileHash,
       size,
@@ -184,7 +180,7 @@ export async function ensureThumbnailForSize(params: {
     return { status: 'error', error: new Error('Unsupported format') }
   }
 
-  logger.debug('thumbnailer', 'source uri', {
+  logger.debug('thumbnailer', 'source_uri', {
     fileId,
     uri: sourceUri,
     storedType: fileType,
@@ -196,28 +192,28 @@ export async function ensureThumbnailForSize(params: {
   try {
     if (actualType?.startsWith('video/')) {
       info = await prepareVideoThumbnail(sourceUri, size)
-      logger.debug('thumbnailer', 'video base frame prepared', {
+      logger.debug('thumbnailer', 'video_frame_prepared', {
         fileId,
         size,
         info,
       })
     } else {
       info = await prepareImageThumbnail(sourceUri, size)
-      logger.debug('thumbnailer', 'image target size prepared', {
+      logger.debug('thumbnailer', 'image_resized', {
         fileId,
         size,
         info,
       })
     }
   } catch (e) {
-    logger.error('thumbnailer', 'error preparing source', {
+    logger.error('thumbnailer', 'source_prepare_error', {
       fileId,
       fileHash,
       size,
       storedType: fileType,
       detectedType,
       sourceUri,
-      error: e,
+      error: e as Error,
     })
     markFileErrored(fileId)
     return { status: 'error', error: e }
@@ -250,7 +246,7 @@ export async function ensureThumbnailForSize(params: {
     const fileUri = await copyFileToFs(thumbFileInfo, new File(result.uri))
     const thumbHash = await calculateContentHash(fileUri)
     if (!thumbHash) {
-      logger.error('thumbnailer', 'failed to calculate hash', { fileId, size })
+      logger.error('thumbnailer', 'hash_error', { fileId, size })
       markFileErrored(fileId)
       return { status: 'error', error: new Error('Missing thumbnail hash') }
     }
@@ -258,7 +254,7 @@ export async function ensureThumbnailForSize(params: {
     // Check if a thumbnail with this hash already exists (dedupe by content hash).
     const existingThumb = await readFileRecordByContentHash(thumbHash)
     if (existingThumb) {
-      logger.debug('thumbnailer', 'thumbnail already exists by hash', {
+      logger.debug('thumbnailer', 'hash_exists', {
         thumbId: existingThumb.id,
         hash: fileHash,
         size,
@@ -285,7 +281,7 @@ export async function ensureThumbnailForSize(params: {
       },
       true,
     )
-    logger.debug('thumbnailer', 'created thumbnail record', {
+    logger.debug('thumbnailer', 'record_created', {
       thumbId,
       hash: fileHash,
       size,
@@ -302,7 +298,7 @@ export async function ensureThumbnailForSize(params: {
       height: result.height ?? null,
     }
   } catch (e) {
-    logger.error('thumbnailer', 'error generating thumbnail', {
+    logger.error('thumbnailer', 'generation_error', {
       fileId,
       fileHash,
       size,
@@ -310,7 +306,7 @@ export async function ensureThumbnailForSize(params: {
       detectedType,
       sourceUri,
       inputUri: info.inputUri,
-      error: e,
+      error: e as Error,
     })
     markFileErrored(fileId)
     return { status: 'error', error: e }

@@ -106,7 +106,9 @@ function SingleFileActionsSheet({
       toast.show('Removed from device')
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to remove local file', e)
+      logger.error('FileActionsSheet', 'remove_local_file_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to remove from device')
     }
   }, [file?.id, file?.type, toast, onComplete, file])
@@ -119,7 +121,7 @@ function SingleFileActionsSheet({
       toast.show('Upload queued')
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to reupload file', e)
+      logger.error('FileActionsSheet', 'reupload_failed', { error: e as Error })
       toast.show('Failed to reupload file')
     }
   }, [file?.id, toast, onComplete, file, reupload])
@@ -131,7 +133,9 @@ function SingleFileActionsSheet({
       toast.show('Removed from network')
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to remove from network', e)
+      logger.error('FileActionsSheet', 'remove_from_network_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to remove from network')
     }
   }, [file?.id, toast, onComplete, file])
@@ -144,7 +148,9 @@ function SingleFileActionsSheet({
       toast.show('File deleted')
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to delete file', e)
+      logger.error('FileActionsSheet', 'delete_file_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to delete file')
     }
   }, [file, navigation, toast, onComplete])
@@ -306,7 +312,9 @@ function BulkFileActionsSheet({
       }
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to queue downloads', e)
+      logger.error('FileActionsSheet', 'queue_downloads_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to start downloads')
     }
   }, [counts, toast, onComplete])
@@ -325,7 +333,9 @@ function BulkFileActionsSheet({
       toast.show(`Removed ${removed} files from device`)
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to remove files from device', e)
+      logger.error('FileActionsSheet', 'remove_files_from_device_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to remove files from device')
     }
   }, [counts, toast, onComplete])
@@ -343,7 +353,9 @@ function BulkFileActionsSheet({
       toast.show(`Removed ${removed} files from network`)
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to remove files from network', e)
+      logger.error('FileActionsSheet', 'remove_files_from_network_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to remove files from network')
     }
   }, [counts, toast, onComplete])
@@ -363,7 +375,9 @@ function BulkFileActionsSheet({
       toast.show(`Queued ${queued} uploads`)
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to queue uploads', e)
+      logger.error('FileActionsSheet', 'queue_uploads_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to start uploads')
     }
   }, [counts, toast, onComplete])
@@ -375,7 +389,9 @@ function BulkFileActionsSheet({
       toast.show(`Deleted ${counts.total} files`)
       onComplete?.()
     } catch (e) {
-      logger.error('FileActionsSheet', 'failed to delete files', e)
+      logger.error('FileActionsSheet', 'delete_files_failed', {
+        error: e as Error,
+      })
       toast.show('Failed to delete files')
     }
   }, [counts, toast, onComplete])

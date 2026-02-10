@@ -32,9 +32,9 @@ export async function runLogRotation(): Promise<void> {
       )`,
       toDelete,
     )
-    logger.debug('logRotation', `Rotated ${toDelete} log entries`)
+    logger.debug('logRotation', 'rotated', { deleted: toDelete })
   } catch (error) {
-    logger.error('logRotation', 'Failed to rotate logs', error)
+    logger.error('logRotation', 'rotation_failed', { error: error as Error })
   }
 }
 

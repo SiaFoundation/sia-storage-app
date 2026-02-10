@@ -14,12 +14,12 @@ export async function initializeDB(options?: {
   databaseName?: string
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
-  logger.info('db', `initializing database: ${name}`)
+  logger.info('db', 'initializing', { name })
   database = await SQLite.openDatabaseAsync(name)
   await runMigrations(database, options?.onProgress)
   dbInitialized = true
   dbName = name
-  logger.info('db', 'database initialized')
+  logger.info('db', 'initialized')
 }
 
 /** Close the database connection (for test cleanup) */
@@ -28,7 +28,7 @@ export async function closeDb(): Promise<void> {
     try {
       await database.closeAsync()
     } catch (e) {
-      logger.debug('db', 'error closing database', e)
+      logger.debug('db', 'close_error', { error: e as Error })
     }
     dbInitialized = false
   }
@@ -42,11 +42,9 @@ export async function resetDb() {
     const rows = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
     )
-    logger.debug(
-      'db',
-      'dropping tables',
-      rows.map((r) => r.name),
-    )
+    logger.debug('db', 'dropping_tables', {
+      tables: rows.map((r) => r.name),
+    })
     for (let i = 0; i < rows.length; i++) {
       const table = rows[i].name
       await database.execAsync(`DROP TABLE IF EXISTS "${table}"`)

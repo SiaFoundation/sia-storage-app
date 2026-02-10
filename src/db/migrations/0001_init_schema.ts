@@ -122,7 +122,10 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       `CREATE INDEX IF NOT EXISTS idx_logs_createdAt ON logs(createdAt);`,
     )
   } catch (e) {
-    logger.error('db', 'error running migration 0001_init_schema', e)
+    logger.error('db', 'migration_error', {
+      id: '0001_init_schema',
+      error: e as Error,
+    })
     throw e
   }
 }
