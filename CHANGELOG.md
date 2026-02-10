@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.4.0 (2026-02-10)
+
+### Features
+
+- Added periodic CPU and memory usage logging for performance monitoring.
+- Redesigned upload system to replace the separate scanner with direct DB polling and slab-aware batch packing.
+
+### Fixes
+
+- Fixed file sharing not working on Android.
+- Fixed file viewer flickering and showing wrong file during sync by using a frozen ID window for carousel positions.
+- Fixed crash in file details view caused by rendering a number outside a Text component.
+- Fixed image reloading when switching between viewer and detail view.
+- Fixed file detail view not scrollable on Android by using gesture-handler-aware ScrollView.
+- Local storage stats now auto-refresh while the status sheet is open.
+- Fixed orphan and eviction scanners blocking the UI by running them during startup and background tasks only, with batched processing for the orphan scanner.
+- Fix file viewer flickering when library updates.
+- Archive sync now waits for all files to finish uploading before continuing.
+- Improved drag-to-dismiss gesture to feel more responsive with velocity-based flick detection and a lower distance threshold.
+- Logs emitted before the database is ready are now queued and flushed once the logger initializes.
+- Cancel uploads now actually aborts in-flight batches instead of only clearing UI state.
+
 ## 1.3.0 (2026-02-05)
 
 ### Features
