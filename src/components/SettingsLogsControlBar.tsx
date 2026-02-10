@@ -66,7 +66,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
         toast.show('No logs to export')
       }
     } catch (error) {
-      logger.error('logs', 'Failed to export logs', error)
+      logger.error('logs', 'export_failed', { error: error as Error })
       toast.show('Failed to export logs')
     } finally {
       setIsExporting(false)
@@ -112,7 +112,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
               await logsSwr.triggerChange()
               toast.show('Logs cleared')
             } catch (error) {
-              logger.error('logs', 'Failed to clear logs', error)
+              logger.error('logs', 'clear_failed', { error: error as Error })
               toast.show('Failed to clear logs')
             }
           },
@@ -130,15 +130,20 @@ export function SettingsLogsControlBar({ navigation }: Props) {
         return
       }
       const content = logs
-        .map(
-          (entry) =>
-            `${entry.timestamp} ${entry.level.toUpperCase()} [${entry.scope}] ${entry.message}`,
+        .map((entry) =>
+          JSON.stringify({
+            ts: entry.timestamp,
+            level: entry.level,
+            scope: entry.scope,
+            msg: entry.message,
+            ...entry.data,
+          }),
         )
         .join('\n')
       Clipboard.setString(content)
       toast.show('Logs copied')
     } catch (error) {
-      logger.error('logs', 'Failed to copy logs', error)
+      logger.error('logs', 'copy_failed', { error: error as Error })
       toast.show('Failed to copy logs')
     }
   }, [toast])

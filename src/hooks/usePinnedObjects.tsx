@@ -14,10 +14,10 @@ export function usePinnedObjects(file: FileRecord) {
           const appKey = await getAppKeyForIndexer(indexerURL)
           if (!appKey) {
             // TODO: Figure out how to handle this situation.
-            logger.warn(
-              'usePinnedObjects',
-              `fileId=${file.id} indexerURL=${indexerURL} No AppKey found`,
-            )
+            logger.warn('usePinnedObjects', 'no_app_key', {
+              fileId: file.id,
+              indexerURL,
+            })
             return null
           }
           return {

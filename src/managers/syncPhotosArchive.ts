@@ -22,13 +22,14 @@ import { settingsSwr } from '../stores/settings'
 const PAGE_SIZE = 50
 
 export async function workBackward() {
+  logger.debug('syncPhotosArchive', 'tick')
   if (!(await getMediaLibraryPermissions())) return
   const localOnlyCount = await getFileCountLocal({ localOnly: true })
   if (localOnlyCount > 0) {
-    logger.info(
-      'syncPhotosArchive',
-      `waiting for ${localOnlyCount} local-only files to sync`,
-    )
+    logger.info('syncPhotosArchive', 'skipped', {
+      reason: 'local_only_pending',
+      localOnlyCount,
+    })
     return
   }
   const cursor = await getPhotosArchiveCursor()
@@ -44,11 +45,11 @@ export async function workBackward() {
       resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
-      logger.info('syncPhotosArchive', 'archive is fully synced')
+      logger.info('syncPhotosArchive', 'fully_synced')
       await setPhotosArchiveCursor(0)
       return
     }
-    logger.info('syncPhotosArchive', `batch size=${page.assets.length}`)
+    logger.info('syncPhotosArchive', 'batch', { size: page.assets.length })
     const lastAssetCreationTime =
       page.assets[page.assets.length - 1].creationTime ?? 0
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime - 1 : 0
@@ -70,7 +71,7 @@ export async function workBackward() {
       return 0
     }
   } catch (e) {
-    logger.error('syncPhotosArchive', 'batch error', e)
+    logger.error('syncPhotosArchive', 'batch_error', { error: e as Error })
   }
 }
 
@@ -114,11 +115,11 @@ export async function setPhotosArchiveCursor(value: number) {
 }
 
 export async function restartPhotosArchiveCursor() {
-  logger.info('syncPhotosArchive', 'restarting photos archive sync cursor')
+  logger.info('syncPhotosArchive', 'cursor_restart')
   await setPhotosArchiveCursor(Date.now())
 }
 
 export async function resetPhotosArchiveCursor() {
-  logger.info('syncPhotosArchive', 'disabling photos archive sync cursor')
+  logger.info('syncPhotosArchive', 'cursor_disable')
   await setPhotosArchiveCursor(defaultValue)
 }

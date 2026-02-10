@@ -58,15 +58,15 @@ export function Root() {
 
   // Log AppState changes.
   useEffect(() => {
-    logger.info('appState', `initial state: ${appStateRef.current}`)
+    logger.info('appState', 'initial_state', { state: appStateRef.current })
 
     const subscription = AppState.addEventListener(
       'change',
       (nextAppState: AppStateStatus) => {
-        logger.info(
-          'appState',
-          `state changed: ${appStateRef.current} -> ${nextAppState}`,
-        )
+        logger.info('appState', 'state_changed', {
+          from: appStateRef.current,
+          to: nextAppState,
+        })
         appStateRef.current = nextAppState
       },
     )

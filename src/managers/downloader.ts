@@ -102,11 +102,7 @@ export function useDownloadFromShareURL() {
         downloadState?.status === 'running' ||
         downloadState?.status === 'queued'
       ) {
-        logger.debug(
-          'useDownloadFromShareURL',
-          'download already in progress',
-          id,
-        )
+        logger.debug('useDownloadFromShareURL', 'already_in_progress', { id })
         return id
       }
 
@@ -187,12 +183,7 @@ function createFileWriter(params: {
       }
 
       if (chunks % 10 === 0) {
-        logger.debug(
-          'streamToCache',
-          'downloaded',
-          bytesWritten,
-          'bytes so far',
-        )
+        logger.debug('streamToCache', 'progress', { bytesWritten })
       }
     },
   }
@@ -208,14 +199,14 @@ async function streamToCache(params: {
 }): Promise<void> {
   const { file, totalSize, download, onAfterClose, signal } = params
   const targetFile = await getOrCreateTempDownloadFile(file)
-  logger.debug('streamToCache', 'writing to cache path:', targetFile.uri)
+  logger.debug('streamToCache', 'write_start', { uri: targetFile.uri })
 
   const fileWriter = targetFile.writableStream().getWriter()
 
   try {
     // Check for abort before starting
     if (signal.aborted) {
-      logger.debug('streamToCache', 'abort received before download started')
+      logger.debug('streamToCache', 'abort_before_start')
       await targetFile.delete()
       return
     }
@@ -230,10 +221,10 @@ async function streamToCache(params: {
     // Download writes chunks to our writer
     await download(writer)
 
-    logger.debug('streamToCache', 'download stream ended')
+    logger.debug('streamToCache', 'stream_ended')
   } finally {
     await fileWriter.close()
-    logger.debug('streamToCache', 'writer closed')
+    logger.debug('streamToCache', 'writer_closed')
   }
 
   if (onAfterClose) {
@@ -254,10 +245,7 @@ export async function downloadFirstBytesFromShared(
     throw new Error('SDK not initialized')
   }
 
-  logger.debug(
-    'downloadFirstBytesFromShared',
-    `Downloading first ${byteCount} bytes`,
-  )
+  logger.debug('downloadFirstBytesFromShared', 'downloading', { byteCount })
 
   // Collect bytes into an array
   const chunks: Uint8Array[] = []
@@ -305,9 +293,8 @@ export async function downloadFirstBytesFromShared(
     if (offset >= byteCount) break
   }
 
-  logger.debug(
-    'downloadFirstBytesFromShared',
-    `Downloaded ${bytes.length} bytes`,
-  )
+  logger.debug('downloadFirstBytesFromShared', 'downloaded', {
+    bytes: bytes.length,
+  })
   return bytes
 }

@@ -134,7 +134,7 @@ export function removeUploads(ids: string[]) {
 }
 
 export function clearAllUploads() {
-  logger.debug('uploads', 'cancelling all uploads')
+  logger.debug('uploads', 'cancel_all')
   useUploadsStore.setState({ uploads: {} })
 }
 

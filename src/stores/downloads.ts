@@ -86,10 +86,10 @@ export function cancelAllDownloads() {
   const current = getState().downloads
   Object.values(current).forEach((r) => {
     try {
-      logger.debug('downloads', 'aborting download', r.id)
+      logger.debug('downloads', 'aborting', { id: r.id })
       r.controller?.abort()
     } catch (e) {
-      logger.error('downloads', 'error aborting download', r.id, e)
+      logger.error('downloads', 'abort_error', { id: r.id, error: e as Error })
     }
   })
   useDownloadsStore.setState({ downloads: {} })
@@ -123,17 +123,17 @@ export async function runDownloadWithSlot<T>(params: {
   setDownloadState(id, 'queued', 0)
   const release = await acquireDownloadSlot()
   try {
-    logger.debug('downloads', 'download running', id)
+    logger.debug('downloads', 'running', { id })
     setDownloadState(id, 'running', 0)
     const result = await task(controller.signal)
-    logger.debug('downloads', 'download success', id)
+    logger.debug('downloads', 'success', { id })
     // Set 'done' status and delay removal to prevent re-triggering downloads
     // while components may not have fetched the new file uri yet.
     setDownloadState(id, 'done', 1)
     setTimeout(() => removeDownload(id), 5000)
     return result
   } catch (e) {
-    logger.error('downloads', 'download error', id, e)
+    logger.error('downloads', 'error', { id, error: e as Error })
     const message = e instanceof Error ? e.message : String(e)
     setDownloadState(id, 'error', 0, message)
     throw e

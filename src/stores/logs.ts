@@ -4,7 +4,12 @@ import { useShallow } from 'zustand/react/shallow'
 import { db, dbInitialized } from '../db'
 import { sqlInsert } from '../db/sql'
 import { setLogAppender } from '../lib/logAppender'
-import { type LogEntry, type LogLevel, logger } from '../lib/logger'
+import {
+  type LogEntry,
+  type LogLevel,
+  logger,
+  serializeData,
+} from '../lib/logger'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
 export type LogsState = {
@@ -30,7 +35,7 @@ export async function initLogger(): Promise<void> {
   setLogAppender(appendLogToDb)
 
   // Now we can log.
-  logger.info('logs', 'initLogger called')
+  logger.info('logs', 'init')
 
   // Init state with stored values.
   const storedLevel = await getLogLevel()
@@ -127,8 +132,6 @@ export async function toggleLogScope(scope: string): Promise<void> {
 async function appendLogToDb(entry: LogEntry): Promise<void> {
   try {
     if (!dbInitialized) {
-      // Database not fully initialized (migrations not run), skip DB write.
-      // Early logs still go to console via logger.ts.
       return
     }
     await sqlInsert('logs', {
@@ -136,6 +139,7 @@ async function appendLogToDb(entry: LogEntry): Promise<void> {
       level: entry.level,
       scope: entry.scope,
       message: entry.message,
+      data: serializeData(entry.data),
       createdAt: Date.now(),
     })
   } catch (error) {
@@ -188,21 +192,31 @@ export async function readLogs(
     }
 
     const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
-    const query = `SELECT timestamp, level, scope, message FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC`
+    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC`
 
     const rows = await db().getAllAsync<{
       timestamp: string
       level: string
       scope: string
       message: string
+      data: string | null
     }>(query, ...params)
 
-    return rows.map((row) => ({
-      timestamp: row.timestamp,
-      level: row.level as LogEntry['level'],
-      scope: row.scope,
-      message: row.message,
-    }))
+    return rows.map((row) => {
+      let data: Record<string, unknown> | undefined
+      if (row.data) {
+        try {
+          data = JSON.parse(row.data)
+        } catch {}
+      }
+      return {
+        timestamp: row.timestamp,
+        level: row.level as LogEntry['level'],
+        scope: row.scope,
+        message: row.message,
+        data,
+      }
+    })
   } catch (error) {
     console.error('[logs] Failed to read logs:', error)
     return []

@@ -21,6 +21,7 @@ import { settingsSwr } from '../stores/settings'
 const PAGE_SIZE = 200
 
 async function workForward(): Promise<void> {
+  logger.debug('syncNewPhotos', 'tick')
   if (!(await getMediaLibraryPermissions())) return
   const cursor = await getPhotosNewCursor()
 
@@ -35,10 +36,10 @@ async function workForward(): Promise<void> {
       resolveWithFullInfo: true,
     })
     if (page.assets.length === 0) {
-      logger.debug('syncNewPhotos', 'no new photos found')
+      logger.debug('syncNewPhotos', 'no_new_photos')
       return
     }
-    logger.info('syncNewPhotos', `batch size=${page.assets.length}`)
+    logger.info('syncNewPhotos', 'batch', { size: page.assets.length })
     const lastAssetCreationTime =
       page.assets[page.assets.length - 1].creationTime
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime + 1 : 0
@@ -55,7 +56,7 @@ async function workForward(): Promise<void> {
     )
     if (files.length > 0) await librarySwr.triggerChange()
   } catch (e) {
-    logger.error('syncNewPhotos', 'batch error', e)
+    logger.error('syncNewPhotos', 'batch_error', { error: e as Error })
   }
 }
 
@@ -101,6 +102,6 @@ export async function setPhotosNewCursor(value: number) {
 }
 
 export async function resetPhotosNewCursor() {
-  logger.info('syncNewPhotos', 'resetting photos new sync cursor')
+  logger.info('syncNewPhotos', 'cursor_reset')
   await setPhotosNewCursor(defaultValue)
 }

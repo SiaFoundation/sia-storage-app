@@ -171,7 +171,7 @@ export function FileCarousel({
       Clipboard.setString(shareUrl)
       toast.show('Share URL copied')
     } catch (e) {
-      logger.error('FileCarousel', 'Failed to share URL', e)
+      logger.error('FileCarousel', 'share_url_failed', { error: e as Error })
       toast.show('Failed to copy URL')
     }
   }, [currentFile, sdk, toast])
@@ -189,7 +189,7 @@ export function FileCarousel({
       const msg =
         typeof e === 'string' ? e : e instanceof Error ? e.message : ''
       if (!msg.includes('User did not share')) {
-        logger.error('FileCarousel', 'File sharing failed', e)
+        logger.error('FileCarousel', 'share_failed', { error: e as Error })
       }
     }
   }, [currentFile, status.data?.fileUri])

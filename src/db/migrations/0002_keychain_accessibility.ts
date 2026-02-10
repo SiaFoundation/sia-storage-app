@@ -55,13 +55,13 @@ export const migration_0002_keychain_accessibility: Migration = {
   id: '0002_keychain_accessibility',
   description: 'Migrate keychain to AFTER_FIRST_UNLOCK accessibility',
   up: async (_db: SQLite.SQLiteDatabase) => {
-    logger.info('db', 'Starting keychain accessibility migration...')
+    logger.info('db', 'keychain_migration_start')
 
     const appKeysMap = await getAppKeysMap()
     const keyCount = Object.keys(appKeysMap).length
 
     if (keyCount === 0) {
-      logger.info('db', 'No AppKeys to migrate')
+      logger.info('db', 'no_keys_to_migrate')
       return
     }
 
@@ -72,9 +72,6 @@ export const migration_0002_keychain_accessibility: Migration = {
     // Re-add with AFTER_FIRST_UNLOCK accessibility
     await setAppKeysMap(appKeysMap)
 
-    logger.info(
-      'db',
-      `Keychain accessibility migration complete: migrated ${keyCount} key(s)`,
-    )
+    logger.info('db', 'keychain_migration_complete', { keyCount })
   },
 }

@@ -54,7 +54,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
       const msg =
         typeof e === 'string' ? e : e instanceof Error ? e.message : ''
       if (!msg.includes('User did not share')) {
-        logger.error('shareAction', 'File sharing failed:', e)
+        logger.error('shareAction', 'share_failed', { error: e as Error })
       }
     }
   }, [file, status.data?.fileUri])

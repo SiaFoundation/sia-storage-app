@@ -28,10 +28,9 @@ export function useIsOnline() {
     if (isOnline.isLoading) {
       return
     }
-    logger.debug(
-      'netinfo',
-      `app is now ${isOnline.data ? 'online' : 'offline'}`,
-    )
+    logger.debug('netinfo', 'connectivity_changed', {
+      online: isOnline.data,
+    })
   }, [isOnline.data, isOnline.isLoading])
 
   return isOnline

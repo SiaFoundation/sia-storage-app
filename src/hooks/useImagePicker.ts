@@ -11,12 +11,12 @@ export function useImagePicker() {
   const isPickingRef = useRef<boolean>(false)
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isPickingRef.current) {
-      logger.debug('imagePicker', 'already picking, ignoring new request.')
+      logger.debug('imagePicker', 'already_picking')
       return []
     }
     isPickingRef.current = true
     try {
-      logger.debug('imagePicker', 'opening media picker...')
+      logger.debug('imagePicker', 'opening')
       const result = await ImagePicker.launchImageLibrary({
         mediaType: 'mixed',
         // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
@@ -29,14 +29,14 @@ export function useImagePicker() {
       })
 
       if (result.didCancel) {
-        logger.debug('imagePicker', 'media selection canceled.')
+        logger.debug('imagePicker', 'canceled')
         return []
       }
       if (result.errorCode) {
-        logger.warn(
-          'imagePicker',
-          `error: ${result.errorMessage ?? result.errorCode}`,
-        )
+        logger.warn('imagePicker', 'picker_error', {
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+        })
         return []
       }
 
@@ -55,7 +55,7 @@ export function useImagePicker() {
       }
       return files
     } catch (e) {
-      logger.error('imagePicker', 'error', e)
+      logger.error('imagePicker', 'error', { error: e as Error })
       return []
     } finally {
       isPickingRef.current = false

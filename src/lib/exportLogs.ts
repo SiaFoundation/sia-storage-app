@@ -18,18 +18,21 @@ export async function exportLogs(): Promise<string | null> {
       return null
     }
 
-    // Format logs as text file.
+    // Format logs as JSONL.
     const content = logs
-      .map(
-        (entry) =>
-          `${entry.timestamp} ${entry.level.toUpperCase()} [${entry.scope}] ${
-            entry.message
-          }`,
+      .map((entry) =>
+        JSON.stringify({
+          ...entry.data,
+          ts: entry.timestamp,
+          level: entry.level,
+          scope: entry.scope,
+          msg: entry.message,
+        }),
       )
       .join('\n')
 
     // Write to temporary file.
-    const tempFileName = `logs-export-${Date.now()}.txt`
+    const tempFileName = `logs-export-${Date.now()}.jsonl`
     const tempFile = new File(Paths.document, tempFileName)
     const contentBytes = new TextEncoder().encode(content)
 
@@ -47,11 +50,11 @@ export async function exportLogs(): Promise<string | null> {
     const fileId = uniqueId()
     const size = contentBytes.length
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const fileName = `logs-${timestamp}.txt`
+    const fileName = `logs-${timestamp}.jsonl`
 
     // Copy temp file to FS storage.
     const fsFileUri = await copyFileToFs(
-      { id: fileId, type: 'text/plain' },
+      { id: fileId, type: 'application/x-ndjson' },
       tempFile,
     )
 
@@ -75,7 +78,7 @@ export async function exportLogs(): Promise<string | null> {
     await createFileRecord({
       id: fileId,
       name: fileName,
-      type: 'text/plain',
+      type: 'application/x-ndjson',
       size,
       hash,
       createdAt: now,
@@ -90,7 +93,7 @@ export async function exportLogs(): Promise<string | null> {
 
     return fileId
   } catch (error) {
-    logger.error('logExport', 'Failed to export logs', error)
+    logger.error('logExport', 'export_failed', { error: error as Error })
     throw error
   }
 }

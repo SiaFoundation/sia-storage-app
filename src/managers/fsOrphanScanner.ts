@@ -56,15 +56,16 @@ export async function runFsOrphanScanner(options?: {
         try {
           entry.file.delete()
           removed++
-          logger.info(
-            'fsOrphanScanner',
-            `removed unindexed file fileId=${entry.fileId} uri=${entry.file.uri}`,
-          )
+          logger.info('fsOrphanScanner', 'file_removed', {
+            fileId: entry.fileId,
+            uri: entry.file.uri,
+          })
         } catch (error) {
-          logger.error(
-            'fsOrphanScanner',
-            `failed to delete file fileId=${entry.fileId} uri=${entry.file.uri} error=${error}`,
-          )
+          logger.error('fsOrphanScanner', 'delete_failed', {
+            fileId: entry.fileId,
+            uri: entry.file.uri,
+            error: error as Error,
+          })
         }
       }
 
@@ -80,11 +81,11 @@ export async function runFsOrphanScanner(options?: {
 
     if (removed > 0) {
       await fsTriggerRefresh()
-      logger.info('fsOrphanScanner', `summary removed=${removed}`)
+      logger.info('fsOrphanScanner', 'summary', { removed })
     }
     return { removed }
   } catch (error) {
-    logger.error('fsOrphanScanner', 'error during scan', error)
+    logger.error('fsOrphanScanner', 'scan_error', { error: error as Error })
   } finally {
     await setFsOrphanLastRun()
   }

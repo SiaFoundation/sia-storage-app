@@ -8,7 +8,9 @@ export default async function shareLink({ url }: { url: string }) {
     })
     if (result.action === Share.sharedAction) {
       if (result.activityType) {
-        logger.debug('shareLink', result.activityType)
+        logger.debug('shareLink', 'shared', {
+          activityType: result.activityType,
+        })
         // shared with activity type of result.activityType
       } else {
         // shared

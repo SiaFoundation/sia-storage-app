@@ -46,20 +46,20 @@ export async function getAppKeyForIndexer(
   // Check cache first.
   const cached = cachedAppKeys.get(indexerURL)
   if (cached) {
-    logger.debug('appKey', 'cache hit, using cached AppKey')
+    logger.debug('appKey', 'cache_hit')
     return new AppKey(cached)
   }
 
   // Load from storage.
-  logger.debug('appKey', 'cache miss, loading from SecureStore...')
+  logger.debug('appKey', 'cache_miss')
   const appKeysMap = await getAppKeysMap()
   const keyBuffer = appKeysMap[indexerURL]
   if (!keyBuffer) {
-    logger.debug('appKey', 'AppKey not found in SecureStore')
+    logger.debug('appKey', 'not_found')
     return undefined
   }
 
-  logger.debug('appKey', 'AppKey loaded from SecureStore, caching')
+  logger.debug('appKey', 'loaded')
   cachedAppKeys.set(indexerURL, keyBuffer)
   return new AppKey(keyBuffer)
 }

@@ -11,12 +11,12 @@ export function useDocumentPicker() {
   const isPickingRef = useRef<boolean>(false)
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isPickingRef.current) {
-      logger.debug('documentPicker', 'already picking, ignoring new request.')
+      logger.debug('documentPicker', 'already_picking')
       return []
     }
     isPickingRef.current = true
     try {
-      logger.debug('documentPicker', 'opening document picker...')
+      logger.debug('documentPicker', 'opening')
       const result = await DocumentPicker.getDocumentAsync({
         multiple: true,
         type: '*/*',
@@ -24,7 +24,7 @@ export function useDocumentPicker() {
       })
 
       if (result.canceled) {
-        logger.debug('documentPicker', 'selection canceled.')
+        logger.debug('documentPicker', 'canceled')
         return []
       }
 
@@ -44,7 +44,7 @@ export function useDocumentPicker() {
 
       return files
     } catch (e) {
-      logger.error('documentPicker', 'error', e)
+      logger.error('documentPicker', 'error', { error: e as Error })
       return []
     } finally {
       isPickingRef.current = false

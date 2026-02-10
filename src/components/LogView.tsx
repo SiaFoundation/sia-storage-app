@@ -11,7 +11,7 @@ import {
 } from 'react-native'
 import { useLogs } from '../hooks/useLogs'
 import { getLevelColorHex, getScopeColorHex } from '../lib/logColors'
-import type { LogEntry } from '../lib/logger'
+import { formatDataPairs, type LogEntry } from '../lib/logger'
 import { palette } from '../styles/colors'
 
 type LogViewProps = {
@@ -53,6 +53,7 @@ export function LogView({
     ({ item, index }: { item: LogEntry; index: number }) => {
       const scopeColor = getScopeColorHex(item.scope)
       const levelColor = getLevelColorHex(item.level) ?? palette.gray[50]
+      const dataPart = formatDataPairs(item.data)
 
       return (
         <Text
@@ -69,6 +70,7 @@ export function LogView({
             [{item.scope}]{' '}
           </Text>
           <Text style={styles.message}>{item.message}</Text>
+          {dataPart ? <Text style={styles.data}>{` ${dataPart}`}</Text> : null}
         </Text>
       )
     },
@@ -140,6 +142,9 @@ const styles = StyleSheet.create({
   },
   message: {
     color: palette.gray[50],
+  },
+  data: {
+    color: palette.gray[400],
   },
   empty: {
     color: palette.gray[300],

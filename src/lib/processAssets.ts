@@ -209,10 +209,12 @@ export async function processAssets(
   const warnings: string[] = []
   const existingFilesByLocalIdCount = existingLocalIds.length
   const existingFilesByContentHashCount = existingContentHashes.length
-  logger.debug(
-    'processAssets',
-    `result: picked=${candidateFiles.length}, new=${newFiles.length}, incomplete=${incompleteFiles.length}, existing=${existingFiles.length}`,
-  )
+  logger.debug('processAssets', 'result', {
+    picked: candidateFiles.length,
+    new: newFiles.length,
+    incomplete: incompleteFiles.length,
+    existing: existingFiles.length,
+  })
   if (existingFilesByLocalIdCount > 0 || existingFilesByContentHashCount > 0) {
     warnings.push('Some files were duplicates and were not included.')
   }
@@ -221,10 +223,9 @@ export async function processAssets(
   await createManyFileRecords(newFiles)
 
   // Generate thumbnails for new image and video files.
-  logger.debug(
-    'processAssets',
-    `generating thumbnails for ${newFiles.length} new files`,
-  )
+  logger.debug('processAssets', 'generating_thumbnails', {
+    count: newFiles.length,
+  })
 
   // Generate thumbnails for new files, this will run in the background.
   generateThumbnails(newFiles)

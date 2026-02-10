@@ -110,7 +110,7 @@ export async function copyFileToFs(
   file: FsFileInfo,
   sourceFile: File,
 ): Promise<string> {
-  logger.debug('fs', `copyFile ${file.id} from ${sourceFile.uri}`)
+  logger.debug('fs', 'copy_file', { fileId: file.id, uri: sourceFile.uri })
   const target = getFsFileForId(file)
   const targetInfo = target.info()
   if (targetInfo.exists) {

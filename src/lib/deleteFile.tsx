@@ -22,7 +22,7 @@ async function tryStep<T>(
 ): Promise<void> {
   const [, err] = await tryCatch(fn)
   if (err) {
-    logger.error('deleteFile', `${step} failed for ${id}`, err)
+    logger.error('deleteFile', 'step_failed', { step, id, error: err as Error })
   }
 }
 
