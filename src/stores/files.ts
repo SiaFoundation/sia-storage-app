@@ -584,6 +584,21 @@ export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
   },
 )
 
+export const [getFileStatsLost, useFileStatsLost] = createGetterAndSWRHook(
+  librarySwr.getKey('lostStats'),
+  async () => {
+    const currentIndexerURL = await getIndexerURL()
+    return readAllFileRecordsStats({
+      order: 'ASC',
+      pinned: {
+        indexerURL: currentIndexerURL,
+        isPinned: false,
+      },
+      fileExistsLocally: false,
+    })
+  },
+)
+
 export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
   librarySwr.getKey('localCount'),
   async ({ localOnly }: { localOnly: boolean }) => {

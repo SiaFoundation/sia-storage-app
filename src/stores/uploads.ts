@@ -193,6 +193,7 @@ export function useUploadProgress(): {
   show: boolean
   enabled: boolean
   remaining: number
+  percentDecimal: number
   percentComplete: string
   total: number
 } {
@@ -211,7 +212,7 @@ export function useUploadProgress(): {
   const activeWeightedProgress = activeUploads
     .map((u) => u.progress * u.size)
     .reduce((a, b) => a + b, 0)
-  const percentComplete = totalBytes
+  const percentDecimal = totalBytes
     ? Math.min((activeWeightedProgress + uploadedBytes) / totalBytes, 1)
     : 0
 
@@ -219,7 +220,8 @@ export function useUploadProgress(): {
     show: isEnabled && !!localOnlyFiles,
     enabled: isEnabled,
     remaining: localOnlyFiles,
-    percentComplete: humanUploadPercent(percentComplete),
+    percentDecimal,
+    percentComplete: humanUploadPercent(percentDecimal),
     total: totalFiles,
   }
 }

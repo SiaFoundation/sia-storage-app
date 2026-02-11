@@ -13,6 +13,7 @@ export type UploadCategoryStats = {
 
 export type UploadStats = {
   overall: UploadCategoryStats
+  files: UploadCategoryStats
   photos: UploadCategoryStats
   videos: UploadCategoryStats
   audio: UploadCategoryStats
@@ -59,7 +60,7 @@ async function counts(
   const uploaded = Math.max(0, total - remaining)
   const uploadedBytes = Math.max(0, totalBytes - remainingBytes)
   const percentDecimal = totalBytes ? uploadedBytes / totalBytes : 1
-  const percent = `${Math.round(percentDecimal * 100)}%`
+  const percent = `${(percentDecimal * 100).toFixed(1)}%`.padStart(6)
   return {
     total,
     remaining,
@@ -90,19 +91,34 @@ export async function getUploadStats(): Promise<UploadStats> {
     counts(thumbsWhere, indexerURL),
   ])
 
-  const categories = [photosC, videosC, audioC, docsC, otherC, thumbsC]
-  const overallTotal = categories.reduce((s, c) => s + c.total, 0)
-  const overallUploaded = categories.reduce((s, c) => s + c.uploaded, 0)
-  const overallRemaining = categories.reduce((s, c) => s + c.remaining, 0)
-  const overallTotalBytes = categories.reduce((s, c) => s + c.totalBytes, 0)
-  const overallUploadedBytes = categories.reduce(
+  const fileCategories = [photosC, videosC, audioC, docsC, otherC]
+  const filesTotalCount = fileCategories.reduce((s, c) => s + c.total, 0)
+  const filesUploaded = fileCategories.reduce((s, c) => s + c.uploaded, 0)
+  const filesRemaining = fileCategories.reduce((s, c) => s + c.remaining, 0)
+  const filesTotalBytes = fileCategories.reduce((s, c) => s + c.totalBytes, 0)
+  const filesUploadedBytes = fileCategories.reduce(
+    (s, c) => s + c.uploadedBytes,
+    0,
+  )
+  const filesPercentDecimal = filesTotalBytes
+    ? filesUploadedBytes / filesTotalBytes
+    : 1
+  const filesPercent = `${(filesPercentDecimal * 100).toFixed(1)}%`.padStart(6)
+
+  const allCategories = [...fileCategories, thumbsC]
+  const overallTotal = allCategories.reduce((s, c) => s + c.total, 0)
+  const overallUploaded = allCategories.reduce((s, c) => s + c.uploaded, 0)
+  const overallRemaining = allCategories.reduce((s, c) => s + c.remaining, 0)
+  const overallTotalBytes = allCategories.reduce((s, c) => s + c.totalBytes, 0)
+  const overallUploadedBytes = allCategories.reduce(
     (s, c) => s + c.uploadedBytes,
     0,
   )
   const overallPercentDecimal = overallTotalBytes
     ? overallUploadedBytes / overallTotalBytes
     : 1
-  const overallPercent = `${Math.round(overallPercentDecimal * 100)}%`
+  const overallPercent =
+    `${(overallPercentDecimal * 100).toFixed(1)}%`.padStart(6)
 
   const stats: UploadStats = {
     overall: {
@@ -113,6 +129,15 @@ export async function getUploadStats(): Promise<UploadStats> {
       uploadedBytes: overallUploadedBytes,
       percent: overallPercent,
       percentDecimal: overallPercentDecimal,
+    },
+    files: {
+      uploaded: filesUploaded,
+      total: filesTotalCount,
+      remaining: filesRemaining,
+      totalBytes: filesTotalBytes,
+      uploadedBytes: filesUploadedBytes,
+      percent: filesPercent,
+      percentDecimal: filesPercentDecimal,
     },
     photos: photosC,
     videos: videosC,

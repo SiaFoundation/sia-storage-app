@@ -1,6 +1,13 @@
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useCallback } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  type TextStyle,
+  View,
+} from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { colors, palette } from '../styles/colors'
 
@@ -14,6 +21,7 @@ type Props = {
   ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip'
   align?: 'left' | 'right'
   labelWidth?: number
+  labelStyle?: TextStyle
 }
 
 const defaultLabelWidth = 96
@@ -28,6 +36,7 @@ export function LabeledValueRow({
   ellipsizeMode = 'tail',
   align = 'right',
   labelWidth,
+  labelStyle,
 }: Props) {
   const toast = useToast()
 
@@ -69,7 +78,11 @@ export function LabeledValueRow({
         ]}
       >
         <Text
-          style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+          style={[
+            styles.rowLabel,
+            { width: labelWidth || defaultLabelWidth },
+            labelStyle,
+          ]}
           numberOfLines={1}
           ellipsizeMode="tail"
         >
@@ -81,7 +94,11 @@ export function LabeledValueRow({
   ) : (
     <View style={[styles.row, showDividerTop && styles.rowDivider]}>
       <Text
-        style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+        style={[
+          styles.rowLabel,
+          { width: labelWidth || defaultLabelWidth },
+          labelStyle,
+        ]}
         numberOfLines={1}
         ellipsizeMode="tail"
       >
