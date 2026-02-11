@@ -139,7 +139,7 @@ class UploadManager {
   /** Add files to the explicit queue and wake the loop. */
   enqueue(files: FileEntry[]): void {
     for (const file of files) {
-      registerUpload(file.fileId)
+      registerUpload(file.fileId, file.size)
     }
     this.explicitQueue.push(...files)
     this.wake()
@@ -324,7 +324,7 @@ class UploadManager {
    */
   async __testProcessFiles(files: FileEntry[]): Promise<void> {
     for (const file of files) {
-      registerUpload(file.fileId)
+      registerUpload(file.fileId, file.size)
       await this.processEntry(file)
     }
   }
@@ -658,7 +658,7 @@ class UploadManager {
           file,
           size: file.size,
         }
-        registerUpload(entry.fileId)
+        registerUpload(entry.fileId, entry.size)
         this.polledFiles.push(entry)
       }
 

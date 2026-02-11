@@ -530,6 +530,16 @@ export function useFileCountAll() {
   )
 }
 
+export function useFileStatsAll() {
+  return useSWR(librarySwr.getKey('stats'), () =>
+    readAllFileRecordsStats({
+      limit: undefined,
+      after: undefined,
+      order: 'ASC',
+    }),
+  )
+}
+
 export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
   librarySwr.getKey('localOnly'),
   async ({
