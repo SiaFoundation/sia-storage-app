@@ -4,6 +4,7 @@ import {
   UploadCloudIcon,
 } from 'lucide-react-native'
 import type React from 'react'
+import { compactUploadPercent } from '../lib/uploadPercent'
 import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
 import { useHasOnboarded } from '../stores/settings'
@@ -46,10 +47,11 @@ export function useAppStatus(): AppStatus {
   }
 
   if (uploadsProgress.show) {
+    const hint = compactUploadPercent(uploadsProgress.percentDecimal)
     return {
       visible: true,
       icon: <UploadCloudIcon size={14} color={palette.gray[50]} />,
-      hint: `${uploadsProgress.percentComplete}`,
+      hint: hint ?? undefined,
       level: 'info',
     }
   }
