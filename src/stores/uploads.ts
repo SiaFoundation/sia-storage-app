@@ -201,7 +201,7 @@ export function useUploadProgress(): {
     .map((u) => u.progress)
     .reduce((a, b) => a + b, 0)
   const percentComplete = totalCount
-    ? (activeProgress + uploadedCount) / totalCount
+    ? Math.min((activeProgress + uploadedCount) / totalCount, 1)
     : 0
 
   return {
