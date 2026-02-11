@@ -34,7 +34,6 @@ import {
   getActiveUploads,
   registerUpload,
   removeUpload,
-  removeUploads,
   setUploadBatchInfo,
   setUploadError,
   setUploadStatus,
@@ -225,7 +224,6 @@ class UploadManager {
         batch,
         pinnedObjects,
       )
-      removeUploads(successfulFileIds)
       logger.info('uploadManager', 'batch_completed', {
         batchId: batch.batchId,
         files: successfulFileIds.length,
@@ -817,6 +815,7 @@ class UploadManager {
           logger.warn('uploadManager', 'file_deleted_during_upload', {
             fileId: entry.fileId,
           })
+          removeUpload(entry.fileId)
           successfulFileIds.push(entry.fileId)
           continue
         }
@@ -830,6 +829,7 @@ class UploadManager {
           pinnedObject,
         )
         await upsertLocalObject(localObject)
+        removeUpload(entry.fileId)
 
         logger.debug('uploadManager', 'object_saved', { fileId: entry.fileId })
         this._uploadedCount++
