@@ -69,6 +69,8 @@ jest.mock('../stores/files', () => {
     getFilesLocalOnly: jest.fn(() => []),
     useFileCountAll: jest.fn(() => ({ data: 0 })),
     useFileCountLocal: jest.fn(() => ({ data: 0 })),
+    useFileStatsAll: jest.fn(() => ({ data: { count: 0, totalBytes: 0 } })),
+    useFileStatsLocal: jest.fn(() => ({ data: { count: 0, totalBytes: 0 } })),
   }
 })
 

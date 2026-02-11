@@ -2,7 +2,12 @@ import { create } from 'zustand'
 import { logger } from '../lib/logger'
 import { createGetterAndSelector } from '../lib/selectors'
 import { humanUploadPercent } from '../lib/uploadPercent'
-import { useFileCountAll, useFileCountLocal } from './files'
+import {
+  useFileCountAll,
+  useFileCountLocal,
+  useFileStatsAll,
+  useFileStatsLocal,
+} from './files'
 import { useAutoScanUploads } from './settings'
 
 export type UploadStatus =
@@ -15,6 +20,7 @@ export type UploadStatus =
 
 export type UploadState = {
   id: string
+  size: number
   status: UploadStatus
   progress: number
   error?: string
@@ -57,10 +63,11 @@ export function flushPendingUploadProgress(): void {
   flushUploadProgress()
 }
 
-export function registerUpload(id: string): void {
+export function registerUpload(id: string, size: number): void {
   setState((state) => {
     const next: UploadState = {
       id,
+      size,
       status: 'queued',
       progress: 0,
     }
@@ -189,26 +196,30 @@ export function useUploadProgress(): {
   percentComplete: string
   total: number
 } {
-  const total = useFileCountAll()
-  const localOnly = useFileCountLocal({ localOnly: true })
+  const totalCount = useFileCountAll()
+  const localOnlyCount = useFileCountLocal({ localOnly: true })
+  const totalStats = useFileStatsAll()
+  const localOnlyStats = useFileStatsLocal({ localOnly: true })
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
-  const totalCount = total.data ?? 0
-  const localOnlyCount = localOnly.data ?? 0
-  const uploadedCount = totalCount - localOnlyCount
+  const totalFiles = totalCount.data ?? 0
+  const localOnlyFiles = localOnlyCount.data ?? 0
+  const totalBytes = totalStats.data?.totalBytes ?? 0
+  const localOnlyBytes = localOnlyStats.data?.totalBytes ?? 0
+  const uploadedBytes = totalBytes - localOnlyBytes
   const isEnabled = enabled.data ?? false
-  const activeProgress = activeUploads
-    .map((u) => u.progress)
+  const activeWeightedProgress = activeUploads
+    .map((u) => u.progress * u.size)
     .reduce((a, b) => a + b, 0)
-  const percentComplete = totalCount
-    ? Math.min((activeProgress + uploadedCount) / totalCount, 1)
+  const percentComplete = totalBytes
+    ? Math.min((activeWeightedProgress + uploadedBytes) / totalBytes, 1)
     : 0
 
   return {
-    show: isEnabled && !!localOnlyCount,
+    show: isEnabled && !!localOnlyFiles,
     enabled: isEnabled,
-    remaining: localOnlyCount,
+    remaining: localOnlyFiles,
     percentComplete: humanUploadPercent(percentComplete),
-    total: total.data ?? 0,
+    total: totalFiles,
   }
 }
