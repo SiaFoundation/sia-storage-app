@@ -16,6 +16,7 @@ jest.mock('../config', () => ({
   PACKER_POLL_INTERVAL: 5000,
 }))
 
+import { AppState } from 'react-native'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
@@ -185,6 +186,12 @@ function createMockSdk(
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<SdkInterface>
+}
+
+function simulateAppResume() {
+  const calls = jest.mocked(AppState.addEventListener).mock.calls
+  const listener = calls.find(([event]) => event === 'change')?.[1]
+  listener?.('active')
 }
 
 describe('UploadManager', () => {
@@ -861,23 +868,41 @@ describe('UploadManager', () => {
 
       // Process first file to start a batch
       manager.enqueue([createFileEntry('pre-suspend', 1000)])
-      // Flush microtasks so the loop wakes and processes the file
       await jest.advanceTimersByTimeAsync(0)
       expect(manager.flushHistory).toHaveLength(0)
 
-      // Simulate app suspension: advance clock 5 minutes (synchronous,
-      // so the idle timeout fires but no microtask flush yet)
+      // Simulate iOS suspension: advance clock 5 minutes, then resume
       jest.advanceTimersByTime(5 * 60 * 1000)
+      simulateAppResume()
 
-      // Process another file — the 5min gap is detected as suspension
-      // and excluded from duration tracking, so no max_duration flush
+      // Process another file — suspension time is excluded
       manager.enqueue([createFileEntry('post-suspend', 1000)])
-      // Flush microtasks so the loop processes the file
       await jest.advanceTimersByTimeAsync(0)
-
       expect(manager.flushHistory).toHaveLength(0)
 
       // The batch is still open — flush via idle timeout
+      await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
+      expect(manager.flushHistory).toHaveLength(1)
+      expect(manager.flushHistory[0].reason).toBe('idle_timeout')
+      expect(manager.flushHistory[0].fileCount).toBe(2)
+    })
+
+    it('app suspension before first file does not trigger max_duration', async () => {
+      manager.initialize(mockSdk, TEST_INDEXER_URL)
+
+      // Simulate suspension before any files are processed
+      jest.advanceTimersByTime(5 * 60 * 1000)
+      simulateAppResume()
+
+      manager.enqueue([createFileEntry('first-file', 1000)])
+      await jest.advanceTimersByTimeAsync(0)
+      expect(manager.flushHistory).toHaveLength(0)
+
+      manager.enqueue([createFileEntry('second-file', 1000)])
+      await jest.advanceTimersByTimeAsync(0)
+      expect(manager.flushHistory).toHaveLength(0)
+
+      // Flush via idle timeout
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(manager.flushHistory).toHaveLength(1)
       expect(manager.flushHistory[0].reason).toBe('idle_timeout')

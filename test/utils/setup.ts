@@ -170,6 +170,10 @@ jest.mock('react-native', () => ({
       },
     ),
   },
+  AppState: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    currentState: 'active',
+  },
 }))
 
 // Unique ID generator (deterministic for tests)
