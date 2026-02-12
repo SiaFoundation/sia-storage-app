@@ -1,4 +1,6 @@
 import { Linking, StyleSheet, Switch, Text } from 'react-native'
+import { SYNC_ARCHIVE_RESUME_THRESHOLD } from '../config'
+import { humanSize } from '../lib/humanSize'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import {
   toggleAutoSyncNewPhotos,
@@ -10,7 +12,7 @@ import {
   useAutoSyncPhotosArchive,
   usePhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
-import { useFileCountLocal } from '../stores/files'
+import { useFileStatsLocal } from '../stores/files'
 import { colors } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup } from './Group'
@@ -21,7 +23,7 @@ export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
   const autoSyncPhotosArchive = useAutoSyncPhotosArchive()
   const photosArchiveCursor = usePhotosArchiveCursor()
-  const localOnlyCount = useFileCountLocal({ localOnly: true })
+  const localOnlyStats = useFileStatsLocal({ localOnly: true })
   const cursorValue = photosArchiveCursor.data ?? 0
   const photosArchiveInProgress = cursorValue > 0
   const { isSomeAccess, accessLabel, color } = useMediaLibraryPermissions()
@@ -90,10 +92,11 @@ export function SettingsSyncPhotos() {
         : null}
       {autoSyncPhotosArchive.data &&
       photosArchiveInProgress &&
-      (localOnlyCount.data ?? 0) > 0 ? (
+      (localOnlyStats.data?.totalBytes ?? 0) >=
+        SYNC_ARCHIVE_RESUME_THRESHOLD ? (
         <Text
           style={styles.info}
-        >{`Waiting for ${localOnlyCount.data} files to upload before continuing archive sync`}</Text>
+        >{`Waiting for ${humanSize(localOnlyStats.data?.totalBytes ?? 0) ?? '0 B'} to upload before continuing archive sync`}</Text>
       ) : null}
       <Button
         style={{ marginTop: 10 }}
