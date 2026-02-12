@@ -1,5 +1,8 @@
 import * as MediaLibrary from 'expo-media-library'
-import { SYNC_PHOTOS_ARCHIVE_INTERVAL } from '../config'
+import {
+  SYNC_ARCHIVE_RESUME_THRESHOLD,
+  SYNC_PHOTOS_ARCHIVE_INTERVAL,
+} from '../config'
 import { logger } from '../lib/logger'
 import {
   ensureMediaLibraryPermission,
@@ -15,7 +18,7 @@ import {
   setAsyncStorageBoolean,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
-import { getFileCountLocal } from '../stores/files'
+import { getFileStatsLocal } from '../stores/files'
 import { librarySwr } from '../stores/library'
 import { settingsSwr } from '../stores/settings'
 
@@ -24,11 +27,12 @@ const PAGE_SIZE = 50
 export async function workBackward() {
   logger.debug('syncPhotosArchive', 'tick')
   if (!(await getMediaLibraryPermissions())) return
-  const localOnlyCount = await getFileCountLocal({ localOnly: true })
-  if (localOnlyCount > 0) {
+  const { count, totalBytes } = await getFileStatsLocal({ localOnly: true })
+  if (totalBytes >= SYNC_ARCHIVE_RESUME_THRESHOLD) {
     logger.info('syncPhotosArchive', 'skipped', {
       reason: 'local_only_pending',
-      localOnlyCount,
+      count,
+      totalBytes,
     })
     return
   }

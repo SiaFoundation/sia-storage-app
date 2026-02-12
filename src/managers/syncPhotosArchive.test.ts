@@ -34,7 +34,7 @@ jest.mock('../lib/processAssets', () => ({
 }))
 jest.mock('../stores/files', () => ({
   __esModule: true,
-  getFileCountLocal: jest.fn().mockResolvedValue(0),
+  getFileStatsLocal: jest.fn().mockResolvedValue({ count: 0, totalBytes: 0 }),
 }))
 jest.mock('../stores/library', () => ({
   __esModule: true,

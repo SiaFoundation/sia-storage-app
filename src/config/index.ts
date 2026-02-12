@@ -38,6 +38,8 @@ export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(5) // 5 seconds
 // Sync archive photos interval.
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = secondsInMs(5) // 5 seconds
+// Resume fetching archive photos when pending local-only bytes drop below this threshold.
+export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.
