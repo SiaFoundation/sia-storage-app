@@ -67,7 +67,6 @@ type BatchState = {
   startedAt: number
   /** Timestamp of last successful packer.add() — used to detect suspension gaps. */
   lastProcessedAt: number
-  abortController: AbortController
 }
 
 /** Recorded after each flush for efficiency analysis and testing. */
@@ -108,6 +107,8 @@ class UploadManager {
   private batch: BatchState | null = null
   /** The batch currently being finalized/uploaded (after flush, before pin). */
   private uploadingBatch: BatchState | null = null
+  /** Native packed upload handle for the batch being finalized; used by shutdown() to cancel. */
+  private uploadingPacker: PackedUploadInterface | null = null
   /** Base URL for the indexer service; used when saving pinned objects. */
   private indexerURL: string = ''
   /** Files added via enqueue() — processed before polled files. */
@@ -173,8 +174,9 @@ class UploadManager {
     const batch = this.batch
     const packer = this.packer
 
-    // Move batch to uploadingBatch so shutdown() can cancel it separately
+    // Move batch/packer to uploading* so shutdown() can cancel them separately
     this.uploadingBatch = batch
+    this.uploadingPacker = packer
     this.packer = null
     this.batch = null
 
@@ -210,9 +212,7 @@ class UploadManager {
       }
 
       const finalizeStart = Date.now()
-      const pinnedObjects = await packer.finalize({
-        signal: batch.abortController.signal,
-      })
+      const pinnedObjects = await packer.finalize()
       logger.info('uploadManager', 'batch_finalized', {
         batchId: batch.batchId,
         objects: pinnedObjects.length,
@@ -241,28 +241,33 @@ class UploadManager {
       }
     } finally {
       this.uploadingBatch = null
+      this.uploadingPacker = null
     }
   }
 
-  /** Stop the loop, abort in-flight batches, and clean up upload state. */
-  shutdown(): void {
+  /** Stop the loop, cancel in-flight uploads, and clean up upload state. */
+  async shutdown(): Promise<void> {
     this.active = false
 
-    if (this.batch) {
+    if (this.packer) {
       logger.info('uploadManager', 'batch_cancel', {
-        batchId: this.batch.batchId,
+        batchId: this.batch?.batchId,
       })
-      this.batch.abortController.abort()
+      await this.packer.cancel()
+    }
+    if (this.batch) {
       for (const entry of this.batch.files) {
         removeUpload(entry.fileId)
       }
     }
 
-    if (this.uploadingBatch) {
+    if (this.uploadingPacker) {
       logger.info('uploadManager', 'uploading_batch_cancel', {
-        batchId: this.uploadingBatch.batchId,
+        batchId: this.uploadingBatch?.batchId,
       })
-      this.uploadingBatch.abortController.abort()
+      await this.uploadingPacker.cancel()
+    }
+    if (this.uploadingBatch) {
       for (const entry of this.uploadingBatch.files) {
         removeUpload(entry.fileId)
       }
@@ -307,6 +312,7 @@ class UploadManager {
     this.packer = null
     this.batch = null
     this.uploadingBatch = null
+    this.uploadingPacker = null
     this.explicitQueue = []
     this.polledFiles = []
     this.sdk = null
@@ -434,21 +440,17 @@ class UploadManager {
           slabsFilled: 0,
           startedAt: Date.now(),
           lastProcessedAt: 0,
-          abortController: new AbortController(),
         }
         this.batch = batch
-        this.packer = await this.sdk.uploadPacked(
-          {
-            maxInflight: UPLOAD_MAX_INFLIGHT,
-            dataShards: UPLOAD_DATA_SHARDS,
-            parityShards: UPLOAD_PARITY_SHARDS,
-            progressCallback: {
-              progress: (uploaded, total) =>
-                this.onProgress(batch, uploaded, total),
-            },
+        this.packer = await this.sdk.uploadPacked({
+          maxInflight: UPLOAD_MAX_INFLIGHT,
+          dataShards: UPLOAD_DATA_SHARDS,
+          parityShards: UPLOAD_PARITY_SHARDS,
+          progressCallback: {
+            progress: (uploaded, total) =>
+              this.onProgress(batch, uploaded, total),
           },
-          { signal: batch.abortController.signal },
-        )
+        })
       }
 
       setUploadStatus(entry.fileId, 'packing')
@@ -460,9 +462,7 @@ class UploadManager {
       const t0 = Date.now()
       const reader = createFileReader(entry.fileUri)
       const t1 = Date.now()
-      await this.packer.add(reader, {
-        signal: this.batch!.abortController.signal,
-      })
+      await this.packer.add(reader)
       const t2 = Date.now()
       const slabsBefore = this.batch!.slabsFilled
       this.recordAdd(entry)
@@ -535,7 +535,6 @@ class UploadManager {
     end: number,
   ): Promise<void> {
     const packer = this.packer!
-    const signal = this.batch!.abortController.signal
 
     const inflight = []
     for (let j = from; j < end; j++) {
@@ -552,7 +551,7 @@ class UploadManager {
         entry,
         t0,
         readerMs: Date.now() - t0,
-        promise: packer.add(reader, { signal }),
+        promise: packer.add(reader),
       })
     }
 

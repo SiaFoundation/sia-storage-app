@@ -173,6 +173,7 @@ function createMockPacker(
 ): jest.Mocked<PackedUploadInterface> {
   return {
     add: jest.fn().mockResolvedValue(BigInt(1000)),
+    cancel: jest.fn().mockResolvedValue(undefined),
     finalize: jest.fn().mockResolvedValue([pinnedObject]),
   } as unknown as jest.Mocked<PackedUploadInterface>
 }
@@ -243,15 +244,12 @@ describe('UploadManager', () => {
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
-      expect(mockSdk.uploadPacked).toHaveBeenCalledWith(
-        {
-          maxInflight: UPLOAD_MAX_INFLIGHT,
-          dataShards: UPLOAD_DATA_SHARDS,
-          parityShards: UPLOAD_PARITY_SHARDS,
-          progressCallback: expect.any(Object),
-        },
-        { signal: expect.any(AbortSignal) },
-      )
+      expect(mockSdk.uploadPacked).toHaveBeenCalledWith({
+        maxInflight: UPLOAD_MAX_INFLIGHT,
+        dataShards: UPLOAD_DATA_SHARDS,
+        parityShards: UPLOAD_PARITY_SHARDS,
+        progressCallback: expect.any(Object),
+      })
     })
 
     it('reuses packer for subsequent files in same batch', async () => {
@@ -605,7 +603,7 @@ describe('UploadManager', () => {
       // Before cancel, files should be in store
       expect(getActiveUploads()).toHaveLength(2)
 
-      manager.shutdown()
+      await manager.shutdown()
 
       // After cancel, all uploads should be removed
       expect(getActiveUploads()).toHaveLength(0)
@@ -617,36 +615,22 @@ describe('UploadManager', () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
 
       await manager.__testProcessFiles([createFileEntry('file1')])
-      manager.shutdown()
+      await manager.shutdown()
 
       // Advancing timers should not trigger finalize since loop is stopped
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT + 1000)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
     })
 
-    it('aborts batch operations via AbortSignal', async () => {
-      let capturedSignal: AbortSignal | undefined
-
-      // Capture the abort signal passed to uploadPacked
-      mockSdk.uploadPacked.mockImplementation(
-        async (_opts: any, asyncOpts: any) => {
-          capturedSignal = asyncOpts?.signal
-          return mockPacker
-        },
-      )
-
+    it('cancels inflight uploads via packer.cancel()', async () => {
       manager.initialize(mockSdk, TEST_INDEXER_URL)
       await manager.__testProcessFiles([createFileEntry('file1')])
 
-      // Signal should not be aborted yet
-      expect(capturedSignal).toBeDefined()
-      expect(capturedSignal?.aborted).toBe(false)
+      expect(mockPacker.cancel).not.toHaveBeenCalled()
 
-      // Cancel the batch
-      manager.shutdown()
+      await manager.shutdown()
 
-      // Signal should now be aborted
-      expect(capturedSignal?.aborted).toBe(true)
+      expect(mockPacker.cancel).toHaveBeenCalledTimes(1)
     })
 
     it('removes enqueued files from upload store', async () => {
@@ -658,7 +642,7 @@ describe('UploadManager', () => {
       // Before shutdown, file should be in store
       expect(getUploadState('queued-file')).toBeDefined()
 
-      manager.shutdown()
+      await manager.shutdown()
 
       // After shutdown, queued file should be removed
       expect(getUploadState('queued-file')).toBeUndefined()

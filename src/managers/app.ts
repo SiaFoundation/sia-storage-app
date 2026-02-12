@@ -106,21 +106,21 @@ export async function initApp(): Promise<void> {
   endInitState()
 }
 
-function cancelAllTransfers() {
-  getUploadManager().shutdown()
+async function cancelAllTransfers() {
+  await getUploadManager().shutdown()
   clearAllUploads()
   cancelAllDownloads()
 }
 
 export async function shutdownApp() {
-  cancelAllTransfers()
+  await cancelAllTransfers()
 }
 
 export async function resetData() {
   await deleteAllFileRecords()
   await resetDb()
   await resetSyncDownCursor()
-  cancelAllTransfers()
+  await cancelAllTransfers()
 }
 
 export async function resetApp() {
