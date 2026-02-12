@@ -40,8 +40,8 @@ export function SettingsAdvancedTransfers() {
         <Button
           style={{ marginTop: 10 }}
           disabled={uploadCounts.total === 0}
-          onPress={() => {
-            getUploadManager().shutdown()
+          onPress={async () => {
+            await getUploadManager().shutdown()
             clearAllUploads()
           }}
         >

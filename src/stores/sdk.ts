@@ -80,7 +80,7 @@ export async function setSdkWithUploader(
 ): Promise<void> {
   const currentSdk = getState().sdk
   if (currentSdk && currentSdk !== sdk) {
-    getUploadManager().shutdown()
+    await getUploadManager().shutdown()
   }
   setState({ sdk })
   if (sdk) {
@@ -551,7 +551,7 @@ export async function getPinnedObject(
  * Resets the SDK state and shuts down uploader.
  */
 export async function resetSdk() {
-  getUploadManager().shutdown()
+  await getUploadManager().shutdown()
   setState({
     sdk: null,
     isConnected: false,
