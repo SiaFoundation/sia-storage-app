@@ -82,6 +82,10 @@ jest.mock('react-native', () => ({
     select: (o) => o?.ios ?? o?.native ?? o?.default,
   },
   Image: { getSize: jest.fn() },
+  AppState: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    currentState: 'active',
+  },
 }))
 
 jest.mock('./src/lib/uniqueId', () => {

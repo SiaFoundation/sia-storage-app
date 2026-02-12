@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { AppState, type NativeEventSubscription } from 'react-native'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
@@ -65,8 +66,14 @@ type BatchState = {
   /** Number of complete slabs: floor(totalSize / SLAB_SIZE). */
   slabsFilled: number
   startedAt: number
-  /** Timestamp of last successful packer.add() — used to detect suspension gaps. */
+  /** Timestamp of last successful packer.add(). */
   lastProcessedAt: number
+  /** Accumulated wall-clock time spent suspended by iOS, excluded from duration checks. */
+  suspendedMs: number
+  /** Cumulative time spent in packer.add() calls (encoding + any mid-add slab uploads). */
+  totalAddMs: number
+  /** Number of packer.add() calls that triggered a slab upload (slabs increased). */
+  slabUploadAdds: number
 }
 
 /** Recorded after each flush for efficiency analysis and testing. */
@@ -117,6 +124,8 @@ class UploadManager {
   private polledFiles: FileEntry[] = []
   /** Whether the async loop is running; set false by shutdown() to exit. */
   private active = false
+  /** AppState subscription; removed on shutdown(). */
+  private appStateSubscription: NativeEventSubscription | null = null
   /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
   private wakeResolver: (() => void) | null = null
   /** Recorded flush events for efficiency analysis and testing. */
@@ -134,6 +143,11 @@ class UploadManager {
   initialize(sdk: SdkInterface, indexerURL: string): void {
     this.sdk = sdk
     this.indexerURL = indexerURL
+    this.appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        this.adjustBatchForSuspension()
+      }
+    })
     this.startLoop()
   }
 
@@ -181,7 +195,7 @@ class UploadManager {
     this.batch = null
 
     const durationMs = Date.now() - batch.startedAt
-    const durationSec = (durationMs / 1000).toFixed(1)
+    const activeDurationMs = durationMs - batch.suspendedMs
     const slabCapacity = (batch.slabsFilled + 1) * SLAB_SIZE
     const fillPercent = Math.round((batch.totalSize / slabCapacity) * 100)
 
@@ -200,8 +214,11 @@ class UploadManager {
       files: batch.files.length,
       totalSize: batch.totalSize,
       slabsFilled: batch.slabsFilled,
-      fillPercent: `${fillPercent}%`,
-      durationSec,
+      fillPercent,
+      durationMs,
+      activeDurationMs,
+      totalAddMs: batch.totalAddMs,
+      slabUploadAdds: batch.slabUploadAdds,
     })
 
     try {
@@ -248,6 +265,8 @@ class UploadManager {
   /** Stop the loop, cancel in-flight uploads, and clean up upload state. */
   async shutdown(): Promise<void> {
     this.active = false
+    this.appStateSubscription?.remove()
+    this.appStateSubscription = null
 
     if (this.packer) {
       logger.info('uploadManager', 'batch_cancel', {
@@ -432,14 +451,18 @@ class UploadManager {
       }
 
       if (!this.packer) {
-        logger.info('uploadManager', 'packer_create')
+        const batchId = uniqueId()
+        logger.info('uploadManager', 'packer_create', { batchId })
         const batch: BatchState = {
-          batchId: uniqueId(),
+          batchId,
           files: [],
           totalSize: 0,
           slabsFilled: 0,
           startedAt: Date.now(),
           lastProcessedAt: 0,
+          suspendedMs: 0,
+          totalAddMs: 0,
+          slabUploadAdds: 0,
         }
         this.batch = batch
         this.packer = await this.sdk.uploadPacked({
@@ -457,6 +480,7 @@ class UploadManager {
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
         size: entry.size,
+        batchId: this.batch!.batchId,
       })
 
       const t0 = Date.now()
@@ -464,14 +488,15 @@ class UploadManager {
       const t1 = Date.now()
       await this.packer.add(reader)
       const t2 = Date.now()
+      const addMs = t2 - t1
       const slabsBefore = this.batch!.slabsFilled
-      this.recordAdd(entry)
-      logger.info('uploadManager', 'file_added', {
+      this.recordAdd(entry, addMs)
+      logger.debug('uploadManager', 'file_added', {
         fileId: entry.fileId,
         size: entry.size,
         batchId: this.batch!.batchId,
         readerMs: t1 - t0,
-        addMs: t2 - t1,
+        addMs,
         slabsBefore,
         slabsAfter: this.batch!.slabsFilled,
       })
@@ -544,6 +569,7 @@ class UploadManager {
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
         size: entry.size,
+        batchId: this.batch!.batchId,
       })
       const t0 = Date.now()
       const reader = createFileReader(entry.fileUri)
@@ -563,14 +589,15 @@ class UploadManager {
         await promise
         if (!this.active || !this.batch) break
         const t2 = Date.now()
+        const addMs = t2 - t1
         const slabsBefore = this.batch.slabsFilled
-        this.recordAdd(entry)
-        logger.info('uploadManager', 'file_added', {
+        this.recordAdd(entry, addMs)
+        logger.debug('uploadManager', 'file_added', {
           fileId: entry.fileId,
           size: entry.size,
           batchId: this.batch.batchId,
           readerMs,
-          addMs: t2 - t1,
+          addMs,
           slabsBefore,
           slabsAfter: this.batch.slabsFilled,
         })
@@ -694,32 +721,41 @@ class UploadManager {
     })
   }
 
-  /**
-   * Update batch state after a successful packer.add(). Detects suspension
-   * gaps (time between adds exceeding PACKER_IDLE_TIMEOUT) and adjusts
-   * startedAt so suspended time doesn't count toward max_duration.
-   */
-  private recordAdd(entry: FileEntry): void {
-    const now = Date.now()
-    if (this.batch!.lastProcessedAt > 0) {
-      const gap = now - this.batch!.lastProcessedAt
-      if (gap > PACKER_IDLE_TIMEOUT) {
-        this.batch!.startedAt += gap
-      }
-    }
-    this.batch!.lastProcessedAt = now
-
+  /** Update batch state after a successful packer.add(). */
+  private recordAdd(entry: FileEntry, addMs: number): void {
+    this.batch!.lastProcessedAt = Date.now()
     this.batch!.files.push(entry)
     this.batch!.totalSize += entry.size
     this._packedCount++
     this._packedBytes += entry.size
     setUploadStatus(entry.fileId, 'packed')
+    const slabsBefore = this.batch!.slabsFilled
     this.batch!.slabsFilled = Math.floor(this.batch!.totalSize / SLAB_SIZE)
+    this.batch!.totalAddMs += addMs
+    if (this.batch!.slabsFilled > slabsBefore) this.batch!.slabUploadAdds++
+  }
+
+  /**
+   * Adjust the current batch for time spent suspended by iOS. Called when
+   * AppState transitions to 'active'. Adds the gap since the last activity
+   * to suspendedMs so it is excluded from the max_duration check.
+   */
+  private adjustBatchForSuspension(): void {
+    if (!this.batch) return
+    const now = Date.now()
+    const ref =
+      this.batch.lastProcessedAt > 0
+        ? this.batch.lastProcessedAt
+        : this.batch.startedAt
+    const gap = now - ref
+    this.batch.suspendedMs += gap
+    this.batch.lastProcessedAt = now
   }
 
   private batchExceedsDuration(): boolean {
     if (!this.batch) return false
-    return Date.now() - this.batch.startedAt >= PACKER_MAX_BATCH_DURATION
+    const elapsed = Date.now() - this.batch.startedAt - this.batch.suspendedMs
+    return elapsed >= PACKER_MAX_BATCH_DURATION
   }
 
   /** True when the batch has filled enough slabs to warrant flushing. */
