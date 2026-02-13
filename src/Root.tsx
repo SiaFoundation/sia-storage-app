@@ -18,6 +18,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AppSplash } from './components/AppSplash'
 import { AuthWebViewModal } from './components/AuthWebViewModal'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
@@ -102,37 +103,39 @@ export function Root() {
 
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
-      <SafeAreaProvider>
-        <ToastProvider>
-          <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-            <StatusBar
-              barStyle={Platform.select({
-                ios: 'light-content',
-                android: 'light-content',
-                default: 'light-content',
-              })}
-            />
-            <ShareIntentProvider>
-              <BottomSheetModalProvider>
-                {showSplash ? (
-                  <AppSplash />
-                ) : (
-                  <>
-                    <ShareIntentConsumer />
-                    <NavigationContainer
-                      ref={navigationRef}
-                      theme={darkNavigationTheme}
-                    >
-                      <RootTabs />
-                    </NavigationContainer>
-                  </>
-                )}
-              </BottomSheetModalProvider>
-              <AuthWebViewModal />
-            </ShareIntentProvider>
-          </SafeAreaView>
-        </ToastProvider>
-      </SafeAreaProvider>
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <ToastProvider>
+            <SafeAreaView style={styles.safe} edges={['left', 'right']}>
+              <StatusBar
+                barStyle={Platform.select({
+                  ios: 'light-content',
+                  android: 'light-content',
+                  default: 'light-content',
+                })}
+              />
+              <ShareIntentProvider>
+                <BottomSheetModalProvider>
+                  {showSplash ? (
+                    <AppSplash />
+                  ) : (
+                    <>
+                      <ShareIntentConsumer />
+                      <NavigationContainer
+                        ref={navigationRef}
+                        theme={darkNavigationTheme}
+                      >
+                        <RootTabs />
+                      </NavigationContainer>
+                    </>
+                  )}
+                </BottomSheetModalProvider>
+                <AuthWebViewModal />
+              </ShareIntentProvider>
+            </SafeAreaView>
+          </ToastProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   )
 }
