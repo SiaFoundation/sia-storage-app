@@ -45,10 +45,17 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       );`,
     )
 
-    // Add directoryId column to files table.
-    await db.execAsync(
-      `ALTER TABLE files ADD COLUMN directoryId TEXT REFERENCES directories(id) ON DELETE SET NULL;`,
+    // Add directoryId column to files table (idempotent: ALTER TABLE ADD COLUMN
+    // is not transactional in SQLite, so the column may already exist from a
+    // previously failed run).
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('files') WHERE name='directoryId'`,
     )
+    if (cols.length === 0) {
+      await db.execAsync(
+        `ALTER TABLE files ADD COLUMN directoryId TEXT REFERENCES directories(id) ON DELETE SET NULL;`,
+      )
+    }
 
     // Index for looking up files by directory.
     await db.execAsync(

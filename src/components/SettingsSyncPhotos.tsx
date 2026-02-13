@@ -12,6 +12,7 @@ import {
   toggleAutoSyncPhotosArchive,
   useAutoSyncPhotosArchive,
   usePhotosArchiveCursor,
+  usePhotosArchiveDisplayDate,
 } from '../managers/syncPhotosArchive'
 import { useFileStatsLocal } from '../stores/files'
 import {
@@ -30,14 +31,15 @@ export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
   const autoSyncPhotosArchive = useAutoSyncPhotosArchive()
   const photosArchiveCursor = usePhotosArchiveCursor()
+  const photosArchiveDisplayDate = usePhotosArchiveDisplayDate()
   const localOnlyStats = useFileStatsLocal({ localOnly: true })
-  const cursorValue = photosArchiveCursor.data ?? 0
-  const photosArchiveInProgress = cursorValue > 0
+  const cursorValue = photosArchiveCursor.data ?? 'done'
+  const photosArchiveInProgress = cursorValue !== 'done'
   const { isSomeAccess, accessLabel, color } = useMediaLibraryPermissions()
   const photoImportDir = usePhotoImportDirectory()
 
   const isPhotosAccessDisabled = !isSomeAccess
-  const archiveDateLabel = formatArchiveCursor(cursorValue)
+  const archiveDateLabel = formatDisplayDate(photosArchiveDisplayDate.data ?? 0)
   const syncPhotosArchiveControlsDisabled =
     isPhotosAccessDisabled || !autoSyncPhotosArchive.data
 
@@ -108,24 +110,22 @@ export function SettingsSyncPhotos() {
           }
         />
       </InfoCard>
-      {photosArchiveCursor.data && photosArchiveCursor.data > 0
-        ? archiveDateLabel && (
-            <Text
-              style={[
-                styles.info,
-                syncPhotosArchiveControlsDisabled
-                  ? styles.infoDisabled
-                  : undefined,
-              ]}
-            >{`Currently synced back to: ${archiveDateLabel} ${
-              !autoSyncPhotosArchive.data
-                ? '(paused)'
-                : photosArchiveInProgress
-                  ? '(in progress)'
-                  : ''
-            }`}</Text>
-          )
-        : null}
+      {photosArchiveInProgress ? (
+        <Text
+          style={[
+            styles.info,
+            syncPhotosArchiveControlsDisabled ? styles.infoDisabled : undefined,
+          ]}
+        >
+          {archiveDateLabel
+            ? `Currently synced back to: ${archiveDateLabel} ${
+                !autoSyncPhotosArchive.data ? '(paused)' : '(in progress)'
+              }`
+            : `Archive sync ${
+                !autoSyncPhotosArchive.data ? '(paused)' : '(in progress)'
+              }`}
+        </Text>
+      ) : null}
       {autoSyncPhotosArchive.data &&
       photosArchiveInProgress &&
       (localOnlyStats.data?.totalBytes ?? 0) >=
@@ -141,7 +141,7 @@ export function SettingsSyncPhotos() {
           void restartPhotosArchiveCursor()
         }}
       >
-        {photosArchiveCursor.data && photosArchiveCursor.data > 0
+        {photosArchiveInProgress
           ? 'Restart archive sync'
           : 'Start archive sync'}
       </Button>
@@ -162,11 +162,9 @@ const styles = StyleSheet.create({
   },
 })
 
-function formatArchiveCursor(value: number): string | null {
-  // Always show a date; if value is not set or <= 0, use current time.
-  const ts = Number.isFinite(value) && value > 0 ? value : Date.now()
-  if (!Number.isFinite(ts)) return null
-  const d = new Date(ts)
+function formatDisplayDate(displayDate: number): string | null {
+  if (displayDate <= 0) return null
+  const d = new Date(displayDate)
   if (Number.isNaN(d.getTime())) return null
   try {
     return new Intl.DateTimeFormat(undefined, {

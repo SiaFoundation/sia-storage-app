@@ -71,6 +71,10 @@ jest.mock('./fsOrphanScanner', () => ({
   runFsOrphanScanner: () => mockRunFsOrphanScanner(),
 }))
 
+jest.mock('./syncPhotosArchive', () => ({
+  triggerRecentScanIfNeeded: jest.fn(() => Promise.resolve(false)),
+}))
+
 jest.mock('./uploader', () => ({
   getUploadManager: jest.fn(() => ({
     packedCount: 0,

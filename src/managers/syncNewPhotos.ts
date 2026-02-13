@@ -1,3 +1,25 @@
+/*
+ * syncNewPhotos — polls every 10s, fetches 1 page of 50 photos.
+ *
+ * Runs in the foreground while the user is active. Kept lightweight
+ * (small page, longer interval) to minimize jank. Only processes
+ * photos with modificationTime >= enabledAt so that historic photos
+ * don't appear unexpectedly — the archive handles the backfill.
+ * As time passes, the enabledAt floor stays fixed so the window of
+ * "new" photos grows naturally.
+ *
+ * Catches: newly taken photos and recently modified photos near the
+ * top of the sorted list. The deep historical tail and periodic
+ * re-scans for cross-device synced photos are handled by
+ * syncPhotosArchive (which runs its bounded re-scan during background
+ * tasks where heavier DB work is free).
+ *
+ * Sorts by modificationTime DESC because:
+ * - Android: DATE_TAKEN can be NULL for imported/downloaded photos,
+ *   silently excluding them from createdAfter/createdBefore queries.
+ * - iOS: creationDate can be an old EXIF date; modificationDate is the
+ *   iCloud-synced metadata timestamp (not local arrival time).
+ */
 import * as MediaLibrary from 'expo-media-library'
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
 import { logger } from '../lib/logger'
@@ -20,43 +42,42 @@ import {
   invalidateCacheLibraryLists,
 } from '../stores/librarySwr'
 
-const PAGE_SIZE = 200
+const PAGE_SIZE = 50
 
-async function workForward(signal: AbortSignal): Promise<void> {
+export async function workNew(signal?: AbortSignal): Promise<void> {
   logger.debug('syncNewPhotos', 'tick')
   if (!(await getMediaLibraryPermissions())) return
-  if (signal.aborted) return
-  const cursor = await getPhotosNewCursor()
+  if (signal?.aborted) return
+  const enabledAt = await getSyncNewPhotosEnabledAt()
 
   try {
     const page = await MediaLibrary.getAssetsAsync({
       first: PAGE_SIZE,
-      createdAfter: new Date(cursor),
-      // Ascending order.
-      sortBy: [[MediaLibrary.SortBy.creationTime, true]],
+      sortBy: [[MediaLibrary.SortBy.modificationTime, false]],
       mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
-      // Resolve full info. For images this gets the full EXIF data and can fix the orientation.
-      resolveWithFullInfo: true,
     })
-    if (signal.aborted) return
-    if (page.assets.length === 0) {
+    if (signal?.aborted) return
+    const assets = page.assets.filter((a) => a.modificationTime >= enabledAt)
+    if (assets.length === 0) {
       logger.debug('syncNewPhotos', 'no_new_photos')
       return
     }
-    logger.info('syncNewPhotos', 'batch', { size: page.assets.length })
-    const lastAssetCreationTime =
-      page.assets[page.assets.length - 1].creationTime
-    const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime + 1 : 0
-    await setPhotosNewCursor(nextTimestamp)
-    if (signal.aborted) return
+
+    logger.info('syncNewPhotos', 'batch', {
+      assets: assets.length,
+      totalOnPage: page.assets.length,
+    })
+    if (signal?.aborted) return
     const { files } = await processAssets(
-      page.assets.map((asset) => ({
+      assets.map((asset) => ({
         id: asset.id,
         sourceUri: asset.uri,
         name: asset.filename,
         type: undefined,
         size: undefined,
-        timestamp: new Date(asset.creationTime).toISOString(),
+        timestamp: new Date(
+          asset.creationTime || asset.modificationTime,
+        ).toISOString(),
       })),
     )
     if (files.length > 0) {
@@ -64,18 +85,18 @@ async function workForward(signal: AbortSignal): Promise<void> {
       invalidateCacheLibraryLists()
     }
   } catch (e) {
-    logger.error('syncNewPhotos', 'batch_error', { error: e as Error })
+    logger.error('syncNewPhotos', 'batch_error', {
+      error: e as Error,
+    })
   }
 }
 
 export const { init: initSyncNewPhotos } = createServiceInterval({
   name: 'syncNewPhotos',
-  worker: workForward,
+  worker: workNew,
   getState: () => getAutoSyncNewPhotos(),
   interval: SYNC_NEW_PHOTOS_INTERVAL,
 })
-
-// Photos sync - new photos forward cursor and toggle.
 
 export const [
   getAutoSyncNewPhotos,
@@ -89,6 +110,7 @@ export async function setAutoSyncNewPhotos(value: boolean) {
   await setAsyncStorageBoolean('autoSyncNewPhotos', value)
   await autoSyncNewPhotosCache.set(value)
   if (value) {
+    await setSyncNewPhotosEnabledAt(Date.now())
     ensureMediaLibraryPermission()
   }
   mediaLibraryPermissionsCache.invalidate()
@@ -100,19 +122,12 @@ export async function toggleAutoSyncNewPhotos() {
   await setAutoSyncNewPhotos(next)
 }
 
-const defaultValue = Date.now()
-
-export const [getPhotosNewCursor, usePhotosNewCursor, photosNewCursorCache] =
+export const [getSyncNewPhotosEnabledAt, , syncNewPhotosEnabledAtCache] =
   createGetterAndSWRHook<number>(() =>
-    getAsyncStorageNumber('photosNewCursor', defaultValue),
+    getAsyncStorageNumber('syncNewPhotosEnabledAt', 0),
   )
 
-export async function setPhotosNewCursor(value: number) {
-  await setAsyncStorageNumber('photosNewCursor', value)
-  await photosNewCursorCache.set(value)
-}
-
-export async function resetPhotosNewCursor() {
-  logger.info('syncNewPhotos', 'cursor_reset')
-  await setPhotosNewCursor(defaultValue)
+export async function setSyncNewPhotosEnabledAt(value: number) {
+  await setAsyncStorageNumber('syncNewPhotosEnabledAt', value)
+  await syncNewPhotosEnabledAtCache.set(value)
 }

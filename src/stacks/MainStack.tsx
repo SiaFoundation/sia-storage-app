@@ -27,7 +27,11 @@ export function MainStack() {
       />
       <Stack.Screen
         name="Search"
-        options={{ headerShown: false, animation: 'fade', animationDuration: 100 }}
+        options={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 100,
+        }}
         component={SearchScreen}
       />
     </Stack.Navigator>

@@ -35,11 +35,15 @@ export const PACKER_POLL_INTERVAL = secondsInMs(5) // 5 seconds
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
-export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(5) // 5 seconds
+export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync archive photos interval.
 export const SYNC_PHOTOS_ARCHIVE_INTERVAL = secondsInMs(5) // 5 seconds
 // Resume fetching archive photos when pending local-only bytes drop below this threshold.
 export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
+// Minimum interval between bounded recent re-scans of the archive.
+export const SYNC_ARCHIVE_RECENT_SCAN_INTERVAL = minutesInMs(180) // 3 hours
+// How far back the bounded recent re-scan walks.
+export const SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK = daysInMs(14) // 14 days
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.

@@ -2,7 +2,12 @@ import type * as SQLite from 'expo-sqlite'
 import type { Migration } from './types'
 
 async function up(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.execAsync('ALTER TABLE logs ADD COLUMN data TEXT;')
+  const cols = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('logs') WHERE name='data'`,
+  )
+  if (cols.length === 0) {
+    await db.execAsync('ALTER TABLE logs ADD COLUMN data TEXT;')
+  }
 }
 
 export const migration_0003_logs_data_column: Migration = {
