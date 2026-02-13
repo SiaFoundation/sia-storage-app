@@ -67,6 +67,7 @@ jobs:
           SIA_RELEASE_KEY_ALIAS: ${{ secrets.SIA_RELEASE_KEY_ALIAS }}
           SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           CI: true
         run: bun scripts/releaseAndroid.ts ${{ inputs.track || 'internal' }}
         shell: bash

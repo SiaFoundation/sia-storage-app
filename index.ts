@@ -1,8 +1,11 @@
 import { registerRootComponent } from 'expo'
 import './polyfills'
 import { initSia, setLogger } from 'react-native-sia'
+import { installGlobalErrorHandler } from './src/lib/globalErrorHandler'
 import { logger, rustLogger } from './src/lib/logger'
 import { Root } from './src/Root'
+
+installGlobalErrorHandler()
 
 logger.info('app', 'initSia and uniffi...')
 
