@@ -11,6 +11,7 @@ import { getIsConnected } from '../stores/sdk'
 import { getHasOnboarded } from '../stores/settings'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
+import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
 /**
@@ -90,6 +91,10 @@ const taskStates: Record<TaskId, TaskState> = {
     invocationId: '',
     abort: undefined,
   },
+}
+
+export function getIsBackgroundTaskRunning(): boolean {
+  return Object.values(taskStates).some((s) => s.status === 'running')
 }
 
 function createFreshTaskState(): TaskState {
@@ -280,6 +285,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
 
   await runFsOrphanScanner()
   await runFsEvictionScanner()
+  await triggerRecentScanIfNeeded()
 
   const manager = getUploadManager()
   const initialStats = await getFileStatsLocal({ localOnly: true })

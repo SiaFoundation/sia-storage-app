@@ -26,7 +26,10 @@ import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents, resetSyncDownCursor } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
-import { initSyncPhotosArchive } from './syncPhotosArchive'
+import {
+  initSyncPhotosArchive,
+  resetPhotosArchiveCursor,
+} from './syncPhotosArchive'
 import { initSyncUpMetadata, resetSyncUpCursor } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
@@ -113,9 +116,10 @@ export async function initApp(): Promise<void> {
     },
   })
 
-  await runSteps(steps)
-
-  endInitState()
+  const success = await runSteps(steps)
+  if (success) {
+    endInitState()
+  }
 }
 
 async function cancelAllTransfers() {
@@ -142,7 +146,7 @@ export async function resetApp() {
   // 2. Stop all service intervals and wait for in-flight workers to finish.
   await shutdownAllServiceIntervals()
 
-  await runSteps([
+  const success = await runSteps([
     {
       id: 'reset',
       label: 'Resetting application',
@@ -162,13 +166,20 @@ export async function resetApp() {
         // 6. Reset all in-memory state (zustand stores).
         resetAllStores()
 
-        // 7. Clear SWR cache (must come after store resets to avoid races).
+        // 7. Reset cursor caches.
+        await resetPhotosArchiveCursor()
+
+        // 8. Clear SWR cache (must come after store resets to avoid races).
         await mutate(() => true, undefined, { revalidate: false })
       },
     },
   ])
 
-  // 8. Re-initialize the app from clean state.
+  if (!success) {
+    return
+  }
+
+  // 9. Re-initialize the app from clean state.
   await initApp()
 }
 
@@ -244,7 +255,7 @@ type StepDefinition = {
   runner: (updateMessage: (message: string) => void) => Promise<void>
 }
 
-async function runSteps(steps: StepDefinition[]): Promise<void> {
+async function runSteps(steps: StepDefinition[]): Promise<boolean> {
   for (const stepDef of steps) {
     nextInitStep({
       id: stepDef.id,
@@ -265,7 +276,8 @@ async function runSteps(steps: StepDefinition[]): Promise<void> {
       const message = error instanceof Error ? error.message : String(error)
       updateMessage(message)
       setAppState((state) => ({ ...state, initializationError: message }))
-      return // Stop execution on error
+      return false
     }
   }
+  return true
 }
