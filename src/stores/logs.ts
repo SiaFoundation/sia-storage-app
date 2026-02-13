@@ -189,6 +189,7 @@ function buildLogFilterQuery(
 export async function readLogs(
   logLevel?: LogLevel,
   logScopes?: string[],
+  limit?: number,
 ): Promise<LogEntry[]> {
   try {
     if (!dbInitialized) {
@@ -196,7 +197,8 @@ export async function readLogs(
     }
 
     const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
-    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC LIMIT 500`
+    const limitClause = limit ? ` LIMIT ${limit}` : ''
+    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC${limitClause}`
 
     const rows = await db().getAllAsync<{
       timestamp: string

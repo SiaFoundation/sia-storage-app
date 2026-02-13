@@ -13,7 +13,7 @@ export function useLogs() {
     logsSwr.getKey(`${logLevel},${logScopes.join(',')}`),
     async () => {
       const [entries, totalCount] = await Promise.all([
-        readLogs(logLevel, logScopes),
+        readLogs(logLevel, logScopes, 500),
         countLogs(logLevel, logScopes),
       ])
       return { entries, totalCount }
