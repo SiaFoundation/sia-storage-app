@@ -3,7 +3,7 @@ import { logger } from '../lib/logger'
 import { createGetterAndSelector } from '../lib/selectors'
 import { acquireDownloadSlot } from '../managers/downloadsPool'
 
-export type DownloadStatus = 'queued' | 'running' | 'done' | 'error'
+export type DownloadStatus = 'queued' | 'running' | 'error'
 
 export type DownloadState = {
   id: string
@@ -127,10 +127,7 @@ export async function runDownloadWithSlot<T>(params: {
     setDownloadState(id, 'running', 0)
     const result = await task(controller.signal)
     logger.debug('downloads', 'success', { id })
-    // Set 'done' status and delay removal to prevent re-triggering downloads
-    // while components may not have fetched the new file uri yet.
-    setDownloadState(id, 'done', 1)
-    setTimeout(() => removeDownload(id), 5000)
+    removeDownload(id)
     return result
   } catch (e) {
     logger.error('downloads', 'error', { id, error: e as Error })

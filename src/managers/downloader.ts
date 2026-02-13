@@ -34,8 +34,7 @@ export async function downloadFile(file: FileRecord): Promise<void> {
   const downloadState = getDownloadState(file.id)
   if (
     downloadState?.status === 'running' ||
-    downloadState?.status === 'queued' ||
-    downloadState?.status === 'done'
+    downloadState?.status === 'queued'
   ) {
     return // Already downloading or just completed
   }
