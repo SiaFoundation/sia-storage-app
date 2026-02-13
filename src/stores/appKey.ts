@@ -46,7 +46,6 @@ export async function getAppKeyForIndexer(
   // Check cache first.
   const cached = cachedAppKeys.get(indexerURL)
   if (cached) {
-    logger.debug('appKey', 'cache_hit')
     return new AppKey(cached)
   }
 

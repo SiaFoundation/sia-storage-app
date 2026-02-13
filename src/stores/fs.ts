@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import { db } from '../db'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { extFromMime } from '../lib/fileTypes'
@@ -11,6 +11,10 @@ import { buildSWRHelpers } from '../lib/swr'
  */
 
 const { getKey, triggerChange } = buildSWRHelpers('fs/files')
+
+function swrKeyFsFileUri(fileId?: string) {
+  return [...getKey(fileId), 'uri']
+}
 
 export type FsFileInfo = {
   id: string
@@ -127,12 +131,12 @@ export async function copyFileToFs(
     addedAt: previous?.addedAt ?? Date.now(),
     usedAt: Date.now(),
   })
-  await fsTriggerRefresh(file.id)
+  await mutate(swrKeyFsFileUri(file.id), target.uri, { revalidate: false })
   return target.uri
 }
 
 export function useFsFileUri(file?: FsFileInfo) {
-  return useSWR([...getKey(file?.id), 'uri'], () => {
+  return useSWR(swrKeyFsFileUri(file?.id), () => {
     return file ? getFsFileUri(file) : null
   })
 }
