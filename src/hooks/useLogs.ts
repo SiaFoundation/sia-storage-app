@@ -1,4 +1,5 @@
 import useSWR from 'swr'
+import type { LogEntry } from '../lib/logger'
 import { buildSWRHelpers } from '../lib/swr'
 import { countLogs, readLogs, useLogLevel, useLogScopes } from '../stores/logs'
 
@@ -8,9 +9,15 @@ export function useLogs() {
   const logLevel = useLogLevel()
   const logScopes = useLogScopes()
 
-  return useSWR(
+  return useSWR<{ entries: LogEntry[]; totalCount: number }>(
     logsSwr.getKey(`${logLevel},${logScopes.join(',')}`),
-    () => readLogs(logLevel, logScopes),
+    async () => {
+      const [entries, totalCount] = await Promise.all([
+        readLogs(logLevel, logScopes),
+        countLogs(logLevel, logScopes),
+      ])
+      return { entries, totalCount }
+    },
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
@@ -19,7 +26,7 @@ export function useLogs() {
 }
 
 /** Returns true if there are new logs available for the current filter. */
-export function useHasNewLogs(displayedCount: number): boolean {
+export function useHasNewLogs(lastFetchedCount: number): boolean {
   const logLevel = useLogLevel()
   const logScopes = useLogScopes()
 
@@ -33,5 +40,5 @@ export function useHasNewLogs(displayedCount: number): boolean {
     },
   )
 
-  return dbCount > displayedCount
+  return dbCount > lastFetchedCount
 }

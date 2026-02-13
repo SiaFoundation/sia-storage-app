@@ -16,23 +16,25 @@ import { palette } from '../styles/colors'
 
 type LogViewProps = {
   isFollowing?: boolean
-  onLogCountChange?: (count: number) => void
+  onTotalCountChange?: (count: number) => void
   onScrollAwayFromBottom?: () => void
 }
 
 export function LogView({
   isFollowing,
-  onLogCountChange,
+  onTotalCountChange,
   onScrollAwayFromBottom,
 }: LogViewProps) {
-  const { data: logs = [], isLoading, error } = useLogs()
+  const { data, isLoading, error } = useLogs()
+  const logs = data?.entries ?? []
+  const totalCount = data?.totalCount ?? 0
   const flatListRef = useRef<FlatList<LogEntry>>(null)
 
-  const logCount = logs.length
   useEffect(() => {
-    onLogCountChange?.(logCount)
-  }, [logCount, onLogCountChange])
+    onTotalCountChange?.(totalCount)
+  }, [totalCount, onTotalCountChange])
 
+  const logCount = logs.length
   useEffect(() => {
     if (isFollowing && logCount > 0) {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false })

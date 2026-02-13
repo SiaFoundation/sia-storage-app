@@ -101,3 +101,17 @@ export async function toggleLibraryViewMode() {
   const next = current === 'gallery' ? 'list' : 'gallery'
   await setLibraryViewMode(next)
 }
+
+// Status display mode (count vs size)
+
+export type StatusDisplayMode = 'count' | 'size'
+
+export const [getStatusDisplayMode, useStatusDisplayMode] =
+  createGetterAndSWRHook(settingsSwr.getKey('statusDisplayMode'), () =>
+    getAsyncStorageString<StatusDisplayMode>('statusDisplayMode', 'count'),
+  )
+
+export async function setStatusDisplayMode(value: StatusDisplayMode) {
+  await setAsyncStorageString<StatusDisplayMode>('statusDisplayMode', value)
+  settingsSwr.triggerChange('statusDisplayMode')
+}

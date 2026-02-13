@@ -1,5 +1,12 @@
-import { useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback } from 'react'
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import useSWR from 'swr'
 import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
@@ -8,12 +15,13 @@ import type { UploadCategoryStats } from '../stores/fileStats'
 import { getUploadStats } from '../stores/fileStats'
 import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
+import { setStatusDisplayMode, useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
-import { ActionSheet } from './ActionSheet'
 import { RowGroup, RowSubGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
+import { ModalSheet } from './ModalSheet'
 
 const refreshInterval = 5_000
 
@@ -52,7 +60,7 @@ export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
   const isOnline = useIsOnline()
   const isOpen = useSheetOpen('libraryStatus')
-  const [displayMode, setDisplayMode] = useState<'count' | 'size'>('count')
+  const { data: displayMode = 'count' } = useStatusDisplayMode()
   const stats = useSWR(
     ['upload-stats', isOpen ?? null],
     () => getUploadStats(),
@@ -67,6 +75,10 @@ export function LibraryStatusSheet() {
   )
   const lost = useFileStatsLost({ refreshInterval })
 
+  const handleClose = useCallback(() => {
+    closeSheet()
+  }, [])
+
   const toggle = (
     <View style={styles.toggleTrack}>
       {(['count', 'size'] as const).map((mode) => (
@@ -76,7 +88,7 @@ export function LibraryStatusSheet() {
             styles.toggleSegment,
             displayMode === mode && styles.toggleSegmentSelected,
           ]}
-          onPress={() => setDisplayMode(mode)}
+          onPress={() => setStatusDisplayMode(mode)}
         >
           <Text
             style={[
@@ -92,13 +104,9 @@ export function LibraryStatusSheet() {
   )
 
   return (
-    <ActionSheet
-      visible={isOpen}
-      onRequestClose={() => closeSheet()}
-      contentStyle={styles.sheetContent}
-    >
-      <View style={styles.sheetInnerDark}>
-        <RowGroup title="App status" style={styles.groupSpacing}>
+    <ModalSheet visible={isOpen} onRequestClose={handleClose} title="Status">
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <RowGroup title="Connectivity" style={styles.groupSpacing}>
           <InfoCard>
             <LabeledValueRow
               label="Internet"
@@ -373,18 +381,15 @@ export function LibraryStatusSheet() {
             </InfoCard>
           </RowSubGroup>
         </RowGroup>
-      </View>
-    </ActionSheet>
+      </ScrollView>
+    </ModalSheet>
   )
 }
 
 const styles = StyleSheet.create({
-  sheetContent: {
-    paddingTop: 16,
-    paddingBottom: 48,
+  scrollContent: {
     paddingHorizontal: 12,
-  },
-  sheetInnerDark: {
+    paddingBottom: 48,
     gap: 14,
   },
   groupSpacing: { marginTop: 8 },

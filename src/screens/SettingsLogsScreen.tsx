@@ -14,9 +14,9 @@ type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'>
 
 export function SettingsLogsScreen({ route, navigation }: Props) {
   useMenuHeader()
-  const [displayedCount, setDisplayedCount] = useState(0)
+  const [lastFetchedCount, setLastFetchedCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(true)
-  const hasNewLogs = useHasNewLogs(displayedCount)
+  const hasNewLogs = useHasNewLogs(lastFetchedCount)
 
   useEffect(() => {
     if (isFollowing && hasNewLogs) {
@@ -37,7 +37,7 @@ export function SettingsLogsScreen({ route, navigation }: Props) {
     <SettingsFullLayout>
       <LogView
         isFollowing={isFollowing}
-        onLogCountChange={setDisplayedCount}
+        onTotalCountChange={setLastFetchedCount}
         onScrollAwayFromBottom={handleScrollAwayFromBottom}
       />
       {!isFollowing && hasNewLogs && (
