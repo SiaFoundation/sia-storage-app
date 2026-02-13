@@ -8,7 +8,14 @@ import {
   Trash2Icon,
 } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { logsSwr } from '../hooks/useLogs'
 import { exportLogs } from '../lib/exportLogs'
 import { type LogLevel, logger } from '../lib/logger'
@@ -26,9 +33,10 @@ import {
   useLogsStore,
 } from '../stores/logs'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { palette } from '../styles/colors'
+import { palette, whiteA } from '../styles/colors'
 import { ActionSheet } from './ActionSheet'
 import { BottomControlBar, iconColors } from './BottomControlBar'
+import { ModalSheet } from './ModalSheet'
 import { type OverflowAction, OverflowActions } from './OverflowActions'
 import { SpinnerIcon } from './SpinnerIcon'
 
@@ -39,7 +47,7 @@ const LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error']
 export function SettingsLogsControlBar({ navigation }: Props) {
   const logLevel = useLogLevel()
   const logScopes = useLogScopes()
-  const availableScopes = useAvailableScopes()
+  const { data: availableScopes = [] } = useAvailableScopes()
   const levelSheetOpen = useSheetOpen('logLevel')
   const scopeSheetOpen = useSheetOpen('logScopes')
   const toast = useToast()
@@ -234,51 +242,53 @@ export function SettingsLogsControlBar({ navigation }: Props) {
         ))}
       </ActionSheet>
 
-      <ActionSheet
+      <ModalSheet
         visible={scopeSheetOpen}
         onRequestClose={closeSheet}
-        snapPoints={['70%']}
-      >
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-          }}
-        >
-          <Text style={styles.sheetTitle}>Scopes</Text>
-          {logScopes.length > 0 && (
-            <Pressable onPress={handleClearScopes}>
-              <Text style={styles.clearButton}>Clear</Text>
+        title="Scopes"
+        headerRight={
+          <>
+            {logScopes.length > 0 && (
+              <Pressable onPress={handleClearScopes} hitSlop={8}>
+                <Text style={styles.clearButton}>Clear</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => closeSheet()} hitSlop={8}>
+              <Text style={styles.doneText}>Done</Text>
             </Pressable>
-          )}
-        </View>
+          </>
+        }
+      >
         {availableScopes.length === 0 ? (
           <Text style={styles.emptyText}>No scopes available yet</Text>
         ) : (
-          availableScopes.map((scope) => {
-            const isSelected = logScopes.includes(scope)
-            return (
-              <Pressable
-                key={scope}
-                style={styles.sheetRow}
-                onPress={() => handleScopeToggle(scope)}
-              >
-                <Text
-                  style={[
-                    styles.sheetRowText,
-                    isSelected && styles.sheetRowTextSelected,
-                  ]}
+          <FlatList
+            data={availableScopes}
+            keyExtractor={(item) => item}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scopeListContent}
+            renderItem={({ item: scope }) => {
+              const isSelected = logScopes.includes(scope)
+              return (
+                <Pressable
+                  style={styles.scopeRow}
+                  onPress={() => handleScopeToggle(scope)}
                 >
-                  {scope}
-                </Text>
-                {isSelected && <Text style={styles.sheetRowCheck}>✓</Text>}
-              </Pressable>
-            )
-          })
+                  <Text
+                    style={[
+                      styles.scopeRowText,
+                      isSelected && styles.scopeRowTextSelected,
+                    ]}
+                  >
+                    {scope}
+                  </Text>
+                  {isSelected && <Text style={styles.scopeRowCheck}>✓</Text>}
+                </Pressable>
+              )
+            }}
+          />
         )}
-      </ActionSheet>
+      </ModalSheet>
     </>
   )
 }
@@ -328,10 +338,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  doneText: {
+    color: palette.blue[400],
+    fontSize: 17,
+    fontWeight: '600',
+  },
   emptyText: {
     color: palette.gray[400],
     fontSize: 14,
     textAlign: 'center',
     marginTop: 20,
+  },
+  scopeListContent: {
+    paddingBottom: 40,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: whiteA.a08,
+  },
+  scopeRowText: {
+    color: palette.gray[200],
+    fontSize: 16,
+  },
+  scopeRowTextSelected: {
+    color: palette.gray[50],
+    fontWeight: '600',
+  },
+  scopeRowCheck: {
+    color: palette.blue[400],
+    fontSize: 18,
+    fontWeight: '600',
   },
 })

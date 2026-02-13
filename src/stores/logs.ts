@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { db, dbInitialized } from '../db'
@@ -10,6 +9,8 @@ import {
   logger,
   serializeData,
 } from '../lib/logger'
+import { createGetterAndSWRHook } from '../lib/selectors'
+import { buildSWRHelpers } from '../lib/swr'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
 export type LogsState = {
@@ -51,22 +52,25 @@ export async function initLogger(): Promise<void> {
   hasInit = true
 }
 
-// Get available scopes from log files.
-export async function getAvailableScopes(): Promise<string[]> {
-  const logs = await readLogs()
-  return extractScopes(logs)
+export const logsScopeSwr = buildSWRHelpers('logScopes')
+
+async function fetchAvailableScopes(): Promise<string[]> {
+  try {
+    if (!dbInitialized) return []
+    const rows = await db().getAllAsync<{ scope: string }>(
+      'SELECT DISTINCT scope FROM logs ORDER BY scope',
+    )
+    return rows.map((r) => r.scope)
+  } catch (error) {
+    console.error('[logs] Failed to get scopes:', error)
+    return []
+  }
 }
 
-// Hook to get available scopes (reads from files).
-export function useAvailableScopes(): string[] {
-  const [scopes, setScopes] = useState<string[]>([])
-
-  useEffect(() => {
-    getAvailableScopes().then(setScopes)
-  }, [])
-
-  return scopes
-}
+export const [getAvailableScopes, useAvailableScopes] = createGetterAndSWRHook(
+  logsScopeSwr.getKey('available'),
+  fetchAvailableScopes,
+)
 
 export function useLogLevel(): LogLevel {
   return useLogsStore(useShallow((s) => s.logLevel))
@@ -192,7 +196,7 @@ export async function readLogs(
     }
 
     const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
-    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC`
+    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC LIMIT 500`
 
     const rows = await db().getAllAsync<{
       timestamp: string
