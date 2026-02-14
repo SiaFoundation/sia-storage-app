@@ -565,7 +565,7 @@ describe('syncDownEvents', () => {
     expect(file).toBeNull()
   })
 
-  test('error in delete event breaks loop without advancing cursor', async () => {
+  test('FS error in delete cleanup does not prevent cursor advancement', async () => {
     // Create existing file.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
@@ -591,7 +591,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // First event will fail during delete.
     const events: ObjectEvent[] = [
       makeObjectEvent({
         id: 'obj-1',
@@ -609,16 +608,23 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    // Simulate error during file system removal.
+    // Simulate error during file system removal (cleanup phase).
     jest.mocked(removeFsFile).mockRejectedValueOnce(new Error('FS error'))
 
     await syncDownEvents()
 
-    // Cursor should not have advanced because error broke the loop.
+    // Cursor should have advanced because DB commit succeeded (FS cleanup is non-fatal).
     const cursor = await getSyncDownCursor()
-    expect(cursor).toBeUndefined()
+    expect(cursor).toEqual({
+      id: 'obj-2',
+      after: new Date(NOW_BASE + 2 + cursorIncrement),
+    })
 
-    // Verify that removeFsFile was called, indicating the delete was attempted.
+    // File should be deleted from DB.
+    const deletedFile = await readFileRecordByObjectId('obj-1')
+    expect(deletedFile).toBeNull()
+
+    // Verify that removeFsFile was still called.
     expect(removeFsFile).toHaveBeenCalled()
   })
 
@@ -712,6 +718,66 @@ describe('syncDownEvents', () => {
     expect(thumb).not.toBeNull()
   })
 
+  test('deduplicates thumbnail events with same thumbForHash+thumbSize in batch', async () => {
+    const thumb1: FileMetadata = {
+      thumbForHash: 'hash-original',
+      thumbSize: 512,
+      name: 'thumb1.jpg',
+      type: 'image/jpeg',
+      size: 50,
+      hash: 'hash-thumb-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+    }
+
+    const thumb2: FileMetadata = {
+      thumbForHash: 'hash-original',
+      thumbSize: 512,
+      name: 'thumb2.jpg',
+      type: 'image/jpeg',
+      size: 55,
+      hash: 'hash-thumb-2',
+      createdAt: NOW_BASE + 1,
+      updatedAt: NOW_BASE + 1,
+    }
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-thumb-1',
+        updatedAt: new Date(NOW_BASE),
+        object: makeMockPinnedObject(thumb1, 'obj-thumb-1'),
+      }),
+      makeObjectEvent({
+        id: 'obj-thumb-2',
+        updatedAt: new Date(NOW_BASE + 1),
+        object: makeMockPinnedObject(thumb2, 'obj-thumb-2'),
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    await syncDownEvents()
+
+    // First event creates the thumbnail.
+    const t1 = await readFileRecordByObjectId('obj-thumb-1')
+    expect(t1).not.toBeNull()
+
+    // Second event with same thumbForHash+thumbSize is treated as an update
+    // (deduped), not a create that would violate the UNIQUE constraint.
+    const t2 = await readFileRecordByObjectId('obj-thumb-2')
+    expect(t2).not.toBeNull()
+    expect(t2!.id).toBe(t1!.id)
+
+    // Cursor should have advanced past both events.
+    const cursor = await getSyncDownCursor()
+    expect(cursor).toEqual({
+      id: 'obj-thumb-2',
+      after: new Date(NOW_BASE + 1 + cursorIncrement),
+    })
+  })
+
   test('cursor persists across multiple runs', async () => {
     // First run events.
     const metadata1: FileMetadata = {
@@ -789,5 +855,86 @@ describe('syncDownEvents', () => {
 
     cursor = await getSyncDownCursor()
     expect(cursor).toBeUndefined()
+  })
+
+  test('returns 0 interval (poll immediately) when multiple events found', async () => {
+    const metadata1: FileMetadata = {
+      name: 'test1.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForHash: undefined,
+      thumbSize: undefined,
+    }
+
+    const metadata2: FileMetadata = {
+      name: 'test2.jpg',
+      type: 'image/jpeg',
+      size: 200,
+      hash: 'hash-2',
+      createdAt: NOW_BASE + 1,
+      updatedAt: NOW_BASE + 1,
+      thumbForHash: undefined,
+      thumbSize: undefined,
+    }
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-1',
+        updatedAt: new Date(NOW_BASE),
+        object: makeMockPinnedObject(metadata1, 'obj-1'),
+      }),
+      makeObjectEvent({
+        id: 'obj-2',
+        updatedAt: new Date(NOW_BASE + 1),
+        object: makeMockPinnedObject(metadata2, 'obj-2'),
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    const result = await syncDownEvents()
+    expect(result).toBe(0)
+  })
+
+  test('returns undefined (use default interval) when 0-1 events found', async () => {
+    const metadata: FileMetadata = {
+      name: 'test.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForHash: undefined,
+      thumbSize: undefined,
+    }
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-1',
+        updatedAt: new Date(NOW_BASE),
+        object: makeMockPinnedObject(metadata, 'obj-1'),
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    const result = await syncDownEvents()
+    expect(result).toBeUndefined()
+  })
+
+  test('returns undefined (use default interval) when no events found', async () => {
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce([]),
+    } as any)
+
+    const result = await syncDownEvents()
+    expect(result).toBeUndefined()
   })
 })
