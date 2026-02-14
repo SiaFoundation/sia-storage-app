@@ -8,14 +8,6 @@ import {
 } from './files'
 import { upsertFsFileMetadata } from './fs'
 
-jest.mock('./library', () => ({
-  librarySwr: {
-    triggerChange: jest.fn(),
-    addChangeCallback: jest.fn(),
-    getKey: jest.fn((key: string) => key),
-  },
-}))
-
 describe('files store queries', () => {
   const base = 1_000
 

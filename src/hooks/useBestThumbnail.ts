@@ -4,9 +4,12 @@ import { useFileStatus } from '../lib/file'
 import { useDownload } from '../managers/downloader'
 import { useIsInitializing } from '../stores/app'
 import type { FileRecord, ThumbSize } from '../stores/files'
-import { getFsFileUri } from '../stores/fs'
+import { useFsFileUri } from '../stores/fs'
 import { useIsConnected } from '../stores/sdk'
-import { readBestThumbnailByHash, thumbnailSwr } from '../stores/thumbnails'
+import {
+  bestThumbnailCache,
+  readBestThumbnailByHash,
+} from '../stores/thumbnails'
 
 /**
  * useBestThumbnailUri returns the local URI of the best available thumbnail for a file.
@@ -24,7 +27,7 @@ export function useBestThumbnailUri(
 ) {
   // Fetch the best thumbnail record.
   const thumbRecord = useSWR(
-    file ? thumbnailSwr.getKey(`${file.hash}/${thumbSize}/record`) : null,
+    file ? bestThumbnailCache.key(file.hash, String(thumbSize)) : null,
     () => (file ? readBestThumbnailByHash(file.hash, thumbSize) : null),
   )
 
@@ -43,18 +46,7 @@ export function useBestThumbnailUri(
     download()
   }, [isInitializing, isConnected, thumbRecord.data, status.data, download])
 
-  // Get the URI for the thumbnail.
-  const response = useSWR(
-    file ? thumbnailSwr.getKey(`${file.hash}/${thumbSize}/uri`) : null,
-    async () => {
-      if (!thumbRecord.data) return null
-      return await getFsFileUri(thumbRecord.data)
-    },
-  )
-  // Update when status changes so the thumbnail is re-rendered when the uri becomes available.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: status.data triggers mutate intentionally
-  useEffect(() => {
-    response.mutate()
-  }, [status.data])
-  return response
+  // Get the URI via fsFileUriCache which receives synchronous pushes from
+  // copyFileToFs — no async gap between download completing and URI appearing.
+  return useFsFileUri(thumbRecord.data ?? undefined)
 }

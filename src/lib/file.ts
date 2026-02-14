@@ -1,10 +1,9 @@
-import { useEffect } from 'react'
+import { useMemo } from 'react'
 import {
   PinnedObject,
   type PinnedObjectInterface,
   type SealedObject,
 } from 'react-native-sia'
-import useSWR, { type SWRResponse } from 'swr'
 import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
 import { type DownloadState, useDownloadState } from '../stores/downloads'
@@ -75,29 +74,39 @@ function computeFileStatus({
   }
 }
 
+export type FileStatusResponse = {
+  data: FileStatus | undefined
+  isLoading: boolean
+}
+
 export function useFileStatus(
   file?: FileRecord,
   isShared?: boolean,
-): SWRResponse<FileStatus, Error> {
+): FileStatusResponse {
   const uploadState = useUploadState(file?.id || '')
   const downloadState = useDownloadState(file?.id || '')
   const fileUri = useFsFileUri(file)
-  const response = useSWR(fileUri.isLoading ? null : [file?.id, 'status'], () =>
-    computeFileStatus({
+
+  const data = useMemo(() => {
+    if (fileUri.isLoading) return undefined
+    return computeFileStatus({
       file,
       isShared,
       uploadState,
       downloadState,
       fileUri: fileUri.data ?? null,
       errorText: uploadState?.error || downloadState?.error || null,
-    }),
-  )
-  // Immediately update when there are changes to data or transfer progress.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: these deps trigger mutate intentionally
-  useEffect(() => {
-    response.mutate()
-  }, [file, uploadState, downloadState, fileUri.data])
-  return response
+    })
+  }, [
+    file,
+    isShared,
+    uploadState,
+    downloadState,
+    fileUri.data,
+    fileUri.isLoading,
+  ])
+
+  return { data, isLoading: fileUri.isLoading }
 }
 
 export function getFileTypeName(

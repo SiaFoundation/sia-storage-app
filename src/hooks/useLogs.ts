@@ -1,16 +1,17 @@
 import useSWR from 'swr'
 import type { LogEntry } from '../lib/logger'
-import { buildSWRHelpers } from '../lib/swr'
+import { swrCacheBy } from '../lib/swr'
 import { countLogs, readLogs, useLogLevel, useLogScopes } from '../stores/logs'
 
-export const logsSwr = buildSWRHelpers('logs')
+/** Filtered log entries, keyed by (level, scopes). */
+export const logsCache = swrCacheBy()
 
 export function useLogs() {
   const logLevel = useLogLevel()
   const logScopes = useLogScopes()
 
   return useSWR<{ entries: LogEntry[]; totalCount: number }>(
-    logsSwr.getKey(`${logLevel},${logScopes.join(',')}`),
+    logsCache.key(logLevel, logScopes.join(',')),
     async () => {
       const [entries, totalCount] = await Promise.all([
         readLogs(logLevel, logScopes, 500),

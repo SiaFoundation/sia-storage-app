@@ -26,6 +26,10 @@ import {
   updateFileRecordWithLocalObject,
 } from '../stores/files'
 import { removeFsFile } from '../stores/fs'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from '../stores/librarySwr'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
 import { removeTempDownloadFile } from '../stores/tempFs'
@@ -104,6 +108,11 @@ export async function syncDownEvents(): Promise<void> {
     }
   }
 
+  if (counts.added > 0 || counts.deleted > 0 || counts.existing > 0) {
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
+  }
+
   logger.info('syncDownEvents', 'synced', {
     existing: counts.existing,
     added: counts.added,
@@ -137,8 +146,8 @@ async function handleDeleteEvent(id: string, counts: Counts): Promise<void> {
         removeFsFile(existingFileRecord),
         // Remove any temporary download file.
         removeTempDownloadFile(existingFileRecord),
-        // Remove the file from the database.
-        deleteFileRecord(existingFileRecord.id),
+        // Remove the file from the database (deferred invalidation).
+        deleteFileRecord(existingFileRecord.id, false),
       ])
       counts.deleted++
     } else {
@@ -223,6 +232,7 @@ async function handleFileRecord(
       },
       localObject,
       { includeUpdatedAt: true },
+      false,
     )
     // Cancel any inflight upload for this file since we now have a pinned object.
     removeUpload(existingFile.id)
@@ -249,6 +259,7 @@ async function handleFileRecord(
         addedAt: Date.now(),
       },
       localObject,
+      false,
     )
     counts.added++
   }

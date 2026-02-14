@@ -1,43 +1,51 @@
 import { mutate } from 'swr'
 
+let nextId = 0
+
+export type SwrCache<T = unknown> = ReturnType<typeof swrCache<T>>
+
 /**
- * Builds SWR helpers for a given base key.
+ * SWR cache entry with no parameters.
  *
- * Example:
- * ```
- * const { getKey, triggerChange } = buildSWRHelpers('key')
- * ```
+ *   const allHostsCache = swrCache()
+ *   useSWR(allHostsCache.key(), fetcher)
+ *   allHostsCache.invalidate()
+ *   allHostsCache.set(newData)
  */
-export function buildSWRHelpers(baseKey: string) {
-  const changeCallbacks = new Map<string, () => void>()
-
-  const addChangeCallback = (key: string, callback: () => void) => {
-    changeCallbacks.set(key, callback)
-  }
-
-  const removeChangeCallback = (key: string) => {
-    changeCallbacks.delete(key)
-  }
-
-  const getKey = (id?: string) => {
-    return id ? [`${baseKey}/${id}`] : [`${baseKey}`]
-  }
-
-  const triggerChange = async (keyPath?: string) => {
-    await mutate((key: string[]) => {
-      if (!Array.isArray(key) || typeof key[0] !== 'string') {
-        return false
-      }
-      const first = key[0]
-      return first.startsWith(getKey(keyPath)[0])
-    })
-    changeCallbacks.forEach((callback) => callback())
-  }
-
+export function swrCache<T = unknown>() {
+  const key = [`swr/${nextId++}`]
   return {
-    getKey,
-    triggerChange,
-    addChangeCallback,
-    removeChangeCallback,
+    key: () => key,
+    invalidate: () => mutate(key),
+    set: (data: T) => mutate(key, data ?? undefined, { revalidate: false }),
+  }
+}
+
+/**
+ * SWR cache entry parameterized by one or more string key parts.
+ *
+ *   const hostByKeyCache = swrCacheBy()
+ *   useSWR(hostByKeyCache.key(publicKey), fetcher)
+ *   hostByKeyCache.invalidate(publicKey)
+ *   hostByKeyCache.set(newData, publicKey)
+ *   hostByKeyCache.invalidateAll()
+ */
+export function swrCacheBy<T = unknown>() {
+  const prefix = `swr/${nextId++}`
+  return {
+    key: (...parts: string[]) => [`${prefix}/${parts.join('/')}`],
+    invalidate: (...parts: string[]) =>
+      mutate([`${prefix}/${parts.join('/')}`]),
+    invalidateAll: () =>
+      mutate(
+        (key: unknown) =>
+          Array.isArray(key) &&
+          typeof key[0] === 'string' &&
+          key[0].startsWith(`${prefix}/`),
+      ),
+    set: (data: T, ...parts: string[]) =>
+      mutate([`${prefix}/${parts.join('/')}`], data ?? undefined, {
+        revalidate: false,
+      }),
   }
 }

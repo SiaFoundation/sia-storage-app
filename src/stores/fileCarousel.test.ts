@@ -10,22 +10,7 @@ import {
 import { createFileRecord } from './files'
 import type { Category } from './library'
 
-const mockChangeCallbacks = new Map<string, () => void>()
-
-jest.mock('./librarySwr', () => ({
-  librarySwr: {
-    triggerChange: jest.fn(() => {
-      mockChangeCallbacks.forEach((callback) => callback())
-    }),
-    addChangeCallback: jest.fn((key: string, callback: () => void) => {
-      mockChangeCallbacks.set(key, callback)
-    }),
-    removeChangeCallback: jest.fn((key: string) => {
-      mockChangeCallbacks.delete(key)
-    }),
-    getKey: jest.fn((key: string) => key),
-  },
-}))
+import { invalidateCacheLibraryLists } from './librarySwr'
 
 jest.mock('./library', () => {
   const actual = jest.requireActual('./library')
@@ -410,13 +395,11 @@ describe('useFileCarousel hook', () => {
 
   beforeEach(async () => {
     await initializeDB()
-    mockChangeCallbacks.clear()
   })
 
   afterEach(async () => {
     await resetDb()
     jest.clearAllMocks()
-    mockChangeCallbacks.clear()
   })
 
   async function createRecord(params: {
@@ -442,7 +425,7 @@ describe('useFileCarousel hook', () => {
   }
 
   function triggerSyncChange() {
-    mockChangeCallbacks.forEach((callback) => callback())
+    invalidateCacheLibraryLists()
   }
 
   describe('sync event handling', () => {

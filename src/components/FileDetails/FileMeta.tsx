@@ -9,7 +9,10 @@ import { humanSize } from '../../lib/humanSize'
 import { type FileRecord, updateFileRecord } from '../../stores/files'
 import { getFsFileUri } from '../../stores/fs'
 import { useShowAdvanced } from '../../stores/settings'
-import { readThumbnailsByHash, thumbnailSwr } from '../../stores/thumbnails'
+import {
+  readThumbnailsByHash,
+  thumbnailsByHashCache,
+} from '../../stores/thumbnails'
 import { colors, palette } from '../../styles/colors'
 import { RowGroup } from '../Group'
 import { InfoCard } from '../InfoCard'
@@ -37,7 +40,7 @@ export function FileMeta({
   })
   const pinnedObjects = usePinnedObjects(file)
   const thumbnails = useSWR(
-    showAdvanced.data ? thumbnailSwr.getKey(`${file.hash}/all`) : null,
+    showAdvanced.data ? thumbnailsByHashCache.key(file.hash) : null,
     async () => {
       const records = await readThumbnailsByHash(file.hash)
       return Promise.all(

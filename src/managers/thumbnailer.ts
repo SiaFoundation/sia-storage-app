@@ -16,9 +16,9 @@ import {
 } from '../stores/files'
 import { copyFileToFs, getFsFileUri } from '../stores/fs'
 import {
+  invalidateThumbnailsForHash,
   readThumbnailSizesForHash,
   thumbnailExistsForHashAndSize,
-  thumbnailSwr,
 } from '../stores/thumbnails'
 
 // Track files currently being processed to prevent race conditions
@@ -289,7 +289,7 @@ export async function ensureThumbnailForSize(params: {
 
     // Invalidate thumbnail cache for this original file so gallery items update.
     // This will revalidate all thumb sizes for this hash.
-    await thumbnailSwr.triggerChange(fileHash)
+    await invalidateThumbnailsForHash(fileHash)
 
     return {
       status: 'produced',

@@ -22,10 +22,10 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
   __esModule: true,
   ensureMediaLibraryPermission: jest.fn(),
   getMediaLibraryPermissions: jest.fn().mockResolvedValue(true),
-  mediaLibraryPermissionsSwr: {
-    getKey: jest.fn((k: string) => [k]),
-    triggerChange: jest.fn(),
-    addChangeCallback: jest.fn(),
+  mediaLibraryPermissionsCache: {
+    key: jest.fn(() => ['mediaLibraryPermissions']),
+    invalidate: jest.fn(),
+    set: jest.fn(),
   },
 }))
 jest.mock('../lib/processAssets', () => ({
@@ -36,13 +36,10 @@ jest.mock('../stores/files', () => ({
   __esModule: true,
   getFileStatsLocal: jest.fn().mockResolvedValue({ count: 0, totalBytes: 0 }),
 }))
-jest.mock('../stores/library', () => ({
+jest.mock('../stores/librarySwr', () => ({
   __esModule: true,
-  librarySwr: {
-    triggerChange: jest.fn(),
-    addChangeCallback: jest.fn(),
-    getKey: jest.fn((k: string) => [k]),
-  },
+  invalidateCacheLibraryAllStats: jest.fn(),
+  invalidateCacheLibraryLists: jest.fn(),
 }))
 
 async function runTick() {

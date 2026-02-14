@@ -1,5 +1,5 @@
 import { db } from '../db'
-import { buildSWRHelpers } from '../lib/swr'
+import { swrCacheBy } from '../lib/swr'
 import {
   type FileRecord,
   type FileRecordRow,
@@ -9,7 +9,20 @@ import {
 } from './files'
 import { readLocalObjectsForFile } from './localObjects'
 
-export const thumbnailSwr = buildSWRHelpers('thumbnails')
+/** Single best thumbnail for a given (hash, thumbSize) pair. */
+export const bestThumbnailCache = swrCacheBy()
+
+/** All thumbnails associated with an original file hash. */
+export const thumbnailsByHashCache = swrCacheBy()
+
+export async function invalidateThumbnailsForHash(hash: string) {
+  await Promise.all([
+    ...ThumbSizes.map((size) =>
+      bestThumbnailCache.invalidate(hash, String(size)),
+    ),
+    thumbnailsByHashCache.invalidate(hash),
+  ])
+}
 
 /** Read all thumbnails associated with an original file content hash. */
 export async function readThumbnailsByHash(
@@ -72,7 +85,7 @@ export async function readBestThumbnailByHash(
     `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
      FROM files
      WHERE thumbForHash = ? AND COALESCE(thumbSize, 0) <= ?
-     ORDER BY 
+     ORDER BY
        COALESCE(thumbSize, 0) DESC,
        id ASC
      LIMIT 1`,

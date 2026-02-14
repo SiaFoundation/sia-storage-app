@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react'
 import { Linking, Platform } from 'react-native'
 import useSWR from 'swr'
 import { palette } from '../styles/colors'
-import { buildSWRHelpers } from './swr'
+import { swrCache } from './swr'
 
 export async function ensureMediaLibraryPermission(): Promise<boolean> {
   const res = await MediaLibrary.requestPermissionsAsync()
@@ -16,12 +16,11 @@ export async function getMediaLibraryPermissions(): Promise<boolean> {
   return res.granted === true
 }
 
-export const mediaLibraryPermissionsSwr = buildSWRHelpers(
-  'mediaLibraryPermissions',
-)
+/** Device media library permission status. */
+export const mediaLibraryPermissionsCache = swrCache()
 
 export function useMediaLibraryPermissions() {
-  const perms = useSWR(mediaLibraryPermissionsSwr.getKey(), () =>
+  const perms = useSWR(mediaLibraryPermissionsCache.key(), () =>
     MediaLibrary.getPermissionsAsync(),
   )
 

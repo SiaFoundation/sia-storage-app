@@ -4,7 +4,7 @@ import { logger } from '../lib/logger'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
-  mediaLibraryPermissionsSwr,
+  mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 import { createGetterAndSWRHook } from '../lib/selectors'
@@ -15,8 +15,10 @@ import {
   setAsyncStorageBoolean,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
-import { librarySwr } from '../stores/library'
-import { settingsSwr } from '../stores/settings'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from '../stores/librarySwr'
 
 const PAGE_SIZE = 200
 
@@ -54,7 +56,10 @@ async function workForward(): Promise<void> {
         timestamp: new Date(asset.creationTime).toISOString(),
       })),
     )
-    if (files.length > 0) await librarySwr.triggerChange()
+    if (files.length > 0) {
+      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryLists()
+    }
   } catch (e) {
     logger.error('syncNewPhotos', 'batch_error', { error: e as Error })
   }
@@ -69,18 +74,21 @@ export const initSyncNewPhotos = createServiceInterval({
 
 // Photos sync - new photos forward cursor and toggle.
 
-export const [getAutoSyncNewPhotos, useAutoSyncNewPhotos] =
-  createGetterAndSWRHook(settingsSwr.getKey('autoSyncNewPhotos'), () =>
-    getAsyncStorageBoolean('autoSyncNewPhotos', false),
-  )
+export const [
+  getAutoSyncNewPhotos,
+  useAutoSyncNewPhotos,
+  autoSyncNewPhotosCache,
+] = createGetterAndSWRHook<boolean>(() =>
+  getAsyncStorageBoolean('autoSyncNewPhotos', false),
+)
 
 export async function setAutoSyncNewPhotos(value: boolean) {
   await setAsyncStorageBoolean('autoSyncNewPhotos', value)
-  settingsSwr.triggerChange('autoSyncNewPhotos')
+  await autoSyncNewPhotosCache.set(value)
   if (value) {
     ensureMediaLibraryPermission()
   }
-  mediaLibraryPermissionsSwr.triggerChange()
+  mediaLibraryPermissionsCache.invalidate()
 }
 
 export async function toggleAutoSyncNewPhotos() {
@@ -91,14 +99,14 @@ export async function toggleAutoSyncNewPhotos() {
 
 const defaultValue = Date.now()
 
-export const [getPhotosNewCursor, usePhotosNewCursor] = createGetterAndSWRHook(
-  settingsSwr.getKey('photosNewCursor'),
-  () => getAsyncStorageNumber('photosNewCursor', defaultValue),
-)
+export const [getPhotosNewCursor, usePhotosNewCursor, photosNewCursorCache] =
+  createGetterAndSWRHook<number>(() =>
+    getAsyncStorageNumber('photosNewCursor', defaultValue),
+  )
 
 export async function setPhotosNewCursor(value: number) {
   await setAsyncStorageNumber('photosNewCursor', value)
-  settingsSwr.triggerChange('photosNewCursor')
+  await photosNewCursorCache.set(value)
 }
 
 export async function resetPhotosNewCursor() {

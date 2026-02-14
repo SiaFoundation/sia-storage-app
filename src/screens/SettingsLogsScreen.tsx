@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { LogView } from '../components/LogView'
 import { SettingsFullLayout } from '../components/SettingsLayout'
 import { SettingsLogsControlBar } from '../components/SettingsLogsControlBar'
-import { logsSwr, useHasNewLogs } from '../hooks/useLogs'
+import { logsCache, useHasNewLogs } from '../hooks/useLogs'
 import { useMenuHeader } from '../hooks/useMenuHeader'
 import type { MenuStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
@@ -20,7 +20,7 @@ export function SettingsLogsScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (isFollowing && hasNewLogs) {
-      logsSwr.triggerChange()
+      logsCache.invalidateAll()
     }
   }, [isFollowing, hasNewLogs])
 
@@ -30,7 +30,7 @@ export function SettingsLogsScreen({ route, navigation }: Props) {
 
   const handleShowNewLogs = () => {
     setIsFollowing(true)
-    logsSwr.triggerChange()
+    logsCache.invalidateAll()
   }
 
   return (
