@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.5.1 (2026-02-14)
+
+### Fixes
+
+- Added error boundary and global error logging to catch and log unexpected crashes.
+- Fixed a bug on Android where downloaded files would loop back to downloading.
+- Fixed Android crash caused by missing Google Maps API key in CI release builds.
+- Fixed copy and export logs not including all log entries.
+
 ## 1.5.0 (2026-02-13)
 
 ### Features
