@@ -1,6 +1,5 @@
 import { DEFAULT_INDEXER_URL } from '../config'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { buildSWRHelpers } from '../lib/swr'
 import {
   getAsyncStorageBoolean,
   getAsyncStorageString,
@@ -8,54 +7,48 @@ import {
   setAsyncStorageString,
 } from './asyncStore'
 
-export const settingsSwr = buildSWRHelpers('settings')
-
 // Active Indexer URL
 
-export const [getIndexerURL, useIndexerURL] = createGetterAndSWRHook(
-  settingsSwr.getKey('indexerURL'),
-  () => getAsyncStorageString<string>('indexerURL', DEFAULT_INDEXER_URL),
-)
+export const [getIndexerURL, useIndexerURL, indexerURLCache] =
+  createGetterAndSWRHook<string>(() =>
+    getAsyncStorageString<string>('indexerURL', DEFAULT_INDEXER_URL),
+  )
 
 export async function setIndexerURL(value: string) {
   await setAsyncStorageString('indexerURL', value)
-  settingsSwr.triggerChange('indexerURL')
+  await indexerURLCache.set(value)
 }
 
 // Has Onboarded
 
-export const [getHasOnboarded, useHasOnboarded] = createGetterAndSWRHook(
-  settingsSwr.getKey('hasOnboarded'),
-  () => getAsyncStorageBoolean('hasOnboarded'),
-)
+export const [getHasOnboarded, useHasOnboarded, hasOnboardedCache] =
+  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('hasOnboarded'))
 
 export async function setHasOnboarded(value: boolean) {
   await setAsyncStorageBoolean('hasOnboarded', value)
-  settingsSwr.triggerChange('hasOnboarded')
+  await hasOnboardedCache.set(value)
 }
 
 // Show Advanced
 
+export const [getShowAdvanced, useShowAdvanced, showAdvancedCache] =
+  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('showAdvanced'))
+
 export async function setShowAdvanced(value: boolean) {
   await setAsyncStorageBoolean('showAdvanced', value)
-  settingsSwr.triggerChange('showAdvanced')
+  await showAdvancedCache.set(value)
 }
-
-export const [getShowAdvanced, useShowAdvanced] = createGetterAndSWRHook(
-  settingsSwr.getKey('showAdvanced'),
-  () => getAsyncStorageBoolean('showAdvanced'),
-)
 
 // Auto Scan Uploads
 
-export const [getAutoScanUploads, useAutoScanUploads] = createGetterAndSWRHook(
-  settingsSwr.getKey('autoScanUploads'),
-  () => getAsyncStorageBoolean('autoScanUploads', true),
-)
+export const [getAutoScanUploads, useAutoScanUploads, autoScanUploadsCache] =
+  createGetterAndSWRHook<boolean>(() =>
+    getAsyncStorageBoolean('autoScanUploads', true),
+  )
 
 export async function setAutoScanUploads(value: boolean) {
   await setAsyncStorageBoolean('autoScanUploads', value)
-  settingsSwr.triggerChange('autoScanUploads')
+  await autoScanUploadsCache.set(value)
 }
 
 export async function toggleAutoScanUploads() {
@@ -66,14 +59,17 @@ export async function toggleAutoScanUploads() {
 
 // Auto Sync Down Events
 
-export const [getAutoSyncDownEvents, useAutoSyncDownEvents] =
-  createGetterAndSWRHook(settingsSwr.getKey('autoSyncDownEvents'), () =>
-    getAsyncStorageBoolean('autoSyncDownEvents', true),
-  )
+export const [
+  getAutoSyncDownEvents,
+  useAutoSyncDownEvents,
+  autoSyncDownEventsCache,
+] = createGetterAndSWRHook<boolean>(() =>
+  getAsyncStorageBoolean('autoSyncDownEvents', true),
+)
 
 export async function setAutoSyncDownEvents(value: boolean) {
   await setAsyncStorageBoolean('autoSyncDownEvents', value)
-  settingsSwr.triggerChange('autoSyncDownEvents')
+  await autoSyncDownEventsCache.set(value)
 }
 
 export async function toggleAutoSyncDownEvents() {
@@ -86,14 +82,14 @@ export async function toggleAutoSyncDownEvents() {
 
 export type LibraryViewMode = 'gallery' | 'list'
 
-export const [getLibraryViewMode, useLibraryViewMode] = createGetterAndSWRHook(
-  settingsSwr.getKey('libraryViewMode'),
-  () => getAsyncStorageString<LibraryViewMode>('libraryViewMode', 'gallery'),
-)
+export const [getLibraryViewMode, useLibraryViewMode, libraryViewModeCache] =
+  createGetterAndSWRHook<LibraryViewMode>(() =>
+    getAsyncStorageString<LibraryViewMode>('libraryViewMode', 'gallery'),
+  )
 
 export async function setLibraryViewMode(value: LibraryViewMode) {
   await setAsyncStorageString<LibraryViewMode>('libraryViewMode', value)
-  settingsSwr.triggerChange('libraryViewMode')
+  await libraryViewModeCache.set(value)
 }
 
 export async function toggleLibraryViewMode() {
@@ -106,12 +102,15 @@ export async function toggleLibraryViewMode() {
 
 export type StatusDisplayMode = 'count' | 'size'
 
-export const [getStatusDisplayMode, useStatusDisplayMode] =
-  createGetterAndSWRHook(settingsSwr.getKey('statusDisplayMode'), () =>
-    getAsyncStorageString<StatusDisplayMode>('statusDisplayMode', 'count'),
-  )
+export const [
+  getStatusDisplayMode,
+  useStatusDisplayMode,
+  statusDisplayModeCache,
+] = createGetterAndSWRHook<StatusDisplayMode>(() =>
+  getAsyncStorageString<StatusDisplayMode>('statusDisplayMode', 'count'),
+)
 
 export async function setStatusDisplayMode(value: StatusDisplayMode) {
   await setAsyncStorageString<StatusDisplayMode>('statusDisplayMode', value)
-  settingsSwr.triggerChange('statusDisplayMode')
+  await statusDisplayModeCache.set(value)
 }

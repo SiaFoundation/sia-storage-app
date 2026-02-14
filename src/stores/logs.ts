@@ -10,7 +10,6 @@ import {
   serializeData,
 } from '../lib/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { buildSWRHelpers } from '../lib/swr'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
 export type LogsState = {
@@ -52,8 +51,6 @@ export async function initLogger(): Promise<void> {
   hasInit = true
 }
 
-export const logsScopeSwr = buildSWRHelpers('logScopes')
-
 async function fetchAvailableScopes(): Promise<string[]> {
   try {
     if (!dbInitialized) return []
@@ -67,10 +64,8 @@ async function fetchAvailableScopes(): Promise<string[]> {
   }
 }
 
-export const [getAvailableScopes, useAvailableScopes] = createGetterAndSWRHook(
-  logsScopeSwr.getKey('available'),
-  fetchAvailableScopes,
-)
+export const [getAvailableScopes, useAvailableScopes] =
+  createGetterAndSWRHook<string[]>(fetchAvailableScopes)
 
 export function useLogLevel(): LogLevel {
   return useLogsStore(useShallow((s) => s.logLevel))

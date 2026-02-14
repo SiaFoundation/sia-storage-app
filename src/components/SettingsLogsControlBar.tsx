@@ -16,7 +16,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { logsSwr } from '../hooks/useLogs'
+import { logsCache } from '../hooks/useLogs'
 import { exportLogs } from '../lib/exportLogs'
 import { type LogLevel, logger } from '../lib/logger'
 import { useToast } from '../lib/toastContext'
@@ -117,7 +117,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
           onPress: async () => {
             try {
               await clearLogs()
-              await logsSwr.triggerChange()
+              await logsCache.invalidateAll()
               toast.show('Logs cleared')
             } catch (error) {
               logger.error('logs', 'clear_failed', { error: error as Error })

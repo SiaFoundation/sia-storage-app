@@ -1,11 +1,16 @@
 import useSWR from 'swr'
+import { swrCache, swrCacheBy } from '../lib/swr'
 import { useSdk } from './sdk'
 
-const KEY = 'sdk/hosts'
+/** Full list of all hosts. */
+const allHostsCache = swrCache()
+
+/** Single host keyed by public key. */
+const hostByKeyCache = swrCacheBy()
 
 export function useHosts() {
   const sdk = useSdk()
-  return useSWR(sdk ? [KEY] : null, async () => sdk?.hosts(), {
+  return useSWR(sdk ? allHostsCache.key() : null, () => sdk!.hosts(), {
     revalidateOnFocus: false,
     refreshInterval: 20_000,
   })
@@ -13,7 +18,7 @@ export function useHosts() {
 
 export function useHost(publicKey: string) {
   const hosts = useHosts()
-  return useSWR(hosts.data ? [KEY, publicKey] : null, () =>
+  return useSWR(hosts.data ? hostByKeyCache.key(publicKey) : null, () =>
     hosts.data?.find((h) => h.publicKey === publicKey),
   )
 }

@@ -8,7 +8,7 @@ import {
 } from '../stores/asyncStore'
 import {
   deleteFsFileMetadataBatch,
-  fsTriggerRefresh,
+  fsFileUriCache,
   listFilesInFsStorageDirectory,
 } from '../stores/fs'
 
@@ -80,7 +80,7 @@ export async function runFsOrphanScanner(options?: {
     }
 
     if (removed > 0) {
-      await fsTriggerRefresh()
+      await fsFileUriCache.invalidateAll()
       logger.info('fsOrphanScanner', 'summary', { removed })
     }
     return { removed }

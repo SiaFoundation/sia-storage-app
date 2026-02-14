@@ -8,10 +8,18 @@ import {
 } from '../encoding/localObject'
 import { logger } from '../lib/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
+import { swrCacheBy } from '../lib/swr'
 import { keysOf } from '../lib/types'
-import { librarySwr } from './librarySwr'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+  libraryStats,
+} from './librarySwr'
 import { readLocalObjectsForFile, upsertLocalObject } from './localObjects'
 import { getIndexerURL } from './settings'
+
+/** Single file record keyed by file ID. */
+const fileByIdCache = swrCacheBy()
 
 /** Valid thumbnail sizes in pixels. */
 export type ThumbSize = 64 | 512
@@ -97,7 +105,8 @@ export async function createFileRecord(
     thumbSize,
   })
   if (triggerUpdate) {
-    await librarySwr.triggerChange()
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -110,7 +119,8 @@ export async function createManyFileRecords(
     }
   })
   if (files.length > 0) {
-    await librarySwr.triggerChange()
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -386,7 +396,7 @@ export async function updateFileRecord(
 
   await sqlUpdate('files', assignments, { id })
   if (triggerUpdate) {
-    await librarySwr.triggerChange()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -400,7 +410,7 @@ export async function updateManyFileRecords(
     }
   })
   if (updates.length > 0) {
-    await librarySwr.triggerChange()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -410,7 +420,8 @@ export async function deleteFileRecord(
 ): Promise<void> {
   await sqlDelete('files', { id })
   if (triggerUpdate) {
-    await librarySwr.triggerChange()
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -421,7 +432,8 @@ export async function deleteManyFileRecords(ids: string[]): Promise<void> {
       await deleteFileRecord(id, false)
     }
   })
-  await librarySwr.triggerChange()
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 }
 
 /** Delete an original file and all its associated thumbnails. */
@@ -433,7 +445,8 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
     await sqlDelete('files', { thumbForHash: hash })
     await sqlDelete('files', { id })
   })
-  await librarySwr.triggerChange()
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 }
 
 /** Delete multiple files and all their associated thumbnails. */
@@ -454,7 +467,8 @@ export async function deleteManyFileRecordsAndThumbnails(
       await sqlDelete('files', { id })
     }
   })
-  await librarySwr.triggerChange()
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 }
 
 export async function deleteAllFileRecords(): Promise<void> {
@@ -465,13 +479,17 @@ export async function deleteAllFileRecords(): Promise<void> {
 export async function createFileRecordWithLocalObject(
   fileRecord: Omit<FileRecord, 'objects'>,
   localObject: LocalObject,
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   try {
     await withTransactionLock(async () => {
       await createFileRecord(fileRecord, false)
       await upsertLocalObject(localObject, false)
     })
-    await librarySwr.triggerChange()
+    if (triggerUpdate) {
+      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryLists()
+    }
   } catch (e) {
     logger.error('db', 'create_file_record_error', { error: e as Error })
     throw e
@@ -483,13 +501,17 @@ export async function updateFileRecordWithLocalObject(
   fileRecord: Omit<FileRecord, 'objects'>,
   localObject: LocalObject,
   options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
+  triggerUpdate: boolean = true,
 ): Promise<void> {
   try {
     await withTransactionLock(async () => {
       await updateFileRecord(fileRecord, false, options)
       await upsertLocalObject(localObject, false)
     })
-    await librarySwr.triggerChange()
+    if (triggerUpdate) {
+      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryLists()
+    }
   } catch (e) {
     logger.error('db', 'update_file_record_error', { error: e as Error })
     throw e
@@ -521,7 +543,7 @@ export function transformRow(
 }
 
 export function useFileCountAll() {
-  return useSWR(librarySwr.getKey('count'), () =>
+  return useSWR(libraryStats.key('count'), () =>
     readAllFileRecordsCount({
       limit: undefined,
       after: undefined,
@@ -531,7 +553,7 @@ export function useFileCountAll() {
 }
 
 export function useFileStatsAll() {
-  return useSWR(librarySwr.getKey('stats'), () =>
+  return useSWR(libraryStats.key('stats'), () =>
     readAllFileRecordsStats({
       limit: undefined,
       after: undefined,
@@ -541,7 +563,7 @@ export function useFileStatsAll() {
 }
 
 export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
-  librarySwr.getKey('localOnly'),
+  libraryStats.key('localOnly'),
   async ({
     limit,
     order,
@@ -570,7 +592,7 @@ export const [getFilesLocalOnly, useFilesLocalOnly] = createGetterAndSWRHook(
 )
 
 export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
-  librarySwr.getKey('lostFiles'),
+  libraryStats.key('lostCount'),
   async () => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsCount({
@@ -585,7 +607,7 @@ export const [getFileCountLost, useFileCountLost] = createGetterAndSWRHook(
 )
 
 export const [getFileStatsLost, useFileStatsLost] = createGetterAndSWRHook(
-  librarySwr.getKey('lostStats'),
+  libraryStats.key('lostStats'),
   async () => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsStats({
@@ -600,7 +622,7 @@ export const [getFileStatsLost, useFileStatsLost] = createGetterAndSWRHook(
 )
 
 export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
-  librarySwr.getKey('localCount'),
+  libraryStats.key('localCount'),
   async ({ localOnly }: { localOnly: boolean }) => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsCount({
@@ -615,7 +637,7 @@ export const [getFileCountLocal, useFileCountLocal] = createGetterAndSWRHook(
 )
 
 export const [getFileStatsLocal, useFileStatsLocal] = createGetterAndSWRHook(
-  librarySwr.getKey('localStats'),
+  libraryStats.key('localStats'),
   async ({ localOnly }: { localOnly: boolean }) => {
     const currentIndexerURL = await getIndexerURL()
     return readAllFileRecordsStats({
@@ -630,5 +652,5 @@ export const [getFileStatsLocal, useFileStatsLocal] = createGetterAndSWRHook(
 )
 
 export function useFileDetails(id: string) {
-  return useSWR(librarySwr.getKey(id), () => readFileRecord(id))
+  return useSWR(fileByIdCache.key(id), () => readFileRecord(id))
 }

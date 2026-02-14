@@ -6,7 +6,10 @@ import {
   localObjectFromStorageRow,
   localObjectToStorageRow,
 } from '../encoding/localObject'
-import { librarySwr } from './librarySwr'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from './librarySwr'
 
 export async function readLocalObjectsForFile(
   fileId: string,
@@ -42,7 +45,8 @@ export async function upsertLocalObject(
     { conflictClause: 'OR REPLACE' },
   )
   if (triggerUpdate) {
-    await librarySwr.triggerChange()
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -52,7 +56,8 @@ export async function deleteLocalObjects(
 ): Promise<void> {
   await sqlDelete('objects', { fileId })
   if (triggerUpdate) {
-    await librarySwr.triggerChange()
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
   }
 }
 
@@ -61,7 +66,8 @@ export async function deleteManyLocalObjects(fileIds: string[]): Promise<void> {
   for (const fileId of fileIds) {
     await deleteLocalObjects(fileId, false)
   }
-  await librarySwr.triggerChange()
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 }
 
 export async function readLocalObjectsForFiles(

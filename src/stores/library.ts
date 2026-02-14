@@ -1,14 +1,11 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { create } from 'zustand'
 import { db } from '../db'
-import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 import { type FileRecord, type FileRecordRow, transformRow } from './files'
-import { librarySwr } from './librarySwr'
+import { libraryStats, useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
-
-export { librarySwr }
 
 type MediaCategory = 'Video' | 'Image' | 'Audio'
 const MEDIA_PREFIXES: Record<MediaCategory, string> = {
@@ -70,15 +67,12 @@ const PAGE_SIZE = 40
 export function useFileList() {
   const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
   const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-
   const categories = Array.from(selectedCategories ?? new Set())
   const categoriesKey = categories.length
     ? categories.slice().sort().join(',')
     : ''
 
-  const base = librarySwr.getKey(
-    `list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`,
-  )
+  const base = `library/list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -103,14 +97,7 @@ export function useFileList() {
     { revalidateOnFocus: false, revalidateAll: true },
   )
 
-  const debouncedMutate = useDebouncedCallback(() => swr.mutate(), 100)
-
-  useEffect(() => {
-    librarySwr.addChangeCallback('infiniteList', debouncedMutate)
-    return () => {
-      librarySwr.removeChangeCallback('infiniteList')
-    }
-  }, [debouncedMutate])
+  useOnLibraryListChange(() => swr.mutate())
 
   const pages = swr.data
 
@@ -130,7 +117,7 @@ export function useFileList() {
 
 // Count of library files excluding thumbnails.
 export function useLibraryCount() {
-  return useSWR(librarySwr.getKey('countWithoutThumbs'), async () => {
+  return useSWR(libraryStats.key('countNoThumbs'), async () => {
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NULL`,
     )

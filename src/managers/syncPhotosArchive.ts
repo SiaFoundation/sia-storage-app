@@ -7,7 +7,7 @@ import { logger } from '../lib/logger'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
-  mediaLibraryPermissionsSwr,
+  mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 import { createGetterAndSWRHook } from '../lib/selectors'
@@ -19,8 +19,10 @@ import {
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
 import { getFileStatsLocal } from '../stores/files'
-import { librarySwr } from '../stores/library'
-import { settingsSwr } from '../stores/settings'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from '../stores/librarySwr'
 
 const PAGE_SIZE = 50
 
@@ -69,7 +71,8 @@ export async function workBackward() {
       })),
     )
     if (files.length > 0) {
-      await librarySwr.triggerChange()
+      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryLists()
     } else {
       // Nothing was found so immediately start next interval.
       return 0
@@ -88,18 +91,21 @@ export const initSyncPhotosArchive = createServiceInterval({
 
 const defaultValue = 0
 
-export const [getAutoSyncPhotosArchive, useAutoSyncPhotosArchive] =
-  createGetterAndSWRHook(settingsSwr.getKey('autoSyncPhotosArchive'), () =>
-    getAsyncStorageBoolean('autoSyncPhotosArchive', false),
-  )
+export const [
+  getAutoSyncPhotosArchive,
+  useAutoSyncPhotosArchive,
+  autoSyncPhotosArchiveCache,
+] = createGetterAndSWRHook<boolean>(() =>
+  getAsyncStorageBoolean('autoSyncPhotosArchive', false),
+)
 
 export async function setAutoSyncPhotosArchive(value: boolean) {
   await setAsyncStorageBoolean('autoSyncPhotosArchive', value)
-  settingsSwr.triggerChange('autoSyncPhotosArchive')
+  await autoSyncPhotosArchiveCache.set(value)
   if (value) {
     ensureMediaLibraryPermission()
   }
-  mediaLibraryPermissionsSwr.triggerChange()
+  mediaLibraryPermissionsCache.invalidate()
 }
 
 export async function toggleAutoSyncPhotosArchive() {
@@ -108,14 +114,17 @@ export async function toggleAutoSyncPhotosArchive() {
   await setAutoSyncPhotosArchive(next)
 }
 
-export const [getPhotosArchiveCursor, usePhotosArchiveCursor] =
-  createGetterAndSWRHook(settingsSwr.getKey('photosArchiveCursor'), () =>
-    getAsyncStorageNumber('photosArchiveCursor', defaultValue),
-  )
+export const [
+  getPhotosArchiveCursor,
+  usePhotosArchiveCursor,
+  photosArchiveCursorCache,
+] = createGetterAndSWRHook<number>(() =>
+  getAsyncStorageNumber('photosArchiveCursor', defaultValue),
+)
 
 export async function setPhotosArchiveCursor(value: number) {
   await setAsyncStorageNumber('photosArchiveCursor', value)
-  settingsSwr.triggerChange('photosArchiveCursor')
+  await photosArchiveCursorCache.set(value)
 }
 
 export async function restartPhotosArchiveCursor() {

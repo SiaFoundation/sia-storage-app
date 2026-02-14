@@ -2,11 +2,8 @@ import { AppKey, type AppKeyInterface } from 'react-native-sia'
 import { hexArrayBufferCodec } from '../encoding/arrayBuffer'
 import { logger } from '../lib/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { buildSWRHelpers } from '../lib/swr'
 import { getSecureStoreJSON, setSecureStoreJSON } from './secureStore'
 import { getIndexerURL } from './settings'
-
-const appKeySwr = buildSWRHelpers('appKey')
 
 /**
  * AppKeys are stored per indexer URL. Each indexer has its own AppKey derived
@@ -66,17 +63,15 @@ export async function getAppKeyForIndexer(
 /**
  * Get the AppKey for the currently active indexer.
  */
-export const [getAppKey, useAppKey] = createGetterAndSWRHook<AppKey>(
-  appKeySwr.getKey(),
-  async () => {
+export const [getAppKey, useAppKey, appKeyCache] =
+  createGetterAndSWRHook<AppKey>(async () => {
     const indexerURL = await getIndexerURL()
     const appKey = await getAppKeyForIndexer(indexerURL)
     if (!appKey) {
       throw new Error('AppKey not found for active indexer')
     }
     return appKey
-  },
-)
+  })
 
 /**
  * Set the AppKey for a specific indexer URL.
@@ -91,7 +86,7 @@ export async function setAppKeyForIndexer(
   const appKeysMap = await getAppKeysMap()
   appKeysMap[indexerURL] = exported
   await setAppKeysMap(appKeysMap)
-  appKeySwr.triggerChange()
+  appKeyCache.invalidate()
 }
 
 /**
@@ -151,5 +146,5 @@ async function setAppKeysMap(map: AppKeysMap): Promise<void> {
 export async function clearAppKeys(): Promise<void> {
   await setSecureStoreJSON(APP_KEYS_SECURE_STORE_KEY, undefined, appKeysCodec)
   cachedAppKeys.clear()
-  appKeySwr.triggerChange()
+  appKeyCache.invalidate()
 }

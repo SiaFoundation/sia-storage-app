@@ -210,16 +210,6 @@ jest.mock('../../src/lib/fileReader', () => ({
   }),
 }))
 
-// Library SWR - keep as mock for simplicity, but include real query building functions
-jest.mock('../../src/stores/library', () => ({
-  ...jest.requireActual('../../src/stores/library'),
-  librarySwr: {
-    triggerChange: jest.fn(),
-    addChangeCallback: jest.fn(),
-    getKey: jest.fn((key: string) => key),
-  },
-}))
-
 // Suppress expected warnings from Expo modules
 const suppressedWarnings = [
   'EXNativeModulesProxy',

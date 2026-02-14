@@ -1,20 +1,17 @@
 import { Directory, File, Paths } from 'expo-file-system'
-import useSWR, { mutate } from 'swr'
+import useSWR from 'swr'
 import { db } from '../db'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { extFromMime } from '../lib/fileTypes'
 import { logger } from '../lib/logger'
-import { buildSWRHelpers } from '../lib/swr'
+import { swrCacheBy } from '../lib/swr'
 
 /**
  * Persistent file system used for storing local copies of files.
  */
 
-const { getKey, triggerChange } = buildSWRHelpers('fs/files')
-
-function swrKeyFsFileUri(fileId?: string) {
-  return [...getKey(fileId), 'uri']
-}
+/** Local filesystem URI for a file, keyed by file ID. */
+export const fsFileUriCache = swrCacheBy<string | null>()
 
 export type FsFileInfo = {
   id: string
@@ -29,10 +26,6 @@ export type FsMetaRow = {
 }
 
 export const fsStorageDirectory = new Directory(Paths.document, 'files')
-
-export function fsTriggerRefresh(fileId?: string): Promise<void> {
-  return triggerChange(fileId)
-}
 
 export function listFilesInFsStorageDirectory(): File[] {
   const info = fsStorageDirectory.info()
@@ -95,18 +88,18 @@ export async function getFsFileUri(file: FsFileInfo): Promise<string | null> {
 export async function removeFsFile(file: FsFileInfo): Promise<void> {
   const fsFile = getFsFileForId(file)
   const info = fsFile.info()
-  let mutated = false
+  let changed = false
   if (info.exists) {
     fsFile.delete()
-    mutated = true
+    changed = true
   }
   const meta = await readFsFileMetadata(file.id)
   if (meta) {
     await deleteFsFileMetadata(file.id)
-    mutated = true
+    changed = true
   }
-  if (mutated) {
-    fsTriggerRefresh(file.id)
+  if (changed) {
+    await fsFileUriCache.set(null, file.id)
   }
 }
 
@@ -131,12 +124,12 @@ export async function copyFileToFs(
     addedAt: previous?.addedAt ?? Date.now(),
     usedAt: Date.now(),
   })
-  await mutate(swrKeyFsFileUri(file.id), target.uri, { revalidate: false })
+  await fsFileUriCache.set(target.uri, file.id)
   return target.uri
 }
 
 export function useFsFileUri(file?: FsFileInfo) {
-  return useSWR(swrKeyFsFileUri(file?.id), () => {
+  return useSWR(fsFileUriCache.key(file?.id ?? ''), () => {
     return file ? getFsFileUri(file) : null
   })
 }

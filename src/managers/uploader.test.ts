@@ -106,14 +106,6 @@ jest.mock('../encoding/fileMetadata', () => ({
   encodeFileMetadata: jest.fn(() => new Uint8Array()),
 }))
 
-jest.mock('../stores/library', () => ({
-  librarySwr: {
-    triggerChange: jest.fn(),
-    addChangeCallback: jest.fn(),
-    getKey: jest.fn((key: string) => key),
-  },
-}))
-
 const TEST_INDEXER_URL = 'https://test.indexer'
 
 async function createTestFile(id: string, size = 1000): Promise<FileEntry> {

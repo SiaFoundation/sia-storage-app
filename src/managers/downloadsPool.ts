@@ -7,7 +7,6 @@ import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
 } from '../stores/asyncStore'
-import { settingsSwr } from '../stores/settings'
 
 let downloadPool: SlotPool | null = null
 const initDownloadOnce = new SingleInit()
@@ -42,10 +41,10 @@ export async function setMaxDownloads(value: number) {
   const clamped = Math.max(1, Math.floor(Number(value) || 1))
   await setAsyncStorageNumber('maxDownloads', clamped)
   setDownloadMaxSlots(clamped)
-  settingsSwr.triggerChange('maxDownloads')
+  await maxDownloadsCache.set(clamped)
 }
 
-export const [getMaxDownloads, useMaxDownloads] = createGetterAndSWRHook(
-  settingsSwr.getKey('maxDownloads'),
-  () => getAsyncStorageNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS),
-)
+export const [getMaxDownloads, useMaxDownloads, maxDownloadsCache] =
+  createGetterAndSWRHook<number>(() =>
+    getAsyncStorageNumber('maxDownloads', DEFAULT_MAX_DOWNLOADS),
+  )

@@ -9,7 +9,7 @@ import {
   type SortDir,
   useLibrary,
 } from './library'
-import { librarySwr } from './librarySwr'
+import { useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
 
 const FILE_COLUMNS =
@@ -473,31 +473,23 @@ export function useFileCarousel({
     populateCaches,
   ])
 
-  const handleLibraryChange = useCallback(async () => {
+  useOnLibraryListChange(() => {
     if (isLoading) return
-
     const currentFileID = currentFileIdRef.current
     if (!currentFileID) return
 
-    try {
-      const row = await db().getFirstAsync<{ id: string }>(
+    db()
+      .getFirstAsync<{ id: string }>(
         'SELECT id FROM files WHERE id = ? LIMIT 1',
         currentFileID,
       )
-      if (!row) {
-        onDeleted?.()
-      }
-    } catch (_e) {
-      // Silently ignore errors during sync handling.
-    }
-  }, [isLoading, onDeleted])
-
-  useEffect(() => {
-    librarySwr.addChangeCallback('carousel', handleLibraryChange)
-    return () => {
-      librarySwr.removeChangeCallback('carousel')
-    }
-  }, [handleLibraryChange])
+      .then((row) => {
+        if (!row) {
+          onDeleted?.()
+        }
+      })
+      .catch(() => {})
+  })
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when caches update
   const getFileAtIndex = useCallback(
