@@ -78,6 +78,7 @@ describe('sdk store', () => {
       object: jest.fn(),
       saveObject: jest.fn(),
       appKey: jest.fn(() => mockAppKey),
+      objectEvents: jest.fn().mockResolvedValue([]),
     } as unknown as SdkInterface
 
     // Default: mnemonic validation returns null (no hash to validate against)

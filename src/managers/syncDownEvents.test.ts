@@ -142,14 +142,14 @@ describe('syncDownEvents', () => {
 
   test('early exit when not connected', async () => {
     getIsConnectedMock.mockReturnValue(false)
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
     expect(getSdkMock).not.toHaveBeenCalled()
   })
 
   test('early exit when no sdk', async () => {
     getIsConnectedMock.mockReturnValue(true)
     getSdkMock.mockReturnValue(null)
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
     const cur = await getSyncDownCursor()
     expect(cur).toBeUndefined()
   })
@@ -194,7 +194,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     expect(getSdkMock).toHaveBeenCalledTimes(1)
 
@@ -241,7 +241,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Should only call once since batch is not full.
     expect(getSdkMock).toHaveBeenCalledTimes(1)
@@ -290,7 +290,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     expect(removeFsFileMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'file-1' }),
@@ -352,7 +352,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     expect(removeUploadMock).toHaveBeenCalledWith('file-1')
     const updatedFile = await readFileRecordByObjectId('obj-1')
@@ -383,7 +383,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     const newFile = await readFileRecordByObjectId('obj-1')
     expect(newFile).not.toBeNull()
@@ -439,7 +439,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Verify all metadata fields were merged from remote since it's newer.
     const updatedFile = await readFileRecordByObjectId('obj-1')
@@ -518,7 +518,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Verify local metadata was preserved since it's newer.
     const file2 = await readFileRecordByObjectId('obj-1')
@@ -559,7 +559,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     const file = await readFileRecordByObjectId('obj-1')
     expect(file).toBeNull()
@@ -611,7 +611,7 @@ describe('syncDownEvents', () => {
     // Simulate error during file system removal (cleanup phase).
     jest.mocked(removeFsFile).mockRejectedValueOnce(new Error('FS error'))
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Cursor should have advanced because DB commit succeeded (FS cleanup is non-fatal).
     const cursor = await getSyncDownCursor()
@@ -676,7 +676,7 @@ describe('syncDownEvents', () => {
       .mocked(getAppKeyForIndexer)
       .mockRejectedValueOnce(new Error('AppKey error'))
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Cursor should not have advanced because error broke the loop.
     const cursor = await getSyncDownCursor()
@@ -711,7 +711,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // Verify the thumbnail was created.
     const thumb = await readFileRecordByObjectId('obj-thumb')
@@ -758,7 +758,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
 
     // First event creates the thumbnail.
     const t1 = await readFileRecordByObjectId('obj-thumb-1')
@@ -826,7 +826,7 @@ describe('syncDownEvents', () => {
     } as any)
 
     // First run.
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
     const cursor1 = await getSyncDownCursor()
     expect(cursor1).toEqual({
       id: 'obj-1',
@@ -834,7 +834,7 @@ describe('syncDownEvents', () => {
     })
 
     // Second run.
-    await syncDownEvents()
+    await syncDownEvents(new AbortController().signal)
     const cursor2 = await getSyncDownCursor()
     expect(cursor2).toEqual({
       id: 'obj-2',
@@ -897,7 +897,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    const result = await syncDownEvents()
+    const result = await syncDownEvents(new AbortController().signal)
     expect(result).toBe(0)
   })
 
@@ -925,7 +925,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce(events),
     } as any)
 
-    const result = await syncDownEvents()
+    const result = await syncDownEvents(new AbortController().signal)
     expect(result).toBeUndefined()
   })
 
@@ -934,7 +934,7 @@ describe('syncDownEvents', () => {
       objectEvents: jest.fn().mockResolvedValueOnce([]),
     } as any)
 
-    const result = await syncDownEvents()
+    const result = await syncDownEvents(new AbortController().signal)
     expect(result).toBeUndefined()
   })
 })

@@ -268,7 +268,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
   return summary
 }
 
-export const initThumbnailScanner = createServiceInterval({
+export const { init: initThumbnailScanner } = createServiceInterval({
   name: 'thumbnailScanner',
   worker: async () => {
     await runThumbnailScanner()

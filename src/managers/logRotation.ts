@@ -46,7 +46,7 @@ export async function initLogRotation(): Promise<void> {
   initLogRotationInterval()
 }
 
-const initLogRotationInterval = createServiceInterval({
+const { init: initLogRotationInterval } = createServiceInterval({
   name: 'logRotation',
   worker: async () => {
     await runLogRotation()

@@ -3,7 +3,7 @@ import { PERF_MONITOR_INTERVAL } from '../config'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 
-export const initPerfMonitor = createServiceInterval({
+export const { init: initPerfMonitor } = createServiceInterval({
   name: 'perfMonitor',
   worker: () => {
     const cpu = getCpuUsage()

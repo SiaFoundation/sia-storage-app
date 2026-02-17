@@ -79,7 +79,9 @@ type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
  * Returns 0 when multiple events were fetched (run again immediately),
  * or void to use the default interval.
  */
-export async function syncDownEvents(): Promise<number | void> {
+export async function syncDownEvents(
+  signal: AbortSignal,
+): Promise<number | void> {
   logger.debug('syncDownEvents', 'tick')
   const isConnected = getIsConnected()
   if (!isConnected) {
@@ -101,6 +103,7 @@ export async function syncDownEvents(): Promise<number | void> {
   let totalEventsFetched = 0
 
   while (true) {
+    if (signal.aborted) break
     try {
       const cursor = await getSyncDownCursor()
       logger.debug('syncDownEvents', 'syncing', {
@@ -123,7 +126,7 @@ export async function syncDownEvents(): Promise<number | void> {
       }
 
       const prevTotal = counts.added + counts.deleted + counts.existing
-      await processBatch(events, counts)
+      await processBatch(events, counts, signal)
       const batchChanged =
         counts.added + counts.deleted + counts.existing > prevTotal
 
@@ -171,7 +174,11 @@ type BatchDedup = {
   byThumbKey: Map<string, FileRecordRow>
 }
 
-async function processBatch(events: ObjectEvent[], counts: Counts) {
+async function processBatch(
+  events: ObjectEvent[],
+  counts: Counts,
+  signal: AbortSignal,
+) {
   // Phase 1: Prepare (no locks held)
   const prepared: PreparedEvent[] = []
   const dedup: BatchDedup = {
@@ -180,6 +187,7 @@ async function processBatch(events: ObjectEvent[], counts: Counts) {
   }
 
   for (const { object, deleted, id } of events) {
+    if (signal.aborted) return
     if (deleted) {
       const result = await prepareDelete(id)
       if (result) prepared.push(result)
@@ -190,7 +198,7 @@ async function processBatch(events: ObjectEvent[], counts: Counts) {
     if (result) prepared.push(result)
   }
 
-  if (prepared.length === 0) return
+  if (prepared.length === 0 || signal.aborted) return
 
   // Phase 2: Commit (single transaction, per-event error handling)
   await withTransactionLock(async () => {
@@ -385,12 +393,13 @@ async function prepareFileRecord(
   }
 }
 
-export const initSyncDownEvents = createServiceInterval({
-  name: 'syncDownEvents',
-  worker: syncDownEvents,
-  getState: getAutoSyncDownEvents,
-  interval: SYNC_EVENTS_INTERVAL,
-})
+export const { init: initSyncDownEvents, triggerNow: triggerSyncDownEvents } =
+  createServiceInterval({
+    name: 'syncDownEvents',
+    worker: syncDownEvents,
+    getState: getAutoSyncDownEvents,
+    interval: SYNC_EVENTS_INTERVAL,
+  })
 
 // Persistent cursor saved for next batch.
 

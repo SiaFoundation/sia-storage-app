@@ -93,6 +93,10 @@ export async function setSyncUpCursor(
   await setAsyncStorageJSON('syncUpCursor', value, syncUpCursorCodec)
 }
 
+export async function resetSyncUpCursor(): Promise<void> {
+  await setSyncUpCursor(undefined)
+}
+
 /**
  * Iterate files pinned to the current indexer, fetch latest remote metadata,
  * diff against local file metadata, and if local is newer, push to remote.
@@ -182,7 +186,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   }
 }
 
-export const initSyncUpMetadata = createServiceInterval({
+export const { init: initSyncUpMetadata } = createServiceInterval({
   name: 'syncUpMetadata',
   worker: async () => {
     return runSyncUpMetadata(SYNC_UP_METADATA_BATCH_SIZE)
