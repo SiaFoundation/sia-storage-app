@@ -82,7 +82,7 @@ export async function workBackward() {
   }
 }
 
-export const initSyncPhotosArchive = createServiceInterval({
+export const { init: initSyncPhotosArchive } = createServiceInterval({
   name: 'syncPhotosArchive',
   worker: workBackward,
   getState: async () => getAutoSyncPhotosArchive(),

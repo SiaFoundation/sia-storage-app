@@ -65,7 +65,7 @@ async function workForward(): Promise<void> {
   }
 }
 
-export const initSyncNewPhotos = createServiceInterval({
+export const { init: initSyncNewPhotos } = createServiceInterval({
   name: 'syncNewPhotos',
   worker: workForward,
   getState: () => getAutoSyncNewPhotos(),

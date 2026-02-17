@@ -1,29 +1,32 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
 import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { type InitStep, setAppState } from '../stores/app'
 import { clearAppKeys } from '../stores/appKey'
-import { cancelAllDownloads } from '../stores/downloads'
-import { deleteAllFileRecords } from '../stores/files'
+import { useAuthWebViewStore } from '../stores/authWebView'
+import { cancelAllDownloads, useDownloadsStore } from '../stores/downloads'
+import { useFileSelectionStore } from '../stores/fileSelection'
 import { ensureFsStorageDirectory } from '../stores/fs'
+import { useLibrary } from '../stores/library'
+import { invalidateCacheLibraryLists } from '../stores/librarySwr'
 import { initLogger } from '../stores/logs'
 import { clearMnemonicHash } from '../stores/mnemonic'
-import { reconnectIndexer, resetSdk } from '../stores/sdk'
-import { getHasOnboarded, setHasOnboarded } from '../stores/settings'
+import { reconnectIndexer, useSdkStore } from '../stores/sdk'
+import { getHasOnboarded } from '../stores/settings'
+import { useSheetsStore } from '../stores/sheets'
+import { useSyncDownStore } from '../stores/syncDown'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
-import { clearAllUploads } from '../stores/uploads'
+import { clearAllUploads, useUploadsStore } from '../stores/uploads'
 import { initBackgroundTasks } from './backgroundTasks'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents, resetSyncDownCursor } from './syncDownEvents'
-import { initSyncNewPhotos, resetPhotosNewCursor } from './syncNewPhotos'
-import {
-  initSyncPhotosArchive,
-  resetPhotosArchiveCursor,
-} from './syncPhotosArchive'
-import { initSyncUpMetadata } from './syncUpMetadata'
+import { initSyncNewPhotos } from './syncNewPhotos'
+import { initSyncPhotosArchive } from './syncPhotosArchive'
+import { initSyncUpMetadata, resetSyncUpCursor } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
 
@@ -83,19 +86,27 @@ export async function initApp(): Promise<void> {
         await runFsEvictionScanner()
       },
     })
+
+    steps.push({
+      id: 'services',
+      label: 'Starting background services',
+      message: 'Launching background services...',
+      runner: async () => {
+        initSyncDownEvents()
+        initSyncNewPhotos()
+        initSyncPhotosArchive()
+        initBackgroundTasks()
+        initSyncUpMetadata()
+        initThumbnailScanner()
+      },
+    })
   }
 
   steps.push({
-    id: 'services',
-    label: 'Starting background services',
-    message: 'Launching background services...',
+    id: 'monitoring',
+    label: 'Starting monitoring',
+    message: 'Launching monitoring...',
     runner: async () => {
-      initSyncDownEvents()
-      initSyncNewPhotos()
-      initSyncPhotosArchive()
-      initBackgroundTasks()
-      initSyncUpMetadata()
-      initThumbnailScanner()
       initPerfMonitor()
       await initLogRotation()
     },
@@ -117,15 +128,18 @@ export async function shutdownApp() {
 }
 
 export async function resetData() {
-  await deleteAllFileRecords()
   await resetDb()
   await resetSyncDownCursor()
+  await resetSyncUpCursor()
   await cancelAllTransfers()
 }
 
 export async function resetApp() {
+  // 1. Show splash screen immediately.
   startInitState()
-  shutdownAllServiceIntervals()
+
+  // 2. Stop all service intervals and wait for in-flight workers to finish.
+  await shutdownAllServiceIntervals()
 
   await runSteps([
     {
@@ -133,19 +147,55 @@ export async function resetApp() {
       label: 'Resetting application',
       message: 'Clearing data...',
       runner: async () => {
-        await resetData()
+        // 3. Cancel uploads and downloads (side-effect cleanup).
+        await cancelAllTransfers()
+
+        // 4. Drop and recreate all database tables.
+        await resetDb()
+
+        // 5. Wipe all persisted state.
+        await AsyncStorage.clear()
         await clearAppKeys()
         await clearMnemonicHash()
-        await setHasOnboarded(false)
-        await resetSdk()
-        await resetPhotosNewCursor()
-        await resetPhotosArchiveCursor()
+
+        // 6. Reset all in-memory state (zustand stores).
+        resetAllStores()
+
+        // 7. Clear SWR cache (must come after store resets to avoid races).
         await mutate(() => true, undefined, { revalidate: false })
       },
     },
   ])
 
+  // 8. Re-initialize the app from clean state.
   await initApp()
+}
+
+function resetAllStores() {
+  useSdkStore.setState({
+    sdk: null,
+    isConnected: false,
+    connectionError: null,
+    isAuthing: false,
+    isReconnecting: false,
+    pendingApproval: null,
+  })
+  useSyncDownStore.setState({ isSyncing: false })
+  useUploadsStore.setState({ uploads: {} })
+  useDownloadsStore.setState({ downloads: {} })
+  useFileSelectionStore.setState({
+    selectedFileIds: new Set(),
+    isSelectionMode: false,
+  })
+  useSheetsStore.setState({ openName: '' })
+  useAuthWebViewStore.setState({ visible: false, url: '', resolver: null })
+  useLibrary.setState({
+    sortBy: 'DATE',
+    sortDir: 'DESC',
+    selectedCategories: new Set(),
+    searchQuery: '',
+  })
+  invalidateCacheLibraryLists()
 }
 
 function startInitState(): void {

@@ -108,6 +108,8 @@ export async function connectSdk(): Promise<SdkInterface | null> {
 
     if (sdk) {
       await setSdkWithUploader(sdk)
+      // Warm up the HTTP connection pool so the first real request doesn't timeout.
+      sdk.objectEvents(undefined, 1).catch(() => {})
       return sdk
     }
 

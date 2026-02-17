@@ -1,12 +1,14 @@
 import { logger } from './logger'
 
-// Scheduler state for a service: the latest token and its timeout handle.
+// Scheduler state for a service: the latest token, its timeout handle, and abort controller.
 type SchedulerState = {
   token: number
   timeoutId: NodeJS.Timeout | null
+  abortController: AbortController
 }
 
 const schedulerStateMap = new Map<string, SchedulerState>()
+const runningPromises = new Set<Promise<void>>()
 
 // Pause/resume state for testing
 let paused = false
@@ -48,23 +50,37 @@ export function createServiceInterval({
   interval,
 }: {
   name: string
-  worker: () => void | undefined | number | Promise<void | undefined | number>
+  worker: (
+    signal: AbortSignal,
+  ) => void | undefined | number | Promise<void | undefined | number>
   getState: () => Promise<boolean>
   interval: number
-}): () => void {
+}): { init: () => void; triggerNow: () => void } {
+  let running = false
+  let runTick: (() => void) | null = null
+
   const init = () => {
     const existing = schedulerStateMap.get(name)
     if (existing?.timeoutId) {
       clearTimeout(existing.timeoutId)
     }
+    existing?.abortController.abort()
 
     logger.debug(name, 'initializing')
 
     // Increment the token to invalidate any previously scheduled or in-flight ticks.
     const token = (existing?.token ?? 0) + 1
-    schedulerStateMap.set(name, { token, timeoutId: null })
+    const abortController = new AbortController()
+    running = false
+    schedulerStateMap.set(name, { token, timeoutId: null, abortController })
 
-    async function runTick() {
+    runTick = () => {
+      const p = runTickAsync()
+      runningPromises.add(p)
+      p.finally(() => runningPromises.delete(p))
+    }
+
+    async function runTickAsync() {
       // Guard against stale ticks created before the latest init.
       const current = schedulerStateMap.get(name)
       if (!current || current.token !== token) return
@@ -81,13 +97,17 @@ export function createServiceInterval({
         return
       }
 
+      running = true
       let nextInterval = interval
       try {
-        const customInterval = await Promise.resolve(worker())
+        const customInterval = await Promise.resolve(
+          worker(abortController.signal),
+        )
         if (typeof customInterval === 'number') {
           nextInterval = customInterval
         }
       } finally {
+        running = false
         scheduleNextRun(nextInterval)
       }
     }
@@ -103,21 +123,34 @@ export function createServiceInterval({
         return
       }
 
-      const timeoutId = setTimeout(runTick, interval)
-      schedulerStateMap.set(name, { token, timeoutId })
+      const timeoutId = setTimeout(runTick!, interval)
+      schedulerStateMap.set(name, { token, timeoutId, abortController })
     }
 
     scheduleNextRun(interval)
   }
 
-  return init
+  const triggerNow = () => {
+    const current = schedulerStateMap.get(name)
+    if (!current || !runTick || running) return
+    if (current.timeoutId) {
+      clearTimeout(current.timeoutId)
+      schedulerStateMap.set(name, { ...current, timeoutId: null })
+    }
+    runTick()
+  }
+
+  return { init, triggerNow }
 }
 
-export function shutdownAllServiceIntervals() {
+export async function shutdownAllServiceIntervals() {
   schedulerStateMap.forEach((state) => {
     if (state.timeoutId) {
       clearTimeout(state.timeoutId)
     }
+    state.abortController.abort()
   })
   schedulerStateMap.clear()
+  await Promise.allSettled(runningPromises)
+  runningPromises.clear()
 }
