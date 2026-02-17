@@ -23,6 +23,7 @@ import {
   deleteFileRecord,
   type FileMetadata,
   type FileRecord,
+  type FileRecordRow,
   readFileRecordByContentHash,
   readFileRecordByObjectId,
   updateFileRecord,
@@ -35,6 +36,7 @@ import {
 import { upsertLocalObject } from '../stores/localObjects'
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
+import { setSyncDownState } from '../stores/syncDown'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { readThumbnailRecordByThumbForHashAndSize } from '../stores/thumbnails'
 import { removeUpload } from '../stores/uploads'
@@ -49,13 +51,13 @@ type Counts = {
 
 type PreparedCreate = {
   kind: 'create'
-  fileRecord: Omit<FileRecord, 'objects'>
+  fileRecord: FileRecordRow
   localObject: LocalObject
 }
 
 type PreparedUpdate = {
   kind: 'update'
-  fileRecord: Omit<FileRecord, 'objects'>
+  fileRecord: FileRecordRow
   localObject: LocalObject
   fileId: string
 }
@@ -63,7 +65,7 @@ type PreparedUpdate = {
 type PreparedDelete = {
   kind: 'delete'
   fileId: string
-  fileRecord: Omit<FileRecord, 'objects'>
+  fileRecord: FileRecordRow
 }
 
 type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
@@ -109,6 +111,10 @@ export async function syncDownEvents(): Promise<number | void> {
       const events = await sdk.objectEvents(cursor, batchSize)
       totalEventsFetched += events.length
 
+      if (totalEventsFetched > 1) {
+        setSyncDownState({ isSyncing: true })
+      }
+
       // If the batch size is 1, we are probably synced and repeatedly polling the last event.
       if (events.length === 1) {
         logger.debug('syncDownEvents', 'batch', { size: events.length })
@@ -153,14 +159,16 @@ export async function syncDownEvents(): Promise<number | void> {
     deleted: counts.deleted,
   })
 
+  setSyncDownState({ isSyncing: false })
+
   if (totalEventsFetched > 1) {
     return 0 // Zero interval — poll again immediately.
   }
 }
 
 type BatchDedup = {
-  byContentHash: Map<string, Omit<FileRecord, 'objects'>>
-  byThumbKey: Map<string, Omit<FileRecord, 'objects'>>
+  byContentHash: Map<string, FileRecordRow>
+  byThumbKey: Map<string, FileRecordRow>
 }
 
 async function processBatch(events: ObjectEvent[], counts: Counts) {
@@ -309,7 +317,7 @@ async function prepareFileRecord(
   metadata: FileMetadata,
   dedup: BatchDedup,
 ): Promise<PreparedCreate | PreparedUpdate> {
-  let inBatch: Omit<FileRecord, 'objects'> | undefined
+  let inBatch: FileRecordRow | undefined
   if (!existingFile) {
     inBatch = dedup.byContentHash.get(metadata.hash)
     if (!inBatch && metadata.thumbForHash && metadata.thumbSize) {
@@ -357,7 +365,7 @@ async function prepareFileRecord(
     indexerURL,
     object,
   )
-  const fileRecord: Omit<FileRecord, 'objects'> = {
+  const fileRecord: FileRecordRow = {
     id: fileId,
     ...metadata,
     localId: null,
