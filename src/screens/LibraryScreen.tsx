@@ -40,12 +40,14 @@ import {
 } from '../stores/library'
 import { useLibraryViewMode } from '../stores/settings'
 import { openSheet } from '../stores/sheets'
+import { useIsSyncingDown } from '../stores/syncDown'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
 export function LibraryScreen({ route, navigation }: Props) {
   const viewMode = useLibraryViewMode()
+  const isSyncing = useIsSyncingDown()
   const { selectedCategories, searchQuery } = useLibrary()
   const files = useFileList()
   const fileCount = useLibraryCount()
@@ -231,6 +233,13 @@ export function LibraryScreen({ route, navigation }: Props) {
             {files.error ? <LibraryLocalResetButton /> : null}
           </View>
         )
+      ) : isSyncing &&
+        searchQuery.trim().length === 0 &&
+        selectedCategories.size === 0 ? (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator color={palette.blue[400]} />
+          <Text style={styles.emptyTitle}>Syncing your files</Text>
+        </View>
       ) : (
         <View style={styles.emptyWrap}>
           <Image
