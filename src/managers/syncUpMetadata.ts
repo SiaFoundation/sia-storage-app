@@ -1,31 +1,37 @@
 import { z } from 'zod'
 import {
   SYNC_UP_METADATA_BATCH_SIZE,
+  SYNC_UP_METADATA_CONCURRENCY,
   SYNC_UP_METADATA_INTERVAL,
 } from '../config'
 import {
   decodeFileMetadata,
   encodeFileMetadata,
+  MAX_SUPPORTED_VERSION,
 } from '../encoding/fileMetadata'
 import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
+import { SlotPool } from '../lib/slotPool'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import {
-  type FileMetadata,
   fileMetadataKeys,
   readAllFileRecords,
+  readAllFileRecordsCount,
 } from '../stores/files'
 import { getIsConnected, getPinnedObject, updateMetadata } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
+import {
+  getIsSyncingUpMetadata,
+  setSyncUpMetadataState,
+} from '../stores/syncUpMetadata'
 
 type DiffEntry = { local: unknown; remote: unknown }
-type DiffResult = Record<keyof FileMetadata, DiffEntry>
 
 export function diffFileMetadata(
-  localMeta: FileMetadata,
-  remoteMeta: FileMetadata,
-): Partial<DiffResult> {
-  const diffs: Partial<DiffResult> = {}
+  localMeta: Record<string, unknown>,
+  remoteMeta: Record<string, unknown>,
+): Record<string, DiffEntry> {
+  const diffs: Record<string, DiffEntry> = {}
   for (const key of fileMetadataKeys) {
     const l = localMeta[key]
     const r = remoteMeta[key]
@@ -106,6 +112,7 @@ export async function resetSyncUpCursor(): Promise<void> {
 export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   if (!getIsConnected()) {
     logger.debug('syncUpMetadata', 'skipped', { reason: 'not_connected' })
+    setSyncUpMetadataState({ isSyncing: false })
     return
   }
   const indexerURL = await getIndexerURL()
@@ -128,51 +135,127 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
   })
   if (batch.length === 0) {
     logger.debug('syncUpMetadata', 'no_updates')
+    setSyncUpMetadataState({ isSyncing: false, processed: 0, total: 0 })
     return
   }
-  for (const f of batch) {
-    const obj = f.objects[indexerURL]
-    if (!obj || !obj.id) continue
-
-    const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
-
-    const remote = await tryWithLog(
-      () => getPinnedObject(obj.id),
-      'getPinnedObject',
-      ctx,
-    )
-    if (!remote) continue
-
-    const remoteMeta = await tryWithLog(
-      () => decodeFileMetadata(remote.metadata()),
-      'decodeFileMetadata',
-      ctx,
-    )
-    if (!remoteMeta) continue
-
-    const diffs = diffFileMetadata(f, remoteMeta)
-    if (Object.keys(diffs).length === 0) continue
-
-    const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
-    logger.info('syncUpMetadata', 'metadata_diff', {
-      fileId: f.id,
-      objectId: obj.id,
-      localUpdatedAt: f.updatedAt,
-      remoteUpdatedAt: remoteMeta.updatedAt,
-      newerSide: isLocalNewer ? 'local' : 'remote',
-      diffs,
-    })
-
-    if (isLocalNewer) {
-      await tryWithLog(
-        () => updateMetadata(remote, encodeFileMetadata(f)),
-        'updateMetadata',
-        ctx,
-      )
+  if (!getIsSyncingUpMetadata()) {
+    const queryOpts = {
+      order: 'ASC' as const,
+      orderBy: 'updatedAt' as const,
+      pinned: { indexerURL, isPinned: true },
+      after: after ? { value: after.updatedAt, id: after.id } : undefined,
     }
+    const total = await readAllFileRecordsCount(queryOpts)
+    setSyncUpMetadataState({ isSyncing: true, processed: 0, total })
+  }
+  let hasErrors = false
+  const pool = new SlotPool(SYNC_UP_METADATA_CONCURRENCY)
+  await Promise.all(
+    batch.map((f) => {
+      const obj = f.objects[indexerURL]
+      if (!obj || !obj.id) return
+      if (f.kind === 'thumb' && !f.thumbForId) return
+      return pool.withSlot(async () => {
+        const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
+
+        const remote = await tryWithLog(
+          () => getPinnedObject(obj.id),
+          'getPinnedObject',
+          ctx,
+        )
+        if (!remote) {
+          hasErrors = true
+          return
+        }
+
+        const remoteMeta = await tryWithLog(
+          () => decodeFileMetadata(remote.metadata()),
+          'decodeFileMetadata',
+          ctx,
+        )
+        if (!remoteMeta) {
+          hasErrors = true
+          return
+        }
+
+        let remoteVersion = 0
+        try {
+          const raw = JSON.parse(new TextDecoder().decode(remote.metadata()))
+          remoteVersion = typeof raw.version === 'number' ? raw.version : 0
+        } catch {
+          // Ignore parse errors — remoteMeta decode already handles this.
+        }
+        if (remoteVersion > MAX_SUPPORTED_VERSION) {
+          logger.warn('syncUpMetadata', 'skipping_newer_version', {
+            ...ctx,
+            remoteVersion,
+            maxSupported: MAX_SUPPORTED_VERSION,
+          })
+          return
+        }
+
+        const diffs = diffFileMetadata(f, remoteMeta)
+        // v0→v1 compat: Don't overwrite a remote ID that was already set by
+        // another device. First device to push sets the canonical ID; others
+        // adopt it via syncDown. Can be removed once all devices run v1.
+        if (remoteMeta.id && diffs.id) {
+          delete diffs.id
+        }
+        if (Object.keys(diffs).length === 0) return
+
+        const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
+        logger.info('syncUpMetadata', 'metadata_diff', {
+          fileId: f.id,
+          objectId: obj.id,
+          localUpdatedAt: f.updatedAt,
+          remoteUpdatedAt: remoteMeta.updatedAt,
+          newerSide: isLocalNewer ? 'local' : 'remote',
+          diffs,
+        })
+
+        if (isLocalNewer) {
+          const fileToEncode =
+            remoteMeta.id && remoteMeta.id !== f.id
+              ? { ...f, id: remoteMeta.id }
+              : f
+          logger.info('syncUpMetadata', 'pushing_v1', {
+            fileId: fileToEncode.id,
+            objectId: obj.id,
+            kind: fileToEncode.kind,
+            thumbForId: fileToEncode.thumbForId,
+            thumbForHash: remoteMeta.thumbForHash,
+            thumbSize: fileToEncode.thumbSize,
+          })
+          const result = await tryWithLog(
+            () =>
+              updateMetadata(
+                remote,
+                encodeFileMetadata(fileToEncode, {
+                  thumbForHash: remoteMeta.thumbForHash,
+                }),
+              ),
+            'updateMetadata',
+            ctx,
+          )
+          if (result === null) {
+            hasErrors = true
+            return
+          }
+        }
+      })
+    }),
+  )
+  setSyncUpMetadataState((s) => ({
+    processed: s.processed + batch.length,
+  }))
+  if (hasErrors) {
+    logger.warn('syncUpMetadata', 'batch_had_errors_cursor_not_advanced')
+    setSyncUpMetadataState({ isSyncing: false, processed: 0, total: 0 })
+    return
   }
   const last = batch[batch.length - 1]
   if (batch.length < batchSize) {
+    setSyncUpMetadataState({ isSyncing: false, processed: 0, total: 0 })
     await setSyncUpCursor({
       updatedAt: last.updatedAt + 1,
       id: last.id,

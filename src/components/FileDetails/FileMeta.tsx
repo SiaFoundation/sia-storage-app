@@ -10,8 +10,8 @@ import { type FileRecord, updateFileRecord } from '../../stores/files'
 import { getFsFileUri } from '../../stores/fs'
 import { useShowAdvanced } from '../../stores/settings'
 import {
-  readThumbnailsByHash,
-  thumbnailsByHashCache,
+  readThumbnailsByFileId,
+  thumbnailsByFileIdCache,
 } from '../../stores/thumbnails'
 import { colors, palette } from '../../styles/colors'
 import { RowGroup } from '../Group'
@@ -40,9 +40,9 @@ export function FileMeta({
   })
   const pinnedObjects = usePinnedObjects(file)
   const thumbnails = useSWR(
-    showAdvanced.data ? thumbnailsByHashCache.key(file.hash) : null,
+    showAdvanced.data ? thumbnailsByFileIdCache.key(file.id) : null,
     async () => {
-      const records = await readThumbnailsByHash(file.hash)
+      const records = await readThumbnailsByFileId(file.id)
       return Promise.all(
         records.map(async (thumb) => ({
           record: thumb,

@@ -21,12 +21,16 @@ import { logger } from '../../lib/logger'
 import { migration_0001_init_schema } from './0001_init_schema'
 import { migration_0002_keychain_accessibility } from './0002_keychain_accessibility'
 import { migration_0003_logs_data_column } from './0003_logs_data_column'
+import { migration_0004_hash_and_thumbs } from './0004_hash_and_thumbs'
+import { migration_0005_reset_sync_up_cursor } from './0005_reset_sync_up_cursor'
 import type { Migration, MigrationProgressHandler } from './types'
 
 const migrations: Migration[] = [
   migration_0001_init_schema,
   migration_0002_keychain_accessibility,
   migration_0003_logs_data_column,
+  migration_0004_hash_and_thumbs,
+  migration_0005_reset_sync_up_cursor,
 ]
 
 export async function runMigrations(

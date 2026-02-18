@@ -96,6 +96,7 @@ function createFileEntry(id: string, size = 1000): FileEntry {
       name: `${id}.txt`,
       size,
       type: 'text/plain',
+      kind: 'file',
       hash: 'hash',
       createdAt: Date.now(),
       updatedAt: Date.now(),

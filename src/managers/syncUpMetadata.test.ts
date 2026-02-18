@@ -72,13 +72,14 @@ describe('syncUpMetadata', () => {
       id: 'file-a',
       name: 'a.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 100,
       hash: 'hash-a',
       createdAt: 100,
       updatedAt: 200, // local newer
       localId: null,
       addedAt: 100,
-      thumbForHash: undefined,
+      thumbForId: undefined,
       thumbSize: undefined,
     }
     await createFileRecordWithLocalObject(
@@ -97,13 +98,14 @@ describe('syncUpMetadata', () => {
       id: 'file-b',
       name: 'b.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 200,
       hash: 'hash-b',
       createdAt: 110,
       updatedAt: 100, // local older
       localId: null,
       addedAt: 110,
-      thumbForHash: undefined,
+      thumbForId: undefined,
       thumbSize: undefined,
     }
     await createFileRecordWithLocalObject(
@@ -128,7 +130,7 @@ describe('syncUpMetadata', () => {
       hash: 'hash-a',
       createdAt: 100,
       updatedAt: 150, // remote older -> local should win
-      thumbForHash: undefined,
+      thumbForId: undefined,
       thumbSize: undefined,
     }
     const remoteB = {
@@ -138,7 +140,7 @@ describe('syncUpMetadata', () => {
       hash: 'hash-b',
       createdAt: 110,
       updatedAt: 200, // remote newer -> remote should win, skip update
-      thumbForHash: undefined,
+      thumbForId: undefined,
       thumbSize: undefined,
     }
     meta.decodeFileMetadata
@@ -152,6 +154,7 @@ describe('syncUpMetadata', () => {
     expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
       expect.objectContaining(localA),
+      { thumbForHash: undefined },
     )
   })
 
@@ -175,13 +178,14 @@ describe('syncUpMetadata', () => {
         id: `file-${i}`,
         name: `name-${i}`,
         type: 'image/jpeg',
+        kind: 'file',
         size: 100 + i,
         hash: `hash-${i}`,
         createdAt: NOW_BASE + i,
         updatedAt: NOW_BASE + i,
         localId: null,
         addedAt: NOW_BASE + i,
-        thumbForHash: undefined,
+        thumbForId: undefined,
         thumbSize: undefined,
       }
       await createFileRecordWithLocalObject(
@@ -195,6 +199,21 @@ describe('syncUpMetadata', () => {
         }),
       )
     }
+
+    sdk.getPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+    })
+    meta.decodeFileMetadata.mockImplementation(() => ({
+      name: 'name',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    }))
 
     await runSyncUpMetadata(batchSize)
 
@@ -213,13 +232,14 @@ describe('syncUpMetadata', () => {
         id: `file-${i}`,
         name: `name-${i}`,
         type: 'image/jpeg',
+        kind: 'file',
         size: 100 + i,
         hash: `hash-${i}`,
         createdAt: NOW_BASE + i,
         updatedAt: NOW_BASE + i,
         localId: null,
         addedAt: NOW_BASE + i,
-        thumbForHash: undefined,
+        thumbForId: undefined,
         thumbSize: undefined,
       }
       await createFileRecordWithLocalObject(
@@ -233,6 +253,21 @@ describe('syncUpMetadata', () => {
         }),
       )
     }
+
+    sdk.getPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+    })
+    meta.decodeFileMetadata.mockImplementation(() => ({
+      name: 'name',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    }))
 
     await runSyncUpMetadata(batchSize)
 
@@ -251,39 +286,42 @@ describe('syncUpMetadata', () => {
         id: 'file-0',
         name: 'name-0',
         type: 'image/jpeg',
+        kind: 'file',
         size: 101,
         hash: 'hash-0',
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
         localId: null,
         addedAt: NOW_BASE,
-        thumbForHash: undefined,
+        thumbForId: undefined,
         thumbSize: undefined,
       },
       {
         id: 'file-1',
         name: 'name-1',
         type: 'image/jpeg',
+        kind: 'file',
         size: 102,
         hash: 'hash-1',
         createdAt: NOW_BASE + 1,
         updatedAt: NOW_BASE + 1,
         localId: null,
         addedAt: NOW_BASE + 1,
-        thumbForHash: undefined,
+        thumbForId: undefined,
         thumbSize: undefined,
       },
       {
         id: 'file-2',
         name: 'name-2',
         type: 'image/jpeg',
+        kind: 'file',
         size: 103,
         hash: 'hash-2',
         createdAt: NOW_BASE + 2,
         updatedAt: NOW_BASE + 2,
         localId: null,
         addedAt: NOW_BASE + 2,
-        thumbForHash: undefined,
+        thumbForId: undefined,
         thumbSize: undefined,
       },
     ]
@@ -310,7 +348,7 @@ describe('syncUpMetadata', () => {
       hash: 'hash-2',
       createdAt: NOW_BASE + 2,
       updatedAt: NOW_BASE + 1,
-      thumbForHash: undefined,
+      thumbForId: undefined,
       thumbSize: undefined,
     }
 
@@ -320,5 +358,108 @@ describe('syncUpMetadata', () => {
 
     expect(sdk.getPinnedObject).toHaveBeenCalledTimes(1)
     expect(sdk.getPinnedObject).toHaveBeenCalledWith('obj-file-2')
+  })
+
+  test('does not overwrite remote id when remote already has one', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const localFile: Omit<FileRecord, 'objects'> = {
+      id: 'local-id',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-a',
+      createdAt: 100,
+      updatedAt: 200,
+      localId: null,
+      addedAt: 100,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    }
+    await createFileRecordWithLocalObject(
+      localFile,
+      makeLocalObject({
+        fileId: localFile.id,
+        objectId: 'obj-a',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 200,
+      }),
+    )
+
+    sdk.getPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+    })
+
+    meta.decodeFileMetadata.mockReturnValue({
+      id: 'remote-id',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-a',
+      createdAt: 100,
+      updatedAt: 200,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+
+    await runSyncUpMetadata(5)
+
+    expect(sdk.updateMetadata).not.toHaveBeenCalled()
+  })
+
+  test('preserves remote canonical id when pushing other field changes', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const localFile: Omit<FileRecord, 'objects'> = {
+      id: 'local-id',
+      name: 'renamed.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-a',
+      createdAt: 100,
+      updatedAt: 300,
+      localId: null,
+      addedAt: 100,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    }
+    await createFileRecordWithLocalObject(
+      localFile,
+      makeLocalObject({
+        fileId: localFile.id,
+        objectId: 'obj-a',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
+
+    sdk.getPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+    })
+
+    meta.decodeFileMetadata.mockReturnValue({
+      id: 'remote-id',
+      name: 'original.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-a',
+      createdAt: 100,
+      updatedAt: 200,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+
+    await runSyncUpMetadata(5)
+
+    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'remote-id', name: 'renamed.jpg' }),
+      { thumbForHash: undefined },
+    )
   })
 })

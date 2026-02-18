@@ -54,6 +54,8 @@ export const FS_EVICTABLE_MIN_AGE = daysInMs(7) // 7 days
 export const SYNC_UP_METADATA_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync up metadata batch size.
 export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files
+// Sync up metadata concurrency.
+export const SYNC_UP_METADATA_CONCURRENCY = 30
 // Auto-download threshold for shared file imports.
 export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 // Performance monitor logging interval.

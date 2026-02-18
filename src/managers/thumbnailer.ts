@@ -10,15 +10,14 @@ import { uniqueId } from '../lib/uniqueId'
 import {
   createFileRecord,
   type FileRecord,
-  readFileRecordByContentHash,
   type ThumbSize,
   ThumbSizes,
 } from '../stores/files'
 import { copyFileToFs, getFsFileUri } from '../stores/fs'
 import {
-  invalidateThumbnailsForHash,
-  readThumbnailSizesForHash,
-  thumbnailExistsForHashAndSize,
+  invalidateThumbnailsForFileId,
+  readThumbnailSizesForFileId,
+  thumbnailExistsForFileIdAndSize,
 } from '../stores/thumbnails'
 
 // Track files currently being processed to prevent race conditions
@@ -81,7 +80,7 @@ export async function generateThumbnailsForFile(
     }
 
     // Check which sizes already exist.
-    const existingSizes = await readThumbnailSizesForHash(fileRecord.hash)
+    const existingSizes = await readThumbnailSizesForFileId(fileRecord.id)
     const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
 
     if (missingSizes.length === 0) {
@@ -133,7 +132,6 @@ type EnsureResult =
       width: number | null
       height: number | null
     }
-  | { status: 'duplicate'; existingThumbId: string }
   | { status: 'error'; error: unknown }
 
 export async function ensureThumbnailForSize(params: {
@@ -147,7 +145,7 @@ export async function ensureThumbnailForSize(params: {
   const { fileId, fileHash, fileType, size, sourceUri } = params
 
   // Fast path: exact size exists.
-  const exactExists = await thumbnailExistsForHashAndSize(fileHash, size)
+  const exactExists = await thumbnailExistsForFileIdAndSize(fileId, size)
   if (exactExists) {
     return { status: 'exists' }
   }
@@ -251,18 +249,6 @@ export async function ensureThumbnailForSize(params: {
       return { status: 'error', error: new Error('Missing thumbnail hash') }
     }
 
-    // Check if a thumbnail with this hash already exists (dedupe by content hash).
-    const existingThumb = await readFileRecordByContentHash(thumbHash)
-    if (existingThumb) {
-      logger.debug('thumbnailer', 'hash_exists', {
-        thumbId: existingThumb.id,
-        hash: fileHash,
-        size,
-      })
-      return { status: 'duplicate', existingThumbId: existingThumb.id }
-    }
-
-    // Create file record with thumbForHash set from the start to avoid flicker.
     const fileSize = new File(fileUri).info().size ?? 0
     const now = Date.now()
     await createFileRecord(
@@ -270,13 +256,14 @@ export async function ensureThumbnailForSize(params: {
         id: thumbId,
         name: 'thumbnail.webp',
         type: thumbFileInfo.type,
+        kind: 'thumb',
         size: fileSize,
         hash: thumbHash,
         createdAt: now,
         updatedAt: now,
         addedAt: now,
         localId: null,
-        thumbForHash: fileHash,
+        thumbForId: fileId,
         thumbSize: size,
       },
       true,
@@ -289,7 +276,7 @@ export async function ensureThumbnailForSize(params: {
 
     // Invalidate thumbnail cache for this original file so gallery items update.
     // This will revalidate all thumb sizes for this hash.
-    await invalidateThumbnailsForHash(fileHash)
+    await invalidateThumbnailsForFileId(fileId)
 
     return {
       status: 'produced',

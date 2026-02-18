@@ -132,6 +132,7 @@ async function downloadAndProcessFile(
       addedAt: Date.now(),
       name: 'Shared File',
       type,
+      kind: 'file',
       size,
       hash: hash ?? '',
       createdAt: Date.now(),
@@ -218,6 +219,7 @@ export function FileImport({
       addedAt: Date.now(),
       name: 'Shared File',
       type,
+      kind: 'file',
       size: fileSize ?? 0,
       hash: '', // Placeholder until calculated.
       createdAt: Date.now(),

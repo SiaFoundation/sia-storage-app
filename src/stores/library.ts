@@ -119,7 +119,7 @@ export function useFileList() {
 export function useLibraryCount() {
   return useSWR(libraryStats.key('countNoThumbs'), async () => {
     const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NULL`,
+      `SELECT COUNT(*) as count FROM files WHERE kind = 'file'`,
     )
     return row?.count ?? 0
   })
@@ -165,7 +165,7 @@ export function buildLibraryQueryParts(
   const whereParts: string[] = []
   const params: (string | number)[] = []
   // Exclude thumbnails from library lists.
-  whereParts.push(`${tableAlias}.thumbForHash IS NULL`)
+  whereParts.push(`${tableAlias}.kind = 'file'`)
 
   if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
     const categoryConditions: string[] = []

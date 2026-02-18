@@ -25,45 +25,54 @@ const fileByIdCache = swrCacheBy()
 export type ThumbSize = 64 | 512
 export const ThumbSizes: ThumbSize[] = [64, 512]
 
+export type FileKind = 'file' | 'thumb'
+
 /** Fields that are stored in both the local database and the indexer metadata. */
 export type FileMetadata = {
+  id: string
   name: string
   type: string
+  kind: FileKind
   size: number
   hash: string
-  // Hash of the original file content this thumbnail is for.
-  thumbForHash?: string
-  // Size of the thumbnail in pixels.
+  thumbForId?: string
   thumbSize?: ThumbSize
+  tags?: string[]
+  directory?: string
   createdAt: number
   updatedAt: number
 }
 
-export const fileMetadataKeys = keysOf<FileMetadata>()([
+// tags and directory are synced via object metadata but stored in separate
+// tables locally, not in the files table.
+export const fileMetadataKeys = keysOf<
+  Omit<FileMetadata, 'tags' | 'directory'>
+>()([
+  'id',
   'name',
   'type',
+  'kind',
   'size',
   'hash',
   'createdAt',
   'updatedAt',
-  'thumbForHash',
+  'thumbForId',
   'thumbSize',
 ])
 
 /** Fields that are stored only in the local database. */
 export type FileLocalMetadata = {
-  id: string
   localId: string | null
   addedAt: number
 }
 
 export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
-  'id',
   'localId',
   'addedAt',
 ])
 
-export type FileRecordRow = FileMetadata & FileLocalMetadata
+export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &
+  FileLocalMetadata
 
 export const fileRecordRowKeys = keysOf<FileRecordRow>()([
   ...fileMetadataKeys,
@@ -85,10 +94,11 @@ export async function createFileRecord(
     createdAt,
     updatedAt,
     type,
+    kind,
     localId,
     hash,
     addedAt,
-    thumbForHash,
+    thumbForId,
     thumbSize,
   } = fileRecord
   await sqlInsert('files', {
@@ -98,10 +108,11 @@ export async function createFileRecord(
     createdAt,
     updatedAt,
     type,
+    kind,
     localId,
     hash,
     addedAt,
-    thumbForHash,
+    thumbForId,
     thumbSize,
   })
   if (triggerUpdate) {
@@ -257,7 +268,7 @@ export async function readAllFileRecords(
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.localId, f.hash, f.addedAt, f.thumbForHash, f.thumbSize,
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
@@ -297,10 +308,12 @@ export async function readAllFileRecords(
 
 export async function readFileRecordByObjectId(
   objectId: string,
+  indexerURL: string,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ?) LIMIT 1`,
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
     objectId,
+    indexerURL,
   )
   if (!row) return null
   const objects = await readLocalObjectsForFile(row.id)
@@ -309,7 +322,7 @@ export async function readFileRecordByObjectId(
 
 export async function readFileRecordsByLocalIds(localIds: string[]) {
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE localId IN (${localIds
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds,
@@ -321,7 +334,7 @@ export async function readFileRecordsByLocalIds(localIds: string[]) {
 
 export async function readFileRecordsByContentHashes(contentHashes: string[]) {
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE hash IN (${contentHashes
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
     ...contentHashes,
@@ -333,7 +346,7 @@ export async function readFileRecordsByContentHashes(contentHashes: string[]) {
 
 export async function readFileRecordByContentHash(hash: string) {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, localId, hash FROM files WHERE hash = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE hash = ?',
     hash,
   )
   if (!row) {
@@ -346,7 +359,7 @@ export async function readFileRecordByContentHash(hash: string) {
 
 export async function readFileRecord(id: string): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize FROM files WHERE id = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE id = ?',
     id,
   )
   if (!row) {
@@ -368,10 +381,11 @@ export async function updateFileRecord(
   const updatableFields: (keyof FileRecordRow)[] = [
     'name',
     'type',
+    'kind',
     'size',
     'hash',
     'createdAt',
-    'thumbForHash',
+    'thumbForId',
     'thumbSize',
     'localId',
   ]
@@ -436,13 +450,15 @@ export async function deleteManyFileRecords(ids: string[]): Promise<void> {
   invalidateCacheLibraryLists()
 }
 
+// TODO: User-initiated file delete should remove the file record and all
+// local objects across every indexer. Currently we only connect to a single
+// indexer, so this isn't an issue yet. When multi-indexer support is added,
+// the delete-file flow needs to iterate all indexers.
+
 /** Delete an original file and all its associated thumbnails. */
 export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
-  const original = await readFileRecord(id)
-  if (!original) return
-  const hash = original.hash
   await withTransactionLock(async () => {
-    await sqlDelete('files', { thumbForHash: hash })
+    await sqlDelete('files', { thumbForId: id })
     await sqlDelete('files', { id })
   })
   await invalidateCacheLibraryAllStats()
@@ -452,18 +468,11 @@ export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
 /** Delete multiple files and all their associated thumbnails. */
 export async function deleteManyFileRecordsAndThumbnails(
   ids: string[],
-  hashes: string[],
 ): Promise<void> {
   if (ids.length === 0) return
   await withTransactionLock(async () => {
-    // Delete thumbnails for all hashes
-    for (const hash of hashes) {
-      if (hash) {
-        await sqlDelete('files', { thumbForHash: hash })
-      }
-    }
-    // Delete the files themselves
     for (const id of ids) {
+      await sqlDelete('files', { thumbForId: id })
       await sqlDelete('files', { id })
     }
   })
@@ -534,9 +543,10 @@ export function transformRow(
     updatedAt: row.updatedAt,
     addedAt: row.addedAt,
     type: row.type,
+    kind: row.kind ?? 'file',
     localId: row.localId,
     hash: row.hash,
-    thumbForHash: row.thumbForHash ?? undefined,
+    thumbForId: row.thumbForId ?? undefined,
     thumbSize: row.thumbSize ?? undefined,
     objects: objectsMap,
   }
