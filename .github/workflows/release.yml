@@ -30,7 +30,7 @@ concurrency:
 jobs:
   release-android:
     if: ${{ github.event_name == 'release' || inputs.platform == 'android' || inputs.platform == 'both' }}
-    runs-on: tenki-standard-autoscale
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4

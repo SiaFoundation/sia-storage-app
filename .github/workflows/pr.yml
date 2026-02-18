@@ -37,7 +37,7 @@ jobs:
       - run: bun run typecheck
 
   test:
-    runs-on: tenki-standard-autoscale
+    runs-on: ubuntu-latest
     if: github.event.action != 'closed'
     steps:
       - uses: actions/checkout@v4
