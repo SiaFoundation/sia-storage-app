@@ -118,6 +118,7 @@ export function useDownloadFromShareURL() {
             id,
             name: 'Shared File',
             type: 'application/octet-stream',
+            kind: 'file',
             size: totalSize,
             hash: '',
             createdAt: Date.now(),

@@ -49,13 +49,12 @@ export async function permanentlyDeleteFiles(
   if (files.length === 0) return
 
   const ids = files.map((f) => f.id)
-  const hashes = files.map((f) => f.hash).filter(Boolean)
 
   removeUploads(ids)
 
   // Batch DB deletes (single transaction, single SWR trigger)
   // Also delete thumbnails for these files
-  await deleteManyFileRecordsAndThumbnails(ids, hashes)
+  await deleteManyFileRecordsAndThumbnails(ids)
   await deleteManyLocalObjects(ids)
 
   // Network deletions in parallel

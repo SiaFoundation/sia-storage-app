@@ -32,16 +32,16 @@ describe('Multi-Device Sync', () => {
 
   /**
    * Scenario: User uploads same photo from two devices simultaneously
-   * The file should be deduplicated by content hash
+   * Each device assigns its own file ID, so both records are kept separately
    */
-  it('deduplicates files added from multiple devices', async () => {
+  it('keeps files from multiple devices as separate records by ID', async () => {
     // Device A adds a real image file locally
     const [file] = await addTestFilesToHarness(
       harness,
       generateTestFilesFromAssets(TEST_ASSETS_DIR, ['test-image-1.png']),
     )
 
-    // Before upload completes, Device B uploads same content to server
+    // Before upload completes, Device B uploads same content to server with a different ID
     harness.sdk.injectObject({
       metadata: {
         ...generateMockFileMetadata(1),
@@ -50,28 +50,22 @@ describe('Multi-Device Sync', () => {
       },
     })
 
-    // Wait for syncDownEvents service to pick up Device B's upload (runs every 2s)
-    // This should deduplicate by hash and cancel the local upload
+    // Wait for syncDownEvents service to pick up Device B's upload
     await waitForCondition(
       async () => {
-        const objects = await readLocalObjectsForFile(file.id)
-        return objects.length > 0
+        const allFiles = await readAllFileRecords({ order: 'ASC' })
+        const files = allFiles.filter((f) => f.kind === 'file')
+        return files.length >= 2
       },
-      { timeout: 10_000, message: 'File to have a synced object' },
+      { timeout: 10_000, message: 'Both files to exist' },
     )
 
-    // Verify: Should have exactly 1 non-thumbnail file (deduplicated by hash)
+    // Verify: Both files exist as separate records (same hash, different IDs)
     const allFiles = await readAllFileRecords({ order: 'ASC' })
-    const files = allFiles.filter((f) => !f.thumbForHash)
-    expect(files).toHaveLength(1)
-
-    // The file should have a local object now
-    const objects = await readLocalObjectsForFile(file.id)
-    expect(objects).toHaveLength(1)
-
-    // Local upload should be cancelled since server already has it
-    const uploadState = getUploadState(file.id)
-    expect(uploadState).toBeUndefined()
+    const files = allFiles.filter((f) => f.kind === 'file')
+    expect(files).toHaveLength(2)
+    expect(files[0].hash).toBe(files[1].hash)
+    expect(files[0].id).not.toBe(files[1].id)
   }, 30_000)
 
   /**

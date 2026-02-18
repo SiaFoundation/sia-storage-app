@@ -24,7 +24,10 @@ import {
   initSyncDownEvents,
   resetSyncDownCursor,
 } from '../../src/managers/syncDownEvents'
-import { initSyncUpMetadata } from '../../src/managers/syncUpMetadata'
+import {
+  initSyncUpMetadata,
+  resetSyncUpCursor,
+} from '../../src/managers/syncUpMetadata'
 import { initThumbnailScanner } from '../../src/managers/thumbnailScanner'
 import { getUploadManager } from '../../src/managers/uploader'
 import { setAppKeyForIndexer } from '../../src/stores/appKey'
@@ -44,7 +47,7 @@ import {
   setSdkWithUploader,
 } from '../../src/stores/sdk'
 import { getIndexerURL } from '../../src/stores/settings'
-import { readThumbnailsByHash } from '../../src/stores/thumbnails'
+import { readThumbnailsByFileId } from '../../src/stores/thumbnails'
 import {
   getActiveUploads,
   getUploadCounts,
@@ -122,6 +125,9 @@ interface HarnessOptions {
 
   /** Custom indexer URL */
   indexerURL?: string
+
+  /** Provide a pre-created MockSdk to share storage across harness instances */
+  sdk?: MockSdk
 }
 
 let testCounter = 0
@@ -129,13 +135,15 @@ let fileIdCounter = 0
 
 class AppCoreHarnessImpl implements AppCoreHarness {
   sdk: MockSdk
+  private ownsSdk: boolean
   private serviceErrors: Map<string, Error[]> = new Map()
   private started = false
   private options: HarnessOptions
   private testId: string
 
   constructor(options: HarnessOptions = {}) {
-    this.sdk = new MockSdk()
+    this.sdk = options.sdk ?? new MockSdk()
+    this.ownsSdk = !options.sdk
     this.options = options
     // Generate unique test ID for isolation
     testCounter++
@@ -154,7 +162,9 @@ class AppCoreHarnessImpl implements AppCoreHarness {
 
     // Reset state
     this.serviceErrors.clear()
-    this.sdk.reset()
+    if (this.ownsSdk) {
+      this.sdk.reset()
+    }
     useUploadsStore.setState({ uploads: {} })
 
     // Initialize database with unique name for test isolation
@@ -204,8 +214,13 @@ class AppCoreHarnessImpl implements AppCoreHarness {
     useUploadsStore.setState({ uploads: {} })
     getUploadManager().reset()
 
-    // Reset SDK
-    this.sdk.reset()
+    // Reset sync cursors
+    await resetSyncUpCursor()
+
+    // Reset SDK (only if we own it)
+    if (this.ownsSdk) {
+      this.sdk.reset()
+    }
 
     // Clean up temp directory for this test
     cleanupTestDirectory(this.testId)
@@ -235,8 +250,7 @@ class AppCoreHarnessImpl implements AppCoreHarness {
         const targetFiles = files.filter((f) => fileIds.includes(f.id))
 
         for (const file of targetFiles) {
-          if (!file.hash) continue
-          const thumbnails = await readThumbnailsByHash(file.hash)
+          const thumbnails = await readThumbnailsByFileId(file.id)
           if (thumbnails.length === 0) return false
         }
 
@@ -466,6 +480,7 @@ export async function addTestFilesToHarness(
       id: file.id,
       name: file.name,
       type: file.type,
+      kind: 'file',
       size: file.size,
       hash: file.hash,
       createdAt: now,

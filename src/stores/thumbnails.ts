@@ -9,43 +9,43 @@ import {
 } from './files'
 import { readLocalObjectsForFile } from './localObjects'
 
-/** Single best thumbnail for a given (hash, thumbSize) pair. */
+/** Single best thumbnail for a given (fileId, thumbSize) pair. */
 export const bestThumbnailCache = swrCacheBy()
 
-/** All thumbnails associated with an original file hash. */
-export const thumbnailsByHashCache = swrCacheBy()
+/** All thumbnails associated with an original file ID. */
+export const thumbnailsByFileIdCache = swrCacheBy()
 
-export async function invalidateThumbnailsForHash(hash: string) {
+export async function invalidateThumbnailsForFileId(fileId: string) {
   await Promise.all([
     ...ThumbSizes.map((size) =>
-      bestThumbnailCache.invalidate(hash, String(size)),
+      bestThumbnailCache.invalidate(fileId, String(size)),
     ),
-    thumbnailsByHashCache.invalidate(hash),
+    thumbnailsByFileIdCache.invalidate(fileId),
   ])
 }
 
-/** Read all thumbnails associated with an original file content hash. */
-export async function readThumbnailsByHash(
-  hash: string,
+/** Read all thumbnails associated with an original file ID. */
+export async function readThumbnailsByFileId(
+  fileId: string,
 ): Promise<FileRecord[]> {
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
      FROM files
-     WHERE thumbForHash = ?
+     WHERE thumbForId = ?
      ORDER BY COALESCE(thumbSize, 0) ASC, id ASC`,
-    hash,
+    fileId,
   )
   return rows.map((row) => transformRow(row))
 }
 
-export async function readThumbnailRecordByThumbForHashAndSize(
-  thumbForHash: string,
+export async function readThumbnailRecordByFileIdAndSize(
+  fileId: string,
   size: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
-     FROM files WHERE thumbForHash = ? AND thumbSize = ?`,
-    thumbForHash,
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
+     FROM files WHERE thumbForId = ? AND thumbSize = ?`,
+    fileId,
     size,
   )
   if (!row) return null
@@ -53,13 +53,13 @@ export async function readThumbnailRecordByThumbForHashAndSize(
   return transformRow(row, objects)
 }
 
-/** Read all existing thumbnail sizes for a given original hash. */
-export async function readThumbnailSizesForHash(
-  hash: string,
+/** Read all existing thumbnail sizes for a given original file ID. */
+export async function readThumbnailSizesForFileId(
+  fileId: string,
 ): Promise<ThumbSize[]> {
   const rows = await db().getAllAsync<{ thumbSize: number | null }>(
-    `SELECT thumbSize FROM files WHERE thumbForHash = ?`,
-    hash,
+    `SELECT thumbSize FROM files WHERE thumbForId = ?`,
+    fileId,
   )
   return rows
     .map((r) => (typeof r.thumbSize === 'number' ? r.thumbSize : null))
@@ -70,26 +70,26 @@ export async function readThumbnailSizesForHash(
 }
 
 /**
- * Read the best thumbnail for a given original file hash and required thumb size.
+ * Read the best thumbnail for a given original file ID and required thumb size.
  *
  * Selection rule:
  * - Only consider thumbnails whose thumbSize is less than or equal to the required size.
  * - Prefer the largest available thumbSize that does not exceed the required size.
  * - Return null if no thumbnails are at or below the required size.
  */
-export async function readBestThumbnailByHash(
-  hash: string,
+export async function readBestThumbnailByFileId(
+  fileId: string,
   requiredSize: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db().getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash, addedAt, thumbForHash, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
      FROM files
-     WHERE thumbForHash = ? AND COALESCE(thumbSize, 0) <= ?
+     WHERE thumbForId = ? AND COALESCE(thumbSize, 0) <= ?
      ORDER BY
        COALESCE(thumbSize, 0) DESC,
        id ASC
      LIMIT 1`,
-    hash,
+    fileId,
     requiredSize,
   )
   if (!row) return null
@@ -97,14 +97,14 @@ export async function readBestThumbnailByHash(
   return transformRow(row, objects)
 }
 
-/** Check if a thumbnail exists for an original hash and exact size. */
-export async function thumbnailExistsForHashAndSize(
-  hash: string,
+/** Check if a thumbnail exists for an original file ID and exact size. */
+export async function thumbnailExistsForFileIdAndSize(
+  fileId: string,
   size: ThumbSize,
 ): Promise<boolean> {
   const row = await db().getFirstAsync<{ id: string }>(
-    `SELECT id FROM files WHERE thumbForHash = ? AND thumbSize = ? LIMIT 1`,
-    hash,
+    `SELECT id FROM files WHERE thumbForId = ? AND thumbSize = ? LIMIT 1`,
+    fileId,
     size,
   )
   return !!row

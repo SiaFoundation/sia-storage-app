@@ -16,6 +16,7 @@ import { reconnectIndexer, useSdkStore } from '../stores/sdk'
 import { getHasOnboarded } from '../stores/settings'
 import { useSheetsStore } from '../stores/sheets'
 import { useSyncDownStore } from '../stores/syncDown'
+import { useSyncUpMetadataStore } from '../stores/syncUpMetadata'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { clearAllUploads, useUploadsStore } from '../stores/uploads'
 import { initBackgroundTasks } from './backgroundTasks'
@@ -181,6 +182,7 @@ function resetAllStores() {
     pendingApproval: null,
   })
   useSyncDownStore.setState({ isSyncing: false })
+  useSyncUpMetadataStore.setState({ isSyncing: false, processed: 0, total: 0 })
   useUploadsStore.setState({ uploads: {} })
   useDownloadsStore.setState({ downloads: {} })
   useFileSelectionStore.setState({

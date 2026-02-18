@@ -13,7 +13,7 @@ import { useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
 
 const FILE_COLUMNS =
-  'f.id, f.name, f.size, f.createdAt, f.updatedAt, f.addedAt, f.type, f.localId, f.hash, f.thumbForHash, f.thumbSize'
+  'f.id, f.name, f.size, f.createdAt, f.updatedAt, f.addedAt, f.type, f.kind, f.localId, f.hash, f.thumbForId, f.thumbSize'
 
 // Cursor-based pagination helpers. These build WHERE clauses that find rows
 // "before" or "after" a given anchor row in the sort order. Used by

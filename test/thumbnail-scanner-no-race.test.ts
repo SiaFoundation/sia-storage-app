@@ -6,7 +6,7 @@ import './utils/setup'
 
 import { generateThumbnailsForFile } from '../src/managers/thumbnailer'
 import { readFileRecord } from '../src/stores/files'
-import { readThumbnailsByHash } from '../src/stores/thumbnails'
+import { readThumbnailsByFileId } from '../src/stores/thumbnails'
 import {
   type AppCoreHarness,
   addTestFilesToHarness,
@@ -35,7 +35,6 @@ describe('Regression: Thumbnail Scanner Race Condition', () => {
     ])
     const files = await addTestFilesToHarness(harness, fileFactories)
     const fileId = files[0].id
-    const fileHash = files[0].hash
 
     // Get the file record
     const fileRecord = await readFileRecord(fileId)
@@ -55,7 +54,7 @@ describe('Regression: Thumbnail Scanner Race Condition', () => {
     await sleep(2000)
 
     // Check only one set of thumbnails exists
-    const thumbnails = await readThumbnailsByHash(fileHash)
+    const thumbnails = await readThumbnailsByFileId(fileId)
     // Should have expected count, not duplicates
     // Each thumbnail size should appear at most once
     const sizeCount = new Map<number, number>()

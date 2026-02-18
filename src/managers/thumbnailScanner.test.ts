@@ -12,7 +12,7 @@ import {
   ThumbSizes,
 } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
-import { readThumbnailSizesForHash } from '../stores/thumbnails'
+import { readThumbnailSizesForFileId } from '../stores/thumbnails'
 import { runThumbnailScanner } from './thumbnailScanner'
 
 jest.mock('expo-image-manipulator', () => ({
@@ -82,6 +82,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -101,6 +102,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -113,13 +115,14 @@ describe('thumbnailScanner', () => {
         id: `thumb-${size}`,
         name: 'thumbnail.webp',
         type: 'image/webp',
+        kind: 'thumb',
         size: 100,
         hash: `thumb-hash-${size}`,
         createdAt: now,
         updatedAt: now,
         addedAt: now,
         localId: null,
-        thumbForHash: 'hash1',
+        thumbForId: 'file1',
         thumbSize: size,
       })
     }
@@ -137,6 +140,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -150,13 +154,14 @@ describe('thumbnailScanner', () => {
         id: `thumb-${size}`,
         name: 'thumbnail.webp',
         type: 'image/webp',
+        kind: 'thumb',
         size: 100,
         hash: `thumb-hash-${size}`,
         createdAt: now,
         updatedAt: now,
         addedAt: now,
         localId: null,
-        thumbForHash: 'hash1',
+        thumbForId: 'file1',
         thumbSize: size,
       })
     }
@@ -168,7 +173,7 @@ describe('thumbnailScanner', () => {
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedSizes).toEqual([64])
-    const sizes = await readThumbnailSizesForHash('hash1')
+    const sizes = await readThumbnailSizesForFileId('file1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
     expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
@@ -183,6 +188,7 @@ describe('thumbnailScanner', () => {
         id,
         name: `no-source-${i}.jpg`,
         type: 'image/jpeg',
+        kind: 'file',
         size: 1000,
         hash: `nosource-hash-${i}`,
         createdAt: now - i,
@@ -198,6 +204,7 @@ describe('thumbnailScanner', () => {
         id,
         name: `covered-${i}.jpg`,
         type: 'image/jpeg',
+        kind: 'file',
         size: 1000,
         hash: `covered-hash-${i}`,
         createdAt: now - 100 - i,
@@ -210,13 +217,14 @@ describe('thumbnailScanner', () => {
           id: `${id}-thumb-${size}`,
           name: 'thumbnail.webp',
           type: 'image/webp',
+          kind: 'thumb',
           size: 100,
           hash: `${id}-thumb-hash-${size}`,
           createdAt: now - 100 - i,
           updatedAt: now - 100 - i,
           addedAt: now - 100 - i,
           localId: null,
-          thumbForHash: `covered-hash-${i}`,
+          thumbForId: `covered-${i}`,
           thumbSize: size,
         })
       }
@@ -226,6 +234,7 @@ describe('thumbnailScanner', () => {
       id: 'eligible-1',
       name: 'eligible.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'eligible-hash-1',
       createdAt: now - 500,
@@ -259,6 +268,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -270,13 +280,14 @@ describe('thumbnailScanner', () => {
       id: 'thumb-64',
       name: 'thumbnail.webp',
       type: 'image/webp',
+      kind: 'thumb',
       size: 100,
       hash: 'thumb-hash-64',
       createdAt: now,
       updatedAt: now,
       addedAt: now,
       localId: null,
-      thumbForHash: 'hash1',
+      thumbForId: 'file1',
       thumbSize: 64,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
@@ -285,57 +296,13 @@ describe('thumbnailScanner', () => {
     expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
-  it('deduplicates by content hash', async () => {
-    const now = Date.now()
-    await createFileRecord({
-      id: 'file1',
-      name: 'test.jpg',
-      type: 'image/jpeg',
-      size: 1000,
-      hash: 'hash1',
-      createdAt: now,
-      updatedAt: now,
-      addedAt: now,
-      localId: null,
-    })
-    await createFileRecord({
-      id: 'existing-thumb',
-      name: 'thumbnail.webp',
-      type: 'image/webp',
-      size: 100,
-      hash: 'sha256:duplicate-thumb-hash',
-      createdAt: now,
-      updatedAt: now,
-      addedAt: now,
-      localId: null,
-      thumbForHash: 'other-hash',
-      thumbSize: 64,
-    })
-    getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    calculateContentHashMock.mockResolvedValue('sha256:duplicate-thumb-hash')
-    const result = await runThumbnailScanner()
-    expect(result.deduplicated.length).toBeGreaterThanOrEqual(1)
-    expect(result.deduplicated).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          originalId: 'file1',
-          originalHash: 'hash1',
-          size: 64,
-          existingThumbId: 'existing-thumb',
-        }),
-      ]),
-    )
-    const sizes = await readThumbnailSizesForHash('hash1')
-    expect(sizes).not.toContain(64)
-    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(2)
-  })
-
   it('generates thumbnails for video files using captured frames', async () => {
     const now = Date.now()
     await createFileRecord({
       id: 'video1',
       name: 'clip.mp4',
       type: 'video/mp4',
+      kind: 'file',
       size: 5_000_000,
       hash: 'video-hash-1',
       createdAt: now,
@@ -356,7 +323,7 @@ describe('thumbnailScanner', () => {
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedForVideo).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    const sizes = await readThumbnailSizesForHash('video-hash-1')
+    const sizes = await readThumbnailSizesForFileId('video1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
   })
 
@@ -367,6 +334,7 @@ describe('thumbnailScanner', () => {
         id: `file${i}`,
         name: `test${i}.jpg`,
         type: 'image/jpeg',
+        kind: 'file',
         size: 1000,
         hash: `hash${i}`,
         createdAt: now,
@@ -390,6 +358,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -426,6 +395,7 @@ describe('thumbnailScanner', () => {
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
+      kind: 'file',
       size: 1000,
       hash: 'hash1',
       createdAt: now,
@@ -448,7 +418,7 @@ describe('thumbnailScanner', () => {
       originalHash: 'hash1',
       size: 64,
     })
-    const sizes = await readThumbnailSizesForHash('hash1')
+    const sizes = await readThumbnailSizesForFileId('file1')
     expect(sizes).not.toContain(64)
   })
 })

@@ -75,12 +75,12 @@ async function counts(
 /** Get upload stats for the library with category breakdown. */
 export async function getUploadStats(): Promise<UploadStats> {
   const indexerURL = await getIndexerURL()
-  const photosWhere = `f.thumbForHash IS NULL AND f.type LIKE 'image/%'`
-  const videosWhere = `f.thumbForHash IS NULL AND f.type LIKE 'video/%'`
-  const audioWhere = `f.thumbForHash IS NULL AND f.type LIKE 'audio/%'`
-  const docsWhere = `f.thumbForHash IS NULL AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')`
-  const otherWhere = `f.thumbForHash IS NULL AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`
-  const thumbsWhere = `f.thumbForHash IS NOT NULL`
+  const photosWhere = `f.kind = 'file' AND f.type LIKE 'image/%'`
+  const videosWhere = `f.kind = 'file' AND f.type LIKE 'video/%'`
+  const audioWhere = `f.kind = 'file' AND f.type LIKE 'audio/%'`
+  const docsWhere = `f.kind = 'file' AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')`
+  const otherWhere = `f.kind = 'file' AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`
+  const thumbsWhere = `f.kind = 'thumb'`
 
   const [photosC, videosC, audioC, docsC, otherC, thumbsC] = await Promise.all([
     counts(photosWhere, indexerURL),

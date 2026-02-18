@@ -4,7 +4,7 @@ import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
-import { readThumbnailSizesForHash } from '../stores/thumbnails'
+import { readThumbnailSizesForFileId } from '../stores/thumbnails'
 import {
   ensureThumbnailForSize,
   isFileBeingProcessed,
@@ -23,10 +23,6 @@ export type ProducedThumbnail = ThumbnailAttempt & {
   thumbId: string
 }
 
-export type DeduplicatedThumbnail = ThumbnailAttempt & {
-  existingThumbId: string
-}
-
 export type ThumbnailGenerationError = ThumbnailAttempt & {
   error: unknown
 }
@@ -35,7 +31,6 @@ export type ThumbnailScannerResult = {
   processedCandidates: number
   attempts: ThumbnailAttempt[]
   produced: ProducedThumbnail[]
-  deduplicated: DeduplicatedThumbnail[]
   skippedNoSource: Array<{ fileId: string; hash: string }>
   skippedFullyCovered: Array<{ fileId: string; hash: string }>
   skippedErrorCooldown: Array<{ fileId: string; hash: string }>
@@ -45,10 +40,10 @@ export type ThumbnailScannerResult = {
 async function logOverallProgress() {
   try {
     const originalsRow = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND thumbForHash IS NULL`,
+      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND kind = 'file'`,
     )
     const thumbsRow = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE thumbForHash IS NOT NULL AND thumbSize IN (${ThumbSizes.join(
+      `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND thumbSize IN (${ThumbSizes.join(
         ',',
       )})`,
     )
@@ -105,10 +100,10 @@ async function queryCandidateOriginals(
       `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
        FROM files f
        LEFT JOIN files t
-         ON t.thumbForHash = f.hash
+         ON t.thumbForId = f.id
         AND t.thumbSize IN (${ThumbSizes.join(',')})
        WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
-         AND f.thumbForHash IS NULL
+         AND f.kind = 'file'
          ${cursorClause}
        GROUP BY f.id
        HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
@@ -145,7 +140,6 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
     processedCandidates: 0,
     attempts: [],
     produced: [],
-    deduplicated: [],
     skippedNoSource: [],
     skippedFullyCovered: [],
     skippedErrorCooldown: [],
@@ -180,7 +174,7 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
 
         summary.processedCandidates += 1
         // Determine missing sizes for this original so we don't attempt existing ones.
-        const existingSizes = await readThumbnailSizesForHash(c.hash)
+        const existingSizes = await readThumbnailSizesForFileId(c.id)
         const missingSizes = ThumbSizes.filter(
           (s) => !existingSizes.includes(s),
         )
@@ -234,13 +228,6 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
               thumbId: outcome.thumbId,
             })
             logger.info('thumbnailScanner', 'produced', { id: c.id, size })
-          } else if (outcome.status === 'duplicate') {
-            summary.deduplicated.push({
-              originalId: c.id,
-              originalHash: c.hash,
-              size,
-              existingThumbId: outcome.existingThumbId,
-            })
           } else if (outcome.status === 'error') {
             summary.errors.push({
               originalId: c.id,
@@ -258,7 +245,6 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
       skippedFullyCovered: summary.skippedFullyCovered.length,
       skippedErrorCooldown: summary.skippedErrorCooldown.length,
       errors: summary.errors.length,
-      deduplicated: summary.deduplicated.length,
       total: summary.processedCandidates + summary.skippedErrorCooldown.length,
     })
     await logOverallProgress()

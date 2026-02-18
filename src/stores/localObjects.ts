@@ -50,6 +50,29 @@ export async function upsertLocalObject(
   }
 }
 
+export async function deleteLocalObject(
+  objectId: string,
+  indexerURL: string,
+  triggerUpdate: boolean = true,
+): Promise<void> {
+  const where = { id: objectId, indexerURL }
+  await sqlDelete('objects', where)
+  if (triggerUpdate) {
+    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryLists()
+  }
+}
+
+export async function countLocalObjectsForFile(
+  fileId: string,
+): Promise<number> {
+  const row = await db().getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM objects WHERE fileId = ?',
+    fileId,
+  )
+  return row?.count ?? 0
+}
+
 export async function deleteLocalObjects(
   fileId: string,
   triggerUpdate: boolean = true,

@@ -8,7 +8,7 @@ import { useFsFileUri } from '../stores/fs'
 import { useIsConnected } from '../stores/sdk'
 import {
   bestThumbnailCache,
-  readBestThumbnailByHash,
+  readBestThumbnailByFileId,
 } from '../stores/thumbnails'
 
 /**
@@ -27,8 +27,8 @@ export function useBestThumbnailUri(
 ) {
   // Fetch the best thumbnail record.
   const thumbRecord = useSWR(
-    file ? bestThumbnailCache.key(file.hash, String(thumbSize)) : null,
-    () => (file ? readBestThumbnailByHash(file.hash, thumbSize) : null),
+    file ? bestThumbnailCache.key(file.id, String(thumbSize)) : null,
+    () => (file ? readBestThumbnailByFileId(file.id, thumbSize) : null),
   )
 
   // Auto-download the chosen thumbnail.

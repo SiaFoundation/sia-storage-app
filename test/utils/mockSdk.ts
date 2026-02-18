@@ -39,7 +39,7 @@ export interface MockSdkStorage {
   uploadFailures: Map<string, Error>
 }
 
-function createEmptyStorage(): MockSdkStorage {
+export function createEmptyStorage(): MockSdkStorage {
   return {
     objects: new Map(),
     events: [],
@@ -336,10 +336,20 @@ export class MockSdk {
     let startIndex = 0
 
     if (cursor) {
-      const cursorIndex = this.storage.events.findIndex(
-        (e) =>
-          e.id === cursor.id && e.updatedAt.getTime() <= cursor.after.getTime(),
-      )
+      // Search from the end to find the LAST matching event. The same objectId
+      // can appear multiple times (v0 inject → syncUp push → metadata change),
+      // and the cursor should always resume after the most recent match.
+      let cursorIndex = -1
+      for (let i = this.storage.events.length - 1; i >= 0; i--) {
+        const e = this.storage.events[i]
+        if (
+          e.id === cursor.id &&
+          e.updatedAt.getTime() <= cursor.after.getTime()
+        ) {
+          cursorIndex = i
+          break
+        }
+      }
       if (cursorIndex >= 0) {
         startIndex = cursorIndex + 1
       }
@@ -348,8 +358,19 @@ export class MockSdk {
     return this.storage.events.slice(startIndex, startIndex + limit)
   }
 
-  async pinObject(): Promise<void> {
+  async pinObject(object: PinnedObjectInterface): Promise<void> {
     if (!this.connected) throw new Error('Network unavailable')
+
+    const objectId = object.id()
+    const stored = this.storage.objects.get(objectId)
+    if (!stored) return
+
+    this.storage.events.push({
+      id: objectId,
+      deleted: false,
+      updatedAt: stored.updatedAt,
+      object: createMockPinnedObject(stored),
+    })
   }
 
   async pruneSlabs(): Promise<void> {
@@ -469,6 +490,122 @@ export class MockSdk {
   }
 
   /**
+   * Inject an object with v0-format metadata (no version, id, or kind fields).
+   * Simulates objects written by a pre-v1 client.
+   */
+  injectV0Object(
+    v0Meta: {
+      name: string
+      type: string
+      size: number
+      hash: string
+      createdAt: number
+      updatedAt: number
+      thumbForHash?: string
+      thumbSize?: number
+    },
+    data?: Uint8Array,
+  ): StoredObject {
+    const objectId = generateObjectId()
+    const now = new Date()
+    const fileData = data ?? new Uint8Array(v0Meta.size)
+
+    const metadata = new TextEncoder().encode(JSON.stringify(v0Meta))
+      .buffer as ArrayBuffer
+
+    const stored: StoredObject = {
+      id: objectId,
+      metadata,
+      size: BigInt(v0Meta.size),
+      slabs: [{ id: `slab-${objectId}`, data: fileData }],
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    this.storage.objects.set(objectId, stored)
+    this.storage.fileData.set(objectId, fileData)
+
+    this.storage.events.push({
+      id: objectId,
+      deleted: false,
+      updatedAt: now,
+      object: createMockPinnedObject(stored),
+    })
+
+    return stored
+  }
+
+  /**
+   * Simulate a v0 node overwriting an object's metadata by stripping v1 fields.
+   * Emulates a pre-v1 client that reads metadata, ignores unknown fields,
+   * and writes back only the fields it understands.
+   */
+  simulateV0Overwrite(objectId: string): void {
+    const stored = this.storage.objects.get(objectId)
+    if (!stored) {
+      throw new Error(`Object not found: ${objectId}`)
+    }
+
+    const current = JSON.parse(new TextDecoder().decode(stored.metadata))
+    const v0Meta: Record<string, unknown> = {
+      name: current.name,
+      type: current.type,
+      size: current.size,
+      hash: current.hash,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+    }
+    if (current.thumbForHash) v0Meta.thumbForHash = current.thumbForHash
+    if (current.thumbSize != null) v0Meta.thumbSize = current.thumbSize
+
+    stored.metadata = new TextEncoder().encode(JSON.stringify(v0Meta))
+      .buffer as ArrayBuffer
+    stored.updatedAt = new Date()
+
+    this.storage.events.push({
+      id: objectId,
+      deleted: false,
+      updatedAt: stored.updatedAt,
+      object: createMockPinnedObject(stored),
+    })
+  }
+
+  /**
+   * Simulate a v0 node making a change (e.g. rename) and writing back v0 metadata.
+   * Like simulateV0Overwrite but applies field changes before stripping v1 fields.
+   */
+  simulateV0Change(objectId: string, changes: Record<string, unknown>): void {
+    const stored = this.storage.objects.get(objectId)
+    if (!stored) {
+      throw new Error(`Object not found: ${objectId}`)
+    }
+
+    const current = JSON.parse(new TextDecoder().decode(stored.metadata))
+    const merged = { ...current, ...changes }
+    const v0Meta: Record<string, unknown> = {
+      name: merged.name,
+      type: merged.type,
+      size: merged.size,
+      hash: merged.hash,
+      createdAt: merged.createdAt,
+      updatedAt: merged.updatedAt,
+    }
+    if (merged.thumbForHash) v0Meta.thumbForHash = merged.thumbForHash
+    if (merged.thumbSize != null) v0Meta.thumbSize = merged.thumbSize
+
+    stored.metadata = new TextEncoder().encode(JSON.stringify(v0Meta))
+      .buffer as ArrayBuffer
+    stored.updatedAt = new Date()
+
+    this.storage.events.push({
+      id: objectId,
+      deleted: false,
+      updatedAt: stored.updatedAt,
+      object: createMockPinnedObject(stored),
+    })
+  }
+
+  /**
    * Inject a delete event as if from another device.
    */
   injectDeleteEvent(objectId: string): void {
@@ -562,8 +699,10 @@ export function generateMockFileMetadata(
 ): FileMetadata {
   const now = Date.now()
   return {
+    id: `mock-file-${index}`,
     name: `test-file-${index}.jpg`,
     type: 'image/jpeg',
+    kind: 'file',
     size: 1024 * (index + 1),
     hash: `hash-${index}`,
     createdAt: now - index * 1000,

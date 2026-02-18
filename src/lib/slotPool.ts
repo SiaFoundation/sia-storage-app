@@ -1,5 +1,3 @@
-import { logger } from '../lib/logger'
-
 /**
  * A counting semaphore-style pool that limits the number of concurrent operations.
  * Use `withSlot` to run an async task while reserving one slot. Defaults to 5 slots.
@@ -43,12 +41,6 @@ export class SlotPool {
   /** Acquire a slot. Resolves with a release function to free the slot. */
   async acquire(): Promise<() => void> {
     if (this.inUseCount < this.maxSlots) {
-      logger.debug('slotPool', 'acquired', {
-        inUse: this.inUseCount + 1,
-        maxSlots: this.maxSlots,
-        queued: Math.max(0, this.waitQueue.length - 1),
-      })
-      // Immediate acquisition.
       this.inUseCount += 1
       let released = false
       return () => {
@@ -59,30 +51,14 @@ export class SlotPool {
       }
     }
 
-    // Wait for a slot to free up.
-    logger.debug('slotPool', 'waiting', {
-      inUse: this.inUseCount,
-      maxSlots: this.maxSlots,
-      queued: this.waitQueue.length,
-    })
     return await new Promise<() => void>((resolve) => {
       const grant = () => {
-        logger.debug('slotPool', 'acquired', {
-          inUse: this.inUseCount + 1,
-          maxSlots: this.maxSlots,
-          queued: Math.max(0, this.waitQueue.length - 1),
-        })
         this.inUseCount += 1
         let released = false
         const release = () => {
           if (released) return
           released = true
           this.inUseCount -= 1
-          logger.debug('slotPool', 'released', {
-            inUse: this.inUseCount,
-            maxSlots: this.maxSlots,
-            queued: this.waitQueue.length,
-          })
           this.drain()
         }
         resolve(release)

@@ -85,7 +85,8 @@ export async function exportLogs(): Promise<string | null> {
       updatedAt: now,
       addedAt: now,
       localId: null,
-      thumbForHash: undefined,
+      kind: 'file',
+      thumbForId: undefined,
       thumbSize: undefined,
     })
 

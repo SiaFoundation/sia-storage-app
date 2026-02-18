@@ -197,6 +197,7 @@ export async function processAssets(
       updatedAt: f.updatedAt,
       addedAt: Date.now(),
       type: f.type,
+      kind: 'file' as const,
       size: f.size!,
       hash: f.hash!,
       objects: {},
