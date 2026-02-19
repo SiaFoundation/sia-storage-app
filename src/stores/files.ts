@@ -480,6 +480,22 @@ export async function deleteManyFileRecordsAndThumbnails(
   invalidateCacheLibraryLists()
 }
 
+/** Delete all lost files (not pinned on current indexer and not on device). */
+export async function deleteLostFiles(): Promise<number> {
+  const currentIndexerURL = await getIndexerURL()
+  const lost = await readAllFileRecords({
+    order: 'ASC',
+    pinned: {
+      indexerURL: currentIndexerURL,
+      isPinned: false,
+    },
+    fileExistsLocally: false,
+  })
+  if (lost.length === 0) return 0
+  await deleteManyFileRecordsAndThumbnails(lost.map((f) => f.id))
+  return lost.length
+}
+
 export async function deleteAllFileRecords(): Promise<void> {
   await sqlDelete('files')
 }

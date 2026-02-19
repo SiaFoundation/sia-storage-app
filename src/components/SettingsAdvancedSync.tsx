@@ -1,5 +1,6 @@
 import { Alert, Switch } from 'react-native'
 import { resetSyncDownCursor } from '../managers/syncDownEvents'
+import { resetSyncUpCursor } from '../managers/syncUpMetadata'
 import {
   toggleAutoScanUploads,
   toggleAutoSyncDownEvents,
@@ -39,7 +40,7 @@ export function SettingsAdvancedSync() {
           }
         />
         <LabeledValueRow
-          label="Reset sync cursor"
+          label="Reset sync down cursor"
           labelWidth={250}
           value={
             <Button
@@ -47,14 +48,40 @@ export function SettingsAdvancedSync() {
               style={{ paddingVertical: 8, paddingHorizontal: 16 }}
               onPress={() => {
                 Alert.alert(
-                  'Reset Sync Cursor',
-                  'This will reset the sync cursor and cause the app to resync all events from the beginning. Continue?',
+                  'Reset Sync Down Cursor',
+                  'This will reset the sync down cursor and cause the app to resync all events from the beginning. Continue?',
                   [
                     { text: 'Cancel', style: 'cancel' },
                     {
                       text: 'Reset',
                       style: 'destructive',
                       onPress: () => resetSyncDownCursor(),
+                    },
+                  ],
+                )
+              }}
+            >
+              Reset
+            </Button>
+          }
+        />
+        <LabeledValueRow
+          label="Reset sync up cursor"
+          labelWidth={250}
+          value={
+            <Button
+              variant="secondary"
+              style={{ paddingVertical: 8, paddingHorizontal: 16 }}
+              onPress={() => {
+                Alert.alert(
+                  'Reset Sync Up Cursor',
+                  'This will reset the sync up cursor and cause the app to re-push metadata for all files. Continue?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Reset',
+                      style: 'destructive',
+                      onPress: () => resetSyncUpCursor(),
                     },
                   ],
                 )

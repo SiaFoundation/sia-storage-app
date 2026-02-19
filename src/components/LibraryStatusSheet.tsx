@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -13,11 +14,21 @@ import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
 import type { UploadCategoryStats } from '../stores/fileStats'
 import { getUploadStats } from '../stores/fileStats'
-import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
+import {
+  deleteLostFiles,
+  useFileStatsLocal,
+  useFileStatsLost,
+} from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
 import { setStatusDisplayMode, useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { useIsSyncingDown, useSyncDownProgress } from '../stores/syncDown'
+import {
+  useIsSyncingUpMetadata,
+  useSyncUpMetadataProgress,
+} from '../stores/syncUpMetadata'
 import { palette, whiteA } from '../styles/colors'
+import { Button } from './Button'
 import { RowGroup, RowSubGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
@@ -59,6 +70,10 @@ function formatCategoryValue(
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
   const isOnline = useIsOnline()
+  const isSyncingDown = useIsSyncingDown()
+  const syncDownProgress = useSyncDownProgress()
+  const isSyncingUpMetadata = useIsSyncingUpMetadata()
+  const syncUpMetadataProgress = useSyncUpMetadataProgress()
   const isOpen = useSheetOpen('libraryStatus')
   const { data: displayMode = 'count' } = useStatusDisplayMode()
   const stats = useSWR(
@@ -141,6 +156,54 @@ export function LibraryStatusSheet() {
                   />
                 </View>
               }
+              showDividerTop
+              canCopy={false}
+            />
+          </InfoCard>
+        </RowGroup>
+
+        <RowGroup title="Sync metadata" style={styles.groupSpacing}>
+          <InfoCard>
+            <LabeledValueRow
+              label="Remote down"
+              labelWidth={120}
+              value={
+                <View style={styles.valueRight}>
+                  <View style={{ flex: 1 }} />
+                  <Text style={styles.valueText}>
+                    {isSyncingDown
+                      ? syncDownProgress.cursorAt
+                        ? new Date(syncDownProgress.cursorAt).toLocaleString()
+                        : 'Starting...'
+                      : 'Synced'}
+                  </Text>
+                  <View
+                    style={isSyncingDown ? styles.dotSyncing : styles.dotOnline}
+                  />
+                </View>
+              }
+              align="right"
+              canCopy={false}
+            />
+            <LabeledValueRow
+              label="Local up"
+              labelWidth={120}
+              value={
+                <View style={styles.valueRight}>
+                  <View style={{ flex: 1 }} />
+                  <Text style={styles.valueText}>
+                    {isSyncingUpMetadata
+                      ? `${syncUpMetadataProgress.processed.toLocaleString()} / ${syncUpMetadataProgress.total.toLocaleString()}`
+                      : 'Synced'}
+                  </Text>
+                  <View
+                    style={
+                      isSyncingUpMetadata ? styles.dotSyncing : styles.dotOnline
+                    }
+                  />
+                </View>
+              }
+              align="right"
               showDividerTop
               canCopy={false}
             />
@@ -379,6 +442,45 @@ export function LibraryStatusSheet() {
                 showDividerTop
               />
             </InfoCard>
+            {(lost.data?.count ?? 0) > 0 && (
+              <View style={styles.deleteLostContainer}>
+                <Button
+                  variant="secondary"
+                  style={styles.deleteLostButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Delete Lost Files',
+                      `This will delete ${lost.data?.count ?? 0} file records that are not on the network or this device. This cannot be undone.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              await deleteLostFiles()
+                              Alert.alert(
+                                'Lost files deleted',
+                                'Lost file records were successfully deleted.',
+                              )
+                            } catch (error) {
+                              Alert.alert(
+                                'Error deleting lost files',
+                                error instanceof Error
+                                  ? error.message
+                                  : 'An unexpected error occurred while deleting lost files.',
+                              )
+                            }
+                          },
+                        },
+                      ],
+                    )
+                  }}
+                >
+                  Delete lost files
+                </Button>
+              </View>
+            )}
           </RowSubGroup>
         </RowGroup>
       </ScrollView>
@@ -447,5 +549,19 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: palette.red[500],
+  },
+  dotSyncing: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: palette.yellow[400],
+  },
+  deleteLostContainer: {
+    marginTop: 8,
+    alignItems: 'flex-end',
+  },
+  deleteLostButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
 })
