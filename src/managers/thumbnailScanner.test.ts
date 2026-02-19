@@ -389,6 +389,75 @@ describe('thumbnailScanner', () => {
     expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
   })
 
+  it('stops immediately when signal is already aborted', async () => {
+    const now = Date.now()
+    await createFileRecord({
+      id: 'file1',
+      name: 'test.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1000,
+      hash: 'hash1',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: 'local-file1',
+    })
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
+
+    const ac = new AbortController()
+    ac.abort()
+    const result = await runThumbnailScanner(ac.signal)
+    expect(result.produced).toHaveLength(0)
+    expect(result.processedCandidates).toBe(0)
+    expect(imageManipulatorMock).not.toHaveBeenCalled()
+  })
+
+  it('stops mid-scan when signal is aborted', async () => {
+    const now = Date.now()
+    for (let i = 0; i < 5; i++) {
+      await createFileRecord({
+        id: `file${i}`,
+        name: `test${i}.jpg`,
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 1000,
+        hash: `hash${i}`,
+        createdAt: now - i,
+        updatedAt: now - i,
+        addedAt: now - i,
+        localId: `local-${i}`,
+      })
+    }
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
+    let counter = 0
+    calculateContentHashMock.mockImplementation(
+      async () => `sha256:thumb-hash-${++counter}`,
+    )
+
+    const ac = new AbortController()
+    let manipCalls = 0
+    imageManipulatorMock.mockImplementation(() => {
+      manipCalls++
+      if (manipCalls >= 2) ac.abort()
+      const renderAsync = jest.fn().mockResolvedValue({
+        saveAsync: jest.fn().mockResolvedValue({
+          uri: 'file://temp/thumb.webp',
+          width: 64,
+          height: 36,
+        }),
+      })
+      return {
+        resize: jest.fn().mockReturnThis(),
+        renderAsync,
+      } as unknown as ImageManipulatorContext
+    })
+
+    const result = await runThumbnailScanner(ac.signal)
+    expect(result.produced.length).toBeGreaterThan(0)
+    expect(result.produced.length).toBeLessThan(ThumbSizes.length * 5)
+  })
+
   it('logs and continues when manipulation throws', async () => {
     const now = Date.now()
     await createFileRecord({

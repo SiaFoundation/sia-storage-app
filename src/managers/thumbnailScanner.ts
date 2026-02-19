@@ -135,7 +135,9 @@ async function queryCandidateOriginals(
   return results
 }
 
-export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
+export async function runThumbnailScanner(
+  signal?: AbortSignal,
+): Promise<ThumbnailScannerResult> {
   const summary: ThumbnailScannerResult = {
     processedCandidates: 0,
     attempts: [],
@@ -152,12 +154,14 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
     const processedThisRun = new Set<string>()
 
     while (producedCount < MAX_THUMBS_PER_TICK) {
+      if (signal?.aborted) break
       const batch = await queryCandidateOriginals(25, processedThisRun)
       if (batch.length === 0) {
         break
       }
 
       for (const c of batch) {
+        if (signal?.aborted) break
         if (producedCount >= MAX_THUMBS_PER_TICK) break
         processedThisRun.add(c.id)
 
@@ -256,8 +260,8 @@ export async function runThumbnailScanner(): Promise<ThumbnailScannerResult> {
 
 export const { init: initThumbnailScanner } = createServiceInterval({
   name: 'thumbnailScanner',
-  worker: async () => {
-    await runThumbnailScanner()
+  worker: async (signal) => {
+    await runThumbnailScanner(signal)
   },
   getState: async () => true,
   interval: THUMBNAIL_SCANNER_INTERVAL,

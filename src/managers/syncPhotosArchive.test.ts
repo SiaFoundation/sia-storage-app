@@ -7,6 +7,7 @@ import {
   initSyncPhotosArchive,
   restartPhotosArchiveCursor,
   setAutoSyncPhotosArchive,
+  workBackward,
 } from './syncPhotosArchive'
 
 jest.useFakeTimers()
@@ -181,5 +182,21 @@ describe('syncPhotosArchive', () => {
     await runTick()
     expect(await getPhotosArchiveCursor()).toBe(0)
     expect(processAssetsMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('aborts before processAssets when signal is aborted during getAssetsAsync', async () => {
+    const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
+    const processAssetsMock = jest.mocked(processAssets)
+
+    const ac = new AbortController()
+    getAssetsAsyncMock.mockImplementation(async () => {
+      ac.abort()
+      return page([asset('b1', 'one.jpg', 10_000)])
+    })
+
+    await restartPhotosArchiveCursor()
+    await workBackward(ac.signal)
+
+    expect(processAssetsMock).not.toHaveBeenCalled()
   })
 })

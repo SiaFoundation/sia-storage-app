@@ -22,9 +22,10 @@ import {
 
 const PAGE_SIZE = 200
 
-async function workForward(): Promise<void> {
+async function workForward(signal: AbortSignal): Promise<void> {
   logger.debug('syncNewPhotos', 'tick')
   if (!(await getMediaLibraryPermissions())) return
+  if (signal.aborted) return
   const cursor = await getPhotosNewCursor()
 
   try {
@@ -37,6 +38,7 @@ async function workForward(): Promise<void> {
       // Resolve full info. For images this gets the full EXIF data and can fix the orientation.
       resolveWithFullInfo: true,
     })
+    if (signal.aborted) return
     if (page.assets.length === 0) {
       logger.debug('syncNewPhotos', 'no_new_photos')
       return
@@ -46,6 +48,7 @@ async function workForward(): Promise<void> {
       page.assets[page.assets.length - 1].creationTime
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime + 1 : 0
     await setPhotosNewCursor(nextTimestamp)
+    if (signal.aborted) return
     const { files } = await processAssets(
       page.assets.map((asset) => ({
         id: asset.id,

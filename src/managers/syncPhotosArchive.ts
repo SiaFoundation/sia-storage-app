@@ -26,9 +26,10 @@ import {
 
 const PAGE_SIZE = 50
 
-export async function workBackward() {
+export async function workBackward(signal: AbortSignal) {
   logger.debug('syncPhotosArchive', 'tick')
   if (!(await getMediaLibraryPermissions())) return
+  if (signal.aborted) return
   const { count, totalBytes } = await getFileStatsLocal({ localOnly: true })
   if (totalBytes >= SYNC_ARCHIVE_RESUME_THRESHOLD) {
     logger.info('syncPhotosArchive', 'skipped', {
@@ -50,6 +51,7 @@ export async function workBackward() {
       // Resolve full info. For images this gets the full EXIF data and can fix the orientation.
       resolveWithFullInfo: true,
     })
+    if (signal.aborted) return
     if (page.assets.length === 0) {
       logger.info('syncPhotosArchive', 'fully_synced')
       await setPhotosArchiveCursor(0)
@@ -60,6 +62,7 @@ export async function workBackward() {
       page.assets[page.assets.length - 1].creationTime ?? 0
     const nextTimestamp = lastAssetCreationTime ? lastAssetCreationTime - 1 : 0
     await setPhotosArchiveCursor(nextTimestamp)
+    if (signal.aborted) return
     const { files } = await processAssets(
       page.assets.map((asset) => ({
         id: asset.id,

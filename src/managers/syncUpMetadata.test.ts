@@ -410,6 +410,95 @@ describe('syncUpMetadata', () => {
     expect(sdk.updateMetadata).not.toHaveBeenCalled()
   })
 
+  test('skips all work when signal is already aborted', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-0',
+      name: 'a.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-0',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-0',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+
+    const ac = new AbortController()
+    ac.abort()
+    await runSyncUpMetadata(5, ac.signal)
+
+    expect(sdk.getPinnedObject).not.toHaveBeenCalled()
+  })
+
+  test('stops fetching objects when signal is aborted mid-batch', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    for (let i = 0; i < 5; i++) {
+      const file: Omit<FileRecord, 'objects'> = {
+        id: `file-${i}`,
+        name: `name-${i}`,
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100 + i,
+        hash: `hash-${i}`,
+        createdAt: NOW_BASE + i,
+        updatedAt: NOW_BASE + i,
+        localId: null,
+        addedAt: NOW_BASE + i,
+        thumbForId: undefined,
+        thumbSize: undefined,
+      }
+      await createFileRecordWithLocalObject(
+        file,
+        makeLocalObject({
+          fileId: file.id,
+          objectId: `obj-${i}`,
+          indexerURL: INDEXER_URL,
+          createdAt: NOW_BASE + i,
+          updatedAt: NOW_BASE + i,
+        }),
+      )
+    }
+
+    const ac = new AbortController()
+    let callCount = 0
+    sdk.getPinnedObject.mockImplementation(async () => {
+      callCount++
+      if (callCount >= 2) ac.abort()
+      return { metadata: () => new ArrayBuffer(0) }
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'name',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+
+    await runSyncUpMetadata(5, ac.signal)
+
+    expect(sdk.getPinnedObject).toHaveBeenCalledTimes(2)
+  })
+
   test('preserves remote canonical id when pushing other field changes', async () => {
     sdk.getIsConnected.mockReturnValue(true)
 

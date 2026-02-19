@@ -109,12 +109,16 @@ export async function resetSyncUpCursor(): Promise<void> {
  * This function processes files with updatedAt after the cursor, to pick
  * up any unsynced changes.
  */
-export async function runSyncUpMetadata(batchSize: number): Promise<void> {
+export async function runSyncUpMetadata(
+  batchSize: number,
+  signal?: AbortSignal,
+): Promise<void> {
   if (!getIsConnected()) {
     logger.debug('syncUpMetadata', 'skipped', { reason: 'not_connected' })
     setSyncUpMetadataState({ isSyncing: false })
     return
   }
+  if (signal?.aborted) return
   const indexerURL = await getIndexerURL()
   const after = await getSyncUpCursor()
   logger.debug('syncUpMetadata', 'tick', {
@@ -156,6 +160,7 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
       if (!obj || !obj.id) return
       if (f.kind === 'thumb' && !f.thumbForId) return
       return pool.withSlot(async () => {
+        if (signal?.aborted) return
         const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
 
         const remote = await tryWithLog(
@@ -271,8 +276,8 @@ export async function runSyncUpMetadata(batchSize: number): Promise<void> {
 
 export const { init: initSyncUpMetadata } = createServiceInterval({
   name: 'syncUpMetadata',
-  worker: async () => {
-    return runSyncUpMetadata(SYNC_UP_METADATA_BATCH_SIZE)
+  worker: async (signal) => {
+    return runSyncUpMetadata(SYNC_UP_METADATA_BATCH_SIZE, signal)
   },
   getState: async () => true,
   interval: SYNC_UP_METADATA_INTERVAL,
