@@ -1,5 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import Share from 'react-native-share'
+import { database } from '../db'
 import type { MenuStackParamList } from '../stacks/types'
 import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
 import { colors, palette } from '../styles/colors'
@@ -25,6 +27,32 @@ export function SettingsAdvancedInfo({ navigation }: Props) {
             />
           }
         />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Export database"
+          onPress={async () => {
+            try {
+              await Share.open({
+                url: `file://${database.databasePath}`,
+                type: 'application/x-sqlite3',
+                filename: 'app.db',
+              })
+            } catch (e: unknown) {
+              if (
+                e instanceof Error &&
+                e.message?.includes('User did not share')
+              )
+                return
+              Alert.alert('Error', String(e))
+            }
+          }}
+          style={styles.debugButton}
+        >
+          <View style={styles.rowItem}>
+            <Text style={styles.rowLabel}>Export Database</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </View>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Debug"

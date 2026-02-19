@@ -1,10 +1,10 @@
-import Clipboard from '@react-native-clipboard/clipboard'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { File, Paths } from 'expo-file-system'
 import {
   ChevronDownIcon,
-  CopyIcon,
   DownloadIcon,
   FilterIcon,
+  ShareIcon,
   Trash2Icon,
 } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
@@ -16,6 +16,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import Share from 'react-native-share'
 import { logsCache } from '../hooks/useLogs'
 import { exportLogs } from '../lib/exportLogs'
 import { type LogLevel, logger } from '../lib/logger'
@@ -129,12 +130,12 @@ export function SettingsLogsControlBar({ navigation }: Props) {
     )
   }, [toast])
 
-  const handleCopyLogs = useCallback(async () => {
+  const handleShareLogs = useCallback(async () => {
     try {
       const state = useLogsStore.getState()
       const logs = await readLogs(state.logLevel, state.logScopes)
       if (logs.length === 0) {
-        toast.show('No logs to copy')
+        toast.show('No logs to share')
         return
       }
       const content = logs
@@ -148,21 +149,42 @@ export function SettingsLogsControlBar({ navigation }: Props) {
           }),
         )
         .join('\n')
-      Clipboard.setString(content)
-      toast.show('Logs copied')
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const fileName = `logs-${timestamp}.jsonl`
+      const tempFile = new File(Paths.cache, fileName)
+      tempFile.create({ intermediates: true })
+      const writer = tempFile.writableStream().getWriter()
+      try {
+        await writer.write(new TextEncoder().encode(content))
+      } finally {
+        await writer.close()
+      }
+      try {
+        await Share.open({
+          url: `file://${tempFile.uri}`,
+          type: 'application/x-ndjson',
+          filename: fileName,
+        })
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message?.includes('User did not share'))
+          return
+        throw e
+      } finally {
+        tempFile.delete()
+      }
     } catch (error) {
-      logger.error('logs', 'copy_failed', { error: error as Error })
-      toast.show('Failed to copy logs')
+      logger.error('logs', 'share_failed', { error: error as Error })
+      toast.show('Failed to share logs')
     }
   }, [toast])
 
   const actions: OverflowAction[] = useMemo(
     () => [
       {
-        key: 'copy',
-        icon: <CopyIcon color={iconColors.white} />,
-        label: 'Copy to Clipboard',
-        onPress: handleCopyLogs,
+        key: 'share',
+        icon: <ShareIcon color={iconColors.white} />,
+        label: 'Share Logs',
+        onPress: handleShareLogs,
       },
       {
         key: 'export',
@@ -183,7 +205,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
         variant: 'danger' as const,
       },
     ],
-    [handleClearLogs, handleCopyLogs, handleExportLogs, isExporting],
+    [handleClearLogs, handleShareLogs, handleExportLogs, isExporting],
   )
 
   return (
