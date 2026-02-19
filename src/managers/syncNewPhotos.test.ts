@@ -2,6 +2,7 @@ import * as MediaLibrary from 'expo-media-library'
 import { SYNC_NEW_PHOTOS_INTERVAL } from '../config'
 import { ensureMediaLibraryPermission } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
+import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { initSyncNewPhotos, setAutoSyncNewPhotos } from './syncNewPhotos'
 
 jest.useFakeTimers()
@@ -113,5 +114,32 @@ describe('syncNewPhotos', () => {
     expect(processAssetsMock).toHaveBeenNthCalledWith(3, [
       expect.objectContaining({ id: 'a4', name: '4.jpg' }),
     ])
+  })
+
+  it('aborts before processAssets when shutdown is called mid-tick', async () => {
+    const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
+    const processAssetsMock = jest.mocked(processAssets)
+
+    await setAutoSyncNewPhotos(true)
+
+    let resolveGetAssets: ((v: any) => void) | null = null
+    getAssetsAsyncMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetAssets = resolve
+      }),
+    )
+
+    initSyncNewPhotos()
+    await jest.advanceTimersByTimeAsync(SYNC_NEW_PHOTOS_INTERVAL)
+
+    // Worker is now blocked on getAssetsAsync.
+    const shutdownPromise = shutdownAllServiceIntervals()
+
+    // Resolve getAssetsAsync — worker will see signal.aborted and return.
+    resolveGetAssets!(page([asset('a1', '1.jpg', 1000)]))
+    await jest.advanceTimersByTimeAsync(0)
+    await shutdownPromise
+
+    expect(processAssetsMock).not.toHaveBeenCalled()
   })
 })
