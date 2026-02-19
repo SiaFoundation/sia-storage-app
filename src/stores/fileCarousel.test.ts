@@ -539,12 +539,12 @@ describe('useFileCarousel hook', () => {
 
       // Simulate a sync storm: add files one at a time, firing sync after each
       for (let i = 4; i <= 10; i++) {
-        await createRecord({
-          id: `file-${i}`,
-          name: `${String.fromCharCode(96 + i)}.jpg`,
-          createdAt: base + i * 10,
-        })
         await act(async () => {
+          await createRecord({
+            id: `file-${i}`,
+            name: `${String.fromCharCode(96 + i)}.jpg`,
+            createdAt: base + i * 10,
+          })
           triggerSyncChange()
           await new Promise((r) => setTimeout(r, 30))
         })
@@ -611,9 +611,17 @@ describe('useFileCarousel hook', () => {
 
       // Add two files that would shift file-2's position in DB, then fire
       // two sync events. With frozen positions, nothing should change.
-      await createRecord({ id: 'file-4', name: 'd.jpg', createdAt: base + 30 })
-      await createRecord({ id: 'file-5', name: 'e.jpg', createdAt: base + 40 })
       await act(async () => {
+        await createRecord({
+          id: 'file-4',
+          name: 'd.jpg',
+          createdAt: base + 30,
+        })
+        await createRecord({
+          id: 'file-5',
+          name: 'e.jpg',
+          createdAt: base + 40,
+        })
         triggerSyncChange()
         triggerSyncChange()
         await new Promise((r) => setTimeout(r, 200))

@@ -1,13 +1,12 @@
-import {
-  CircleCheckIcon,
-  TriangleAlertIcon,
-  UploadCloudIcon,
-} from 'lucide-react-native'
+import { CircleCheckIcon, TriangleAlertIcon } from 'lucide-react-native'
 import type React from 'react'
+import { SpinnerIcon } from '../components/SpinnerIcon'
 import { compactUploadPercent } from '../lib/uploadPercent'
 import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
 import { useHasOnboarded } from '../stores/settings'
+import { useIsSyncingDown } from '../stores/syncDown'
+import { useIsSyncingUpMetadata } from '../stores/syncUpMetadata'
 import { useUploadProgress } from '../stores/uploads'
 import { palette } from '../styles/colors'
 import { useIsOnline } from './useIsOnline'
@@ -24,6 +23,8 @@ export function useAppStatus(): AppStatus {
   const isConnected = useIsConnected()
   const hasOnboarded = useHasOnboarded()
   const uploadsProgress = useUploadProgress()
+  const isSyncingDown = useIsSyncingDown()
+  const isSyncingUpMetadata = useIsSyncingUpMetadata()
   const isOnline = useIsOnline()
 
   if (!hasOnboarded || isInitializing) {
@@ -46,12 +47,15 @@ export function useAppStatus(): AppStatus {
     }
   }
 
-  if (uploadsProgress.show) {
-    const hint = compactUploadPercent(uploadsProgress.percentDecimal)
+  const isActive = uploadsProgress.show || isSyncingDown || isSyncingUpMetadata
+  if (isActive) {
+    const hint = uploadsProgress.show
+      ? (compactUploadPercent(uploadsProgress.percentDecimal) ?? undefined)
+      : undefined
     return {
       visible: true,
-      icon: <UploadCloudIcon size={14} color={palette.gray[50]} />,
-      hint: hint ?? undefined,
+      icon: <SpinnerIcon size={14} color={palette.gray[50]} />,
+      hint,
       level: 'info',
     }
   }
