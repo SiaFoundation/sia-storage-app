@@ -4,6 +4,7 @@ export type MainStackParamList = {
   LibraryHome: { openFileId?: string } | undefined
   TagLibrary: { tagId: string; tagName: string }
   DirectoryScreen: { directoryId: string; directoryName: string }
+  Search: undefined
 }
 
 export type SwitchIndexerStackParamList = {
