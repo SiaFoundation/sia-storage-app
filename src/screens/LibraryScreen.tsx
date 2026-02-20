@@ -1,6 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { MenuIcon } from 'lucide-react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
@@ -16,40 +15,47 @@ import { FileCarousel } from '../components/FileCarousel'
 import { FileGallery } from '../components/FileGallery'
 import { FileList } from '../components/FileList'
 import { Gradient } from '../components/Gradient'
-import { IconButton } from '../components/IconButton'
-import { LibraryAppStatusIcon } from '../components/LibraryAppStatusIcon'
-import { LibraryControlBar } from '../components/LibraryControlBar'
+import { LibraryHeader } from '../components/LibraryHeader'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
-import { ScreenHeader } from '../components/ScreenHeader'
+import { LibraryTabBar } from '../components/LibraryTabBar'
+import { SelectionBar } from '../components/SelectionBar'
 import type { MainStackParamList } from '../stacks/types'
 import {
   enterSelectionMode,
   exitSelectionMode,
-  selectFile,
   toggleFileSelection,
   useIsSelectionMode,
+  useSelectedCount,
   useSelectedFileIds,
 } from '../stores/fileSelection'
 import type { FileRecord } from '../stores/files'
 import {
   type Category,
+  type FileListParams,
   useFileList,
-  useLibrary,
   useLibraryCount,
 } from '../stores/library'
-import { useLibraryViewMode } from '../stores/settings'
 import { openSheet } from '../stores/sheets'
 import { useIsSyncingDown } from '../stores/syncDown'
+import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
 export function LibraryScreen({ route, navigation }: Props) {
-  const viewMode = useLibraryViewMode()
+  const vs = useViewSettings('library')
   const isSyncing = useIsSyncingDown()
-  const { selectedCategories, searchQuery } = useLibrary()
-  const files = useFileList()
+  const filters: FileListParams = useMemo(
+    () => ({
+      scope: 'library',
+      sortBy: vs.sortBy,
+      sortDir: vs.sortDir,
+      categories: vs.selectedCategories,
+    }),
+    [vs.sortBy, vs.sortDir, vs.selectedCategories],
+  )
+  const files = useFileList(filters)
   const fileCount = useLibraryCount()
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(() => {
     const openFileId = route.params?.openFileId
@@ -62,51 +68,47 @@ export function LibraryScreen({ route, navigation }: Props) {
   const fadeAnim = useRef(new Animated.Value(0)).current
   const scaleAnim = useRef(new Animated.Value(0.95)).current
 
-  // Selection mode state
   const isSelectionMode = useIsSelectionMode()
   const selectedFileIds = useSelectedFileIds()
+  const selectedCount = useSelectedCount()
 
-  // Ref to track selection mode for stable callbacks
   const isSelectionModeRef = useRef(isSelectionMode)
   useEffect(() => {
     isSelectionModeRef.current = isSelectionMode
   }, [isSelectionMode])
 
-  // Handle item press - opens carousel or toggles selection
-  // Using ref for isSelectionMode to keep callback reference stable
   const handlePressItem = useCallback((file: FileRecord) => {
     if (isSelectionModeRef.current) {
       toggleFileSelection(file.id)
     } else {
+      setActionFileId(null)
       setSelectedFile(file)
     }
   }, [])
 
-  // Handle long press - enters selection mode with file selected
-  // Using ref for isSelectionMode to keep callback reference stable
+  const [actionFileId, setActionFileId] = useState<string | null>(null)
+
   const handleLongPressItem = useCallback((file: FileRecord) => {
-    if (!isSelectionModeRef.current) {
-      enterSelectionMode()
+    if (isSelectionModeRef.current) {
+      toggleFileSelection(file.id)
+      return
     }
-    selectFile(file.id)
+    setActionFileId(file.id)
+    openSheet('fileActions')
   }, [])
 
-  // Handle opening the action sheet from carousel
   const handleShowCarouselActions = useCallback(() => {
     openSheet('fileActions')
   }, [])
 
-  // Handle opening selection action sheet
   const handleOpenSelectionActions = useCallback(() => {
     openSheet('fileActions')
   }, [])
 
-  // Handle completion of bulk action
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
   }, [])
 
-  // Animate carousel fade in/out with scale
   useEffect(() => {
     if (selectedFile) {
       Animated.parallel([
@@ -138,12 +140,44 @@ export function LibraryScreen({ route, navigation }: Props) {
     }
   }, [selectedFile, fadeAnim, scaleAnim])
 
-  // Get file IDs for action sheet
   const actionSheetFileIds = isSelectionMode
     ? Array.from(selectedFileIds)
     : selectedFile
       ? [selectedFile.id]
-      : []
+      : actionFileId
+        ? [actionFileId]
+        : []
+
+  const categorySet = new Set(vs.selectedCategories)
+
+  const title = (() => {
+    const n = categorySet.size
+    if (n === 1) {
+      const only = Array.from(categorySet)[0] as Category
+      switch (only) {
+        case 'Image':
+          return 'Photos'
+        case 'Video':
+          return 'Videos'
+        case 'Audio':
+          return 'Audio'
+        case 'Files':
+          return 'Files'
+        default:
+          return 'Library'
+      }
+    }
+    return 'Library'
+  })()
+
+  const subtitle = (() => {
+    if (categorySet.size > 0) {
+      const filtered = files.data?.length ?? 0
+      return `${filtered.toLocaleString()} results`
+    }
+    const total = fileCount.data ?? 0
+    return `${total.toLocaleString()} ${total === 1 ? 'item' : 'items'}`
+  })()
 
   return (
     <View style={styles.container}>
@@ -153,67 +187,32 @@ export function LibraryScreen({ route, navigation }: Props) {
         overlayBottomColor={overlay.gradientLight}
         style={styles.topBlur}
       />
-      <ScreenHeader>
-        <View style={styles.headerTitles}>
-          <Text style={styles.headerTitleLarge} pointerEvents="none">
-            {(() => {
-              const n = selectedCategories.size
-              if (n === 1) {
-                const only = Array.from(selectedCategories)[0] as Category
-                switch (only) {
-                  case 'Image':
-                    return 'Photos'
-                  case 'Video':
-                    return 'Videos'
-                  case 'Audio':
-                    return 'Audio'
-                  case 'Files':
-                    return 'Files'
-                  default:
-                    return 'Library'
-                }
-              }
-              return 'Library'
-            })()}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {(() => {
-              const total = fileCount.data ?? 0
-              const filtered = files.data?.length ?? 0
-              if (
-                searchQuery.trim().length > 0 ||
-                selectedCategories.size > 0
-              ) {
-                return `${filtered} results`
-              }
-              return `${total} ${total === 1 ? 'item' : 'items'}`
-            })()}
-          </Text>
-        </View>
-        <View style={styles.buttonRow}>
-          <LibraryAppStatusIcon />
-          <IconButton
-            onPress={() => navigation.navigate('MenuTab' as never)}
-            style={[styles.headerIcon, { paddingHorizontal: 4 }]}
-            accessibilityLabel="Menu"
-          >
-            <MenuIcon color={palette.gray[50]} />
-          </IconButton>
-        </View>
-      </ScreenHeader>
+      <LibraryHeader
+        title={title}
+        subtitle={subtitle}
+        scope="library"
+        isSelectionMode={isSelectionMode}
+        selectedCount={selectedCount}
+        onEnterSelection={enterSelectionMode}
+        onExitSelection={exitSelectionMode}
+        onOpenSelectionActions={handleOpenSelectionActions}
+        onNavigateMenu={() => navigation.navigate('MenuTab' as never)}
+      />
       {files.isLoading ? (
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
         </View>
       ) : fileCount.data ? (
         files.data && files.data.length > 0 ? (
-          viewMode.data === 'gallery' ? (
+          vs.viewMode === 'gallery' ? (
             <FileGallery
+              filters={filters}
               onPressItem={handlePressItem}
               onLongPressItem={handleLongPressItem}
             />
           ) : (
             <FileList
+              filters={filters}
               onPressItem={handlePressItem}
               onLongPressItem={handleLongPressItem}
             />
@@ -233,9 +232,7 @@ export function LibraryScreen({ route, navigation }: Props) {
             {files.error ? <LibraryLocalResetButton /> : null}
           </View>
         )
-      ) : isSyncing &&
-        searchQuery.trim().length === 0 &&
-        selectedCategories.size === 0 ? (
+      ) : isSyncing && categorySet.size === 0 ? (
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
           <Text style={styles.emptyTitle}>Syncing your files</Text>
@@ -255,11 +252,11 @@ export function LibraryScreen({ route, navigation }: Props) {
       )}
       <AddFileActionSheet />
       <LibraryStatusSheet />
-      <LibraryControlBar
-        navigation={navigation}
-        route={route}
-        onOpenSelectionActions={handleOpenSelectionActions}
-      />
+      {isSelectionMode ? (
+        <SelectionBar onOpenSelectionActions={handleOpenSelectionActions} />
+      ) : (
+        <LibraryTabBar />
+      )}
       {selectedFile ? (
         <Animated.View
           style={[
@@ -272,12 +269,12 @@ export function LibraryScreen({ route, navigation }: Props) {
           ]}
           pointerEvents="box-none"
         >
-          {/* Disable drag-to-dismiss when zoomed into an image or viewing
-              file details, so the detail ScrollView can scroll freely. */}
           <DragToDismiss
             onDismiss={() => {
               setSelectedFile(null)
               setIsDraggingToDismiss(false)
+              setIsCarouselZoomed(false)
+              setIsCarouselDetail(false)
             }}
             onDragStart={() => setIsDraggingToDismiss(true)}
             onDragCancel={() => setIsDraggingToDismiss(false)}
@@ -286,7 +283,14 @@ export function LibraryScreen({ route, navigation }: Props) {
             <FileCarousel
               initialId={selectedFile.id}
               initialFile={selectedFile}
-              onClose={() => setSelectedFile(null)}
+              sortBy={vs.sortBy}
+              sortDir={vs.sortDir}
+              categories={vs.selectedCategories}
+              onClose={() => {
+                setSelectedFile(null)
+                setIsCarouselZoomed(false)
+                setIsCarouselDetail(false)
+              }}
               onShowActionSheet={handleShowCarouselActions}
               onZoomChange={setIsCarouselZoomed}
               onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
@@ -308,14 +312,6 @@ export function LibraryScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgCanvas },
-  header: {
-    paddingHorizontal: 16,
-    backgroundColor: 'transparent',
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
   topBlur: {
     zIndex: 10,
     pointerEvents: 'none',
@@ -325,19 +321,6 @@ const styles = StyleSheet.create({
     top: 0,
     height: 180,
   },
-  headerTitleLarge: {
-    color: palette.gray[50],
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  headerTitles: { top: 0, flexDirection: 'column' },
-  headerSubtitle: {
-    color: palette.gray[50],
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  headerIcon: { paddingVertical: 6, paddingHorizontal: 8 },
   emptyImage: { width: 140, height: 140 },
   emptyWrap: {
     flex: 1,
@@ -353,12 +336,6 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   emptyText: { color: whiteA.a70, textAlign: 'center' },
-  buttonRow: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   carouselOverlay: {
     zIndex: 100,
   },

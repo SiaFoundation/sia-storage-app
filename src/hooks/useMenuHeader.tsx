@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { HomeIcon } from 'lucide-react-native'
+import { ArrowLeftIcon } from 'lucide-react-native'
 import { useLayoutEffect } from 'react'
 import { IconButton } from '../components/IconButton'
 import type { MenuStackParamList } from '../stacks/types'
@@ -11,9 +11,9 @@ export function useMenuHeader() {
     useNavigation<NativeStackNavigationProp<MenuStackParamList, 'MenuHome'>>()
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
+      headerLeft: () => (
         <IconButton onPress={() => navigation.navigate('MainTab' as never)}>
-          <HomeIcon color={palette.gray[50]} />
+          <ArrowLeftIcon color={palette.gray[50]} size={22} />
         </IconButton>
       ),
     })

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
-import { create } from 'zustand'
 import { db } from '../db'
 import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import { libraryStats, useOnLibraryListChange } from './librarySwr'
@@ -50,7 +49,7 @@ async function readOrderedFileRecords(
   }
 
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, localId, hash
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,
@@ -64,15 +63,29 @@ async function readOrderedFileRecords(
 
 const PAGE_SIZE = 40
 
-export function useFileList() {
-  const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
-  const sortingDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-  const categories = Array.from(selectedCategories ?? new Set())
+export type FileListParams = {
+  scope: string
+  sortBy?: SortBy
+  sortDir?: SortDir
+  categories?: Category[]
+  query?: string
+}
+
+export function useFileList(params: FileListParams) {
+  const {
+    scope,
+    sortBy = 'DATE',
+    sortDir: sortDirParam,
+    categories = [],
+    query,
+  } = params
+  const sortingDir = sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+
   const categoriesKey = categories.length
     ? categories.slice().sort().join(',')
     : ''
 
-  const base = `library/list:${sortBy}:${sortingDir}:${categoriesKey}:${searchQuery ?? ''}`
+  const base = `library/${scope}:list:${sortBy}:${sortingDir}:${categoriesKey}:${query ?? ''}`
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -80,7 +93,7 @@ export function useFileList() {
       sortBy,
       sortDir: sortingDir,
       categories: categories.length ? categories : undefined,
-      query: searchQuery?.trim().length ? searchQuery : undefined,
+      query: query?.trim().length ? query : undefined,
       limit: PAGE_SIZE,
       offset: pageIndex * PAGE_SIZE,
     })
@@ -125,8 +138,20 @@ export function useLibraryCount() {
   })
 }
 
+// Count of media files (image, video, audio) excluding thumbnails.
+export function useMediaCount() {
+  return useSWR(libraryStats.key('mediaCount'), async () => {
+    const row = await db().getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files
+       WHERE kind = 'file'
+         AND (type LIKE 'image/%' OR type LIKE 'video/%' OR type LIKE 'audio/%')`,
+    )
+    return row?.count ?? 0
+  })
+}
+
 // File View Store
-export type SortBy = 'NAME' | 'DATE'
+export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
 export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
@@ -188,70 +213,27 @@ export function buildLibraryQueryParts(
     whereParts.push(`(${categoryConditions.join(' OR ')})`)
   }
   if (hasQuery) {
-    whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE "\\"`)
+    whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE '\\'`)
     const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
     params.push(`%${escaped}%`)
   }
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
-  const orderExpr =
-    sortBy === 'NAME'
-      ? `(${tableAlias}.name IS NULL) ASC, ${tableAlias}.name COLLATE NOCASE ${dir}, ${tableAlias}.id ${dir}`
-      : `${tableAlias}.createdAt ${dir}, ${tableAlias}.id ${dir}`
+  let orderExpr: string
+  switch (sortBy) {
+    case 'NAME':
+      orderExpr = `(${tableAlias}.name IS NULL) ASC, ${tableAlias}.name COLLATE NOCASE ${dir}, ${tableAlias}.id ${dir}`
+      break
+    case 'ADDED':
+      orderExpr = `${tableAlias}.addedAt ${dir}, ${tableAlias}.id ${dir}`
+      break
+    case 'SIZE':
+      orderExpr = `${tableAlias}.size ${dir}, ${tableAlias}.id ${dir}`
+      break
+    default:
+      orderExpr = `${tableAlias}.createdAt ${dir}, ${tableAlias}.id ${dir}`
+      break
+  }
 
   return { where, params, orderExpr }
-}
-
-type LibraryState = {
-  sortBy: SortBy
-  sortDir: SortDir
-  selectedCategories: Set<Category>
-  searchQuery: string
-}
-
-export const useLibrary = create<LibraryState>(() => ({
-  sortBy: 'DATE',
-  sortDir: 'DESC',
-  selectedCategories: new Set<Category>(),
-  searchQuery: '',
-}))
-
-const { setState } = useLibrary
-
-export function setSortCategory(sortBy: SortBy) {
-  setState(() => {
-    return { sortBy }
-  })
-}
-
-export function toggleDir() {
-  setState((state) => {
-    return { sortDir: state.sortDir === 'ASC' ? 'DESC' : 'ASC' }
-  })
-}
-
-export function toggleCategory(c: Category) {
-  setState((state) => {
-    const next = new Set(state.selectedCategories)
-    next.has(c) ? next.delete(c) : next.add(c)
-    return { selectedCategories: next }
-  })
-}
-
-export function clearCategories() {
-  setState(() => {
-    return { selectedCategories: new Set() }
-  })
-}
-
-export function setSearchQuery(searchQuery: string) {
-  setState(() => {
-    return { searchQuery }
-  })
-}
-
-export function clearSearchQuery() {
-  setState(() => {
-    return { searchQuery: '' }
-  })
 }

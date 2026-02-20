@@ -84,6 +84,15 @@ export function ActionSheet({
   const bottomSheetRef = useRef<BottomSheetModal>(null)
   const [contentHeight, setContentHeight] = useState<number | null>(null)
   const [currentIndex, setCurrentIndex] = useState<number>(-1)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+    } else if (mounted) {
+      bottomSheetRef.current?.dismiss()
+    }
+  }, [visible, mounted])
 
   const contentPaddingBottom = useMemo(() => {
     return Math.max(16, insets.bottom + 12)
@@ -160,35 +169,24 @@ export function ActionSheet({
   const handleDismiss = useCallback(() => {
     onRequestClose()
     setCurrentIndex(-1)
+    setMounted(false)
   }, [onRequestClose])
 
   const handleSheetChange = useCallback((index: number) => {
     setCurrentIndex(index)
   }, [])
 
-  // Present the sheet when it becomes visible.
+  // Present the sheet on mount.
   useEffect(() => {
+    if (!mounted) return
     const sheet = bottomSheetRef.current
-    if (!sheet || !visible) return
+    if (!sheet) return
 
     sheet.present()
     if (resolvedInitialIndex >= 0) {
       sheet.snapToIndex(resolvedInitialIndex)
     }
-  }, [resolvedInitialIndex, visible])
-
-  // Dismiss the sheet when it becomes hidden.
-  useEffect(() => {
-    const sheet = bottomSheetRef.current
-    if (!sheet || visible) return
-
-    sheet.dismiss()
-  }, [visible])
-
-  // Update the current index when the sheet becomes visible or hidden.
-  useEffect(() => {
-    setCurrentIndex(visible ? resolvedInitialIndex : -1)
-  }, [resolvedInitialIndex, visible])
+  }, [mounted, resolvedInitialIndex])
 
   // Measure the content height and update the state.
   const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
@@ -198,6 +196,8 @@ export function ActionSheet({
       return Math.abs(prev - height) <= 1 ? prev : height
     })
   }, [])
+
+  if (!mounted) return null
 
   return (
     <GorhomBottomSheetModal
@@ -210,7 +210,8 @@ export function ActionSheet({
       backdropComponent={renderBackdrop}
       enablePanDownToClose
       enableContentPanningGesture={enableContentPanningGesture}
-      keyboardBehavior="interactive"
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
       onDismiss={handleDismiss}
       onChange={handleSheetChange}
       overDragResistanceFactor={4.5}

@@ -78,26 +78,6 @@ export async function toggleAutoSyncDownEvents() {
   await setAutoSyncDownEvents(next)
 }
 
-// Library view mode
-
-export type LibraryViewMode = 'gallery' | 'list'
-
-export const [getLibraryViewMode, useLibraryViewMode, libraryViewModeCache] =
-  createGetterAndSWRHook<LibraryViewMode>(() =>
-    getAsyncStorageString<LibraryViewMode>('libraryViewMode', 'gallery'),
-  )
-
-export async function setLibraryViewMode(value: LibraryViewMode) {
-  await setAsyncStorageString<LibraryViewMode>('libraryViewMode', value)
-  await libraryViewModeCache.set(value)
-}
-
-export async function toggleLibraryViewMode() {
-  const current = await getLibraryViewMode()
-  const next = current === 'gallery' ? 'list' : 'gallery'
-  await setLibraryViewMode(next)
-}
-
 // Status display mode (count vs size)
 
 export type StatusDisplayMode = 'count' | 'size'

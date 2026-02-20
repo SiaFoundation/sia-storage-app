@@ -12,19 +12,6 @@ import type { Category } from './library'
 
 import { invalidateCacheLibraryLists } from './librarySwr'
 
-jest.mock('./library', () => {
-  const actual = jest.requireActual('./library')
-  return {
-    ...actual,
-    useLibrary: () => ({
-      sortBy: 'DATE',
-      sortDir: 'DESC',
-      selectedCategories: new Set(),
-      searchQuery: '',
-    }),
-  }
-})
-
 describe('fileCarousel virtual list functions', () => {
   const base = 1_000
 

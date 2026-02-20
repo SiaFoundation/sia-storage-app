@@ -15,6 +15,7 @@ type Props = {
   onRequestClose: () => void
   title: string
   headerRight?: ReactNode
+  presentationStyle?: 'pageSheet' | 'formSheet'
   children: ReactNode
 }
 
@@ -23,6 +24,7 @@ export function ModalSheet({
   onRequestClose,
   title,
   headerRight,
+  presentationStyle = 'pageSheet',
   children,
 }: Props) {
   const insets = useSafeAreaInsets()
@@ -31,8 +33,9 @@ export function ModalSheet({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle={presentationStyle}
       onRequestClose={onRequestClose}
+      onDismiss={onRequestClose}
     >
       <View style={styles.container}>
         <View

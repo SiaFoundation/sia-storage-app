@@ -19,6 +19,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   const isSelectionMode = useIsSelectionMode()
   const isSelected = useIsFileSelected(file.id)
   const status = useFileStatus(file)
+
   return (
     <Pressable
       collapsable={false}
@@ -85,19 +86,19 @@ export const FileListItem = memo(FileListItemComponent, (prev, next) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
     display: 'flex',
     flexDirection: 'row',
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: whiteA.a10,
-    paddingBottom: 8,
-    width: '100%',
+    paddingVertical: 8,
+    paddingLeft: 16,
     paddingRight: 24,
     overflow: 'hidden',
   },
   containerSelected: {
     backgroundColor: 'rgba(255,255,255,0.05)',
+    borderBottomWidth: 0,
   },
   thumbnailContainer: {
     alignItems: 'center',
