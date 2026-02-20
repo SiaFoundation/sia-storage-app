@@ -19,6 +19,7 @@ import { LibraryHeader } from '../components/LibraryHeader'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { LibraryTabBar } from '../components/LibraryTabBar'
+import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { SelectionBar } from '../components/SelectionBar'
 import type { MainStackParamList } from '../stacks/types'
 import {
@@ -99,6 +100,10 @@ export function LibraryScreen({ route, navigation }: Props) {
 
   const handleShowCarouselActions = useCallback(() => {
     openSheet('fileActions')
+  }, [])
+
+  const handleShowTagSheet = useCallback(() => {
+    openSheet('manageFileTags')
   }, [])
 
   const handleOpenSelectionActions = useCallback(() => {
@@ -292,6 +297,7 @@ export function LibraryScreen({ route, navigation }: Props) {
                 setIsCarouselDetail(false)
               }}
               onShowActionSheet={handleShowCarouselActions}
+              onShowTagSheet={handleShowTagSheet}
               onZoomChange={setIsCarouselZoomed}
               onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
               isDismissing={isDraggingToDismiss}
@@ -300,11 +306,19 @@ export function LibraryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
       {actionSheetFileIds.length > 0 ? (
-        <FileActionsSheet
-          fileIds={actionSheetFileIds}
-          sheetName="fileActions"
-          onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
-        />
+        <>
+          <FileActionsSheet
+            fileIds={actionSheetFileIds}
+            sheetName="fileActions"
+            onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
+          />
+          {actionSheetFileIds.length === 1 ? (
+            <ManageTagsSheet
+              fileId={actionSheetFileIds[0]}
+              sheetName="manageFileTags"
+            />
+          ) : null}
+        </>
       ) : null}
     </View>
   )

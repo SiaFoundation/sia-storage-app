@@ -1,8 +1,10 @@
-import { Trash2Icon } from 'lucide-react-native'
+import { TagIcon, Trash2Icon } from 'lucide-react-native'
 import { StyleSheet, Text, View } from 'react-native'
 import { useSelectedCount } from '../stores/fileSelection'
+import { openSheet } from '../stores/sheets'
 import { palette } from '../styles/colors'
 import { BottomControlBar, iconColors } from './BottomControlBar'
+import { BulkManageTagsSheet } from './BulkManageTagsSheet'
 import { IconButton } from './IconButton'
 
 type Props = {
@@ -13,24 +15,36 @@ export function SelectionBar({ onOpenSelectionActions }: Props) {
   const selectedCount = useSelectedCount()
 
   return (
-    <BottomControlBar style={styles.bar}>
-      <View style={styles.container}>
-        <View style={styles.spacer} />
-        <Text style={styles.count}>
-          {selectedCount > 0 ? `${selectedCount} selected` : 'Select items'}
-        </Text>
-        <IconButton
-          onPress={onOpenSelectionActions}
-          disabled={selectedCount === 0}
-          accessibilityLabel="Delete"
-        >
-          <Trash2Icon
-            color={selectedCount > 0 ? palette.red[500] : iconColors.inactive}
-            size={20}
-          />
-        </IconButton>
-      </View>
-    </BottomControlBar>
+    <>
+      <BottomControlBar style={styles.bar}>
+        <View style={styles.container}>
+          <IconButton
+            onPress={() => openSheet('bulkManageTags')}
+            disabled={selectedCount === 0}
+            accessibilityLabel="Add tag"
+          >
+            <TagIcon
+              color={selectedCount > 0 ? iconColors.white : iconColors.inactive}
+              size={20}
+            />
+          </IconButton>
+          <Text style={styles.count}>
+            {selectedCount > 0 ? `${selectedCount} selected` : 'Select items'}
+          </Text>
+          <IconButton
+            onPress={onOpenSelectionActions}
+            disabled={selectedCount === 0}
+            accessibilityLabel="Delete"
+          >
+            <Trash2Icon
+              color={selectedCount > 0 ? palette.red[500] : iconColors.inactive}
+              size={20}
+            />
+          </IconButton>
+        </View>
+      </BottomControlBar>
+      <BulkManageTagsSheet />
+    </>
   )
 }
 
@@ -49,8 +63,5 @@ const styles = StyleSheet.create({
     color: palette.gray[50],
     fontSize: 14,
     fontWeight: '600',
-  },
-  spacer: {
-    width: 20,
   },
 })

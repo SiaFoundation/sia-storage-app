@@ -4,8 +4,10 @@ import {
   CloudOffIcon,
   CloudUploadIcon,
   EraserIcon,
+  HeartIcon,
   LinkIcon,
   ShareIcon,
+  TagIcon,
   Trash2Icon,
 } from 'lucide-react-native'
 import { useCallback } from 'react'
@@ -29,7 +31,8 @@ import {
   useFileDetails,
 } from '../stores/files'
 import { getFsFileUri, removeFsFile } from '../stores/fs'
-import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
+import { toggleFavorite, useIsFavorite } from '../stores/tags'
 import { palette } from '../styles/colors'
 import { ActionSheet } from './ActionSheet'
 import { ActionSheetButton } from './ActionSheetButton'
@@ -90,6 +93,12 @@ function SingleFileActionsSheet({
   const { handleShareFile, handleShareURL, canShare } = useShareAction({
     fileId,
   })
+  const favorite = useIsFavorite(isOpen ? fileId : null)
+
+  const handleToggleFavorite = useCallback(() => {
+    closeSheet()
+    void toggleFavorite(fileId)
+  }, [fileId])
 
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {
@@ -215,6 +224,29 @@ function SingleFileActionsSheet({
           Remove from network
         </ActionSheetButton>
       )}
+      <ActionSheetButton
+        variant="primary"
+        icon={
+          <HeartIcon
+            size={18}
+            fill={favorite.data ? palette.red[500] : 'none'}
+            color={favorite.data ? palette.red[500] : undefined}
+          />
+        }
+        onPress={handleToggleFavorite}
+      >
+        {favorite.data ? 'Remove from Favorites' : 'Add to Favorites'}
+      </ActionSheetButton>
+      <ActionSheetButton
+        variant="primary"
+        icon={<TagIcon size={18} />}
+        onPress={() => {
+          closeSheet()
+          setTimeout(() => openSheet('manageFileTags'), 300)
+        }}
+      >
+        Manage tags
+      </ActionSheetButton>
       <ActionSheetButton
         variant="danger"
         icon={<Trash2Icon size={18} />}

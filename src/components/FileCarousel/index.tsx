@@ -1,4 +1,3 @@
-import Clipboard from '@react-native-clipboard/clipboard'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { EyeIcon, EyeOffIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,18 +14,13 @@ import Carousel, {
 } from 'react-native-reanimated-carousel'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Share from 'react-native-share'
-import {
-  getOneSealedObject,
-  getPinnedObject,
-  useFileStatus,
-} from '../../lib/file'
+import { useFileStatus } from '../../lib/file'
 import { logger } from '../../lib/logger'
-import { generateSiaShareUrl } from '../../lib/shareUrl'
 import { useToast } from '../../lib/toastContext'
 import { useFileCarousel } from '../../stores/fileCarousel'
 import type { FileRecord } from '../../stores/files'
 import type { Category, SortBy, SortDir } from '../../stores/library'
-import { useSdk } from '../../stores/sdk'
+import { toggleFavorite, useIsFavorite } from '../../stores/tags'
 import { palette } from '../../styles/colors'
 import BlocksLoader from '../BlocksLoader'
 import { useDragToDismissGesture } from '../DragToDismiss'
@@ -43,6 +37,7 @@ type Props = {
   categories?: Category[]
   onClose: () => void
   onShowActionSheet?: () => void
+  onShowTagSheet?: () => void
   onZoomChange?: (isZoomed: boolean) => void
   onViewStyleChange?: (viewStyle: 'consume' | 'detail') => void
   isDismissing?: boolean
@@ -56,6 +51,7 @@ export function FileCarousel({
   categories,
   onClose,
   onShowActionSheet,
+  onShowTagSheet,
   onZoomChange,
   onViewStyleChange,
   isDismissing,
@@ -105,7 +101,6 @@ export function FileCarousel({
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 })
 
   const insets = useSafeAreaInsets()
-  const sdk = useSdk()
   const carouselRef = useRef<ICarouselInstance>(null)
   const dragToDismissGesture = useDragToDismissGesture()
 
@@ -183,32 +178,24 @@ export function FileCarousel({
     }
   }, [currentFile, status.data?.fileUri])
 
-  const handleShareURL = useCallback(async () => {
-    if (!currentFile || !sdk) return
-    try {
-      const result = getOneSealedObject(currentFile)
-      if (!result) return
-      const pinnedObject = await getPinnedObject(
-        result.indexerURL,
-        result.sealedObject,
-      )
-      const expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + 1)
-      const shareUrl = await generateSiaShareUrl(sdk, pinnedObject, expiresAt)
-      if (!shareUrl) return
-      Clipboard.setString(shareUrl)
-      toast.show('Share URL copied')
-    } catch (e) {
-      logger.error('FileCarousel', 'share_url_failed', { error: e as Error })
-      toast.show('Failed to copy URL')
-    }
-  }, [currentFile, sdk, toast])
-
   const handleMore = useCallback(() => {
     if (onShowActionSheet) {
       onShowActionSheet()
     }
   }, [onShowActionSheet])
+
+  const handleAddTag = useCallback(() => {
+    if (onShowTagSheet) {
+      onShowTagSheet()
+    }
+  }, [onShowTagSheet])
+
+  const favorite = useIsFavorite(currentFile?.id ?? null)
+  const handleToggleFavorite = useCallback(() => {
+    if (currentFile) {
+      void toggleFavorite(currentFile.id)
+    }
+  }, [currentFile])
 
   const toggleControlsVisibility = useCallback(() => {
     setShowChrome((curr) => !curr)
@@ -373,8 +360,10 @@ export function FileCarousel({
             viewStyle={viewStyle}
             setViewStyle={setViewStyle}
             onShareFile={handleShareFile}
-            onShareURL={handleShareURL}
+            onAddTag={handleAddTag}
             onPressMore={handleMore}
+            onToggleFavorite={handleToggleFavorite}
+            isFavorite={favorite.data ?? false}
             canShare={status.data?.isUploaded ?? false}
           />
         </View>

@@ -23,6 +23,7 @@ import { migration_0002_keychain_accessibility } from './0002_keychain_accessibi
 import { migration_0003_logs_data_column } from './0003_logs_data_column'
 import { migration_0004_hash_and_thumbs } from './0004_hash_and_thumbs'
 import { migration_0005_reset_sync_up_cursor } from './0005_reset_sync_up_cursor'
+import { migration_0006_add_tags_and_directories } from './0006_add_tags_and_directories'
 import type { Migration, MigrationProgressHandler } from './types'
 
 const migrations: Migration[] = [
@@ -31,6 +32,7 @@ const migrations: Migration[] = [
   migration_0003_logs_data_column,
   migration_0004_hash_and_thumbs,
   migration_0005_reset_sync_up_cursor,
+  migration_0006_add_tags_and_directories,
 ]
 
 export async function runMigrations(

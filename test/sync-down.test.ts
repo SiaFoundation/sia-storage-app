@@ -5,6 +5,7 @@
 import './utils/setup'
 
 import { readAllFileRecords } from '../src/stores/files'
+import { addTagToFile, readTagsForFile } from '../src/stores/tags'
 import { type AppCoreHarness, createHarness } from './utils/harness'
 import { generateMockFileMetadata } from './utils/mockSdk'
 import { waitForCondition } from './utils/waitFor'
@@ -115,6 +116,105 @@ describe('Sync Down Integration', () => {
         return files.length === 0
       },
       { timeout: 10_000, message: 'File to be deleted' },
+    )
+  })
+
+  it('syncs objects with tags from server', async () => {
+    harness.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        name: 'tagged.jpg',
+        tags: ['vacation', 'beach'],
+      }),
+    })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        if (files.length === 1 && files[0].name === 'tagged.jpg') {
+          fileId = files[0].id
+          return true
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'Tagged file to sync' },
+    )
+
+    const tags = (await readTagsForFile(fileId!)).filter((t) => !t.system)
+    expect(tags.map((t) => t.name).sort()).toEqual(['beach', 'vacation'])
+  })
+
+  it('preserves local tags when remote metadata has no tag data', async () => {
+    const metadata = generateMockFileMetadata(1, { name: 'photo.jpg' })
+    harness.sdk.injectObject({ metadata })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        if (files.length === 1) {
+          fileId = files[0].id
+          return true
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'File to sync' },
+    )
+
+    await addTagToFile(fileId!, 'myTag')
+    const tagsAfterAdd = (await readTagsForFile(fileId!)).filter(
+      (t) => !t.system,
+    )
+    expect(tagsAfterAdd).toHaveLength(1)
+    expect(tagsAfterAdd[0].name).toBe('myTag')
+
+    await new Promise((r) => setTimeout(r, 5000))
+
+    const tagsAfterSync = (await readTagsForFile(fileId!)).filter(
+      (t) => !t.system,
+    )
+    expect(tagsAfterSync).toHaveLength(1)
+    expect(tagsAfterSync[0].name).toBe('myTag')
+  })
+
+  it('syncs tag updates from server', async () => {
+    const stored = harness.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        name: 'file.jpg',
+        tags: ['original'],
+      }),
+    })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        if (files.length === 1) {
+          fileId = files[0].id
+          const tags = (await readTagsForFile(files[0].id)).filter(
+            (t) => !t.system,
+          )
+          return tags.length === 1 && tags[0].name === 'original'
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'Initial tags to sync' },
+    )
+
+    harness.sdk.injectMetadataChange(stored.id, { tags: ['updated', 'new'] })
+
+    await waitForCondition(
+      async () => {
+        const tags = (await readTagsForFile(fileId!)).filter((t) => !t.system)
+        return (
+          tags.length === 2 &&
+          tags
+            .map((t) => t.name)
+            .sort()
+            .join(',') === 'new,updated'
+        )
+      },
+      { timeout: 10_000, message: 'Updated tags to sync' },
     )
   })
 })
