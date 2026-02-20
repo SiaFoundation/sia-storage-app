@@ -7,6 +7,7 @@ import './utils/setup'
 import { decodeFileMetadata } from '../src/encoding/fileMetadata'
 import { readFileRecord, updateFileRecord } from '../src/stores/files'
 import { readLocalObjectsForFile } from '../src/stores/localObjects'
+import { addTagToFile } from '../src/stores/tags'
 import { getUploadState } from '../src/stores/uploads'
 import {
   type AppCoreHarness,
@@ -158,5 +159,41 @@ describe('Sync Up Metadata', () => {
     const remoteMeta1 = decodeFileMetadata(remote1AfterSync.metadata())
     expect(remoteMeta1.name).toBe(remoteNewerName)
     expect(remoteMeta1.updatedAt).toBe(T_remote)
+  }, 30_000)
+
+  it('pushes local tags to remote', async () => {
+    const [file] = await addTestFilesToHarness(
+      harness,
+      generateTestFilesFromAssets(TEST_ASSETS_DIR, ['test-image-1.png']),
+    )
+
+    await waitForCondition(() => getUploadState(file.id) !== undefined, {
+      timeout: 10_000,
+      message: 'File to be detected by scanner',
+    })
+    await harness.waitForNoActiveUploads()
+
+    const localObjects = await readLocalObjectsForFile(file.id)
+    expect(localObjects.length).toBeGreaterThan(0)
+    const objectId = localObjects[0].id
+
+    await addTagToFile(file.id, 'vacation')
+    await addTagToFile(file.id, 'beach')
+    await updateFileRecord({ id: file.id, updatedAt: Date.now() }, true, {
+      includeUpdatedAt: true,
+    })
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return (
+          remoteMeta.tags !== undefined &&
+          remoteMeta.tags.length === 2 &&
+          remoteMeta.tags.slice().sort().join(',') === 'beach,vacation'
+        )
+      },
+      { timeout: 10_000, message: 'Remote metadata to include tags' },
+    )
   }, 30_000)
 })

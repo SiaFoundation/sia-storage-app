@@ -14,6 +14,7 @@ import { createServiceInterval } from '../lib/serviceInterval'
 import { SlotPool } from '../lib/slotPool'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import {
+  type FileMetadata,
   fileMetadataKeys,
   readAllFileRecords,
   readAllFileRecordsCount,
@@ -24,6 +25,7 @@ import {
   getIsSyncingUpMetadata,
   setSyncUpMetadataState,
 } from '../stores/syncUpMetadata'
+import { readTagNamesForFile } from '../stores/tags'
 
 type DiffEntry = { local: unknown; remote: unknown }
 
@@ -219,10 +221,16 @@ export async function runSyncUpMetadata(
         })
 
         if (isLocalNewer) {
-          const fileToEncode =
+          let fileToEncode: FileMetadata =
             remoteMeta.id && remoteMeta.id !== f.id
               ? { ...f, id: remoteMeta.id }
               : f
+          if (f.kind === 'file') {
+            const tags = await readTagNamesForFile(f.id)
+            if (tags) {
+              fileToEncode = { ...fileToEncode, tags }
+            }
+          }
           logger.info('syncUpMetadata', 'pushing_v1', {
             fileId: fileToEncode.id,
             objectId: obj.id,

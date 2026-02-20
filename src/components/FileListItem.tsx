@@ -1,10 +1,16 @@
-import { CircleCheckIcon, CircleIcon, DotIcon } from 'lucide-react-native'
+import {
+  CircleCheckIcon,
+  CircleIcon,
+  DotIcon,
+  HeartIcon,
+} from 'lucide-react-native'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
 import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
 import type { FileRecord } from '../stores/files'
+import { useIsFavorite } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
 import { UploadStatusIcon } from './UploadStatusIcon'
@@ -19,6 +25,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   const isSelectionMode = useIsSelectionMode()
   const isSelected = useIsFileSelected(file.id)
   const status = useFileStatus(file)
+  const isFavorite = useIsFavorite(file.id)
 
   return (
     <Pressable
@@ -50,6 +57,16 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
             <Text style={styles.fileText}>{humanSize(file.size)}</Text>
             <DotIcon size={16} color="grey" />
             <Text style={styles.fileText}>{file.type}</Text>
+            {isFavorite.data ? (
+              <>
+                <DotIcon size={16} color="grey" />
+                <HeartIcon
+                  size={10}
+                  color={palette.red[500]}
+                  fill={palette.red[500]}
+                />
+              </>
+            ) : null}
           </View>
         </View>
       </View>

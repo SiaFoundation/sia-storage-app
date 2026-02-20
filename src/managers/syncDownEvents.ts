@@ -41,6 +41,7 @@ import {
 import { getIsConnected, getSdk } from '../stores/sdk'
 import { getAutoSyncDownEvents, getIndexerURL } from '../stores/settings'
 import { setSyncDownState } from '../stores/syncDown'
+import { syncTagsFromMetadata } from '../stores/tags'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { removeUpload } from '../stores/uploads'
 
@@ -57,6 +58,8 @@ type PreparedCreate = {
   kind: 'create'
   fileRecord: FileRecordRow
   localObject: LocalObject
+  tags?: string[]
+  isFile: boolean
 }
 
 // An "update" means a file record already exists; merge metadata fields.
@@ -65,6 +68,9 @@ type PreparedUpdate = {
   fileRecord: FileRecordRow
   localObject: LocalObject
   fileId: string
+  tags?: string[]
+  isFile: boolean
+  isRemoteNewer: boolean
 }
 
 // A "delete" means the object was removed from the indexer.
@@ -87,6 +93,8 @@ type PreparedAdopt = {
   fileRecord: FileRecordRow
   localObject: LocalObject
   indexerURL: string
+  tags?: string[]
+  isFile: boolean
 }
 
 type PreparedEvent =
@@ -297,7 +305,7 @@ async function processBatch(
   })
 
   // Phase 3: Cleanup — delete local files for deleted records, clear
-  // upload state for updated records. Errors here are non-fatal.
+  // upload state for updated records, sync tags. Errors here are non-fatal.
   for (const event of prepared) {
     if (event.kind === 'delete' && deletedFileIds.has(event.fileId)) {
       try {
@@ -312,6 +320,23 @@ async function processBatch(
       }
     } else if (event.kind === 'update') {
       removeUpload(event.fileId)
+    }
+    // Sync tags from remote metadata for file records.
+    if (event.kind !== 'delete' && event.isFile) {
+      const shouldSync =
+        event.kind === 'create' ||
+        event.kind === 'adopt' ||
+        (event.kind === 'update' && event.isRemoteNewer)
+      if (shouldSync) {
+        try {
+          await syncTagsFromMetadata(event.fileRecord.id, event.tags)
+        } catch (e) {
+          logger.error('syncDownEvents', 'tag_sync_error', {
+            fileId: event.fileRecord.id,
+            error: e as Error,
+          })
+        }
+      }
     }
   }
 }
@@ -485,6 +510,9 @@ async function prepareFileRecord(
       },
       localObject,
       fileId: existing.id,
+      tags: metadata.tags,
+      isFile: type === 'file',
+      isRemoteNewer: metadata.updatedAt >= existing.updatedAt,
     }
   }
 
@@ -511,6 +539,8 @@ async function prepareFileRecord(
     kind: 'create',
     fileRecord,
     localObject,
+    tags: metadata.tags,
+    isFile: type === 'file',
   }
 }
 
@@ -552,6 +582,8 @@ async function prepareAdopt(
     fileRecord,
     localObject,
     indexerURL,
+    tags: metadata.tags,
+    isFile: metadata.kind === 'file',
   }
 }
 

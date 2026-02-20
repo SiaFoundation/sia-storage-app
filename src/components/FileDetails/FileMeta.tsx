@@ -1,5 +1,13 @@
+import { PlusIcon } from 'lucide-react-native'
 import { Fragment, useMemo } from 'react'
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import useSWR from 'swr'
 import { decodeFileMetadata } from '../../encoding/fileMetadata'
 import { useInputValue } from '../../hooks/useInputValue'
@@ -9,6 +17,8 @@ import { humanSize } from '../../lib/humanSize'
 import { type FileRecord, updateFileRecord } from '../../stores/files'
 import { getFsFileUri } from '../../stores/fs'
 import { useShowAdvanced } from '../../stores/settings'
+import { openSheet } from '../../stores/sheets'
+import { useTagsForFile } from '../../stores/tags'
 import {
   readThumbnailsByFileId,
   thumbnailsByFileIdCache,
@@ -18,6 +28,8 @@ import { RowGroup } from '../Group'
 import { InfoCard } from '../InfoCard'
 import { InputRow } from '../InputRow'
 import { LabeledValueRow } from '../LabeledValueRow'
+import { TagManageSheet } from '../TagManageSheet'
+import { TagPill } from '../TagPill'
 import { FileMap } from './FileMap'
 
 export function FileMeta({
@@ -52,6 +64,9 @@ export function FileMeta({
     },
   )
   const { height: windowHeight } = useWindowDimensions()
+  const { data: allFileTags } = useTagsForFile(file.id)
+  const userTags = allFileTags?.filter((t) => !t.system)
+  const tagManageSheetName = `tagManage-${file.id}`
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -121,6 +136,33 @@ export function FileMeta({
           />
         </InfoCard>
       </RowGroup>
+      <RowGroup title="Tags">
+        <InfoCard>
+          <View style={styles.tagsSection}>
+            {userTags && userTags.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tagsContainer}
+              >
+                {userTags.map((tag) => (
+                  <TagPill key={tag.id} tag={tag} />
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.noTagsText}>No tags</Text>
+            )}
+            <Pressable
+              style={styles.addTagButton}
+              onPress={() => openSheet(tagManageSheetName)}
+            >
+              <PlusIcon size={14} color={palette.blue[400]} />
+              <Text style={styles.addTagText}>Add Tag</Text>
+            </Pressable>
+          </View>
+        </InfoCard>
+      </RowGroup>
+      <TagManageSheet sheetName={tagManageSheetName} fileId={file.id} />
       <RowGroup title="File shard storage locations">
         <InfoCard>
           <View style={{ height: Math.round(windowHeight * 0.5) }}>
@@ -236,5 +278,28 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+  },
+  tagsSection: {
+    padding: 12,
+    gap: 12,
+  },
+  tagsContainer: {
+    gap: 8,
+    flexDirection: 'row',
+  },
+  noTagsText: {
+    color: palette.gray[400],
+    fontSize: 14,
+  },
+  addTagButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  addTagText: {
+    color: palette.blue[400],
+    fontSize: 14,
+    fontWeight: '500',
   },
 })

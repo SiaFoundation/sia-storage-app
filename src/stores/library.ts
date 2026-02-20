@@ -18,6 +18,7 @@ type FileOrderParams = {
   sortDir?: SortDir
   categories?: Category[]
   query?: string
+  tags?: string[]
   limit?: number
   offset?: number
 }
@@ -30,6 +31,7 @@ async function readOrderedFileRecords(
     sortDir,
     categories = [],
     query,
+    tags = [],
     limit,
     offset,
   } = opts ?? {}
@@ -40,6 +42,7 @@ async function readOrderedFileRecords(
     sortDir: dir,
     categories,
     query,
+    tags,
     tableAlias: 'files',
   })
 
@@ -69,6 +72,7 @@ export type FileListParams = {
   sortDir?: SortDir
   categories?: Category[]
   query?: string
+  tags?: string[]
 }
 
 export function useFileList(params: FileListParams) {
@@ -78,6 +82,7 @@ export function useFileList(params: FileListParams) {
     sortDir: sortDirParam,
     categories = [],
     query,
+    tags = [],
   } = params
   const sortingDir = sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
@@ -85,7 +90,9 @@ export function useFileList(params: FileListParams) {
     ? categories.slice().sort().join(',')
     : ''
 
-  const base = `library/${scope}:list:${sortBy}:${sortingDir}:${categoriesKey}:${query ?? ''}`
+  const tagsKey = tags.length ? tags.slice().sort().join(',') : ''
+
+  const base = `library/${scope}:list:${sortBy}:${sortingDir}:${categoriesKey}:${tagsKey}:${query ?? ''}`
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -94,6 +101,7 @@ export function useFileList(params: FileListParams) {
       sortDir: sortingDir,
       categories: categories.length ? categories : undefined,
       query: query?.trim().length ? query : undefined,
+      tags: tags.length ? tags : undefined,
       limit: PAGE_SIZE,
       offset: pageIndex * PAGE_SIZE,
     })
@@ -150,6 +158,19 @@ export function useMediaCount() {
   })
 }
 
+// Count of files with a specific tag, excluding thumbnails.
+export function useTagFileCount(tagId: string) {
+  return useSWR(libraryStats.key(`tagCount:${tagId}`), async () => {
+    const row = await db().getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files f
+       INNER JOIN file_tags ft ON ft.fileId = f.id
+       WHERE ft.tagId = ? AND f.kind = 'file'`,
+      tagId,
+    )
+    return row?.count ?? 0
+  })
+}
+
 // File View Store
 export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
@@ -162,6 +183,7 @@ export function buildLibraryQueryParts(
     sortDir?: SortDir
     categories?: Category[]
     query?: string
+    tags?: string[]
     tableAlias?: string
   } = {},
 ): {
@@ -174,6 +196,7 @@ export function buildLibraryQueryParts(
     sortDir,
     categories = [],
     query,
+    tags = [],
     tableAlias = 'files',
   } = opts
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
@@ -216,6 +239,19 @@ export function buildLibraryQueryParts(
     whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE '\\'`)
     const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
     params.push(`%${escaped}%`)
+  }
+  // Tag filtering: file must have ALL selected tags (AND logic).
+  if (tags.length > 0) {
+    const placeholders = tags.map(() => '?').join(',')
+    whereParts.push(`
+      ${tableAlias}.id IN (
+        SELECT ft.fileId FROM file_tags ft
+        WHERE ft.tagId IN (${placeholders})
+        GROUP BY ft.fileId
+        HAVING COUNT(DISTINCT ft.tagId) = ?
+      )
+    `)
+    params.push(...tags, tags.length)
   }
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 

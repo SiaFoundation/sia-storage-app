@@ -1,11 +1,13 @@
 import {
   FullscreenIcon,
-  LinkIcon,
+  HeartIcon,
   MoreVerticalIcon,
   ShareIcon,
+  TagIcon,
   TextAlignStart,
 } from 'lucide-react-native'
 import { useWindowDimensions, View } from 'react-native'
+import { palette } from '../../styles/colors'
 import { BottomControlBar, iconColors } from '../BottomControlBar'
 import { IconButton } from '../IconButton'
 
@@ -13,22 +15,21 @@ type Props = {
   viewStyle: 'consume' | 'detail'
   setViewStyle: (viewStyle: 'consume' | 'detail') => void
   onShareFile: () => void
-  onShareURL: () => void
+  onAddTag: () => void
   onPressMore: () => void
+  onToggleFavorite: () => void
+  isFavorite: boolean
   canShare: boolean
 }
 
-/**
- * A control bar for the carousel overlay designed to work within a modal context.
- * All actions are passed as props from the parent to ensure toasts and sheets
- * render correctly above the modal.
- */
 export function FileCarouselControlBar({
   viewStyle,
   setViewStyle,
   onShareFile,
-  onShareURL,
+  onAddTag,
   onPressMore,
+  onToggleFavorite,
+  isFavorite,
   canShare,
 }: Props) {
   const { width, height } = useWindowDimensions()
@@ -48,11 +49,20 @@ export function FileCarouselControlBar({
         }}
       >
         <View style={{ flexDirection: 'row', gap: 12 }}>
+          <IconButton
+            onPress={onToggleFavorite}
+            accessibilityLabel={isFavorite ? 'Unfavorite' : 'Favorite'}
+          >
+            <HeartIcon
+              color={isFavorite ? palette.red[500] : iconColors.white}
+              fill={isFavorite ? palette.red[500] : 'none'}
+            />
+          </IconButton>
           <IconButton onPress={onShareFile} disabled={!canShare}>
             <ShareIcon color={iconColors.white} />
           </IconButton>
-          <IconButton onPress={onShareURL} disabled={!canShare}>
-            <LinkIcon color={iconColors.white} />
+          <IconButton onPress={onAddTag} accessibilityLabel="Add tag">
+            <TagIcon color={iconColors.white} />
           </IconButton>
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>
