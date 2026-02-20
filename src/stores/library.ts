@@ -19,6 +19,7 @@ type FileOrderParams = {
   categories?: Category[]
   query?: string
   tags?: string[]
+  directoryId?: string
   limit?: number
   offset?: number
 }
@@ -32,6 +33,7 @@ async function readOrderedFileRecords(
     categories = [],
     query,
     tags = [],
+    directoryId,
     limit,
     offset,
   } = opts ?? {}
@@ -43,6 +45,7 @@ async function readOrderedFileRecords(
     categories,
     query,
     tags,
+    directoryId,
     tableAlias: 'files',
   })
 
@@ -73,6 +76,7 @@ export type FileListParams = {
   categories?: Category[]
   query?: string
   tags?: string[]
+  directoryId?: string
 }
 
 export function useFileList(params: FileListParams) {
@@ -83,6 +87,7 @@ export function useFileList(params: FileListParams) {
     categories = [],
     query,
     tags = [],
+    directoryId,
   } = params
   const sortingDir = sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
@@ -92,7 +97,7 @@ export function useFileList(params: FileListParams) {
 
   const tagsKey = tags.length ? tags.slice().sort().join(',') : ''
 
-  const base = `library/${scope}:list:${sortBy}:${sortingDir}:${categoriesKey}:${tagsKey}:${query ?? ''}`
+  const base = `library/${scope}:list:${sortBy}:${sortingDir}:${categoriesKey}:${tagsKey}:${directoryId ?? ''}:${query ?? ''}`
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
@@ -102,6 +107,7 @@ export function useFileList(params: FileListParams) {
       categories: categories.length ? categories : undefined,
       query: query?.trim().length ? query : undefined,
       tags: tags.length ? tags : undefined,
+      directoryId,
       limit: PAGE_SIZE,
       offset: pageIndex * PAGE_SIZE,
     })
@@ -171,6 +177,18 @@ export function useTagFileCount(tagId: string) {
   })
 }
 
+// Count of files in a specific directory, excluding thumbnails.
+export function useDirectoryFileCount(directoryId: string) {
+  return useSWR(libraryStats.key(`dirCount:${directoryId}`), async () => {
+    const row = await db().getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files
+       WHERE directoryId = ? AND kind = 'file'`,
+      directoryId,
+    )
+    return row?.count ?? 0
+  })
+}
+
 // File View Store
 export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
@@ -184,6 +202,7 @@ export function buildLibraryQueryParts(
     categories?: Category[]
     query?: string
     tags?: string[]
+    directoryId?: string
     tableAlias?: string
   } = {},
 ): {
@@ -197,6 +216,7 @@ export function buildLibraryQueryParts(
     categories = [],
     query,
     tags = [],
+    directoryId,
     tableAlias = 'files',
   } = opts
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
@@ -252,6 +272,11 @@ export function buildLibraryQueryParts(
       )
     `)
     params.push(...tags, tags.length)
+  }
+  // Directory filtering.
+  if (directoryId) {
+    whereParts.push(`${tableAlias}.directoryId = ?`)
+    params.push(directoryId)
   }
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 

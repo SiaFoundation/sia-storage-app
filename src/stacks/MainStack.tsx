@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { DirectoryScreen } from '../screens/DirectoryScreen'
 import { LibraryScreen } from '../screens/LibraryScreen'
 import { TagLibraryScreen } from '../screens/TagLibraryScreen'
 import type { MainStackParamList } from './types'
@@ -17,6 +18,11 @@ export function MainStack() {
         name="TagLibrary"
         options={{ headerShown: false }}
         component={TagLibraryScreen}
+      />
+      <Stack.Screen
+        name="DirectoryScreen"
+        options={{ headerShown: false }}
+        component={DirectoryScreen}
       />
     </Stack.Navigator>
   )

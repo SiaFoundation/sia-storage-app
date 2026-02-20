@@ -5,6 +5,7 @@
 import './utils/setup'
 
 import { decodeFileMetadata } from '../src/encoding/fileMetadata'
+import { createDirectory, moveFileToDirectory } from '../src/stores/directories'
 import { readFileRecord, updateFileRecord } from '../src/stores/files'
 import { readLocalObjectsForFile } from '../src/stores/localObjects'
 import { addTagToFile } from '../src/stores/tags'
@@ -194,6 +195,36 @@ describe('Sync Up Metadata', () => {
         )
       },
       { timeout: 10_000, message: 'Remote metadata to include tags' },
+    )
+  }, 30_000)
+
+  it('pushes local directory to remote', async () => {
+    const [file] = await addTestFilesToHarness(
+      harness,
+      generateTestFilesFromAssets(TEST_ASSETS_DIR, ['test-image-1.png']),
+    )
+
+    await waitForCondition(() => getUploadState(file.id) !== undefined, {
+      timeout: 10_000,
+      message: 'File to be detected by scanner',
+    })
+    await harness.waitForNoActiveUploads()
+
+    const localObjects = await readLocalObjectsForFile(file.id)
+    expect(localObjects.length).toBeGreaterThan(0)
+    const objectId = localObjects[0].id
+
+    // Move file to a directory (this bumps updatedAt internally)
+    const dir = await createDirectory('Vacation')
+    await moveFileToDirectory(file.id, dir.id)
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return remoteMeta.directory === 'Vacation'
+      },
+      { timeout: 10_000, message: 'Remote metadata to include directory' },
     )
   }, 30_000)
 })

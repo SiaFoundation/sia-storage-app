@@ -1,6 +1,10 @@
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
 import {
+  getOrCreateDirectory,
+  moveFilesToDirectory,
+} from '../stores/directories'
+import {
   createManyFileRecords,
   type FileRecord,
   readFileRecordsByContentHashes,
@@ -8,6 +12,7 @@ import {
   updateManyFileRecords,
 } from '../stores/files'
 import { copyFileToFs } from '../stores/fs'
+import { getPhotoImportDirectory } from '../stores/settings'
 import { calculateContentHash } from './contentHash'
 import { getMimeType, type MimeType } from './fileTypes'
 import { logger } from './logger'
@@ -222,6 +227,18 @@ export async function processAssets(
 
   await updateManyFileRecords(existingFiles)
   await createManyFileRecords(newFiles)
+
+  // Move media files to the configured photo import directory.
+  const photoImportDir = await getPhotoImportDirectory()
+  if (photoImportDir) {
+    const mediaFileIds = newFiles
+      .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
+      .map((f) => f.id)
+    if (mediaFileIds.length > 0) {
+      const dir = await getOrCreateDirectory(photoImportDir)
+      await moveFilesToDirectory(mediaFileIds, dir.id)
+    }
+  }
 
   // Generate thumbnails for new image and video files.
   logger.debug('processAssets', 'generating_thumbnails', {

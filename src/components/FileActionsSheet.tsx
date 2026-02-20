@@ -4,6 +4,7 @@ import {
   CloudOffIcon,
   CloudUploadIcon,
   EraserIcon,
+  FolderIcon,
   HeartIcon,
   LinkIcon,
   ShareIcon,
@@ -248,6 +249,16 @@ function SingleFileActionsSheet({
         Manage tags
       </ActionSheetButton>
       <ActionSheetButton
+        variant="primary"
+        icon={<FolderIcon size={18} />}
+        onPress={() => {
+          closeSheet()
+          setTimeout(() => openSheet('moveToDirectory'), 300)
+        }}
+      >
+        Move to directory
+      </ActionSheetButton>
+      <ActionSheetButton
         variant="danger"
         icon={<Trash2Icon size={18} />}
         onPress={handlePressAndClose(handleDelete)}
@@ -464,6 +475,16 @@ function BulkFileActionsSheet({
         disabled={!counts || counts.onNetwork === 0}
       >
         Remove from network{counts ? ` (${counts.onNetwork})` : ''}
+      </ActionSheetButton>
+      <ActionSheetButton
+        variant="primary"
+        icon={<FolderIcon size={18} />}
+        onPress={() => {
+          closeSheet()
+          setTimeout(() => openSheet('moveToDirectory'), 300)
+        }}
+      >
+        Move to directory
       </ActionSheetButton>
       <ActionSheetButton
         variant="danger"

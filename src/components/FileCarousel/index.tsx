@@ -38,6 +38,7 @@ type Props = {
   onClose: () => void
   onShowActionSheet?: () => void
   onShowTagSheet?: () => void
+  onMoveToDirectory?: () => void
   onZoomChange?: (isZoomed: boolean) => void
   onViewStyleChange?: (viewStyle: 'consume' | 'detail') => void
   isDismissing?: boolean
@@ -52,6 +53,7 @@ export function FileCarousel({
   onClose,
   onShowActionSheet,
   onShowTagSheet,
+  onMoveToDirectory,
   onZoomChange,
   onViewStyleChange,
   isDismissing,
@@ -189,6 +191,12 @@ export function FileCarousel({
       onShowTagSheet()
     }
   }, [onShowTagSheet])
+
+  const handleMoveToDirectory = useCallback(() => {
+    if (onMoveToDirectory) {
+      onMoveToDirectory()
+    }
+  }, [onMoveToDirectory])
 
   const favorite = useIsFavorite(currentFile?.id ?? null)
   const handleToggleFavorite = useCallback(() => {
@@ -361,6 +369,7 @@ export function FileCarousel({
             setViewStyle={setViewStyle}
             onShareFile={handleShareFile}
             onAddTag={handleAddTag}
+            onMoveToDirectory={handleMoveToDirectory}
             onPressMore={handleMore}
             onToggleFavorite={handleToggleFavorite}
             isFavorite={favorite.data ?? false}

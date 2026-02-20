@@ -14,7 +14,13 @@
 import './utils/setup'
 
 import { decodeFileMetadata } from '../src/encoding/fileMetadata'
+import {
+  createDirectory,
+  moveFileToDirectory,
+  readDirectoryNameForFile,
+} from '../src/stores/directories'
 import { readAllFileRecords, readFileRecord } from '../src/stores/files'
+import { addTagToFile, readTagsForFile } from '../src/stores/tags'
 import { readThumbnailsByFileId } from '../src/stores/thumbnails'
 import {
   addTestFilesToHarness,
@@ -983,4 +989,85 @@ describe('Multi-Device Convergence', () => {
 
     await harnessB.shutdown()
   }, 90_000)
+
+  it('v0 node overwrites v1: tags and directory preserved, syncUp repairs', async () => {
+    const sharedStorage = createEmptyStorage()
+
+    // Device A: upload 1 file with tags and directory
+    const sdkA = new MockSdk(sharedStorage)
+    const harnessA = createHarness({ sdk: sdkA })
+    await harnessA.start()
+
+    const fileFactories = generateTestFiles(1, { type: 'data' })
+    const files = await addTestFilesToHarness(harnessA, fileFactories)
+    await harnessA.waitForNoActiveUploads()
+    await waitForAllObjectsV1(sharedStorage, 1)
+
+    // Add tags and directory
+    await addTagToFile(files[0].id, 'important')
+    const dir = await createDirectory('Work')
+    await moveFileToDirectory(files[0].id, dir.id)
+
+    // Wait for syncUp to push tags + directory to remote
+    const objectId = Array.from(sharedStorage.objects.keys())[0]
+    await waitForCondition(
+      () => {
+        const meta = decodeFileMetadata(
+          sharedStorage.objects.get(objectId)!.metadata,
+        )
+        return !!meta.tags?.includes('important') && meta.directory === 'Work'
+      },
+      { timeout: 15_000, message: 'Tags and directory in remote metadata' },
+    )
+
+    // Simulate v0 node overwriting (strips tags, directory, version, id, kind)
+    harnessA.pause()
+    sdkA.simulateV0Overwrite(objectId)
+
+    // Verify v0 metadata has no tags or directory
+    const v0Raw = JSON.parse(
+      new TextDecoder().decode(sharedStorage.objects.get(objectId)!.metadata),
+    )
+    expect(v0Raw.tags).toBeUndefined()
+    expect(v0Raw.directory).toBeUndefined()
+    expect(v0Raw.version).toBeUndefined()
+
+    harnessA.resume()
+
+    // syncUp should repair remote metadata to v1 with tags and directory
+    await waitForCondition(
+      () => {
+        try {
+          const raw = JSON.parse(
+            new TextDecoder().decode(
+              sharedStorage.objects.get(objectId)!.metadata,
+            ),
+          )
+          return (
+            raw.version === 1 &&
+            Array.isArray(raw.tags) &&
+            raw.tags.includes('important') &&
+            raw.directory === 'Work'
+          )
+        } catch {
+          return false
+        }
+      },
+      {
+        timeout: 15_000,
+        message: 'syncUp to repair remote with tags and directory',
+      },
+    )
+
+    // Verify local state is intact
+    const localTags = (await readTagsForFile(files[0].id)).filter(
+      (t) => !t.system,
+    )
+    expect(localTags.map((t) => t.name)).toContain('important')
+
+    const localDir = await readDirectoryNameForFile(files[0].id)
+    expect(localDir).toBe('Work')
+
+    await harnessA.shutdown()
+  }, 60_000)
 })

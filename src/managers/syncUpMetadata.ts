@@ -13,6 +13,7 @@ import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { SlotPool } from '../lib/slotPool'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
+import { readDirectoryNameForFile } from '../stores/directories'
 import {
   type FileMetadata,
   fileMetadataKeys,
@@ -229,6 +230,10 @@ export async function runSyncUpMetadata(
             const tags = await readTagNamesForFile(f.id)
             if (tags) {
               fileToEncode = { ...fileToEncode, tags }
+            }
+            const directory = await readDirectoryNameForFile(f.id)
+            if (directory) {
+              fileToEncode = { ...fileToEncode, directory }
             }
           }
           logger.info('syncUpMetadata', 'pushing_v1', {

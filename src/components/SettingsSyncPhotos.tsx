@@ -1,4 +1,12 @@
-import { Linking, StyleSheet, Switch, Text } from 'react-native'
+import { useCallback } from 'react'
+import {
+  Alert,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+} from 'react-native'
 import { SYNC_ARCHIVE_RESUME_THRESHOLD } from '../config'
 import { humanSize } from '../lib/humanSize'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
@@ -13,6 +21,10 @@ import {
   usePhotosArchiveCursor,
 } from '../managers/syncPhotosArchive'
 import { useFileStatsLocal } from '../stores/files'
+import {
+  setPhotoImportDirectory,
+  usePhotoImportDirectory,
+} from '../stores/settings'
 import { colors } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup } from './Group'
@@ -27,11 +39,30 @@ export function SettingsSyncPhotos() {
   const cursorValue = photosArchiveCursor.data ?? 0
   const photosArchiveInProgress = cursorValue > 0
   const { isSomeAccess, accessLabel, color } = useMediaLibraryPermissions()
+  const photoImportDir = usePhotoImportDirectory()
 
   const isPhotosAccessDisabled = !isSomeAccess
   const archiveDateLabel = formatArchiveCursor(cursorValue)
   const syncPhotosArchiveControlsDisabled =
     isPhotosAccessDisabled || !autoSyncPhotosArchive.data
+
+  const handleSetPhotoImportDir = useCallback(() => {
+    Alert.prompt(
+      'Photo import directory',
+      'Imported photos and videos will be placed in this directory. Leave empty to disable.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: (value: string | undefined) => {
+            void setPhotoImportDirectory(value?.trim() ?? '')
+          },
+        },
+      ],
+      'plain-text',
+      photoImportDir.data ?? '',
+    )
+  }, [photoImportDir.data])
 
   return (
     <RowGroup
@@ -49,6 +80,16 @@ export function SettingsSyncPhotos() {
       }
     >
       <InfoCard>
+        <Pressable onPress={handleSetPhotoImportDir}>
+          <LabeledValueRow
+            label="Import directory"
+            labelWidth={250}
+            value={photoImportDir.data || 'None'}
+            canCopy={false}
+          />
+        </Pressable>
+      </InfoCard>
+      <InfoCard style={{ marginTop: 10 }}>
         <LabeledValueRow
           label="Import new photos"
           labelWidth={250}

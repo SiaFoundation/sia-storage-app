@@ -36,6 +36,25 @@ async function up(db: SQLite.SQLiteDatabase): Promise<void> {
       `CREATE INDEX IF NOT EXISTS idx_file_tags_tagId ON file_tags(tagId);`,
     )
 
+    // Create the directories table.
+    await db.execAsync(
+      `CREATE TABLE IF NOT EXISTS directories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        createdAt INTEGER NOT NULL
+      );`,
+    )
+
+    // Add directoryId column to files table.
+    await db.execAsync(
+      `ALTER TABLE files ADD COLUMN directoryId TEXT REFERENCES directories(id) ON DELETE SET NULL;`,
+    )
+
+    // Index for looking up files by directory.
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_files_directoryId ON files(directoryId);`,
+    )
+
     // Insert the Favorites system tag.
     const now = Date.now()
     await db.runAsync(

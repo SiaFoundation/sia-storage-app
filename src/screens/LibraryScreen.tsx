@@ -20,6 +20,7 @@ import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { LibraryTabBar } from '../components/LibraryTabBar'
 import { ManageTagsSheet } from '../components/ManageTagsSheet'
+import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
 import { SelectionBar } from '../components/SelectionBar'
 import type { MainStackParamList } from '../stacks/types'
 import {
@@ -104,6 +105,10 @@ export function LibraryScreen({ route, navigation }: Props) {
 
   const handleShowTagSheet = useCallback(() => {
     openSheet('manageFileTags')
+  }, [])
+
+  const handleMoveToDirectory = useCallback(() => {
+    openSheet('moveToDirectory')
   }, [])
 
   const handleOpenSelectionActions = useCallback(() => {
@@ -298,6 +303,7 @@ export function LibraryScreen({ route, navigation }: Props) {
               }}
               onShowActionSheet={handleShowCarouselActions}
               onShowTagSheet={handleShowTagSheet}
+              onMoveToDirectory={handleMoveToDirectory}
               onZoomChange={setIsCarouselZoomed}
               onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
               isDismissing={isDraggingToDismiss}
@@ -320,6 +326,7 @@ export function LibraryScreen({ route, navigation }: Props) {
           ) : null}
         </>
       ) : null}
+      <MoveToDirectorySheet fileIds={actionSheetFileIds} />
     </View>
   )
 }
