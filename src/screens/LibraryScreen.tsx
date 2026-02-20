@@ -9,6 +9,9 @@ import {
   View,
 } from 'react-native'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
+import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
+import { CreateTagSheet } from '../components/CreateTagSheet'
+import { DirectoriesGrid } from '../components/DirectoriesGrid'
 import { DragToDismiss } from '../components/DragToDismiss'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
@@ -22,7 +25,9 @@ import { LibraryTabBar } from '../components/LibraryTabBar'
 import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
 import { SelectionBar } from '../components/SelectionBar'
+import { TagsGrid } from '../components/TagsGrid'
 import type { MainStackParamList } from '../stacks/types'
+import { useAllDirectories } from '../stores/directories'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -37,9 +42,16 @@ import {
   type FileListParams,
   useFileList,
   useLibraryCount,
+  useMediaCount,
 } from '../stores/library'
+import {
+  type ActiveLibraryTab,
+  setActiveLibraryTab,
+  useActiveLibraryTab,
+} from '../stores/settings'
 import { openSheet } from '../stores/sheets'
 import { useIsSyncingDown } from '../stores/syncDown'
+import { useAllTags } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
@@ -59,6 +71,12 @@ export function LibraryScreen({ route, navigation }: Props) {
   )
   const files = useFileList(filters)
   const fileCount = useLibraryCount()
+  const mediaCount = useMediaCount()
+  const activeTabSetting = useActiveLibraryTab()
+  const activeTab: ActiveLibraryTab = activeTabSetting.data ?? 'files'
+  const handleChangeTab = useCallback((tab: ActiveLibraryTab) => {
+    void setActiveLibraryTab(tab)
+  }, [])
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(() => {
     const openFileId = route.params?.openFileId
     if (!openFileId) return null
@@ -103,20 +121,44 @@ export function LibraryScreen({ route, navigation }: Props) {
     openSheet('fileActions')
   }, [])
 
-  const handleShowTagSheet = useCallback(() => {
-    openSheet('manageFileTags')
-  }, [])
-
-  const handleMoveToDirectory = useCallback(() => {
-    openSheet('moveToDirectory')
-  }, [])
-
   const handleOpenSelectionActions = useCallback(() => {
     openSheet('fileActions')
   }, [])
 
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
+  }, [])
+
+  const handleSelectDirectory = useCallback(
+    (directoryId: string, directoryName: string) => {
+      navigation.navigate('DirectoryScreen', { directoryId, directoryName })
+    },
+    [navigation],
+  )
+
+  const handleCreateDirectory = useCallback(() => {
+    openSheet('createDirectory')
+  }, [])
+
+  const handleDirectoryCreated = useCallback(
+    (directoryId: string, directoryName: string) => {
+      navigation.navigate('DirectoryScreen', { directoryId, directoryName })
+    },
+    [navigation],
+  )
+
+  const allDirectories = useAllDirectories()
+  const allTags = useAllTags()
+
+  const handleSelectTag = useCallback(
+    (tagId: string, tagName: string) => {
+      navigation.navigate('TagLibrary', { tagId, tagName })
+    },
+    [navigation],
+  )
+
+  const handleCreateTag = useCallback(() => {
+    openSheet('createTag')
   }, [])
 
   useEffect(() => {
@@ -161,6 +203,8 @@ export function LibraryScreen({ route, navigation }: Props) {
   const categorySet = new Set(vs.selectedCategories)
 
   const title = (() => {
+    if (activeTab === 'files') return 'Files'
+    if (activeTab === 'tags') return 'Tags'
     const n = categorySet.size
     if (n === 1) {
       const only = Array.from(categorySet)[0] as Category
@@ -174,19 +218,27 @@ export function LibraryScreen({ route, navigation }: Props) {
         case 'Files':
           return 'Files'
         default:
-          return 'Library'
+          return 'Media'
       }
     }
-    return 'Library'
+    return 'Media'
   })()
 
   const subtitle = (() => {
+    if (activeTab === 'files') {
+      const dirCount = allDirectories.data?.length ?? 0
+      return `${dirCount.toLocaleString()} ${dirCount === 1 ? 'folder' : 'folders'}`
+    }
+    if (activeTab === 'tags') {
+      const tagCount = allTags.data?.filter((t) => !t.system).length ?? 0
+      return `${tagCount.toLocaleString()} ${tagCount === 1 ? 'tag' : 'tags'}`
+    }
     if (categorySet.size > 0) {
       const filtered = files.data?.length ?? 0
       return `${filtered.toLocaleString()} results`
     }
-    const total = fileCount.data ?? 0
-    return `${total.toLocaleString()} ${total === 1 ? 'item' : 'items'}`
+    const media = mediaCount.data ?? 0
+    return `${media.toLocaleString()} ${media === 1 ? 'image & video' : 'images & videos'}`
   })()
 
   return (
@@ -200,15 +252,22 @@ export function LibraryScreen({ route, navigation }: Props) {
       <LibraryHeader
         title={title}
         subtitle={subtitle}
+        showViewSettings={activeTab === 'media'}
         scope="library"
-        isSelectionMode={isSelectionMode}
+        isSelectionMode={activeTab === 'media' ? isSelectionMode : undefined}
         selectedCount={selectedCount}
-        onEnterSelection={enterSelectionMode}
+        onEnterSelection={
+          activeTab === 'media' ? enterSelectionMode : undefined
+        }
         onExitSelection={exitSelectionMode}
         onOpenSelectionActions={handleOpenSelectionActions}
         onNavigateMenu={() => navigation.navigate('MenuTab' as never)}
       />
-      {files.isLoading ? (
+      {activeTab === 'files' ? (
+        <DirectoriesGrid onSelectDirectory={handleSelectDirectory} />
+      ) : activeTab === 'tags' ? (
+        <TagsGrid onSelectTag={handleSelectTag} />
+      ) : files.isLoading ? (
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
         </View>
@@ -261,11 +320,19 @@ export function LibraryScreen({ route, navigation }: Props) {
         </View>
       )}
       <AddFileActionSheet />
+      <CreateDirectorySheet onCreated={handleDirectoryCreated} />
+      <CreateTagSheet />
       <LibraryStatusSheet />
       {isSelectionMode ? (
         <SelectionBar onOpenSelectionActions={handleOpenSelectionActions} />
       ) : (
-        <LibraryTabBar />
+        <LibraryTabBar
+          activeTab={activeTab}
+          onChangeTab={handleChangeTab}
+          onSearch={() => navigation.navigate('Search')}
+          onCreateDirectory={handleCreateDirectory}
+          onCreateTag={handleCreateTag}
+        />
       )}
       {selectedFile ? (
         <Animated.View
@@ -302,8 +369,8 @@ export function LibraryScreen({ route, navigation }: Props) {
                 setIsCarouselDetail(false)
               }}
               onShowActionSheet={handleShowCarouselActions}
-              onShowTagSheet={handleShowTagSheet}
-              onMoveToDirectory={handleMoveToDirectory}
+              onShowTagSheet={() => openSheet('manageFileTags')}
+              onMoveToDirectory={() => openSheet('moveToDirectory')}
               onZoomChange={setIsCarouselZoomed}
               onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
               isDismissing={isDraggingToDismiss}

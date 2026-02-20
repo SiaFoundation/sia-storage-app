@@ -109,3 +109,17 @@ export async function setPhotoImportDirectory(value: string) {
   await setAsyncStorageString('photoImportDirectory', value)
   await photoImportDirectoryCache.set(value)
 }
+
+// Active library tab
+
+export type ActiveLibraryTab = 'files' | 'tags' | 'media'
+
+export const [getActiveLibraryTab, useActiveLibraryTab, activeLibraryTabCache] =
+  createGetterAndSWRHook<ActiveLibraryTab>(() =>
+    getAsyncStorageString<ActiveLibraryTab>('activeLibraryTab', 'files'),
+  )
+
+export async function setActiveLibraryTab(value: ActiveLibraryTab) {
+  await setAsyncStorageString<ActiveLibraryTab>('activeLibraryTab', value)
+  await activeLibraryTabCache.set(value)
+}
