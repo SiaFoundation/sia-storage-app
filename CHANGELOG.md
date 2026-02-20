@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.6.0 (2026-02-20)
+
+### Features
+
+- Added a control to delete lost file records that are no longer on the network or device.
+- Added a control to export the app database for debugging.
+- Added a metadata migration system for safely upgrading object metadata when the schema changes.
+- Added a control to reset the sync up cursor, allowing metadata to be re-pushed for all files.
+- Added sync metadata status display showing remote down and local up progress.
+
+### Fixes
+
+- Improved sync performance with batched database writes and adaptive polling intervals.
+- Fixed app reset to fully stop background services and return to onboarding.
+- Fixed thumbnails failing to generate for files with identical content hashes.
+- Improved responsiveness of library updates by refining how cached data is refreshed.
+- Changed log sharing to use the native share sheet instead of copying to clipboard.
+- Replaced the upload icon with a spinner that shows during upload or sync activity.
+- Added a syncing indicator on the empty library screen so new users can see progress.
+
 ## 1.5.1 (2026-02-14)
 
 ### Fixes
