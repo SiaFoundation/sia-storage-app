@@ -8,7 +8,6 @@ import { useAuthWebViewStore } from '../stores/authWebView'
 import { cancelAllDownloads, useDownloadsStore } from '../stores/downloads'
 import { useFileSelectionStore } from '../stores/fileSelection'
 import { ensureFsStorageDirectory } from '../stores/fs'
-import { useLibrary } from '../stores/library'
 import { invalidateCacheLibraryLists } from '../stores/librarySwr'
 import { initLogger } from '../stores/logs'
 import { clearMnemonicHash } from '../stores/mnemonic'
@@ -19,6 +18,7 @@ import { useSyncDownStore } from '../stores/syncDown'
 import { useSyncUpMetadataStore } from '../stores/syncUpMetadata'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { clearAllUploads, useUploadsStore } from '../stores/uploads'
+import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
@@ -191,12 +191,7 @@ function resetAllStores() {
   })
   useSheetsStore.setState({ openName: '' })
   useAuthWebViewStore.setState({ visible: false, url: '', resolver: null })
-  useLibrary.setState({
-    sortBy: 'DATE',
-    sortDir: 'DESC',
-    selectedCategories: new Set(),
-    searchQuery: '',
-  })
+  resetViewSettings()
   invalidateCacheLibraryLists()
 }
 

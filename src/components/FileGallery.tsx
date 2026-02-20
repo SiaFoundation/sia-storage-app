@@ -1,22 +1,38 @@
 import { useCallback } from 'react'
-import { ActivityIndicator, FlatList, Platform, StyleSheet } from 'react-native'
+import {
+  ActivityIndicator,
+  FlatList,
+  type FlatListProps,
+  Platform,
+  StyleSheet,
+} from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import type { FileRecord } from '../stores/files'
-import { useFileList } from '../stores/library'
+import { type FileListParams, useFileList } from '../stores/library'
 import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {
+  filters: FileListParams
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
   numColumns?: number
+  keyboardDismissMode?: FlatListProps<FileRecord>['keyboardDismissMode']
 }
 
 export function FileGallery({
+  filters,
   onPressItem,
   onLongPressItem,
   numColumns = 3,
+  keyboardDismissMode,
 }: Props) {
-  const { data: files, size, setSize, isValidating, hasMore } = useFileList()
+  const {
+    data: files,
+    size,
+    setSize,
+    isValidating,
+    hasMore,
+  } = useFileList(filters)
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
     size,
@@ -57,6 +73,7 @@ export function FileGallery({
       maxToRenderPerBatch={20}
       updateCellsBatchingPeriod={20}
       showsVerticalScrollIndicator={false}
+      keyboardDismissMode={keyboardDismissMode}
       ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
       removeClippedSubviews
     />

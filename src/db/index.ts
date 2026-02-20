@@ -16,6 +16,7 @@ export async function initializeDB(options?: {
   const name = options?.databaseName ?? dbName
   logger.info('db', 'initializing', { name })
   database = await SQLite.openDatabaseAsync(name)
+  await database.execAsync('PRAGMA foreign_keys = ON')
   await runMigrations(database, options?.onProgress)
   dbInitialized = true
   dbName = name
@@ -38,6 +39,8 @@ export async function closeDb(): Promise<void> {
 export async function resetDb() {
   // Disable log appender before dropping tables to prevent "no such table: logs" errors
   dbInitialized = false
+  // Disable foreign keys to allow dropping tables in any order
+  await database.execAsync('PRAGMA foreign_keys = OFF')
   await database.withTransactionAsync(async () => {
     const rows = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
@@ -50,6 +53,8 @@ export async function resetDb() {
       await database.execAsync(`DROP TABLE IF EXISTS "${table}"`)
     }
   })
+  // Re-enable foreign keys
+  await database.execAsync('PRAGMA foreign_keys = ON')
   await runMigrations(database)
 }
 

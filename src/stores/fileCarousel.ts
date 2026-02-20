@@ -7,7 +7,6 @@ import {
   type Category,
   type SortBy,
   type SortDir,
-  useLibrary,
 } from './library'
 import { useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
@@ -92,7 +91,6 @@ type VirtualListQueryParams = {
   sortBy: SortBy
   sortDir: SortDir
   categories: Category[]
-  searchQuery: string
 }
 
 function buildOrderExpr(sortBy: SortBy, sortDir: SortDir, alias: string = 'f') {
@@ -109,7 +107,6 @@ export async function fetchTotalCount(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
-    query: params.searchQuery,
     tableAlias: 'f',
   })
 
@@ -131,7 +128,6 @@ export async function fetchFilePosition(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
-    query: params.searchQuery,
     tableAlias: 'f',
   })
 
@@ -186,7 +182,6 @@ export async function fetchSortedFileIds(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
-    query: params.searchQuery,
     tableAlias: 'f',
   })
 
@@ -221,6 +216,9 @@ export async function fetchFilesByIDs(
 type UseFileCarouselParams = {
   initialId: string
   initialFile?: FileRecord
+  sortBy?: SortBy
+  sortDir?: SortDir
+  categories?: Category[]
   prefetchRadius?: number
   maxCacheSize?: number
   onDeleted?: () => void
@@ -266,12 +264,16 @@ const ID_WINDOW_HALF = Math.floor(ID_WINDOW_SIZE / 2)
 export function useFileCarousel({
   initialId,
   initialFile,
+  sortBy: sortByParam = 'DATE',
+  sortDir: sortDirParam,
+  categories: categoriesParam = [],
   prefetchRadius = 3,
   maxCacheSize = 50,
   onDeleted,
 }: UseFileCarouselParams): UseFileCarouselReturn {
-  const { sortBy, sortDir, selectedCategories, searchQuery } = useLibrary()
-  const sortingDir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+  const sortBy = sortByParam
+  const sortingDir: SortDir =
+    sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const [currentIndex, _setCurrentIndex] = useState(0)
   const [totalCount, setTotalCount] = useState(initialFile ? 1 : 0)
@@ -292,11 +294,8 @@ export function useFileCarousel({
   const initialFileRef = useRef(initialFile)
 
   const categoriesKey = useMemo(
-    () =>
-      Array.from(selectedCategories ?? new Set())
-        .sort()
-        .join(','),
-    [selectedCategories],
+    () => categoriesParam.slice().sort().join(','),
+    [categoriesParam],
   )
 
   const queryParams = useMemo<VirtualListQueryParams>(
@@ -304,9 +303,8 @@ export function useFileCarousel({
       sortBy,
       sortDir: sortingDir,
       categories: categoriesKey ? (categoriesKey.split(',') as Category[]) : [],
-      searchQuery: searchQuery ?? '',
     }),
-    [sortBy, sortingDir, categoriesKey, searchQuery],
+    [sortBy, sortingDir, categoriesKey],
   )
 
   const populateCaches = useCallback(

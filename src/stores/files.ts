@@ -74,7 +74,7 @@ export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
 export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &
   FileLocalMetadata
 
-export const fileRecordRowKeys = keysOf<FileRecordRow>()([
+export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
   ...fileMetadataKeys,
   ...fileLocalMetadataKeys,
 ])
@@ -378,7 +378,7 @@ export async function updateFileRecord(
 ): Promise<void> {
   const { id } = update
   const assignments: Record<string, string | number | boolean | null> = {}
-  const updatableFields: (keyof FileRecordRow)[] = [
+  const updatableFields: (keyof Omit<FileRecordRow, 'tags'>)[] = [
     'name',
     'type',
     'kind',

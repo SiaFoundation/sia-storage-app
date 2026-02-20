@@ -17,6 +17,7 @@ type Props = {
   controlsTop?: React.ReactNode
   keyboardAware?: boolean
   style?: StyleProp<ViewStyle>
+  variant?: 'pill' | 'floating'
 }
 
 export function BottomControlBar({
@@ -24,6 +25,7 @@ export function BottomControlBar({
   children,
   controlsTop,
   keyboardAware = false,
+  variant = 'pill',
 }: Props) {
   const keyboardOffset = useKeyboardOffset(keyboardAware)
 
@@ -47,15 +49,32 @@ export function BottomControlBar({
             },
           ]}
         />
-        <View style={[styles.contents, style]}>
+        <View
+          style={[styles.contents, style]}
+          pointerEvents={variant === 'floating' ? 'box-none' : 'auto'}
+        >
           {controlsTop ? (
             <View style={styles.controlsTop}>{controlsTop}</View>
           ) : null}
-          <View style={styles.bar}>{children}</View>
+          {variant === 'pill' ? (
+            <View style={styles.bar}>{children}</View>
+          ) : (
+            children
+          )}
         </View>
       </View>
     </View>
   )
+}
+
+export function FloatingPill({
+  children,
+  style,
+}: {
+  children: React.ReactNode
+  style?: StyleProp<ViewStyle>
+}) {
+  return <View style={[styles.floatingPill, style]}>{children}</View>
 }
 
 const styles = StyleSheet.create({
@@ -115,6 +134,20 @@ const styles = StyleSheet.create({
     bottom: 56 + 12, // Bar height + gap.
     alignSelf: 'center',
     pointerEvents: 'box-none',
+  },
+  floatingPill: {
+    height: 56,
+    borderRadius: 26,
+    backgroundColor: overlay.panelStrong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    shadowColor: palette.gray[950],
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 28,
+    borderColor: whiteA.a08,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   label: { fontSize: 10, color: colors.textMuted },
   disabled: { opacity: 0.3 },

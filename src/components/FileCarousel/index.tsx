@@ -25,6 +25,7 @@ import { generateSiaShareUrl } from '../../lib/shareUrl'
 import { useToast } from '../../lib/toastContext'
 import { useFileCarousel } from '../../stores/fileCarousel'
 import type { FileRecord } from '../../stores/files'
+import type { Category, SortBy, SortDir } from '../../stores/library'
 import { useSdk } from '../../stores/sdk'
 import { palette } from '../../styles/colors'
 import BlocksLoader from '../BlocksLoader'
@@ -37,6 +38,9 @@ import { FileCarouselPage } from './FileCarouselPage'
 type Props = {
   initialId: string
   initialFile?: FileRecord
+  sortBy?: SortBy
+  sortDir?: SortDir
+  categories?: Category[]
   onClose: () => void
   onShowActionSheet?: () => void
   onZoomChange?: (isZoomed: boolean) => void
@@ -47,6 +51,9 @@ type Props = {
 export function FileCarousel({
   initialId,
   initialFile,
+  sortBy,
+  sortDir,
+  categories,
   onClose,
   onShowActionSheet,
   onZoomChange,
@@ -87,6 +94,9 @@ export function FileCarousel({
   } = useFileCarousel({
     initialId,
     initialFile,
+    sortBy,
+    sortDir,
+    categories,
     prefetchRadius: 3,
     maxCacheSize: 50,
     onDeleted: handleFileDeleted,
@@ -155,6 +165,24 @@ export function FileCarousel({
     }
   }, [])
 
+  const handleShareFile = useCallback(async () => {
+    if (!currentFile?.type || !status.data?.fileUri) return
+    try {
+      await Share.open({
+        url: status.data.fileUri,
+        type: currentFile.type,
+        filename: currentFile.name ?? undefined,
+        subject: `Sia Storage - ${currentFile.type}`,
+      })
+    } catch (e) {
+      const msg =
+        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      if (!msg.includes('User did not share')) {
+        logger.error('FileCarousel', 'share_failed', { error: e as Error })
+      }
+    }
+  }, [currentFile, status.data?.fileUri])
+
   const handleShareURL = useCallback(async () => {
     if (!currentFile || !sdk) return
     try {
@@ -175,24 +203,6 @@ export function FileCarousel({
       toast.show('Failed to copy URL')
     }
   }, [currentFile, sdk, toast])
-
-  const handleShareFile = useCallback(async () => {
-    if (!currentFile?.type || !status.data?.fileUri) return
-    try {
-      await Share.open({
-        url: status.data.fileUri,
-        type: currentFile.type,
-        filename: currentFile.name ?? undefined,
-        subject: `Sia Storage - ${currentFile.type}`,
-      })
-    } catch (e) {
-      const msg =
-        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
-      if (!msg.includes('User did not share')) {
-        logger.error('FileCarousel', 'share_failed', { error: e as Error })
-      }
-    }
-  }, [currentFile, status.data?.fileUri])
 
   const handleMore = useCallback(() => {
     if (onShowActionSheet) {

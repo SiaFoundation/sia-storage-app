@@ -1,17 +1,35 @@
 import { useCallback } from 'react'
-import { ActivityIndicator, FlatList, Platform } from 'react-native'
+import {
+  ActivityIndicator,
+  FlatList,
+  type FlatListProps,
+  Platform,
+} from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import type { FileRecord } from '../stores/files'
-import { useFileList } from '../stores/library'
+import { type FileListParams, useFileList } from '../stores/library'
 import { FileListItem } from './FileListItem'
 
 type Props = {
+  filters: FileListParams
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
+  keyboardDismissMode?: FlatListProps<FileRecord>['keyboardDismissMode']
 }
 
-export function FileList({ onPressItem, onLongPressItem }: Props) {
-  const { data: files, size, setSize, isValidating, hasMore } = useFileList()
+export function FileList({
+  filters,
+  onPressItem,
+  onLongPressItem,
+  keyboardDismissMode,
+}: Props) {
+  const {
+    data: files,
+    size,
+    setSize,
+    isValidating,
+    hasMore,
+  } = useFileList(filters)
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
     size,
@@ -44,7 +62,6 @@ export function FileList({ onPressItem, onLongPressItem }: Props) {
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
         paddingTop: Platform.OS === 'android' ? 150 : 130,
-        gap: 8,
         paddingBottom: 130,
       }}
       renderItem={renderItem}
@@ -55,6 +72,7 @@ export function FileList({ onPressItem, onLongPressItem }: Props) {
       maxToRenderPerBatch={20}
       updateCellsBatchingPeriod={20}
       showsVerticalScrollIndicator={false}
+      keyboardDismissMode={keyboardDismissMode}
       ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
       removeClippedSubviews
     />

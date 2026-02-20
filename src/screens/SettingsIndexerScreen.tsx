@@ -8,7 +8,6 @@ import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { useAccount } from '../hooks/useAccount'
-import { useMenuHeader } from '../hooks/useMenuHeader'
 import { humanSize } from '../lib/humanSize'
 import { useToast } from '../lib/toastContext'
 import type { MenuStackParamList } from '../stacks/types'
@@ -23,7 +22,6 @@ export function SettingsIndexerScreen({ navigation }: Props) {
   const currentIndexerURL = useIndexerURL()
   const toast = useToast()
   const [isReconnecting, setIsReconnecting] = useState(false)
-  useMenuHeader()
   const account = useAccount()
 
   const handleReconnect = useCallback(async () => {

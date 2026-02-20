@@ -71,6 +71,7 @@
     "react-native-get-random-values": "^1.11.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-inappbrowser-reborn": "^3.7.0",
+    "react-native-keyboard-controller": "1.18.5",
     "react-native-maps": "^1.26.1",
     "react-native-nitro-modules": "^0.33.7",
     "react-native-pdf": "^7.0.3",
