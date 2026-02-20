@@ -35,6 +35,9 @@ type Props = {
   sortBy?: SortBy
   sortDir?: SortDir
   categories?: Category[]
+  directoryId?: string
+  tags?: string[]
+  query?: string
   onClose: () => void
   onShowActionSheet?: () => void
   onShowTagSheet?: () => void
@@ -50,6 +53,9 @@ export function FileCarousel({
   sortBy,
   sortDir,
   categories,
+  directoryId,
+  tags,
+  query,
   onClose,
   onShowActionSheet,
   onShowTagSheet,
@@ -95,6 +101,9 @@ export function FileCarousel({
     sortBy,
     sortDir,
     categories,
+    directoryId,
+    tags,
+    query,
     prefetchRadius: 3,
     maxCacheSize: 50,
     onDeleted: handleFileDeleted,

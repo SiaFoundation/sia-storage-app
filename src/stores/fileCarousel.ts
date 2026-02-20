@@ -91,6 +91,9 @@ type VirtualListQueryParams = {
   sortBy: SortBy
   sortDir: SortDir
   categories: Category[]
+  directoryId?: string
+  tags?: string[]
+  query?: string
 }
 
 function buildOrderExpr(sortBy: SortBy, sortDir: SortDir, alias: string = 'f') {
@@ -107,6 +110,9 @@ export async function fetchTotalCount(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
+    directoryId: params.directoryId,
+    tags: params.tags,
+    query: params.query,
     tableAlias: 'f',
   })
 
@@ -128,6 +134,9 @@ export async function fetchFilePosition(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
+    directoryId: params.directoryId,
+    tags: params.tags,
+    query: params.query,
     tableAlias: 'f',
   })
 
@@ -182,6 +191,9 @@ export async function fetchSortedFileIds(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
+    directoryId: params.directoryId,
+    tags: params.tags,
+    query: params.query,
     tableAlias: 'f',
   })
 
@@ -219,6 +231,9 @@ type UseFileCarouselParams = {
   sortBy?: SortBy
   sortDir?: SortDir
   categories?: Category[]
+  directoryId?: string
+  tags?: string[]
+  query?: string
   prefetchRadius?: number
   maxCacheSize?: number
   onDeleted?: () => void
@@ -267,6 +282,9 @@ export function useFileCarousel({
   sortBy: sortByParam = 'DATE',
   sortDir: sortDirParam,
   categories: categoriesParam = [],
+  directoryId,
+  tags,
+  query,
   prefetchRadius = 3,
   maxCacheSize = 50,
   onDeleted,
@@ -298,13 +316,21 @@ export function useFileCarousel({
     [categoriesParam],
   )
 
+  const tagsKey = useMemo(
+    () => (tags ? tags.slice().sort().join(',') : ''),
+    [tags],
+  )
+
   const queryParams = useMemo<VirtualListQueryParams>(
     () => ({
       sortBy,
       sortDir: sortingDir,
       categories: categoriesKey ? (categoriesKey.split(',') as Category[]) : [],
+      directoryId,
+      tags: tagsKey ? tagsKey.split(',') : undefined,
+      query,
     }),
-    [sortBy, sortingDir, categoriesKey],
+    [sortBy, sortingDir, categoriesKey, directoryId, tagsKey, query],
   )
 
   const populateCaches = useCallback(
