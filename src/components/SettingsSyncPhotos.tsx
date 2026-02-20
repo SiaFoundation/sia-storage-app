@@ -1,12 +1,5 @@
 import { useCallback } from 'react'
-import {
-  Alert,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-} from 'react-native'
+import { Linking, Pressable, StyleSheet, Switch, Text } from 'react-native'
 import { SYNC_ARCHIVE_RESUME_THRESHOLD } from '../config'
 import { humanSize } from '../lib/humanSize'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
@@ -25,11 +18,13 @@ import {
   setPhotoImportDirectory,
   usePhotoImportDirectory,
 } from '../stores/settings'
+import { openSheet } from '../stores/sheets'
 import { colors } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
+import { SelectDirectorySheet } from './SelectDirectorySheet'
 
 export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
@@ -46,23 +41,17 @@ export function SettingsSyncPhotos() {
   const syncPhotosArchiveControlsDisabled =
     isPhotosAccessDisabled || !autoSyncPhotosArchive.data
 
-  const handleSetPhotoImportDir = useCallback(() => {
-    Alert.prompt(
-      'Photo import directory',
-      'Imported photos and videos will be placed in this directory. Leave empty to disable.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: (value: string | undefined) => {
-            void setPhotoImportDirectory(value?.trim() ?? '')
-          },
-        },
-      ],
-      'plain-text',
-      photoImportDir.data ?? '',
-    )
-  }, [photoImportDir.data])
+  const handleOpenDirectoryPicker = useCallback(() => {
+    openSheet('selectPhotoImportDirectory')
+  }, [])
+
+  const handleSelectDirectory = useCallback((name: string) => {
+    void setPhotoImportDirectory(name)
+  }, [])
+
+  const handleClearDirectory = useCallback(() => {
+    void setPhotoImportDirectory('')
+  }, [])
 
   return (
     <RowGroup
@@ -80,7 +69,7 @@ export function SettingsSyncPhotos() {
       }
     >
       <InfoCard>
-        <Pressable onPress={handleSetPhotoImportDir}>
+        <Pressable onPress={handleOpenDirectoryPicker}>
           <LabeledValueRow
             label="Import directory"
             labelWidth={250}
@@ -89,6 +78,12 @@ export function SettingsSyncPhotos() {
           />
         </Pressable>
       </InfoCard>
+      <SelectDirectorySheet
+        sheetName="selectPhotoImportDirectory"
+        currentValue={photoImportDir.data ?? ''}
+        onSelect={handleSelectDirectory}
+        onClear={handleClearDirectory}
+      />
       <InfoCard style={{ marginTop: 10 }}>
         <LabeledValueRow
           label="Import new photos"

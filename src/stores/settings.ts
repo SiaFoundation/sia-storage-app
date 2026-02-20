@@ -102,7 +102,7 @@ export const [
   usePhotoImportDirectory,
   photoImportDirectoryCache,
 ] = createGetterAndSWRHook<string>(() =>
-  getAsyncStorageString<string>('photoImportDirectory', ''),
+  getAsyncStorageString<string>('photoImportDirectory', 'Media'),
 )
 
 export async function setPhotoImportDirectory(value: string) {
