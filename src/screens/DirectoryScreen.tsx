@@ -4,6 +4,7 @@ import {
   FolderPlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
+  SearchIcon,
   Trash2Icon,
   XIcon,
 } from 'lucide-react-native'
@@ -296,6 +297,12 @@ export function DirectoryScreen({ route, navigation }: Props) {
               accessibilityLabel="Add files"
             >
               <FolderPlusIcon color={palette.gray[50]} size={20} />
+            </IconButton>
+            <IconButton
+              onPress={() => navigation.navigate('Search')}
+              accessibilityLabel="Search"
+            >
+              <SearchIcon color={palette.gray[50]} size={22} />
             </IconButton>
             <IconButton
               onPress={() => openSheet('directoryActions')}

@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { DirectoryScreen } from '../screens/DirectoryScreen'
 import { LibraryScreen } from '../screens/LibraryScreen'
+import { SearchScreen } from '../screens/SearchScreen'
 import { TagLibraryScreen } from '../screens/TagLibraryScreen'
 import type { MainStackParamList } from './types'
 
@@ -23,6 +24,11 @@ export function MainStack() {
         name="DirectoryScreen"
         options={{ headerShown: false }}
         component={DirectoryScreen}
+      />
+      <Stack.Screen
+        name="Search"
+        options={{ headerShown: false, animation: 'fade', animationDuration: 100 }}
+        component={SearchScreen}
       />
     </Stack.Navigator>
   )
