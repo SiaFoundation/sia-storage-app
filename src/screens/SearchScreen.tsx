@@ -96,7 +96,13 @@ export function SearchScreen({ navigation }: Props) {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
 
     const handleShow = (e: KeyboardEvent) => {
-      setKeyboardOffset(e.endCoordinates?.height ?? 0)
+      const height = e.endCoordinates?.height ?? 0
+      // On Android with edge-to-edge, the reported keyboard height may
+      // not include the IME toolbar (clipboard, voice, etc.) above the
+      // keyboard. Add the bottom inset to compensate.
+      setKeyboardOffset(
+        Platform.OS === 'android' ? height + insets.bottom : height,
+      )
     }
     const handleHide = () => {
       setKeyboardOffset(0)
@@ -109,7 +115,7 @@ export function SearchScreen({ navigation }: Props) {
       showSub.remove()
       hideSub.remove()
     }
-  }, [])
+  }, [insets.bottom])
 
   useEffect(() => {
     if (selectedFile) {
