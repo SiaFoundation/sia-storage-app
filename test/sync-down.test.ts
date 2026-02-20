@@ -4,6 +4,10 @@
 
 import './utils/setup'
 
+import {
+  readAllDirectoriesWithCounts,
+  readDirectoryNameForFile,
+} from '../src/stores/directories'
 import { readAllFileRecords } from '../src/stores/files'
 import { addTagToFile, readTagsForFile } from '../src/stores/tags'
 import { type AppCoreHarness, createHarness } from './utils/harness'
@@ -216,5 +220,73 @@ describe('Sync Down Integration', () => {
       },
       { timeout: 10_000, message: 'Updated tags to sync' },
     )
+  })
+
+  it('syncs objects with directory from server', async () => {
+    harness.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        name: 'vacation-photo.jpg',
+        directory: 'Vacation',
+      }),
+    })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        if (files.length === 1 && files[0].name === 'vacation-photo.jpg') {
+          fileId = files[0].id
+          return true
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'File with directory to sync' },
+    )
+
+    const dirName = await readDirectoryNameForFile(fileId!)
+    expect(dirName).toBe('Vacation')
+
+    const dirs = await readAllDirectoriesWithCounts()
+    expect(dirs).toHaveLength(1)
+    expect(dirs[0].name).toBe('Vacation')
+    expect(dirs[0].fileCount).toBe(1)
+  })
+
+  it('syncs directory updates from server', async () => {
+    const stored = harness.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        name: 'photo.jpg',
+        directory: 'Trip',
+      }),
+    })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await readAllFileRecords({ order: 'ASC' })
+        if (files.length === 1) {
+          fileId = files[0].id
+          const dir = await readDirectoryNameForFile(files[0].id)
+          return dir === 'Trip'
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'Initial directory to sync' },
+    )
+
+    harness.sdk.injectMetadataChange(stored.id, { directory: 'Vacation' })
+
+    await waitForCondition(
+      async () => {
+        const dir = await readDirectoryNameForFile(fileId!)
+        return dir === 'Vacation'
+      },
+      { timeout: 10_000, message: 'Updated directory to sync' },
+    )
+
+    const dirs = await readAllDirectoriesWithCounts()
+    const vacationDir = dirs.find((d) => d.name === 'Vacation')
+    expect(vacationDir).toBeDefined()
+    expect(vacationDir!.fileCount).toBe(1)
   })
 })

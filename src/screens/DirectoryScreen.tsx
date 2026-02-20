@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   ArrowLeftIcon,
-  FilePlusIcon,
+  FolderPlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
   Trash2Icon,
@@ -35,6 +35,7 @@ import { ScreenHeader } from '../components/ScreenHeader'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import type { MainStackParamList } from '../stacks/types'
+import { deleteDirectory, moveFilesToDirectory } from '../stores/directories'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -45,29 +46,28 @@ import {
 import type { FileRecord } from '../stores/files'
 import {
   type FileListParams,
+  useDirectoryFileCount,
   useFileList,
-  useTagFileCount,
 } from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFile, deleteTag } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
-type Props = NativeStackScreenProps<MainStackParamList, 'TagLibrary'>
+type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 
-export function TagLibraryScreen({ route, navigation }: Props) {
-  const { tagId, tagName } = route.params
-  const scope = `tag.${tagId}`
+export function DirectoryScreen({ route, navigation }: Props) {
+  const { directoryId, directoryName } = route.params
+  const scope = `dir.${directoryId}`
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
     () => ({
-      scope: `tag:${tagId}`,
+      scope: `dir:${directoryId}`,
       sortBy: vs.sortBy,
       sortDir: vs.sortDir,
       categories: vs.selectedCategories,
-      tags: [tagId],
+      directoryId,
     }),
-    [tagId, vs.sortBy, vs.sortDir, vs.selectedCategories],
+    [directoryId, vs.sortBy, vs.sortDir, vs.selectedCategories],
   )
   const files = useFileList(filters)
   const isSelectionMode = useIsSelectionMode()
@@ -138,7 +138,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
       return
     }
     setActionFileId(file.id)
-    openSheet('tagLibraryFileActions')
+    openSheet('directoryFileActions')
   }, [])
 
   const handleCloseCarousel = useCallback(() => {
@@ -148,7 +148,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
   }, [])
 
   const handleOpenSelectionActions = useCallback(() => {
-    openSheet('tagLibraryFileActions')
+    openSheet('directoryFileActions')
   }, [])
 
   const handleBulkActionComplete = useCallback(() => {
@@ -156,12 +156,13 @@ export function TagLibraryScreen({ route, navigation }: Props) {
   }, [])
 
   const handleFilesAdded = useCallback(
-    (files: FileRecord[]) => {
-      for (const file of files) {
-        void addTagToFile(file.id, tagName)
-      }
+    (addedFiles: FileRecord[]) => {
+      void moveFilesToDirectory(
+        addedFiles.map((f) => f.id),
+        directoryId,
+      )
     },
-    [tagName],
+    [directoryId],
   )
 
   const actionSheetFileIds = isSelectionMode
@@ -172,32 +173,31 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         ? [actionFileId]
         : []
 
-  const tagCount = useTagFileCount(tagId)
-  const fileCount = tagCount.data ?? 0
+  const dirCount = useDirectoryFileCount(directoryId)
+  const fileCount = dirCount.data ?? 0
   const subtitle = `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`
-  const isSystemTag = tagId.startsWith('sys_')
-  const tagActionsOpen = useSheetOpen('tagActions')
+  const dirActionsOpen = useSheetOpen('directoryActions')
 
-  const handleDeleteTag = useCallback(() => {
+  const handleDeleteDirectory = useCallback(() => {
     closeSheet()
     setTimeout(() => {
       Alert.alert(
-        `Delete "${tagName}"?`,
-        'This will remove the tag and unlink all files from it. Files will not be deleted.',
+        `Delete "${directoryName}"?`,
+        'This will remove the directory. Files will be moved out but not deleted.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
-              await deleteTag(tagId)
+              await deleteDirectory(directoryId)
               navigation.goBack()
             },
           },
         ],
       )
     }, 300)
-  }, [tagId, tagName, navigation])
+  }, [directoryId, directoryName, navigation])
 
   return (
     <View style={styles.container}>
@@ -217,7 +217,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
           </IconButton>
           <View>
             <Text style={styles.titleLarge} numberOfLines={1}>
-              {tagName}
+              {directoryName}
             </Text>
             <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
@@ -225,7 +225,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         <View style={styles.buttonRow}>
           <ViewSettingsMenu scope={scope}>
             <IconButton accessibilityLabel="View settings">
-              <ListFilterIcon color={palette.gray[50]} size={20} />
+              <ListFilterIcon color={palette.gray[50]} size={22} />
             </IconButton>
           </ViewSettingsMenu>
           {isSelectionMode ? (
@@ -272,33 +272,33 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             style={styles.emptyImage}
             source={require('../../assets/image-stack.png')}
           />
-          <Text style={styles.emptyTitle}>No files with this tag</Text>
+          <Text style={styles.emptyTitle}>No files in this directory</Text>
           <Text style={styles.emptyText}>
-            Add files to this tag from the file actions menu.
+            Move files here from the file actions menu.
           </Text>
         </View>
       )}
 
       <AddFileActionSheet
-        sheetName="tagLibraryAddFile"
+        sheetName="directoryAddFile"
         onFilesAdded={handleFilesAdded}
       />
       {isSelectionMode ? (
         <SelectionBar
           onOpenSelectionActions={handleOpenSelectionActions}
-          moveToDirectorySheet="tagLibraryMoveToDir"
+          moveToDirectorySheet="directoryMoveToDir"
         />
       ) : (
         <BottomControlBar variant="floating" style={styles.controlBar}>
           <FloatingPill style={styles.actions}>
             <IconButton
-              onPress={() => openSheet('tagLibraryAddFile')}
+              onPress={() => openSheet('directoryAddFile')}
               accessibilityLabel="Add files"
             >
-              <FilePlusIcon color={palette.gray[50]} size={20} />
+              <FolderPlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
             <IconButton
-              onPress={() => openSheet('tagActions')}
+              onPress={() => openSheet('directoryActions')}
               accessibilityLabel="More options"
             >
               <MoreVerticalIcon color={palette.gray[50]} size={22} />
@@ -335,9 +335,9 @@ export function TagLibraryScreen({ route, navigation }: Props) {
               sortDir={vs.sortDir}
               categories={vs.selectedCategories}
               onClose={handleCloseCarousel}
-              onShowActionSheet={() => openSheet('tagLibraryFileActions')}
-              onShowTagSheet={() => openSheet('tagLibraryManageTags')}
-              onMoveToDirectory={() => openSheet('tagLibraryMoveToDir')}
+              onShowActionSheet={() => openSheet('directoryFileActions')}
+              onShowTagSheet={() => openSheet('directoryManageTags')}
+              onMoveToDirectory={() => openSheet('directoryMoveToDir')}
               onZoomChange={setIsCarouselZoomed}
               onViewStyleChange={(s) => setIsCarouselDetail(s === 'detail')}
               isDismissing={isDraggingToDismiss}
@@ -346,34 +346,33 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
 
-      <ActionSheet visible={tagActionsOpen} onRequestClose={() => closeSheet()}>
+      <ActionSheet visible={dirActionsOpen} onRequestClose={() => closeSheet()}>
         <ActionSheetButton
           variant="danger"
           icon={<Trash2Icon size={18} />}
-          onPress={handleDeleteTag}
-          disabled={isSystemTag}
+          onPress={handleDeleteDirectory}
         >
-          Delete tag
+          Delete directory
         </ActionSheetButton>
       </ActionSheet>
       {actionSheetFileIds.length > 0 ? (
         <>
           <FileActionsSheet
             fileIds={actionSheetFileIds}
-            sheetName="tagLibraryFileActions"
+            sheetName="directoryFileActions"
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
             <ManageTagsSheet
               fileId={actionSheetFileIds[0]}
-              sheetName="tagLibraryManageTags"
+              sheetName="directoryManageTags"
             />
           ) : null}
         </>
       ) : null}
       <MoveToDirectorySheet
         fileIds={actionSheetFileIds}
-        sheetName="tagLibraryMoveToDir"
+        sheetName="directoryMoveToDir"
       />
     </View>
   )

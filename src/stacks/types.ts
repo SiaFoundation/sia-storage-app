@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native'
 export type MainStackParamList = {
   LibraryHome: { openFileId?: string } | undefined
   TagLibrary: { tagId: string; tagName: string }
+  DirectoryScreen: { directoryId: string; directoryName: string }
 }
 
 export type SwitchIndexerStackParamList = {

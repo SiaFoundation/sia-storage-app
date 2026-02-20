@@ -94,3 +94,18 @@ export async function setStatusDisplayMode(value: StatusDisplayMode) {
   await setAsyncStorageString<StatusDisplayMode>('statusDisplayMode', value)
   await statusDisplayModeCache.set(value)
 }
+
+// Photo import directory
+
+export const [
+  getPhotoImportDirectory,
+  usePhotoImportDirectory,
+  photoImportDirectoryCache,
+] = createGetterAndSWRHook<string>(() =>
+  getAsyncStorageString<string>('photoImportDirectory', ''),
+)
+
+export async function setPhotoImportDirectory(value: string) {
+  await setAsyncStorageString('photoImportDirectory', value)
+  await photoImportDirectoryCache.set(value)
+}

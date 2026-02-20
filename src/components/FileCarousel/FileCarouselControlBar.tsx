@@ -1,4 +1,5 @@
 import {
+  FolderIcon,
   FullscreenIcon,
   HeartIcon,
   MoreVerticalIcon,
@@ -16,6 +17,7 @@ type Props = {
   setViewStyle: (viewStyle: 'consume' | 'detail') => void
   onShareFile: () => void
   onAddTag: () => void
+  onMoveToDirectory: () => void
   onPressMore: () => void
   onToggleFavorite: () => void
   isFavorite: boolean
@@ -27,6 +29,7 @@ export function FileCarouselControlBar({
   setViewStyle,
   onShareFile,
   onAddTag,
+  onMoveToDirectory,
   onPressMore,
   onToggleFavorite,
   isFavorite,
@@ -63,6 +66,12 @@ export function FileCarouselControlBar({
           </IconButton>
           <IconButton onPress={onAddTag} accessibilityLabel="Add tag">
             <TagIcon color={iconColors.white} />
+          </IconButton>
+          <IconButton
+            onPress={onMoveToDirectory}
+            accessibilityLabel="Move to directory"
+          >
+            <FolderIcon color={iconColors.white} />
           </IconButton>
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>

@@ -1,4 +1,4 @@
-import { TagIcon, Trash2Icon } from 'lucide-react-native'
+import { FolderIcon, TagIcon, Trash2Icon } from 'lucide-react-native'
 import { StyleSheet, Text, View } from 'react-native'
 import { useSelectedCount } from '../stores/fileSelection'
 import { openSheet } from '../stores/sheets'
@@ -9,25 +9,45 @@ import { IconButton } from './IconButton'
 
 type Props = {
   onOpenSelectionActions: () => void
+  moveToDirectorySheet?: string
 }
 
-export function SelectionBar({ onOpenSelectionActions }: Props) {
+export function SelectionBar({
+  onOpenSelectionActions,
+  moveToDirectorySheet = 'moveToDirectory',
+}: Props) {
   const selectedCount = useSelectedCount()
 
   return (
     <>
       <BottomControlBar style={styles.bar}>
         <View style={styles.container}>
-          <IconButton
-            onPress={() => openSheet('bulkManageTags')}
-            disabled={selectedCount === 0}
-            accessibilityLabel="Add tag"
-          >
-            <TagIcon
-              color={selectedCount > 0 ? iconColors.white : iconColors.inactive}
-              size={20}
-            />
-          </IconButton>
+          <View style={styles.leftButtons}>
+            <IconButton
+              onPress={() => openSheet('bulkManageTags')}
+              disabled={selectedCount === 0}
+              accessibilityLabel="Add tag"
+            >
+              <TagIcon
+                color={
+                  selectedCount > 0 ? iconColors.white : iconColors.inactive
+                }
+                size={20}
+              />
+            </IconButton>
+            <IconButton
+              onPress={() => openSheet(moveToDirectorySheet)}
+              disabled={selectedCount === 0}
+              accessibilityLabel="Move to directory"
+            >
+              <FolderIcon
+                color={
+                  selectedCount > 0 ? iconColors.white : iconColors.inactive
+                }
+                size={20}
+              />
+            </IconButton>
+          </View>
           <Text style={styles.count}>
             {selectedCount > 0 ? `${selectedCount} selected` : 'Select items'}
           </Text>
@@ -58,6 +78,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  leftButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   count: {
     color: palette.gray[50],

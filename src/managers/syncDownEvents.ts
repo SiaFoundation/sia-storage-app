@@ -19,6 +19,7 @@ import { logger } from '../lib/logger'
 import { createServiceInterval } from '../lib/serviceInterval'
 import { uniqueId } from '../lib/uniqueId'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
+import { syncDirectoryFromMetadata } from '../stores/directories'
 import {
   createFileRecord,
   deleteFileRecord,
@@ -59,6 +60,7 @@ type PreparedCreate = {
   fileRecord: FileRecordRow
   localObject: LocalObject
   tags?: string[]
+  directory?: string
   isFile: boolean
 }
 
@@ -69,6 +71,7 @@ type PreparedUpdate = {
   localObject: LocalObject
   fileId: string
   tags?: string[]
+  directory?: string
   isFile: boolean
   isRemoteNewer: boolean
 }
@@ -94,6 +97,7 @@ type PreparedAdopt = {
   localObject: LocalObject
   indexerURL: string
   tags?: string[]
+  directory?: string
   isFile: boolean
 }
 
@@ -321,7 +325,7 @@ async function processBatch(
     } else if (event.kind === 'update') {
       removeUpload(event.fileId)
     }
-    // Sync tags from remote metadata for file records.
+    // Sync tags and directories from remote metadata for file records.
     if (event.kind !== 'delete' && event.isFile) {
       const shouldSync =
         event.kind === 'create' ||
@@ -332,6 +336,14 @@ async function processBatch(
           await syncTagsFromMetadata(event.fileRecord.id, event.tags)
         } catch (e) {
           logger.error('syncDownEvents', 'tag_sync_error', {
+            fileId: event.fileRecord.id,
+            error: e as Error,
+          })
+        }
+        try {
+          await syncDirectoryFromMetadata(event.fileRecord.id, event.directory)
+        } catch (e) {
+          logger.error('syncDownEvents', 'directory_sync_error', {
             fileId: event.fileRecord.id,
             error: e as Error,
           })
@@ -511,6 +523,7 @@ async function prepareFileRecord(
       localObject,
       fileId: existing.id,
       tags: metadata.tags,
+      directory: metadata.directory,
       isFile: type === 'file',
       isRemoteNewer: metadata.updatedAt >= existing.updatedAt,
     }
@@ -540,6 +553,7 @@ async function prepareFileRecord(
     fileRecord,
     localObject,
     tags: metadata.tags,
+    directory: metadata.directory,
     isFile: type === 'file',
   }
 }
@@ -583,6 +597,7 @@ async function prepareAdopt(
     localObject,
     indexerURL,
     tags: metadata.tags,
+    directory: metadata.directory,
     isFile: metadata.kind === 'file',
   }
 }
