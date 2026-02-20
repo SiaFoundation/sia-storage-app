@@ -341,6 +341,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
               sortBy={vs.sortBy}
               sortDir={vs.sortDir}
               categories={vs.selectedCategories}
+              directoryId={directoryId}
               onClose={handleCloseCarousel}
               onShowActionSheet={() => openSheet('directoryFileActions')}
               onShowTagSheet={() => openSheet('directoryManageTags')}

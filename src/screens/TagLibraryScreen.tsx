@@ -334,6 +334,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
               sortBy={vs.sortBy}
               sortDir={vs.sortDir}
               categories={vs.selectedCategories}
+              tags={[tagId]}
               onClose={handleCloseCarousel}
               onShowActionSheet={() => openSheet('tagLibraryFileActions')}
               onShowTagSheet={() => openSheet('tagLibraryManageTags')}

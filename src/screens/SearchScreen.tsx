@@ -378,6 +378,8 @@ export function SearchScreen({ navigation }: Props) {
               sortBy={vs.sortBy}
               sortDir={vs.sortDir}
               categories={vs.selectedCategories}
+              query={debounced}
+              tags={Array.from(selectedTags)}
               onClose={handleCloseCarousel}
               onShowActionSheet={() => openSheet('searchFileActions')}
               onShowTagSheet={() => openSheet('searchManageTags')}
