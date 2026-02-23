@@ -32,6 +32,13 @@ jobs:
     if: ${{ github.event_name == 'release' || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: false
+          tool-cache: false
+          swap-storage: false
+
       - name: Checkout
         uses: actions/checkout@v4
 
