@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.7.0 (2026-02-23)
+
+### Features
+
+- Added directories for organizing files into folders.
+- Added search screen with tag-based filtering.
+- Added tags for organizing files with favorites support.
+- Reworked the library into three tabs: Files, Tags, and Media.
+- Added per-view settings so each screen remembers its own sort, filter, and view mode.
+- Fixed photo sync missing photos without EXIF creation timestamps by switching to modificationTime sorting, and added periodic background re-scans to catch cross-device synced photos arriving with old timestamps.
+
+### Fixes
+
+- Updated archive sync settings UI to show progress date from displayDate instead of numeric cursor.
+
 ## 1.6.0 (2026-02-20)
 
 ### Features
