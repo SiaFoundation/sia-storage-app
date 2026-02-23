@@ -20,6 +20,7 @@ import {
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
+import { SpinnerIcon } from './SpinnerIcon'
 
 type Props = {
   fileIds: string[]
@@ -36,6 +37,7 @@ export function MoveToDirectorySheet({
   const inputRef = useRef<TextInput | null>(null)
   const [currentDirName, setCurrentDirName] = useState<string | null>(null)
   const [filesInDirCount, setFilesInDirCount] = useState(0)
+  const [loadingDirId, setLoadingDirId] = useState<string | null>(null)
 
   const isSingleFile = fileIds.length === 1
   const dirs = allDirs.data ?? []
@@ -63,43 +65,59 @@ export function MoveToDirectorySheet({
       setQuery('')
       setCurrentDirName(null)
       setFilesInDirCount(0)
+      setLoadingDirId(null)
     }
   }, [isOpen, fileIds, isSingleFile])
 
   const handleMoveToDirectory = useCallback(
     async (directoryId: string) => {
-      if (fileIds.length === 1) {
-        await moveFileToDirectory(fileIds[0], directoryId)
-      } else if (fileIds.length > 1) {
-        await moveFilesToDirectory(fileIds, directoryId)
+      setLoadingDirId(directoryId)
+      try {
+        if (fileIds.length === 1) {
+          await moveFileToDirectory(fileIds[0], directoryId)
+        } else if (fileIds.length > 1) {
+          await moveFilesToDirectory(fileIds, directoryId)
+        }
+        closeSheet()
+      } finally {
+        setLoadingDirId(null)
       }
-      closeSheet()
     },
     [fileIds],
   )
 
   const handleRemoveFromDirectory = useCallback(async () => {
-    if (fileIds.length === 1) {
-      await moveFileToDirectory(fileIds[0], null)
-    } else if (fileIds.length > 1) {
-      await moveFilesToDirectory(fileIds, null)
+    setLoadingDirId('none')
+    try {
+      if (fileIds.length === 1) {
+        await moveFileToDirectory(fileIds[0], null)
+      } else if (fileIds.length > 1) {
+        await moveFilesToDirectory(fileIds, null)
+      }
+      closeSheet()
+    } finally {
+      setLoadingDirId(null)
     }
-    closeSheet()
   }, [fileIds])
 
   const handleCreateAndMove = useCallback(
     async (name: string) => {
       if (!name.trim()) return
+      setLoadingDirId('create')
       try {
-        const dir = await createDirectory(name.trim())
-        await handleMoveToDirectory(dir.id)
-      } catch {
-        const existing = dirs.find(
-          (d) => d.name.toLowerCase() === name.trim().toLowerCase(),
-        )
-        if (existing) {
-          await handleMoveToDirectory(existing.id)
+        try {
+          const dir = await createDirectory(name.trim())
+          await handleMoveToDirectory(dir.id)
+        } catch {
+          const existing = dirs.find(
+            (d) => d.name.toLowerCase() === name.trim().toLowerCase(),
+          )
+          if (existing) {
+            await handleMoveToDirectory(existing.id)
+          }
         }
+      } finally {
+        setLoadingDirId(null)
       }
     },
     [dirs, handleMoveToDirectory],
@@ -175,9 +193,14 @@ export function MoveToDirectorySheet({
             <Pressable
               style={styles.dirRow}
               onPress={handleRemoveFromDirectory}
+              disabled={loadingDirId !== null}
             >
               <View style={styles.dirRowLeft}>
-                <XIcon size={18} color={palette.gray[400]} />
+                {loadingDirId === 'none' ? (
+                  <SpinnerIcon size={18} color={palette.gray[400]} />
+                ) : (
+                  <XIcon size={18} color={palette.gray[400]} />
+                )}
                 <Text style={styles.removeText}>No directory</Text>
               </View>
             </Pressable>
@@ -185,9 +208,14 @@ export function MoveToDirectorySheet({
               <Pressable
                 style={styles.dirRow}
                 onPress={() => handleCreateAndMove(query.trim())}
+                disabled={loadingDirId !== null}
               >
                 <View style={styles.dirRowLeft}>
-                  <PlusIcon size={16} color={palette.blue[400]} />
+                  {loadingDirId === 'create' ? (
+                    <SpinnerIcon size={16} color={palette.blue[400]} />
+                  ) : (
+                    <PlusIcon size={16} color={palette.blue[400]} />
+                  )}
                   <Text style={styles.createText}>Create "{query.trim()}"</Text>
                 </View>
               </Pressable>
@@ -198,9 +226,14 @@ export function MoveToDirectorySheet({
           <Pressable
             style={styles.dirRow}
             onPress={() => handleMoveToDirectory(item.id)}
+            disabled={loadingDirId !== null}
           >
             <View style={styles.dirRowLeft}>
-              <FolderIcon size={18} color={palette.blue[400]} />
+              {loadingDirId === item.id ? (
+                <SpinnerIcon size={18} color={palette.blue[400]} />
+              ) : (
+                <FolderIcon size={18} color={palette.blue[400]} />
+              )}
               <Text style={styles.dirName}>{item.name}</Text>
               <Text style={styles.dirCount}>{item.fileCount}</Text>
             </View>

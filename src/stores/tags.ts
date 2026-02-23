@@ -199,6 +199,36 @@ export async function addTagToFile(
 }
 
 /**
+ * Adds a tag to multiple files in a single transaction.
+ * Creates the tag if it doesn't exist. Ignores duplicate relationships.
+ */
+export async function addTagToFiles(
+  fileIds: string[],
+  tagName: string,
+): Promise<void> {
+  if (fileIds.length === 0) return
+  await withTransactionLock(async () => {
+    const tag = await getOrCreateTag(tagName)
+    for (const fileId of fileIds) {
+      await sqlInsert(
+        'file_tags',
+        { fileId, tagId: tag.id },
+        { conflictClause: 'OR IGNORE' },
+      )
+    }
+    const now = Date.now()
+    const placeholders = fileIds.map(() => '?').join(',')
+    await db().runAsync(
+      `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      ...fileIds,
+    )
+  })
+  tagsSwr.invalidateAll()
+  invalidateCacheLibraryLists()
+}
+
+/**
  * Removes a tag from a file.
  */
 export async function removeTagFromFile(

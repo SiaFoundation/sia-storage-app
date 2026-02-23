@@ -11,9 +11,10 @@ import {
 } from 'react-native'
 import { useSelectedFileIds } from '../stores/fileSelection'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFile, useAllTags } from '../stores/tags'
+import { addTagToFiles, useAllTags } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
+import { SpinnerIcon } from './SpinnerIcon'
 
 export function BulkManageTagsSheet() {
   const isOpen = useSheetOpen('bulkManageTags')
@@ -22,6 +23,7 @@ export function BulkManageTagsSheet() {
   const [query, setQuery] = useState('')
   const inputRef = useRef<TextInput | null>(null)
   const [addedTagIds, setAddedTagIds] = useState<Set<string>>(new Set())
+  const [loadingTagNames, setLoadingTagNames] = useState<Set<string>>(new Set())
 
   const allTagList = (allTags.data ?? []).filter((t) => !t.system)
 
@@ -41,23 +43,30 @@ export function BulkManageTagsSheet() {
     } else {
       setQuery('')
       setAddedTagIds(new Set())
+      setLoadingTagNames(new Set())
     }
   }, [isOpen])
 
   const handleAddTag = useCallback(
     async (tagName: string) => {
-      if (!tagName.trim()) return
-      const fileIds = Array.from(selectedFileIds)
-      for (const fileId of fileIds) {
-        await addTagToFile(fileId, tagName.trim())
+      const trimmed = tagName.trim()
+      if (!trimmed) return
+      const key = trimmed.toLowerCase()
+      setLoadingTagNames((prev) => new Set([...prev, key]))
+      try {
+        await addTagToFiles(Array.from(selectedFileIds), trimmed)
+        const tag = allTagList.find((t) => t.name.toLowerCase() === key)
+        if (tag) {
+          setAddedTagIds((prev) => new Set([...prev, tag.id]))
+        }
+        setQuery('')
+      } finally {
+        setLoadingTagNames((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
       }
-      const tag = allTagList.find(
-        (t) => t.name.toLowerCase() === tagName.trim().toLowerCase(),
-      )
-      if (tag) {
-        setAddedTagIds((prev) => new Set([...prev, tag.id]))
-      }
-      setQuery('')
     },
     [selectedFileIds, allTagList],
   )
@@ -99,29 +108,47 @@ export function BulkManageTagsSheet() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          query.trim().length > 0 && !exactMatch ? (
-            <Pressable
-              style={styles.tagRow}
-              onPress={() => handleAddTag(query.trim())}
-            >
-              <View style={styles.tagRowLeft}>
-                <PlusIcon size={16} color={palette.blue[400]} />
-                <Text style={styles.createText}>Create "{query.trim()}"</Text>
-              </View>
-            </Pressable>
-          ) : null
+          query.trim().length > 0 && !exactMatch
+            ? (() => {
+                const isCreating = loadingTagNames.has(
+                  query.trim().toLowerCase(),
+                )
+                return (
+                  <Pressable
+                    style={styles.tagRow}
+                    onPress={() => handleAddTag(query.trim())}
+                    disabled={isCreating}
+                  >
+                    <View style={styles.tagRowLeft}>
+                      {isCreating ? (
+                        <SpinnerIcon size={16} color={palette.blue[400]} />
+                      ) : (
+                        <PlusIcon size={16} color={palette.blue[400]} />
+                      )}
+                      <Text style={styles.createText}>
+                        Create "{query.trim()}"
+                      </Text>
+                    </View>
+                  </Pressable>
+                )
+              })()
+            : null
         }
         renderItem={({ item }) => {
+          const isLoading = loadingTagNames.has(item.name.toLowerCase())
           const justAdded = addedTagIds.has(item.id)
           return (
             <Pressable
               style={styles.tagRow}
               onPress={() => handleAddTag(item.name)}
+              disabled={isLoading}
             >
               <View style={styles.tagRowLeft}>
                 <Text style={styles.tagName}>{item.name}</Text>
               </View>
-              {justAdded ? (
+              {isLoading ? (
+                <SpinnerIcon size={18} color={palette.blue[400]} />
+              ) : justAdded ? (
                 <CheckIcon size={18} color={palette.blue[400]} />
               ) : null}
             </Pressable>

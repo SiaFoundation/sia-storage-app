@@ -2,6 +2,7 @@ import { initializeDB, resetDb } from '../db'
 import { createFileRecord, readFileRecord } from './files'
 import {
   addTagToFile,
+  addTagToFiles,
   createTag,
   deleteTag,
   getOrCreateTag,
@@ -282,6 +283,65 @@ describe('tags store', () => {
 
       const after = await readFileRecord('file-1')
       expect(after!.updatedAt).toBeGreaterThan(1000)
+    })
+  })
+
+  describe('addTagToFiles', () => {
+    test('creates junction entries for all files', async () => {
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+      await createTestFile('file-3')
+      await addTagToFiles(['file-1', 'file-2', 'file-3'], 'tag1')
+
+      for (const id of ['file-1', 'file-2', 'file-3']) {
+        const tags = userOnly(await readTagsForFile(id))
+        expect(tags).toHaveLength(1)
+        expect(tags[0].name).toBe('tag1')
+      }
+    })
+
+    test('creates new tag if name not found', async () => {
+      await createTestFile('file-1')
+      await addTagToFiles(['file-1'], 'brandNew')
+
+      const tags = userOnly(await readTagsForFile('file-1'))
+      expect(tags).toHaveLength(1)
+      expect(tags[0].name).toBe('brandNew')
+    })
+
+    test('ignores duplicate add (same file+tag)', async () => {
+      await createTestFile('file-1')
+      await addTagToFiles(['file-1', 'file-1'], 'tag1')
+
+      const tags = userOnly(await readTagsForFile('file-1'))
+      expect(tags).toHaveLength(1)
+    })
+
+    test('uses existing tag (case-insensitive)', async () => {
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+      await addTagToFile('file-1', 'Work')
+      await addTagToFiles(['file-2'], 'work')
+
+      const allTags = userOnly(await readAllTagsWithCounts())
+      expect(allTags).toHaveLength(1)
+      expect(allTags[0].fileCount).toBe(2)
+    })
+
+    test('bumps updatedAt for all files', async () => {
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+
+      await addTagToFiles(['file-1', 'file-2'], 'tag1')
+
+      const f1 = await readFileRecord('file-1')
+      const f2 = await readFileRecord('file-2')
+      expect(f1!.updatedAt).toBeGreaterThan(1000)
+      expect(f2!.updatedAt).toBeGreaterThan(1000)
+    })
+
+    test('handles empty array', async () => {
+      await expect(addTagToFiles([], 'tag1')).resolves.not.toThrow()
     })
   })
 
