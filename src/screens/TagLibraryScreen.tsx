@@ -49,7 +49,7 @@ import {
   useTagFileCount,
 } from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFile, deleteTag } from '../stores/tags'
+import { addTagToFiles, deleteTag } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
@@ -157,9 +157,10 @@ export function TagLibraryScreen({ route, navigation }: Props) {
 
   const handleFilesAdded = useCallback(
     (files: FileRecord[]) => {
-      for (const file of files) {
-        void addTagToFile(file.id, tagName)
-      }
+      void addTagToFiles(
+        files.map((f) => f.id),
+        tagName,
+      )
     },
     [tagName],
   )

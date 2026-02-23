@@ -18,6 +18,7 @@ import {
 } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
+import { SpinnerIcon } from './SpinnerIcon'
 import { TagPill } from './TagPill'
 
 type Props = {
@@ -31,6 +32,8 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
   const allTags = useAllTags()
   const [query, setQuery] = useState('')
   const inputRef = useRef<TextInput | null>(null)
+  const [loadingTagIds, setLoadingTagIds] = useState<Set<string>>(new Set())
+  const [loadingTagNames, setLoadingTagNames] = useState<Set<string>>(new Set())
 
   const existingTagIds = new Set((fileTags.data ?? []).map((t) => t.id))
   const userFileTags = (fileTags.data ?? []).filter((t) => !t.system)
@@ -51,21 +54,43 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
       setTimeout(() => inputRef.current?.focus(), 400)
     } else {
       setQuery('')
+      setLoadingTagIds(new Set())
+      setLoadingTagNames(new Set())
     }
   }, [isOpen])
 
   const handleAddTag = useCallback(
     async (tagName: string) => {
-      if (!tagName.trim()) return
-      await addTagToFile(fileId, tagName.trim())
-      setQuery('')
+      const trimmed = tagName.trim()
+      if (!trimmed) return
+      const key = trimmed.toLowerCase()
+      setLoadingTagNames((prev) => new Set([...prev, key]))
+      try {
+        await addTagToFile(fileId, trimmed)
+        setQuery('')
+      } finally {
+        setLoadingTagNames((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      }
     },
     [fileId],
   )
 
   const handleRemoveTag = useCallback(
     async (tagId: string) => {
-      await removeTagFromFile(fileId, tagId)
+      setLoadingTagIds((prev) => new Set([...prev, tagId]))
+      try {
+        await removeTagFromFile(fileId, tagId)
+      } finally {
+        setLoadingTagIds((prev) => {
+          const next = new Set(prev)
+          next.delete(tagId)
+          return next
+        })
+      }
     },
     [fileId],
   )
@@ -122,24 +147,42 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
         keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          query.trim().length > 0 && !exactMatch ? (
-            <Pressable
-              style={styles.tagRow}
-              onPress={() => handleAddTag(query.trim())}
-            >
-              <View style={styles.tagRowLeft}>
-                <PlusIcon size={16} color={palette.blue[400]} />
-                <Text style={styles.createText}>Create "{query.trim()}"</Text>
-              </View>
-            </Pressable>
-          ) : null
+          query.trim().length > 0 && !exactMatch
+            ? (() => {
+                const isCreating = loadingTagNames.has(
+                  query.trim().toLowerCase(),
+                )
+                return (
+                  <Pressable
+                    style={styles.tagRow}
+                    onPress={() => handleAddTag(query.trim())}
+                    disabled={isCreating}
+                  >
+                    <View style={styles.tagRowLeft}>
+                      {isCreating ? (
+                        <SpinnerIcon size={16} color={palette.blue[400]} />
+                      ) : (
+                        <PlusIcon size={16} color={palette.blue[400]} />
+                      )}
+                      <Text style={styles.createText}>
+                        Create "{query.trim()}"
+                      </Text>
+                    </View>
+                  </Pressable>
+                )
+              })()
+            : null
         }
         renderItem={({ item }) => {
           const isOnFile = existingTagIds.has(item.id)
+          const isLoading =
+            loadingTagIds.has(item.id) ||
+            loadingTagNames.has(item.name.toLowerCase())
           return (
             <Pressable
               style={styles.tagRow}
               onPress={() => handleToggleTag(item)}
+              disabled={isLoading}
             >
               <View style={styles.tagRowLeft}>
                 <Text style={styles.tagName}>{item.name}</Text>
@@ -149,7 +192,9 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
                   </Text>
                 ) : null}
               </View>
-              {isOnFile ? (
+              {isLoading ? (
+                <SpinnerIcon size={18} color={palette.blue[400]} />
+              ) : isOnFile ? (
                 <CheckIcon size={18} color={palette.blue[400]} />
               ) : null}
             </Pressable>
