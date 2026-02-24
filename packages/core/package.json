@@ -9,9 +9,28 @@
     "./adapters": "./src/adapters/index.ts",
     "./config": "./src/config/index.ts",
     "./db": "./src/db/index.ts",
-    "./db/migrations": "./src/db/migrations/index.ts"
+    "./db/migrations": "./src/db/migrations/index.ts",
+    "./lib/mutex": "./src/lib/mutex.ts",
+    "./lib/retry": "./src/lib/retry.ts",
+    "./lib/serviceInterval": "./src/lib/serviceInterval.ts",
+    "./lib/singleflight": "./src/lib/singleflight.ts",
+    "./lib/slotPool": "./src/lib/slotPool.ts",
+    "./lib/timeout": "./src/lib/timeout.ts",
+    "./lib/types": "./src/lib/types.ts",
+    "./lib/uniqueId": "./src/lib/uniqueId.ts",
+    "./types": "./src/types/index.ts",
+    "./encoding/fileMetadata": "./src/encoding/fileMetadata.ts",
+    "./encoding/localObject": "./src/encoding/localObject.ts",
+    "./encoding/slabs": "./src/encoding/slabs.ts",
+    "./db/sql": "./src/db/sql.ts",
+    "./db/operations": "./src/db/operations/index.ts",
+    "./services": "./src/services/index.ts",
+    "./services/logRotation": "./src/services/logRotation.ts",
+    "./services/syncDownEvents": "./src/services/syncDownEvents.ts",
+    "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts"
   },
   "dependencies": {
+    "@siastorage/logger": "workspace:*",
     "zod": "^4.1.8"
   }
 }

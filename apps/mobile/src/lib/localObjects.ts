@@ -1,5 +1,5 @@
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { PinnedObjectInterface } from 'react-native-sia'
-import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
 
 export async function pinnedObjectToLocalObject(

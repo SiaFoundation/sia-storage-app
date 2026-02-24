@@ -9,6 +9,8 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
+import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import { AppState, type NativeEventSubscription } from 'react-native'
@@ -17,10 +19,8 @@ import type {
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
-import { encodeFileMetadata } from '../encoding/fileMetadata'
 import { createFileReader } from '../lib/fileReader'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import { uniqueId } from '../lib/uniqueId'
 import { calculateFileProgress } from '../lib/uploadProgress'
 import {
   type FileRecordRow,

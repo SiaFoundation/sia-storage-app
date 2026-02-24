@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
-import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { type InitStep, setAppState } from '../stores/app'
 import { clearAppKeys } from '../stores/appKey'
 import { useAuthWebViewStore } from '../stores/authWebView'

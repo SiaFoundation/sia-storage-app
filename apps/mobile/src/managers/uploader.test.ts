@@ -24,6 +24,7 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { AppState } from 'react-native'
 import type {
   PackedUploadInterface,
@@ -31,7 +32,6 @@ import type {
   SdkInterface,
 } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
-import type { LocalObject } from '../encoding/localObject'
 import {
   createFileRecord,
   getFilesLocalOnly,
@@ -102,7 +102,7 @@ jest.mock('../lib/localObjects', () => ({
   ),
 }))
 
-jest.mock('../encoding/fileMetadata', () => ({
+jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
   encodeFileMetadata: jest.fn(() => new Uint8Array()),
 }))
 

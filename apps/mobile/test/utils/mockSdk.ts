@@ -11,16 +11,16 @@
  * and is cast to `any` when passed to app code.
  */
 
+import {
+  decodeFileMetadata,
+  encodeFileMetadata,
+} from '@siastorage/core/encoding/fileMetadata'
+import type { FileMetadata } from '@siastorage/core/types'
 import type {
   ObjectEvent,
   ObjectsCursor,
   PinnedObjectInterface,
 } from 'react-native-sia'
-import {
-  decodeFileMetadata,
-  encodeFileMetadata,
-} from '../../src/encoding/fileMetadata'
-import type { FileMetadata } from '../../src/stores/files'
 
 export type StoredObject = {
   id: string

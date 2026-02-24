@@ -1,3 +1,4 @@
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { File, Paths } from 'expo-file-system'
 import { queueUploadForFileId } from '../managers/uploader'
@@ -5,7 +6,6 @@ import { createFileRecord, readFileRecordByContentHash } from '../stores/files'
 import { copyFileToFs } from '../stores/fs'
 import { readLogs, useLogsStore } from '../stores/logs'
 import { calculateContentHash } from './contentHash'
-import { uniqueId } from './uniqueId'
 
 /** Export logs to a library file. */
 export async function exportLogs(): Promise<string | null> {

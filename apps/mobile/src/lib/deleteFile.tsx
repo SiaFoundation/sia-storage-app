@@ -1,6 +1,6 @@
 import { tryCatch } from '@siastorage/core'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { logger } from '@siastorage/logger'
-import type { LocalObject } from '../encoding/localObject'
 import {
   deleteFileRecordAndThumbnails,
   deleteManyFileRecordsAndThumbnails,

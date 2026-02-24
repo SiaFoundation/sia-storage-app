@@ -3,7 +3,7 @@ import { logger } from '@siastorage/logger'
 // Scheduler state for a service: the latest token, its timeout handle, and abort controller.
 type SchedulerState = {
   token: number
-  timeoutId: NodeJS.Timeout | null
+  timeoutId: ReturnType<typeof setTimeout> | null
   abortController: AbortController
 }
 

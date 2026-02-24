@@ -1,20 +1,16 @@
+import type { DatabaseAdapter } from '../../adapters/db'
+import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import {
-  type LocalObject,
-  type LocalObjectRow,
   localObjectFromStorageRow,
   localObjectToStorageRow,
-} from '@siastorage/core/encoding/localObject'
-import { db } from '../db'
-import { sqlDelete, sqlInsert } from '../db/sql'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from './librarySwr'
+} from '../../encoding/localObject'
+import { sqlDelete, sqlInsert } from '../sql'
 
-export async function readLocalObjectsForFile(
+export async function queryLocalObjectsForFile(
+  db: DatabaseAdapter,
   fileId: string,
 ): Promise<LocalObject[]> {
-  const rows = await db().getAllAsync<LocalObjectRow>(
+  const rows = await db.getAllAsync<LocalObjectRow>(
     `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId = ?`,
     fileId,
@@ -22,12 +18,13 @@ export async function readLocalObjectsForFile(
   return rows.map(localObjectFromStorageRow)
 }
 
-export async function upsertLocalObject(
+export async function insertLocalObject(
+  db: DatabaseAdapter,
   object: LocalObject,
-  triggerUpdate: boolean = true,
 ): Promise<void> {
   const e = localObjectToStorageRow(object)
   await sqlInsert(
+    db,
     'objects',
     {
       fileId: e.fileId,
@@ -44,61 +41,41 @@ export async function upsertLocalObject(
     },
     { conflictClause: 'OR REPLACE' },
   )
-  if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
-    invalidateCacheLibraryLists()
-  }
 }
 
-export async function deleteLocalObject(
+export async function deleteLocalObjectById(
+  db: DatabaseAdapter,
   objectId: string,
   indexerURL: string,
-  triggerUpdate: boolean = true,
 ): Promise<void> {
-  const where = { id: objectId, indexerURL }
-  await sqlDelete('objects', where)
-  if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
-    invalidateCacheLibraryLists()
-  }
+  await sqlDelete(db, 'objects', { id: objectId, indexerURL })
 }
 
 export async function countLocalObjectsForFile(
+  db: DatabaseAdapter,
   fileId: string,
 ): Promise<number> {
-  const row = await db().getFirstAsync<{ count: number }>(
+  const row = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM objects WHERE fileId = ?',
     fileId,
   )
   return row?.count ?? 0
 }
 
-export async function deleteLocalObjects(
+export async function deleteLocalObjectsByFileId(
+  db: DatabaseAdapter,
   fileId: string,
-  triggerUpdate: boolean = true,
 ): Promise<void> {
-  await sqlDelete('objects', { fileId })
-  if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
-    invalidateCacheLibraryLists()
-  }
+  await sqlDelete(db, 'objects', { fileId })
 }
 
-export async function deleteManyLocalObjects(fileIds: string[]): Promise<void> {
-  if (fileIds.length === 0) return
-  for (const fileId of fileIds) {
-    await deleteLocalObjects(fileId, false)
-  }
-  await invalidateCacheLibraryAllStats()
-  invalidateCacheLibraryLists()
-}
-
-export async function readLocalObjectsForFiles(
+export async function queryLocalObjectsForFiles(
+  db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<Record<string, LocalObject[]>> {
   if (fileIds.length === 0) return {}
   const placeholders = fileIds.map(() => '?').join(',')
-  const rows = await db().getAllAsync<LocalObjectRow>(
+  const rows = await db.getAllAsync<LocalObjectRow>(
     `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
      FROM objects WHERE fileId IN (${placeholders})`,
     ...fileIds,

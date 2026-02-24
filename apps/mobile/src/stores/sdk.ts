@@ -19,6 +19,7 @@
 
 import { err, hexToUint8, ok, type Result } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
+import { withTimeout } from '@siastorage/core/lib/timeout'
 import { logger } from '@siastorage/logger'
 import {
   type AppKey,
@@ -30,7 +31,6 @@ import {
 import { create } from 'zustand'
 import { openAuthURL } from '../lib/openAuthUrl'
 import { createGetterAndSelector } from '../lib/selectors'
-import { withTimeout } from '../lib/timeout'
 import { getUploadManager } from '../managers/uploader'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
 import { setMnemonicHash, validateMnemonic } from './mnemonic'

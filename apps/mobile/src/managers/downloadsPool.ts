@@ -1,8 +1,8 @@
 import { DEFAULT_MAX_DOWNLOADS } from '@siastorage/core/config'
+import { SingleInit } from '@siastorage/core/lib/singleflight'
+import { SlotPool } from '@siastorage/core/lib/slotPool'
 import { logger } from '@siastorage/logger'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { SingleInit } from '../lib/singleflight'
-import { SlotPool } from '../lib/slotPool'
 import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,

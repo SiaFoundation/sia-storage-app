@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { retry } from '../lib/retry'
+import { retry } from '@siastorage/core/lib/retry'
 
 export async function setAsyncStorageBoolean(key: string, value: boolean) {
   validateKey(key)

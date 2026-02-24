@@ -1,8 +1,8 @@
 import type { MigrationProgressHandler } from '@siastorage/core/db'
 import { runMigrations } from '@siastorage/core/db'
+import { Mutex } from '@siastorage/core/lib/mutex'
 import { logger } from '@siastorage/logger'
 import * as SQLite from 'expo-sqlite'
-import { Mutex } from '../lib/mutex'
 import { migrations } from './migrations'
 
 export let database: SQLite.SQLiteDatabase

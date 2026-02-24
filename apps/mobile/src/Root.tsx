@@ -4,6 +4,7 @@ import {
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native'
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
@@ -24,7 +25,6 @@ import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { ToastProvider } from './lib/toastContext'
-import { uniqueId } from './lib/uniqueId'
 import { initApp, shutdownApp } from './managers/app'
 import { RootTabs } from './stacks/RootTabs'
 import { useShowSplash } from './stores/app'

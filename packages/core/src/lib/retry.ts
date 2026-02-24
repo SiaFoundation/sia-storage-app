@@ -1,5 +1,8 @@
 import { logger } from '@siastorage/logger'
 
+const MAX_BACKOFF_MS = 30000
+const JITTER_RATIO = 0.2
+
 /**
  * Generic helper to retry an async operation with delay on failure
  * @param name - Name of the operation for logging purposes
@@ -8,9 +11,6 @@ import { logger } from '@siastorage/logger'
  * @param delayMs - Delay for first retry in milliseconds (default: 500)
  * @returns Promise with the operation result
  */
-const MAX_BACKOFF_MS = 30000
-const JITTER_RATIO = 0.2
-
 export async function retry<T>(
   name: string,
   operation: () => Promise<T>,

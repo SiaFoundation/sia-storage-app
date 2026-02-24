@@ -9,17 +9,17 @@
  * - Mock SDK access for event injection
  */
 
-import * as crypto from 'crypto'
-import * as nodefs from 'fs'
-import * as path from 'path'
-import { closeDb, initializeDB, resetDb } from '../../src/db'
-import { sqlInsert } from '../../src/db/sql'
 import {
   areServiceIntervalsPaused,
   pauseAllServiceIntervals,
   resumeAllServiceIntervals,
   shutdownAllServiceIntervals,
-} from '../../src/lib/serviceInterval'
+} from '@siastorage/core/lib/serviceInterval'
+import * as crypto from 'crypto'
+import * as nodefs from 'fs'
+import * as path from 'path'
+import { closeDb, initializeDB, resetDb } from '../../src/db'
+import { sqlInsert } from '../../src/db/sql'
 import {
   initSyncDownEvents,
   resetSyncDownCursor,

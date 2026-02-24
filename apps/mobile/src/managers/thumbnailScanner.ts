@@ -1,7 +1,7 @@
 import { THUMBNAIL_SCANNER_INTERVAL } from '@siastorage/core/config'
+import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
 import { db } from '../db'
-import { createServiceInterval } from '../lib/serviceInterval'
 import { type ThumbSize, ThumbSizes } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { readThumbnailSizesForFileId } from '../stores/thumbnails'

@@ -1,8 +1,8 @@
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import useSWR from 'swr'
 import { db, withTransactionLock } from '../db'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { swrCacheBy } from '../lib/swr'
-import { uniqueId } from '../lib/uniqueId'
 import { invalidateCacheLibraryLists } from './librarySwr'
 
 export const tagsSwr = swrCacheBy()

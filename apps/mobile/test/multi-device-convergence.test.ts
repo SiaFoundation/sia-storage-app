@@ -13,7 +13,7 @@
 
 import './utils/setup'
 
-import { decodeFileMetadata } from '../src/encoding/fileMetadata'
+import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import {
   createDirectory,
   moveFileToDirectory,

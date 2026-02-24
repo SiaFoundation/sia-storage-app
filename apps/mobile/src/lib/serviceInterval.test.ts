@@ -5,7 +5,7 @@ jest.mock('@siastorage/logger', () => ({
 import {
   createServiceInterval,
   shutdownAllServiceIntervals,
-} from './serviceInterval'
+} from '@siastorage/core/lib/serviceInterval'
 
 beforeEach(async () => {
   jest.useFakeTimers()
