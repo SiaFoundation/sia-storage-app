@@ -1,11 +1,11 @@
-import type { FileMetadata } from '../stores/files'
 import {
   decodeFileMetadata,
   encodeFileMetadata,
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
   MAX_SUPPORTED_VERSION,
-} from './fileMetadata'
+} from '@siastorage/core/encoding/fileMetadata'
+import type { FileMetadata } from '@siastorage/core/types'
 
 jest.mock('@siastorage/logger', () => ({
   logger: {

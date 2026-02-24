@@ -1,5 +1,5 @@
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { initializeDB, resetDb } from '../db'
-import type { LocalObject } from '../encoding/localObject'
 import {
   createFileRecordWithLocalObject,
   type FileRecord,
@@ -13,12 +13,12 @@ import {
 jest.mock('../stores/sdk', () => ({
   getIsConnected: jest.fn(),
   getPinnedObject: jest.fn(),
-  updateMetadata: jest.fn(),
+  getSdk: jest.fn(),
 }))
 jest.mock('../stores/settings', () => ({
   getIndexerURL: jest.fn(),
 }))
-jest.mock('../encoding/fileMetadata', () => ({
+jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
   decodeFileMetadata: jest.fn(),
   encodeFileMetadata: jest.fn(),
 }))
@@ -48,9 +48,11 @@ function makeLocalObject(params: {
 describe('syncUpMetadata', () => {
   const sdk = require('../stores/sdk') as jest.Mocked<any>
   const settings = require('../stores/settings') as jest.Mocked<any>
-  const meta = require('../encoding/fileMetadata') as jest.Mocked<any>
+  const meta =
+    require('@siastorage/core/encoding/fileMetadata') as jest.Mocked<any>
   const INDEXER_URL = 'indexer-url'
   const NOW_BASE = 400
+  const mockUpdateObjectMetadata = jest.fn()
 
   beforeEach(async () => {
     await initializeDB()
@@ -58,6 +60,9 @@ describe('syncUpMetadata', () => {
     settings.getIndexerURL.mockResolvedValue(INDEXER_URL)
     await setSyncUpCursor(undefined)
     sdk.getIsConnected.mockReturnValue(true)
+    sdk.getSdk.mockReturnValue({
+      updateObjectMetadata: mockUpdateObjectMetadata,
+    })
   })
 
   afterEach(async () => {
@@ -120,7 +125,7 @@ describe('syncUpMetadata', () => {
     )
 
     sdk.getPinnedObject.mockImplementation(async (_objectId: string) => {
-      return { metadata: () => new ArrayBuffer(0) }
+      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
     })
 
     const remoteA = {
@@ -150,7 +155,7 @@ describe('syncUpMetadata', () => {
     await runSyncUpMetadata(5)
 
     // Only file A should be updated, file B should be skipped.
-    expect(sdk.updateMetadata).toHaveBeenCalledTimes(1)
+    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
       expect.objectContaining(localA),
@@ -202,6 +207,7 @@ describe('syncUpMetadata', () => {
 
     sdk.getPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
     })
     meta.decodeFileMetadata.mockImplementation(() => ({
       name: 'name',
@@ -256,6 +262,7 @@ describe('syncUpMetadata', () => {
 
     sdk.getPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
     })
     meta.decodeFileMetadata.mockImplementation(() => ({
       name: 'name',
@@ -390,6 +397,7 @@ describe('syncUpMetadata', () => {
 
     sdk.getPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
     })
 
     meta.decodeFileMetadata.mockReturnValue({
@@ -407,7 +415,7 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(5)
 
-    expect(sdk.updateMetadata).not.toHaveBeenCalled()
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
   })
 
   test('skips all work when signal is already aborted', async () => {
@@ -480,7 +488,7 @@ describe('syncUpMetadata', () => {
     sdk.getPinnedObject.mockImplementation(async () => {
       callCount++
       if (callCount >= 2) ac.abort()
-      return { metadata: () => new ArrayBuffer(0) }
+      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
     })
     meta.decodeFileMetadata.mockReturnValue({
       name: 'name',
@@ -529,6 +537,7 @@ describe('syncUpMetadata', () => {
 
     sdk.getPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
     })
 
     meta.decodeFileMetadata.mockReturnValue({

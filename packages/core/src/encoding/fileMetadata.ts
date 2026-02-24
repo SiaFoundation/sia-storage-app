@@ -13,7 +13,7 @@
 
 import { logger } from '@siastorage/logger'
 import { z } from 'zod'
-import type { FileKind, FileMetadata, ThumbSize } from '../stores/files'
+import type { FileKind, FileMetadata, ThumbSize } from '../types/files'
 
 export const MAX_SUPPORTED_VERSION = 1
 

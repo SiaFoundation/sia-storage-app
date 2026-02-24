@@ -1,7 +1,7 @@
+import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { db, initializeDB, resetDb } from '../db'
-import { encodeFileMetadata } from '../encoding/fileMetadata'
-import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
 import {
   createFileRecordWithLocalObject,

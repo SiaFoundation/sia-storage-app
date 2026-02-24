@@ -178,7 +178,7 @@ jest.mock('react-native', () => ({
 
 // Unique ID generator (deterministic for tests)
 let mockUniqueIdCounter = 0
-jest.mock('../../src/lib/uniqueId', () => ({
+jest.mock('@siastorage/core/lib/uniqueId', () => ({
   uniqueId: () => `uid-${++mockUniqueIdCounter}`,
 }))
 beforeEach(() => {

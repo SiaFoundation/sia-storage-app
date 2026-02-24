@@ -1,5 +1,6 @@
-import { hexArrayBufferCodec, isoToEpochCodec } from '@siastorage/core'
 import { z } from 'zod'
+import { hexArrayBufferCodec } from './arrayBuffer'
+import { isoToEpochCodec } from './date'
 import { slabSchema, slabsStorageCodec } from './slabs'
 
 const localObjectStorageCodec = z.codec(

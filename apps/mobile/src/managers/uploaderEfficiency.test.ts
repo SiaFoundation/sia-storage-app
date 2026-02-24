@@ -79,7 +79,7 @@ jest.mock('../lib/localObjects', () => ({
   })),
 }))
 
-jest.mock('../encoding/fileMetadata', () => ({
+jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
   encodeFileMetadata: jest.fn(() => new Uint8Array()),
 }))
 

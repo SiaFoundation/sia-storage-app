@@ -1,15 +1,14 @@
-import { logger } from '@siastorage/logger'
-import useSWR from 'swr'
-import { db, withTransactionLock } from '../db'
-import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import {
   type LocalObject,
   type LocalObjectRow,
   localObjectFromStorageRow,
-} from '../encoding/localObject'
+} from '@siastorage/core/encoding/localObject'
+import { logger } from '@siastorage/logger'
+import useSWR from 'swr'
+import { db, withTransactionLock } from '../db'
+import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { swrCacheBy } from '../lib/swr'
-import { keysOf } from '../lib/types'
 import {
   invalidateCacheLibraryAllStats,
   invalidateCacheLibraryLists,
@@ -18,70 +17,25 @@ import {
 import { readLocalObjectsForFile, upsertLocalObject } from './localObjects'
 import { getIndexerURL } from './settings'
 
+export type {
+  FileKind,
+  FileLocalMetadata,
+  FileMetadata,
+  FileRecord,
+  FileRecordRow,
+  ThumbSize,
+} from '@siastorage/core/types'
+export {
+  fileLocalMetadataKeys,
+  fileMetadataKeys,
+  fileRecordRowKeys,
+  ThumbSizes,
+} from '@siastorage/core/types'
+
+import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
+
 /** Single file record keyed by file ID. */
 const fileByIdCache = swrCacheBy()
-
-/** Valid thumbnail sizes in pixels. */
-export type ThumbSize = 64 | 512
-export const ThumbSizes: ThumbSize[] = [64, 512]
-
-export type FileKind = 'file' | 'thumb'
-
-/** Fields that are stored in both the local database and the indexer metadata. */
-export type FileMetadata = {
-  id: string
-  name: string
-  type: string
-  kind: FileKind
-  size: number
-  hash: string
-  thumbForId?: string
-  thumbSize?: ThumbSize
-  tags?: string[]
-  directory?: string
-  createdAt: number
-  updatedAt: number
-}
-
-// tags and directory are synced via object metadata but stored in separate
-// tables locally, not in the files table.
-export const fileMetadataKeys = keysOf<
-  Omit<FileMetadata, 'tags' | 'directory'>
->()([
-  'id',
-  'name',
-  'type',
-  'kind',
-  'size',
-  'hash',
-  'createdAt',
-  'updatedAt',
-  'thumbForId',
-  'thumbSize',
-])
-
-/** Fields that are stored only in the local database. */
-export type FileLocalMetadata = {
-  localId: string | null
-  addedAt: number
-}
-
-export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
-  'localId',
-  'addedAt',
-])
-
-export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &
-  FileLocalMetadata
-
-export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
-  ...fileMetadataKeys,
-  ...fileLocalMetadataKeys,
-])
-
-export type FileRecord = FileRecordRow & {
-  objects: Record<string, LocalObject>
-}
 
 export async function createFileRecord(
   fileRecord: Omit<FileRecord, 'objects'>,

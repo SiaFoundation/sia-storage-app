@@ -34,6 +34,7 @@ import {
   SYNC_ARCHIVE_RESUME_THRESHOLD,
   SYNC_PHOTOS_ARCHIVE_INTERVAL,
 } from '@siastorage/core/config'
+import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import {
@@ -43,7 +44,6 @@ import {
 } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
 import { createGetterAndSWRHook } from '../lib/selectors'
-import { createServiceInterval } from '../lib/serviceInterval'
 import {
   getAsyncStorageBoolean,
   getAsyncStorageNumber,

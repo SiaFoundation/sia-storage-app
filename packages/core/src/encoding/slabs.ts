@@ -1,5 +1,5 @@
-import { hexArrayBufferCodec } from '@siastorage/core'
-import type { PinnedSector, Slab } from 'react-native-sia'
+import { hexArrayBufferCodec } from './arrayBuffer'
+import type { PinnedSector, Slab } from '../types/slabs'
 import { z } from 'zod'
 
 export const pinnedSectorSchema = z.object({

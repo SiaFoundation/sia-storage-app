@@ -1,0 +1,48 @@
+export {
+  deleteAllFileRecords,
+  deleteFileRecordById,
+  deleteFileRecordsByThumbForId,
+  insertFileRecord,
+  queryFileRecordByContentHash,
+  queryFileRecordById,
+  queryFileRecordByObjectId,
+  queryFileRecords,
+  queryFileRecordsByContentHashes,
+  queryFileRecordsByLocalIds,
+  queryFileRecordsCount,
+  queryFileRecordsStats,
+  transformRow,
+  updateFileRecordFields,
+  type FileRecordsQueryOpts,
+} from './files'
+export {
+  countLocalObjectsForFile,
+  deleteLocalObjectById,
+  deleteLocalObjectsByFileId,
+  insertLocalObject,
+  queryLocalObjectsForFile,
+  queryLocalObjectsForFiles,
+} from './localObjects'
+export {
+  deleteTagById,
+  ensureSystemTagsInDb,
+  getOrCreateTagInDb,
+  insertTag,
+  queryAllTagsWithCounts,
+  queryTagNamesForFile,
+  queryTagsForFile,
+  syncTagsFromMetadataInDb,
+  SYSTEM_TAGS,
+  type Tag,
+  type TagWithCount,
+} from './tags'
+export {
+  getOrCreateDirectoryInDb,
+  insertDirectory,
+  queryAllDirectoriesWithCounts,
+  queryDirectoryNameForFile,
+  sanitizeDirectoryName,
+  syncDirectoryFromMetadataInDb,
+  type Directory,
+  type DirectoryWithCount,
+} from './directories'

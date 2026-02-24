@@ -1,3 +1,4 @@
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { File } from 'expo-file-system'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
@@ -6,7 +7,6 @@ import { Image } from 'react-native'
 import { calculateContentHash } from '../lib/contentHash'
 import { detectMimeType } from '../lib/detectMimeType'
 import { getMimeType } from '../lib/fileTypes'
-import { uniqueId } from '../lib/uniqueId'
 import {
   createFileRecord,
   type FileRecord,

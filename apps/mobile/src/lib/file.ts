@@ -1,10 +1,10 @@
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { useMemo } from 'react'
 import {
   PinnedObject,
   type PinnedObjectInterface,
   type SealedObject,
 } from 'react-native-sia'
-import type { LocalObject } from '../encoding/localObject'
 import { getAppKeyForIndexer } from '../stores/appKey'
 import { type DownloadState, useDownloadState } from '../stores/downloads'
 import type { FileRecord } from '../stores/files'

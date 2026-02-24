@@ -1,3 +1,4 @@
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
@@ -17,7 +18,6 @@ import { getPhotoImportDirectory } from '../stores/settings'
 import { calculateContentHash } from './contentHash'
 import { getMimeType, type MimeType } from './fileTypes'
 import { getMediaLibraryUri } from './mediaLibrary'
-import { uniqueId } from './uniqueId'
 
 const BATCH_SIZE = 10
 

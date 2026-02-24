@@ -1,3 +1,4 @@
+import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import { PlusIcon } from 'lucide-react-native'
 import { Fragment, useMemo } from 'react'
 import {
@@ -9,7 +10,6 @@ import {
   View,
 } from 'react-native'
 import useSWR from 'swr'
-import { decodeFileMetadata } from '../../encoding/fileMetadata'
 import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 import type { FileStatus } from '../../lib/file'

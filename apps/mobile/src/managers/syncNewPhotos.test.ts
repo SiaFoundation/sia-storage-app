@@ -1,7 +1,7 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
+import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import * as MediaLibrary from 'expo-media-library'
 import { processAssets } from '../lib/processAssets'
-import { shutdownAllServiceIntervals } from '../lib/serviceInterval'
 import { getAsyncStorageNumber } from '../stores/asyncStore'
 import {
   initSyncNewPhotos,

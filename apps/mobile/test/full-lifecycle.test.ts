@@ -4,7 +4,7 @@
 
 import './utils/setup'
 
-import { decodeFileMetadata } from '../src/encoding/fileMetadata'
+import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import { setSyncUpCursor } from '../src/managers/syncUpMetadata'
 import { readFileRecord, updateFileRecord } from '../src/stores/files'
 import { readLocalObjectsForFile } from '../src/stores/localObjects'

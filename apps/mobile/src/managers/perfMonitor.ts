@@ -1,7 +1,7 @@
 import { PERF_MONITOR_INTERVAL } from '@siastorage/core/config'
+import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
 import { getCpuUsage, getMemoryUsage } from 'react-native-performance-toolkit'
-import { createServiceInterval } from '../lib/serviceInterval'
 
 export const { init: initPerfMonitor } = createServiceInterval({
   name: 'perfMonitor',

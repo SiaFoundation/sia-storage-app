@@ -88,7 +88,7 @@ jest.mock('react-native', () => ({
   },
 }))
 
-jest.mock('./src/lib/uniqueId', () => {
+jest.mock('@siastorage/core/lib/uniqueId', () => {
   let c = 0
   return { uniqueId: () => `uid-${++c}` }
 })

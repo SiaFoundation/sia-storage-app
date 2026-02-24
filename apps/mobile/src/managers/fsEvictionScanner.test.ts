@@ -1,6 +1,6 @@
 import { daysInMs } from '@siastorage/core'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { initializeDB, resetDb } from '../db'
-import type { LocalObject } from '../encoding/localObject'
 import {
   getAsyncStorageNumber,
   setAsyncStorageNumber,
