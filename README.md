@@ -1,41 +1,36 @@
 # Sia Storage
 
-Mobile cloud storage app that stores files on the Sia host network.
+Private, encrypted cloud storage powered by the [Sia](https://sia.tech) decentralized network.
+
+## Repo structure
+
+Monorepo managed with [bun workspaces](https://bun.sh/docs/install/workspaces).
 
 ```
+apps/
+  mobile/       React Native + Expo (iOS & Android)
+  web/          Vite + React (browser)
+
+packages/
+  core/         Shared database, config, adapters, utilities
+  logger/       Structured logging
+```
+
+## Development
+
+```bash
 bun install
-```
 
-## Setup iOS
+# Mobile
+bun run mobile:start             # Expo dev server
+bun run mobile:dev:ios:simulator  # iOS simulator
+bun run mobile:dev:android:device # Android device
 
-Before running the app, make sure to have Xcode, Simulator, and CocoaPods installed and up to date.
+# Web
+bun run web:dev                   # Vite dev server
 
-```
-bun run ios
-```
-
-## Setup Android
-
-> 🚧 The Android target is not yet supported in `react-native-sia`. The library needs to to add Android artifacts to its release workflow.
-
-Before running the app, make sure to have Java, Android Studio, and the Android SDK installed and up to date.
-
-```
-bun run android
-```
-
-## Setup Web
-
-> 🚧 The web target is not yet supported in `react-native-sia`. The library needs a WASM-based entrypoint for browser environments.
-
-In the future, we may also support the web.
-
-```
-bun run web
-```
-
-## Running the dev client
-
-```
-bun run start
+# Checks
+bun run lint
+bun run typecheck
+bun run test
 ```

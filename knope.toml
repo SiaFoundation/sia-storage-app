@@ -1,6 +1,6 @@
 [package]
-versioned_files = ["package.json"]
-changelog = "CHANGELOG.md"
+versioned_files = ["apps/mobile/package.json"]
+changelog = "apps/mobile/CHANGELOG.md"
 
 [github]
 owner = "SiaFoundation"
@@ -19,7 +19,7 @@ ignore_conventional_commits = true
 
 [[workflows.steps]]
 type = "Command"
-command = "bun scripts/syncAppVersion.ts"
+command = "bun apps/mobile/scripts/syncAppVersion.ts"
 
 [[workflows.steps]]
 type = "Command"

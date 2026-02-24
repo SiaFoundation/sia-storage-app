@@ -25,6 +25,7 @@ jobs:
         with:
           bun_version: 1.2.19
       - run: bun run lint
+        working-directory: apps/mobile
 
   typecheck:
     runs-on: ubuntu-latest
@@ -35,6 +36,7 @@ jobs:
         with:
           bun_version: 1.2.19
       - run: bun run typecheck
+        working-directory: apps/mobile
 
   test:
     runs-on: ubuntu-latest
@@ -45,3 +47,4 @@ jobs:
         with:
           bun_version: 1.2.19
       - run: bun run test
+        working-directory: apps/mobile
