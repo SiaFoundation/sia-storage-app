@@ -64,12 +64,13 @@ jobs:
 
       - name: Decode Android keystore
         run: |
-          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android-release.keystore
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/mobile/android-release.keystore
         shell: bash
 
       - name: Release Android
+        working-directory: apps/mobile
         env:
-          SIA_RELEASE_STORE_FILE: ${{ github.workspace }}/android-release.keystore
+          SIA_RELEASE_STORE_FILE: ${{ github.workspace }}/apps/mobile/android-release.keystore
           SIA_RELEASE_STORE_PASSWORD: ${{ secrets.SIA_RELEASE_STORE_PASSWORD }}
           SIA_RELEASE_KEY_ALIAS: ${{ secrets.SIA_RELEASE_KEY_ALIAS }}
           SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
@@ -78,6 +79,7 @@ jobs:
           CI: true
         run: bun scripts/releaseAndroid.ts ${{ inputs.track || 'internal' }}
         shell: bash
+
 
   release-ios:
     if: ${{ github.event_name == 'release' || inputs.platform == 'ios' || inputs.platform == 'both' }}
@@ -139,6 +141,7 @@ jobs:
           printf '%s' "$IOS_PROVISIONING_PROFILE_EXTENSION_BASE64" | base64 -d > "$PROFILES_DIR/ShareExtension.mobileprovision"
 
       - name: Release iOS
+        working-directory: apps/mobile
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}

@@ -1,0 +1,20 @@
+import { registerRootComponent } from 'expo'
+import './polyfills'
+import { logger, rustLogger } from '@siastorage/logger'
+import { initSia, setLogger } from 'react-native-sia'
+import { installGlobalErrorHandler } from './src/lib/globalErrorHandler'
+import { Root } from './src/Root'
+
+installGlobalErrorHandler()
+
+logger.info('app', 'initSia and uniffi...')
+
+// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
+// It also ensures that whether you load the app in Expo Go or in a native build,
+// the environment is set up appropriately
+initSia().then(() => {
+  logger.info('app', 'Initializing app...')
+  setLogger(rustLogger, 'debug')
+  registerRootComponent(Root)
+  logger.info('app', 'App initialized')
+})
