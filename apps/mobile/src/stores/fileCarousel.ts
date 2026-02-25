@@ -24,12 +24,13 @@ function buildDateCursorClause(
   alias: string,
   anchorValue: number,
   anchorId: string,
+  column: string = 'createdAt',
 ) {
   const isBefore = direction === 'before'
   const op = dir === 'ASC' ? (isBefore ? '<' : '>') : isBefore ? '>' : '<'
   const orderDirection = isBefore ? (dir === 'ASC' ? 'DESC' : 'ASC') : dir
   return {
-    clause: `(${alias}.createdAt ${op} ?) OR (${alias}.createdAt = ? AND ${alias}.id ${op} ?)`,
+    clause: `(${alias}.${column} ${op} ?) OR (${alias}.${column} = ? AND ${alias}.id ${op} ?)`,
     params: [anchorValue, anchorValue, anchorId],
     orderDirection,
   }
@@ -96,12 +97,6 @@ type VirtualListQueryParams = {
   query?: string
 }
 
-function buildOrderExpr(sortBy: SortBy, sortDir: SortDir, alias: string = 'f') {
-  return sortBy === 'NAME'
-    ? `(${alias}.name IS NULL) ASC, ${alias}.name COLLATE NOCASE ${sortDir}, ${alias}.id ${sortDir}`
-    : `${alias}.createdAt ${sortDir}, ${alias}.id ${sortDir}`
-}
-
 // Returns the total number of files matching the current filters.
 export async function fetchTotalCount(
   params: VirtualListQueryParams,
@@ -152,22 +147,34 @@ export async function fetchFilePosition(
     return 0
   }
 
-  const beforeCursor =
-    params.sortBy === 'NAME'
-      ? buildNameCursorClause(
-          params.sortDir,
-          'before',
-          'f',
-          anchorRow.name ?? null,
-          anchorRow.id,
-        )
-      : buildDateCursorClause(
-          params.sortDir,
-          'before',
-          'f',
-          anchorRow.createdAt,
-          anchorRow.id,
-        )
+  // Build a cursor clause that matches all rows sorted before the anchor,
+  // so COUNT(*) gives us the anchor's 0-indexed position.
+  let beforeCursor: ReturnType<typeof buildDateCursorClause>
+  if (params.sortBy === 'NAME') {
+    beforeCursor = buildNameCursorClause(
+      params.sortDir,
+      'before',
+      'f',
+      anchorRow.name ?? null,
+      anchorRow.id,
+    )
+  } else {
+    // Map sort mode to the corresponding DB column and anchor value.
+    const columnMap = {
+      ADDED: { column: 'addedAt', value: anchorRow.addedAt },
+      SIZE: { column: 'size', value: anchorRow.size },
+      DATE: { column: 'createdAt', value: anchorRow.createdAt },
+    } as const
+    const { column, value } = columnMap[params.sortBy] ?? columnMap.DATE
+    beforeCursor = buildDateCursorClause(
+      params.sortDir,
+      'before',
+      'f',
+      value,
+      anchorRow.id,
+      column,
+    )
+  }
 
   const result = await db().getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f ${
@@ -187,7 +194,11 @@ export async function fetchSortedFileIds(
   limit: number,
   offset: number,
 ): Promise<string[]> {
-  const { where, params: queryParams } = buildLibraryQueryParts({
+  const {
+    where,
+    params: queryParams,
+    orderExpr,
+  } = buildLibraryQueryParts({
     sortBy: params.sortBy,
     sortDir: params.sortDir,
     categories: params.categories,
@@ -197,7 +208,6 @@ export async function fetchSortedFileIds(
     tableAlias: 'f',
   })
 
-  const orderExpr = buildOrderExpr(params.sortBy, params.sortDir)
   const rows = await db().getAllAsync<{ id: string }>(
     `SELECT f.id FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`,
     ...queryParams,
