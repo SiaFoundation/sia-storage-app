@@ -68,6 +68,7 @@ export default {
       'expo-secure-store',
       'expo-sqlite',
       ['./plugins/ios-target-16'],
+      './plugins/android-gradle-cache',
       'expo-video',
       './plugins/background-fetch',
       [
