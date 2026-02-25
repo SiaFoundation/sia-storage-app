@@ -49,6 +49,8 @@ export function useImagePicker() {
           timestamp: a.timestamp,
           sourceUri: a.uri,
         })),
+        'file',
+        { allowDuplicates: true },
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))

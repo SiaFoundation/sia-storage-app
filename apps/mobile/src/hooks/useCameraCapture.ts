@@ -64,6 +64,8 @@ export function useCameraCapture() {
             timestamp: a.timestamp,
           })),
         ),
+        'file',
+        { allowDuplicates: true },
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))

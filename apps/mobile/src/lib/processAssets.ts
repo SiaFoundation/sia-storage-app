@@ -79,11 +79,14 @@ type CandidateFileRecord = {
 export async function processAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
+  { allowDuplicates = false }: { allowDuplicates?: boolean } = {},
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => ({
       id: uniqueId(),
-      localId: a.id ?? null,
+      // Null out localId for manual imports so duplicates don't hit the
+      // UNIQUE constraint and auto-sync never dedupes against them.
+      localId: allowDuplicates ? null : (a.id ?? null),
       sourceUri: a.sourceUri ?? null,
       name: a.name ?? defaultFileName,
       size: null,
@@ -102,9 +105,11 @@ export async function processAssets(
 
   // Update the status of the files that are found by localId.
   // This is quick but will only detect duplicates from the same device.
-  const existingLocalIds = await readFileRecordsByLocalIds(
-    candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!),
-  )
+  const existingLocalIds = allowDuplicates
+    ? []
+    : await readFileRecordsByLocalIds(
+        candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!),
+      )
   for (const f of existingLocalIds) {
     const validFile = candidateFiles.find((v) => v.localId === f.localId)
     if (validFile) {
@@ -161,34 +166,25 @@ export async function processAssets(
     },
   )
 
-  // Check for duplicates by content hash.
+  // Check for content hash duplicates. Auto-sync blocks them to prevent
+  // re-importing files already synced from another device. Manual imports
+  // warn but allow.
   const existingContentHashes = await readFileRecordsByContentHashes(
     candidateFiles
       .filter((f) => f.status === 'new' && f.hash !== null)
       .map((f) => f.hash!),
   )
+  const contentHashDuplicateCount = existingContentHashes.length
 
-  // Update the status of the files that are found by content hash.
-  for (const f of existingContentHashes) {
-    const validFile = candidateFiles.find((v) => v.hash === f.hash)
-    if (validFile) {
-      validFile.id = f.id
-      validFile.status = 'existing'
-      validFile.statusDetails = 'foundByContentHash'
+  if (!allowDuplicates) {
+    for (const f of existingContentHashes) {
+      const validFile = candidateFiles.find((v) => v.hash === f.hash)
+      if (validFile) {
+        validFile.id = f.id
+        validFile.status = 'existing'
+        validFile.statusDetails = 'foundByContentHash'
+      }
     }
-  }
-
-  // Mark any hash-based duplicates within the new files as existing.
-  const hashSet = new Set<string>()
-  for (const f of candidateFiles.filter(
-    (f) => f.status === 'new' && f.hash !== null,
-  )) {
-    const exists = hashSet.has(f.hash!)
-    if (exists) {
-      f.status = 'existing'
-      f.statusDetails = 'foundByContentHash'
-    }
-    hashSet.add(f.hash!)
   }
 
   // Assert that the files are new and have a content hash and size.
@@ -213,16 +209,17 @@ export async function processAssets(
   const existingFiles = candidateFiles.filter((f) => f.status === 'existing')
 
   const warnings: string[] = []
-  const existingFilesByLocalIdCount = existingLocalIds.length
-  const existingFilesByContentHashCount = existingContentHashes.length
   logger.debug('processAssets', 'result', {
     picked: candidateFiles.length,
     new: newFiles.length,
     incomplete: incompleteFiles.length,
     existing: existingFiles.length,
+    contentHashDuplicates: contentHashDuplicateCount,
   })
-  if (existingFilesByLocalIdCount > 0 || existingFilesByContentHashCount > 0) {
-    warnings.push('Some files were duplicates and were not included.')
+  if (contentHashDuplicateCount > 0) {
+    warnings.push(
+      `${contentHashDuplicateCount} ${contentHashDuplicateCount === 1 ? 'file already exists' : 'files already exist'} and ${contentHashDuplicateCount === 1 ? 'was' : 'were'} imported again.`,
+    )
   }
 
   await updateManyFileRecords(existingFiles)

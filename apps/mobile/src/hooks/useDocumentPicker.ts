@@ -37,6 +37,8 @@ export function useDocumentPicker() {
           timestamp: new Date(a.lastModified).toISOString(),
           sourceUri: a.uri,
         })),
+        'file',
+        { allowDuplicates: true },
       )
       if (warnings.length > 0) {
         warnings.forEach((warning) => toast.show(warning))
