@@ -191,11 +191,13 @@ export async function syncDownEventsBatch(
         })
       }
 
-      // Update progress and notify after each batch.
+      // Update progress after each batch. Only report isSyncing when there are
+      // real events to process (>1), not on the periodic heartbeat check which
+      // returns a single cursor-marker event.
       deps.hooks.onProgress({
         ...counts,
         cursorAt: nextTimestamp,
-        isSyncing: true,
+        isSyncing: totalEventsFetched > 1,
       })
       if (batchChanged) {
         await deps.hooks.onBatchChanged()
