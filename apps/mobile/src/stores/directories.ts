@@ -90,7 +90,10 @@ export async function readAllDirectoriesWithCounts(): Promise<
 }
 
 export async function deleteDirectory(id: string): Promise<void> {
-  await sqlUpdate('files', { directoryId: null }, { directoryId: id })
+  await db().runAsync(
+    `UPDATE files SET directoryId = NULL WHERE directoryId = ?`,
+    id,
+  )
   await sqlDelete('directories', { id })
   directoriesSwr.invalidateAll()
   invalidateCacheLibraryLists()
@@ -98,7 +101,7 @@ export async function deleteDirectory(id: string): Promise<void> {
 
 export async function deleteDirectoryAndTrashFiles(id: string): Promise<void> {
   const files = await db().getAllAsync<{ id: string }>(
-    `SELECT id FROM files WHERE directoryId = ? AND kind = 'file'`,
+    `SELECT id FROM files WHERE directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
     id,
   )
   const fileIds = files.map((f) => f.id)
