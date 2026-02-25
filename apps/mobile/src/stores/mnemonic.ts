@@ -4,9 +4,12 @@ import { getSecureStoreString, setSecureStoreString } from './secureStore'
 const MNEMONIC_HASH_SECURE_STORE_KEY = 'mnemonicHash'
 
 /**
- * The mnemonic hash is used to validate that a user enters the correct recovery
- * phrase when connecting to a new indexer. This ensures they derive the same
- * AppKey and can decrypt their existing data.
+ * The mnemonic hash validates that a user enters the correct recovery phrase
+ * when switching indexers, ensuring they derive the same AppKey.
+ *
+ * Stored in iOS Keychain (via expo-secure-store) which persists across app
+ * delete/reinstall. During onboarding the hash is cleared first so a stale
+ * hash from a previous install doesn't block registration.
  */
 
 /**
