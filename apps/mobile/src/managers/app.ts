@@ -12,7 +12,7 @@ import { invalidateCacheLibraryLists } from '../stores/librarySwr'
 import { initLogger } from '../stores/logs'
 import { clearMnemonicHash } from '../stores/mnemonic'
 import { reconnectIndexer, useSdkStore } from '../stores/sdk'
-import { getHasOnboarded } from '../stores/settings'
+import { getHasOnboarded, initKeepAwake } from '../stores/settings'
 import { useSheetsStore } from '../stores/sheets'
 import { useSyncDownStore } from '../stores/syncDown'
 import { useSyncUpMetadataStore } from '../stores/syncUpMetadata'
@@ -47,6 +47,7 @@ export async function initApp(): Promise<void> {
       runner: async () => {
         ensureFsStorageDirectory()
         ensureTempFsStorageDirectory()
+        await initKeepAwake()
       },
     },
     {

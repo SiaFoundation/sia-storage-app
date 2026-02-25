@@ -22,5 +22,6 @@ module.exports = {
     '^expo-video-thumbnails$':
       '<rootDir>/test/mocks/expo-video-thumbnails.ts',
     '^expo-media-library$': '<rootDir>/test/mocks/expo-media-library.ts',
+    '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
   },
 }

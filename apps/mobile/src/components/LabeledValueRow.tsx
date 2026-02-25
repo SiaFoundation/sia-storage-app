@@ -13,6 +13,7 @@ import { colors, palette } from '../styles/colors'
 
 type Props = {
   label: string
+  description?: string
   value: string | React.ReactNode
   isMonospace?: boolean
   numberOfLines?: number
@@ -28,6 +29,7 @@ const defaultLabelWidth = 96
 
 export function LabeledValueRow({
   label,
+  description,
   value,
   isMonospace = false,
   numberOfLines = 1,
@@ -66,55 +68,54 @@ export function LabeledValueRow({
       value
     )
 
+  const rowContent = (
+    <View style={[styles.row, showDividerTop && styles.rowDivider]}>
+      <View style={{ flex: 1 }}>
+        <View
+          style={[
+            styles.rowInner,
+            numberOfLines > 1
+              ? { alignItems: 'flex-start' }
+              : { alignItems: 'center' },
+          ]}
+        >
+          <Text
+            style={[
+              styles.rowLabel,
+              { width: labelWidth || defaultLabelWidth },
+              labelStyle,
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {label}
+          </Text>
+          {valueContent}
+        </View>
+        {description ? (
+          <Text style={styles.rowDescription}>{description}</Text>
+        ) : null}
+      </View>
+    </View>
+  )
+
   return canCopy ? (
     <Pressable accessibilityRole="button" onPress={handleCopy}>
-      <View
-        style={[
-          styles.row,
-          showDividerTop && styles.rowDivider,
-          numberOfLines > 1
-            ? { alignItems: 'flex-start' }
-            : { alignItems: 'center' },
-        ]}
-      >
-        <Text
-          style={[
-            styles.rowLabel,
-            { width: labelWidth || defaultLabelWidth },
-            labelStyle,
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {label}
-        </Text>
-        {valueContent}
-      </View>
+      {rowContent}
     </Pressable>
   ) : (
-    <View style={[styles.row, showDividerTop && styles.rowDivider]}>
-      <Text
-        style={[
-          styles.rowLabel,
-          { width: labelWidth || defaultLabelWidth },
-          labelStyle,
-        ]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {label}
-      </Text>
-      {valueContent}
-    </View>
+    rowContent
   )
 }
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  rowInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   rowDivider: {
     borderTopColor: colors.borderSubtle,
@@ -127,5 +128,10 @@ const styles = StyleSheet.create({
   rowValue: { flex: 1, color: palette.gray[100] },
   rowValueMono: {
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+  },
+  rowDescription: {
+    color: palette.gray[400],
+    fontSize: 13,
+    marginTop: 8,
   },
 })

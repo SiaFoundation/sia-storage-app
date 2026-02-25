@@ -1,4 +1,5 @@
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import {
   getAsyncStorageBoolean,
@@ -122,4 +123,34 @@ export const [getActiveLibraryTab, useActiveLibraryTab, activeLibraryTabCache] =
 export async function setActiveLibraryTab(value: ActiveLibraryTab) {
   await setAsyncStorageString<ActiveLibraryTab>('activeLibraryTab', value)
   await activeLibraryTabCache.set(value)
+}
+
+// Keep Awake
+
+// Named lock so other keep-awake callers don't interfere.
+const KEEP_AWAKE_TAG = 'sync'
+
+export const [getKeepAwake, useKeepAwake, keepAwakeCache] =
+  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('keepAwake'))
+
+export async function setKeepAwake(value: boolean) {
+  await setAsyncStorageBoolean('keepAwake', value)
+  await keepAwakeCache.set(value)
+  if (value) {
+    await activateKeepAwakeAsync(KEEP_AWAKE_TAG)
+  } else {
+    deactivateKeepAwake(KEEP_AWAKE_TAG)
+  }
+}
+
+export async function toggleKeepAwake() {
+  const current = await getKeepAwake()
+  await setKeepAwake(!current)
+}
+
+export async function initKeepAwake() {
+  const enabled = await getKeepAwake()
+  if (enabled) {
+    await activateKeepAwakeAsync(KEEP_AWAKE_TAG)
+  }
 }
