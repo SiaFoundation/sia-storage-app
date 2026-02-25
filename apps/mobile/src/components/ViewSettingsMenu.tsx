@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useMemo } from 'react'
-import type { Category, SortBy } from '../stores/library'
+import { type Category, categories, type SortBy } from '../stores/library'
 import {
   setSortBy,
   setSortDir,
@@ -20,10 +20,16 @@ const CATEGORY_LABELS: Record<string, string> = {
 type Props = {
   children: React.ReactNode
   scope?: string
+  allowedCategories?: readonly Category[]
 }
 
-export function ViewSettingsMenu({ children, scope = 'library' }: Props) {
+export function ViewSettingsMenu({
+  children,
+  scope = 'library',
+  allowedCategories,
+}: Props) {
   const vs = useViewSettings(scope)
+  const visibleCategories = allowedCategories ?? categories
 
   const items: MenuItem[] = useMemo(() => {
     const categorySet = new Set(vs.selectedCategories)
@@ -64,13 +70,13 @@ export function ViewSettingsMenu({ children, scope = 'library' }: Props) {
         type: 'submenu',
         key: 'filter',
         label: 'Filter',
-        items: (['Video', 'Image', 'Audio', 'Files'] as const).map(
+        items: visibleCategories.map(
           (cat): MenuItem => ({
             type: 'checkbox',
             key: `filter-${cat}`,
             label: CATEGORY_LABELS[cat] ?? cat,
-            checked: categorySet.has(cat as Category),
-            onPress: () => toggleCategory(scope, cat as Category),
+            checked: categorySet.has(cat),
+            onPress: () => toggleCategory(scope, cat),
           }),
         ),
       },
@@ -90,7 +96,14 @@ export function ViewSettingsMenu({ children, scope = 'library' }: Props) {
         onPress: () => setViewMode(scope, 'list'),
       },
     ]
-  }, [scope, vs.sortBy, vs.sortDir, vs.viewMode, vs.selectedCategories])
+  }, [
+    scope,
+    vs.sortBy,
+    vs.sortDir,
+    vs.viewMode,
+    vs.selectedCategories,
+    visibleCategories,
+  ])
 
   return <DropdownMenu trigger={children} items={items} />
 }

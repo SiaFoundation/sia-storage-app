@@ -1,5 +1,6 @@
 import { EllipsisIcon, ListFilterIcon, XIcon } from 'lucide-react-native'
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import type { Category } from '../stores/library'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { IconButton } from './IconButton'
 import { LibraryAppStatusIcon } from './LibraryAppStatusIcon'
@@ -11,6 +12,7 @@ type Props = {
   subtitle: string
   showViewSettings?: boolean
   scope?: string
+  allowedCategories?: readonly Category[]
   isSelectionMode?: boolean
   selectedCount?: number
   onEnterSelection?: () => void
@@ -24,6 +26,7 @@ export function LibraryHeader({
   subtitle,
   showViewSettings = true,
   scope = 'library',
+  allowedCategories,
   isSelectionMode,
   selectedCount,
   onEnterSelection,
@@ -55,7 +58,7 @@ export function LibraryHeader({
       <View style={styles.buttonRow}>
         <LibraryAppStatusIcon />
         {showViewSettings ? (
-          <ViewSettingsMenu scope={scope}>
+          <ViewSettingsMenu scope={scope} allowedCategories={allowedCategories}>
             <IconButton accessibilityLabel="View settings">
               <ListFilterIcon color={palette.gray[50]} size={22} />
             </IconButton>
