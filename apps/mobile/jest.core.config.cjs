@@ -33,5 +33,6 @@ module.exports = {
       '<rootDir>/test/mocks/expo-video-thumbnails.ts',
     // Full in-memory simulation of media library
     '^expo-media-library$': '<rootDir>/test/mocks/expo-media-library.ts',
+    '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
   },
 }
