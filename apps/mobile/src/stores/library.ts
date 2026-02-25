@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { db } from '../db'
+import { UNFILED_DIRECTORY_ID } from './directories'
 import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import { libraryStats, useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
@@ -180,10 +181,27 @@ export function useTagFileCount(tagId: string) {
 // Count of files in a specific directory, excluding thumbnails.
 export function useDirectoryFileCount(directoryId: string) {
   return useSWR(libraryStats.key(`dirCount:${directoryId}`), async () => {
+    if (directoryId === UNFILED_DIRECTORY_ID) {
+      const row = await db().getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM files
+         WHERE directoryId IS NULL AND kind = 'file'`,
+      )
+      return row?.count ?? 0
+    }
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files
        WHERE directoryId = ? AND kind = 'file'`,
       directoryId,
+    )
+    return row?.count ?? 0
+  })
+}
+
+export function useUnfiledFileCount() {
+  return useSWR(libraryStats.key('unfiledCount'), async () => {
+    const row = await db().getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files
+       WHERE directoryId IS NULL AND kind = 'file'`,
     )
     return row?.count ?? 0
   })
@@ -274,7 +292,9 @@ export function buildLibraryQueryParts(
     params.push(...tags, tags.length)
   }
   // Directory filtering.
-  if (directoryId) {
+  if (directoryId === UNFILED_DIRECTORY_ID) {
+    whereParts.push(`${tableAlias}.directoryId IS NULL`)
+  } else if (directoryId) {
     whereParts.push(`${tableAlias}.directoryId = ?`)
     params.push(directoryId)
   }

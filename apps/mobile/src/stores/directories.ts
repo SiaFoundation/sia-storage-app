@@ -5,6 +5,8 @@ import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { swrCacheBy } from '../lib/swr'
 import { invalidateCacheLibraryLists } from './librarySwr'
 
+export const UNFILED_DIRECTORY_ID = '__unfiled__'
+
 export const directoriesSwr = swrCacheBy()
 
 export type Directory = {

@@ -1,4 +1,5 @@
-import { FolderIcon } from 'lucide-react-native'
+import { FolderIcon, InboxIcon } from 'lucide-react-native'
+import { useMemo } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -9,8 +10,10 @@ import {
 } from 'react-native'
 import {
   type DirectoryWithCount,
+  UNFILED_DIRECTORY_ID,
   useAllDirectories,
 } from '../stores/directories'
+import { useUnfiledFileCount } from '../stores/library'
 import { overlay, palette, whiteA } from '../styles/colors'
 
 type Props = {
@@ -19,7 +22,21 @@ type Props = {
 
 export function DirectoriesGrid({ onSelectDirectory }: Props) {
   const allDirs = useAllDirectories()
+  const unfiledCount = useUnfiledFileCount()
   const dirs = allDirs.data ?? []
+
+  const listData = useMemo(() => {
+    const items: DirectoryWithCount[] = [...dirs]
+    if ((unfiledCount.data ?? 0) > 0) {
+      items.push({
+        id: UNFILED_DIRECTORY_ID,
+        name: 'No folder',
+        createdAt: 0,
+        fileCount: unfiledCount.data ?? 0,
+      })
+    }
+    return items
+  }, [dirs, unfiledCount.data])
 
   if (!allDirs.data) {
     return (
@@ -29,7 +46,7 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
     )
   }
 
-  if (dirs.length === 0) {
+  if (listData.length === 0) {
     return (
       <View style={styles.emptyWrap}>
         <FolderIcon color={whiteA.a50} size={48} />
@@ -43,7 +60,7 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
 
   return (
     <FlatList
-      data={dirs}
+      data={listData}
       keyExtractor={(dir) => dir.id}
       contentContainerStyle={styles.grid}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -51,6 +68,7 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
         <DirectoryCard
           dir={item}
           onPress={() => onSelectDirectory(item.id, item.name)}
+          isUnfiled={item.id === UNFILED_DIRECTORY_ID}
         />
       )}
     />
@@ -60,9 +78,11 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
 function DirectoryCard({
   dir,
   onPress,
+  isUnfiled = false,
 }: {
   dir: DirectoryWithCount
   onPress: () => void
+  isUnfiled?: boolean
 }) {
   return (
     <Pressable
@@ -70,7 +90,11 @@ function DirectoryCard({
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <FolderIcon color={palette.blue[400]} size={24} />
+      {isUnfiled ? (
+        <InboxIcon color={palette.gray[400]} size={24} />
+      ) : (
+        <FolderIcon color={palette.blue[400]} size={24} />
+      )}
       <View style={styles.cardText}>
         <Text style={styles.dirName} numberOfLines={1}>
           {dir.name}
