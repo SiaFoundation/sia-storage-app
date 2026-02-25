@@ -80,6 +80,8 @@ export async function workNew(signal?: AbortSignal): Promise<void> {
           asset.creationTime || asset.modificationTime,
         ).toISOString(),
       })),
+      'file',
+      { addToImportDirectory: true },
     )
     if (files.length > 0) {
       await invalidateCacheLibraryAllStats()

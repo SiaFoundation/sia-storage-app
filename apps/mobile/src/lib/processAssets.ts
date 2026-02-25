@@ -79,7 +79,10 @@ type CandidateFileRecord = {
 export async function processAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
-  { allowDuplicates = false }: { allowDuplicates?: boolean } = {},
+  {
+    allowDuplicates = false,
+    addToImportDirectory = false,
+  }: { allowDuplicates?: boolean; addToImportDirectory?: boolean } = {},
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => ({
@@ -226,8 +229,9 @@ export async function processAssets(
   await createManyFileRecords(newFiles)
 
   // Move media files to the configured photo import directory.
+  // Skipped when importing from a directory or tag context.
   const photoImportDir = await getPhotoImportDirectory()
-  if (photoImportDir) {
+  if (photoImportDir && addToImportDirectory) {
     const mediaFileIds = newFiles
       .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
       .map((f) => f.id)

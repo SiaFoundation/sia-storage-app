@@ -209,11 +209,15 @@ describe('syncPhotosArchive', () => {
       ),
     )
     await workBackward()
-    expect(processAssetsMock).toHaveBeenCalledWith([
-      expect.objectContaining({
-        timestamp: new Date(50_000).toISOString(),
-      }),
-    ])
+    expect(processAssetsMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          timestamp: new Date(50_000).toISOString(),
+        }),
+      ],
+      'file',
+      { addToImportDirectory: true },
+    )
   })
 
   it('processes all assets on the page without filtering', async () => {
@@ -229,11 +233,15 @@ describe('syncPhotosArchive', () => {
       ),
     )
     await workBackward()
-    expect(processAssetsMock).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'a1' }),
-      expect.objectContaining({ id: 'a2' }),
-      expect.objectContaining({ id: 'a3' }),
-    ])
+    expect(processAssetsMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ id: 'a1' }),
+        expect.objectContaining({ id: 'a2' }),
+        expect.objectContaining({ id: 'a3' }),
+      ],
+      'file',
+      { addToImportDirectory: true },
+    )
   })
 
   it('aborts before processAssets when signal is aborted during getAssetsAsync', async () => {
@@ -339,10 +347,14 @@ describe('syncPhotosArchive', () => {
       )
       await workBackward()
 
-      expect(processAssetsMock).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'a1' }),
-        expect.objectContaining({ id: 'a2' }),
-      ])
+      expect(processAssetsMock).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({ id: 'a1' }),
+          expect.objectContaining({ id: 'a2' }),
+        ],
+        'file',
+        { addToImportDirectory: true },
+      )
     })
   })
 })
