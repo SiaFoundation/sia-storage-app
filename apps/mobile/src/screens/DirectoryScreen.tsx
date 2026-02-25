@@ -39,7 +39,7 @@ import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import type { MainStackParamList } from '../stacks/types'
 import {
-  deleteDirectory,
+  deleteDirectoryAndTrashFiles,
   moveFilesToDirectory,
   renameDirectory,
   UNFILED_DIRECTORY_ID,
@@ -202,14 +202,14 @@ export function DirectoryScreen({ route, navigation }: Props) {
     setTimeout(() => {
       Alert.alert(
         `Delete "${directoryName}"?`,
-        'This will remove the folder. Files will be moved out but not deleted.',
+        'This will delete the folder and move all files to trash.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
-              await deleteDirectory(directoryId)
+              await deleteDirectoryAndTrashFiles(directoryId)
               navigation.goBack()
             },
           },

@@ -1,7 +1,9 @@
 import { initializeDB, resetDb } from '../db'
+import { trashFiles } from '../lib/deleteFile'
 import {
   createDirectory,
   deleteDirectory,
+  deleteDirectoryAndTrashFiles,
   getOrCreateDirectory,
   moveFilesToDirectory,
   moveFileToDirectory,
@@ -12,6 +14,10 @@ import {
   syncDirectoryFromMetadata,
 } from './directories'
 import { createFileRecord, readFileRecord } from './files'
+
+jest.mock('../lib/deleteFile', () => ({
+  trashFiles: jest.fn(),
+}))
 
 jest.mock('./librarySwr', () => ({
   libraryStats: {
@@ -151,21 +157,116 @@ describe('directories store', () => {
       expect(dirs).toHaveLength(1)
       expect(dirs[0].fileCount).toBe(0)
     })
+
+    test('excludes trashed files from count', async () => {
+      const dir = await createDirectory('Photos')
+      await createTestFile('file-1')
+      await createFileRecord({
+        id: 'file-2',
+        name: 'file-2.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: 'hash-file-2',
+        createdAt: 1000,
+        updatedAt: 1000,
+        localId: null,
+        addedAt: 1000,
+        trashedAt: 2000,
+        deletedAt: null,
+      })
+      await moveFileToDirectory('file-1', dir.id)
+      await moveFileToDirectory('file-2', dir.id)
+
+      const dirs = await readAllDirectoriesWithCounts()
+      expect(dirs[0].fileCount).toBe(1)
+    })
   })
 
   describe('deleteDirectory', () => {
-    test('deletes directory and unlinks files', async () => {
+    test('unlinks files from directory but does not delete them', async () => {
       const dir = await createDirectory('Photos')
       await createTestFile('file-1')
+      await createTestFile('file-2')
       await moveFileToDirectory('file-1', dir.id)
+      await moveFileToDirectory('file-2', dir.id)
 
       await deleteDirectory(dir.id)
 
       const dirs = await readAllDirectoriesWithCounts()
       expect(dirs).toHaveLength(0)
 
-      const file = await readFileRecord('file-1')
-      expect(file).toBeTruthy()
+      const f1 = await readFileRecord('file-1')
+      const f2 = await readFileRecord('file-2')
+      expect(f1).not.toBeNull()
+      expect(f2).not.toBeNull()
+      expect(await readDirectoryNameForFile('file-1')).toBeUndefined()
+      expect(await readDirectoryNameForFile('file-2')).toBeUndefined()
+    })
+
+    test('deletes empty directory', async () => {
+      const dir = await createDirectory('Empty')
+
+      await deleteDirectory(dir.id)
+
+      const dirs = await readAllDirectoriesWithCounts()
+      expect(dirs).toHaveLength(0)
+    })
+  })
+
+  describe('deleteDirectoryAndTrashFiles', () => {
+    test('trashes files and deletes directory', async () => {
+      const dir = await createDirectory('Photos')
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+      await moveFileToDirectory('file-1', dir.id)
+      await moveFileToDirectory('file-2', dir.id)
+
+      await deleteDirectoryAndTrashFiles(dir.id)
+
+      const dirs = await readAllDirectoriesWithCounts()
+      expect(dirs).toHaveLength(0)
+
+      expect(trashFiles).toHaveBeenCalledTimes(1)
+      const trashedIds = (trashFiles as jest.Mock).mock.calls[0][0]
+      expect(trashedIds.sort()).toEqual(['file-1', 'file-2'])
+    })
+
+    test('deletes empty directory without calling trashFiles', async () => {
+      const dir = await createDirectory('Empty')
+
+      await deleteDirectoryAndTrashFiles(dir.id)
+
+      const dirs = await readAllDirectoriesWithCounts()
+      expect(dirs).toHaveLength(0)
+      expect(trashFiles).not.toHaveBeenCalled()
+    })
+
+    test('skips already-trashed files', async () => {
+      const dir = await createDirectory('Photos')
+      await createTestFile('file-1')
+      await createFileRecord({
+        id: 'file-2',
+        name: 'file-2.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: 'hash-file-2',
+        createdAt: 1000,
+        updatedAt: 1000,
+        localId: null,
+        addedAt: 1000,
+        trashedAt: 2000,
+        deletedAt: null,
+      })
+      await moveFileToDirectory('file-1', dir.id)
+      await moveFileToDirectory('file-2', dir.id)
+
+      await deleteDirectoryAndTrashFiles(dir.id)
+
+      expect(trashFiles).toHaveBeenCalledTimes(1)
+      const trashedIds = (trashFiles as jest.Mock).mock.calls[0][0]
+      expect(trashedIds).toEqual(['file-1'])
     })
   })
 

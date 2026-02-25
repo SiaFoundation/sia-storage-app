@@ -12,6 +12,9 @@ import { calculateContentHash } from './contentHash'
 import { getMediaLibraryUri } from './mediaLibrary'
 import { processAssets } from './processAssets'
 
+jest.mock('./deleteFile', () => ({
+  permanentlyDeleteFiles: jest.fn(),
+}))
 jest.mock('./mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
 }))
