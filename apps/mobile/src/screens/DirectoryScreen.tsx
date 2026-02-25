@@ -42,6 +42,7 @@ import {
   deleteDirectory,
   moveFilesToDirectory,
   renameDirectory,
+  UNFILED_DIRECTORY_ID,
 } from '../stores/directories'
 import {
   enterSelectionMode,
@@ -65,6 +66,7 @@ type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 export function DirectoryScreen({ route, navigation }: Props) {
   const { directoryId, directoryName: initialDirectoryName } = route.params
   const [directoryName, setDirectoryName] = useState(initialDirectoryName)
+  const isUnfiled = directoryId === UNFILED_DIRECTORY_ID
   const scope = `dir.${directoryId}`
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
@@ -165,12 +167,13 @@ export function DirectoryScreen({ route, navigation }: Props) {
 
   const handleFilesAdded = useCallback(
     (addedFiles: FileRecord[]) => {
+      if (isUnfiled) return
       void moveFilesToDirectory(
         addedFiles.map((f) => f.id),
         directoryId,
       )
     },
-    [directoryId],
+    [directoryId, isUnfiled],
   )
 
   const actionSheetFileIds = isSelectionMode
@@ -319,12 +322,14 @@ export function DirectoryScreen({ route, navigation }: Props) {
             >
               <SearchIcon color={palette.gray[50]} size={22} />
             </IconButton>
-            <IconButton
-              onPress={() => openSheet('directoryActions')}
-              accessibilityLabel="More options"
-            >
-              <MoreVerticalIcon color={palette.gray[50]} size={22} />
-            </IconButton>
+            {!isUnfiled ? (
+              <IconButton
+                onPress={() => openSheet('directoryActions')}
+                accessibilityLabel="More options"
+              >
+                <MoreVerticalIcon color={palette.gray[50]} size={22} />
+              </IconButton>
+            ) : null}
           </FloatingPill>
         </BottomControlBar>
       )}
