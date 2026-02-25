@@ -29,18 +29,20 @@ describe('fileCarousel virtual list functions', () => {
     name: string | null
     createdAt: number
     type?: string
+    addedAt?: number
+    size?: number
   }) {
     await createFileRecord({
       id: params.id,
       name: params.name ?? `${params.id}.jpg`,
       type: params.type ?? 'image/jpeg',
       kind: 'file',
-      size: 100,
+      size: params.size ?? 100,
       hash: `hash-${params.id}`,
       createdAt: params.createdAt,
       updatedAt: params.createdAt,
       localId: null,
-      addedAt: params.createdAt,
+      addedAt: params.addedAt ?? params.createdAt,
     })
   }
 
@@ -58,6 +60,72 @@ describe('fileCarousel virtual list functions', () => {
     await createRecord({ id: 'id-5', name: 'c.jpg', createdAt: base + 20 })
     await createRecord({ id: 'id-2', name: 'd.jpg', createdAt: base + 30 })
     await createRecord({ id: 'id-4', name: 'e.jpg', createdAt: base + 40 })
+  }
+
+  async function seedAddedRecords() {
+    await createRecord({
+      id: 'file-a',
+      name: 'a.jpg',
+      createdAt: base,
+      addedAt: base + 40,
+    })
+    await createRecord({
+      id: 'file-b',
+      name: 'b.jpg',
+      createdAt: base + 10,
+      addedAt: base + 20,
+    })
+    await createRecord({
+      id: 'file-c',
+      name: 'c.jpg',
+      createdAt: base + 20,
+      addedAt: base + 30,
+    })
+    await createRecord({
+      id: 'file-d',
+      name: 'd.jpg',
+      createdAt: base + 30,
+      addedAt: base,
+    })
+    await createRecord({
+      id: 'file-e',
+      name: 'e.jpg',
+      createdAt: base + 40,
+      addedAt: base + 10,
+    })
+  }
+
+  async function seedSizeRecords() {
+    await createRecord({
+      id: 'file-a',
+      name: 'a.jpg',
+      createdAt: base,
+      size: 500,
+    })
+    await createRecord({
+      id: 'file-b',
+      name: 'b.jpg',
+      createdAt: base + 10,
+      size: 200,
+    })
+    await createRecord({
+      id: 'file-c',
+      name: 'c.jpg',
+      createdAt: base + 20,
+      size: 800,
+    })
+    await createRecord({
+      id: 'file-d',
+      name: 'd.jpg',
+      createdAt: base + 30,
+      size: 100,
+    })
+    await createRecord({
+      id: 'file-e',
+      name: 'e.jpg',
+      createdAt: base + 40,
+      size: 1000,
+    })
   }
 
   const defaultParams = {
@@ -198,6 +266,62 @@ describe('fileCarousel virtual list functions', () => {
       })
     })
 
+    describe('ADDED sorting (DESC)', () => {
+      const addedParams = {
+        ...defaultParams,
+        sortBy: 'ADDED' as const,
+        sortDir: 'DESC' as const,
+      }
+
+      test('returns correct position for middle file', async () => {
+        await seedAddedRecords()
+        // addedAt values: a=base+40, c=base+30, b=base+20, e=base+10, d=base
+        // DESC order: file-a(0), file-c(1), file-b(2), file-e(3), file-d(4)
+        const position = await fetchFilePosition('file-b', addedParams)
+        expect(position).toBe(2)
+      })
+
+      test('returns 0 for first file', async () => {
+        await seedAddedRecords()
+        const position = await fetchFilePosition('file-a', addedParams)
+        expect(position).toBe(0)
+      })
+
+      test('returns last position for last file', async () => {
+        await seedAddedRecords()
+        const position = await fetchFilePosition('file-d', addedParams)
+        expect(position).toBe(4)
+      })
+    })
+
+    describe('SIZE sorting (DESC)', () => {
+      const sizeParams = {
+        ...defaultParams,
+        sortBy: 'SIZE' as const,
+        sortDir: 'DESC' as const,
+      }
+
+      test('returns correct position for middle file', async () => {
+        await seedSizeRecords()
+        // size values: e=1000, c=800, a=500, b=200, d=100
+        // DESC order: file-e(0), file-c(1), file-a(2), file-b(3), file-d(4)
+        const position = await fetchFilePosition('file-a', sizeParams)
+        expect(position).toBe(2)
+      })
+
+      test('returns 0 for first file', async () => {
+        await seedSizeRecords()
+        const position = await fetchFilePosition('file-e', sizeParams)
+        expect(position).toBe(0)
+      })
+
+      test('returns last position for last file', async () => {
+        await seedSizeRecords()
+        const position = await fetchFilePosition('file-d', sizeParams)
+        expect(position).toBe(4)
+      })
+    })
+
     describe('tie-breaking by ID', () => {
       test('breaks DATE ties using ID', async () => {
         await createRecord({ id: 'file-c', name: 'c.jpg', createdAt: base })
@@ -318,6 +442,28 @@ describe('fileCarousel virtual list functions', () => {
     test('returns empty array for empty database', async () => {
       const ids = await fetchSortedFileIds(defaultParams, 10, 0)
       expect(ids).toEqual([])
+    })
+
+    test('returns IDs in ADDED sort order', async () => {
+      await seedAddedRecords()
+      // addedAt values: a=base+40, c=base+30, b=base+20, e=base+10, d=base
+      const ids = await fetchSortedFileIds(
+        { ...defaultParams, sortBy: 'ADDED', sortDir: 'DESC' },
+        5,
+        0,
+      )
+      expect(ids).toEqual(['file-a', 'file-c', 'file-b', 'file-e', 'file-d'])
+    })
+
+    test('returns IDs in SIZE sort order', async () => {
+      await seedSizeRecords()
+      // size values: e=1000, c=800, a=500, b=200, d=100
+      const ids = await fetchSortedFileIds(
+        { ...defaultParams, sortBy: 'SIZE', sortDir: 'DESC' },
+        5,
+        0,
+      )
+      expect(ids).toEqual(['file-e', 'file-c', 'file-a', 'file-b', 'file-d'])
     })
   })
 
