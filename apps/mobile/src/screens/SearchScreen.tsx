@@ -326,6 +326,7 @@ export function SearchScreen({ navigation }: Props) {
               placeholder="Search files..."
               placeholderTextColor={whiteA.a50}
               style={styles.input}
+              autoCapitalize="none"
               returnKeyType="search"
               onSubmitEditing={() => Keyboard.dismiss()}
               onKeyPress={(e) => {
