@@ -6,14 +6,12 @@ import { LogView } from '../components/LogView'
 import { SettingsFullLayout } from '../components/SettingsLayout'
 import { SettingsLogsControlBar } from '../components/SettingsLogsControlBar'
 import { logsCache, useHasNewLogs } from '../hooks/useLogs'
-import { useMenuHeader } from '../hooks/useMenuHeader'
 import type { MenuStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Logs'>
 
 export function SettingsLogsScreen({ route, navigation }: Props) {
-  useMenuHeader()
   const [lastFetchedCount, setLastFetchedCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(true)
   const hasNewLogs = useHasNewLogs(lastFetchedCount)
