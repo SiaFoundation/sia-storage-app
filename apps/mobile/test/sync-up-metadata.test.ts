@@ -5,10 +5,18 @@
 import './utils/setup'
 
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
-import { createDirectory, moveFileToDirectory } from '../src/stores/directories'
+import {
+  createDirectory,
+  moveFileToDirectory,
+  renameDirectory,
+} from '../src/stores/directories'
 import { readFileRecord, updateFileRecord } from '../src/stores/files'
 import { readLocalObjectsForFile } from '../src/stores/localObjects'
-import { addTagToFile } from '../src/stores/tags'
+import {
+  addTagToFile,
+  readAllTagsWithCounts,
+  renameTag,
+} from '../src/stores/tags'
 import { getUploadState } from '../src/stores/uploads'
 import {
   type AppCoreHarness,
@@ -225,6 +233,97 @@ describe('Sync Up Metadata', () => {
         return remoteMeta.directory === 'Vacation'
       },
       { timeout: 10_000, message: 'Remote metadata to include directory' },
+    )
+  }, 30_000)
+
+  it('pushes renamed tag to remote', async () => {
+    const [file] = await addTestFilesToHarness(
+      harness,
+      generateTestFilesFromAssets(TEST_ASSETS_DIR, ['test-image-1.png']),
+    )
+
+    await waitForCondition(() => getUploadState(file.id) !== undefined, {
+      timeout: 10_000,
+      message: 'File to be detected by scanner',
+    })
+    await harness.waitForNoActiveUploads()
+
+    const localObjects = await readLocalObjectsForFile(file.id)
+    expect(localObjects.length).toBeGreaterThan(0)
+    const objectId = localObjects[0].id
+
+    // Add a tag and wait for it to sync
+    await addTagToFile(file.id, 'vacation')
+    await updateFileRecord({ id: file.id, updatedAt: Date.now() }, true, {
+      includeUpdatedAt: true,
+    })
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return remoteMeta.tags?.includes('vacation') === true
+      },
+      { timeout: 10_000, message: 'Remote metadata to include tag' },
+    )
+
+    // Rename the tag — this bumps updatedAt on tagged files
+    const tags = await readAllTagsWithCounts()
+    const vacationTag = tags.find((t) => t.name === 'vacation')!
+    await renameTag(vacationTag.id, 'travel')
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return (
+          remoteMeta.tags?.includes('travel') === true &&
+          !remoteMeta.tags?.includes('vacation')
+        )
+      },
+      { timeout: 10_000, message: 'Remote metadata to have renamed tag' },
+    )
+  }, 30_000)
+
+  it('pushes renamed directory to remote', async () => {
+    const [file] = await addTestFilesToHarness(
+      harness,
+      generateTestFilesFromAssets(TEST_ASSETS_DIR, ['test-image-1.png']),
+    )
+
+    await waitForCondition(() => getUploadState(file.id) !== undefined, {
+      timeout: 10_000,
+      message: 'File to be detected by scanner',
+    })
+    await harness.waitForNoActiveUploads()
+
+    const localObjects = await readLocalObjectsForFile(file.id)
+    expect(localObjects.length).toBeGreaterThan(0)
+    const objectId = localObjects[0].id
+
+    // Move file to a directory and wait for sync
+    const dir = await createDirectory('Vacation')
+    await moveFileToDirectory(file.id, dir.id)
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return remoteMeta.directory === 'Vacation'
+      },
+      { timeout: 10_000, message: 'Remote metadata to include directory' },
+    )
+
+    // Rename the directory — this bumps updatedAt on files in it
+    await renameDirectory(dir.id, 'Travel')
+
+    await waitForCondition(
+      async () => {
+        const remote = await harness.sdk.object(objectId)
+        const remoteMeta = decodeFileMetadata(remote.metadata())
+        return remoteMeta.directory === 'Travel'
+      },
+      { timeout: 10_000, message: 'Remote metadata to have renamed directory' },
     )
   }, 30_000)
 })

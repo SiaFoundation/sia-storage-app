@@ -315,6 +315,50 @@ export async function readIsFavorite(fileId: string): Promise<boolean> {
 }
 
 /**
+ * Renames a tag and bumps updatedAt on all affected files so syncUp
+ * pushes the new name in their metadata.
+ */
+export async function renameTag(tagId: string, newName: string): Promise<void> {
+  const trimmed = newName.trim()
+  if (!trimmed) {
+    throw new Error('Tag name cannot be empty')
+  }
+
+  const tag = await db().getFirstAsync<Tag>(
+    'SELECT id, name, createdAt, usedAt, system FROM tags WHERE id = ?',
+    tagId,
+  )
+  if (!tag) return
+  if (tag.system) {
+    throw new Error('System tags cannot be renamed')
+  }
+
+  const existing = await db().getFirstAsync<{ id: string }>(
+    'SELECT id FROM tags WHERE name = ? COLLATE NOCASE AND id != ?',
+    trimmed,
+    tagId,
+  )
+  if (existing) {
+    throw new Error(`Tag "${trimmed}" already exists`)
+  }
+
+  await withTransactionLock(async () => {
+    await sqlUpdate('tags', { name: trimmed }, { id: tagId })
+    // Bump updatedAt on affected files so syncUp pushes the new tag name.
+    const now = Date.now()
+    await db().runAsync(
+      `UPDATE files SET updatedAt = ? WHERE id IN (
+        SELECT fileId FROM file_tags WHERE tagId = ?
+      )`,
+      now,
+      tagId,
+    )
+  })
+  tagsSwr.invalidateAll()
+  invalidateCacheLibraryLists()
+}
+
+/**
  * Deletes a tag. System tags cannot be deleted.
  */
 export async function deleteTag(tagId: string): Promise<void> {

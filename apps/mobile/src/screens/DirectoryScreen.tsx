@@ -4,6 +4,7 @@ import {
   FolderPlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
+  PencilIcon,
   SearchIcon,
   Trash2Icon,
   XIcon,
@@ -32,11 +33,16 @@ import { Gradient } from '../components/Gradient'
 import { IconButton } from '../components/IconButton'
 import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
+import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import type { MainStackParamList } from '../stacks/types'
-import { deleteDirectory, moveFilesToDirectory } from '../stores/directories'
+import {
+  deleteDirectory,
+  moveFilesToDirectory,
+  renameDirectory,
+} from '../stores/directories'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -57,7 +63,8 @@ import { colors, overlay, palette, whiteA } from '../styles/colors'
 type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 
 export function DirectoryScreen({ route, navigation }: Props) {
-  const { directoryId, directoryName } = route.params
+  const { directoryId, directoryName: initialDirectoryName } = route.params
+  const [directoryName, setDirectoryName] = useState(initialDirectoryName)
   const scope = `dir.${directoryId}`
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
@@ -178,6 +185,14 @@ export function DirectoryScreen({ route, navigation }: Props) {
   const fileCount = dirCount.data ?? 0
   const subtitle = `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`
   const dirActionsOpen = useSheetOpen('directoryActions')
+
+  const handleRenameDirectory = useCallback(
+    async (newName: string) => {
+      await renameDirectory(directoryId, newName)
+      setDirectoryName(newName)
+    },
+    [directoryId],
+  )
 
   const handleDeleteDirectory = useCallback(() => {
     closeSheet()
@@ -354,7 +369,19 @@ export function DirectoryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
 
-      <ActionSheet visible={dirActionsOpen} onRequestClose={() => closeSheet()}>
+      <ActionSheet
+        visible={dirActionsOpen}
+        onRequestClose={() => closeSheet('directoryActions')}
+      >
+        <ActionSheetButton
+          icon={<PencilIcon size={18} />}
+          onPress={() => {
+            closeSheet()
+            setTimeout(() => openSheet('renameDirectory'), 300)
+          }}
+        >
+          Rename folder
+        </ActionSheetButton>
         <ActionSheetButton
           variant="danger"
           icon={<Trash2Icon size={18} />}
@@ -363,6 +390,13 @@ export function DirectoryScreen({ route, navigation }: Props) {
           Delete folder
         </ActionSheetButton>
       </ActionSheet>
+      <RenameSheet
+        sheetName="renameDirectory"
+        title="Rename Folder"
+        placeholder="Folder name"
+        initialValue={directoryName}
+        onRename={handleRenameDirectory}
+      />
       {actionSheetFileIds.length > 0 ? (
         <>
           <FileActionsSheet

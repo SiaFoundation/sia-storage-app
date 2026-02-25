@@ -107,6 +107,13 @@ export async function renameDirectory(id: string, name: string): Promise<void> {
     throw new Error(`Folder "${trimmed}" already exists`)
   }
   await sqlUpdate('directories', { name: trimmed }, { id })
+  // Bump updatedAt on affected files so syncUp pushes the new folder name.
+  const now = Date.now()
+  await db().runAsync(
+    'UPDATE files SET updatedAt = ? WHERE directoryId = ?',
+    now,
+    id,
+  )
   directoriesSwr.invalidate('all')
   invalidateCacheLibraryLists()
 }

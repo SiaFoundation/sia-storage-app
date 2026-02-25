@@ -182,6 +182,29 @@ describe('directories store', () => {
         'Folder name cannot be empty',
       )
     })
+
+    test('throws on duplicate name', async () => {
+      const dir = await createDirectory('Photos')
+      await createDirectory('Videos')
+      await expect(renameDirectory(dir.id, 'Videos')).rejects.toThrow(
+        'Folder "Videos" already exists',
+      )
+    })
+
+    test('bumps updatedAt on files in directory', async () => {
+      const dir = await createDirectory('Photos')
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+      await moveFileToDirectory('file-1', dir.id)
+      await moveFileToDirectory('file-2', dir.id)
+
+      await renameDirectory(dir.id, 'Images')
+
+      const f1 = await readFileRecord('file-1')
+      const f2 = await readFileRecord('file-2')
+      expect(f1!.updatedAt).toBeGreaterThan(1000)
+      expect(f2!.updatedAt).toBeGreaterThan(1000)
+    })
   })
 
   describe('moveFileToDirectory', () => {
