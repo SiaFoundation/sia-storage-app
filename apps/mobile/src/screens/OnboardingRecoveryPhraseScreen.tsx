@@ -3,7 +3,7 @@ import type { RouteProp } from '@react-navigation/native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { logger } from '@siastorage/logger'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Platform,
   Pressable,
@@ -22,6 +22,8 @@ import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistr
 import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
 import { useToast } from '../lib/toastContext'
 import type { OnboardingStackParamList } from '../stacks/types'
+import { clearAppKeys } from '../stores/appKey'
+import { clearMnemonicHash } from '../stores/mnemonic'
 import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
@@ -42,6 +44,11 @@ export default function OnboardingRecoveryPhraseScreen() {
     useRecoveryPhraseValidation(manualPhrase)
 
   const { register, isSubmitting } = useRecoveryPhraseRegistration()
+
+  useEffect(() => {
+    clearMnemonicHash()
+    clearAppKeys()
+  }, [])
 
   const handleContinue = async () => {
     try {
