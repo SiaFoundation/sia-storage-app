@@ -11,6 +11,7 @@ import {
   readTagNamesForFile,
   readTagsForFile,
   removeTagFromFile,
+  renameTag,
   searchTags,
   syncTagsFromMetadata,
   toggleFavorite,
@@ -514,6 +515,57 @@ describe('tags store', () => {
 
       await toggleFavorite('file-1')
       expect(await readIsFavorite('file-1')).toBe(false)
+    })
+  })
+
+  describe('renameTag', () => {
+    test('renames tag', async () => {
+      const tag = await createTag('vacation')
+      await renameTag(tag.id, 'travel')
+
+      const tags = userOnly(await readAllTagsWithCounts())
+      expect(tags).toHaveLength(1)
+      expect(tags[0].name).toBe('travel')
+    })
+
+    test('throws on empty name', async () => {
+      const tag = await createTag('vacation')
+      await expect(renameTag(tag.id, '')).rejects.toThrow(
+        'Tag name cannot be empty',
+      )
+    })
+
+    test('throws on duplicate name', async () => {
+      const tag = await createTag('vacation')
+      await createTag('travel')
+      await expect(renameTag(tag.id, 'travel')).rejects.toThrow(
+        'Tag "travel" already exists',
+      )
+    })
+
+    test('prevents renaming system tags', async () => {
+      await expect(renameTag('sys:favorites', 'Starred')).rejects.toThrow(
+        'System tags cannot be renamed',
+      )
+    })
+
+    test('bumps updatedAt on tagged files', async () => {
+      await createTestFile('file-1')
+      await createTestFile('file-2')
+      await addTagToFile('file-1', 'vacation')
+      await addTagToFile('file-2', 'vacation')
+
+      const tag = userOnly(await readAllTagsWithCounts())[0]
+      await renameTag(tag.id, 'travel')
+
+      const f1 = await readFileRecord('file-1')
+      const f2 = await readFileRecord('file-2')
+      expect(f1!.updatedAt).toBeGreaterThan(1000)
+      expect(f2!.updatedAt).toBeGreaterThan(1000)
+    })
+
+    test('no-ops for nonexistent tag', async () => {
+      await expect(renameTag('nonexistent', 'test')).resolves.not.toThrow()
     })
   })
 

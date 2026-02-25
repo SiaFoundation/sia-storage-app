@@ -4,6 +4,7 @@ import {
   FilePlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
+  PencilIcon,
   Trash2Icon,
   XIcon,
 } from 'lucide-react-native'
@@ -31,6 +32,7 @@ import { Gradient } from '../components/Gradient'
 import { IconButton } from '../components/IconButton'
 import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
+import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
@@ -49,14 +51,15 @@ import {
   useTagFileCount,
 } from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFiles, deleteTag } from '../stores/tags'
+import { addTagToFiles, deleteTag, renameTag } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'TagLibrary'>
 
 export function TagLibraryScreen({ route, navigation }: Props) {
-  const { tagId, tagName } = route.params
+  const { tagId, tagName: initialTagName } = route.params
+  const [tagName, setTagName] = useState(initialTagName)
   const scope = `tag.${tagId}`
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
@@ -178,6 +181,14 @@ export function TagLibraryScreen({ route, navigation }: Props) {
   const subtitle = `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`
   const isSystemTag = tagId.startsWith('sys_')
   const tagActionsOpen = useSheetOpen('tagActions')
+
+  const handleRenameTag = useCallback(
+    async (newName: string) => {
+      await renameTag(tagId, newName)
+      setTagName(newName)
+    },
+    [tagId],
+  )
 
   const handleDeleteTag = useCallback(() => {
     closeSheet()
@@ -348,7 +359,21 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
 
-      <ActionSheet visible={tagActionsOpen} onRequestClose={() => closeSheet()}>
+      <ActionSheet
+        visible={tagActionsOpen}
+        onRequestClose={() => closeSheet('tagActions')}
+      >
+        {!isSystemTag ? (
+          <ActionSheetButton
+            icon={<PencilIcon size={18} />}
+            onPress={() => {
+              closeSheet()
+              setTimeout(() => openSheet('renameTag'), 300)
+            }}
+          >
+            Rename tag
+          </ActionSheetButton>
+        ) : null}
         <ActionSheetButton
           variant="danger"
           icon={<Trash2Icon size={18} />}
@@ -358,6 +383,13 @@ export function TagLibraryScreen({ route, navigation }: Props) {
           Delete tag
         </ActionSheetButton>
       </ActionSheet>
+      <RenameSheet
+        sheetName="renameTag"
+        title="Rename Tag"
+        placeholder="Tag name"
+        initialValue={tagName}
+        onRename={handleRenameTag}
+      />
       {actionSheetFileIds.length > 0 ? (
         <>
           <FileActionsSheet

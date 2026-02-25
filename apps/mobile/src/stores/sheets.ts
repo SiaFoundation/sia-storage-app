@@ -16,8 +16,11 @@ export function openSheet(name: string): void {
   })
 }
 
-export async function closeSheet(): Promise<void> {
-  setState(() => {
+export async function closeSheet(name?: string): Promise<void> {
+  setState((state) => {
+    // Only close if this sheet is actually open, so callers don't
+    // accidentally dismiss a different sheet that opened in the meantime.
+    if (name && state.openName !== name) return state
     return { openName: '' }
   })
   await new Promise((resolve) => setTimeout(resolve, 220))
