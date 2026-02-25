@@ -119,11 +119,15 @@ describe('syncNewPhotos', () => {
       ]),
     )
     await workNew()
-    expect(processAssetsMock).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'a1', name: 'new1.jpg' }),
-      expect.objectContaining({ id: 'a2', name: 'new2.jpg' }),
-      expect.objectContaining({ id: 'a3', name: 'exact.jpg' }),
-    ])
+    expect(processAssetsMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ id: 'a1', name: 'new1.jpg' }),
+        expect.objectContaining({ id: 'a2', name: 'new2.jpg' }),
+        expect.objectContaining({ id: 'a3', name: 'exact.jpg' }),
+      ],
+      'file',
+      { addToImportDirectory: true },
+    )
   })
 
   it('skips processing when all photos are before enabledAt', async () => {
@@ -165,11 +169,15 @@ describe('syncNewPhotos', () => {
       ]),
     )
     await workNew()
-    expect(processAssetsMock).toHaveBeenCalledWith([
-      expect.objectContaining({
-        timestamp: new Date(5_000).toISOString(),
-      }),
-    ])
+    expect(processAssetsMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          timestamp: new Date(5_000).toISOString(),
+        }),
+      ],
+      'file',
+      { addToImportDirectory: true },
+    )
   })
 
   it('setAutoSyncNewPhotos saves enablement timestamp', async () => {

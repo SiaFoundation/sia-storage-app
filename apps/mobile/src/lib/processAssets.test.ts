@@ -1,11 +1,13 @@
 import { setExpoFileSystemMockMethods } from '../../mocks/expo-file-system'
-import { initializeDB, resetDb } from '../db'
+import { db, initializeDB, resetDb } from '../db'
+import { readAllDirectoriesWithCounts } from '../stores/directories'
 import {
   createFileRecord,
   readAllFileRecords,
   readFileRecord,
 } from '../stores/files'
 import { copyFileToFs, readFsFileMetadata } from '../stores/fs'
+import { setPhotoImportDirectory } from '../stores/settings'
 import { calculateContentHash } from './contentHash'
 import { getMediaLibraryUri } from './mediaLibrary'
 import { processAssets } from './processAssets'
@@ -301,6 +303,51 @@ describe('processAssets', () => {
     expect(meta).toMatchObject({
       fileId: files[0].id,
     })
+  })
+  it('does not auto-move files by default', async () => {
+    await setPhotoImportDirectory('Camera Roll')
+    const assets = [
+      {
+        id: undefined,
+        name: 'photo.jpg',
+        sourceUri: 'file:///photo.jpg',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files } = await processAssets(assets)
+    expect(files).toHaveLength(1)
+    const row = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      files[0].id,
+    )
+    expect(row?.directoryId).toBeNull()
+    const dirs = await readAllDirectoriesWithCounts()
+    expect(dirs).toHaveLength(0)
+  })
+  it('addToImportDirectory moves media files to photo import directory', async () => {
+    await setPhotoImportDirectory('Camera Roll')
+    const assets = [
+      {
+        id: undefined,
+        name: 'photo.jpg',
+        sourceUri: 'file:///photo.jpg',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files } = await processAssets(assets, 'file', {
+      addToImportDirectory: true,
+    })
+    expect(files).toHaveLength(1)
+    const row = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      files[0].id,
+    )
+    expect(row?.directoryId).toBeTruthy()
+    const dirs = await readAllDirectoriesWithCounts()
+    expect(dirs).toHaveLength(1)
+    expect(dirs[0].name).toBe('Camera Roll')
   })
   it('adds file size to new files', async () => {
     setExpoFileSystemMockMethods({

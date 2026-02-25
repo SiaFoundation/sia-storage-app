@@ -127,6 +127,8 @@ export async function workBackward(signal?: AbortSignal) {
           asset.creationTime || asset.modificationTime,
         ).toISOString(),
       })),
+      'file',
+      { addToImportDirectory: true },
     )
     if (files.length > 0) {
       logger.info('syncPhotosArchive', 'batch_processed', {
