@@ -38,7 +38,7 @@ export function SelectionBar({
             <IconButton
               onPress={() => openSheet(moveToDirectorySheet)}
               disabled={selectedCount === 0}
-              accessibilityLabel="Move to directory"
+              accessibilityLabel="Move to folder"
             >
               <FolderIcon
                 color={

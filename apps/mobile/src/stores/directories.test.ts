@@ -95,7 +95,7 @@ describe('directories store', () => {
 
     test('throws on empty name', async () => {
       await expect(createDirectory('')).rejects.toThrow(
-        'Directory name cannot be empty',
+        'Folder name cannot be empty',
       )
     })
 
@@ -106,7 +106,7 @@ describe('directories store', () => {
 
     test('throws on name that sanitizes to empty', async () => {
       await expect(createDirectory('/')).rejects.toThrow(
-        'Directory name cannot be empty',
+        'Folder name cannot be empty',
       )
     })
 
@@ -179,7 +179,7 @@ describe('directories store', () => {
     test('throws on empty name', async () => {
       const dir = await createDirectory('Photos')
       await expect(renameDirectory(dir.id, '')).rejects.toThrow(
-        'Directory name cannot be empty',
+        'Folder name cannot be empty',
       )
     })
   })

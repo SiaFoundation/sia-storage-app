@@ -95,7 +95,7 @@ export function SelectDirectorySheet({
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
-      title="Import directory"
+      title="Import folder"
       headerRight={
         <Pressable
           accessibilityRole="button"
@@ -111,7 +111,7 @@ export function SelectDirectorySheet({
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder="Search or create directory..."
+          placeholder="Search or create folder..."
           placeholderTextColor={palette.gray[500]}
           value={query}
           onChangeText={setQuery}
@@ -134,7 +134,7 @@ export function SelectDirectorySheet({
             <Pressable style={styles.dirRow} onPress={handleClear}>
               <View style={styles.dirRowLeft}>
                 <XIcon size={18} color={palette.gray[400]} />
-                <Text style={styles.removeText}>No directory</Text>
+                <Text style={styles.removeText}>No folder</Text>
               </View>
               {currentValue === '' && (
                 <CheckIcon size={18} color={palette.blue[400]} />
@@ -171,7 +171,7 @@ export function SelectDirectorySheet({
         ListEmptyComponent={
           query.trim().length === 0 ? (
             <Text style={styles.emptyText}>
-              No directories yet. Type to create one.
+              No folders yet. Type to create one.
             </Text>
           ) : null
         }

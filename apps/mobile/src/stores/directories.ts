@@ -33,7 +33,7 @@ export function sanitizeDirectoryName(name: string): string {
 export async function createDirectory(name: string): Promise<Directory> {
   const trimmed = sanitizeDirectoryName(name)
   if (!trimmed) {
-    throw new Error('Directory name cannot be empty')
+    throw new Error('Folder name cannot be empty')
   }
 
   const existing = await db().getFirstAsync<{ id: string }>(
@@ -41,7 +41,7 @@ export async function createDirectory(name: string): Promise<Directory> {
     trimmed,
   )
   if (existing) {
-    throw new Error(`Directory "${trimmed}" already exists`)
+    throw new Error(`Folder "${trimmed}" already exists`)
   }
 
   const now = Date.now()
@@ -59,7 +59,7 @@ export async function createDirectory(name: string): Promise<Directory> {
 export async function getOrCreateDirectory(name: string): Promise<Directory> {
   const trimmed = sanitizeDirectoryName(name)
   if (!trimmed) {
-    throw new Error('Directory name cannot be empty')
+    throw new Error('Folder name cannot be empty')
   }
 
   const existing = await db().getFirstAsync<Directory>(
@@ -96,7 +96,7 @@ export async function deleteDirectory(id: string): Promise<void> {
 export async function renameDirectory(id: string, name: string): Promise<void> {
   const trimmed = sanitizeDirectoryName(name)
   if (!trimmed) {
-    throw new Error('Directory name cannot be empty')
+    throw new Error('Folder name cannot be empty')
   }
   const existing = await db().getFirstAsync<{ id: string }>(
     'SELECT id FROM directories WHERE name = ? COLLATE NOCASE AND id != ?',
@@ -104,7 +104,7 @@ export async function renameDirectory(id: string, name: string): Promise<void> {
     id,
   )
   if (existing) {
-    throw new Error(`Directory "${trimmed}" already exists`)
+    throw new Error(`Folder "${trimmed}" already exists`)
   }
   await sqlUpdate('directories', { name: trimmed }, { id })
   directoriesSwr.invalidate('all')

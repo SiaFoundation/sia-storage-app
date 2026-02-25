@@ -108,7 +108,7 @@ export function LibraryTabBar({
           <>
             <IconButton
               onPress={onCreateDirectory}
-              accessibilityLabel="Create directory"
+              accessibilityLabel="Create folder"
             >
               <FolderPlusIcon color={palette.gray[50]} size={20} />
             </IconButton>

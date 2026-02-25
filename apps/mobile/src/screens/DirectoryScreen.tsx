@@ -184,7 +184,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
     setTimeout(() => {
       Alert.alert(
         `Delete "${directoryName}"?`,
-        'This will remove the directory. Files will be moved out but not deleted.',
+        'This will remove the folder. Files will be moved out but not deleted.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -273,7 +273,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
             style={styles.emptyImage}
             source={require('../../assets/image-stack.png')}
           />
-          <Text style={styles.emptyTitle}>No files in this directory</Text>
+          <Text style={styles.emptyTitle}>No files in this folder</Text>
           <Text style={styles.emptyText}>
             Move files here from the file actions menu.
           </Text>
@@ -360,7 +360,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
           icon={<Trash2Icon size={18} />}
           onPress={handleDeleteDirectory}
         >
-          Delete directory
+          Delete folder
         </ActionSheetButton>
       </ActionSheet>
       {actionSheetFileIds.length > 0 ? (

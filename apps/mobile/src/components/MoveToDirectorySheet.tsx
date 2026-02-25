@@ -135,7 +135,7 @@ export function MoveToDirectorySheet({
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
-      title={`Move ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to directory`}
+      title={`Move ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to folder`}
       headerRight={
         <Pressable
           accessibilityRole="button"
@@ -153,7 +153,7 @@ export function MoveToDirectorySheet({
           <Text style={styles.infoText}>
             {currentDirName
               ? `Currently in ${currentDirName}`
-              : 'Not in a directory'}
+              : 'Not in a folder'}
           </Text>
         </View>
       ) : filesInDirCount > 0 ? (
@@ -161,8 +161,8 @@ export function MoveToDirectorySheet({
           <FoldersIcon size={16} color={whiteA.a50} />
           <Text style={styles.infoText}>
             {filesInDirCount === fileIds.length
-              ? 'All files are already in directories'
-              : `${filesInDirCount} ${filesInDirCount === 1 ? 'file is' : 'files are'} already in a directory`}
+              ? 'All files are already in folders'
+              : `${filesInDirCount} ${filesInDirCount === 1 ? 'file is' : 'files are'} already in a folder`}
           </Text>
         </View>
       ) : null}
@@ -170,7 +170,7 @@ export function MoveToDirectorySheet({
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder="Search or create directory..."
+          placeholder="Search or create folder..."
           placeholderTextColor={palette.gray[500]}
           value={query}
           onChangeText={setQuery}
@@ -201,7 +201,7 @@ export function MoveToDirectorySheet({
                 ) : (
                   <XIcon size={18} color={palette.gray[400]} />
                 )}
-                <Text style={styles.removeText}>No directory</Text>
+                <Text style={styles.removeText}>No folder</Text>
               </View>
             </Pressable>
             {query.trim().length > 0 && !exactMatch ? (

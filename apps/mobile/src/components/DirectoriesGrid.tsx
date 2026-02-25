@@ -33,9 +33,9 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
     return (
       <View style={styles.emptyWrap}>
         <FolderIcon color={whiteA.a50} size={48} />
-        <Text style={styles.emptyTitle}>No directories yet</Text>
+        <Text style={styles.emptyTitle}>No folders yet</Text>
         <Text style={styles.emptyText}>
-          Create directories to organize your files.
+          Create folders to organize your files.
         </Text>
       </View>
     )
