@@ -256,7 +256,7 @@ function SingleFileActionsSheet({
           setTimeout(() => openSheet('moveToDirectory'), 300)
         }}
       >
-        Move to directory
+        Move to folder
       </ActionSheetButton>
       <ActionSheetButton
         variant="danger"
@@ -484,7 +484,7 @@ function BulkFileActionsSheet({
           setTimeout(() => openSheet('moveToDirectory'), 300)
         }}
       >
-        Move to directory
+        Move to folder
       </ActionSheetButton>
       <ActionSheetButton
         variant="danger"

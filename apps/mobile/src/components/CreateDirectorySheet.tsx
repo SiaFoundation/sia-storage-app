@@ -49,7 +49,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
       closeSheet()
       onCreated?.(dir.id, dir.name)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create directory')
+      setError(e instanceof Error ? e.message : 'Failed to create folder')
     }
   }, [name, onCreated])
 
@@ -57,7 +57,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
-      title="New Directory"
+      title="New Folder"
       presentationStyle="formSheet"
       headerRight={
         <Pressable
@@ -75,7 +75,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
           <TextInput
             ref={inputRef}
             style={styles.input}
-            placeholder="Directory name"
+            placeholder="Folder name"
             placeholderTextColor={palette.gray[500]}
             value={name}
             onChangeText={(text) => {

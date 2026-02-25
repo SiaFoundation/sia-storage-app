@@ -73,7 +73,7 @@ export function SettingsSyncPhotos() {
       <InfoCard>
         <Pressable onPress={handleOpenDirectoryPicker}>
           <LabeledValueRow
-            label="Import directory"
+            label="Import folder"
             labelWidth={250}
             value={photoImportDir.data || 'None'}
             canCopy={false}

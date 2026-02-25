@@ -69,7 +69,7 @@ export function FileCarouselControlBar({
           </IconButton>
           <IconButton
             onPress={onMoveToDirectory}
-            accessibilityLabel="Move to directory"
+            accessibilityLabel="Move to folder"
           >
             <FolderIcon color={iconColors.white} />
           </IconButton>
