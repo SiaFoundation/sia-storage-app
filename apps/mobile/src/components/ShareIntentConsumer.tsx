@@ -38,6 +38,8 @@ export function ShareIntentConsumer() {
             timestamp: new Date().toISOString(),
             sourceUri: file.path,
           })),
+          'file',
+          { allowDuplicates: true },
         )
 
         if (warnings.length > 0) {

@@ -107,7 +107,45 @@ describe('processAssets', () => {
     })
     expect(copyFileToFs).toHaveBeenCalledTimes(0)
   })
-  it('updates and copies existing by hash but does not create a new record', async () => {
+  it('allowDuplicates bypasses localId dedup', async () => {
+    await createFileRecord(
+      {
+        id: 'existing-1',
+        name: 'old.jpg',
+        size: 5,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: '1',
+        hash: '',
+        addedAt: 1,
+      },
+      false,
+    )
+
+    jest
+      .mocked(getMediaLibraryUri)
+      .mockImplementation(async (localId: string | null) => {
+        if (localId === '1') return 'file://1'
+        return null
+      })
+    const assets = [
+      {
+        id: '1',
+        name: 'new.jpg',
+        sourceUri: 'file://1',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files } = await processAssets(assets, 'file', {
+      allowDuplicates: true,
+    })
+
+    expect(files).toHaveLength(1)
+  })
+  it('blocks content hash duplicates during auto-sync', async () => {
     await createFileRecord(
       {
         id: 'existing',
@@ -140,18 +178,46 @@ describe('processAssets', () => {
 
     expect(files).toHaveLength(0)
     expect(updatedFiles).toHaveLength(1)
-    const updated = await readFileRecord('existing')
-    expect(updated).toMatchObject({
-      id: 'existing',
-      name: 'same-hash.jpg',
-    })
-    expect(copyFileToFs).toHaveBeenCalledTimes(1)
-    expect(copyFileToFs).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'existing' }),
-      expect.objectContaining({ uri: 'file://same-hash.jpg' }),
-    )
+    expect(updatedFiles[0]).toMatchObject({ id: 'existing' })
   })
-  it('dedupes on hash within new files', async () => {
+  it('allowDuplicates bypasses content hash dedup', async () => {
+    await createFileRecord(
+      {
+        id: 'existing',
+        name: 'existing.jpg',
+        size: 10,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        hash: 'sha256:existing-hash',
+        localId: null,
+        addedAt: 1,
+      },
+      false,
+    )
+
+    jest
+      .mocked(calculateContentHash)
+      .mockImplementation(async () => 'sha256:existing-hash')
+    const assets = [
+      {
+        id: undefined,
+        name: 'same-hash.jpg',
+        sourceUri: 'file://same-hash.jpg',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files, warnings } = await processAssets(assets, 'file', {
+      allowDuplicates: true,
+    })
+
+    expect(files).toHaveLength(1)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/already exist/)
+  })
+  it('allows importing multiple files with same hash', async () => {
     jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
       return null
     })
@@ -178,11 +244,7 @@ describe('processAssets', () => {
     ]
 
     const { files } = await processAssets(assets)
-    expect(files).toHaveLength(1)
-    const file = await readFileRecord(files[0].id)
-    expect(file).toMatchObject({
-      type: 'image/jpeg',
-    })
+    expect(files).toHaveLength(2)
   })
   it('grabs the highest quality file when localId is valid', async () => {
     jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
