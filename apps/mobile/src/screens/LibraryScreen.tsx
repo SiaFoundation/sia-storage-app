@@ -60,15 +60,18 @@ type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 export function LibraryScreen({ route, navigation }: Props) {
   const vs = useViewSettings('library')
   const isSyncing = useIsSyncingDown()
-  const filters: FileListParams = useMemo(
-    () => ({
+  const mediaAllowed: Category[] = useMemo(() => ['Video', 'Image'], [])
+  const filters: FileListParams = useMemo(() => {
+    const filtered = vs.selectedCategories.filter((c) =>
+      mediaAllowed.includes(c),
+    )
+    return {
       scope: 'library',
       sortBy: vs.sortBy,
       sortDir: vs.sortDir,
-      categories: vs.selectedCategories,
-    }),
-    [vs.sortBy, vs.sortDir, vs.selectedCategories],
-  )
+      categories: filtered.length > 0 ? filtered : mediaAllowed,
+    }
+  }, [vs.sortBy, vs.sortDir, vs.selectedCategories, mediaAllowed])
   const files = useFileList(filters)
   const fileCount = useLibraryCount()
   const mediaCount = useMediaCount()
@@ -254,6 +257,7 @@ export function LibraryScreen({ route, navigation }: Props) {
         subtitle={subtitle}
         showViewSettings={activeTab === 'media'}
         scope="library"
+        allowedCategories={mediaAllowed}
         isSelectionMode={activeTab === 'media' ? isSelectionMode : undefined}
         selectedCount={selectedCount}
         onEnterSelection={
