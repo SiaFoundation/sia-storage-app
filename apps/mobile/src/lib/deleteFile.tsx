@@ -1,48 +1,82 @@
-import { tryCatch } from '@siastorage/core'
-import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { TRASH_AUTO_PURGE_AGE } from '@siastorage/core/config'
 import { logger } from '@siastorage/logger'
-import {
-  deleteFileRecordAndThumbnails,
-  deleteManyFileRecordsAndThumbnails,
-  type FileRecord,
-} from '../stores/files'
+import { db, withTransactionLock } from '../db'
+import type { FileRecord } from '../stores/files'
+import { readFileRecordsByIds } from '../stores/files'
 import { removeFsFile } from '../stores/fs'
 import {
-  deleteLocalObjects,
-  deleteManyLocalObjects,
-} from '../stores/localObjects'
-import { getSdk } from '../stores/sdk'
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from '../stores/librarySwr'
 import { removeTempDownloadFile } from '../stores/tempFs'
 import { removeUploads } from '../stores/uploads'
 
-async function tryStep<T>(
-  step: string,
-  id: string,
-  fn: () => Promise<T>,
-): Promise<void> {
-  const [, err] = await tryCatch(fn)
-  if (err) {
-    logger.error('deleteFile', 'step_failed', { step, id, error: err as Error })
-  }
+/**
+ * Move files to trash by setting trashedAt. Trashed files are hidden from
+ * the library but can be restored. The updatedAt timestamp is bumped so
+ * syncUp pushes the change to the indexer. Associated thumbnails are also
+ * trashed.
+ */
+export async function trashFiles(fileIds: string[]): Promise<void> {
+  if (fileIds.length === 0) return
+  const now = Date.now()
+  const placeholders = fileIds.map(() => '?').join(',')
+  await withTransactionLock(async () => {
+    await db().runAsync(
+      `UPDATE files SET trashedAt = ?, updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      now,
+      ...fileIds,
+    )
+    await db().runAsync(
+      `UPDATE files SET trashedAt = ?, updatedAt = ? WHERE thumbForId IN (${placeholders})`,
+      now,
+      now,
+      ...fileIds,
+    )
+  })
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
+}
+
+/**
+ * Restore trashed files by clearing trashedAt. The updatedAt timestamp is
+ * bumped so syncUp pushes the change to the indexer. Associated thumbnails
+ * are also restored.
+ */
+export async function restoreFiles(fileIds: string[]): Promise<void> {
+  if (fileIds.length === 0) return
+  const now = Date.now()
+  const placeholders = fileIds.map(() => '?').join(',')
+  await withTransactionLock(async () => {
+    await db().runAsync(
+      `UPDATE files SET trashedAt = NULL, updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      ...fileIds,
+    )
+    await db().runAsync(
+      `UPDATE files SET trashedAt = NULL, updatedAt = ? WHERE thumbForId IN (${placeholders})`,
+      now,
+      ...fileIds,
+    )
+  })
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 }
 
 export async function permanentlyDeleteFile(file: FileRecord) {
-  removeUploads([file.id])
-  await tryStep('deleteFileRecord', file.id, () =>
-    deleteFileRecordAndThumbnails(file.id),
-  )
-  await tryStep('deleteAllIndexerObjects', file.id, () =>
-    deleteAllIndexerObjects(file),
-  )
-  await tryStep('deleteLocalObjects', file.id, () =>
-    deleteLocalObjects(file.id),
-  )
-  await tryStep('removeFsFile', file.id, () => removeFsFile(file))
-  await tryStep('removeTempDownloadFile', file.id, () =>
-    removeTempDownloadFile(file),
-  )
+  await permanentlyDeleteFiles([file])
 }
 
+/**
+ * Permanently delete files by setting the deletedAt tombstone. Tombstoned
+ * files are hidden from the UI and will never be resurrected by sync. The
+ * actual remote object deletion is handled by syncUp, which calls
+ * sdk.deleteObject() for each tombstoned file's objects on the next cycle.
+ *
+ * Local filesystem files are removed immediately. Any active uploads for
+ * the files are cancelled.
+ */
 export async function permanentlyDeleteFiles(
   files: FileRecord[],
 ): Promise<void> {
@@ -52,64 +86,63 @@ export async function permanentlyDeleteFiles(
 
   removeUploads(ids)
 
-  // Batch DB deletes (single transaction, single SWR trigger)
-  // Also delete thumbnails for these files
-  await deleteManyFileRecordsAndThumbnails(ids)
-  await deleteManyLocalObjects(ids)
+  const now = Date.now()
+  const placeholders = ids.map(() => '?').join(',')
+  await withTransactionLock(async () => {
+    await db().runAsync(
+      `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      now,
+      now,
+      ...ids,
+    )
+    await db().runAsync(
+      `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ? WHERE thumbForId IN (${placeholders})`,
+      now,
+      now,
+      now,
+      ...ids,
+    )
+  })
+  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryLists()
 
-  // Network deletions in parallel
-  await deleteAllIndexerObjectsForFiles(files)
-
-  // Filesystem deletions in parallel
+  const thumbs = await db().getAllAsync<{
+    id: string
+    type: string
+    localId: string | null
+  }>(
+    `SELECT id, type, localId FROM files WHERE thumbForId IN (${placeholders})`,
+    ...ids,
+  )
   await Promise.all(
-    files.flatMap((f) => [removeFsFile(f), removeTempDownloadFile(f)]),
+    [...files, ...thumbs].flatMap((f) => [
+      removeFsFile(f),
+      removeTempDownloadFile(f),
+    ]),
   )
 }
 
-async function deleteAllIndexerObjectsForFiles(
-  files: FileRecord[],
-): Promise<void> {
-  const sdk = getSdk()
-  if (!sdk) return
-
-  const objectIds = files.flatMap((f) =>
-    Object.values(f.objects ?? {})
-      .map((o) => o.id)
-      .filter(Boolean),
-  )
-
-  // Fire off all deletions in parallel (best effort)
-  await Promise.all(
-    objectIds.map((id) =>
-      sdk.deleteObject(id).catch(() => {
-        // Swallow errors - best effort deletion
-      }),
-    ),
-  )
-}
-
-export async function deleteFileFromNetwork(file: FileRecord) {
-  await tryStep('deleteAllIndexerObjects', file.id, () =>
-    deleteAllIndexerObjects(file),
-  )
-  await tryStep('deleteLocalObjects', file.id, () =>
-    deleteLocalObjects(file.id),
-  )
-}
-
-// TODO: in the future if a file is synced with multiple indexers,
-// we will need to init and use an sdk for each indexer.
-export async function deleteAllIndexerObjects(file: {
-  objects?: Record<string, LocalObject>
-}) {
-  if (!file.objects) return
-  const sdk = getSdk()
-  if (!sdk) return
-  for (const [_, object] of Object.entries(file.objects)) {
-    if (object.id) {
-      await tryStep('sdk.deleteObject', object.id, () =>
-        sdk.deleteObject(object.id),
-      )
+/**
+ * Permanently delete files that have been in the trash longer than
+ * TRASH_AUTO_PURGE_AGE (30 days). Sets the deletedAt tombstone so
+ * syncUp will handle remote object cleanup on the next tick.
+ */
+export async function autoPurgeOldTrashedFiles() {
+  try {
+    const cutoff = Date.now() - TRASH_AUTO_PURGE_AGE
+    const rows = await db().getAllAsync<{ id: string }>(
+      `SELECT id FROM files WHERE trashedAt IS NOT NULL AND trashedAt < ? AND deletedAt IS NULL AND kind = 'file'`,
+      cutoff,
+    )
+    if (rows.length === 0) return
+    const ids = rows.map((r) => r.id)
+    const files = await readFileRecordsByIds(ids)
+    if (files.length > 0) {
+      logger.info('deleteFile', 'auto_purge_trashed', { count: files.length })
+      await permanentlyDeleteFiles(files)
     }
+  } catch (error) {
+    logger.error('deleteFile', 'auto_purge_failed', { error: error as Error })
   }
 }

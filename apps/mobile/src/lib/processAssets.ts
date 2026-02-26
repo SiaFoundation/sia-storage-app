@@ -204,6 +204,8 @@ export async function processAssets(
       kind: 'file' as const,
       size: f.size!,
       hash: f.hash!,
+      trashedAt: null,
+      deletedAt: null,
       objects: {},
     }))
   const incompleteFiles = candidateFiles.filter(
@@ -225,7 +227,14 @@ export async function processAssets(
     )
   }
 
-  await updateManyFileRecords(existingFiles)
+  await updateManyFileRecords(
+    existingFiles.map((f) => ({
+      id: f.id,
+      name: f.name,
+      type: f.type,
+      localId: f.localId,
+    })),
+  )
   await createManyFileRecords(newFiles)
 
   // Move media files to the configured photo import directory.

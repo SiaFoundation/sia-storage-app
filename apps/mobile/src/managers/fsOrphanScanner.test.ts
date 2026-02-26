@@ -89,6 +89,8 @@ describe('fsOrphanScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: null,
+      trashedAt: null,
+      deletedAt: null,
     })
     await upsertFsFileMetadata({
       fileId: 'file-2',
@@ -136,6 +138,8 @@ describe('fsOrphanScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: null,
+      trashedAt: null,
+      deletedAt: null,
     })
     await upsertFsFileMetadata({
       fileId: 'b',
@@ -162,6 +166,8 @@ describe('fsOrphanScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: null,
+      trashedAt: null,
+      deletedAt: null,
     })
     await upsertFsFileMetadata({
       fileId: 'keep-1',
@@ -180,6 +186,36 @@ describe('fsOrphanScanner', () => {
     expect(orphaned.has('orphan-1')).toBe(true)
     expect(orphaned.has('orphan-2')).toBe(true)
     expect(orphaned.size).toBe(2)
+  })
+
+  it('treats tombstoned files as orphaned', async () => {
+    const file = makeFile('file-tomb.jpg')
+    listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
+    await createFileRecord({
+      id: 'file-tomb',
+      name: 'file-tomb.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: null,
+      trashedAt: now,
+      deletedAt: now,
+    })
+    await upsertFsFileMetadata({
+      fileId: 'file-tomb',
+      size: 100,
+      addedAt: now,
+      usedAt: now,
+    })
+
+    const result = await runFsOrphanScanner()
+
+    expect(file.delete).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ removed: 1 })
   })
 
   it('yields between batches via setTimeout', async () => {

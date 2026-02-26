@@ -121,6 +121,8 @@ async function createTestFile(id: string, size = 1000): Promise<FileEntry> {
     updatedAt: now,
     localId: null,
     addedAt: now,
+    trashedAt: null,
+    deletedAt: null,
   })
 
   const file = await readFileRecord(id)
@@ -149,6 +151,8 @@ function createFileEntry(id: string, size = 1000): FileEntry {
       updatedAt: Date.now(),
       localId: null,
       addedAt: Date.now(),
+      trashedAt: null,
+      deletedAt: null,
     },
     size,
   }

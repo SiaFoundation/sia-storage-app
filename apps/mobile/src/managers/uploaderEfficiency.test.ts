@@ -102,6 +102,8 @@ function createFileEntry(id: string, size = 1000): FileEntry {
       updatedAt: Date.now(),
       localId: null,
       addedAt: Date.now(),
+      trashedAt: null,
+      deletedAt: null,
     },
     size,
   }

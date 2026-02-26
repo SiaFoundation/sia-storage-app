@@ -89,6 +89,9 @@ export type SyncDownDeps = {
       record: Partial<FileRecordRow> & { id: string },
       options?: { includeUpdatedAt?: boolean },
     ): Promise<void>
+    // Only used by adopt to clean up local-only duplicate records after
+    // re-parenting to the canonical remote ID. Not for user-initiated
+    // deletes — those are tombstoned, never removed.
     delete(id: string): Promise<void>
   }
   localObjects: {
@@ -289,14 +292,37 @@ async function processBatch(
             counts.existing++
             break
           case 'delete':
-            // A file can have multiple objects (same file pinned to
-            // multiple indexers, or duplicate pins from v1 migration).
-            // Only delete the file record when no objects remain.
+            // Delete event: the remote object was deleted from this indexer.
+            //
+            // 1. Remove the local object row for this indexer.
+            // 2. Tombstone the file (set deletedAt) so it's hidden from the
+            //    UI and won't be resurrected by future sync events.
+            //
+            // File rows are NEVER removed from the database. In our
+            // event-log sync model, the tombstone is the permanent record
+            // that this file was deleted. Without it, a future sync event
+            // from another device or indexer would recreate the file.
+            // This is the same principle as CRDT tombstones.
+            //
+            // If the file has objects on other indexers, syncUp will
+            // eventually process the tombstone and call deleteObject for
+            // each remaining object. The object rows get cleaned up but
+            // the file row with its tombstone persists indefinitely.
             await deps.localObjects.delete(event.objectId, event.indexerURL)
+            if (!event.fileRecord.deletedAt) {
+              const now = Date.now()
+              await deps.files.update(
+                {
+                  id: event.fileId,
+                  deletedAt: now,
+                  trashedAt: event.fileRecord.trashedAt ?? now,
+                },
+                { includeUpdatedAt: false },
+              )
+            }
             if (
               (await deps.localObjects.countForFile(event.fileId)) === 0
             ) {
-              await deps.files.delete(event.fileId)
               deletedFileIds.add(event.fileId)
               counts.deleted++
             }
@@ -590,6 +616,7 @@ async function prepareFileRecord(
     id: fileId,
     localId: null,
     addedAt: Date.now(),
+    deletedAt: null,
   }
   return {
     kind: 'create',
@@ -632,6 +659,7 @@ async function prepareAdopt(
     id: fileId,
     localId: oldFile.localId,
     addedAt: oldFile.addedAt,
+    deletedAt: null,
   }
   return {
     kind: 'adopt',
@@ -649,7 +677,7 @@ async function prepareAdopt(
 /** Map decoded metadata to file record fields (all v1 fields preserved). */
 function toFileRecordFields(
   metadata: DecodedFileMetadata,
-): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt'> {
+): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt' | 'deletedAt'> {
   return {
     name: metadata.name,
     type: metadata.type,
@@ -660,6 +688,7 @@ function toFileRecordFields(
     updatedAt: metadata.updatedAt,
     thumbForId: metadata.thumbForId,
     thumbSize: metadata.thumbSize,
+    trashedAt: metadata.trashedAt ?? null,
   }
 }
 
@@ -681,7 +710,7 @@ function toFileRecordFields(
 function toV0SafeFileRecordFields(
   metadata: DecodedFileMetadata,
   existing: FileRecordRow,
-): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt'> {
+): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt' | 'deletedAt'> {
   return {
     name: metadata.name,
     type: metadata.type,
@@ -692,5 +721,6 @@ function toV0SafeFileRecordFields(
     updatedAt: Math.max(Date.now(), metadata.updatedAt, existing.updatedAt) + 1,
     thumbForId: existing.thumbForId,
     thumbSize: metadata.thumbSize,
+    trashedAt: existing.trashedAt ?? null,
   }
 }

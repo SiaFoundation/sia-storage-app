@@ -100,7 +100,7 @@ export async function findOrphanedFileIds(
      WHERE NOT EXISTS (
        SELECT 1 FROM fs WHERE fs.fileId = value
      ) OR NOT EXISTS (
-       SELECT 1 FROM files WHERE files.id = value
+       SELECT 1 FROM files WHERE files.id = value AND files.deletedAt IS NULL
      )`,
     JSON.stringify(fileIds),
   )

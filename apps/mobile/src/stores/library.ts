@@ -56,7 +56,7 @@ async function readOrderedFileRecords(
   }
 
   const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt
      FROM files
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,
@@ -147,7 +147,7 @@ export function useFileList(params: FileListParams) {
 export function useLibraryCount() {
   return useSWR(libraryStats.key('countNoThumbs'), async () => {
     const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE kind = 'file'`,
+      `SELECT COUNT(*) as count FROM files WHERE kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
     )
     return row?.count ?? 0
   })
@@ -159,6 +159,7 @@ export function useMediaCount() {
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files
        WHERE kind = 'file'
+         AND trashedAt IS NULL AND deletedAt IS NULL
          AND (type LIKE 'image/%' OR type LIKE 'video/%' OR type LIKE 'audio/%')`,
     )
     return row?.count ?? 0
@@ -171,7 +172,7 @@ export function useTagFileCount(tagId: string) {
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files f
        INNER JOIN file_tags ft ON ft.fileId = f.id
-       WHERE ft.tagId = ? AND f.kind = 'file'`,
+       WHERE ft.tagId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
       tagId,
     )
     return row?.count ?? 0
@@ -184,13 +185,13 @@ export function useDirectoryFileCount(directoryId: string) {
     if (directoryId === UNFILED_DIRECTORY_ID) {
       const row = await db().getFirstAsync<{ count: number }>(
         `SELECT COUNT(*) as count FROM files
-         WHERE directoryId IS NULL AND kind = 'file'`,
+         WHERE directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
       )
       return row?.count ?? 0
     }
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files
-       WHERE directoryId = ? AND kind = 'file'`,
+       WHERE directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
       directoryId,
     )
     return row?.count ?? 0
@@ -201,7 +202,7 @@ export function useUnfiledFileCount() {
   return useSWR(libraryStats.key('unfiledCount'), async () => {
     const row = await db().getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files
-       WHERE directoryId IS NULL AND kind = 'file'`,
+       WHERE directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
     )
     return row?.count ?? 0
   })
@@ -250,8 +251,9 @@ export function buildLibraryQueryParts(
 
   const whereParts: string[] = []
   const params: (string | number)[] = []
-  // Exclude thumbnails from library lists.
   whereParts.push(`${tableAlias}.kind = 'file'`)
+  whereParts.push(`${tableAlias}.trashedAt IS NULL`)
+  whereParts.push(`${tableAlias}.deletedAt IS NULL`)
 
   if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
     const categoryConditions: string[] = []

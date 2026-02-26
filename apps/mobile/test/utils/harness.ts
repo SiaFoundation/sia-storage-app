@@ -487,6 +487,8 @@ export async function addTestFilesToHarness(
       updatedAt: now,
       localId: null,
       addedAt: now,
+      trashedAt: null,
+      deletedAt: null,
     })
 
     // Add fs metadata entry so the file is detected as "local"

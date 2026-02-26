@@ -2,7 +2,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { logger } from '@siastorage/logger'
 import {
   ArrowDownToLineIcon,
-  CloudOffIcon,
   CloudUploadIcon,
   EraserIcon,
   FolderIcon,
@@ -16,11 +15,7 @@ import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
-import {
-  deleteFileFromNetwork,
-  permanentlyDeleteFile,
-  permanentlyDeleteFiles,
-} from '../lib/deleteFile'
+import { trashFiles } from '../lib/deleteFile'
 import { fileHasASealedObject, useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile, useDownload } from '../managers/downloader'
@@ -136,32 +131,18 @@ function SingleFileActionsSheet({
     }
   }, [file?.id, toast, onComplete, file, reupload])
 
-  const handleRemoveFromNetwork = useCallback(async () => {
-    if (!file) return
-    try {
-      await deleteFileFromNetwork(file)
-      toast.show('Removed from network')
-      onComplete?.()
-    } catch (e) {
-      logger.error('FileActionsSheet', 'remove_from_network_failed', {
-        error: e as Error,
-      })
-      toast.show('Failed to remove from network')
-    }
-  }, [file?.id, toast, onComplete, file])
-
   const handleDelete = useCallback(async () => {
     if (!file) return
     try {
-      await permanentlyDeleteFile(file)
+      await trashFiles([file.id])
       if (navigation) navigation.goBack()
-      toast.show('File deleted')
+      toast.show('Moved to trash')
       onComplete?.()
     } catch (e) {
       logger.error('FileActionsSheet', 'delete_file_failed', {
         error: e as Error,
       })
-      toast.show('Failed to delete file')
+      toast.show('Failed to move to trash')
     }
   }, [file, navigation, toast, onComplete])
 
@@ -214,15 +195,6 @@ function SingleFileActionsSheet({
           onPress={handlePressAndClose(handleRemoveLocalFile)}
         >
           Remove from device
-        </ActionSheetButton>
-      )}
-      {status.data?.isUploaded && (
-        <ActionSheetButton
-          variant="primary"
-          icon={<CloudOffIcon size={18} />}
-          onPress={handlePressAndClose(handleRemoveFromNetwork)}
-        >
-          Remove from network
         </ActionSheetButton>
       )}
       <ActionSheetButton
@@ -383,26 +355,6 @@ function BulkFileActionsSheet({
     }
   }, [counts, toast, onComplete])
 
-  const handleRemoveFromNetwork = useCallback(async () => {
-    if (!counts) return
-    try {
-      let removed = 0
-      for (const file of counts.files) {
-        if (fileHasASealedObject(file)) {
-          await deleteFileFromNetwork(file)
-          removed++
-        }
-      }
-      toast.show(`Removed ${removed} files from network`)
-      onComplete?.()
-    } catch (e) {
-      logger.error('FileActionsSheet', 'remove_files_from_network_failed', {
-        error: e as Error,
-      })
-      toast.show('Failed to remove files from network')
-    }
-  }, [counts, toast, onComplete])
-
   const handleUploadToNetwork = useCallback(async () => {
     if (!counts) return
     try {
@@ -428,14 +380,14 @@ function BulkFileActionsSheet({
   const handleDeleteAll = useCallback(async () => {
     if (!counts) return
     try {
-      await permanentlyDeleteFiles(counts.files)
-      toast.show(`Deleted ${counts.total} files`)
+      await trashFiles(counts.files.map((f) => f.id))
+      toast.show(`Moved ${counts.total} files to trash`)
       onComplete?.()
     } catch (e) {
       logger.error('FileActionsSheet', 'delete_files_failed', {
         error: e as Error,
       })
-      toast.show('Failed to delete files')
+      toast.show('Failed to move files to trash')
     }
   }, [counts, toast, onComplete])
 
@@ -470,14 +422,6 @@ function BulkFileActionsSheet({
       </ActionSheetButton>
       <ActionSheetButton
         variant="primary"
-        icon={<CloudOffIcon size={18} />}
-        onPress={handlePressAndClose(handleRemoveFromNetwork)}
-        disabled={!counts || counts.onNetwork === 0}
-      >
-        Remove from network{counts ? ` (${counts.onNetwork})` : ''}
-      </ActionSheetButton>
-      <ActionSheetButton
-        variant="primary"
         icon={<FolderIcon size={18} />}
         onPress={() => {
           closeSheet()
@@ -492,7 +436,7 @@ function BulkFileActionsSheet({
         onPress={handlePressAndClose(handleDeleteAll)}
         disabled={!counts}
       >
-        Delete {total} files
+        Move {total} files to trash
       </ActionSheetButton>
     </ActionSheet>
   )

@@ -40,10 +40,10 @@ export type ThumbnailScannerResult = {
 async function logOverallProgress() {
   try {
     const originalsRow = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND kind = 'file'`,
+      `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
     )
     const thumbsRow = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND thumbSize IN (${ThumbSizes.join(
+      `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND deletedAt IS NULL AND thumbSize IN (${ThumbSizes.join(
         ',',
       )})`,
     )
@@ -104,6 +104,7 @@ async function queryCandidateOriginals(
         AND t.thumbSize IN (${ThumbSizes.join(',')})
        WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
          AND f.kind = 'file'
+         AND f.trashedAt IS NULL AND f.deletedAt IS NULL
          ${cursorClause}
        GROUP BY f.id
        HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}

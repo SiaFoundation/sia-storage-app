@@ -171,7 +171,7 @@ export async function readAllTagsWithCounts(): Promise<TagWithCount[]> {
     `SELECT t.id, t.name, t.createdAt, t.usedAt, t.system, COUNT(f.id) as fileCount
      FROM tags t
      LEFT JOIN file_tags ft ON ft.tagId = t.id
-     LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file'
+     LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
      GROUP BY t.id
      ORDER BY t.system DESC, t.name COLLATE NOCASE`,
   )

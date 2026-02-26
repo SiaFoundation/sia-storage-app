@@ -2,6 +2,7 @@ import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import useSWR from 'swr'
 import { db } from '../db'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
+import { trashFiles } from '../lib/deleteFile'
 import { swrCacheBy } from '../lib/swr'
 import { invalidateCacheLibraryLists } from './librarySwr'
 
@@ -82,7 +83,7 @@ export async function readAllDirectoriesWithCounts(): Promise<
   return db().getAllAsync<DirectoryWithCount>(
     `SELECT d.id, d.name, d.createdAt, COUNT(f.id) as fileCount
      FROM directories d
-     LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file'
+     LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
      GROUP BY d.id
      ORDER BY d.name COLLATE NOCASE`,
   )
@@ -90,6 +91,20 @@ export async function readAllDirectoriesWithCounts(): Promise<
 
 export async function deleteDirectory(id: string): Promise<void> {
   await sqlUpdate('files', { directoryId: null }, { directoryId: id })
+  await sqlDelete('directories', { id })
+  directoriesSwr.invalidateAll()
+  invalidateCacheLibraryLists()
+}
+
+export async function deleteDirectoryAndTrashFiles(id: string): Promise<void> {
+  const files = await db().getAllAsync<{ id: string }>(
+    `SELECT id FROM files WHERE directoryId = ? AND kind = 'file'`,
+    id,
+  )
+  const fileIds = files.map((f) => f.id)
+  if (fileIds.length > 0) {
+    await trashFiles(fileIds)
+  }
   await sqlDelete('directories', { id })
   directoriesSwr.invalidateAll()
   invalidateCacheLibraryLists()

@@ -707,6 +707,7 @@ export function generateMockFileMetadata(
     hash: `hash-${index}`,
     createdAt: now - index * 1000,
     updatedAt: now - index * 1000,
+    trashedAt: null,
     ...overrides,
   }
 }

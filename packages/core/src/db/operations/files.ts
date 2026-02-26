@@ -29,6 +29,8 @@ export function transformRow(
     hash: row.hash,
     thumbForId: row.thumbForId ?? undefined,
     thumbSize: row.thumbSize ?? undefined,
+    trashedAt: row.trashedAt ?? null,
+    deletedAt: row.deletedAt ?? null,
     objects: objectsMap,
   }
 }
@@ -50,6 +52,8 @@ export async function insertFileRecord(
     addedAt,
     thumbForId,
     thumbSize,
+    trashedAt,
+    deletedAt,
   } = fileRecord
   await sqlInsert(db, 'files', {
     id,
@@ -64,6 +68,8 @@ export async function insertFileRecord(
     addedAt,
     thumbForId,
     thumbSize,
+    trashedAt,
+    deletedAt,
   })
 }
 
@@ -80,6 +86,7 @@ export type FileRecordsQueryOpts = {
   }
   fileExistsLocally?: boolean
   excludeIds?: string[]
+  activeOnly?: boolean
 }
 
 function buildFileRecordsQuery(
@@ -99,12 +106,18 @@ function buildFileRecordsQuery(
     orderBy,
     fileExistsLocally,
     excludeIds,
+    activeOnly,
   } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
   const params: (string | number)[] = []
 
   const whereClauses: string[] = []
+
+  if (activeOnly) {
+    whereClauses.push(`${tableAlias}.trashedAt IS NULL`)
+    whereClauses.push(`${tableAlias}.deletedAt IS NULL`)
+  }
 
   if (after) {
     if (order === 'ASC') {
@@ -201,7 +214,7 @@ export async function queryFileRecords(
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize,
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
@@ -245,7 +258,7 @@ export async function queryFileRecordByObjectId(
   indexerURL: string,
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
     objectId,
     indexerURL,
   )
@@ -256,7 +269,7 @@ export async function queryFileRecordsByLocalIds(
   localIds: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE localId IN (${localIds
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds,
@@ -268,7 +281,7 @@ export async function queryFileRecordsByContentHashes(
   contentHashes: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE hash IN (${contentHashes
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
     ...contentHashes,
@@ -280,7 +293,7 @@ export async function queryFileRecordByContentHash(
   hash: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE hash = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE hash = ?',
     hash,
   )
   if (!row) {
@@ -294,7 +307,7 @@ export async function queryFileRecordById(
   id: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize FROM files WHERE id = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE id = ?',
     id,
   )
   if (!row) {
@@ -320,13 +333,15 @@ export async function updateFileRecordFields(
     'thumbForId',
     'thumbSize',
     'localId',
+    'trashedAt',
+    'deletedAt',
   ]
   if (options.includeUpdatedAt) {
     updatableFields.push('updatedAt')
   }
   for (const field of updatableFields) {
     const value = update[field]
-    if (value === undefined || value === null) {
+    if (value === undefined) {
       continue
     }
     assignments[field] = value

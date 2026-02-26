@@ -19,6 +19,7 @@ export type FileMetadata = {
   thumbSize?: ThumbSize
   tags?: string[]
   directory?: string
+  trashedAt: number | null
   createdAt: number
   updatedAt: number
 }
@@ -38,17 +39,20 @@ export const fileMetadataKeys = keysOf<
   'updatedAt',
   'thumbForId',
   'thumbSize',
+  'trashedAt',
 ])
 
 /** Fields that are stored only in the local database. */
 export type FileLocalMetadata = {
   localId: string | null
   addedAt: number
+  deletedAt: number | null
 }
 
 export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
   'localId',
   'addedAt',
+  'deletedAt',
 ])
 
 export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &

@@ -35,6 +35,7 @@ const FileV1Schema = z.object({
   kind: z.literal('file'),
   tags: z.array(z.string()).optional(),
   directory: z.string().optional(),
+  trashedAt: z.number().nullable().optional(),
 })
 
 const ThumbV1Schema = z.object({
@@ -68,6 +69,7 @@ const FutureVersionSchema = z.object({
   thumbSize: z.number().optional(),
   tags: z.array(z.string()).optional(),
   directory: z.string().optional(),
+  trashedAt: z.number().nullable().optional(),
 })
 
 // Pre-versioned metadata format (no version, id, or kind fields).
@@ -110,6 +112,7 @@ export function encodeFileMetadata(
   if (meta.kind === 'file') {
     if (meta.tags) payload.tags = meta.tags
     if (meta.directory) payload.directory = meta.directory
+    payload.trashedAt = meta.trashedAt
   } else if (meta.kind === 'thumb') {
     payload.thumbForId = meta.thumbForId
     payload.thumbSize = meta.thumbSize
@@ -185,6 +188,9 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
       hash: v0.hash,
       createdAt: v0.createdAt,
       updatedAt: v0.updatedAt,
+      // Safe to default: v0 updates go through toV0SafeFileRecordFields
+      // which preserves existing.trashedAt from the local record.
+      trashedAt: null,
       thumbForHash: v0.thumbForHash,
       thumbForId: undefined,
       thumbSize: v0.thumbSize as ThumbSize | undefined,
@@ -232,10 +238,12 @@ function toDecodedMetadata(
     hash: data.hash,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    trashedAt: null,
   }
   if (kind === 'file') {
     result.tags = d.tags as string[] | undefined
     result.directory = d.directory as string | undefined
+    result.trashedAt = (d.trashedAt as number | null | undefined) ?? null
   } else if (kind === 'thumb') {
     result.thumbForId = d.thumbForId as string | undefined
     result.thumbForHash = d.thumbForHash as string | undefined
@@ -254,5 +262,6 @@ function emptyMetadata(): DecodedFileMetadata {
     hash: '',
     createdAt: 0,
     updatedAt: 0,
+    trashedAt: null,
   }
 }

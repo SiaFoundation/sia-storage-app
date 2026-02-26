@@ -92,18 +92,19 @@ describe('Full File Lifecycle', () => {
     // STEP 4: User deletes file on another device
     harness.sdk.injectDeleteEvent(objectId)
 
-    // Wait for syncDownEvents service to process the deletion
+    // Wait for syncDown to tombstone the file
     await waitForCondition(
       async () => {
         const deletedFile = await readFileRecord(file.id)
-        return deletedFile === null
+        return deletedFile?.deletedAt != null
       },
-      { timeout: 10_000, message: 'File to be deleted' },
+      { timeout: 10_000, message: 'File to be tombstoned' },
     )
 
-    // Verify: File removed everywhere
+    // Verify: file is tombstoned, object row cleaned up
     dbFile = await readFileRecord(file.id)
-    expect(dbFile).toBeNull()
+    expect(dbFile).not.toBeNull()
+    expect(dbFile!.deletedAt).not.toBeNull()
     objects = await readLocalObjectsForFile(file.id)
     expect(objects).toHaveLength(0)
     // The file's object should be gone from remote

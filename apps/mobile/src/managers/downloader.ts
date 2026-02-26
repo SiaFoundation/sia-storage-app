@@ -125,6 +125,8 @@ export function useDownloadFromShareURL() {
             updatedAt: Date.now(),
             localId: null,
             addedAt: Date.now(),
+            trashedAt: null,
+            deletedAt: null,
             objects: {},
           }
 

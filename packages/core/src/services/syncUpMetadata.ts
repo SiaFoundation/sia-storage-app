@@ -18,8 +18,8 @@ export function diffFileMetadata(
 ): Record<string, DiffEntry> {
   const diffs: Record<string, DiffEntry> = {}
   for (const key of fileMetadataKeys) {
-    const l = localMeta[key]
-    const r = remoteMeta[key]
+    const l = localMeta[key] ?? null
+    const r = remoteMeta[key] ?? null
     if (l !== r) {
       diffs[key] = { local: l, remote: r }
     }
@@ -42,10 +42,15 @@ export type SyncUpDeps = {
   sdk: {
     getPinnedObject(objectId: string): Promise<PinnedObjectRef>
     updateObjectMetadata(pinnedObject: PinnedObjectRef): Promise<void>
+    deleteObject(objectId: string): Promise<void>
   }
   files: {
     readAll(opts: FileRecordsQueryOpts): Promise<FileRecord[]>
     readAllCount(opts: FileRecordsQueryOpts): Promise<number>
+  }
+  localObjects: {
+    delete(objectId: string, indexerURL: string): Promise<void>
+    countForFile(fileId: string): Promise<number>
   }
   tags: {
     readNamesForFile(fileId: string): Promise<string[] | undefined>
@@ -86,6 +91,16 @@ async function tryWithLog<T>(
  * diff against local file metadata, and if local is newer, push to remote.
  * This function processes files with updatedAt after the cursor, to pick
  * up any unsynced changes.
+ *
+ * TODO: Multi-indexer cleanup gap. Currently we only connect to one indexer
+ * at a time, so this function only deletes objects for the current indexer.
+ * If a file has objects on Indexer A and B, and gets tombstoned while
+ * connected to A, only A's object is deleted. B's object row persists
+ * locally. Switching to B won't help because the syncUp cursor (which is
+ * global, not per-indexer) has already advanced past the file. A future
+ * cleanup service should scan for tombstoned files that still have object
+ * rows on non-current indexers. Alternatively, the cursor could be reset
+ * or stored per-indexer when multi-indexer support is added.
  */
 export async function runSyncUpMetadataBatch(
   batchSize: number,
@@ -144,6 +159,33 @@ export async function runSyncUpMetadataBatch(
       return pool.withSlot(async () => {
         if (signal.aborted) return
         const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
+
+        // Tombstoned files: delete the remote object and clean up the
+        // local object row. The file row itself is never removed — the
+        // tombstone is the permanent record of deletion, required for
+        // convergence across devices in our event-log sync model.
+        //
+        // This only deletes the object for the currently connected
+        // indexer. If the file has objects on other indexers, those
+        // object rows persist locally until the user connects to that
+        // indexer. See TODO below about the cleanup gap.
+        //
+        // If deleteObject fails, we must NOT clean up the local object
+        // row — we'd lose the reference to the remote object and could
+        // never retry. The batch stalls and retries on the next tick.
+        if (f.deletedAt) {
+          const result = await tryWithLog(
+            () => deps.sdk.deleteObject(obj.id),
+            'deleteObject',
+            ctx,
+          )
+          if (result === null) {
+            hasErrors = true
+            return
+          }
+          await deps.localObjects.delete(obj.id, indexerURL)
+          return
+        }
 
         const remote = await tryWithLog(
           () => deps.sdk.getPinnedObject(obj.id),
