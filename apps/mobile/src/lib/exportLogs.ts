@@ -86,6 +86,8 @@ export async function exportLogs(): Promise<string | null> {
       addedAt: now,
       localId: null,
       kind: 'file',
+      trashedAt: null,
+      deletedAt: null,
       thumbForId: undefined,
       thumbSize: undefined,
     })

@@ -31,6 +31,7 @@ const baseFile: FileMetadata = {
   hash: 'abc123',
   createdAt: 1000,
   updatedAt: 2000,
+  trashedAt: null,
 }
 
 const baseThumb: FileMetadata = {
@@ -42,6 +43,7 @@ const baseThumb: FileMetadata = {
   hash: 'thumb-hash',
   thumbForId: 'file-1',
   thumbSize: 64,
+  trashedAt: null,
   createdAt: 1000,
   updatedAt: 2000,
 }
@@ -71,6 +73,7 @@ describe('fileMetadata', () => {
         hash: 'abc123',
         createdAt: 1000,
         updatedAt: 2000,
+        trashedAt: null,
       })
     })
 
@@ -125,33 +128,39 @@ describe('fileMetadata', () => {
       it('decodes a v1 file', () => {
         const buf = encodeFileMetadata(baseFile)
         const result = decodeFileMetadata(buf)
-        expect(result).toEqual({
-          id: 'file-1',
-          name: 'photo.jpg',
-          type: 'image/jpeg',
-          kind: 'file',
-          size: 1024,
-          hash: 'abc123',
-          createdAt: 1000,
-          updatedAt: 2000,
-        })
+        expect(result).toEqual(
+          expect.objectContaining({
+            id: 'file-1',
+            name: 'photo.jpg',
+            type: 'image/jpeg',
+            kind: 'file',
+            size: 1024,
+            hash: 'abc123',
+            createdAt: 1000,
+            updatedAt: 2000,
+            trashedAt: null,
+          }),
+        )
       })
 
       it('decodes a v1 thumbnail with thumbForId', () => {
         const buf = encodeFileMetadata(baseThumb)
         const result = decodeFileMetadata(buf)
-        expect(result).toEqual({
-          id: 'thumb-1',
-          name: 'photo.jpg',
-          type: 'image/jpeg',
-          kind: 'thumb',
-          size: 512,
-          hash: 'thumb-hash',
-          thumbForId: 'file-1',
-          thumbSize: 64,
-          createdAt: 1000,
-          updatedAt: 2000,
-        })
+        expect(result).toEqual(
+          expect.objectContaining({
+            id: 'thumb-1',
+            name: 'photo.jpg',
+            type: 'image/jpeg',
+            kind: 'thumb',
+            size: 512,
+            hash: 'thumb-hash',
+            thumbForId: 'file-1',
+            thumbSize: 64,
+            createdAt: 1000,
+            updatedAt: 2000,
+            trashedAt: null,
+          }),
+        )
       })
 
       it('preserves thumbForHash when present in v1 thumb metadata', () => {
@@ -184,6 +193,7 @@ describe('fileMetadata', () => {
           hash: 'v0-hash',
           createdAt: 100,
           updatedAt: 200,
+          trashedAt: null,
           thumbForHash: undefined,
           thumbForId: undefined,
           thumbSize: undefined,
@@ -307,16 +317,19 @@ describe('fileMetadata', () => {
       it('file round-trips cleanly', () => {
         const encoded = encodeFileMetadata(baseFile)
         const decoded = decodeFileMetadata(encoded)
-        expect(decoded).toEqual({
-          id: baseFile.id,
-          name: baseFile.name,
-          type: baseFile.type,
-          kind: baseFile.kind,
-          size: baseFile.size,
-          hash: baseFile.hash,
-          createdAt: baseFile.createdAt,
-          updatedAt: baseFile.updatedAt,
-        })
+        expect(decoded).toEqual(
+          expect.objectContaining({
+            id: baseFile.id,
+            name: baseFile.name,
+            type: baseFile.type,
+            kind: baseFile.kind,
+            size: baseFile.size,
+            hash: baseFile.hash,
+            createdAt: baseFile.createdAt,
+            updatedAt: baseFile.updatedAt,
+            trashedAt: null,
+          }),
+        )
       })
 
       it('thumbnail round-trips cleanly', () => {

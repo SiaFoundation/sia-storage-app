@@ -4,6 +4,7 @@ import {
   readAllFileRecords,
   readAllFileRecordsCount,
   readFileRecord,
+  readFileRecordsByIds,
   updateFileRecord,
 } from './files'
 import { upsertFsFileMetadata } from './fs'
@@ -38,6 +39,8 @@ describe('files store queries', () => {
       addedAt: params.createdAt,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     })
   }
 
@@ -211,6 +214,8 @@ describe('updateFileRecord', () => {
       updatedAt: 100,
       localId: null,
       addedAt: 100,
+      trashedAt: null,
+      deletedAt: null,
     })
     await updateFileRecord({
       id: 'file-new',
@@ -237,6 +242,8 @@ describe('updateFileRecord', () => {
       updatedAt: 100,
       localId: null,
       addedAt: 100,
+      trashedAt: null,
+      deletedAt: null,
     })
     await updateFileRecord(
       {
@@ -250,5 +257,94 @@ describe('updateFileRecord', () => {
     const record = await readFileRecord('file-new')
     expect(record).toMatchObject({ name: 'new name', updatedAt: 4444 })
     expect(nowSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('activeOnly filter and null handling', () => {
+  const base = 2_000
+
+  beforeEach(async () => {
+    await initializeDB()
+  })
+
+  afterEach(async () => {
+    await resetDb()
+    jest.clearAllMocks()
+  })
+
+  async function createRecord(params: { id: string; createdAt: number }) {
+    await createFileRecord({
+      id: params.id,
+      name: `${params.id}.jpg`,
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: `hash-${params.id}`,
+      createdAt: params.createdAt,
+      updatedAt: params.createdAt,
+      localId: null,
+      addedAt: params.createdAt,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    })
+  }
+
+  test('trashedAt filter excludes trashed files from active queries', async () => {
+    await createRecord({ id: 'file-a', createdAt: base })
+
+    const before = await readAllFileRecords({ order: 'ASC', activeOnly: true })
+    expect(before.map((r) => r.id)).toContain('file-a')
+
+    await updateFileRecord({ id: 'file-a', trashedAt: base + 1 })
+
+    const afterActive = await readAllFileRecords({
+      order: 'ASC',
+      activeOnly: true,
+    })
+    expect(afterActive.map((r) => r.id)).not.toContain('file-a')
+
+    const afterAll = await readAllFileRecords({ order: 'ASC' })
+    expect(afterAll.map((r) => r.id)).toContain('file-a')
+  })
+
+  test('deletedAt filter excludes tombstones from active queries', async () => {
+    await createRecord({ id: 'file-b', createdAt: base })
+
+    const before = await readAllFileRecords({ order: 'ASC', activeOnly: true })
+    expect(before.map((r) => r.id)).toContain('file-b')
+
+    await updateFileRecord({ id: 'file-b', deletedAt: base + 1 })
+
+    const afterActive = await readAllFileRecords({
+      order: 'ASC',
+      activeOnly: true,
+    })
+    expect(afterActive.map((r) => r.id)).not.toContain('file-b')
+
+    const afterAll = await readAllFileRecords({ order: 'ASC' })
+    expect(afterAll.map((r) => r.id)).toContain('file-b')
+  })
+
+  test('updateFileRecord writes null values correctly', async () => {
+    await createRecord({ id: 'file-c', createdAt: base })
+    await updateFileRecord({ id: 'file-c', trashedAt: base + 1 })
+
+    const trashed = await readFileRecord('file-c')
+    expect(trashed?.trashedAt).toBe(base + 1)
+
+    await updateFileRecord({ id: 'file-c', trashedAt: null })
+
+    const restored = await readFileRecord('file-c')
+    expect(restored?.trashedAt).toBeNull()
+  })
+
+  test('readFileRecordsByIds returns tombstoned files', async () => {
+    await createRecord({ id: 'file-d', createdAt: base })
+    await updateFileRecord({ id: 'file-d', deletedAt: base + 1 })
+
+    const results = await readFileRecordsByIds(['file-d'])
+    expect(results.map((r) => r.id)).toContain('file-d')
   })
 })

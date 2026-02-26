@@ -52,6 +52,8 @@ describe('tags store', () => {
       updatedAt: 1000,
       localId: null,
       addedAt: 1000,
+      trashedAt: null,
+      deletedAt: null,
     })
   }
 

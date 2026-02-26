@@ -167,6 +167,8 @@ function makeFileRecord(id: string, size: number): FileRecord {
     updatedAt: now,
     addedAt: now,
     localId: null,
+    trashedAt: null,
+    deletedAt: null,
     objects: {},
   }
 }

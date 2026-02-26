@@ -89,6 +89,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue(null)
     const result = await runThumbnailScanner()
@@ -109,6 +111,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     for (const size of ThumbSizes) {
       await createFileRecord({
@@ -124,6 +128,8 @@ describe('thumbnailScanner', () => {
         localId: null,
         thumbForId: 'file1',
         thumbSize: size,
+        trashedAt: null,
+        deletedAt: null,
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
@@ -147,6 +153,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     for (const size of ThumbSizes) {
       if (size === 64) continue
@@ -163,6 +171,8 @@ describe('thumbnailScanner', () => {
         localId: null,
         thumbForId: 'file1',
         thumbSize: size,
+        trashedAt: null,
+        deletedAt: null,
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
@@ -195,6 +205,8 @@ describe('thumbnailScanner', () => {
         updatedAt: now - i,
         addedAt: now - i,
         localId: `local-nosource-${i}`,
+        trashedAt: null,
+        deletedAt: null,
       })
     }
 
@@ -211,6 +223,8 @@ describe('thumbnailScanner', () => {
         updatedAt: now - 100 - i,
         addedAt: now - 100 - i,
         localId: `local-covered-${i}`,
+        trashedAt: null,
+        deletedAt: null,
       })
       for (const size of ThumbSizes) {
         await createFileRecord({
@@ -226,6 +240,8 @@ describe('thumbnailScanner', () => {
           localId: null,
           thumbForId: `covered-${i}`,
           thumbSize: size,
+          trashedAt: null,
+          deletedAt: null,
         })
       }
     }
@@ -241,6 +257,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now - 500,
       addedAt: now - 500,
       localId: 'local-eligible-1',
+      trashedAt: null,
+      deletedAt: null,
     })
 
     getFsFileUriMock.mockImplementation(async ({ id }: { id: string }) => {
@@ -275,6 +293,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: null,
+      trashedAt: null,
+      deletedAt: null,
     })
     await createFileRecord({
       id: 'thumb-64',
@@ -289,6 +309,8 @@ describe('thumbnailScanner', () => {
       localId: null,
       thumbForId: 'file1',
       thumbSize: 64,
+      trashedAt: null,
+      deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
@@ -309,6 +331,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-video1',
+      trashedAt: null,
+      deletedAt: null,
     })
     let counter = 0
     calculateContentHashMock.mockImplementation(
@@ -341,6 +365,8 @@ describe('thumbnailScanner', () => {
         updatedAt: now,
         addedAt: now,
         localId: `local-${i}`,
+        trashedAt: null,
+        deletedAt: null,
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
@@ -365,6 +391,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     imageGetSizeMock.mockImplementation((_, _ok, err) => {
@@ -402,6 +430,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
 
@@ -427,6 +457,8 @@ describe('thumbnailScanner', () => {
         updatedAt: now - i,
         addedAt: now - i,
         localId: `local-${i}`,
+        trashedAt: null,
+        deletedAt: null,
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
@@ -471,6 +503,8 @@ describe('thumbnailScanner', () => {
       updatedAt: now,
       addedAt: now,
       localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     imageGetSizeMock.mockImplementation((_, ok) => {

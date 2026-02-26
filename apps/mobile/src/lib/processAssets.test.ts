@@ -76,6 +76,8 @@ describe('processAssets', () => {
         localId: '1',
         hash: '',
         addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
       },
       false,
     )
@@ -122,6 +124,8 @@ describe('processAssets', () => {
         localId: '1',
         hash: '',
         addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
       },
       false,
     )
@@ -160,6 +164,8 @@ describe('processAssets', () => {
         hash: 'sha256:existing-hash',
         localId: null,
         addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
       },
       false,
     )
@@ -195,6 +201,8 @@ describe('processAssets', () => {
         hash: 'sha256:existing-hash',
         localId: null,
         addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
       },
       false,
     )

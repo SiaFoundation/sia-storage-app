@@ -3,6 +3,7 @@ import { initializeDB, resetDb } from '../db'
 import {
   createFileRecordWithLocalObject,
   type FileRecord,
+  updateFileRecord,
 } from '../stores/files'
 import {
   getSyncUpCursor,
@@ -53,6 +54,7 @@ describe('syncUpMetadata', () => {
   const INDEXER_URL = 'indexer-url'
   const NOW_BASE = 400
   const mockUpdateObjectMetadata = jest.fn()
+  const mockDeleteObject = jest.fn()
 
   beforeEach(async () => {
     await initializeDB()
@@ -62,6 +64,7 @@ describe('syncUpMetadata', () => {
     sdk.getIsConnected.mockReturnValue(true)
     sdk.getSdk.mockReturnValue({
       updateObjectMetadata: mockUpdateObjectMetadata,
+      deleteObject: mockDeleteObject,
     })
   })
 
@@ -86,6 +89,8 @@ describe('syncUpMetadata', () => {
       addedAt: 100,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       localA,
@@ -112,6 +117,8 @@ describe('syncUpMetadata', () => {
       addedAt: 110,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       localB,
@@ -192,6 +199,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE + i,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       }
       await createFileRecordWithLocalObject(
         file,
@@ -247,6 +256,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE + i,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       }
       await createFileRecordWithLocalObject(
         file,
@@ -302,6 +313,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       },
       {
         id: 'file-1',
@@ -316,6 +329,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE + 1,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       },
       {
         id: 'file-2',
@@ -330,6 +345,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE + 2,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       },
     ]
 
@@ -383,6 +400,8 @@ describe('syncUpMetadata', () => {
       addedAt: 100,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       localFile,
@@ -411,6 +430,7 @@ describe('syncUpMetadata', () => {
       updatedAt: 200,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     })
 
     await runSyncUpMetadata(5)
@@ -434,6 +454,8 @@ describe('syncUpMetadata', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -470,6 +492,8 @@ describe('syncUpMetadata', () => {
         addedAt: NOW_BASE + i,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
       }
       await createFileRecordWithLocalObject(
         file,
@@ -523,6 +547,8 @@ describe('syncUpMetadata', () => {
       addedAt: 100,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       localFile,
@@ -559,5 +585,236 @@ describe('syncUpMetadata', () => {
       expect.objectContaining({ id: 'remote-id', name: 'renamed.jpg' }),
       { thumbForHash: undefined },
     )
+  })
+
+  test('syncUp calls deleteObject for tombstoned files', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-tomb',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
+      includeUpdatedAt: false,
+    })
+
+    mockDeleteObject.mockResolvedValue(undefined)
+
+    await runSyncUpMetadata(5)
+
+    expect(mockDeleteObject).toHaveBeenCalledWith('obj-tomb')
+  })
+
+  test('syncUp advances cursor after successful deleteObject for tombstoned files', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-tomb2',
+      name: 'photo2.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb2',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb2',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
+      includeUpdatedAt: false,
+    })
+
+    mockDeleteObject.mockResolvedValue(undefined)
+
+    await runSyncUpMetadata(5)
+
+    const cur = await getSyncUpCursor()
+    expect(cur).toBeDefined()
+  })
+
+  test('syncUp stalls on network error for tombstoned file', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-tomb3',
+      name: 'photo3.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb3',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb3',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
+      includeUpdatedAt: false,
+    })
+
+    mockDeleteObject.mockRejectedValue(new Error('network error'))
+
+    await runSyncUpMetadata(5)
+
+    const cur = await getSyncUpCursor()
+    expect(cur).toBeUndefined()
+  })
+
+  test('syncUp skips metadata path and only calls deleteObject for tombstoned files', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-tomb4',
+      name: 'photo4.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb4',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb4',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
+      includeUpdatedAt: false,
+    })
+
+    mockDeleteObject.mockResolvedValue(undefined)
+
+    await runSyncUpMetadata(5)
+
+    expect(sdk.getPinnedObject).not.toHaveBeenCalled()
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
+    expect(mockDeleteObject).toHaveBeenCalledWith('obj-tomb4')
+  })
+
+  test('tombstoned file with object on another indexer leaves that object row dangling', async () => {
+    sdk.getIsConnected.mockReturnValue(true)
+    const OTHER_INDEXER = 'other-indexer-url'
+
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-multi-idx',
+      name: 'multi.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-multi-idx',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+
+    // Create file with objects on both the current indexer and another indexer.
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-current',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    const { upsertLocalObject } = require('../stores/localObjects')
+    await upsertLocalObject(
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-other',
+        indexerURL: OTHER_INDEXER,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+      false,
+    )
+
+    // Tombstone the file.
+    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
+      includeUpdatedAt: false,
+    })
+
+    mockDeleteObject.mockResolvedValue(undefined)
+    await runSyncUpMetadata(5)
+
+    // syncUp only deletes the current indexer's object.
+    expect(mockDeleteObject).toHaveBeenCalledTimes(1)
+    expect(mockDeleteObject).toHaveBeenCalledWith('obj-current')
+
+    // The other indexer's object row persists locally. This is a known
+    // limitation: we can only connect to one indexer at a time, so we
+    // can't delete objects on other indexers. A future cleanup service
+    // is needed to handle this (see TODO in syncUpMetadata.ts).
+    const { readLocalObjectsForFile } = require('../stores/localObjects')
+    const remaining = await readLocalObjectsForFile(file.id)
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].id).toBe('obj-other')
+    expect(remaining[0].indexerURL).toBe(OTHER_INDEXER)
   })
 })

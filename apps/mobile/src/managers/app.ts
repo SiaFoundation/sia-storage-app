@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
+import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
 import { type InitStep, setAppState } from '../stores/app'
 import { clearAppKeys } from '../stores/appKey'
 import { useAuthWebViewStore } from '../stores/authWebView'
@@ -83,6 +84,7 @@ export async function initApp(): Promise<void> {
       label: 'Cleaning up old files',
       message: 'Cleaning up old files...',
       runner: async (updateMessage) => {
+        await autoPurgeOldTrashedFiles()
         await runFsOrphanScanner({
           onProgress: (removed) => {
             updateMessage(`Cleaning up old files... ${removed} removed`)

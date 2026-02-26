@@ -265,6 +265,8 @@ export async function ensureThumbnailForSize(params: {
         localId: null,
         thumbForId: fileId,
         thumbSize: size,
+        trashedAt: null,
+        deletedAt: null,
       },
       true,
     )

@@ -43,6 +43,8 @@ describe('fileCarousel virtual list functions', () => {
       updatedAt: params.createdAt,
       localId: null,
       addedAt: params.addedAt ?? params.createdAt,
+      trashedAt: null,
+      deletedAt: null,
     })
   }
 
@@ -552,6 +554,8 @@ describe('useFileCarousel hook', () => {
       updatedAt: params.createdAt,
       localId: null,
       addedAt: params.createdAt,
+      trashedAt: null,
+      deletedAt: null,
     })
   }
 
@@ -793,6 +797,8 @@ describe('useFileCarousel hook', () => {
         addedAt: base + 20,
         thumbForId: undefined,
         thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
         objects: {},
         objectsHash: '',
       }

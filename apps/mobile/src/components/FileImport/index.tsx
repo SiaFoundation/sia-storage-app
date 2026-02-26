@@ -137,6 +137,8 @@ async function downloadAndProcessFile(
       hash: hash ?? '',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      trashedAt: null,
+      deletedAt: null,
       objects: {},
     } satisfies FileRecord
   } catch (e) {
@@ -224,6 +226,8 @@ export function FileImport({
       hash: '', // Placeholder until calculated.
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      trashedAt: null,
+      deletedAt: null,
       objects: {},
     } satisfies FileRecord
   }, [sharedObject.data, id, fileSize, detectedType.data])

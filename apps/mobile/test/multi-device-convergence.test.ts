@@ -14,12 +14,14 @@
 import './utils/setup'
 
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
+import { permanentlyDeleteFiles, trashFiles } from '../src/lib/deleteFile'
 import {
   createDirectory,
   moveFileToDirectory,
   readDirectoryNameForFile,
 } from '../src/stores/directories'
 import { readAllFileRecords, readFileRecord } from '../src/stores/files'
+import { readLocalObjectsForFile } from '../src/stores/localObjects'
 import { addTagToFile, readTagsForFile } from '../src/stores/tags'
 import { readThumbnailsByFileId } from '../src/stores/thumbnails'
 import {
@@ -272,6 +274,7 @@ describe('Multi-Device Convergence', () => {
         updatedAt: Date.now(),
         thumbForId: parentFileId,
         thumbSize: 64,
+        trashedAt: null,
       },
     })
 
@@ -623,6 +626,7 @@ describe('Multi-Device Convergence', () => {
         updatedAt: Date.now(),
         thumbForId: parentFileId,
         thumbSize: 64,
+        trashedAt: null,
       },
     })
 
@@ -785,23 +789,22 @@ describe('Multi-Device Convergence', () => {
 
     await waitForCondition(
       async () => {
-        const files = await readAllFileRecords({ order: 'ASC' })
-        return files.length === 2
+        const file = await readFileRecord(deviceAFiles[0].id)
+        return file?.deletedAt != null
       },
-      { timeout: 15_000, message: 'Device B to sync delete' },
+      { timeout: 15_000, message: 'Device B to tombstone deleted file' },
     )
 
-    const remainingFiles = await readAllFileRecords({ order: 'ASC' })
-    expect(remainingFiles).toHaveLength(2)
-
-    // The deleted file should be gone
+    // The deleted file should be tombstoned, not removed
     const deletedFile = await readFileRecord(deviceAFiles[0].id)
-    expect(deletedFile).toBeNull()
+    expect(deletedFile).not.toBeNull()
+    expect(deletedFile!.deletedAt).not.toBeNull()
 
-    // The other two files should still exist
+    // The other two files should still be active
     for (const file of deviceAFiles.slice(1)) {
       const remaining = await readFileRecord(file.id)
       expect(remaining).not.toBeNull()
+      expect(remaining!.deletedAt).toBeNull()
     }
 
     await harnessB.shutdown()
@@ -989,6 +992,158 @@ describe('Multi-Device Convergence', () => {
 
     await harnessB.shutdown()
   }, 90_000)
+
+  it('trash and tombstone converge across two devices', async () => {
+    const sharedStorage = createEmptyStorage()
+
+    // Device A: upload 2 data files
+    const sdkA = new MockSdk(sharedStorage)
+    const harnessA = createHarness({ sdk: sdkA })
+    await harnessA.start()
+
+    const fileFactories = generateTestFiles(2, { type: 'data' })
+    const testFiles = await addTestFilesToHarness(harnessA, fileFactories)
+    await harnessA.waitForNoActiveUploads()
+    await waitForAllObjectsV1(sharedStorage, 2)
+
+    const fileIdA = testFiles[0].id
+    const fileIdB = testFiles[1].id
+
+    await harnessA.shutdown()
+
+    // Device B: sync both files
+    const sdkB = new MockSdk(sharedStorage)
+    const harnessB = createHarness({ sdk: sdkB })
+    await harnessB.start()
+
+    await harnessB.waitForFileCount(2)
+
+    // Both files are active
+    let file1 = await readFileRecord(fileIdA)
+    let file2 = await readFileRecord(fileIdB)
+    expect(file1!.trashedAt).toBeNull()
+    expect(file1!.deletedAt).toBeNull()
+    expect(file2!.trashedAt).toBeNull()
+    expect(file2!.deletedAt).toBeNull()
+
+    // Simulate Device A trashing file 1 (metadata update with trashedAt)
+    harnessB.pause()
+    const objectEntries = Array.from(sharedStorage.objects.entries())
+    const obj1Entry = objectEntries.find(([_, obj]) => {
+      try {
+        const meta = decodeFileMetadata(obj.metadata)
+        return meta.id === fileIdA
+      } catch {
+        return false
+      }
+    })!
+    const obj2Entry = objectEntries.find(([_, obj]) => {
+      try {
+        const meta = decodeFileMetadata(obj.metadata)
+        return meta.id === fileIdB
+      } catch {
+        return false
+      }
+    })!
+
+    const trashTime = Date.now() + 5000
+    sdkB.injectMetadataChange(obj1Entry[0], {
+      trashedAt: trashTime,
+      updatedAt: trashTime,
+    })
+    harnessB.resume()
+
+    // Device B sees the trash via syncDown
+    await waitForCondition(
+      async () => {
+        const file = await readFileRecord(fileIdA)
+        return file?.trashedAt != null
+      },
+      { timeout: 15_000, message: 'Device B to see trashedAt on file 1' },
+    )
+
+    file1 = await readFileRecord(fileIdA)
+    expect(file1!.trashedAt).not.toBeNull()
+    expect(file1!.deletedAt).toBeNull()
+
+    // Device B trashes file 2 locally
+    await trashFiles([fileIdB])
+    file2 = await readFileRecord(fileIdB)
+    expect(file2!.trashedAt).not.toBeNull()
+    expect(file2!.deletedAt).toBeNull()
+
+    // Wait for Device B's syncUp to push trashedAt for file 2
+    await waitForCondition(
+      () => {
+        try {
+          const meta = decodeFileMetadata(
+            sharedStorage.objects.get(obj2Entry[0])!.metadata,
+          )
+          return meta.trashedAt != null
+        } catch {
+          return false
+        }
+      },
+      {
+        timeout: 15_000,
+        message: 'Device B syncUp to push trashedAt for file 2',
+      },
+    )
+
+    // Simulate Device A permanently deleting file 1 (object deleted from indexer)
+    harnessB.pause()
+    const deleteSdk = new MockSdk(sharedStorage)
+    await deleteSdk.deleteObject(obj1Entry[0])
+    harnessB.resume()
+
+    // Device B processes the delete event → tombstone
+    await waitForCondition(
+      async () => {
+        const file = await readFileRecord(fileIdA)
+        return file?.deletedAt != null
+      },
+      { timeout: 15_000, message: 'Device B to tombstone file 1' },
+    )
+
+    file1 = await readFileRecord(fileIdA)
+    expect(file1!.deletedAt).not.toBeNull()
+
+    // Local object row cleaned up
+    const objects1 = await readLocalObjectsForFile(fileIdA)
+    expect(objects1).toHaveLength(0)
+
+    // File row persists as tombstone
+    expect(await readFileRecord(fileIdA)).not.toBeNull()
+
+    // Device B permanently deletes file 2
+    file2 = (await readFileRecord(fileIdB))!
+    await permanentlyDeleteFiles([file2])
+
+    file2 = (await readFileRecord(fileIdB))!
+    expect(file2.deletedAt).not.toBeNull()
+
+    // Wait for Device B's syncUp to call deleteObject for file 2
+    await waitForCondition(() => !sharedStorage.objects.has(obj2Entry[0]), {
+      timeout: 15_000,
+      message: 'Device B syncUp to delete file 2 object',
+    })
+
+    // Delete event was pushed to shared storage
+    const deleteEvents = sharedStorage.events.filter(
+      (e) => e.id === obj2Entry[0] && e.deleted,
+    )
+    expect(deleteEvents.length).toBeGreaterThan(0)
+
+    // Local object row cleaned up for file 2
+    const objects2 = await readLocalObjectsForFile(fileIdB)
+    expect(objects2).toHaveLength(0)
+
+    // Both files are tombstoned
+    expect((await readFileRecord(fileIdA))!.deletedAt).not.toBeNull()
+    expect((await readFileRecord(fileIdB))!.deletedAt).not.toBeNull()
+
+    await harnessB.shutdown()
+  }, 60_000)
 
   it('v0 node overwrites v1: tags and directory preserved, syncUp repairs', async () => {
     const sharedStorage = createEmptyStorage()

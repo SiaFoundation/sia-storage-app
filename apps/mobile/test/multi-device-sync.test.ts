@@ -144,17 +144,19 @@ describe('Multi-Device Sync', () => {
     // Phone deletes the file
     harness.sdk.injectDeleteEvent(objectId)
 
-    // Wait for syncDownEvents service to process the deletion
+    // Wait for syncDown to tombstone the file
     await waitForCondition(
       async () => {
         const dbFile = await readFileRecord(file.id)
-        return dbFile === null
+        return dbFile?.deletedAt != null
       },
-      { timeout: 10_000, message: 'File to be deleted' },
+      { timeout: 10_000, message: 'File to be tombstoned' },
     )
 
-    // Verify: File removed locally
-    expect(await readFileRecord(file.id)).toBeNull()
+    // Verify: file is tombstoned, object row cleaned up
+    const dbFile = await readFileRecord(file.id)
+    expect(dbFile).not.toBeNull()
+    expect(dbFile!.deletedAt).not.toBeNull()
     const objects = await readLocalObjectsForFile(file.id)
     expect(objects).toHaveLength(0)
   }, 30_000)

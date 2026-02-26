@@ -9,6 +9,7 @@ import {
   type FileRecord,
   readFileRecord,
   readFileRecordByObjectId,
+  updateFileRecord,
 } from '../stores/files'
 import { removeFsFile } from '../stores/fs'
 import {
@@ -175,6 +176,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const metadata2: FileMetadata = {
@@ -188,6 +190,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -242,6 +245,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -282,6 +286,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -334,6 +340,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -357,6 +365,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -390,6 +399,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -425,6 +435,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -449,6 +461,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 100, // Newer timestamp.
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -507,6 +520,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -531,6 +546,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE, // Older timestamp.
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -574,6 +590,7 @@ describe('syncDownEvents', () => {
       updatedAt: 0,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -609,6 +626,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -675,6 +694,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const metadata2: FileMetadata = {
@@ -688,6 +708,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -733,6 +754,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-thumb',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -767,6 +789,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
     const events1: ObjectEvent[] = [
       makeObjectEvent({
@@ -788,6 +811,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
     // Second run should use cursor from first run.
     const events2: ObjectEvent[] = [
@@ -849,6 +873,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const metadata2: FileMetadata = {
@@ -862,6 +887,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -897,6 +923,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -934,6 +961,7 @@ describe('syncDownEvents', () => {
       hash: 'same-hash',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
+      trashedAt: null,
     }
 
     const metadata2: FileMetadata = {
@@ -945,6 +973,7 @@ describe('syncDownEvents', () => {
       hash: 'same-hash',
       createdAt: NOW_BASE + 1,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -987,6 +1016,8 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE,
       localId: null,
       addedAt: NOW_BASE,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       fileA,
@@ -1009,6 +1040,7 @@ describe('syncDownEvents', () => {
       hash: 'same-hash',
       createdAt: NOW_BASE + 1,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1046,6 +1078,7 @@ describe('syncDownEvents', () => {
       thumbSize: 64,
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
+      trashedAt: null,
     }
 
     const thumb2: FileMetadata = {
@@ -1059,6 +1092,7 @@ describe('syncDownEvents', () => {
       thumbSize: 64,
       createdAt: NOW_BASE + 1,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1098,6 +1132,7 @@ describe('syncDownEvents', () => {
       hash: 'abc123',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
+      trashedAt: null,
     }
 
     // Two different objects on the indexer share the same metadata.id
@@ -1150,6 +1185,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       parent,
@@ -1175,6 +1212,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined, // NULL — migration couldn't resolve
       thumbSize: 64,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       thumb,
@@ -1275,6 +1314,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -1296,6 +1337,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1338,6 +1380,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE - 500,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -1359,6 +1403,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1396,6 +1441,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -1427,6 +1474,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1484,6 +1532,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: 'parent-file',
       thumbSize: 64,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       thumb,
@@ -1507,6 +1557,7 @@ describe('syncDownEvents', () => {
       updatedAt: NOW_BASE + 1,
       thumbForId: 'parent-file',
       thumbSize: 64,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1551,6 +1602,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -1587,9 +1640,10 @@ describe('syncDownEvents', () => {
 
     await syncDownEvents(new AbortController().signal)
 
-    // The file record should still exist because the other indexer's object remains.
+    // Tombstoned file row must persist — tombstones are never removed.
     const fileRecord = await readFileRecord('file-1')
     expect(fileRecord).not.toBeNull()
+    expect(fileRecord!.deletedAt).not.toBeNull()
 
     // The other indexer's object should still be present.
     const objects = await readLocalObjectsForFile('file-1')
@@ -1612,6 +1666,8 @@ describe('syncDownEvents', () => {
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
     }
     await createFileRecordWithLocalObject(
       file,
@@ -1636,6 +1692,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 1,
+      trashedAt: null,
     }
 
     const events: ObjectEvent[] = [
@@ -1657,5 +1714,190 @@ describe('syncDownEvents', () => {
     expect(fileRecord).not.toBeNull()
     const objects = await readLocalObjectsForFile('file-1')
     expect(objects).toHaveLength(2)
+  })
+
+  test('delete event sets deletedAt tombstone on file when other objects remain', async () => {
+    // Create a file with two objects: one on the current indexer, one on another.
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-1',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1024,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-current',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await upsertLocalObject(
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-other',
+        indexerURL: 'other-indexer',
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-current',
+        updatedAt: new Date(NOW_BASE + 1),
+        deleted: true,
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    await syncDownEvents(new AbortController().signal)
+
+    // Tombstoned file row must persist — tombstones are never removed.
+    const fileRecord = await readFileRecord('file-1')
+    expect(fileRecord).not.toBeNull()
+    expect(fileRecord!.deletedAt).not.toBeNull()
+
+    // Only the other indexer's object should remain.
+    const remainingObjects = await readLocalObjectsForFile('file-1')
+    expect(remainingObjects).toHaveLength(1)
+    expect(remainingObjects[0].indexerURL).toBe('other-indexer')
+  })
+
+  test('delete event on already-tombstoned file preserves tombstone when no objects remain', async () => {
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-1',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1024,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-1',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+
+    await updateFileRecord({ id: 'file-1', deletedAt: 5000 })
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-1',
+        updatedAt: new Date(NOW_BASE + 1),
+        deleted: true,
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    await syncDownEvents(new AbortController().signal)
+
+    // Object row should be gone.
+    const deletedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    expect(deletedFile).toBeNull()
+
+    // Tombstoned file row must persist even with zero objects remaining.
+    const fileRecord = await readFileRecord('file-1')
+    expect(fileRecord).not.toBeNull()
+    expect(fileRecord!.deletedAt).toBe(5000)
+  })
+
+  test('tombstone blocks syncDown from clearing deletedAt via metadata update', async () => {
+    // Create a file with a single object.
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'file-1',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1024,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await createFileRecordWithLocalObject(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-1',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+
+    // Tombstone the file.
+    await updateFileRecord({ id: 'file-1', deletedAt: 5000 })
+
+    // Inject a metadata UPDATE event for the same object with a newer updatedAt.
+    const updatedMetadata: FileMetadata = {
+      id: 'file-1',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1024,
+      hash: 'hash-1',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE + 100,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+    }
+
+    const events: ObjectEvent[] = [
+      makeObjectEvent({
+        id: 'obj-1',
+        updatedAt: new Date(NOW_BASE + 100),
+        object: makeMockPinnedObject(updatedMetadata, 'obj-1'),
+      }),
+    ]
+
+    getSdkMock.mockReturnValue({
+      objectEvents: jest.fn().mockResolvedValueOnce(events),
+    } as any)
+
+    await syncDownEvents(new AbortController().signal)
+
+    // The tombstone must NOT be cleared by the metadata merge, because
+    // toFileRecordFields does not include deletedAt.
+    const fileRecord = await readFileRecord('file-1')
+    expect(fileRecord).not.toBeNull()
+    expect(fileRecord!.deletedAt).not.toBeNull()
   })
 })

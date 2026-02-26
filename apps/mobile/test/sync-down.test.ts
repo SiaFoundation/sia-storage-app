@@ -113,13 +113,13 @@ describe('Sync Down Integration', () => {
     // Inject delete event
     harness.sdk.injectDeleteEvent(stored.id)
 
-    // Wait for delete to sync
+    // Wait for syncDown to tombstone the file
     await waitForCondition(
       async () => {
         const files = await readAllFileRecords({ order: 'ASC' })
-        return files.length === 0
+        return files.length === 1 && files[0].deletedAt != null
       },
-      { timeout: 10_000, message: 'File to be deleted' },
+      { timeout: 10_000, message: 'File to be tombstoned' },
     )
   })
 

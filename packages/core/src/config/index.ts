@@ -62,5 +62,7 @@ export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files
 export const SYNC_UP_METADATA_CONCURRENCY = 30
 // Auto-download threshold for shared file imports.
 export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
+// Auto-purge trashed files older than this threshold.
+export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)

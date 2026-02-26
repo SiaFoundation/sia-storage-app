@@ -9,6 +9,10 @@ import { z } from 'zod'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { readDirectoryNameForFile } from '../stores/directories'
 import { readAllFileRecords, readAllFileRecordsCount } from '../stores/files'
+import {
+  countLocalObjectsForFile,
+  deleteLocalObject,
+} from '../stores/localObjects'
 import { getIsConnected, getPinnedObject, getSdk } from '../stores/sdk'
 import { getIndexerURL } from '../stores/settings'
 import {
@@ -68,10 +72,20 @@ export async function runSyncUpMetadata(
           if (!sdk) throw new Error('SDK not initialized')
           await sdk.updateObjectMetadata(pinnedObject)
         },
+        deleteObject: async (objectId) => {
+          const sdk = getSdk()
+          if (!sdk) throw new Error('SDK not initialized')
+          await sdk.deleteObject(objectId)
+        },
       },
       files: {
         readAll: readAllFileRecords,
         readAllCount: readAllFileRecordsCount,
+      },
+      localObjects: {
+        delete: (objectId, indexerURL) =>
+          deleteLocalObject(objectId, indexerURL, false),
+        countForFile: countLocalObjectsForFile,
       },
       tags: { readNamesForFile: readTagNamesForFile },
       directories: { readNameForFile: readDirectoryNameForFile },
