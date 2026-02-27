@@ -3,7 +3,6 @@ import { logger } from '@siastorage/logger'
 import {
   ArrowDownToLineIcon,
   CloudUploadIcon,
-  EraserIcon,
   FolderIcon,
   HeartIcon,
   LinkIcon,
@@ -26,7 +25,7 @@ import {
   readFileRecord,
   useFileDetails,
 } from '../stores/files'
-import { getFsFileUri, removeFsFile } from '../stores/fs'
+import { getFsFileUri } from '../stores/fs'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { toggleFavorite, useIsFavorite } from '../stores/tags'
 import { palette } from '../styles/colors'
@@ -104,20 +103,6 @@ function SingleFileActionsSheet({
     [],
   )
 
-  const handleRemoveLocalFile = useCallback(async () => {
-    if (!file) return
-    try {
-      await removeFsFile(file)
-      toast.show('Removed from device')
-      onComplete?.()
-    } catch (e) {
-      logger.error('FileActionsSheet', 'remove_local_file_failed', {
-        error: e as Error,
-      })
-      toast.show('Failed to remove from device')
-    }
-  }, [file?.id, file?.type, toast, onComplete, file])
-
   const reupload = useReuploadFile()
   const handleReupload = useCallback(async () => {
     if (!file) return
@@ -188,15 +173,6 @@ function SingleFileActionsSheet({
             Upload file
           </ActionSheetButton>
         )}
-      {status.data?.fileUri && status.data?.isUploaded && (
-        <ActionSheetButton
-          variant="primary"
-          icon={<EraserIcon size={18} />}
-          onPress={handlePressAndClose(handleRemoveLocalFile)}
-        >
-          Remove from device
-        </ActionSheetButton>
-      )}
       <ActionSheetButton
         variant="primary"
         icon={
@@ -248,7 +224,6 @@ type BulkFileProps = {
 }
 
 type BulkCounts = {
-  onDevice: number
   onNetwork: number
   downloadable: number // on network but not on device
   uploadable: number // on device but not on network
@@ -258,7 +233,6 @@ type BulkCounts = {
 
 async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
   const files: FileRecord[] = []
-  let onDevice = 0
   let onNetwork = 0
   let downloadable = 0
   let uploadable = 0
@@ -272,9 +246,6 @@ async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
       if (hasSealed) {
         onNetwork++
       }
-      if (uri) {
-        onDevice++
-      }
       if (hasSealed && !uri) {
         downloadable++
       }
@@ -285,7 +256,6 @@ async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
   }
 
   return {
-    onDevice,
     onNetwork,
     downloadable,
     uploadable,
@@ -331,27 +301,6 @@ function BulkFileActionsSheet({
         error: e as Error,
       })
       toast.show('Failed to start downloads')
-    }
-  }, [counts, toast, onComplete])
-
-  const handleRemoveFromDevice = useCallback(async () => {
-    if (!counts) return
-    try {
-      let removed = 0
-      for (const file of counts.files) {
-        const uri = await getFsFileUri(file)
-        if (uri) {
-          await removeFsFile(file)
-          removed++
-        }
-      }
-      toast.show(`Removed ${removed} files from device`)
-      onComplete?.()
-    } catch (e) {
-      logger.error('FileActionsSheet', 'remove_files_from_device_failed', {
-        error: e as Error,
-      })
-      toast.show('Failed to remove files from device')
     }
   }, [counts, toast, onComplete])
 
@@ -411,14 +360,6 @@ function BulkFileActionsSheet({
         disabled={!counts || counts.uploadable === 0}
       >
         Upload to network{counts ? ` (${counts.uploadable})` : ''}
-      </ActionSheetButton>
-      <ActionSheetButton
-        variant="primary"
-        icon={<EraserIcon size={18} />}
-        onPress={handlePressAndClose(handleRemoveFromDevice)}
-        disabled={!counts || counts.onDevice === 0}
-      >
-        Remove from device{counts ? ` (${counts.onDevice})` : ''}
       </ActionSheetButton>
       <ActionSheetButton
         variant="primary"
