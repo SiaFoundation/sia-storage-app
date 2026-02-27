@@ -5,6 +5,7 @@
  * Core tests boot the full app with real timers and services.
  */
 module.exports = {
+  globalSetup: '<rootDir>/jest.globalSetup.cjs',
   preset: 'jest-expo',
   testEnvironment: 'node',
   testTimeout: 60000,

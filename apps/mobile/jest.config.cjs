@@ -1,4 +1,5 @@
 module.exports = {
+  globalSetup: '<rootDir>/jest.globalSetup.cjs',
   preset: 'jest-expo',
   testEnvironment: 'node',
   testTimeout: 60000,
