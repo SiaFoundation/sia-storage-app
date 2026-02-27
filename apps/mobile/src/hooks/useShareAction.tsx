@@ -3,7 +3,6 @@ import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import Share from 'react-native-share'
 import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
-import { generateSiaShareUrl } from '../lib/shareUrl'
 import { useToast } from '../lib/toastContext'
 import { useFileDetails } from '../stores/files'
 import { useSdk } from '../stores/sdk'
@@ -26,7 +25,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
     )
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    return generateSiaShareUrl(sdk, pinnedObject, expiresAt)
+    return sdk.shareObject(pinnedObject, expiresAt)
   }, [file, sdk])
 
   const handleShareURL = useCallback(async () => {
