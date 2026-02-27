@@ -33,8 +33,7 @@
     "test:e2e:ios": "bun scripts/e2e.ts ios",
     "test:e2e:android": "bun scripts/e2e.ts android",
     "android": "expo run:android",
-    "ios": "expo run:ios",
-    "postinstall": "npm rebuild better-sqlite3"
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@siastorage/core": "workspace:*",
@@ -110,6 +109,7 @@
     "expo-sqlite-mock": "^3.0.0",
     "jest": "~29.7.0",
     "jest-expo": "^54.0.13",
+    "semver": "^7.7.3",
     "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   },
