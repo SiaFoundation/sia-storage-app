@@ -7,16 +7,17 @@ import BlocksGrid from '../components/BlocksGrid'
 import { SHAPES } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import type { OnboardingStackParamList } from '../stacks/types'
+import { palette } from '../styles/colors'
 
-const typeFadeDurationMs = 1000
-const typeFadeStaggerMs = 500
+const typeFadeDurationMs = 500
+const typeFadeStaggerMs = 250
 const shapeTypeCount = Object.keys(SHAPES).length
 const totalTypeFadeMs =
   typeFadeDurationMs + (shapeTypeCount - 1) * typeFadeStaggerMs
 
 const gridDimTarget = 0.12
-const gridDimDurationMs = 1400
-const contentFadeDurationMs = 1200
+const gridDimDurationMs = 700
+const contentFadeDurationMs = 600
 
 export default function OnboardingWelcomeScreen() {
   const nav =
@@ -77,6 +78,9 @@ export default function OnboardingWelcomeScreen() {
             <Text testID="welcome-title" style={styles.title}>
               Sia Storage
             </Text>
+            <Text style={styles.subtitle}>
+              The world's safest cloud storage, by design.
+            </Text>
           </View>
         </View>
       </Animated.View>
@@ -104,15 +108,18 @@ const styles = StyleSheet.create({
 
   contentWrap: {
     flex: 1,
-    paddingHorizontal: 20,
+    alignItems: 'stretch',
     justifyContent: 'center',
   },
 
   card: {
     width: '100%',
-    maxWidth: 560,
-    padding: 20,
-    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 32,
+    backgroundColor: '#000',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: palette.gray[800],
   },
 
   center: {
@@ -122,9 +129,16 @@ const styles = StyleSheet.create({
 
   title: {
     color: 'white',
-    fontSize: 40,
-    fontWeight: '400',
+    fontSize: 32,
+    fontWeight: '800',
     textAlign: 'center',
+  },
+
+  subtitle: {
+    color: palette.gray[400],
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 10,
   },
 
   footer: {

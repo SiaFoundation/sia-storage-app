@@ -27,8 +27,8 @@ export type BlocksGridProps = {
   opacity?: number
 }
 
-const typeFadeDurationMS = 1000
-const typeFadeStaggerMS = 500
+const typeFadeDurationMS = 500
+const typeFadeStaggerMS = 250
 const swapIntervalMS = 900
 
 const ORDER_BASE: readonly ShapeId[] = [

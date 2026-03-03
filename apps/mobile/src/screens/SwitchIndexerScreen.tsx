@@ -46,7 +46,7 @@ export function SwitchIndexerScreen({ navigation }: Props) {
     <SettingsScrollLayout style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.subtitle}>
-          Select a provider to connect to. You will need to enter your recovery
+          Select an indexer to connect to. You will need to enter your recovery
           phrase to complete the switch.
         </Text>
 

@@ -29,7 +29,7 @@ import {
   type SdkInterface,
 } from 'react-native-sia'
 import { create } from 'zustand'
-import { openAuthURL } from '../lib/openAuthUrl'
+import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
 import { createGetterAndSelector } from '../lib/selectors'
 import { getUploadManager } from '../managers/uploader'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
@@ -68,6 +68,7 @@ export const useSdkStore = create<SdkState>(() => {
 const { getState, setState } = useSdkStore
 
 const CONNECTION_TIMEOUT_MS = 10_000
+const AUTH_TIMEOUT_MS = 30 * 60 * 1_000
 
 /**
  * Sets SDK and manages uploader lifecycle.
@@ -152,14 +153,15 @@ export async function reconnectIndexer(): Promise<boolean> {
     } else {
       setState({
         isConnected: false,
-        connectionError: 'Failed to connect to indexer',
+        connectionError: 'Failed to connect to indexer.',
       })
     }
     return connected
-  } catch (_e) {
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
     setState({
       isConnected: false,
-      connectionError: 'Failed to connect to indexer',
+      connectionError: message,
     })
     return false
   } finally {
@@ -405,7 +407,7 @@ async function builderRequestConnection(
         description: 'Privacy-first, decentralized cloud storage',
         serviceUrl: 'https://sia.storage',
         callbackUrl: 'sia://callback',
-        logoUrl: 'https://sia.storage/logo.png',
+        logoUrl: 'https://app.sia.storage/icon.png',
       }),
       CONNECTION_TIMEOUT_MS,
     )
@@ -423,10 +425,7 @@ async function builderWaitForApproval(
 ): Promise<Result<BuilderInterface>> {
   try {
     logger.debug('sdk', 'waiting_for_approval')
-    const result = await withTimeout(
-      builder.waitForApproval(),
-      CONNECTION_TIMEOUT_MS,
-    )
+    const result = await withTimeout(builder.waitForApproval(), AUTH_TIMEOUT_MS)
     return ok(result)
   } catch (e) {
     return err(e as Error)
@@ -453,24 +452,58 @@ async function builderRegister(
 }
 
 /**
- * Opens auth URL and waits for user approval.
- * Returns { type: 'cancelled' } if user closes browser.
+ * Opens auth URL and polls for approval in parallel.
+ * When polling confirms approval, the browser is closed automatically.
+ * If the user closes the browser before approval, returns cancelled.
  */
 async function waitForUserApproval(
   builder: BuilderInterface,
 ): Promise<Result<BuilderInterface, AuthError>> {
   const responseUrl = builder.responseUrl()
-  const authCompleted = await openAuthURL(responseUrl)
 
-  if (!authCompleted) {
+  let approved: BuilderInterface | null = null
+  let approvalError: string | null = null
+
+  const approvalPromise = builderWaitForApproval(builder).then(
+    ([result, waitErr]) => {
+      if (waitErr) {
+        approvalError = waitErr.message
+      } else {
+        approved = result
+      }
+      closeAuthBrowser()
+    },
+  )
+
+  const deepLinkReceived = await openAuthURL(responseUrl)
+
+  if (approved) {
+    return ok(approved)
+  }
+
+  if (!deepLinkReceived) {
+    // Browser closed without a deep link — give the approval poll a brief
+    // window to resolve in case the user approved but closed the browser
+    // manually before the redirect fired.
+    await Promise.race([
+      approvalPromise,
+      new Promise((r) => setTimeout(r, 3_000)),
+    ])
+    if (approved) {
+      return ok(approved)
+    }
     return err({ type: 'cancelled' })
   }
 
-  const [result, waitErr] = await builderWaitForApproval(builder)
-  if (waitErr) {
-    return err({ type: 'error', message: waitErr.message })
+  await approvalPromise
+
+  if (approvalError) {
+    return err({ type: 'error', message: approvalError })
   }
-  return ok(result)
+  if (approved) {
+    return ok(approved)
+  }
+  return err({ type: 'cancelled' })
 }
 
 /**

@@ -272,7 +272,13 @@ class UploadManager {
       logger.info('uploadManager', 'batch_cancel', {
         batchId: this.batch?.batchId,
       })
-      await this.packer.cancel()
+      try {
+        await this.packer.cancel()
+      } catch (e) {
+        logger.debug('uploadManager', 'batch_cancel_error', {
+          error: e as Error,
+        })
+      }
     }
     if (this.batch) {
       for (const entry of this.batch.files) {
@@ -284,7 +290,13 @@ class UploadManager {
       logger.info('uploadManager', 'uploading_batch_cancel', {
         batchId: this.uploadingBatch?.batchId,
       })
-      await this.uploadingPacker.cancel()
+      try {
+        await this.uploadingPacker.cancel()
+      } catch (e) {
+        logger.debug('uploadManager', 'uploading_batch_cancel_error', {
+          error: e as Error,
+        })
+      }
     }
     if (this.uploadingBatch) {
       for (const entry of this.uploadingBatch.files) {

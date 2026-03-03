@@ -130,8 +130,8 @@ export default function OnboardingFinishedScreen() {
             You are connected and ready to use Sia Storage.
           </Text>
           <Text style={styles.subtitle}>
-            Manage your recovery phrase and provider anytime in Settings via the
-            icon on the top right of the home screen.
+            Manage your recovery phrase and indexer anytime in Settings via the
+            shard icon on the top left of the home screen.
           </Text>
         </View>
       </View>
@@ -145,7 +145,7 @@ export default function OnboardingFinishedScreen() {
             await initApp()
           }}
         >
-          Upload files
+          Get started
         </Button>
       </View>
     </SafeAreaView>
@@ -156,18 +156,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
   },
   card: {
     width: '100%',
-    maxWidth: 560,
     gap: 16,
-    padding: 20,
-    backgroundColor: 'black',
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: palette.gray[800],
   },
   titleRow: {
@@ -186,7 +185,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: 'white',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
   },
   subtitle: {

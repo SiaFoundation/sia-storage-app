@@ -42,7 +42,7 @@ export function RecoveryPhraseInput({
           style={styles.textInput}
           autoCapitalize="none"
           autoCorrect={false}
-          textAlignVertical="center"
+          textAlignVertical="top"
           submitBehavior="blurAndSubmit"
           returnKeyType="done"
           editable={editable}
