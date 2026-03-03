@@ -4,7 +4,7 @@ changelog = "apps/mobile/CHANGELOG.md"
 
 [github]
 owner = "SiaFoundation"
-repo = "sia-mobile"
+repo = "sia-storage-app"
 
 [[workflows]]
 name = "prepare-release"
