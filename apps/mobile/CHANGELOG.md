@@ -1,6 +1,31 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.8.0 (2026-03-03)
+
+### Features
+
+- Added the ability to rename tags and folders.
+- Added a stay awake toggle in sync settings to keep the screen on during long syncs.
+- Added trash and soft delete with cross-device sync support.
+- Files not assigned to any folder now appear under a "No folder" entry in the files view.
+- Reset database migrations and remove v0 metadata compatibility.
+
+### Fixes
+
+- Manually importing a file that already exists now shows a warning instead of silently blocking the import.
+- Fixed carousel sort order for ADDED and SIZE sorts to match the gallery.
+- Search input no longer auto-capitalizes text.
+- Deleting a folder now moves its files to trash instead of permanently deleting them.
+- Manually imported files are no longer automatically moved to the photo import directory.
+- The media view now only shows images and videos, with filter options restricted to Photos and Videos.
+- Fixed onboarding failing after app reinstall due to stale Keychain credentials from a previous install.
+- Settings sub-pages use the standard back arrow instead of a custom header.
+- Fixed the status spinner activating on every sync heartbeat even when there's nothing to sync.
+- Removed "Remove from device" option from file action sheets.
+- Removed https/sia URL scheme transforms now that the SDK returns sia:// links directly.
+- Renamed "directories" to "folders" throughout the app for clearer terminology.
+
 ## 1.7.0 (2026-02-23)
 
 ### Features
