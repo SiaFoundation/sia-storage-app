@@ -1,7 +1,12 @@
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { ArrowLeftIcon } from 'lucide-react-native'
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  KeyboardAwareScrollView,
+  KeyboardProvider,
+} from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksLoader from '../components/BlocksLoader'
@@ -24,9 +29,7 @@ export default function OnboardingIndexerScreen() {
   const showWaiting = isWaiting || isNavigating
 
   const handleBack = () => {
-    if (nav.canGoBack()) {
-      nav.goBack()
-    }
+    nav.navigate('Welcome')
   }
 
   const handleContinue = async () => {
@@ -43,101 +46,112 @@ export default function OnboardingIndexerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <BlocksGrid
-        cols={5}
-        rows={12}
-        tileScale={0.12}
-        animation="swap"
-        opacity={0.12}
-        inset={{ top, bottom }}
-        style={StyleSheet.absoluteFillObject}
-      />
+    <KeyboardProvider>
+      <SafeAreaView style={styles.screen}>
+        <Pressable
+          testID="indexer-back-button"
+          onPress={handleBack}
+          style={[styles.backButton, { top: top + 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ArrowLeftIcon color={palette.gray[50]} size={22} />
+        </Pressable>
+        <BlocksGrid
+          cols={5}
+          rows={12}
+          tileScale={0.12}
+          animation="swap"
+          opacity={0.12}
+          inset={{ top, bottom }}
+          style={StyleSheet.absoluteFillObject}
+        />
 
-      <View
-        style={[
-          styles.centerWrap,
-          { paddingTop: top + 12, paddingBottom: bottom + 12 },
-        ]}
-      >
-        {showWaiting ? (
-          <View style={styles.waitingWrap}>
-            <BlocksLoader colorStart={1} size={20} />
-            <Text testID="indexer-connecting-text" style={styles.waitingText}>
-              {isNavigating ? 'Connected' : 'Connecting...'}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.content}>
-            <View style={styles.titleRow}>
-              <View style={styles.titleIcon}>
-                <BlocksShape
-                  shape="line2"
-                  tileSize={12}
-                  origin={{ x: 0, y: 0 }}
-                  rotation={90}
-                  style={styles.titleIconGlyph}
-                />
-              </View>
-              <Text testID="indexer-title" style={styles.title}>
-                Connect to a provider
+        <KeyboardAwareScrollView
+          contentContainerStyle={[
+            styles.centerWrap,
+            { paddingTop: top + 12, paddingBottom: bottom + 12 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={20}
+        >
+          {showWaiting ? (
+            <View style={styles.waitingWrap}>
+              <BlocksLoader colorStart={1} size={20} />
+              <Text testID="indexer-connecting-text" style={styles.waitingText}>
+                {isNavigating ? 'Connected' : 'Connecting...'}
               </Text>
             </View>
-            <Text style={styles.subtitle}>
-              Use our provider or link whichever one you prefer. This can be
-              changed at any time.
-            </Text>
+          ) : (
+            <View style={styles.content}>
+              <View style={styles.titleRow}>
+                <View style={styles.titleIcon}>
+                  <BlocksShape
+                    shape="line2"
+                    tileSize={12}
+                    origin={{ x: 0, y: 0 }}
+                    rotation={90}
+                    style={styles.titleIconGlyph}
+                  />
+                </View>
+                <Text testID="indexer-title" style={styles.title}>
+                  Connect to an indexer
+                </Text>
+              </View>
+              <Text style={styles.subtitle}>
+                An indexer backs up your encrypted file metadata and syncs it
+                across devices. It cannot access your files. Files are stored on
+                and retrieved directly from the Sia network. Use ours or connect
+                your own.
+              </Text>
 
-            <IndexerSelector
-              value={newIndexerInputProps.value}
-              onChangeText={newIndexerInputProps.onChangeText}
-              hasErrored={hasErrored}
-            />
+              <IndexerSelector
+                value={newIndexerInputProps.value}
+                onChangeText={newIndexerInputProps.onChangeText}
+                hasErrored={hasErrored}
+              />
+            </View>
+          )}
+        </KeyboardAwareScrollView>
+        {!showWaiting ? (
+          <View style={[styles.footer, { paddingBottom: bottom + 12 }]}>
+            <Button
+              testID="indexer-authorize-button"
+              onPress={handleContinue}
+              disabled={isInputEmpty}
+            >
+              Authorize
+            </Button>
           </View>
-        )}
-      </View>
-      {!showWaiting ? (
-        <View style={[styles.footer, { paddingBottom: bottom + 12 }]}>
-          <Button
-            testID="indexer-back-button"
-            variant="secondary"
-            onPress={handleBack}
-            style={styles.footerButton}
-          >
-            Back
-          </Button>
-          <Button
-            testID="indexer-authorize-button"
-            onPress={handleContinue}
-            style={styles.footerButton}
-            disabled={isInputEmpty}
-          >
-            Authorize
-          </Button>
-        </View>
-      ) : null}
-    </SafeAreaView>
+        ) : null}
+      </SafeAreaView>
+    </KeyboardProvider>
   )
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 1,
+    padding: 4,
+  },
 
   centerWrap: {
-    flex: 1,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+    flexGrow: 1,
+    alignItems: 'stretch',
     justifyContent: 'center',
   },
 
   content: {
     width: '100%',
-    maxWidth: 560,
     gap: 16,
-    padding: 20,
-    backgroundColor: 'black',
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: palette.gray[800],
   },
 
@@ -149,7 +163,7 @@ const styles = StyleSheet.create({
 
   title: {
     color: palette.gray[100],
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
   },
 
@@ -175,12 +189,6 @@ const styles = StyleSheet.create({
   waitingText: { color: 'white', fontSize: 14 },
 
   footer: {
-    flexDirection: 'row',
-    gap: 12,
     paddingHorizontal: 20,
-  },
-
-  footerButton: {
-    flex: 1,
   },
 })

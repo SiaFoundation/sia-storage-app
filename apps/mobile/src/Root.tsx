@@ -19,7 +19,6 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AppSplash } from './components/AppSplash'
-import { AuthWebViewModal } from './components/AuthWebViewModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
@@ -130,7 +129,6 @@ export function Root() {
                     </>
                   )}
                 </BottomSheetModalProvider>
-                <AuthWebViewModal />
               </ShareIntentProvider>
             </SafeAreaView>
           </ToastProvider>

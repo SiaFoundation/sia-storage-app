@@ -35,5 +35,7 @@ module.exports = {
     // Full in-memory simulation of media library
     '^expo-media-library$': '<rootDir>/test/mocks/expo-media-library.ts',
     '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
+    '^react-native-inappbrowser-reborn$':
+      '<rootDir>/test/mocks/react-native-inappbrowser-reborn.ts',
   },
 }

@@ -1,8 +1,7 @@
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { palette } from '../styles/colors'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { colors, palette } from '../styles/colors'
 import { InfoCard } from './InfoCard'
-import { InputRow } from './InputRow'
 
 type IndexerSelectorProps = {
   value: string
@@ -75,18 +74,19 @@ export function IndexerSelector({
             {isUsingCustomProvider ? <View style={styles.radioInner} /> : null}
           </View>
           <View style={styles.optionText}>
-            <Text style={styles.optionTitle}>Enter a provider URL</Text>
+            <Text style={styles.optionTitle}>Custom Indexer</Text>
           </View>
         </Pressable>
         {isUsingCustomProvider ? (
-          <View style={styles.customInput}>
-            <InputRow
-              label="Provider URL"
-              align="left"
-              labelWidth={96}
+          <View style={styles.inputWrap}>
+            <Text style={styles.inputLabel}>Indexer URL</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="https://sia.storage"
+              placeholderTextColor={palette.gray[400]}
               keyboardType="url"
               autoCorrect={false}
-              placeholder="https://"
+              autoCapitalize="none"
               value={value}
               onChangeText={onChangeText}
             />
@@ -101,11 +101,11 @@ const styles = StyleSheet.create({
   errorText: {
     color: palette.red[500],
     fontSize: 12,
-    textAlign: 'center',
   },
   optionCard: {
-    padding: 20,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
   },
   optionCardActive: {
     borderColor: palette.blue[400],
@@ -139,11 +139,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  customInput: {
-    marginTop: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+  inputWrap: {
+    gap: 6,
+  },
+  inputLabel: {
+    color: palette.gray[300],
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  textInput: {
+    color: colors.textPrimary,
     backgroundColor: palette.gray[950],
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
   },
 })

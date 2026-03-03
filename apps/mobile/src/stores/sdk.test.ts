@@ -44,7 +44,10 @@ jest.mock('./settings', () => ({
 function expectCleanAuthState() {
   expect(sdkStore.useSdkStore.getState().isAuthing).toBe(false)
 }
-jest.mock('../lib/openAuthUrl', () => ({ openAuthURL: jest.fn() }))
+jest.mock('../lib/openAuthUrl', () => ({
+  openAuthURL: jest.fn(),
+  closeAuthBrowser: jest.fn(),
+}))
 jest.mock('@siastorage/logger', () => ({ logger: { log: jest.fn() } }))
 jest.mock('@siastorage/core/config', () => ({ APP_KEY: '0'.repeat(64) }))
 
@@ -182,7 +185,7 @@ describe('sdk store', () => {
       expect(result).toBe(false)
       expect(sdkStore.getIsConnected()).toBe(false)
       expect(sdkStore.useSdkStore.getState().connectionError).toBe(
-        'Failed to connect to indexer',
+        'Failed to connect to indexer.',
       )
       expect(sdkStore.useSdkStore.getState().isReconnecting).toBe(false)
     })
@@ -195,7 +198,7 @@ describe('sdk store', () => {
       expect(result).toBe(false)
       expect(sdkStore.getIsConnected()).toBe(false)
       expect(sdkStore.useSdkStore.getState().connectionError).toBe(
-        'Failed to connect to indexer',
+        'Failed to connect to indexer.',
       )
     })
 
@@ -285,12 +288,48 @@ describe('sdk store', () => {
       })
 
       it('returns cancelled when user cancels browser auth', async () => {
-        mockOpenAuthURL.mockResolvedValue(false)
+        jest.useFakeTimers()
+        try {
+          mockOpenAuthURL.mockResolvedValue(false)
+          mockWaitForApproval.mockImplementation(() => new Promise(() => {}))
 
-        const [, error] = await sdkStore.authenticateIndexer(indexerUrl)
+          const promise = sdkStore.authenticateIndexer(indexerUrl)
+          await jest.advanceTimersByTimeAsync(3_000)
+          const [, error] = await promise
 
-        expect(error?.type).toBe('cancelled')
-        expectCleanAuthState()
+          expect(error?.type).toBe('cancelled')
+          expectCleanAuthState()
+        } finally {
+          jest.useRealTimers()
+        }
+      })
+
+      it('succeeds when user closes browser manually after approving', async () => {
+        jest.useFakeTimers()
+        try {
+          // Browser closes without deep link, but approval resolves within grace period.
+          mockOpenAuthURL.mockResolvedValue(false)
+          mockWaitForApproval.mockImplementation(
+            () =>
+              new Promise((resolve) =>
+                setTimeout(() => resolve(mockBuilderInterface), 1_000),
+              ),
+          )
+
+          const promise = sdkStore.authenticateIndexer(indexerUrl)
+          await jest.advanceTimersByTimeAsync(1_000)
+          const [result, error] = await promise
+
+          expect(error).toBeNull()
+          expect(result?.alreadyConnected).toBe(false)
+          expect(sdkStore.useSdkStore.getState().pendingApproval).toEqual({
+            indexerURL: indexerUrl,
+            builder: mockBuilderInterface,
+          })
+          expectCleanAuthState()
+        } finally {
+          jest.useRealTimers()
+        }
       })
 
       it('returns error when builder.requestConnection() fails', async () => {
@@ -501,18 +540,23 @@ describe('sdk store', () => {
       })
 
       it('returns cancelled when user closes browser', async () => {
-        mockOpenAuthURL.mockResolvedValue(false)
+        jest.useFakeTimers()
+        try {
+          mockOpenAuthURL.mockResolvedValue(false)
+          mockWaitForApproval.mockImplementation(() => new Promise(() => {}))
 
-        const [, error] = await sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+          const promise = sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
+          await jest.advanceTimersByTimeAsync(3_000)
+          const [, error] = await promise
 
-        expect(error?.type).toBe('cancelled')
-        expect(mockInterfaceRegister).not.toHaveBeenCalled()
-        expect(mockSetAppKeyForIndexer).not.toHaveBeenCalled()
-        expect(sdkStore.getSdk()).toBeNull()
-        expectCleanAuthState()
+          expect(error?.type).toBe('cancelled')
+          expect(mockInterfaceRegister).not.toHaveBeenCalled()
+          expect(mockSetAppKeyForIndexer).not.toHaveBeenCalled()
+          expect(sdkStore.getSdk()).toBeNull()
+          expectCleanAuthState()
+        } finally {
+          jest.useRealTimers()
+        }
       })
     })
 
@@ -596,7 +640,7 @@ describe('sdk store', () => {
           mnemonic,
           testIndexerURL,
         )
-        await jest.advanceTimersByTimeAsync(10_000)
+        await jest.advanceTimersByTimeAsync(30 * 60 * 1_000)
         const [, error] = await registerPromise
 
         expect(error?.type).toBe('error')

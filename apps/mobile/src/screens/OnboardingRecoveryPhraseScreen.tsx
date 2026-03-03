@@ -3,6 +3,7 @@ import type { RouteProp } from '@react-navigation/native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { logger } from '@siastorage/logger'
+import { ArrowLeftIcon } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
 import {
   Platform,
@@ -24,6 +25,7 @@ import { useToast } from '../lib/toastContext'
 import type { OnboardingStackParamList } from '../stacks/types'
 import { clearAppKeys } from '../stores/appKey'
 import { clearMnemonicHash } from '../stores/mnemonic'
+import { useSdkStore } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
@@ -45,6 +47,16 @@ export default function OnboardingRecoveryPhraseScreen() {
 
   const { register, isSubmitting } = useRecoveryPhraseRegistration()
 
+  // Clear pendingApproval so the indexer screen runs a fresh auth flow.
+  // Navigate to ChooseIndexer (not goBack) to avoid returning to a stale
+  // "connecting" state from the previous auth attempt.
+  const handleBack = () => {
+    useSdkStore.setState({ pendingApproval: null })
+    nav.navigate('ChooseIndexer')
+  }
+
+  // Ensure onboarding starts with a fresh app key and no stale mnemonic
+  // hash to validate against.
   useEffect(() => {
     clearMnemonicHash()
     clearAppKeys()
@@ -86,6 +98,15 @@ export default function OnboardingRecoveryPhraseScreen() {
         inset={{ top, bottom }}
         style={StyleSheet.absoluteFillObject}
       />
+      <Pressable
+        testID="recovery-back-button"
+        onPress={handleBack}
+        style={[styles.backButton, { top: top + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+      >
+        <ArrowLeftIcon color={palette.gray[50]} size={22} />
+      </Pressable>
       <View
         style={[styles.centerWrap, { paddingTop: top, paddingBottom: bottom }]}
       >
@@ -107,9 +128,9 @@ export default function OnboardingRecoveryPhraseScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            Generate your master key and save this phrase somewhere secure--such
-            as a password manager or hard copy. Do not ever share it with
-            anyone.
+            Your recovery phrase is the only way to access your data. Write it
+            down and store it somewhere safe. If you lose it, your files cannot
+            be recovered.
           </Text>
 
           {mode === 'generated' ? (
@@ -121,10 +142,15 @@ export default function OnboardingRecoveryPhraseScreen() {
                 >
                   <Text
                     testID="recovery-phrase-text"
-                    style={styles.phraseText}
-                    selectable
+                    style={
+                      recoveryPhrase
+                        ? styles.phraseText
+                        : styles.phrasePlaceholder
+                    }
+                    selectable={!!recoveryPhrase}
                   >
-                    {recoveryPhrase ?? ''}
+                    {recoveryPhrase ||
+                      "Tap 'Generate new key' to create your recovery phrase"}
                   </Text>
                 </ScrollView>
               </View>
@@ -216,22 +242,27 @@ export default function OnboardingRecoveryPhraseScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 1,
+    padding: 4,
+  },
 
   centerWrap: {
     flex: 1,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
   },
 
   card: {
     width: '100%',
-    maxWidth: 560,
     gap: 16,
-    padding: 20,
-    backgroundColor: 'black',
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: palette.gray[800],
   },
 
@@ -266,6 +297,12 @@ const styles = StyleSheet.create({
       android: 'monospace',
       default: 'monospace',
     }),
+  },
+
+  phrasePlaceholder: {
+    color: palette.gray[500],
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   actionsRow: { flexDirection: 'row', gap: 12 },

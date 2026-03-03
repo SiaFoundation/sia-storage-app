@@ -16,10 +16,16 @@ export function OnboardingStack() {
       <Stack.Screen name="ChooseIndexer" options={{ headerShown: false }}>
         {() => <OnboardingIndexerScreen />}
       </Stack.Screen>
-      <Stack.Screen name="RecoveryPhrase" options={{ headerShown: false }}>
+      <Stack.Screen
+        name="RecoveryPhrase"
+        options={{ headerShown: false, gestureEnabled: false }}
+      >
         {() => <OnboardingRecoveryPhraseScreen />}
       </Stack.Screen>
-      <Stack.Screen name="FinishedOnboarding" options={{ headerShown: false }}>
+      <Stack.Screen
+        name="FinishedOnboarding"
+        options={{ headerShown: false, gestureEnabled: false }}
+      >
         {() => <OnboardingFinishedScreen />}
       </Stack.Screen>
     </Stack.Navigator>

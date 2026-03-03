@@ -45,6 +45,7 @@ export function InputRow({
       ellipsizeMode={ellipsizeMode}
       align={align}
       labelWidth={labelWidth}
+      canCopy={false}
       value={
         <TextInput
           style={[styles.input, isMonospace && styles.inputMono, inputStyle]}

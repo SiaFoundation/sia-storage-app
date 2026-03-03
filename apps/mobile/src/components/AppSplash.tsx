@@ -1,10 +1,12 @@
 import { TriangleAlertIcon } from 'lucide-react-native'
-import { StyleSheet, Text, View } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { resetApp } from '../managers/app'
 import { useCurrentInitStep, useInitializationError } from '../stores/app'
 import { palette } from '../styles/colors'
 import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'
+import { Button } from './Button'
 
 export function AppSplash() {
   const currentStep = useCurrentInitStep()
@@ -39,6 +41,26 @@ export function AppSplash() {
               Please report this issue to the team or restart the app to try
               again.
             </Text>
+            <Button
+              variant="danger"
+              style={styles.resetButton}
+              onPress={() => {
+                Alert.alert(
+                  'Reset Application',
+                  'This will delete all local metadata. This cannot be undone.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Permanently reset',
+                      style: 'destructive',
+                      onPress: () => resetApp(),
+                    },
+                  ],
+                )
+              }}
+            >
+              Reset application
+            </Button>
           </View>
         ) : (
           <View style={styles.waitingWrap}>
@@ -98,5 +120,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  resetButton: {
+    marginTop: 16,
+    alignSelf: 'stretch',
   },
 })

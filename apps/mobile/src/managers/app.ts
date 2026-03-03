@@ -5,14 +5,13 @@ import { initializeDB, resetDb } from '../db'
 import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
 import { type InitStep, setAppState } from '../stores/app'
 import { clearAppKeys } from '../stores/appKey'
-import { useAuthWebViewStore } from '../stores/authWebView'
 import { cancelAllDownloads, useDownloadsStore } from '../stores/downloads'
 import { useFileSelectionStore } from '../stores/fileSelection'
 import { ensureFsStorageDirectory } from '../stores/fs'
 import { invalidateCacheLibraryLists } from '../stores/librarySwr'
 import { initLogger } from '../stores/logs'
 import { clearMnemonicHash } from '../stores/mnemonic'
-import { reconnectIndexer, useSdkStore } from '../stores/sdk'
+import { reconnectIndexer, resetSdk, useSdkStore } from '../stores/sdk'
 import { getHasOnboarded, initKeepAwake } from '../stores/settings'
 import { useSheetsStore } from '../stores/sheets'
 import { useSyncDownStore } from '../stores/syncDown'
@@ -72,10 +71,7 @@ export async function initApp(): Promise<void> {
       label: 'Connecting to indexer',
       message: 'Initializing SDK...',
       runner: async () => {
-        const connected = await reconnectIndexer()
-        if (!connected) {
-          throw new Error('Failed to connect to indexer.')
-        }
+        await reconnectIndexer()
       },
     })
 
@@ -155,10 +151,13 @@ export async function resetApp() {
       label: 'Resetting application',
       message: 'Clearing data...',
       runner: async () => {
-        // 3. Cancel uploads and downloads (side-effect cleanup).
+        // 3. Tear down SDK to stop the rust layer from retrying uploads.
+        await resetSdk()
+
+        // 4. Cancel uploads and downloads (side-effect cleanup).
         await cancelAllTransfers()
 
-        // 4. Drop and recreate all database tables.
+        // 5. Drop and recreate all database tables.
         await resetDb()
 
         // 5. Wipe all persisted state.
@@ -204,7 +203,6 @@ function resetAllStores() {
     isSelectionMode: false,
   })
   useSheetsStore.setState({ openName: '' })
-  useAuthWebViewStore.setState({ visible: false, url: '', resolver: null })
   resetViewSettings()
   invalidateCacheLibraryLists()
 }
