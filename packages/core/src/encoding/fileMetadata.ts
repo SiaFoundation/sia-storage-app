@@ -2,18 +2,18 @@
  * Versioned file metadata encoding/decoding for server-side object metadata.
  *
  * Server objects store metadata as JSON in an ArrayBuffer. This module handles
- * three formats:
+ * two formats:
  *   - v1: Current format with id, kind, thumbForId (discriminated union on kind).
- *   - v0: Pre-versioned format without version/id/kind fields.
  *   - Future: Versions above MAX_SUPPORTED_VERSION, decoded with lenient defaults.
  *
  * encodeFileMetadata() always writes the current version (v1).
- * decodeFileMetadata() handles all three formats gracefully.
+ * decodeFileMetadata() handles both formats gracefully.
  */
 
 import { logger } from '@siastorage/logger'
 import { z } from 'zod'
 import type { FileKind, FileMetadata, ThumbSize } from '../types/files'
+export type { FileMetadata } from '../types/files'
 
 export const MAX_SUPPORTED_VERSION = 1
 
@@ -42,7 +42,6 @@ const ThumbV1Schema = z.object({
   ...BaseV1Fields,
   kind: z.literal('thumb'),
   thumbForId: z.string(),
-  thumbForHash: z.string().optional(),
   thumbSize: ThumbSizeSchema,
 })
 
@@ -65,39 +64,13 @@ const FutureVersionSchema = z.object({
   createdAt: z.number().catch(0),
   updatedAt: z.number().catch(0),
   thumbForId: z.string().optional(),
-  thumbForHash: z.string().optional(),
   thumbSize: z.number().optional(),
   tags: z.array(z.string()).optional(),
   directory: z.string().optional(),
   trashedAt: z.number().nullable().optional(),
 })
 
-// Pre-versioned metadata format (no version, id, or kind fields).
-// Used by older clients before the v1 migration.
-const V0Schema = z.object({
-  name: z.string().catch(''),
-  type: z.string().catch(''),
-  size: z.number().catch(0),
-  hash: z.string().catch(''),
-  createdAt: z.number().catch(0),
-  updatedAt: z.number().catch(0),
-  thumbForHash: z.string().optional(),
-  thumbSize: z.number().optional(),
-})
-
-export type DecodedFileMetadata = FileMetadata & {
-  thumbForHash?: string
-}
-
-/**
- * Encode file metadata to the current version (v1) format.
- * opts.thumbForHash preserves the v0 hash-based parent reference so older
- * clients that haven't migrated yet can still resolve the thumbnail's parent.
- */
-export function encodeFileMetadata(
-  meta: FileMetadata,
-  opts?: { thumbForHash?: string },
-): ArrayBuffer {
+export function encodeFileMetadata(meta: FileMetadata): ArrayBuffer {
   const payload: Record<string, unknown> = {
     version: 1,
     id: meta.id,
@@ -116,19 +89,16 @@ export function encodeFileMetadata(
   } else if (meta.kind === 'thumb') {
     payload.thumbForId = meta.thumbForId
     payload.thumbSize = meta.thumbSize
-    if (opts?.thumbForHash) {
-      payload.thumbForHash = opts.thumbForHash
-    }
   }
   return new TextEncoder().encode(JSON.stringify(payload)).buffer as ArrayBuffer
 }
 
 /**
  * Decode metadata from a server object's ArrayBuffer.
- * Tries in order: v1 (current) → future version (lenient) → v0 (pre-versioned).
+ * Tries in order: v1 (current) → future version (lenient).
  * Returns empty metadata on parse failure so callers always get a safe value.
  */
-export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
+export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
   try {
     const raw = JSON.parse(new TextDecoder().decode(buffer))
 
@@ -140,7 +110,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
         })
         const parsed = FutureVersionSchema.safeParse(raw)
         if (parsed.success) {
-          return toDecodedMetadata(parsed.data)
+          return toFileMetadata(parsed.data)
         }
         logger.warn('fileMetadata', 'future_version_parse_failed', {
           version: raw.version,
@@ -150,7 +120,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
 
       const parsed = MetadataV1Schema.safeParse(raw)
       if (parsed.success) {
-        return toDecodedMetadata(parsed.data)
+        return toFileMetadata(parsed.data)
       }
       // V1 strict parse failed (e.g., orphaned thumb missing thumbForId).
       // Try lenient parse to preserve id, kind, and other valid fields.
@@ -159,7 +129,7 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
       })
       const lenient = FutureVersionSchema.safeParse(raw)
       if (lenient.success) {
-        return toDecodedMetadata(lenient.data)
+        return toFileMetadata(lenient.data)
       }
       logger.warn('fileMetadata', 'v1_lenient_also_failed', {
         errors: lenient.error.issues.map((i) => `${i.path}: ${i.message}`),
@@ -169,42 +139,16 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): DecodedFileMetadata {
       })
     }
 
-    const v0 = V0Schema.parse(raw)
-    const kind: FileKind = v0.thumbForHash ? 'thumb' : 'file'
-    if (typeof raw.version === 'number') {
-      logger.warn('fileMetadata', 'v1_fell_to_v0', {
-        version: raw.version,
-        rawId: raw.id,
-        decodedKind: kind,
-        hasThumbForHash: !!v0.thumbForHash,
-      })
-    }
-    return {
-      id: '',
-      name: v0.name,
-      type: v0.type,
-      kind,
-      size: v0.size,
-      hash: v0.hash,
-      createdAt: v0.createdAt,
-      updatedAt: v0.updatedAt,
-      // Safe to default: v0 updates go through toV0SafeFileRecordFields
-      // which preserves existing.trashedAt from the local record.
-      trashedAt: null,
-      thumbForHash: v0.thumbForHash,
-      thumbForId: undefined,
-      thumbSize: v0.thumbSize as ThumbSize | undefined,
-    }
+    return emptyMetadata()
   } catch (e) {
     logger.error('fileMetadata', 'decode_error', { error: e as Error })
     return emptyMetadata()
   }
 }
 
-export function hasCompleteFileMetadata(
-  metadata: DecodedFileMetadata,
-): boolean {
+export function hasCompleteFileMetadata(metadata: FileMetadata): boolean {
   return (
+    !!metadata.id &&
     !!metadata.hash &&
     !!metadata.type &&
     !!metadata.name &&
@@ -214,22 +158,20 @@ export function hasCompleteFileMetadata(
   )
 }
 
-export function hasCompleteThumbnailMetadata(
-  metadata: DecodedFileMetadata,
-): boolean {
+export function hasCompleteThumbnailMetadata(metadata: FileMetadata): boolean {
   return (
     hasCompleteFileMetadata(metadata) &&
-    (!!metadata.thumbForId || !!metadata.thumbForHash) &&
+    !!metadata.thumbForId &&
     !!metadata.thumbSize
   )
 }
 
-function toDecodedMetadata(
+function toFileMetadata(
   data: z.infer<typeof MetadataV1Schema> | z.infer<typeof FutureVersionSchema>,
-): DecodedFileMetadata {
+): FileMetadata {
   const kind = data.kind as FileKind
   const d = data as Record<string, unknown>
-  const result: DecodedFileMetadata = {
+  const result: FileMetadata = {
     id: data.id,
     name: data.name,
     type: data.type,
@@ -246,13 +188,12 @@ function toDecodedMetadata(
     result.trashedAt = (d.trashedAt as number | null | undefined) ?? null
   } else if (kind === 'thumb') {
     result.thumbForId = d.thumbForId as string | undefined
-    result.thumbForHash = d.thumbForHash as string | undefined
     result.thumbSize = d.thumbSize as ThumbSize | undefined
   }
   return result
 }
 
-function emptyMetadata(): DecodedFileMetadata {
+function emptyMetadata(): FileMetadata {
   return {
     id: '',
     name: '',

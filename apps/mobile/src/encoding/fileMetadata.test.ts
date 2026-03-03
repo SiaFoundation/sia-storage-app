@@ -95,25 +95,11 @@ describe('fileMetadata', () => {
       })
     })
 
-    it('includes thumbForHash for backwards compatibility when provided', () => {
-      const buf = encodeFileMetadata(baseThumb, { thumbForHash: 'parent-hash' })
-      const decoded = JSON.parse(new TextDecoder().decode(buf))
-      expect(decoded.thumbForHash).toBe('parent-hash')
-      expect(decoded.thumbForId).toBe('file-1')
-    })
-
-    it('omits thumbForHash when not provided for thumbnails', () => {
-      const buf = encodeFileMetadata(baseThumb)
-      const decoded = JSON.parse(new TextDecoder().decode(buf))
-      expect(decoded.thumbForHash).toBeUndefined()
-    })
-
     it('omits thumb fields for files', () => {
       const buf = encodeFileMetadata(baseFile)
       const decoded = JSON.parse(new TextDecoder().decode(buf))
       expect(decoded.thumbForId).toBeUndefined()
       expect(decoded.thumbSize).toBeUndefined()
-      expect(decoded.thumbForHash).toBeUndefined()
     })
 
     it('always writes version: 1', () => {
@@ -161,62 +147,6 @@ describe('fileMetadata', () => {
             trashedAt: null,
           }),
         )
-      })
-
-      it('preserves thumbForHash when present in v1 thumb metadata', () => {
-        const buf = encodeFileMetadata(baseThumb, {
-          thumbForHash: 'parent-hash',
-        })
-        const result = decodeFileMetadata(buf)
-        expect(result.thumbForHash).toBe('parent-hash')
-        expect(result.thumbForId).toBe('file-1')
-      })
-    })
-
-    describe('v0 format (no version field)', () => {
-      it('decodes a v0 file', () => {
-        const buf = encode({
-          name: 'old.jpg',
-          type: 'image/jpeg',
-          size: 500,
-          hash: 'v0-hash',
-          createdAt: 100,
-          updatedAt: 200,
-        })
-        const result = decodeFileMetadata(buf)
-        expect(result).toEqual({
-          id: '',
-          name: 'old.jpg',
-          type: 'image/jpeg',
-          kind: 'file',
-          size: 500,
-          hash: 'v0-hash',
-          createdAt: 100,
-          updatedAt: 200,
-          trashedAt: null,
-          thumbForHash: undefined,
-          thumbForId: undefined,
-          thumbSize: undefined,
-        })
-      })
-
-      it('decodes a v0 thumbnail (has thumbForHash)', () => {
-        const buf = encode({
-          name: 'old.jpg',
-          type: 'image/jpeg',
-          size: 200,
-          hash: 'v0-thumb',
-          thumbForHash: 'v0-parent',
-          thumbSize: 512,
-          createdAt: 100,
-          updatedAt: 200,
-        })
-        const result = decodeFileMetadata(buf)
-        expect(result.kind).toBe('thumb')
-        expect(result.thumbForHash).toBe('v0-parent')
-        expect(result.thumbForId).toBeUndefined()
-        expect(result.thumbSize).toBe(512)
-        expect(result.id).toBe('')
       })
     })
 
@@ -281,7 +211,6 @@ describe('fileMetadata', () => {
           size: 100,
           hash: 'fth',
           thumbForId: 'fp-1',
-          thumbForHash: 'fph',
           thumbSize: 512,
           createdAt: 1,
           updatedAt: 2,
@@ -289,7 +218,6 @@ describe('fileMetadata', () => {
         const result = decodeFileMetadata(buf)
         expect(result.kind).toBe('thumb')
         expect(result.thumbForId).toBe('fp-1')
-        expect(result.thumbForHash).toBe('fph')
         expect(result.thumbSize).toBe(512)
       })
     })
@@ -333,14 +261,11 @@ describe('fileMetadata', () => {
       })
 
       it('thumbnail round-trips cleanly', () => {
-        const encoded = encodeFileMetadata(baseThumb, {
-          thumbForHash: 'parent-hash',
-        })
+        const encoded = encodeFileMetadata(baseThumb)
         const decoded = decodeFileMetadata(encoded)
         expect(decoded.id).toBe(baseThumb.id)
         expect(decoded.kind).toBe('thumb')
         expect(decoded.thumbForId).toBe(baseThumb.thumbForId)
-        expect(decoded.thumbForHash).toBe('parent-hash')
         expect(decoded.thumbSize).toBe(baseThumb.thumbSize)
       })
     })
@@ -375,20 +300,6 @@ describe('fileMetadata', () => {
   describe('hasCompleteThumbnailMetadata', () => {
     it('returns true for complete v1 thumbnail', () => {
       const buf = encodeFileMetadata(baseThumb)
-      expect(hasCompleteThumbnailMetadata(decodeFileMetadata(buf))).toBe(true)
-    })
-
-    it('returns true for v0 thumbnail with thumbForHash', () => {
-      const buf = encode({
-        name: 't.jpg',
-        type: 'image/jpeg',
-        size: 100,
-        hash: 'th',
-        thumbForHash: 'parent-h',
-        thumbSize: 64,
-        createdAt: 1,
-        updatedAt: 1,
-      })
       expect(hasCompleteThumbnailMetadata(decodeFileMetadata(buf))).toBe(true)
     })
 

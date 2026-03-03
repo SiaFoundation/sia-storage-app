@@ -51,8 +51,8 @@ async function setAppKeysMap(map: AppKeysMap): Promise<void> {
  *
  * This enables background task access when the device is locked.
  */
-export const migration_0002_keychain_accessibility: Migration = {
-  id: '0002_keychain_accessibility',
+export const migration_keychain_afterfirstunlock: Migration = {
+  id: 'keychain_afterfirstunlock',
   description: 'Migrate keychain to AFTER_FIRST_UNLOCK accessibility',
   up: async (_db: DatabaseAdapter) => {
     logger.info('db', 'keychain_migration_start')

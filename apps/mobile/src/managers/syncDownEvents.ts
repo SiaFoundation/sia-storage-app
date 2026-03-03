@@ -11,7 +11,6 @@ import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { syncDirectoryFromMetadata } from '../stores/directories'
 import {
   createFileRecord,
-  deleteFileRecord,
   readFileRecord,
   readFileRecordByObjectId,
   updateFileRecord,
@@ -57,7 +56,6 @@ export async function syncDownEvents(
         readByObjectId: readFileRecordByObjectId,
         create: (record) => createFileRecord(record, false),
         update: (record, options) => updateFileRecord(record, false, options),
-        delete: (id) => deleteFileRecord(id, false),
       },
       localObjects: {
         upsert: (lo) => upsertLocalObject(lo, false),
@@ -102,7 +100,6 @@ export const { init: initSyncDownEvents, triggerNow: triggerSyncDownEvents } =
 const objectsCursorCodec = z.codec(
   z.object({
     id: z.string().optional(),
-    key: z.string().optional(),
     after: z.number(),
   }),
   z.object({
@@ -111,7 +108,7 @@ const objectsCursorCodec = z.codec(
   }),
   {
     decode: (stored) => ({
-      id: stored.id ?? stored.key ?? '',
+      id: stored.id ?? '',
       after: isoToEpochCodec.decode(stored.after),
     }),
     encode: (cursor) => ({
