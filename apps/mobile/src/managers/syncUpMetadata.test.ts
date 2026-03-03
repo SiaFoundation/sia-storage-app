@@ -166,7 +166,6 @@ describe('syncUpMetadata', () => {
     expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
       expect.objectContaining(localA),
-      { thumbForHash: undefined },
     )
   })
 
@@ -384,7 +383,7 @@ describe('syncUpMetadata', () => {
     expect(sdk.getPinnedObject).toHaveBeenCalledWith('obj-file-2')
   })
 
-  test('does not overwrite remote id when remote already has one', async () => {
+  test('pushes local id when remote id differs', async () => {
     sdk.getIsConnected.mockReturnValue(true)
 
     const localFile: Omit<FileRecord, 'objects'> = {
@@ -435,7 +434,10 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(5)
 
-    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
+    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
+    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'local-id' }),
+    )
   })
 
   test('skips all work when signal is already aborted', async () => {
@@ -531,7 +533,7 @@ describe('syncUpMetadata', () => {
     expect(sdk.getPinnedObject).toHaveBeenCalledTimes(2)
   })
 
-  test('preserves remote canonical id when pushing other field changes', async () => {
+  test('pushes local id when pushing field changes with different remote id', async () => {
     sdk.getIsConnected.mockReturnValue(true)
 
     const localFile: Omit<FileRecord, 'objects'> = {
@@ -582,8 +584,7 @@ describe('syncUpMetadata', () => {
     await runSyncUpMetadata(5)
 
     expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'remote-id', name: 'renamed.jpg' }),
-      { thumbForHash: undefined },
+      expect.objectContaining({ id: 'local-id', name: 'renamed.jpg' }),
     )
   })
 

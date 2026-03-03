@@ -2,11 +2,12 @@ import { logger } from '@siastorage/logger'
 import type { PinnedObjectRef } from '../adapters/sdk'
 import {
   MAX_SUPPORTED_VERSION,
+  type FileMetadata,
   decodeFileMetadata,
   encodeFileMetadata,
 } from '../encoding/fileMetadata'
 import { SlotPool } from '../lib/slotPool'
-import type { FileMetadata, FileRecord } from '../types/files'
+import type { FileRecord } from '../types/files'
 import { fileMetadataKeys } from '../types/files'
 import type { FileRecordsQueryOpts } from '../db/operations/files'
 
@@ -155,7 +156,6 @@ export async function runSyncUpMetadataBatch(
     batch.map((f) => {
       const obj = f.objects[indexerURL]
       if (!obj || !obj.id) return
-      if (f.kind === 'thumb' && !f.thumbForId) return
       return pool.withSlot(async () => {
         if (signal.aborted) return
         const ctx = { fileId: f.id, objectId: obj.id, fileName: f.name }
@@ -224,12 +224,6 @@ export async function runSyncUpMetadataBatch(
         }
 
         const diffs = diffFileMetadata(f, remoteMeta)
-        // v0→v1 compat: Don't overwrite a remote ID that was already set by
-        // another device. First device to push sets the canonical ID; others
-        // adopt it via syncDown. Can be removed once all devices run v1.
-        if (remoteMeta.id && diffs.id) {
-          delete diffs.id
-        }
         if (Object.keys(diffs).length === 0) return
 
         const isLocalNewer = (f.updatedAt || 0) >= (remoteMeta.updatedAt || 0)
@@ -243,10 +237,7 @@ export async function runSyncUpMetadataBatch(
         })
 
         if (isLocalNewer) {
-          let fileToEncode: FileMetadata =
-            remoteMeta.id && remoteMeta.id !== f.id
-              ? { ...f, id: remoteMeta.id }
-              : f
+          let fileToEncode: FileMetadata = f
           if (f.kind === 'file') {
             const tags = await deps.tags.readNamesForFile(f.id)
             if (tags) {
@@ -262,16 +253,11 @@ export async function runSyncUpMetadataBatch(
             objectId: obj.id,
             kind: fileToEncode.kind,
             thumbForId: fileToEncode.thumbForId,
-            thumbForHash: remoteMeta.thumbForHash,
             thumbSize: fileToEncode.thumbSize,
           })
           const result = await tryWithLog(
             () => {
-              remote.updateMetadata(
-                encodeFileMetadata(fileToEncode, {
-                  thumbForHash: remoteMeta.thumbForHash,
-                }),
-              )
+              remote.updateMetadata(encodeFileMetadata(fileToEncode))
               return deps.sdk.updateObjectMetadata(remote)
             },
             'updateMetadata',

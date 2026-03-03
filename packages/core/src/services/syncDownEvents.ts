@@ -2,12 +2,11 @@ import { logger } from '@siastorage/logger'
 import type { AppKeyRef, ObjectsCursor, PinnedObjectRef } from '../adapters/sdk'
 import type { LocalObject } from '../encoding/localObject'
 import {
-  type DecodedFileMetadata,
+  type FileMetadata,
   decodeFileMetadata,
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
-import { uniqueId } from '../lib/uniqueId'
 import type { FileRecord, FileRecordRow } from '../types/files'
 
 const batchSize = 500
@@ -49,27 +48,7 @@ type PreparedDelete = {
   indexerURL: string
 }
 
-// An "adopt" means the remote metadata carries a different canonical ID
-// than the local file record (e.g. during v0→v1 migration when another
-// device assigned the ID first). The file record is re-parented under
-// the canonical ID.
-type PreparedAdopt = {
-  kind: 'adopt'
-  oldFileId: string
-  objectId: string
-  fileRecord: FileRecordRow
-  localObject: LocalObject
-  indexerURL: string
-  tags?: string[]
-  directory?: string
-  isFile: boolean
-}
-
-type PreparedEvent =
-  | PreparedCreate
-  | PreparedUpdate
-  | PreparedDelete
-  | PreparedAdopt
+type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
 
 export type SyncDownDeps = {
   sdk: {
@@ -89,10 +68,6 @@ export type SyncDownDeps = {
       record: Partial<FileRecordRow> & { id: string },
       options?: { includeUpdatedAt?: boolean },
     ): Promise<void>
-    // Only used by adopt to clean up local-only duplicate records after
-    // re-parenting to the canonical remote ID. Not for user-initiated
-    // deletes — those are tombstoned, never removed.
-    delete(id: string): Promise<void>
   }
   localObjects: {
     upsert(localObject: LocalObject): Promise<void>
@@ -236,8 +211,8 @@ async function processBatch(
   deps: SyncDownDeps,
 ) {
   // Phase 1: Prepare — read DB state without holding any locks. Each event
-  // is classified as create/update/delete/adopt based on whether a matching
-  // file record exists and whether the remote ID differs from the local one.
+  // is classified as create/update/delete based on whether a matching
+  // file record exists.
   const prepared: PreparedEvent[] = []
   const indexerURL = await deps.platform.getIndexerURL()
 
@@ -327,27 +302,6 @@ async function processBatch(
               counts.deleted++
             }
             break
-          case 'adopt':
-            // Re-parent the object under the canonical file ID. The
-            // target record may already exist from a previous adopt in
-            // this batch (multiple objects sharing a file ID).
-            await deps.localObjects.delete(event.objectId, event.indexerURL)
-            if (
-              (await deps.localObjects.countForFile(event.oldFileId)) === 0
-            ) {
-              await deps.files.delete(event.oldFileId)
-            }
-            if (await deps.files.read(event.fileRecord.id)) {
-              await deps.files.update(event.fileRecord, {
-                includeUpdatedAt: true,
-              })
-              counts.existing++
-            } else {
-              await deps.files.create(event.fileRecord)
-              counts.added++
-            }
-            await deps.localObjects.upsert(event.localObject)
-            break
         }
       } catch (e) {
         logger.error('syncDownEvents', 'event_commit_error', {
@@ -376,7 +330,6 @@ async function processBatch(
     if (event.kind !== 'delete' && event.isFile) {
       const shouldSync =
         event.kind === 'create' ||
-        event.kind === 'adopt' ||
         (event.kind === 'update' && event.isRemoteNewer)
       if (shouldSync) {
         try {
@@ -433,56 +386,16 @@ async function prepareDelete(
   }
 }
 
-/**
- * Classify an upsert event as create, update, or adopt.
- *
- * Lookup order:
- *   1. By metadata.id (v1 canonical ID) — fast path for v1 metadata.
- *   2. By objectId+indexerURL — fallback for v0 metadata (no id field).
- *
- * If a file record is found by objectId but its local ID differs from the
- * remote metadata.id, this is an "adopt" — another device assigned a
- * canonical ID that this device should adopt.
- */
 async function prepareUpsert(
   id: string,
   object: PinnedObjectRef,
   indexerURL: string,
   deps: SyncDownDeps,
-): Promise<PreparedCreate | PreparedUpdate | PreparedAdopt | null> {
+): Promise<PreparedCreate | PreparedUpdate | null> {
   try {
     const metadata = decodeFileMetadata(object.metadata())
     if (hasCompleteThumbnailMetadata(metadata)) {
-      let existingThumbnail: FileRecord | null = null
-      if (metadata.id) {
-        existingThumbnail = await deps.files.read(metadata.id)
-      }
-      if (!existingThumbnail) {
-        const byObjectId = await deps.files.readByObjectId(id, indexerURL)
-        if (byObjectId) {
-          if (metadata.id && metadata.id !== byObjectId.id) {
-            return prepareAdopt(
-              id,
-              byObjectId,
-              indexerURL,
-              object,
-              metadata,
-              deps,
-            )
-          }
-          existingThumbnail = byObjectId
-        }
-      }
-      // v0 thumbnails lack thumbForId. We don't resolve thumbForHash here
-      // because multiple files can share the same hash, making the parent
-      // ambiguous. The v0 device that created the thumbnail knows the
-      // correct pairing — when it upgrades, migration 0004 resolves it
-      // locally and syncUp pushes the correct thumbForId. Until then,
-      // the thumbnail is stored but invisible (syncUp skips thumbnails
-      // without thumbForId).
-      if (!metadata.thumbForId) {
-        metadata.kind = 'thumb'
-      }
+      const existingThumbnail = await deps.files.read(metadata.id)
       return prepareFileRecord(
         'thumbnail',
         existingThumbnail,
@@ -493,26 +406,7 @@ async function prepareUpsert(
       )
     }
     if (hasCompleteFileMetadata(metadata)) {
-      let existingFile: FileRecord | null = null
-      if (metadata.id) {
-        existingFile = await deps.files.read(metadata.id)
-      }
-      if (!existingFile) {
-        const byObjectId = await deps.files.readByObjectId(id, indexerURL)
-        if (byObjectId) {
-          if (metadata.id && metadata.id !== byObjectId.id) {
-            return prepareAdopt(
-              id,
-              byObjectId,
-              indexerURL,
-              object,
-              metadata,
-              deps,
-            )
-          }
-          existingFile = byObjectId
-        }
-      }
+      const existingFile = await deps.files.read(metadata.id)
       return prepareFileRecord(
         'file',
         existingFile,
@@ -537,7 +431,7 @@ async function prepareFileRecord(
   existingFile: FileRecord | null,
   indexerURL: string,
   object: PinnedObjectRef,
-  metadata: DecodedFileMetadata,
+  metadata: FileMetadata,
   deps: SyncDownDeps,
 ): Promise<PreparedCreate | PreparedUpdate> {
   const existing = existingFile
@@ -555,29 +449,11 @@ async function prepareFileRecord(
       indexerURL,
       object,
     )
-    // v0 downgrade detection: incoming metadata has no id but the existing
-    // record has a v1 id. This happens when a pre-v1 node overwrites the
-    // indexer object — it writes back all fields it knows but strips v1-only
-    // fields (version, id, kind, thumbForId) that it doesn't understand.
-    //
-    // Strategy: accept v0-compatible changes (name, size, type, etc.) so
-    // renames and other edits from v0 nodes propagate, but preserve v1-only
-    // fields from the existing record. Set updatedAt = Date.now() to ensure
-    // it moves past the syncUp cursor, triggering syncUp to push repaired
-    // v1 metadata back to the indexer.
-    //
-    // This does NOT cause loops: after syncUp pushes, the resulting syncDown
-    // event is v1 (has id) so it takes the normal merge path. The normal
-    // merge produces the same updatedAt, and the syncUp cursor is already
-    // past it, so no re-trigger occurs.
-    const isV0Downgrade = !metadata.id && !!existing.id
     let mergedMetadata: Partial<
       Omit<FileRecordRow, 'id' | 'localId' | 'addedAt'>
     >
     if (metadata.updatedAt >= existing.updatedAt) {
-      mergedMetadata = isV0Downgrade
-        ? toV0SafeFileRecordFields(metadata, existing)
-        : toFileRecordFields(metadata)
+      mergedMetadata = toFileRecordFields(metadata)
     } else {
       // Remote metadata is older than local — skip merge. This can happen
       // when events are replayed or arrive out of order.
@@ -598,7 +474,7 @@ async function prepareFileRecord(
     }
   }
 
-  const fileId = metadata.id || uniqueId()
+  const fileId = metadata.id
   if (type === 'file') {
     logger.info('syncDownEvents', 'file_create', { hash: metadata.hash })
   } else {
@@ -628,55 +504,9 @@ async function prepareFileRecord(
   }
 }
 
-/**
- * Prepare an adopt event: the remote metadata.id differs from the local
- * file record's ID. This happens during v0→v1 migration when another
- * device assigned a canonical ID first, or during subsequent ID
- * reassignments. The local file record and its objects are re-parented
- * under the canonical ID, preserving localId and addedAt.
- */
-async function prepareAdopt(
-  objectId: string,
-  oldFile: FileRecord,
-  indexerURL: string,
-  object: PinnedObjectRef,
-  metadata: DecodedFileMetadata,
-  deps: SyncDownDeps,
-): Promise<PreparedAdopt> {
-  logger.info('syncDownEvents', 'id_adopt', {
-    oldId: oldFile.id,
-    newId: metadata.id,
-    objectId,
-  })
-  const fileId = metadata.id || uniqueId()
-  const localObject = await deps.platform.pinnedObjectToLocalObject(
-    fileId,
-    indexerURL,
-    object,
-  )
-  const fileRecord: FileRecordRow = {
-    ...toFileRecordFields(metadata),
-    id: fileId,
-    localId: oldFile.localId,
-    addedAt: oldFile.addedAt,
-    deletedAt: null,
-  }
-  return {
-    kind: 'adopt',
-    oldFileId: oldFile.id,
-    objectId,
-    fileRecord,
-    localObject,
-    indexerURL,
-    tags: metadata.tags,
-    directory: metadata.directory,
-    isFile: metadata.kind === 'file',
-  }
-}
-
 /** Map decoded metadata to file record fields (all v1 fields preserved). */
 function toFileRecordFields(
-  metadata: DecodedFileMetadata,
+  metadata: FileMetadata,
 ): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt' | 'deletedAt'> {
   return {
     name: metadata.name,
@@ -689,38 +519,5 @@ function toFileRecordFields(
     thumbForId: metadata.thumbForId,
     thumbSize: metadata.thumbSize,
     trashedAt: metadata.trashedAt ?? null,
-  }
-}
-
-/**
- * Build file record fields from v0 metadata, preserving v1-only fields
- * (kind, thumbForId) from the existing record. Accepts v0-compatible
- * changes like name, size, type, hash, and timestamps.
- *
- * updatedAt is set to max(now, incoming, existing) + 1 to guarantee:
- *   1. It advances past the syncUp cursor (which may be far ahead if
- *      other files were synced later — a simple +1 on old values fails).
- *   2. It's strictly greater than the remote metadata's updatedAt so
- *      syncUp's isLocalNewer check passes even if the v0 node's clock
- *      was ahead.
- * This does NOT cause loops: after syncUp pushes the repaired v1 event,
- * syncDown's normal merge produces the same updatedAt, and the cursor
- * is already past it.
- */
-function toV0SafeFileRecordFields(
-  metadata: DecodedFileMetadata,
-  existing: FileRecordRow,
-): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt' | 'deletedAt'> {
-  return {
-    name: metadata.name,
-    type: metadata.type,
-    kind: existing.kind,
-    size: metadata.size,
-    hash: metadata.hash,
-    createdAt: metadata.createdAt,
-    updatedAt: Math.max(Date.now(), metadata.updatedAt, existing.updatedAt) + 1,
-    thumbForId: existing.thumbForId,
-    thumbSize: metadata.thumbSize,
-    trashedAt: existing.trashedAt ?? null,
   }
 }

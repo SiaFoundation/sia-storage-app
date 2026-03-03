@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   ArrowLeftIcon,
-  FolderPlusIcon,
+  FilePlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
   PencilIcon,
@@ -314,7 +314,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
               onPress={() => openSheet('directoryAddFile')}
               accessibilityLabel="Add files"
             >
-              <FolderPlusIcon color={palette.gray[50]} size={20} />
+              <FilePlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
             <IconButton
               onPress={() => navigation.navigate('Search')}

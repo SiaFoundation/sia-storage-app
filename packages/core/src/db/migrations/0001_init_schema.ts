@@ -2,7 +2,14 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { Migration } from '../types'
 
 async function up(db: DatabaseAdapter): Promise<void> {
-  // Create the files table.
+  await db.execAsync(
+    `CREATE TABLE IF NOT EXISTS directories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    createdAt INTEGER NOT NULL
+  );`,
+  )
+
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,
@@ -11,45 +18,49 @@ async function up(db: DatabaseAdapter): Promise<void> {
     name TEXT NOT NULL,
     size INTEGER NOT NULL,
     type TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'file',
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL,
-    hash TEXT NOT NULL UNIQUE,
-    thumbForHash TEXT,
-    thumbSize INTEGER
+    hash TEXT NOT NULL,
+    thumbForId TEXT,
+    thumbSize INTEGER,
+    directoryId TEXT REFERENCES directories(id) ON DELETE SET NULL,
+    trashedAt INTEGER,
+    deletedAt INTEGER
   );`,
   )
 
-  // Index for sorting on createdAt.
-  // Matches ORDER BY createdAt, id for paginated lists without extra sort. Reverse scan works for DESC.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_createdAt_id ON files(createdAt, id);`,
   )
-
-  // Index for category filters like WHERE type LIKE 'video/%'.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_fileType ON files(type);`,
   )
-
-  // Index for searching and sorting on filename.
-  // 1) Case-insensitive search: accelerates prefix searches like WHERE name LIKE 'foo%' COLLATE NOCASE.
-  //    Note: It does not help contains searches like WHERE name LIKE '%foo%' due to leading wildcard.
-  // 2) Sorting: matches ORDER BY name COLLATE NOCASE, id for stable, index-only ordered scans.
-  //    Including id provides a deterministic tie-break and supports pagination without extra sort.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_fileName_nocase_id ON files(name COLLATE NOCASE, id);`,
   )
-
-  // Index for sync queries on updatedAt.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_updatedAt_id ON files(updatedAt, id);`,
   )
-
-  // Index to efficiently select thumbnails for an original and size bucket.
   await db.execAsync(
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_files_thumbForHash_thumbSize ON files(thumbForHash, thumbSize);`,
+    `CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);`,
+  )
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_files_kind ON files(kind);`,
+  )
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_files_thumbForId_thumbSize ON files(thumbForId, thumbSize);`,
+  )
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_files_directoryId ON files(directoryId);`,
+  )
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_files_trashedAt ON files(trashedAt);`,
+  )
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_files_deletedAt ON files(deletedAt);`,
   )
 
-  // Create the objects table.
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS objects (
     fileId TEXT NOT NULL,
@@ -68,20 +79,15 @@ async function up(db: DatabaseAdapter): Promise<void> {
   );`,
   )
 
-  // Index for lookups by object id.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_objects_id ON objects(id);`,
   )
-
-  // Index for joins and filters by fileId.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_objects_fileId ON objects(fileId);`,
   )
 
-  // Create the fs table.
-  // Metadata table that mirrors files on disk so we can track usage,
-  // limit the total size of local storage, and evict unused files.
   await db.execAsync(
+    // No FK on fileId — fs is a cache managed by fsOrphanScanner/fsEvictionScanner
     `CREATE TABLE IF NOT EXISTS fs (
     fileId TEXT PRIMARY KEY,
     size INTEGER NOT NULL,
@@ -97,7 +103,6 @@ async function up(db: DatabaseAdapter): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`,
   )
 
-  // Create the logs table.
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,18 +110,53 @@ async function up(db: DatabaseAdapter): Promise<void> {
     level TEXT NOT NULL,
     scope TEXT NOT NULL,
     message TEXT NOT NULL,
-    createdAt INTEGER NOT NULL
+    createdAt INTEGER NOT NULL,
+    data TEXT
   );`,
   )
 
-  // Index for filtering by level and scope.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_logs_level_scope ON logs(level, scope);`,
   )
-
-  // Index for ordering by creation time.
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_logs_createdAt ON logs(createdAt);`,
+  )
+
+  await db.execAsync(
+    `CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    createdAt INTEGER NOT NULL,
+    usedAt INTEGER NOT NULL,
+    system INTEGER NOT NULL DEFAULT 0
+  );`,
+  )
+
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_tags_usedAt ON tags(usedAt);`,
+  )
+
+  await db.execAsync(
+    `CREATE TABLE IF NOT EXISTS file_tags (
+    fileId TEXT NOT NULL,
+    tagId TEXT NOT NULL,
+    PRIMARY KEY (fileId, tagId),
+    FOREIGN KEY (fileId) REFERENCES files(id) ON DELETE CASCADE,
+    FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+  );`,
+  )
+
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_file_tags_tagId ON file_tags(tagId);`,
+  )
+
+  const now = Date.now()
+  await db.runAsync(
+    `INSERT OR IGNORE INTO tags (id, name, createdAt, usedAt, system) VALUES (?, ?, ?, ?, 1)`,
+    'sys:favorites',
+    'Favorites',
+    now,
+    now,
   )
 }
 
