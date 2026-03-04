@@ -1,15 +1,15 @@
 import { logger } from '@siastorage/logger'
 import type { PinnedObjectRef } from '../adapters/sdk'
+import type { FileRecordsQueryOpts } from '../db/operations/files'
 import {
-  MAX_SUPPORTED_VERSION,
-  type FileMetadata,
   decodeFileMetadata,
   encodeFileMetadata,
+  type FileMetadata,
+  MAX_SUPPORTED_VERSION,
 } from '../encoding/fileMetadata'
 import { SlotPool } from '../lib/slotPool'
 import type { FileRecord } from '../types/files'
 import { fileMetadataKeys } from '../types/files'
-import type { FileRecordsQueryOpts } from '../db/operations/files'
 
 type DiffEntry = { local: unknown; remote: unknown }
 

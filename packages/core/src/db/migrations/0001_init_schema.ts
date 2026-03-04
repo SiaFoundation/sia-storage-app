@@ -99,9 +99,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_fs_addedAt ON fs(addedAt);`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`)
 
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS logs (

@@ -7,9 +7,9 @@ export type {
   ThumbSize,
 } from './files'
 export {
-  ThumbSizes,
   fileLocalMetadataKeys,
   fileMetadataKeys,
   fileRecordRowKeys,
+  ThumbSizes,
 } from './files'
 export type { PinnedSector, Slab } from './slabs'

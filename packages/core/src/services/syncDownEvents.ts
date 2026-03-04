@@ -1,12 +1,12 @@
 import { logger } from '@siastorage/logger'
 import type { AppKeyRef, ObjectsCursor, PinnedObjectRef } from '../adapters/sdk'
-import type { LocalObject } from '../encoding/localObject'
 import {
-  type FileMetadata,
   decodeFileMetadata,
+  type FileMetadata,
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
+import type { LocalObject } from '../encoding/localObject'
 import type { FileRecord, FileRecordRow } from '../types/files'
 
 const batchSize = 500
@@ -55,7 +55,14 @@ export type SyncDownDeps = {
     objectEvents(
       cursor: ObjectsCursor | undefined,
       limit: number,
-    ): Promise<{ id: string; object?: PinnedObjectRef; deleted?: boolean; updatedAt: Date }[]>
+    ): Promise<
+      {
+        id: string
+        object?: PinnedObjectRef
+        deleted?: boolean
+        updatedAt: Date
+      }[]
+    >
   }
   files: {
     read(id: string): Promise<FileRecord | null>
@@ -100,9 +107,7 @@ export type SyncDownDeps = {
     onBatchChanged(): Promise<void>
     onFileDeleted(fileRecord: FileRecordRow): Promise<void>
     onFileUpdated(fileId: string): void
-    onProgress(
-      counts: Counts & { isSyncing: boolean; cursorAt?: number },
-    ): void
+    onProgress(counts: Counts & { isSyncing: boolean; cursorAt?: number }): void
   }
 }
 
@@ -205,7 +210,12 @@ export async function syncDownEventsBatch(
 }
 
 async function processBatch(
-  events: { id: string; object?: PinnedObjectRef; deleted?: boolean; updatedAt: Date }[],
+  events: {
+    id: string
+    object?: PinnedObjectRef
+    deleted?: boolean
+    updatedAt: Date
+  }[],
   counts: Counts,
   signal: AbortSignal,
   deps: SyncDownDeps,
@@ -295,9 +305,7 @@ async function processBatch(
                 { includeUpdatedAt: false },
               )
             }
-            if (
-              (await deps.localObjects.countForFile(event.fileId)) === 0
-            ) {
+            if ((await deps.localObjects.countForFile(event.fileId)) === 0) {
               deletedFileIds.add(event.fileId)
               counts.deleted++
             }

@@ -2,19 +2,20 @@
 
 Private, encrypted cloud storage powered by the [Sia](https://sia.tech) decentralized network.
 
-## Repo structure
+## Apps
 
-Monorepo managed with [bun workspaces](https://bun.sh/docs/install/workspaces).
+| App | Stack | Description |
+|-----|-------|-------------|
+| [`apps/mobile`](apps/mobile) | React Native + Expo | iOS & Android |
+| [`apps/desktop`](apps/desktop) | Electron + Vite | macOS, Linux, Windows |
+| [`apps/cli`](apps/cli) | Bun + Commander | macOS, Linux, Windows |
 
-```
-apps/
-  mobile/       React Native + Expo (iOS & Android)
-  web/          Vite + React (browser)
+## Packages
 
-packages/
-  core/         Shared database, config, adapters, utilities
-  logger/       Structured logging
-```
+| Package | Description |
+|---------|-------------|
+| [`packages/core`](packages/core) | Database, services, adapters, config |
+| [`packages/logger`](packages/logger) | Structured logging |
 
 ## Development
 
@@ -22,12 +23,9 @@ packages/
 bun install
 
 # Mobile
-bun run mobile:start             # Expo dev server
-bun run mobile:dev:ios:simulator  # iOS simulator
-bun run mobile:dev:android:device # Android device
-
-# Web
-bun run web:dev                   # Vite dev server
+bun run mobile:start
+bun run mobile:dev:ios:device
+bun run mobile:dev:android:device
 
 # Checks
 bun run lint

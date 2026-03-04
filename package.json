@@ -1,12 +1,15 @@
 {
   "name": "siastorage",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "postinstall": "npm rebuild better-sqlite3",
-    "lint": "bun --cwd apps/mobile lint",
-    "typecheck": "bun --cwd apps/mobile typecheck",
-    "test": "bun --cwd apps/mobile test",
+    "lint": "biome check .",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
     "mobile:fresh": "bun --cwd apps/mobile fresh",
     "mobile:start": "bun --cwd apps/mobile start",
     "mobile:dev:ios:simulator": "bun --cwd apps/mobile dev:ios:simulator",
@@ -26,6 +29,9 @@
     "mobile:test:e2e:android": "bun --cwd apps/mobile test:e2e:android",
     "mobile:android": "bun --cwd apps/mobile android",
     "mobile:ios": "bun --cwd apps/mobile ios",
+    "changeset": "knope document-change",
+    "release": "knope release",
     "migration:create": "bun scripts/create-migration.ts"
-  }
+  },
+  "dependencies": {}
 }

@@ -1,6 +1,6 @@
-import { hexArrayBufferCodec } from './arrayBuffer'
-import type { PinnedSector, Slab } from '../types/slabs'
 import { z } from 'zod'
+import type { PinnedSector, Slab } from '../types/slabs'
+import { hexArrayBufferCodec } from './arrayBuffer'
 
 export const pinnedSectorSchema = z.object({
   root: z.string(),
