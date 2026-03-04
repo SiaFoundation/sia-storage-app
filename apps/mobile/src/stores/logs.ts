@@ -142,7 +142,7 @@ async function appendLogToDb(entry: LogEntry): Promise<void> {
       createdAt: Date.now(),
     })
   } catch (error) {
-    console.error('[logs] Failed to append log:', error)
+    console.warn('[logs] Failed to append log:', error)
   }
 }
 
