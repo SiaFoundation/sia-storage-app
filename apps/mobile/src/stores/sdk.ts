@@ -21,6 +21,7 @@ import { err, hexToUint8, ok, type Result } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
 import { withTimeout } from '@siastorage/core/lib/timeout'
 import { logger } from '@siastorage/logger'
+import { AppState, Platform } from 'react-native'
 import {
   type AppKey,
   Builder,
@@ -68,7 +69,6 @@ export const useSdkStore = create<SdkState>(() => {
 const { getState, setState } = useSdkStore
 
 const CONNECTION_TIMEOUT_MS = 10_000
-const AUTH_TIMEOUT_MS = 30 * 60 * 1_000
 
 /**
  * Sets SDK and manages uploader lifecycle.
@@ -188,12 +188,6 @@ export type RegisterError =
 
 export type RegisterResult = Result<void, RegisterError>
 
-export type SwitchError =
-  | { type: 'error'; message: string }
-  | { type: 'needsReauth' }
-
-export type SwitchResult = Result<void, SwitchError>
-
 /**
  * Authenticates with an indexer during onboarding.
  *
@@ -259,51 +253,6 @@ export function setIsConnected(connected: boolean) {
 
 export function setSdk(sdk: SdkInterface | null) {
   return useSdkStore.setState({ sdk, isConnected: sdk !== null })
-}
-
-/**
- * Switches to a new indexer using stored credentials for that specific indexer.
- * Used from settings when changing indexers.
- *
- * AppKeys are unique per indexer URL. If we have a stored AppKey for this
- * specific indexer, we can connect instantly. If not, the user must enter
- * their mnemonic to register with the new indexer.
- *
- * @returns success if connected, `needsReauth` if mnemonic entry required
- */
-export async function switchIndexer(
-  newIndexerURL: string,
-): Promise<SwitchResult> {
-  logger.info('sdk', 'indexer_switch', { indexerURL: newIndexerURL })
-
-  // First, check if we have an AppKey specifically for this indexer.
-  const appKeyForIndexer = await getAppKeyForIndexer(newIndexerURL)
-  if (appKeyForIndexer) {
-    const builder = new Builder(newIndexerURL)
-    const [sdk, connectedErr] = await builderConnected(
-      builder,
-      appKeyForIndexer,
-    )
-
-    if (connectedErr) {
-      logger.error('sdk', 'stored_key_connect_error', {
-        error: connectedErr as Error,
-      })
-      return err({ type: 'error', message: connectedErr.message })
-    }
-
-    if (sdk) {
-      logger.info('sdk', 'stored_key_connected')
-      setIndexerURL(newIndexerURL)
-      await setSdkWithUploader(sdk)
-      setState({ isConnected: true })
-      return ok(undefined)
-    }
-  }
-
-  // No stored AppKey for this indexer - user needs to enter mnemonic.
-  logger.info('sdk', 'no_stored_key')
-  return err({ type: 'needsReauth' })
 }
 
 /**
@@ -417,19 +366,19 @@ async function builderRequestConnection(
   }
 }
 
+// Slightly longer than the SDK's 5s poll interval so one full cycle can complete.
+const BROWSER_CLOSE_GRACE_MS = 6_000
+
+let authAbortController: AbortController | null = null
+
 /**
- * Waits for the indexer to confirm app approval.
+ * Cancels any in-flight auth flow. Aborts the SDK's waitForApproval poll
+ * via AbortSignal and closes the auth browser.
  */
-async function builderWaitForApproval(
-  builder: BuilderInterface,
-): Promise<Result<BuilderInterface>> {
-  try {
-    logger.debug('sdk', 'waiting_for_approval')
-    const result = await withTimeout(builder.waitForApproval(), AUTH_TIMEOUT_MS)
-    return ok(result)
-  } catch (e) {
-    return err(e as Error)
-  }
+export function cancelAuth() {
+  authAbortController?.abort()
+  authAbortController = null
+  closeAuthBrowser()
 }
 
 /**
@@ -452,58 +401,143 @@ async function builderRegister(
 }
 
 /**
- * Opens auth URL and polls for approval in parallel.
- * When polling confirms approval, the browser is closed automatically.
- * If the user closes the browser before approval, returns cancelled.
+ * Resolves when the app returns to foreground after being backgrounded.
+ * Defensive fallback for Android in case a Chrome Custom Tab dismissal
+ * doesn't cause openAuthURL() to resolve on some devices.
+ */
+function createAppStateDismissal() {
+  let resolve: () => void
+  const promise = new Promise<void>((r) => {
+    resolve = r
+  })
+  let wasBackground = false
+  const subscription = AppState.addEventListener('change', (state) => {
+    if (state === 'background') {
+      wasBackground = true
+    } else if (state === 'active' && wasBackground) {
+      resolve()
+    }
+  })
+  return { promise, subscription }
+}
+
+/**
+ * Browser auth state machine. Races three concurrent signals:
+ *
+ * 1. SDK approval poll — builder.waitForApproval() (internal 5s poll loop)
+ * 2. Browser dismissal — openAuthURL() resolves true (deep link) or false (manual close)
+ * 3. Android AppState   — foreground after background (Chrome Custom Tab backstop)
+ *
+ * The SDK's waitForApproval() accepts an AbortSignal, which we use to cancel
+ * the poll cleanly when the user navigates away or a grace period expires.
+ *
+ * Signal handling:
+ * - Approval poll resolves → close browser, return result
+ * - Browser dismissed       → wait for poll up to 6s, then cancel
+ * - cancelAuth()            → abort poll immediately, return cancelled
  */
 async function waitForUserApproval(
   builder: BuilderInterface,
 ): Promise<Result<BuilderInterface, AuthError>> {
   const responseUrl = builder.responseUrl()
 
-  let approved: BuilderInterface | null = null
-  let approvalError: string | null = null
+  const abortController = new AbortController()
+  authAbortController = abortController
+  const { signal } = abortController
 
-  const approvalPromise = builderWaitForApproval(builder).then(
-    ([result, waitErr]) => {
-      if (waitErr) {
-        approvalError = waitErr.message
-      } else {
-        approved = result
-      }
-      closeAuthBrowser()
-    },
+  type ApprovalOutcome =
+    | { ok: true; result: BuilderInterface }
+    | { ok: false; error: Error }
+
+  const startApprovalPoll = (): Promise<ApprovalOutcome> =>
+    builder
+      .waitForApproval({ signal })
+      .then((result): ApprovalOutcome => ({ ok: true, result }))
+      .catch((e): ApprovalOutcome => ({ ok: false, error: e as Error }))
+
+  const isAndroid = Platform.OS === 'android'
+
+  // iOS: start polling immediately (app stays in foreground).
+  // Android: defer polling until user returns — background network is unreliable.
+  let approvalPromise: Promise<ApprovalOutcome> | null = isAndroid
+    ? null
+    : startApprovalPoll()
+
+  const browserPromise = openAuthURL(responseUrl)
+
+  // Android backstop: detect foreground via AppState in case Chrome Custom
+  // Tab dismissal doesn't cause openAuthURL to resolve on some devices.
+  const androidDismissal = isAndroid ? createAppStateDismissal() : null
+
+  // Dismissal = browser closed (deep link or manual) OR Android AppState foreground.
+  // Swallow any rejection from openAuthURL so dismissalPromise never rejects.
+  const browserResult: { error: Error | null } = { error: null }
+  const dismissalPromise = Promise.race(
+    [
+      browserPromise.then(
+        () => {},
+        (e) => {
+          browserResult.error = e as Error
+        },
+      ),
+      androidDismissal?.promise,
+    ].filter(Boolean),
   )
 
-  const deepLinkReceived = await openAuthURL(responseUrl)
-
-  if (approved) {
-    return ok(approved)
-  }
-
-  if (!deepLinkReceived) {
-    // Browser closed without a deep link — give the approval poll a brief
-    // window to resolve in case the user approved but closed the browser
-    // manually before the redirect fired.
-    await Promise.race([
-      approvalPromise,
-      new Promise((r) => setTimeout(r, 3_000)),
-    ])
-    if (approved) {
-      return ok(approved)
+  try {
+    // Race: on iOS the approval poll can win; on Android only dismissal wins
+    // because the poll is deferred until the browser is dismissed.
+    const raceCandidates: Promise<'dismissed' | 'approval'>[] = [
+      dismissalPromise.then(() => 'dismissed' as const),
+    ]
+    if (approvalPromise) {
+      raceCandidates.push(approvalPromise.then(() => 'approval' as const))
     }
+    const winner = await Promise.race(raceCandidates)
+
+    if (signal.aborted) return err({ type: 'cancelled' })
+    if (browserResult.error)
+      return err({ type: 'error', message: browserResult.error.message })
+
+    // iOS only: approval poll resolved before browser was dismissed.
+    if (winner === 'approval') {
+      closeAuthBrowser()
+      const outcome = await approvalPromise!
+      if (outcome.ok) return ok(outcome.result)
+      return err({ type: 'error', message: outcome.error.message })
+    }
+
+    // Browser dismissed (deep link, manual close, or AppState foreground).
+    // Start deferred poll (Android) or reuse existing (iOS).
+    if (!approvalPromise) {
+      approvalPromise = startApprovalPoll()
+    }
+
+    // Give the poll one cycle (6s) to confirm approval, then cancel.
+    const grace = await Promise.race([
+      approvalPromise.then(() => 'approved' as const),
+      new Promise<'timeout'>((r) =>
+        setTimeout(() => r('timeout'), BROWSER_CLOSE_GRACE_MS),
+      ),
+    ])
+
+    if (signal.aborted) return err({ type: 'cancelled' })
+
+    if (grace === 'approved') {
+      const outcome = await approvalPromise
+      if (outcome.ok) return ok(outcome.result)
+      return err({ type: 'error', message: outcome.error.message })
+    }
+
+    // Grace period expired — abort the SDK poll and cancel.
+    abortController.abort()
     return err({ type: 'cancelled' })
+  } finally {
+    androidDismissal?.subscription.remove()
+    if (authAbortController === abortController) {
+      authAbortController = null
+    }
   }
-
-  await approvalPromise
-
-  if (approvalError) {
-    return err({ type: 'error', message: approvalError })
-  }
-  if (approved) {
-    return ok(approved)
-  }
-  return err({ type: 'cancelled' })
 }
 
 /**
