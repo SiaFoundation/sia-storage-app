@@ -16,7 +16,13 @@ export interface SealedObjectRef {
   id: string
   encryptedDataKey: ArrayBuffer
   encryptedMetadataKey: ArrayBuffer
-  slabs: Array<{ encryptionKey: ArrayBuffer; minShards: number; sectors: Array<{ root: string; hostKey: string }>; offset: number; length: number }>
+  slabs: Array<{
+    encryptionKey: ArrayBuffer
+    minShards: number
+    sectors: Array<{ root: string; hostKey: string }>
+    offset: number
+    length: number
+  }>
   encryptedMetadata: ArrayBuffer
   dataSignature: ArrayBuffer
   metadataSignature: ArrayBuffer
@@ -30,7 +36,13 @@ export interface PinnedObjectRef {
   updateMetadata(metadata: ArrayBuffer): void
   size(): bigint
   seal(appKey: AppKeyRef): SealedObjectRef
-  slabs(): Array<{ encryptionKey: ArrayBuffer; minShards: number; sectors: Array<{ root: string; hostKey: string }>; offset: number; length: number }>
+  slabs(): Array<{
+    encryptionKey: ArrayBuffer
+    minShards: number
+    sectors: Array<{ root: string; hostKey: string }>
+    offset: number
+    length: number
+  }>
   createdAt(): Date
   updatedAt(): Date
 }

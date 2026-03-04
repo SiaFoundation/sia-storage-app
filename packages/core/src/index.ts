@@ -10,15 +10,15 @@ export type {
 } from './adapters'
 export { hexArrayBufferCodec } from './encoding/arrayBuffer'
 export { isoToEpochCodec } from './encoding/date'
-export { uint8ToHex, hexToUint8, arrayBufferToHex } from './lib/hex'
+export { arrayBufferToHex, hexToUint8, uint8ToHex } from './lib/hex'
 export {
-  type Result,
-  ok,
   err,
-  isOk,
   isErr,
+  isOk,
+  ok,
+  type Result,
+  tryCatch,
   unwrap,
   unwrapOr,
-  tryCatch,
 } from './lib/result'
 export { daysInMs, minutesInMs, secondsInMs } from './lib/time'

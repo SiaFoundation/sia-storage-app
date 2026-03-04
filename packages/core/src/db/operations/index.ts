@@ -1,7 +1,18 @@
 export {
+  type Directory,
+  type DirectoryWithCount,
+  getOrCreateDirectoryInDb,
+  insertDirectory,
+  queryAllDirectoriesWithCounts,
+  queryDirectoryNameForFile,
+  sanitizeDirectoryName,
+  syncDirectoryFromMetadataInDb,
+} from './directories'
+export {
   deleteAllFileRecords,
   deleteFileRecordById,
   deleteFileRecordsByThumbForId,
+  type FileRecordsQueryOpts,
   insertFileRecord,
   queryFileRecordByContentHash,
   queryFileRecordById,
@@ -13,7 +24,6 @@ export {
   queryFileRecordsStats,
   transformRow,
   updateFileRecordFields,
-  type FileRecordsQueryOpts,
 } from './files'
 export {
   countLocalObjectsForFile,
@@ -31,18 +41,8 @@ export {
   queryAllTagsWithCounts,
   queryTagNamesForFile,
   queryTagsForFile,
-  syncTagsFromMetadataInDb,
   SYSTEM_TAGS,
+  syncTagsFromMetadataInDb,
   type Tag,
   type TagWithCount,
 } from './tags'
-export {
-  getOrCreateDirectoryInDb,
-  insertDirectory,
-  queryAllDirectoriesWithCounts,
-  queryDirectoryNameForFile,
-  sanitizeDirectoryName,
-  syncDirectoryFromMetadataInDb,
-  type Directory,
-  type DirectoryWithCount,
-} from './directories'

@@ -1,12 +1,12 @@
-export { runLogRotation, LOG_ROTATION_INTERVAL } from './logRotation'
+export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export {
-  syncDownEventsBatch,
   type SyncDownDeps,
+  syncDownEventsBatch,
 } from './syncDownEvents'
 export {
   diffFileMetadata,
   runSyncUpMetadataBatch,
-  type SyncUpDeps,
   type SyncUpCursor,
+  type SyncUpDeps,
   type SyncUpProgressState,
 } from './syncUpMetadata'

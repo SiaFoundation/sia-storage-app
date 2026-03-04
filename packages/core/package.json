@@ -29,6 +29,11 @@
     "./services/syncDownEvents": "./src/services/syncDownEvents.ts",
     "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts"
   },
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'No tests yet'"
+  },
   "dependencies": {
     "@siastorage/logger": "workspace:*",
     "zod": "^4.1.8"

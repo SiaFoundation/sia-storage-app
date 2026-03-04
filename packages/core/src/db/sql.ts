@@ -135,14 +135,12 @@ export async function sqlUpdate(
   fields: Record<string, SqlValue>,
   conditions: Record<string, SqlValue>,
 ): Promise<SQLRunResult> {
-  const { clause: assignments, params: setParams } =
-    buildSqlAssignments(fields)
+  const { clause: assignments, params: setParams } = buildSqlAssignments(fields)
   if (!assignments) {
     return Promise.resolve({ changes: 0, lastInsertRowId: 0 })
   }
 
-  const { clause: where, params: whereParams } =
-    buildSqlWhereClause(conditions)
+  const { clause: where, params: whereParams } = buildSqlWhereClause(conditions)
   const sql = `UPDATE ${table} SET ${assignments}${where}`
   return await runSql(db, sql, [...setParams, ...whereParams])
 }

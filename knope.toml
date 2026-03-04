@@ -1,6 +1,26 @@
-[package]
+[packages.core]
+versioned_files = ["packages/core/package.json"]
+changelog = "packages/core/CHANGELOG.md"
+
+[packages.logger]
+versioned_files = ["packages/logger/package.json"]
+changelog = "packages/logger/CHANGELOG.md"
+
+[packages.web]
+versioned_files = ["apps/web/package.json"]
+changelog = "apps/web/CHANGELOG.md"
+
+[packages.mobile]
 versioned_files = ["apps/mobile/package.json"]
 changelog = "apps/mobile/CHANGELOG.md"
+
+[packages.desktop]
+versioned_files = ["apps/desktop/package.json"]
+changelog = "apps/desktop/CHANGELOG.md"
+
+[packages.cli]
+versioned_files = ["apps/cli/package.json"]
+changelog = "apps/cli/CHANGELOG.md"
 
 [github]
 owner = "SiaFoundation"
@@ -27,7 +47,7 @@ command = "git add -A"
 
 [[workflows.steps]]
 type = "Command"
-command = "git commit -m \"chore: release v$version\""
+command = "git commit -m \"chore: release\""
 
 [[workflows.steps]]
 type = "Command"
@@ -38,11 +58,11 @@ type = "CreatePullRequest"
 base = "main"
 
 [workflows.steps.title]
-template = "chore: release v$version"
+template = "chore: release"
 
 [workflows.steps.body]
 template = """
-## Release v$version
+## Release
 
 $changelog
 

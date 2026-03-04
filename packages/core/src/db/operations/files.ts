@@ -1,9 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
-import type {
-  LocalObject,
-  LocalObjectRow,
-} from '../../encoding/localObject'
+import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import { localObjectFromStorageRow } from '../../encoding/localObject'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import { sqlDelete, sqlInsert, sqlUpdate } from '../sql'
@@ -372,8 +369,6 @@ export async function deleteFileRecordsByThumbForId(
   await sqlDelete(db, 'files', { thumbForId })
 }
 
-export async function deleteAllFileRecords(
-  db: DatabaseAdapter,
-): Promise<void> {
+export async function deleteAllFileRecords(db: DatabaseAdapter): Promise<void> {
   await sqlDelete(db, 'files')
 }
