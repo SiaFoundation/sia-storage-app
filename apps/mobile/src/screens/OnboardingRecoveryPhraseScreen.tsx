@@ -25,7 +25,7 @@ import { useToast } from '../lib/toastContext'
 import type { OnboardingStackParamList } from '../stacks/types'
 import { clearAppKeys } from '../stores/appKey'
 import { clearMnemonicHash } from '../stores/mnemonic'
-import { useSdkStore } from '../stores/sdk'
+import { cancelAuth, useSdkStore } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
@@ -47,12 +47,11 @@ export default function OnboardingRecoveryPhraseScreen() {
 
   const { register, isSubmitting } = useRecoveryPhraseRegistration()
 
-  // Clear pendingApproval so the indexer screen runs a fresh auth flow.
-  // Navigate to ChooseIndexer (not goBack) to avoid returning to a stale
-  // "connecting" state from the previous auth attempt.
+  // Abort any in-flight auth poll and clear pending state before leaving.
   const handleBack = () => {
+    cancelAuth()
     useSdkStore.setState({ pendingApproval: null })
-    nav.navigate('ChooseIndexer')
+    nav.goBack()
   }
 
   // Ensure onboarding starts with a fresh app key and no stale mnemonic

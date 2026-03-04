@@ -1,7 +1,7 @@
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ArrowLeftIcon } from 'lucide-react-native'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   KeyboardAwareScrollView,
@@ -15,6 +15,7 @@ import { Button } from '../components/Button'
 import { IndexerSelector } from '../components/IndexerSelector'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import type { OnboardingStackParamList } from '../stacks/types'
+import { cancelAuth } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingIndexerScreen() {
@@ -24,12 +25,22 @@ export default function OnboardingIndexerScreen() {
   const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } =
     useChangeIndexer()
   const [isNavigating, setIsNavigating] = useState(false)
+
+  // Reset after navigating back from a later screen (e.g. RecoveryPhrase).
+  useFocusEffect(
+    useCallback(() => {
+      setIsNavigating(false)
+    }, []),
+  )
+
   const trimmedValue = newIndexerInputProps.value.trim()
   const isInputEmpty = trimmedValue.length === 0
   const showWaiting = isWaiting || isNavigating
 
+  // Abort any in-flight auth poll before leaving.
   const handleBack = () => {
-    nav.navigate('Welcome')
+    cancelAuth()
+    nav.goBack()
   }
 
   const handleContinue = async () => {
