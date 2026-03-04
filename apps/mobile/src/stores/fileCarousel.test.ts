@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native'
-import { db, initializeDB, resetDb } from '../db'
+import { database, db, initializeDB, resetDb } from '../db'
 import {
   fetchFilePosition,
   fetchFilesByIDs,
@@ -658,7 +658,6 @@ describe('useFileCarousel hook', () => {
       expect(initDoneIndex).toBeGreaterThanOrEqual(0)
 
       // Add DB delays to simulate real async behavior
-      const database = db()
       const origFirst = database.getFirstAsync.bind(database)
       const origAll = database.getAllAsync.bind(database)
       jest
@@ -730,7 +729,6 @@ describe('useFileCarousel hook', () => {
       expect(result.current.currentFile?.id).toBe('file-2')
 
       // Add async delays to DB methods to simulate real expo-sqlite behavior.
-      const database = db()
       const origFirst = database.getFirstAsync.bind(database)
       const origAll = database.getAllAsync.bind(database)
       jest
