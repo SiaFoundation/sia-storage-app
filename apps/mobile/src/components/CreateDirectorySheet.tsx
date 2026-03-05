@@ -23,10 +23,12 @@ export function CreateDirectorySheet({ onCreated }: Props) {
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 400)
-    } else {
+    if (!isOpen) {
       setName('')
       setError('')
     }
@@ -57,6 +59,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
+      onShow={handleShow}
       title="New Folder"
       presentationStyle="formSheet"
       headerRight={

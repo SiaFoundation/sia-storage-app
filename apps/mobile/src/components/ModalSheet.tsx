@@ -13,6 +13,7 @@ import { colors, palette } from '../styles/colors'
 type Props = {
   visible: boolean
   onRequestClose: () => void
+  onShow?: () => void
   title: string
   headerRight?: ReactNode
   presentationStyle?: 'pageSheet' | 'formSheet'
@@ -22,6 +23,7 @@ type Props = {
 export function ModalSheet({
   visible,
   onRequestClose,
+  onShow,
   title,
   headerRight,
   presentationStyle = 'pageSheet',
@@ -36,6 +38,7 @@ export function ModalSheet({
       presentationStyle={presentationStyle}
       onRequestClose={onRequestClose}
       onDismiss={onRequestClose}
+      onShow={onShow}
     >
       <View style={styles.container}>
         <View
