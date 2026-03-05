@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useToast } from '../lib/toastContext'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import {
   addTagToFile,
@@ -27,6 +28,7 @@ type Props = {
 }
 
 export function ManageTagsSheet({ fileId, sheetName }: Props) {
+  const toast = useToast()
   const isOpen = useSheetOpen(sheetName)
   const fileTags = useTagsForFile(fileId)
   const allTags = useAllTags()
@@ -70,6 +72,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
       try {
         await addTagToFile(fileId, trimmed)
         setQuery('')
+        toast.show(`Added "${trimmed}"`)
       } finally {
         setLoadingTagNames((prev) => {
           const next = new Set(prev)
@@ -78,7 +81,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
         })
       }
     },
-    [fileId],
+    [fileId, toast],
   )
 
   const handleRemoveTag = useCallback(
@@ -86,6 +89,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
       setLoadingTagIds((prev) => new Set([...prev, tagId]))
       try {
         await removeTagFromFile(fileId, tagId)
+        toast.show('Tag removed')
       } finally {
         setLoadingTagIds((prev) => {
           const next = new Set(prev)
@@ -94,7 +98,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
         })
       }
     },
-    [fileId],
+    [fileId, toast],
   )
 
   const handleClose = useCallback(() => {

@@ -36,6 +36,7 @@ import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
+import { useToast } from '../lib/toastContext'
 import type { MainStackParamList } from '../stacks/types'
 import {
   enterSelectionMode,
@@ -58,6 +59,7 @@ import { colors, overlay, palette, whiteA } from '../styles/colors'
 type Props = NativeStackScreenProps<MainStackParamList, 'TagLibrary'>
 
 export function TagLibraryScreen({ route, navigation }: Props) {
+  const toast = useToast()
   const { tagId, tagName: initialTagName } = route.params
   const [tagName, setTagName] = useState(initialTagName)
   const scope = `tag.${tagId}`
@@ -182,8 +184,9 @@ export function TagLibraryScreen({ route, navigation }: Props) {
     async (newName: string) => {
       await renameTag(tagId, newName)
       setTagName(newName)
+      toast.show(`Renamed to "${newName}"`)
     },
-    [tagId],
+    [tagId, toast],
   )
 
   const handleDeleteTag = useCallback(() => {
@@ -200,12 +203,13 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             onPress: async () => {
               await deleteTag(tagId)
               navigation.goBack()
+              toast.show(`Deleted "${tagName}"`)
             },
           },
         ],
       )
     }, 300)
-  }, [tagId, tagName, navigation])
+  }, [tagId, tagName, navigation, toast])
 
   return (
     <View style={styles.container}>
