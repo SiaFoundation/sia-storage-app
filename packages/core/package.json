@@ -10,6 +10,8 @@
     "./config": "./src/config/index.ts",
     "./db": "./src/db/index.ts",
     "./db/migrations": "./src/db/migrations/index.ts",
+    "./lib/detectMimeType": "./src/lib/detectMimeType.ts",
+    "./lib/fileTypes": "./src/lib/fileTypes.ts",
     "./lib/mutex": "./src/lib/mutex.ts",
     "./lib/retry": "./src/lib/retry.ts",
     "./lib/serviceInterval": "./src/lib/serviceInterval.ts",
@@ -17,6 +19,7 @@
     "./lib/slotPool": "./src/lib/slotPool.ts",
     "./lib/timeout": "./src/lib/timeout.ts",
     "./lib/types": "./src/lib/types.ts",
+    "./lib/localObjects": "./src/lib/localObjects.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",
     "./types": "./src/types/index.ts",
     "./encoding/fileMetadata": "./src/encoding/fileMetadata.ts",
@@ -27,15 +30,26 @@
     "./services": "./src/services/index.ts",
     "./services/logRotation": "./src/services/logRotation.ts",
     "./services/syncDownEvents": "./src/services/syncDownEvents.ts",
-    "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts"
+    "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts",
+    "./services/thumbnailScanner": "./src/services/thumbnailScanner.ts",
+    "./services/cacheEviction": "./src/services/cacheEviction.ts",
+    "./services/uploader": "./src/services/uploader.ts",
+    "./services/fsFileUri": "./src/services/fsFileUri.ts"
   },
   "scripts": {
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'No tests yet'"
+    "test": "jest"
   },
   "dependencies": {
     "@siastorage/logger": "workspace:*",
     "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@siastorage/node-adapters": "workspace:*",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "typescript": "^5.0.0"
   }
 }

@@ -1,8 +1,9 @@
+import type { FsMetaRow } from '@siastorage/core/db/operations'
+import * as ops from '@siastorage/core/db/operations'
 import { logger } from '@siastorage/logger'
 import { Directory, File, Paths } from 'expo-file-system'
 import useSWR from 'swr'
 import { db } from '../db'
-import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
 import { extFromMime } from '../lib/fileTypes'
 import { swrCacheBy } from '../lib/swr'
 
@@ -18,12 +19,7 @@ export type FsFileInfo = {
   type: string
 }
 
-export type FsMetaRow = {
-  fileId: string
-  size: number
-  addedAt: number
-  usedAt: number
-}
+export type { FsMetaRow } from '@siastorage/core/db/operations'
 
 export const fsStorageDirectory = new Directory(Paths.document, 'files')
 
@@ -134,55 +130,33 @@ export function useFsFileUri(file?: FsFileInfo) {
   })
 }
 
-const fsMetadataTable = 'fs'
-
 export async function upsertFsFileMetadata(row: FsMetaRow): Promise<void> {
-  await sqlInsert(
-    fsMetadataTable,
-    {
-      fileId: row.fileId,
-      size: row.size,
-      addedAt: row.addedAt,
-      usedAt: row.usedAt,
-    },
-    { conflictClause: 'OR REPLACE' },
-  )
+  await ops.upsertFsFileMetadata(db(), row)
 }
 
 export async function deleteFsFileMetadata(fileId: string): Promise<void> {
-  await sqlDelete(fsMetadataTable, { fileId })
+  await ops.deleteFsFileMetadata(db(), fileId)
 }
 
 export async function deleteFsFileMetadataBatch(
   fileIds: string[],
 ): Promise<void> {
-  if (fileIds.length === 0) return
-  const placeholders = fileIds.map(() => '?').join(',')
-  await db().runAsync(
-    `DELETE FROM ${fsMetadataTable} WHERE fileId IN (${placeholders})`,
-    ...fileIds,
-  )
+  await ops.deleteFsFileMetadataBatch(db(), fileIds)
 }
 
 export async function readFsFileMetadata(
   fileId: string,
 ): Promise<FsMetaRow | null> {
-  return db().getFirstAsync<FsMetaRow>(
-    `SELECT fileId, size, addedAt, usedAt FROM ${fsMetadataTable} WHERE fileId = ?`,
-    fileId,
-  )
+  return ops.readFsFileMetadata(db(), fileId)
 }
 
 export async function updateFsFileMetadataUsedAt(
   fileId: string,
   usedAt: number = Date.now(),
 ): Promise<void> {
-  await sqlUpdate(fsMetadataTable, { usedAt }, { fileId })
+  await ops.updateFsFileMetadataUsedAt(db(), fileId, usedAt)
 }
 
 export async function calcFsFilesMetadataTotalSize(): Promise<number> {
-  const result = await db().getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(size), 0) AS total FROM ${fsMetadataTable}`,
-  )
-  return result?.total ?? 0
+  return ops.calcFsFilesMetadataTotalSize(db())
 }

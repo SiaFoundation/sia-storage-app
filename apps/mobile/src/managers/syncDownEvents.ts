@@ -5,7 +5,7 @@ import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { logger } from '@siastorage/logger'
 import type { ObjectsCursor } from 'react-native-sia'
 import { z } from 'zod'
-import { withTransactionLock } from '../db'
+import { db } from '../db'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { getAsyncStorageJSON, setAsyncStorageJSON } from '../stores/asyncStore'
 import { syncDirectoryFromMetadata } from '../stores/directories'
@@ -70,7 +70,8 @@ export async function syncDownEvents(
           throw new Error('not implemented')
         },
         pinnedObjectToLocalObject,
-        withTransaction: withTransactionLock,
+        withTransaction: (fn: () => Promise<void>) =>
+          db().withTransactionAsync(fn),
       },
       hooks: {
         onBatchChanged: async () => {

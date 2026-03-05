@@ -1,5 +1,5 @@
 import { logger } from '@siastorage/logger'
-import type { PinnedObjectRef } from '../adapters/sdk'
+import type { SdkAdapter } from '../adapters/sdk'
 import type { FileRecordsQueryOpts } from '../db/operations/files'
 import {
   decodeFileMetadata,
@@ -40,11 +40,10 @@ export type SyncUpProgressState = {
 }
 
 export type SyncUpDeps = {
-  sdk: {
-    getPinnedObject(objectId: string): Promise<PinnedObjectRef>
-    updateObjectMetadata(pinnedObject: PinnedObjectRef): Promise<void>
-    deleteObject(objectId: string): Promise<void>
-  }
+  sdk: Pick<
+    SdkAdapter,
+    'getPinnedObject' | 'updateObjectMetadata' | 'deleteObject'
+  >
   files: {
     readAll(opts: FileRecordsQueryOpts): Promise<FileRecord[]>
     readAllCount(opts: FileRecordsQueryOpts): Promise<number>

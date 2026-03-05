@@ -17,7 +17,7 @@ export type InsertOptions = {
   conflictClause?: InsertConflictClause
 }
 
-export async function sqlInsert<
+export async function insert<
   T extends Record<string, string | number | boolean | null | undefined>,
 >(
   db: DatabaseAdapter,
@@ -46,7 +46,7 @@ export async function sqlInsert<
   const sql = `${verb} INTO ${table} (${columns.join(
     ', ',
   )}) VALUES (${valuesSql.join(', ')})`
-  return await runSql(db, sql, params)
+  return await run(db, sql, params)
 }
 
 function normalizeSqlValue(value: SqlValue): string | number {
@@ -64,7 +64,7 @@ function normalizeSqlValue(value: SqlValue): string | number {
   return String(value)
 }
 
-export async function runSql(
+export async function run(
   db: DatabaseAdapter,
   sql: string,
   params: SqlValue[] = [],
@@ -129,7 +129,7 @@ function buildSqlWhereClause(
   return { clause, params }
 }
 
-export async function sqlUpdate(
+export async function update(
   db: DatabaseAdapter,
   table: string,
   fields: Record<string, SqlValue>,
@@ -142,15 +142,15 @@ export async function sqlUpdate(
 
   const { clause: where, params: whereParams } = buildSqlWhereClause(conditions)
   const sql = `UPDATE ${table} SET ${assignments}${where}`
-  return await runSql(db, sql, [...setParams, ...whereParams])
+  return await run(db, sql, [...setParams, ...whereParams])
 }
 
-export async function sqlDelete(
+export async function del(
   db: DatabaseAdapter,
   table: string,
   conditions?: Record<string, SqlValue>,
 ): Promise<SQLRunResult> {
   const { clause, params } = buildSqlWhereClause(conditions)
   const sql = `DELETE FROM ${table}${clause}`
-  return await runSql(db, sql, params)
+  return await run(db, sql, params)
 }

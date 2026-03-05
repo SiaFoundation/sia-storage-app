@@ -25,25 +25,37 @@ import {
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
-import { AppState } from 'react-native'
+import type { UploadDeps } from '@siastorage/core/services/uploader'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
+import { createFileReader } from '../lib/fileReader'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import {
   createFileRecord,
   getFilesLocalOnly,
   readFileRecord,
 } from '../stores/files'
-import { readLocalObjectsForFile } from '../stores/localObjects'
+import { getFsFileUri } from '../stores/fs'
+import {
+  readLocalObjectsForFile,
+  upsertLocalObject,
+} from '../stores/localObjects'
 import { getIsConnected } from '../stores/sdk'
 import { getAutoScanUploads } from '../stores/settings'
 import {
   flushPendingUploadProgress,
   getActiveUploads,
   getUploadState,
+  registerUpload,
+  removeUpload,
+  setUploadBatchInfo,
+  setUploadError,
+  setUploadStatus,
+  updateUploadProgress,
   useUploadsStore,
 } from '../stores/uploads'
 import { type FileEntry, getUploadManager } from './uploader'
@@ -186,10 +198,40 @@ function createMockSdk(
   } as unknown as jest.Mocked<SdkInterface>
 }
 
-function simulateAppResume() {
-  const calls = jest.mocked(AppState.addEventListener).mock.calls
-  const listener = calls.find(([event]) => event === 'change')?.[1]
-  listener?.('active')
+function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
+  return {
+    sdk: {
+      uploadPacked: (opts: any) => sdk.uploadPacked(opts),
+      pinObject: (po: any) => sdk.pinObject(po),
+    },
+    files: {
+      read: (id) => readFileRecord(id),
+      getLocalOnly: (opts) => getFilesLocalOnly(opts),
+      getFsFileUri: (file) => getFsFileUri(file),
+    },
+    localObjects: {
+      upsert: (lo) => upsertLocalObject(lo),
+    },
+    platform: {
+      isConnected: () => getIsConnected(),
+      autoScanEnabled: () => getAutoScanUploads(),
+      getIndexerURL: () => indexerURL,
+      createFileReader: (uri) => createFileReader(uri),
+      pinnedObjectToLocalObject: (fileId, url, po: any) =>
+        pinnedObjectToLocalObject(fileId, url, po),
+    },
+    uploads: {
+      register: (fileId, size) => registerUpload(fileId, size),
+      remove: (fileId) => removeUpload(fileId),
+      setStatus: (fileId, status) => setUploadStatus(fileId, status),
+      setError: (fileId, message) => setUploadError(fileId, message),
+      setBatchInfo: (fileId, batchId, count) =>
+        setUploadBatchInfo(fileId, batchId, count),
+      updateProgress: (fileId, progress) =>
+        updateUploadProgress(fileId, progress),
+      getActive: () => getActiveUploads(),
+    },
+  }
 }
 
 describe('UploadManager', () => {
@@ -228,7 +270,7 @@ describe('UploadManager', () => {
 
   describe('__testProcessFiles (test helper)', () => {
     it('adds files to packer and sets status to packed', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([
         createFileEntry('file1'),
@@ -245,7 +287,7 @@ describe('UploadManager', () => {
 
   describe('processEntry', () => {
     it('creates packer on first file', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
@@ -258,7 +300,7 @@ describe('UploadManager', () => {
     })
 
     it('reuses packer for subsequent files in same batch', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.__testProcessFiles([createFileEntry('file2')])
@@ -268,7 +310,7 @@ describe('UploadManager', () => {
     })
 
     it('sets error status on add failure', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
@@ -282,7 +324,7 @@ describe('UploadManager', () => {
 
   describe('flush', () => {
     it('calls finalize on packer', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
@@ -295,7 +337,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = await createTestFile('file2')
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -316,7 +358,7 @@ describe('UploadManager', () => {
 
     it('creates local object in DB after successful upload', async () => {
       const entry = await createTestFile('file1')
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
       await manager.__testProcessFiles([entry])
@@ -331,7 +373,7 @@ describe('UploadManager', () => {
 
     it('file record remains in DB after upload completes', async () => {
       const entry = await createTestFile('file1')
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
       await manager.__testProcessFiles([entry])
@@ -344,7 +386,7 @@ describe('UploadManager', () => {
     })
 
     it('sets error on all files when finalize fails', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockRejectedValueOnce(new Error('Network error'))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
@@ -360,7 +402,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = await createTestFile('file2')
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -387,7 +429,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = createFileEntry('file2-no-db-record')
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -408,7 +450,7 @@ describe('UploadManager', () => {
 
     it('sets error when pinObject fails and does not save to local DB', async () => {
       const entry = await createTestFile('pin-fail-file')
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
       mockSdk.pinObject.mockRejectedValueOnce(new Error('Indexer unavailable'))
 
@@ -430,7 +472,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('pin-success')
       const entry2 = await createTestFile('pin-fail')
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -460,7 +502,7 @@ describe('UploadManager', () => {
     })
 
     it('creates new packer for files added after flush', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
@@ -472,7 +514,7 @@ describe('UploadManager', () => {
 
   describe('idle timeout via loop', () => {
     it('flushes batch after idle timeout', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Let the loop start and enter its initial poll wait
       await jest.advanceTimersByTimeAsync(0)
@@ -490,7 +532,7 @@ describe('UploadManager', () => {
     })
 
     it('resets idle timer when new file is enqueued', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       // Flush microtasks so the loop starts, polls DB (empty), and enters wait
       await jest.advanceTimersByTimeAsync(0)
 
@@ -522,7 +564,7 @@ describe('UploadManager', () => {
     // At 90% threshold with 40 MiB slab, threshold is 36 MiB
 
     it('does NOT flush when below threshold', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // 80% of slab = 96 MiB, below 90% threshold
       const file = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.8))
@@ -532,7 +574,7 @@ describe('UploadManager', () => {
     })
 
     it('does NOT flush when at threshold but next file would not overflow', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
@@ -546,7 +588,7 @@ describe('UploadManager', () => {
     })
 
     it('flushes when at threshold AND next file would overflow', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
@@ -562,7 +604,7 @@ describe('UploadManager', () => {
     })
 
     it('does NOT flush before overflow if below threshold', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // 50% of slab, below threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.5))
@@ -577,7 +619,7 @@ describe('UploadManager', () => {
     })
 
     it('correctly calculates fill percent for partial slabs', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Fill exactly to threshold (90%)
       const file1 = createFileEntry(
@@ -598,7 +640,7 @@ describe('UploadManager', () => {
 
   describe('shutdown', () => {
     it('removes all files from upload store', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([
         createFileEntry('file1'),
@@ -617,7 +659,7 @@ describe('UploadManager', () => {
     })
 
     it('stops the loop', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.shutdown()
@@ -628,7 +670,7 @@ describe('UploadManager', () => {
     })
 
     it('cancels inflight uploads via packer.cancel()', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await manager.__testProcessFiles([createFileEntry('file1')])
 
       expect(mockPacker.cancel).not.toHaveBeenCalled()
@@ -639,7 +681,7 @@ describe('UploadManager', () => {
     })
 
     it('removes enqueued files from upload store', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Enqueue files (they get registered in store)
       manager.enqueue([createFileEntry('queued-file')])
@@ -663,7 +705,7 @@ describe('UploadManager', () => {
         return BigInt(1000)
       })
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       const files = Array.from({ length: 15 }, (_, i) =>
         createFileEntry(`s-file${i}`),
       )
@@ -686,7 +728,7 @@ describe('UploadManager', () => {
 
   describe('progress callback', () => {
     it('updates progress in upload store when reported', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       let progressCallback: ((uploaded: bigint, total: bigint) => void) | null =
         null
@@ -719,7 +761,7 @@ describe('UploadManager', () => {
     it('creates separate local objects for each file', async () => {
       const entry1 = await createTestFile('batch-file-1')
       const entry2 = await createTestFile('batch-file-2')
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -741,7 +783,7 @@ describe('UploadManager', () => {
 
   describe('upload serialization', () => {
     it('files enqueued during flush end up in a new batch', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
@@ -777,7 +819,7 @@ describe('UploadManager', () => {
     // 40 MiB slab, 10 slabs max = 400 MiB absolute limit
 
     it('max slabs limit triggers flush at 400MB', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Add files to fill exactly 10 slabs (400 MiB)
       // Using 40 MiB files = exactly 1 slab each
@@ -791,7 +833,7 @@ describe('UploadManager', () => {
     })
 
     it('duration exceeded triggers flush on next loop iteration', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Enqueue files through the loop with gaps just under
       // PACKER_IDLE_TIMEOUT so they count as active time.
@@ -816,7 +858,7 @@ describe('UploadManager', () => {
     })
 
     it('duration exceeded mid-window triggers flush after window completes', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Flush microtasks so the loop starts, polls DB (empty), and enters poll wait
       await jest.advanceTimersByTimeAsync(0)
@@ -862,7 +904,7 @@ describe('UploadManager', () => {
     })
 
     it('app suspension does not count toward max batch duration', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Process first file to start a batch
       manager.enqueue([createFileEntry('pre-suspend', 1000)])
@@ -871,7 +913,7 @@ describe('UploadManager', () => {
 
       // Simulate iOS suspension: advance clock 5 minutes, then resume
       jest.advanceTimersByTime(5 * 60 * 1000)
-      simulateAppResume()
+      manager.adjustBatchForSuspension()
 
       // Process another file — suspension time is excluded
       manager.enqueue([createFileEntry('post-suspend', 1000)])
@@ -886,11 +928,11 @@ describe('UploadManager', () => {
     })
 
     it('app suspension before first file does not trigger max_duration', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Simulate suspension before any files are processed
       jest.advanceTimersByTime(5 * 60 * 1000)
-      simulateAppResume()
+      manager.adjustBatchForSuspension()
 
       manager.enqueue([createFileEntry('first-file', 1000)])
       await jest.advanceTimersByTimeAsync(0)
@@ -908,7 +950,7 @@ describe('UploadManager', () => {
     })
 
     it('many small photos hit max slabs limit before 400MB', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // 2MB photos: 20 per slab, 200 photos = 10 slabs = 400 MiB
       for (let i = 0; i < 200; i++) {
@@ -958,7 +1000,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(createDBFiles(20))
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       // Flush microtasks: loop starts → pollDB finds 20 files →
       // drainQueues → processEntries adds all 20
       await jest.advanceTimersByTimeAsync(0)
@@ -984,7 +1026,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(wave2)
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       // Flush microtasks: loop polls twice (wave1 → wave2) and processes all 10
       await jest.advanceTimersByTimeAsync(0)
 
@@ -1005,7 +1047,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(wave1)
         .mockResolvedValueOnce([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       expect(mockPacker.add).toHaveBeenCalledTimes(3)
 
@@ -1033,7 +1075,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(createDBFiles(3))
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       manager.enqueue([createFileEntry('explicit-1')])
       await jest.advanceTimersByTimeAsync(0)
 
@@ -1045,7 +1087,7 @@ describe('UploadManager', () => {
       jest.mocked(getAutoScanUploads).mockResolvedValue(true)
       jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).not.toHaveBeenCalled()
@@ -1057,7 +1099,7 @@ describe('UploadManager', () => {
       jest.mocked(getAutoScanUploads).mockResolvedValue(false)
       jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).not.toHaveBeenCalled()
@@ -1077,7 +1119,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce(batch2)
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(300)
@@ -1097,7 +1139,7 @@ describe('UploadManager', () => {
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValue([mockPinnedObject] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Batch 1 — finalize will fail
       manager.enqueue([createFileEntry('fail-1', 100)])

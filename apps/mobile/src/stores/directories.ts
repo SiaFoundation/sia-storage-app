@@ -1,139 +1,51 @@
-import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import * as ops from '@siastorage/core/db/operations'
 import useSWR from 'swr'
 import { db } from '../db'
-import { sqlDelete, sqlInsert, sqlUpdate } from '../db/sql'
-import { trashFiles } from '../lib/deleteFile'
 import { swrCacheBy } from '../lib/swr'
-import { invalidateCacheLibraryLists } from './librarySwr'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from './librarySwr'
+
+export type {
+  Directory,
+  DirectoryWithCount,
+} from '@siastorage/core/db/operations'
+export const sanitizeDirectoryName = ops.sanitizeDirectoryName
 
 export const UNFILED_DIRECTORY_ID = '__unfiled__'
 
 export const directoriesSwr = swrCacheBy()
 
-export type Directory = {
-  id: string
-  name: string
-  createdAt: number
-}
-
-export type DirectoryWithCount = Directory & {
-  fileCount: number
-}
-
-export function sanitizeDirectoryName(name: string): string {
-  let result = ''
-  for (const ch of name) {
-    const code = ch.codePointAt(0)!
-    if (ch === '/' || ch === '\\') continue
-    if (code < 0x20 || code === 0x7f) continue
-    result += ch
-  }
-  result = result.trim()
-  if (/^\.+$/.test(result)) return ''
-  return result.slice(0, 255)
-}
-
-export async function createDirectory(name: string): Promise<Directory> {
-  const trimmed = sanitizeDirectoryName(name)
-  if (!trimmed) {
-    throw new Error('Folder name cannot be empty')
-  }
-
-  const existing = await db().getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ? COLLATE NOCASE',
-    trimmed,
-  )
-  if (existing) {
-    throw new Error(`Folder "${trimmed}" already exists`)
-  }
-
-  const now = Date.now()
-  const dir: Directory = {
-    id: uniqueId(),
-    name: trimmed,
-    createdAt: now,
-  }
-
-  await sqlInsert('directories', dir)
+export async function createDirectory(name: string) {
+  const dir = await ops.insertDirectory(db(), name)
   directoriesSwr.invalidate('all')
   return dir
 }
 
-export async function getOrCreateDirectory(name: string): Promise<Directory> {
-  const trimmed = sanitizeDirectoryName(name)
-  if (!trimmed) {
-    throw new Error('Folder name cannot be empty')
-  }
-
-  const existing = await db().getFirstAsync<Directory>(
-    'SELECT id, name, createdAt FROM directories WHERE name = ? COLLATE NOCASE',
-    trimmed,
-  )
-
-  if (existing) {
-    return existing
-  }
-
-  return createDirectory(trimmed)
+export async function getOrCreateDirectory(name: string) {
+  return ops.getOrCreateDirectory(db(), name)
 }
 
-export async function readAllDirectoriesWithCounts(): Promise<
-  DirectoryWithCount[]
-> {
-  return db().getAllAsync<DirectoryWithCount>(
-    `SELECT d.id, d.name, d.createdAt, COUNT(f.id) as fileCount
-     FROM directories d
-     LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-     GROUP BY d.id
-     ORDER BY d.name COLLATE NOCASE`,
-  )
+export async function readAllDirectoriesWithCounts() {
+  return ops.queryAllDirectoriesWithCounts(db())
 }
 
 export async function deleteDirectory(id: string): Promise<void> {
-  await db().runAsync(
-    `UPDATE files SET directoryId = NULL WHERE directoryId = ?`,
-    id,
-  )
-  await sqlDelete('directories', { id })
+  await ops.deleteDirectory(db(), id)
   directoriesSwr.invalidateAll()
   invalidateCacheLibraryLists()
 }
 
 export async function deleteDirectoryAndTrashFiles(id: string): Promise<void> {
-  const files = await db().getAllAsync<{ id: string }>(
-    `SELECT id FROM files WHERE directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-    id,
-  )
-  const fileIds = files.map((f) => f.id)
-  if (fileIds.length > 0) {
-    await trashFiles(fileIds)
-  }
-  await sqlDelete('directories', { id })
+  await ops.deleteDirectoryAndTrashFiles(db(), id)
   directoriesSwr.invalidateAll()
+  await invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
 export async function renameDirectory(id: string, name: string): Promise<void> {
-  const trimmed = sanitizeDirectoryName(name)
-  if (!trimmed) {
-    throw new Error('Folder name cannot be empty')
-  }
-  const existing = await db().getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ? COLLATE NOCASE AND id != ?',
-    trimmed,
-    id,
-  )
-  if (existing) {
-    throw new Error(`Folder "${trimmed}" already exists`)
-  }
-  await sqlUpdate('directories', { name: trimmed }, { id })
-  // Bump updatedAt on affected files so syncUp pushes the new folder name.
-  const now = Date.now()
-  await db().runAsync(
-    'UPDATE files SET updatedAt = ? WHERE directoryId = ?',
-    now,
-    id,
-  )
+  await ops.renameDirectory(db(), id, name)
   directoriesSwr.invalidate('all')
   invalidateCacheLibraryLists()
 }
@@ -142,11 +54,7 @@ export async function moveFileToDirectory(
   fileId: string,
   directoryId: string | null,
 ): Promise<void> {
-  await sqlUpdate(
-    'files',
-    { directoryId, updatedAt: Date.now() },
-    { id: fileId },
-  )
+  await ops.moveFileToDirectory(db(), fileId, directoryId)
   directoriesSwr.invalidate('all')
   directoriesSwr.invalidate(`file/${fileId}`)
   invalidateCacheLibraryLists()
@@ -156,15 +64,7 @@ export async function moveFilesToDirectory(
   fileIds: string[],
   directoryId: string | null,
 ): Promise<void> {
-  if (fileIds.length === 0) return
-  const now = Date.now()
-  const placeholders = fileIds.map(() => '?').join(',')
-  await db().runAsync(
-    `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${placeholders})`,
-    directoryId,
-    now,
-    ...fileIds,
-  )
+  await ops.moveFilesToDirectory(db(), fileIds, directoryId)
   directoriesSwr.invalidate('all')
   for (const id of fileIds) {
     directoriesSwr.invalidate(`file/${id}`)
@@ -175,25 +75,13 @@ export async function moveFilesToDirectory(
 export async function readDirectoryNameForFile(
   fileId: string,
 ): Promise<string | undefined> {
-  const row = await db().getFirstAsync<{ name: string }>(
-    `SELECT d.name FROM directories d
-     INNER JOIN files f ON f.directoryId = d.id
-     WHERE f.id = ?`,
-    fileId,
-  )
-  return row?.name
+  return ops.queryDirectoryNameForFile(db(), fileId)
 }
 
 export async function countFilesWithDirectories(
   fileIds: string[],
 ): Promise<number> {
-  if (fileIds.length === 0) return 0
-  const placeholders = fileIds.map(() => '?').join(',')
-  const row = await db().getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE id IN (${placeholders}) AND directoryId IS NOT NULL`,
-    ...fileIds,
-  )
-  return row?.count ?? 0
+  return ops.queryCountFilesWithDirectories(db(), fileIds)
 }
 
 export async function syncDirectoryFromMetadata(
@@ -201,8 +89,7 @@ export async function syncDirectoryFromMetadata(
   directoryName: string | undefined,
 ): Promise<void> {
   if (directoryName === undefined) return
-  const dir = await getOrCreateDirectory(directoryName)
-  await sqlUpdate('files', { directoryId: dir.id }, { id: fileId })
+  await ops.syncDirectoryFromMetadata(db(), fileId, directoryName)
   directoriesSwr.invalidate('all')
   directoriesSwr.invalidate(`file/${fileId}`)
   invalidateCacheLibraryLists()

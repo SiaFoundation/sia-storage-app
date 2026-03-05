@@ -13,7 +13,7 @@ import {
 } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { readThumbnailSizesForFileId } from '../stores/thumbnails'
-import { runThumbnailScanner } from './thumbnailScanner'
+import { getThumbnailScanner, runThumbnailScanner } from './thumbnailScanner'
 
 jest.mock('expo-image-manipulator', () => ({
   ImageManipulator: { manipulate: jest.fn() },
@@ -31,6 +31,7 @@ const imageManipulatorMock = jest.mocked(ImageManipulator.manipulate)
 const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
 
 beforeEach(async () => {
+  getThumbnailScanner().reset()
   await initializeDB()
   jest.clearAllMocks()
 

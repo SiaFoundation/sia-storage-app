@@ -64,5 +64,7 @@ export const SYNC_UP_METADATA_CONCURRENCY = 30
 export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 // Auto-purge trashed files older than this threshold.
 export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
+// How often to check for trashed files to auto-purge.
+export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)

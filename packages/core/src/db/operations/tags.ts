@@ -1,6 +1,6 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import { uniqueId } from '../../lib/uniqueId'
-import { sqlDelete, sqlInsert } from '../sql'
+import * as sql from '../sql'
 
 export const SYSTEM_TAGS = {
   favorites: { id: 'sys:favorites', name: 'Favorites' },
@@ -18,7 +18,7 @@ export type TagWithCount = Tag & {
   fileCount: number
 }
 
-export async function ensureSystemTagsInDb(db: DatabaseAdapter): Promise<void> {
+export async function ensureSystemTags(db: DatabaseAdapter): Promise<void> {
   const now = Date.now()
   for (const tag of Object.values(SYSTEM_TAGS)) {
     await db.runAsync(
@@ -57,11 +57,11 @@ export async function insertTag(
     system: 0,
   }
 
-  await sqlInsert(db, 'tags', tag)
+  await sql.insert(db, 'tags', tag)
   return tag
 }
 
-export async function getOrCreateTagInDb(
+export async function getOrCreateTag(
   db: DatabaseAdapter,
   name: string,
 ): Promise<Tag> {
@@ -122,13 +122,13 @@ export async function queryAllTagsWithCounts(
     `SELECT t.id, t.name, t.createdAt, t.usedAt, t.system, COUNT(f.id) as fileCount
      FROM tags t
      LEFT JOIN file_tags ft ON ft.tagId = t.id
-     LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file'
+     LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
      GROUP BY t.id
      ORDER BY t.system DESC, t.name COLLATE NOCASE`,
   )
 }
 
-export async function syncTagsFromMetadataInDb(
+export async function syncTagsFromMetadata(
   db: DatabaseAdapter,
   fileId: string,
   tagNames: string[] | undefined,
@@ -136,7 +136,7 @@ export async function syncTagsFromMetadataInDb(
   if (tagNames === undefined) {
     return
   }
-  await ensureSystemTagsInDb(db)
+  await ensureSystemTags(db)
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `DELETE FROM file_tags WHERE fileId = ? AND tagId NOT IN (
@@ -146,8 +146,8 @@ export async function syncTagsFromMetadataInDb(
     )
 
     for (const name of tagNames) {
-      const tag = await getOrCreateTagInDb(db, name)
-      await sqlInsert(
+      const tag = await getOrCreateTag(db, name)
+      await sql.insert(
         db,
         'file_tags',
         { fileId, tagId: tag.id },
@@ -157,7 +157,117 @@ export async function syncTagsFromMetadataInDb(
   })
 }
 
-export async function deleteTagById(
+export async function insertFileTag(
+  db: DatabaseAdapter,
+  fileId: string,
+  tagId: string,
+): Promise<void> {
+  await sql.insert(
+    db,
+    'file_tags',
+    { fileId, tagId },
+    { conflictClause: 'OR IGNORE' },
+  )
+}
+
+export async function queryTagsByPrefix(
+  db: DatabaseAdapter,
+  query: string,
+  limit: number = 10,
+): Promise<Tag[]> {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return db.getAllAsync<Tag>(
+      'SELECT id, name, createdAt, usedAt, system FROM tags ORDER BY usedAt DESC LIMIT ?',
+      limit,
+    )
+  }
+
+  const escaped = trimmed.replace(/[%_\\]/g, (m) => `\\${m}`)
+  return db.getAllAsync<Tag>(
+    `SELECT id, name, createdAt, usedAt, system FROM tags
+     WHERE name LIKE ? COLLATE NOCASE ESCAPE '\\'
+     ORDER BY usedAt DESC
+     LIMIT ?`,
+    `${escaped}%`,
+    limit,
+  )
+}
+
+export async function toggleFavorite(
+  db: DatabaseAdapter,
+  fileId: string,
+): Promise<void> {
+  const tagId = SYSTEM_TAGS.favorites.id
+  const existing = await db.getFirstAsync<{ tagId: string }>(
+    'SELECT tagId FROM file_tags WHERE fileId = ? AND tagId = ?',
+    fileId,
+    tagId,
+  )
+
+  if (existing) {
+    await sql.del(db, 'file_tags', { fileId, tagId })
+  } else {
+    await sql.insert(
+      db,
+      'file_tags',
+      { fileId, tagId },
+      { conflictClause: 'OR IGNORE' },
+    )
+  }
+  await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+}
+
+export async function queryIsFavorite(
+  db: DatabaseAdapter,
+  fileId: string,
+): Promise<boolean> {
+  const row = await db.getFirstAsync<{ tagId: string }>(
+    'SELECT tagId FROM file_tags WHERE fileId = ? AND tagId = ?',
+    fileId,
+    SYSTEM_TAGS.favorites.id,
+  )
+  return !!row
+}
+
+export async function renameTag(
+  db: DatabaseAdapter,
+  tagId: string,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    throw new Error('Tag name cannot be empty')
+  }
+
+  const tag = await db.getFirstAsync<Tag>(
+    'SELECT id, name, createdAt, usedAt, system FROM tags WHERE id = ?',
+    tagId,
+  )
+  if (!tag) return
+  if (tag.system) {
+    throw new Error('System tags cannot be renamed')
+  }
+
+  const existing = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM tags WHERE name = ? COLLATE NOCASE AND id != ?',
+    trimmed,
+    tagId,
+  )
+  if (existing) {
+    throw new Error(`Tag "${trimmed}" already exists`)
+  }
+
+  const now = Date.now()
+  await sql.update(db, 'tags', { name: trimmed }, { id: tagId })
+  await db.runAsync(
+    'UPDATE files SET updatedAt = ? WHERE id IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
+    now,
+    tagId,
+  )
+}
+
+export async function deleteTag(
   db: DatabaseAdapter,
   tagId: string,
 ): Promise<void> {
@@ -170,7 +280,77 @@ export async function deleteTagById(
     throw new Error('System tags cannot be deleted')
   }
   await db.withTransactionAsync(async () => {
-    await sqlDelete(db, 'file_tags', { tagId })
-    await sqlDelete(db, 'tags', { id: tagId })
+    await sql.del(db, 'file_tags', { tagId })
+    await sql.del(db, 'tags', { id: tagId })
   })
+}
+
+export async function addTagToFile(
+  db: DatabaseAdapter,
+  fileId: string,
+  tagName: string,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    const tag = await getOrCreateTag(db, tagName)
+    await sql.insert(
+      db,
+      'file_tags',
+      { fileId, tagId: tag.id },
+      { conflictClause: 'OR IGNORE' },
+    )
+    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+  })
+}
+
+export async function addTagToFiles(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  tagName: string,
+): Promise<void> {
+  if (fileIds.length === 0) return
+  await db.withTransactionAsync(async () => {
+    const tag = await getOrCreateTag(db, tagName)
+    for (const fileId of fileIds) {
+      await sql.insert(
+        db,
+        'file_tags',
+        { fileId, tagId: tag.id },
+        { conflictClause: 'OR IGNORE' },
+      )
+    }
+    const now = Date.now()
+    const placeholders = fileIds.map(() => '?').join(',')
+    await db.runAsync(
+      `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      ...fileIds,
+    )
+  })
+}
+
+export async function removeTagFromFile(
+  db: DatabaseAdapter,
+  fileId: string,
+  tagId: string,
+): Promise<void> {
+  await sql.del(db, 'file_tags', { fileId, tagId })
+  await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+}
+
+export async function removeTagFromFiles(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  tagId: string,
+): Promise<void> {
+  if (fileIds.length === 0) return
+  for (const fileId of fileIds) {
+    await sql.del(db, 'file_tags', { fileId, tagId })
+  }
+  const now = Date.now()
+  const placeholders = fileIds.map(() => '?').join(',')
+  await db.runAsync(
+    `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
+    now,
+    ...fileIds,
+  )
 }

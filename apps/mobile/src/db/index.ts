@@ -141,16 +141,27 @@ const RECOVERY_METHODS = new Set([
 
 let _dbProxy: SQLite.SQLiteDatabase | null = null
 
+const txMutex = new Mutex()
+
 /**
  * Returns a proxy around the current database connection that automatically
  * retries operations on native handle invalidation (Android NPE).
- * All async query/exec methods are wrapped with recovery; other methods
- * (like withTransactionAsync) pass through directly.
+ * All async query/exec methods are wrapped with recovery.
+ * `withTransactionAsync` is wrapped with mutex serialization + recovery
+ * so all code paths (including core operations) get these guarantees.
  */
 export function db(): SQLite.SQLiteDatabase {
   if (!_dbProxy) {
     _dbProxy = new Proxy({} as SQLite.SQLiteDatabase, {
       get(_, prop) {
+        if (prop === 'withTransactionAsync') {
+          return (fn: () => Promise<void>) =>
+            txMutex.runExclusive(() =>
+              withRecovery(async () => {
+                await database.withTransactionAsync(fn)
+              }),
+            )
+        }
         const value = (database as any)[prop]
         if (typeof prop === 'string' && RECOVERY_METHODS.has(prop)) {
           return (...args: unknown[]) =>
@@ -164,23 +175,4 @@ export function db(): SQLite.SQLiteDatabase {
     })
   }
   return _dbProxy
-}
-
-const txMutex = new Mutex()
-
-/**
- * Run operations in a transaction and serialize all database transactions across the app.
- * Uses `database` directly for withTransactionAsync — transaction lifecycle can't be
- * retried at the method level. The outer withRecovery retries the entire transaction.
- */
-export async function withTransactionLock<T>(fn: () => Promise<T>): Promise<T> {
-  return txMutex.runExclusive(() =>
-    withRecovery(async () => {
-      let out!: T
-      await database.withTransactionAsync(async () => {
-        out = await fn()
-      })
-      return out
-    }),
-  )
 }
