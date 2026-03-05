@@ -328,7 +328,7 @@ export function LibraryScreen({ route, navigation }: Props) {
       <CreateTagSheet />
       <LibraryStatusSheet />
       {isSelectionMode ? (
-        <SelectionBar onOpenSelectionActions={handleOpenSelectionActions} />
+        <SelectionBar onComplete={handleBulkActionComplete} />
       ) : (
         <LibraryTabBar
           activeTab={activeTab}

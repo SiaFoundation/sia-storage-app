@@ -15,16 +15,16 @@ import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
 import { trashFiles } from '../lib/deleteFile'
-import { fileHasASealedObject, useFileStatus } from '../lib/file'
+import {
+  fetchBulkCounts,
+  fileHasASealedObject,
+  useFileStatus,
+} from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
 import type { MainStackParamList } from '../stacks/types'
-import {
-  type FileRecord,
-  readFileRecord,
-  useFileDetails,
-} from '../stores/files'
+import { useFileDetails } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { toggleFavorite, useIsFavorite } from '../stores/tags'
@@ -159,7 +159,7 @@ function SingleFileActionsSheet({
             icon={<ArrowDownToLineIcon size={18} />}
             onPress={handlePressAndClose(handleDownload)}
           >
-            Download file
+            Download to device
           </ActionSheetButton>
         )}
       {!status.data?.isUploaded &&
@@ -170,7 +170,7 @@ function SingleFileActionsSheet({
             icon={<CloudUploadIcon size={18} />}
             onPress={handlePressAndClose(handleReupload)}
           >
-            Upload file
+            Upload to network
           </ActionSheetButton>
         )}
       <ActionSheetButton
@@ -211,7 +211,7 @@ function SingleFileActionsSheet({
         icon={<Trash2Icon size={18} />}
         onPress={handlePressAndClose(handleDelete)}
       >
-        Delete file
+        Move to trash
       </ActionSheetButton>
     </ActionSheet>
   )
@@ -221,47 +221,6 @@ type BulkFileProps = {
   sheetName: string
   fileIds: string[]
   onComplete?: () => void
-}
-
-type BulkCounts = {
-  onNetwork: number
-  downloadable: number // on network but not on device
-  uploadable: number // on device but not on network
-  total: number
-  files: FileRecord[]
-}
-
-async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
-  const files: FileRecord[] = []
-  let onNetwork = 0
-  let downloadable = 0
-  let uploadable = 0
-
-  for (const id of fileIds) {
-    const file = await readFileRecord(id)
-    if (file) {
-      files.push(file)
-      const hasSealed = fileHasASealedObject(file)
-      const uri = await getFsFileUri(file)
-      if (hasSealed) {
-        onNetwork++
-      }
-      if (hasSealed && !uri) {
-        downloadable++
-      }
-      if (uri && !hasSealed) {
-        uploadable++
-      }
-    }
-  }
-
-  return {
-    onNetwork,
-    downloadable,
-    uploadable,
-    total: files.length,
-    files,
-  }
 }
 
 function BulkFileActionsSheet({
