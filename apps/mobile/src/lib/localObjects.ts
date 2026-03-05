@@ -1,4 +1,5 @@
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { sealPinnedObject } from '@siastorage/core/lib/localObjects'
 import type { PinnedObjectInterface } from 'react-native-sia'
 import { getAppKeyForIndexer } from '../stores/appKey'
 
@@ -11,12 +12,5 @@ export async function pinnedObjectToLocalObject(
   if (!appKey) {
     throw new Error(`No AppKey found for indexer: ${indexerURL}`)
   }
-  const sealedObject = pinnedObject.seal(appKey)
-  return {
-    ...sealedObject,
-    fileId,
-    indexerURL,
-    createdAt: sealedObject.createdAt ?? new Date(),
-    updatedAt: sealedObject.updatedAt ?? new Date(),
-  }
+  return sealPinnedObject(fileId, indexerURL, pinnedObject, appKey)
 }

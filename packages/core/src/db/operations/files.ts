@@ -3,7 +3,8 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import { localObjectFromStorageRow } from '../../encoding/localObject'
 import type { FileRecord, FileRecordRow } from '../../types/files'
-import { sqlDelete, sqlInsert, sqlUpdate } from '../sql'
+import * as sql from '../sql'
+import { insertLocalObject, queryLocalObjectsForFile } from './localObjects'
 
 export function transformRow(
   row: FileRecordRow,
@@ -52,7 +53,7 @@ export async function insertFileRecord(
     trashedAt,
     deletedAt,
   } = fileRecord
-  await sqlInsert(db, 'files', {
+  await sql.insert(db, 'files', {
     id,
     name,
     size,
@@ -266,7 +267,7 @@ export async function queryFileRecordsByLocalIds(
   localIds: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE localId IN (${localIds
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds,
@@ -278,7 +279,7 @@ export async function queryFileRecordsByContentHashes(
   contentHashes: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE hash IN (${contentHashes
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
     ...contentHashes,
@@ -352,23 +353,309 @@ export async function updateFileRecordFields(
     return
   }
 
-  await sqlUpdate(db, 'files', assignments, { id })
+  await sql.update(db, 'files', assignments, { id })
+}
+
+export async function updateFileDirectory(
+  db: DatabaseAdapter,
+  fileId: string,
+  dirId: string,
+): Promise<void> {
+  const now = Date.now()
+  await sql.update(
+    db,
+    'files',
+    { directoryId: dirId, updatedAt: now },
+    { id: fileId },
+  )
 }
 
 export async function deleteFileRecordById(
   db: DatabaseAdapter,
   id: string,
 ): Promise<void> {
-  await sqlDelete(db, 'files', { id })
+  await sql.del(db, 'files', { id })
 }
 
 export async function deleteFileRecordsByThumbForId(
   db: DatabaseAdapter,
   thumbForId: string,
 ): Promise<void> {
-  await sqlDelete(db, 'files', { thumbForId })
+  await sql.del(db, 'files', { thumbForId })
+}
+
+export async function deleteFileRecordAndThumbnails(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await sql.del(db, 'files', { thumbForId: id })
+    await sql.del(db, 'files', { id })
+  })
+}
+
+export async function deleteFileRecordsAndThumbnails(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const id of ids) {
+      await sql.del(db, 'files', { thumbForId: id })
+      await sql.del(db, 'files', { id })
+    }
+  })
 }
 
 export async function deleteAllFileRecords(db: DatabaseAdapter): Promise<void> {
-  await sqlDelete(db, 'files')
+  await sql.del(db, 'files')
+}
+
+export async function readFileRecord(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<FileRecord | null> {
+  const row = await queryFileRecordById(db, id)
+  if (!row) return null
+  const objects = await queryLocalObjectsForFile(db, id)
+  return transformRow(row, objects)
+}
+
+export async function readFileRecordByObjectId(
+  db: DatabaseAdapter,
+  objectId: string,
+  indexerURL: string,
+): Promise<FileRecord | null> {
+  const row = await queryFileRecordByObjectId(db, objectId, indexerURL)
+  if (!row) return null
+  const objects = await queryLocalObjectsForFile(db, row.id)
+  return transformRow(row, objects)
+}
+
+export async function readFileRecordByContentHash(
+  db: DatabaseAdapter,
+  hash: string,
+): Promise<FileRecord | null> {
+  const row = await queryFileRecordByContentHash(db, hash)
+  if (!row) return null
+  const objects = await queryLocalObjectsForFile(db, row.id)
+  return transformRow(row, objects)
+}
+
+export async function readFileRecordsByLocalIds(
+  db: DatabaseAdapter,
+  localIds: string[],
+): Promise<(FileRecord & { localId: string })[]> {
+  const rows = await queryFileRecordsByLocalIds(db, localIds)
+  return rows.map((row) => transformRow(row)) as (FileRecord & {
+    localId: string
+  })[]
+}
+
+export async function readFileRecordsByContentHashes(
+  db: DatabaseAdapter,
+  contentHashes: string[],
+): Promise<(FileRecord & { hash: string })[]> {
+  const rows = await queryFileRecordsByContentHashes(db, contentHashes)
+  return rows.map((row) => transformRow(row)) as (FileRecord & {
+    hash: string
+  })[]
+}
+
+export async function queryLocalOnlyFiles(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  opts: {
+    limit?: number
+    order?: 'ASC' | 'DESC'
+    excludeIds?: string[]
+  } = {},
+): Promise<FileRecord[]> {
+  return queryFileRecords(db, {
+    limit: opts.limit,
+    order: opts.order ?? 'ASC',
+    pinned: { indexerURL, isPinned: false },
+    fileExistsLocally: true,
+    excludeIds: opts.excludeIds,
+    activeOnly: true,
+  })
+}
+
+export async function createFileRecordWithLocalObject(
+  db: DatabaseAdapter,
+  record: Omit<FileRecord, 'objects'>,
+  localObject: LocalObject,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await insertFileRecord(db, record)
+    await insertLocalObject(db, localObject)
+  })
+}
+
+export async function updateFileRecordWithLocalObject(
+  db: DatabaseAdapter,
+  update: Partial<FileRecordRow> & { id: string },
+  localObject: LocalObject,
+  options?: { includeUpdatedAt?: boolean },
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await updateFileRecordFields(db, update, options)
+    await insertLocalObject(db, localObject)
+  })
+}
+
+export async function queryLostFileCount(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<number> {
+  return queryFileRecordsCount(db, {
+    order: 'ASC',
+    pinned: { indexerURL, isPinned: false },
+    fileExistsLocally: false,
+    activeOnly: true,
+  })
+}
+
+export async function queryLostFileStats(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<{ count: number; totalBytes: number }> {
+  return queryFileRecordsStats(db, {
+    order: 'ASC',
+    pinned: { indexerURL, isPinned: false },
+    fileExistsLocally: false,
+    activeOnly: true,
+  })
+}
+
+export async function queryLocalFileCount(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  localOnly: boolean,
+): Promise<number> {
+  return queryFileRecordsCount(db, {
+    order: 'ASC',
+    pinned: { indexerURL, isPinned: !localOnly },
+    fileExistsLocally: true,
+    activeOnly: true,
+  })
+}
+
+export async function queryLocalFileStats(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  localOnly: boolean,
+): Promise<{ count: number; totalBytes: number }> {
+  return queryFileRecordsStats(db, {
+    order: 'ASC',
+    pinned: { indexerURL, isPinned: !localOnly },
+    fileExistsLocally: true,
+    activeOnly: true,
+  })
+}
+
+export async function readFileRecordsByIds(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<FileRecord[]> {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  const joined = await db.getAllAsync<
+    FileRecordRow &
+      LocalObjectRow & {
+        objectId: string
+        objectCreatedAt: number
+        objectUpdatedAt: number
+      }
+  >(
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt,
+            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
+            o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
+            o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
+            o.metadataSignature as metadataSignature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
+     FROM files f
+     LEFT JOIN objects o ON o.fileId = f.id
+     WHERE f.id IN (${placeholders})`,
+    ...ids,
+  )
+
+  const byId: Map<string, FileRecordRow> = new Map()
+  const objectsById: Map<string, LocalObject[]> = new Map()
+
+  for (const r of joined) {
+    if (!byId.has(r.id)) {
+      byId.set(r.id, r)
+    }
+    if (r.fileId && r.indexerURL) {
+      const arr = objectsById.get(r.id) || []
+      arr.push(
+        localObjectFromStorageRow({
+          ...r,
+          id: r.objectId,
+          createdAt: r.objectCreatedAt,
+          updatedAt: r.objectUpdatedAt,
+        }),
+      )
+      objectsById.set(r.id, arr)
+    }
+  }
+
+  return Array.from(byId.values()).map((row) => {
+    return transformRow(row, objectsById.get(row.id))
+  })
+}
+
+export async function insertManyFileRecords(
+  db: DatabaseAdapter,
+  records: Omit<FileRecord, 'objects'>[],
+): Promise<void> {
+  if (records.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const record of records) {
+      await insertFileRecord(db, record)
+    }
+  })
+}
+
+export async function updateManyFileRecordFields(
+  db: DatabaseAdapter,
+  updates: (Partial<FileRecordRow> & { id: string })[],
+  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
+): Promise<void> {
+  if (updates.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const update of updates) {
+      await updateFileRecordFields(db, update, options)
+    }
+  })
+}
+
+export async function deleteManyFileRecordsByIds(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const id of ids) {
+      await deleteFileRecordById(db, id)
+    }
+  })
+}
+
+export async function deleteLostFiles(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<string[]> {
+  const lost = await queryFileRecords(db, {
+    order: 'ASC',
+    pinned: { indexerURL, isPinned: false },
+    fileExistsLocally: false,
+    activeOnly: true,
+  })
+  if (lost.length === 0) return []
+  await deleteFileRecordsAndThumbnails(
+    db,
+    lost.map((f) => f.id),
+  )
+  return lost.map((f) => f.id)
 }

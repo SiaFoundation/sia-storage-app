@@ -5,6 +5,8 @@ export type ExpoFileSystemMock = {
     uri: string
     name: string
     info: jest.Mock
+    bytes: jest.Mock
+    write: jest.Mock
     delete: jest.Mock
     copy: jest.Mock
   }
@@ -26,6 +28,8 @@ let mock = buildExpoFileSystemMock()
 type CustomMocks = {
   File?: {
     info?: jest.Mock
+    bytes?: jest.Mock
+    write?: jest.Mock
     list?: jest.Mock
     create?: jest.Mock
     delete?: jest.Mock
@@ -42,6 +46,8 @@ type CustomMocks = {
 type ExpoFileSystemMockMethods = {
   File: {
     info: jest.Mock
+    bytes: jest.Mock
+    write: jest.Mock
     list: jest.Mock
     create: jest.Mock
     delete: jest.Mock
@@ -61,6 +67,8 @@ function buildExpoFileSystemMockMethods(
   return {
     File: {
       info: jest.fn((uri: string) => ({ exists: true, size: 100, uri })),
+      bytes: jest.fn(() => new Uint8Array(100)),
+      write: jest.fn(() => {}),
       list: jest.fn(() => []),
       create: jest.fn(() => {}),
       delete: jest.fn(() => {}),
@@ -112,6 +120,8 @@ export function buildExpoFileSystemMock(): ExpoFileSystemMock {
       }
     }
     info = methods.File.info
+    bytes = methods.File.bytes
+    write = methods.File.write
     list = methods.File.list
     create = methods.File.create
     delete = methods.File.delete

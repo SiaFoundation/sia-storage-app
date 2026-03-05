@@ -17,16 +17,30 @@ jest.mock('@siastorage/core/config', () => ({
 }))
 
 import { PACKER_IDLE_TIMEOUT, SLAB_SIZE } from '@siastorage/core/config'
+import type { UploadDeps } from '@siastorage/core/services/uploader'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
+import { createFileReader } from '../lib/fileReader'
+import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { getFilesLocalOnly } from '../stores/files'
+import { getFsFileUri } from '../stores/fs'
+import { upsertLocalObject } from '../stores/localObjects'
 import { getIsConnected } from '../stores/sdk'
 import { getAutoScanUploads } from '../stores/settings'
-import { useUploadsStore } from '../stores/uploads'
+import {
+  getActiveUploads,
+  registerUpload,
+  removeUpload,
+  setUploadBatchInfo,
+  setUploadError,
+  setUploadStatus,
+  updateUploadProgress,
+  useUploadsStore,
+} from '../stores/uploads'
 import { type FileEntry, type FlushRecord, getUploadManager } from './uploader'
 
 jest.mock('react-native-sia', () => ({}))
@@ -134,6 +148,42 @@ function createMockSdk(
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<SdkInterface>
+}
+
+function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
+  return {
+    sdk: {
+      uploadPacked: (opts: any) => sdk.uploadPacked(opts),
+      pinObject: (po: any) => sdk.pinObject(po),
+    },
+    files: {
+      read: () => Promise.resolve(null),
+      getLocalOnly: (opts) => getFilesLocalOnly(opts),
+      getFsFileUri: (file) => getFsFileUri(file),
+    },
+    localObjects: {
+      upsert: (lo) => upsertLocalObject(lo),
+    },
+    platform: {
+      isConnected: () => getIsConnected(),
+      autoScanEnabled: () => getAutoScanUploads(),
+      getIndexerURL: () => indexerURL,
+      createFileReader: (uri) => createFileReader(uri),
+      pinnedObjectToLocalObject: (fileId, url, po: any) =>
+        pinnedObjectToLocalObject(fileId, url, po),
+    },
+    uploads: {
+      register: (fileId, size) => registerUpload(fileId, size),
+      remove: (fileId) => removeUpload(fileId),
+      setStatus: (fileId, status) => setUploadStatus(fileId, status),
+      setError: (fileId, message) => setUploadError(fileId, message),
+      setBatchInfo: (fileId, batchId, count) =>
+        setUploadBatchInfo(fileId, batchId, count),
+      updateProgress: (fileId, progress) =>
+        updateUploadProgress(fileId, progress),
+      getActive: () => getActiveUploads(),
+    },
+  }
 }
 
 function enablePolling() {
@@ -263,7 +313,7 @@ describe('UploadManager packing efficiency', () => {
     it('100 small files (50KB each) pack into one batch', async () => {
       // 100 × 50KB = 5,120,000 bytes — fits well under one slab (40MiB)
       // fillPercent is low because files are tiny relative to slab capacity
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 100 }, (_, i) =>
         createFileEntry(`small-${i}`, 50 * KB),
@@ -282,7 +332,7 @@ describe('UploadManager packing efficiency', () => {
 
     it('small files that nearly fill a slab', async () => {
       // 200 × 200KB = 40,960,000 bytes ≈ 97.7% of one slab
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 200 }, (_, i) =>
         createFileEntry(`small-exact-${i}`, 200 * KB),
@@ -303,7 +353,7 @@ describe('UploadManager packing efficiency', () => {
   describe('medium files', () => {
     it('medium files fill a slab efficiently', async () => {
       // 19 × 2MiB = 38MiB = exactly 95% of one slab
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 19 }, (_, i) =>
         createFileEntry(`med-${i}`, 2 * MB),
@@ -323,7 +373,7 @@ describe('UploadManager packing efficiency', () => {
     it('medium files crossing slab boundaries accumulate without premature flush', async () => {
       // 15 × 15MiB = 225MiB → slabsFilled=5, capacity=240MiB
       // Fill at each boundary stays at 0.375/0.75/0.125/0.5/0.875 — never ≥0.9
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 15 }, (_, i) =>
         createFileEntry(`med-cross-${i}`, 15 * MB),
@@ -346,7 +396,7 @@ describe('UploadManager packing efficiency', () => {
   describe('large / oversized files', () => {
     it('single file larger than one slab', async () => {
       // 1 × 50MiB → spans 1 full slab + partial, capacity = 2 slabs
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('big-1', 50 * MB)])
       await manager.flush()
@@ -362,7 +412,7 @@ describe('UploadManager packing efficiency', () => {
 
     it('file spanning 3+ slabs', async () => {
       // 1 × 130MiB → spans 3 full slabs + partial, capacity = 4 slabs
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('huge-1', 130 * MB)])
       await manager.flush()
@@ -379,7 +429,7 @@ describe('UploadManager packing efficiency', () => {
     it('single file larger than max slabs (500MiB)', async () => {
       // 1 × 500MiB → slabsFilled=12, exceeds PACKER_MAX_SLABS
       // Auto-flushes immediately after adding
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('giant-1', 500 * MB)])
 
@@ -397,7 +447,7 @@ describe('UploadManager packing efficiency', () => {
       // Flush 1: the existing 5 small files (only 25% of a slab — wasteful
       //          but necessary to keep the oversized file in its own batch)
       // Flush 2: the 500MiB file alone
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const smallFiles = Array.from({ length: 5 }, (_, i) =>
         createFileEntry(`pre-${i}`, 2 * MB),
@@ -427,7 +477,7 @@ describe('UploadManager packing efficiency', () => {
     it('large file + small files fill remaining slab space', async () => {
       // 1 × 30MiB + 40 × 250KB = ~39.75MiB — nearly fills one slab
       // No boundary crossing so no threshold fires despite high fill
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = [
         createFileEntry('large-gap', 30 * MB),
@@ -450,7 +500,7 @@ describe('UploadManager packing efficiency', () => {
     it('oversized file + small files fill partial slab', async () => {
       // 1 × 50MiB (spans into slab 2) + 80 × 350KB fills slab 2 to 97%
       // No boundary crossing within slab 2 so no threshold fires
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = [
         createFileEntry('over-gap', 50 * MB),
@@ -477,7 +527,7 @@ describe('UploadManager packing efficiency', () => {
       // Phase 2: 15% of slab → would cross boundary → threshold flush
       // Flush 1: the 92% file (efficient threshold flush)
       // Flush 2: the 15% file (wasteful but unavoidable remainder)
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const file1Size = Math.floor(SLAB_SIZE * 0.92)
       await manager.__testProcessFiles([createFileEntry('thresh-1', file1Size)])
@@ -508,7 +558,7 @@ describe('UploadManager packing efficiency', () => {
       // Threshold flush at 92%, then overflow + 130MiB + small files
       // Flush 1: threshold flush of the 92% file
       // Flush 2: overflow (15%) + 130MiB + 10 × 200KB = ~138MiB across 4 slabs
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([
         createFileEntry('pre-thresh', Math.floor(SLAB_SIZE * 0.92)),
@@ -546,7 +596,7 @@ describe('UploadManager packing efficiency', () => {
     it('multi-slab batch stays efficient', async () => {
       // 4 × 35MiB = 140MiB → slabsFilled=3, capacity=160MiB
       // Fill at each boundary: 0.875/0.75/0.625/0.5 — never ≥0.9
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 4 }, (_, i) =>
         createFileEntry(`multi-slab-${i}`, 35 * MB),
@@ -571,7 +621,7 @@ describe('UploadManager packing efficiency', () => {
       // 10 × 40MiB = 400MiB → slabsFilled=10 → max_slabs flush
       // Each file exactly fills one slab so fill=0% at each boundary (no threshold)
       // Then 5 × 40MiB = 200MiB remainder
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       for (let i = 0; i < 10; i++) {
         await manager.__testProcessFiles([
@@ -606,7 +656,7 @@ describe('UploadManager packing efficiency', () => {
     it('max slabs with partial fill', async () => {
       // 20 × 20MiB = 400MiB → slabsFilled=10 on the 20th file
       // Fill oscillates 0%/50% at boundaries — never hits 90% threshold
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       for (let i = 0; i < 19; i++) {
         await manager.__testProcessFiles([
@@ -635,7 +685,7 @@ describe('UploadManager packing efficiency', () => {
       // thumbnailer generates 2 thumbnails per photo asynchronously.
       // 20 photos (1.5MiB) + 2 videos (15MiB) + 50 thumbs (4KB)
       // = 30MiB + 30MiB + 0.2MiB = ~60.2MiB → slabsFilled=1
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const photos = Array.from({ length: 20 }, (_, i) =>
         createFileEntry(`photo-${i}`, Math.floor(1.5 * MB)),
@@ -664,7 +714,7 @@ describe('UploadManager packing efficiency', () => {
       // photos pack first filling slabs, then thumbnails fill gaps.
       // 50 × 3MiB = 150MiB: threshold fires every 13 photos (39MiB = 97.5%)
       // 3 threshold flushes of 13 photos, then 11 photos + 100 thumbs remain
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const photos = Array.from({ length: 50 }, (_, i) =>
         createFileEntry(`sync-photo-${i}`, 3 * MB),
@@ -697,7 +747,7 @@ describe('UploadManager packing efficiency', () => {
 
   describe('sequential flush-refill cycles', () => {
     it('each cycle maintains efficiency', async () => {
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       // Cycle 1: 37 × 1MiB = 37MiB → 93% of one slab
       await manager.__testProcessFiles(
@@ -749,7 +799,7 @@ describe('UploadManager packing efficiency', () => {
         .mockResolvedValueOnce(createDBFiles(50, { size: 800 * KB }))
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
@@ -775,7 +825,7 @@ describe('UploadManager packing efficiency', () => {
         .mockResolvedValueOnce(wave2)
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
@@ -798,7 +848,7 @@ describe('UploadManager packing efficiency', () => {
         .mockResolvedValueOnce(createDBFiles(500, { size: MB }))
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
@@ -838,7 +888,7 @@ describe('UploadManager packing efficiency', () => {
         )
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
@@ -863,7 +913,7 @@ describe('UploadManager packing efficiency', () => {
         )
         .mockResolvedValue([] as any)
 
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
@@ -890,7 +940,7 @@ describe('UploadManager packing efficiency', () => {
     it('idle resets keep batch open', async () => {
       // 5 × 7MiB = 35MiB enqueued 2s apart (under 5s idle timeout)
       // All pack into one batch, idle timeout fires after last enqueue
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       for (let i = 0; i < 5; i++) {
@@ -912,7 +962,7 @@ describe('UploadManager packing efficiency', () => {
     it('gap exceeding idle timeout — two separate efficient batches', async () => {
       // Batch 1: 3 × 12MiB = 36MiB → idle timeout → 90% fill
       // Batch 2: 2 × 18MiB = 36MiB → idle timeout → 90% fill
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       for (let i = 0; i < 3; i++) {
@@ -954,7 +1004,7 @@ describe('UploadManager packing efficiency', () => {
       //
       // 2MiB files trigger threshold every 19 files (19×2MiB = 38MiB = 95%)
       // The first 2MiB batch includes the overflow file so it's 17 files
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([
         createFileEntry('p1-big', Math.floor(SLAB_SIZE * 0.92)),
@@ -1031,7 +1081,7 @@ describe('UploadManager packing efficiency', () => {
       //
       // Threshold fires when batch hits ~99.7% of 5 slabs (after R1-R4 + 5 R5)
       // Then 2MiB files trigger threshold every 19 files
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles(
         Array.from({ length: 20 }, (_, i) =>
@@ -1122,7 +1172,7 @@ describe('UploadManager packing efficiency', () => {
     it('single photo (5 MiB) — 13% fill', async () => {
       // The most common real-world case: user shares one photo.
       // 5 MiB barely dents the 40 MiB slab.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('photo-1', 5 * MB)])
       await manager.flush()
@@ -1138,7 +1188,7 @@ describe('UploadManager packing efficiency', () => {
 
     it('share sheet: 3 photos (3 × 5 MiB) — 38% fill', async () => {
       // Common multi-select from share sheet. 15 MiB is well under one slab.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 3 }, (_, i) =>
         createFileEntry(`photo-${i}`, 5 * MB),
@@ -1160,7 +1210,7 @@ describe('UploadManager packing efficiency', () => {
       // only using 41 MiB. Not inherently wasteful — more files arriving
       // before the idle timeout would fill the gap. Only a problem when
       // this is the last file in the batch.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([
         createFileEntry('border-file', 41 * MB),
@@ -1180,7 +1230,7 @@ describe('UploadManager packing efficiency', () => {
       // Videos commonly exceed one slab but don't fill the second.
       // Like the boundary case above, only wasteful when no more files
       // arrive to fill the remaining ~30 MiB before the batch flushes.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       await manager.__testProcessFiles([createFileEntry('video-1', 50 * MB)])
       await manager.flush()
@@ -1199,7 +1249,7 @@ describe('UploadManager packing efficiency', () => {
       // slab boundary, triggering threshold flush. The orphaned file sits
       // alone at 5% fill — the threshold logic sacrifices tail efficiency
       // for smaller batch sizes.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
 
       const files = Array.from({ length: 20 }, (_, i) =>
         createFileEntry(`eff-${i}`, 2 * MB),
@@ -1225,7 +1275,7 @@ describe('UploadManager packing efficiency', () => {
     it('trickle upload: idle timeout drains single-photo batches — 13% each', async () => {
       // Files arrive one at a time with gaps exceeding idle timeout.
       // Each photo gets its own batch instead of accumulating.
-      manager.initialize(mockSdk, TEST_INDEXER_URL)
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       await jest.advanceTimersByTimeAsync(0)
 
       for (let i = 0; i < 3; i++) {

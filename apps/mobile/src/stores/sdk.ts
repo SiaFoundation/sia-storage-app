@@ -30,9 +30,10 @@ import {
   type SdkInterface,
 } from 'react-native-sia'
 import { create } from 'zustand'
+import { MobileSdkAdapter } from '../adapters/sdk'
 import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
 import { createGetterAndSelector } from '../lib/selectors'
-import { getUploadManager } from '../managers/uploader'
+import { getUploadManager, initializeUploader } from '../managers/uploader'
 import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
 import { setMnemonicHash, validateMnemonic } from './mnemonic'
 import { getIndexerURL, setIndexerURL } from './settings'
@@ -84,8 +85,7 @@ export async function setSdkWithUploader(
   }
   setState({ sdk })
   if (sdk) {
-    const indexerURL = await getIndexerURL()
-    getUploadManager().initialize(sdk, indexerURL)
+    await initializeUploader(new MobileSdkAdapter(sdk))
   }
 }
 

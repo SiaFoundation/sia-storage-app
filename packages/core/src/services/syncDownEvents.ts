@@ -1,5 +1,10 @@
 import { logger } from '@siastorage/logger'
-import type { AppKeyRef, ObjectsCursor, PinnedObjectRef } from '../adapters/sdk'
+import type {
+  AppKeyRef,
+  ObjectsCursor,
+  PinnedObjectRef,
+  SdkAdapter,
+} from '../adapters/sdk'
 import {
   decodeFileMetadata,
   type FileMetadata,
@@ -51,19 +56,7 @@ type PreparedDelete = {
 type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
 
 export type SyncDownDeps = {
-  sdk: {
-    objectEvents(
-      cursor: ObjectsCursor | undefined,
-      limit: number,
-    ): Promise<
-      {
-        id: string
-        object?: PinnedObjectRef
-        deleted?: boolean
-        updatedAt: Date
-      }[]
-    >
-  }
+  sdk: Pick<SdkAdapter, 'objectEvents'>
   files: {
     read(id: string): Promise<FileRecord | null>
     readByObjectId(

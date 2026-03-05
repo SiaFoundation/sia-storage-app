@@ -8,7 +8,7 @@ import {
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { db, dbInitialized } from '../db'
-import { sqlInsert } from '../db/sql'
+import { insert } from '../db/sql'
 import { createGetterAndSWRHook } from '../lib/selectors'
 import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
 
@@ -133,7 +133,7 @@ async function appendLogToDb(entry: LogEntry): Promise<void> {
     if (!dbInitialized) {
       return
     }
-    await sqlInsert('logs', {
+    await insert('logs', {
       timestamp: entry.timestamp,
       level: entry.level,
       scope: entry.scope,

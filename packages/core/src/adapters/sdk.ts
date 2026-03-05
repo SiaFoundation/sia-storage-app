@@ -60,15 +60,17 @@ export interface UploadOptions {
   maxInflight: number
   dataShards: number
   parityShards: number
-  progressCallback?: {
-    progress: (uploaded: bigint, total: bigint) => void
-  }
+  progressCallback:
+    | {
+        progress: (uploaded: bigint, total: bigint) => void
+      }
+    | undefined
 }
 
 export interface DownloadOptions {
   maxInflight: number
   offset: bigint
-  length?: bigint
+  length: bigint | undefined
 }
 
 export interface ObjectEvent {
@@ -92,6 +94,8 @@ export interface SdkAdapter {
   ): Promise<void>
   uploadPacked(options: UploadOptions): Promise<PackedUploadRef>
   pinObject(pinnedObject: PinnedObjectRef): Promise<void>
+  deleteObject(objectId: string): Promise<void>
+  getPinnedObject(objectId: string): Promise<PinnedObjectRef>
   sharedObject(url: string): Promise<PinnedObjectRef>
   appKey(): AppKeyRef
 }
