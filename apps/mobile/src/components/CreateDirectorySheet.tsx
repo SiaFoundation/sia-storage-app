@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useToast } from '../lib/toastContext'
 import { createDirectory } from '../stores/directories'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -18,6 +19,7 @@ type Props = {
 }
 
 export function CreateDirectorySheet({ onCreated }: Props) {
+  const toast = useToast()
   const isOpen = useSheetOpen('createDirectory')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
@@ -49,11 +51,12 @@ export function CreateDirectorySheet({ onCreated }: Props) {
       setName('')
       setError('')
       closeSheet()
+      toast.show(`Created "${dir.name}"`)
       onCreated?.(dir.id, dir.name)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create folder')
     }
-  }, [name, onCreated])
+  }, [name, onCreated, toast])
 
   return (
     <ModalSheet

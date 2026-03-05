@@ -8,12 +8,14 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useToast } from '../lib/toastContext'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { createTag } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 
 export function CreateTagSheet() {
+  const toast = useToast()
   const isOpen = useSheetOpen('createTag')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
@@ -45,10 +47,11 @@ export function CreateTagSheet() {
       setName('')
       setError('')
       closeSheet()
+      toast.show(`Created "${trimmed}"`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create tag')
     }
-  }, [name])
+  }, [name, toast])
 
   return (
     <ModalSheet

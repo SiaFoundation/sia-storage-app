@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useToast } from '../lib/toastContext'
 import {
   countFilesWithDirectories,
   createDirectory,
@@ -31,6 +32,7 @@ export function MoveToDirectorySheet({
   fileIds,
   sheetName = 'moveToDirectory',
 }: Props) {
+  const toast = useToast()
   const isOpen = useSheetOpen(sheetName)
   const allDirs = useAllDirectories()
   const [query, setQuery] = useState('')
@@ -76,17 +78,23 @@ export function MoveToDirectorySheet({
     async (directoryId: string) => {
       setLoadingDirId(directoryId)
       try {
+        const targetDir = dirs.find((d) => d.id === directoryId)
         if (fileIds.length === 1) {
           await moveFileToDirectory(fileIds[0], directoryId)
         } else if (fileIds.length > 1) {
           await moveFilesToDirectory(fileIds, directoryId)
         }
         closeSheet()
+        toast.show(
+          targetDir
+            ? `Moved to "${targetDir.name}"`
+            : `Moved ${fileIds.length === 1 ? 'file' : 'files'} to folder`,
+        )
       } finally {
         setLoadingDirId(null)
       }
     },
-    [fileIds],
+    [fileIds, dirs, toast],
   )
 
   const handleRemoveFromDirectory = useCallback(async () => {
@@ -98,10 +106,11 @@ export function MoveToDirectorySheet({
         await moveFilesToDirectory(fileIds, null)
       }
       closeSheet()
+      toast.show('Removed from folder')
     } finally {
       setLoadingDirId(null)
     }
-  }, [fileIds])
+  }, [fileIds, toast])
 
   const handleCreateAndMove = useCallback(
     async (name: string) => {
