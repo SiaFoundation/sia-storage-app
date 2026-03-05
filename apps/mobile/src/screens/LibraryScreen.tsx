@@ -397,7 +397,10 @@ export function LibraryScreen({ route, navigation }: Props) {
           ) : null}
         </>
       ) : null}
-      <MoveToDirectorySheet fileIds={actionSheetFileIds} />
+      <MoveToDirectorySheet
+        fileIds={actionSheetFileIds}
+        onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
+      />
     </View>
   )
 }

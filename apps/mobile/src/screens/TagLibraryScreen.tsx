@@ -408,6 +408,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
       <MoveToDirectorySheet
         fileIds={actionSheetFileIds}
         sheetName="tagLibraryMoveToDir"
+        onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
       />
     </View>
   )
