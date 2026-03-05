@@ -37,6 +37,7 @@ import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
+import { useToast } from '../lib/toastContext'
 import type { MainStackParamList } from '../stacks/types'
 import {
   deleteDirectoryAndTrashFiles,
@@ -64,6 +65,7 @@ import { colors, overlay, palette, whiteA } from '../styles/colors'
 type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 
 export function DirectoryScreen({ route, navigation }: Props) {
+  const toast = useToast()
   const { directoryId, directoryName: initialDirectoryName } = route.params
   const [directoryName, setDirectoryName] = useState(initialDirectoryName)
   const isUnfiled = directoryId === UNFILED_DIRECTORY_ID
@@ -189,8 +191,9 @@ export function DirectoryScreen({ route, navigation }: Props) {
     async (newName: string) => {
       await renameDirectory(directoryId, newName)
       setDirectoryName(newName)
+      toast.show(`Renamed to "${newName}"`)
     },
-    [directoryId],
+    [directoryId, toast],
   )
 
   const handleDeleteDirectory = useCallback(() => {
@@ -207,12 +210,13 @@ export function DirectoryScreen({ route, navigation }: Props) {
             onPress: async () => {
               await deleteDirectoryAndTrashFiles(directoryId)
               navigation.goBack()
+              toast.show(`Deleted "${directoryName}"`)
             },
           },
         ],
       )
     }, 300)
-  }, [directoryId, directoryName, navigation])
+  }, [directoryId, directoryName, navigation, toast])
 
   return (
     <View style={styles.container}>

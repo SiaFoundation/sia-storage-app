@@ -90,10 +90,12 @@ function SingleFileActionsSheet({
   })
   const favorite = useIsFavorite(isOpen ? fileId : null)
 
-  const handleToggleFavorite = useCallback(() => {
+  const handleToggleFavorite = useCallback(async () => {
+    const wasFavorite = favorite.data
     closeSheet(sheetName)
-    void toggleFavorite(fileId)
-  }, [fileId, sheetName])
+    await toggleFavorite(fileId)
+    toast.show(wasFavorite ? 'Removed from Favorites' : 'Added to Favorites')
+  }, [fileId, sheetName, favorite.data, toast])
 
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {

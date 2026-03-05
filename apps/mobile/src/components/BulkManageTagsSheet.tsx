@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useToast } from '../lib/toastContext'
 import { useSelectedFileIds } from '../stores/fileSelection'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { addTagToFiles, useAllTags } from '../stores/tags'
@@ -17,6 +18,7 @@ import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
 
 export function BulkManageTagsSheet() {
+  const toast = useToast()
   const isOpen = useSheetOpen('bulkManageTags')
   const selectedFileIds = useSelectedFileIds()
   const allTags = useAllTags()
@@ -57,6 +59,7 @@ export function BulkManageTagsSheet() {
       setLoadingTagNames((prev) => new Set([...prev, key]))
       try {
         await addTagToFiles(Array.from(selectedFileIds), trimmed)
+        toast.show(`Added "${trimmed}" to ${selectedFileIds.size} files`)
         const tag = allTagList.find((t) => t.name.toLowerCase() === key)
         if (tag) {
           setAddedTagIds((prev) => new Set([...prev, tag.id]))
@@ -70,7 +73,7 @@ export function BulkManageTagsSheet() {
         })
       }
     },
-    [selectedFileIds, allTagList],
+    [selectedFileIds, allTagList, toast],
   )
 
   const handleClose = useCallback(() => {
