@@ -34,7 +34,7 @@ export function useAppStatus(): AppStatus {
   if (typeof isOnline.data === 'boolean' && !isOnline.data) {
     return {
       visible: true,
-      icon: <TriangleAlertIcon size={14} color={palette.yellow[400]} />,
+      icon: <TriangleAlertIcon size={18} color={palette.yellow[400]} />,
       level: 'warning',
     }
   }
@@ -42,7 +42,7 @@ export function useAppStatus(): AppStatus {
   if (!isConnected) {
     return {
       visible: true,
-      icon: <TriangleAlertIcon size={14} color={palette.yellow[400]} />,
+      icon: <TriangleAlertIcon size={18} color={palette.yellow[400]} />,
       level: 'warning',
     }
   }
@@ -54,7 +54,7 @@ export function useAppStatus(): AppStatus {
       : undefined
     return {
       visible: true,
-      icon: <SpinnerIcon size={14} color={palette.gray[50]} />,
+      icon: <SpinnerIcon size={18} color={palette.gray[50]} />,
       hint,
       level: 'info',
     }
@@ -62,7 +62,7 @@ export function useAppStatus(): AppStatus {
 
   return {
     visible: true,
-    icon: <CircleCheckIcon size={14} color={palette.green[500]} />,
+    icon: <CircleCheckIcon size={18} color={palette.green[500]} />,
     level: 'info',
   }
 }
