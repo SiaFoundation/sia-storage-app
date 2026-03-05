@@ -17,7 +17,11 @@ import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
 
-export function BulkManageTagsSheet() {
+type Props = {
+  onComplete?: () => void
+}
+
+export function BulkManageTagsSheet({ onComplete }: Props) {
   const toast = useToast()
   const isOpen = useSheetOpen('bulkManageTags')
   const selectedFileIds = useSelectedFileIds()
@@ -77,10 +81,12 @@ export function BulkManageTagsSheet() {
   )
 
   const handleClose = useCallback(() => {
+    const hasChanges = addedTagIds.size > 0
     setQuery('')
     Keyboard.dismiss()
     closeSheet()
-  }, [])
+    if (hasChanges) onComplete?.()
+  }, [addedTagIds.size, onComplete])
 
   const fileCount = selectedFileIds.size
 

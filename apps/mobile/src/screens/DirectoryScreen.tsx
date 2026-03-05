@@ -420,6 +420,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
       <MoveToDirectorySheet
         fileIds={actionSheetFileIds}
         sheetName="directoryMoveToDir"
+        onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
       />
     </View>
   )

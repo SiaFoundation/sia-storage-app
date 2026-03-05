@@ -167,7 +167,7 @@ export function SelectionBar({
           <OverflowActions actions={actions} sheetName="selectionOverflow" />
         </View>
       </BottomControlBar>
-      <BulkManageTagsSheet />
+      <BulkManageTagsSheet onComplete={onComplete} />
     </>
   )
 }

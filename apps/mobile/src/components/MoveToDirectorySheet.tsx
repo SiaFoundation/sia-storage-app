@@ -26,11 +26,13 @@ import { SpinnerIcon } from './SpinnerIcon'
 type Props = {
   fileIds: string[]
   sheetName?: string
+  onComplete?: () => void
 }
 
 export function MoveToDirectorySheet({
   fileIds,
   sheetName = 'moveToDirectory',
+  onComplete,
 }: Props) {
   const toast = useToast()
   const isOpen = useSheetOpen(sheetName)
@@ -90,11 +92,12 @@ export function MoveToDirectorySheet({
             ? `Moved to "${targetDir.name}"`
             : `Moved ${fileIds.length === 1 ? 'file' : 'files'} to folder`,
         )
+        onComplete?.()
       } finally {
         setLoadingDirId(null)
       }
     },
-    [fileIds, dirs, toast],
+    [fileIds, dirs, toast, onComplete],
   )
 
   const handleRemoveFromDirectory = useCallback(async () => {
@@ -107,10 +110,11 @@ export function MoveToDirectorySheet({
       }
       closeSheet()
       toast.show('Removed from folder')
+      onComplete?.()
     } finally {
       setLoadingDirId(null)
     }
-  }, [fileIds, toast])
+  }, [fileIds, toast, onComplete])
 
   const handleCreateAndMove = useCallback(
     async (name: string) => {

@@ -407,6 +407,7 @@ export function SearchScreen({ navigation }: Props) {
       <MoveToDirectorySheet
         fileIds={actionSheetFileIds}
         sheetName="searchMoveToDir"
+        onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
       />
     </View>
   )
