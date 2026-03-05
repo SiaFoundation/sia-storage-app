@@ -82,7 +82,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
               setName(text)
               setError('')
             }}
-            autoCapitalize="none"
+            autoCapitalize="words"
             autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleCreate}

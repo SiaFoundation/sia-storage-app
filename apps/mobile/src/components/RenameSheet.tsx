@@ -89,7 +89,7 @@ export function RenameSheet({
               setName(text)
               setError('')
             }}
-            autoCapitalize="none"
+            autoCapitalize="words"
             autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleRename}
