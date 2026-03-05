@@ -157,10 +157,6 @@ export function DirectoryScreen({ route, navigation }: Props) {
     setIsCarouselDetail(false)
   }, [])
 
-  const handleOpenSelectionActions = useCallback(() => {
-    openSheet('directoryFileActions')
-  }, [])
-
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
   }, [])
@@ -304,7 +300,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
       />
       {isSelectionMode ? (
         <SelectionBar
-          onOpenSelectionActions={handleOpenSelectionActions}
+          onComplete={handleBulkActionComplete}
           moveToDirectorySheet="directoryMoveToDir"
         />
       ) : (

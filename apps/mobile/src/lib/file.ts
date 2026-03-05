@@ -7,8 +7,8 @@ import {
 } from 'react-native-sia'
 import { getAppKeyForIndexer } from '../stores/appKey'
 import { type DownloadState, useDownloadState } from '../stores/downloads'
-import type { FileRecord } from '../stores/files'
-import { useFsFileUri } from '../stores/fs'
+import { type FileRecord, readFileRecord } from '../stores/files'
+import { getFsFileUri, useFsFileUri } from '../stores/fs'
 import { type UploadState, useUploadState } from '../stores/uploads'
 
 export function fileHasASealedObject(file?: FileRecord): boolean {
@@ -107,6 +107,41 @@ export function useFileStatus(
   ])
 
   return { data, isLoading: fileUri.isLoading }
+}
+
+export type BulkCounts = {
+  onNetwork: number
+  downloadable: number
+  uploadable: number
+  total: number
+  files: FileRecord[]
+}
+
+export async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
+  const files: FileRecord[] = []
+  let onNetwork = 0
+  let downloadable = 0
+  let uploadable = 0
+
+  for (const id of fileIds) {
+    const file = await readFileRecord(id)
+    if (file) {
+      files.push(file)
+      const hasSealed = fileHasASealedObject(file)
+      const uri = await getFsFileUri(file)
+      if (hasSealed) {
+        onNetwork++
+      }
+      if (hasSealed && !uri) {
+        downloadable++
+      }
+      if (uri && !hasSealed) {
+        uploadable++
+      }
+    }
+  }
+
+  return { onNetwork, downloadable, uploadable, total: files.length, files }
 }
 
 export function getFileTypeName(
