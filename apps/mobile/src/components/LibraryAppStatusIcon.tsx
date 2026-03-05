@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import { useAppStatus } from '../hooks/useAppStatus'
 import { openSheet } from '../stores/sheets'
-import { overlay, palette } from '../styles/colors'
+import { overlay } from '../styles/colors'
 
 export function LibraryAppStatusIcon() {
   const appStatus = useAppStatus()
@@ -14,9 +14,6 @@ export function LibraryAppStatusIcon() {
           style={styles.statusPill}
         >
           {appStatus.icon}
-          {appStatus.hint ? (
-            <Text style={styles.statusPillText}>{appStatus.hint}</Text>
-          ) : null}
         </Pressable>
       </View>
     )
@@ -28,17 +25,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   statusPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    gap: 4,
-    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: overlay.pill,
-  },
-  statusPillText: {
-    color: palette.gray[50],
-    fontSize: 10,
-    fontWeight: '600',
   },
 })
