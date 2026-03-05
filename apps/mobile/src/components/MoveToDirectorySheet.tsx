@@ -51,9 +51,12 @@ export function MoveToDirectorySheet({
     query.trim().length > 0 &&
     dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 400)
       if (isSingleFile) {
         readDirectoryNameForFile(fileIds[0]).then((name) =>
           setCurrentDirName(name ?? null),
@@ -135,6 +138,7 @@ export function MoveToDirectorySheet({
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
+      onShow={handleShow}
       title={`Move ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to folder`}
       headerRight={
         <Pressable

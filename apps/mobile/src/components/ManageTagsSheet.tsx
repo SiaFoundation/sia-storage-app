@@ -49,10 +49,12 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
     query.trim().length > 0 &&
     allTagList.some((t) => t.name.toLowerCase() === query.trim().toLowerCase())
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 400)
-    } else {
+    if (!isOpen) {
       setQuery('')
       setLoadingTagIds(new Set())
       setLoadingTagNames(new Set())
@@ -113,7 +115,12 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
   )
 
   return (
-    <ModalSheet visible={isOpen} onRequestClose={handleClose} title="Tags">
+    <ModalSheet
+      visible={isOpen}
+      onRequestClose={handleClose}
+      onShow={handleShow}
+      title="Tags"
+    >
       <View style={styles.inputRow}>
         {userFileTags.map((tag) => (
           <TagPill

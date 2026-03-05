@@ -43,10 +43,12 @@ export function SelectDirectorySheet({
     query.trim().length > 0 &&
     dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 400)
-    } else {
+    if (!isOpen) {
       setQuery('')
     }
   }, [isOpen])
@@ -95,6 +97,7 @@ export function SelectDirectorySheet({
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
+      onShow={handleShow}
       title="Import folder"
       headerRight={
         <Pressable

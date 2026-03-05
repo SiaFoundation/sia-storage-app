@@ -37,10 +37,12 @@ export function BulkManageTagsSheet() {
     query.trim().length > 0 &&
     allTagList.some((t) => t.name.toLowerCase() === query.trim().toLowerCase())
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 400)
-    } else {
+    if (!isOpen) {
       setQuery('')
       setAddedTagIds(new Set())
       setLoadingTagNames(new Set())
@@ -83,6 +85,7 @@ export function BulkManageTagsSheet() {
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
+      onShow={handleShow}
       title={`Add ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to tag`}
     >
       <View style={styles.inputRow}>
