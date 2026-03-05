@@ -161,10 +161,6 @@ export function SearchScreen({ navigation }: Props) {
     setIsCarouselDetail(false)
   }, [])
 
-  const handleOpenSelectionActions = useCallback(() => {
-    openSheet('searchFileActions')
-  }, [])
-
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
   }, [])
@@ -286,7 +282,7 @@ export function SearchScreen({ navigation }: Props) {
       />
       {isSelectionMode ? (
         <SelectionBar
-          onOpenSelectionActions={handleOpenSelectionActions}
+          onComplete={handleBulkActionComplete}
           moveToDirectorySheet="searchMoveToDir"
         />
       ) : (

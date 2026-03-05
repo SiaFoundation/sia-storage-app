@@ -150,10 +150,6 @@ export function TagLibraryScreen({ route, navigation }: Props) {
     setIsCarouselDetail(false)
   }, [])
 
-  const handleOpenSelectionActions = useCallback(() => {
-    openSheet('tagLibraryFileActions')
-  }, [])
-
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
   }, [])
@@ -297,7 +293,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
       />
       {isSelectionMode ? (
         <SelectionBar
-          onOpenSelectionActions={handleOpenSelectionActions}
+          onComplete={handleBulkActionComplete}
           moveToDirectorySheet="tagLibraryMoveToDir"
         />
       ) : (
