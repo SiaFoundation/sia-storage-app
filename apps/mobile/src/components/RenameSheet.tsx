@@ -32,10 +32,13 @@ export function RenameSheet({
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
 
+  const handleShow = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
+
   useEffect(() => {
     if (isOpen) {
       setName(initialValue)
-      setTimeout(() => inputRef.current?.focus(), 400)
     } else {
       setError('')
     }
@@ -64,6 +67,7 @@ export function RenameSheet({
     <ModalSheet
       visible={isOpen}
       onRequestClose={handleClose}
+      onShow={handleShow}
       title={title}
       presentationStyle="formSheet"
       headerRight={
