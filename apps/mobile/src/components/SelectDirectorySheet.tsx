@@ -115,7 +115,7 @@ export function SelectDirectorySheet({
           placeholderTextColor={palette.gray[500]}
           value={query}
           onChangeText={setQuery}
-          autoCapitalize="none"
+          autoCapitalize="words"
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={() => {

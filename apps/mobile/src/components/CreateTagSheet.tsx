@@ -77,7 +77,7 @@ export function CreateTagSheet() {
               setName(text)
               setError('')
             }}
-            autoCapitalize="none"
+            autoCapitalize="words"
             autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleCreate}
