@@ -69,8 +69,7 @@ export default {
       'expo-sqlite',
       ['./plugins/ios-target-16'],
       'expo-video',
-      ['./plugins/android-background-fetch-maven'],
-      'react-native-background-fetch',
+      './plugins/background-fetch',
       [
         'react-native-maps',
         {
