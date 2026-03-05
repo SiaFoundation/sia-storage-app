@@ -91,16 +91,16 @@ function SingleFileActionsSheet({
   const favorite = useIsFavorite(isOpen ? fileId : null)
 
   const handleToggleFavorite = useCallback(() => {
-    closeSheet()
+    closeSheet(sheetName)
     void toggleFavorite(fileId)
-  }, [fileId])
+  }, [fileId, sheetName])
 
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {
-      closeSheet()
+      closeSheet(sheetName)
       void action()
     },
-    [],
+    [sheetName],
   )
 
   const reupload = useReuploadFile()
@@ -134,7 +134,7 @@ function SingleFileActionsSheet({
   const handleDownload = useDownload(file)
 
   return (
-    <ActionSheet visible={isOpen} onRequestClose={() => closeSheet()}>
+    <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
       <ActionSheetButton
         disabled={!canShare}
         variant="primary"
@@ -190,7 +190,7 @@ function SingleFileActionsSheet({
         variant="primary"
         icon={<TagIcon size={18} />}
         onPress={() => {
-          closeSheet()
+          closeSheet(sheetName)
           setTimeout(() => openSheet('manageFileTags'), 300)
         }}
       >
@@ -200,7 +200,7 @@ function SingleFileActionsSheet({
         variant="primary"
         icon={<FolderIcon size={18} />}
         onPress={() => {
-          closeSheet()
+          closeSheet(sheetName)
           setTimeout(() => openSheet('moveToDirectory'), 300)
         }}
       >
@@ -238,10 +238,10 @@ function BulkFileActionsSheet({
 
   const handlePressAndClose = useCallback(
     (action: () => void | Promise<void>) => () => {
-      closeSheet()
+      closeSheet(sheetName)
       void action()
     },
-    [],
+    [sheetName],
   )
 
   const handleDownloadToDevice = useCallback(async () => {
@@ -302,7 +302,7 @@ function BulkFileActionsSheet({
   const total = counts?.total ?? fileIds.length
 
   return (
-    <ActionSheet visible={isOpen} onRequestClose={() => closeSheet()}>
+    <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
       <Text style={styles.bulkHeader}>{total} files selected</Text>
       <ActionSheetButton
         variant="primary"
@@ -324,7 +324,7 @@ function BulkFileActionsSheet({
         variant="primary"
         icon={<FolderIcon size={18} />}
         onPress={() => {
-          closeSheet()
+          closeSheet(sheetName)
           setTimeout(() => openSheet('moveToDirectory'), 300)
         }}
       >
