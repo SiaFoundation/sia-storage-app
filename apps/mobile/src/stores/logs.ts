@@ -1,3 +1,5 @@
+import type { LogRow } from '@siastorage/core/db/operations'
+import * as ops from '@siastorage/core/db/operations'
 import {
   type LogEntry,
   type LogLevel,
@@ -54,10 +56,7 @@ export async function initLogger(): Promise<void> {
 async function fetchAvailableScopes(): Promise<string[]> {
   try {
     if (!dbInitialized) return []
-    const rows = await db().getAllAsync<{ scope: string }>(
-      'SELECT DISTINCT scope FROM logs ORDER BY scope',
-    )
-    return rows.map((r) => r.scope)
+    return ops.queryAvailableLogScopes(db())
   } catch (error) {
     console.error('[logs] Failed to get scopes:', error)
     return []
@@ -146,41 +145,22 @@ async function appendLogToDb(entry: LogEntry): Promise<void> {
   }
 }
 
-/** Get levels that should be included based on minimum level. */
-function getLevelsForFilter(minLevel: LogLevel): LogLevel[] {
-  const levelOrder: LogLevel[] = ['debug', 'info', 'warn', 'error']
-  const minIndex = levelOrder.indexOf(minLevel)
-  return levelOrder.slice(minIndex)
+function parseLogRow(row: LogRow): LogEntry {
+  let data: Record<string, unknown> | undefined
+  if (row.data) {
+    try {
+      data = JSON.parse(row.data)
+    } catch {}
+  }
+  return {
+    timestamp: row.timestamp,
+    level: row.level as LogEntry['level'],
+    scope: row.scope,
+    message: row.message,
+    data,
+  }
 }
 
-/** Build WHERE clause and params for log queries. */
-function buildLogFilterQuery(
-  logLevel?: LogLevel,
-  logScopes?: string[],
-): { whereClause: string; params: (string | number)[] } {
-  const conditions: string[] = []
-  const params: (string | number)[] = []
-
-  if (logLevel) {
-    const allowedLevels = getLevelsForFilter(logLevel)
-    const placeholders = allowedLevels.map(() => '?').join(',')
-    conditions.push(`level IN (${placeholders})`)
-    params.push(...allowedLevels)
-  }
-
-  if (logScopes && logScopes.length > 0) {
-    const placeholders = logScopes.map(() => '?').join(',')
-    conditions.push(`scope IN (${placeholders})`)
-    params.push(...logScopes)
-  }
-
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
-  return { whereClause, params }
-}
-
-/** Read logs from database with optional filters. */
 export async function readLogs(
   logLevel?: LogLevel,
   logScopes?: string[],
@@ -190,41 +170,14 @@ export async function readLogs(
     if (!dbInitialized) {
       return []
     }
-
-    const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
-    const limitClause = limit ? ` LIMIT ${limit}` : ''
-    const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC${limitClause}`
-
-    const rows = await db().getAllAsync<{
-      timestamp: string
-      level: string
-      scope: string
-      message: string
-      data: string | null
-    }>(query, ...params)
-
-    return rows.map((row) => {
-      let data: Record<string, unknown> | undefined
-      if (row.data) {
-        try {
-          data = JSON.parse(row.data)
-        } catch {}
-      }
-      return {
-        timestamp: row.timestamp,
-        level: row.level as LogEntry['level'],
-        scope: row.scope,
-        message: row.message,
-        data,
-      }
-    })
+    const rows = await ops.queryLogs(db(), { logLevel, logScopes, limit })
+    return rows.map(parseLogRow)
   } catch (error) {
     console.error('[logs] Failed to read logs:', error)
     return []
   }
 }
 
-/** Count logs matching the current filters. */
 export async function countLogs(
   logLevel?: LogLevel,
   logScopes?: string[],
@@ -233,11 +186,7 @@ export async function countLogs(
     if (!dbInitialized) {
       return 0
     }
-
-    const { whereClause, params } = buildLogFilterQuery(logLevel, logScopes)
-    const query = `SELECT COUNT(*) as count FROM logs ${whereClause}`
-    const result = await db().getFirstAsync<{ count: number }>(query, ...params)
-    return result?.count ?? 0
+    return ops.queryLogCount(db(), { logLevel, logScopes })
   } catch (error) {
     console.error('[logs] Failed to count logs:', error)
     return 0
@@ -253,13 +202,12 @@ export function extractScopes(entries: LogEntry[]): string[] {
   return Array.from(scopes).sort()
 }
 
-/** Clear all logs from the database. */
 export async function clearLogs(): Promise<void> {
   try {
     if (!dbInitialized) {
       return
     }
-    await db().runAsync('DELETE FROM logs')
+    await ops.deleteAllLogs(db())
   } catch (error) {
     console.error('[logs] Failed to clear logs:', error)
     throw error

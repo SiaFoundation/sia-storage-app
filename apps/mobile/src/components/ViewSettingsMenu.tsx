@@ -1,6 +1,7 @@
+import type { Category, SortBy } from '@siastorage/core/db/operations'
 import type React from 'react'
 import { useMemo } from 'react'
-import { type Category, categories, type SortBy } from '../stores/library'
+import { categories } from '../stores/library'
 import {
   setSortBy,
   setSortDir,

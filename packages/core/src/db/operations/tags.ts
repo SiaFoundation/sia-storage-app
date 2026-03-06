@@ -333,8 +333,10 @@ export async function removeTagFromFile(
   fileId: string,
   tagId: string,
 ): Promise<void> {
-  await sql.del(db, 'file_tags', { fileId, tagId })
-  await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+  await db.withTransactionAsync(async () => {
+    await sql.del(db, 'file_tags', { fileId, tagId })
+    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+  })
 }
 
 export async function removeTagFromFiles(
@@ -343,14 +345,18 @@ export async function removeTagFromFiles(
   tagId: string,
 ): Promise<void> {
   if (fileIds.length === 0) return
-  for (const fileId of fileIds) {
-    await sql.del(db, 'file_tags', { fileId, tagId })
-  }
-  const now = Date.now()
-  const placeholders = fileIds.map(() => '?').join(',')
-  await db.runAsync(
-    `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
-    now,
-    ...fileIds,
-  )
+  await db.withTransactionAsync(async () => {
+    const placeholders = fileIds.map(() => '?').join(',')
+    await db.runAsync(
+      `DELETE FROM file_tags WHERE tagId = ? AND fileId IN (${placeholders})`,
+      tagId,
+      ...fileIds,
+    )
+    const now = Date.now()
+    await db.runAsync(
+      `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
+      now,
+      ...fileIds,
+    )
+  })
 }

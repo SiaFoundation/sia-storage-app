@@ -1,3 +1,4 @@
+import type { UploadCategoryStats } from '@siastorage/core/db/operations'
 import { useCallback } from 'react'
 import {
   Alert,
@@ -12,7 +13,6 @@ import useSWR from 'swr'
 import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
-import type { UploadCategoryStats } from '../stores/fileStats'
 import { getUploadStats } from '../stores/fileStats'
 import {
   deleteLostFiles,

@@ -1,92 +1,9 @@
+import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
+import * as ops from '@siastorage/core/db/operations'
+import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
 import { db } from '../db'
-import { type FileRecord, type FileRecordRow, transformRow } from './files'
-import {
-  buildLibraryQueryParts,
-  type Category,
-  type SortBy,
-  type SortDir,
-} from './library'
 import { useOnLibraryListChange } from './librarySwr'
-import { readLocalObjectsForFiles } from './localObjects'
-
-const FILE_COLUMNS =
-  'f.id, f.name, f.size, f.createdAt, f.updatedAt, f.addedAt, f.type, f.kind, f.localId, f.hash, f.thumbForId, f.thumbSize'
-
-// Cursor-based pagination helpers. These build WHERE clauses that find rows
-// "before" or "after" a given anchor row in the sort order. Used by
-// fetchFilePosition to count how many rows come before a specific file.
-
-function buildDateCursorClause(
-  dir: SortDir,
-  direction: 'before' | 'after',
-  alias: string,
-  anchorValue: number,
-  anchorId: string,
-  column: string = 'createdAt',
-) {
-  const isBefore = direction === 'before'
-  const op = dir === 'ASC' ? (isBefore ? '<' : '>') : isBefore ? '>' : '<'
-  const orderDirection = isBefore ? (dir === 'ASC' ? 'DESC' : 'ASC') : dir
-  return {
-    clause: `(${alias}.${column} ${op} ?) OR (${alias}.${column} = ? AND ${alias}.id ${op} ?)`,
-    params: [anchorValue, anchorValue, anchorId],
-    orderDirection,
-  }
-}
-
-function buildNameCursorClause(
-  dir: SortDir,
-  direction: 'before' | 'after',
-  alias: string,
-  anchorName: string | null,
-  anchorId: string,
-) {
-  const nullExpr = `${alias}.name IS NULL`
-  const nameExpr = `${alias}.name COLLATE NOCASE`
-  const anchorNull = anchorName === null ? 1 : 0
-  const isBefore = direction === 'before'
-
-  const nameOp = dir === 'ASC' ? '<' : '>'
-  const afterNameOp = dir === 'ASC' ? '>' : '<'
-  const idOpBefore = dir === 'ASC' ? '<' : '>'
-  const idOpAfter = dir === 'ASC' ? '>' : '<'
-  const orderDirection = isBefore ? (dir === 'ASC' ? 'DESC' : 'ASC') : dir
-
-  if (anchorName === null) {
-    return {
-      clause: `(${nullExpr} ${
-        isBefore ? '<' : '>'
-      } ?) OR (${nullExpr} = ? AND ${alias}.id ${
-        isBefore ? idOpBefore : idOpAfter
-      } ?)`,
-      params: [anchorNull, anchorNull, anchorId],
-      orderDirection,
-    }
-  }
-
-  if (isBefore) {
-    return {
-      clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND (${nameExpr} ${nameOp} ? OR (${nameExpr} = ? AND ${alias}.id ${idOpBefore} ?)))`,
-      params: [anchorNull, anchorNull, anchorName, anchorName, anchorId],
-      orderDirection,
-    }
-  }
-
-  return {
-    clause: `(${nullExpr} > ?) OR (${nullExpr} = ? AND (${nameExpr} ${afterNameOp} ? OR (${nameExpr} = ? AND ${alias}.id ${idOpAfter} ?)))`,
-    params: [anchorNull, anchorNull, anchorName, anchorName, anchorId],
-    orderDirection,
-  }
-}
-
-async function hydrateRows(rows: FileRecordRow[]): Promise<FileRecord[]> {
-  if (!rows.length) return []
-  const ids = rows.map((r) => r.id)
-  const objectsById = await readLocalObjectsForFiles(ids)
-  return rows.map((row) => transformRow(row, objectsById[row.id]))
-}
 
 type VirtualListQueryParams = {
   sortBy: SortBy
@@ -97,96 +14,17 @@ type VirtualListQueryParams = {
   query?: string
 }
 
-// Returns the total number of files matching the current filters.
 export async function fetchTotalCount(
   params: VirtualListQueryParams,
 ): Promise<number> {
-  const { where, params: queryParams } = buildLibraryQueryParts({
-    sortBy: params.sortBy,
-    sortDir: params.sortDir,
-    categories: params.categories,
-    directoryId: params.directoryId,
-    tags: params.tags,
-    query: params.query,
-    tableAlias: 'f',
-  })
-
-  const result = await db().getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f ${where ?? ''}`,
-    ...queryParams,
-  )
-
-  return result?.count ?? 0
+  return ops.queryFileCountWithFilters(db(), params)
 }
 
-// Given a file ID, returns its position (0-indexed) in the sorted list.
-// Used to determine where to start the carousel when opening a specific file.
 export async function fetchFilePosition(
   fileId: string,
   params: VirtualListQueryParams,
 ): Promise<number> {
-  const { where, params: queryParams } = buildLibraryQueryParts({
-    sortBy: params.sortBy,
-    sortDir: params.sortDir,
-    categories: params.categories,
-    directoryId: params.directoryId,
-    tags: params.tags,
-    query: params.query,
-    tableAlias: 'f',
-  })
-
-  const anchorRow = await db().getFirstAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS} FROM files f ${
-      where ? `${where} AND f.id = ?` : 'WHERE f.id = ?'
-    } LIMIT 1`,
-    ...queryParams,
-    fileId,
-  )
-
-  if (!anchorRow) {
-    return 0
-  }
-
-  // Build a cursor clause that matches all rows sorted before the anchor,
-  // so COUNT(*) gives us the anchor's 0-indexed position.
-  let beforeCursor: ReturnType<typeof buildDateCursorClause>
-  if (params.sortBy === 'NAME') {
-    beforeCursor = buildNameCursorClause(
-      params.sortDir,
-      'before',
-      'f',
-      anchorRow.name ?? null,
-      anchorRow.id,
-    )
-  } else {
-    // Map sort mode to the corresponding DB column and anchor value.
-    const columnMap = {
-      ADDED: { column: 'addedAt', value: anchorRow.addedAt },
-      SIZE: { column: 'size', value: anchorRow.size },
-      DATE: { column: 'createdAt', value: anchorRow.createdAt },
-    } as const
-    const { column, value } = columnMap[params.sortBy] ?? columnMap.DATE
-    beforeCursor = buildDateCursorClause(
-      params.sortDir,
-      'before',
-      'f',
-      value,
-      anchorRow.id,
-      column,
-    )
-  }
-
-  const result = await db().getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f ${
-      where
-        ? `${where} AND (${beforeCursor.clause})`
-        : `WHERE ${beforeCursor.clause}`
-    }`,
-    ...queryParams,
-    ...beforeCursor.params,
-  )
-
-  return result?.count ?? 0
+  return ops.queryFilePositionInSortedList(db(), fileId, params)
 }
 
 export async function fetchSortedFileIds(
@@ -194,27 +32,7 @@ export async function fetchSortedFileIds(
   limit: number,
   offset: number,
 ): Promise<string[]> {
-  const {
-    where,
-    params: queryParams,
-    orderExpr,
-  } = buildLibraryQueryParts({
-    sortBy: params.sortBy,
-    sortDir: params.sortDir,
-    categories: params.categories,
-    directoryId: params.directoryId,
-    tags: params.tags,
-    query: params.query,
-    tableAlias: 'f',
-  })
-
-  const rows = await db().getAllAsync<{ id: string }>(
-    `SELECT f.id FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`,
-    ...queryParams,
-    limit,
-    offset,
-  )
-  return rows.map((r) => r.id)
+  return ops.querySortedFileIds(db(), params, limit, offset)
 }
 
 export async function fetchFilesByIDs(
@@ -223,13 +41,8 @@ export async function fetchFilesByIDs(
   const result = new Map<string, FileRecord>()
   if (ids.length === 0) return result
 
-  const placeholders = ids.map(() => '?').join(',')
-  const rows = await db().getAllAsync<FileRecordRow>(
-    `SELECT ${FILE_COLUMNS} FROM files f WHERE f.id IN (${placeholders})`,
-    ...ids,
-  )
-  const hydrated = await hydrateRows(rows)
-  for (const file of hydrated) {
+  const files = await ops.readFileRecordsByIds(db(), ids)
+  for (const file of files) {
     result.set(file.id, file)
   }
   return result
@@ -512,13 +325,10 @@ export function useFileCarousel({
     const currentFileID = currentFileIdRef.current
     if (!currentFileID) return
 
-    db()
-      .getFirstAsync<{ id: string }>(
-        'SELECT id FROM files WHERE id = ? LIMIT 1',
-        currentFileID,
-      )
-      .then((row) => {
-        if (!row) {
+    ops
+      .queryFileExists(db(), currentFileID)
+      .then((exists) => {
+        if (!exists) {
           onDeleted?.()
         }
       })

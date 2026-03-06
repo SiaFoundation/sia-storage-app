@@ -1,18 +1,12 @@
+import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
+import * as ops from '@siastorage/core/db/operations'
+import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { db } from '../db'
-import { UNFILED_DIRECTORY_ID } from './directories'
-import { type FileRecord, type FileRecordRow, transformRow } from './files'
 import { libraryStats, useOnLibraryListChange } from './librarySwr'
 import { readLocalObjectsForFiles } from './localObjects'
-
-type MediaCategory = 'Video' | 'Image' | 'Audio'
-const MEDIA_PREFIXES: Record<MediaCategory, string> = {
-  Video: 'video/',
-  Image: 'image/',
-  Audio: 'audio/',
-}
 
 type FileOrderParams = {
   sortBy?: SortBy
@@ -40,7 +34,7 @@ async function readOrderedFileRecords(
   } = opts ?? {}
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const { where, params, orderExpr } = buildLibraryQueryParts({
+  const { where, params, orderExpr } = ops.buildLibraryQueryParts({
     sortBy,
     sortDir: dir,
     categories,
@@ -65,7 +59,7 @@ async function readOrderedFileRecords(
 
   const fileIds = rows.map((r) => r.id)
   const objectsByFile = await readLocalObjectsForFiles(fileIds)
-  return rows.map((row) => transformRow(row, objectsByFile[row.id]))
+  return rows.map((row) => ops.transformRow(row, objectsByFile[row.id]))
 }
 
 const PAGE_SIZE = 40
@@ -143,180 +137,34 @@ export function useFileList(params: FileListParams) {
   }
 }
 
-// Count of library files excluding thumbnails.
 export function useLibraryCount() {
-  return useSWR(libraryStats.key('countNoThumbs'), async () => {
-    const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files WHERE kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-    )
-    return row?.count ?? 0
-  })
+  return useSWR(libraryStats.key('countNoThumbs'), () =>
+    ops.queryLibraryFileCount(db()),
+  )
 }
 
-// Count of media files (image, video, audio) excluding thumbnails.
 export function useMediaCount() {
-  return useSWR(libraryStats.key('mediaCount'), async () => {
-    const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files
-       WHERE kind = 'file'
-         AND trashedAt IS NULL AND deletedAt IS NULL
-         AND (type LIKE 'image/%' OR type LIKE 'video/%' OR type LIKE 'audio/%')`,
-    )
-    return row?.count ?? 0
-  })
+  return useSWR(libraryStats.key('mediaCount'), () =>
+    ops.queryMediaFileCount(db()),
+  )
 }
 
-// Count of files with a specific tag, excluding thumbnails.
 export function useTagFileCount(tagId: string) {
-  return useSWR(libraryStats.key(`tagCount:${tagId}`), async () => {
-    const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files f
-       INNER JOIN file_tags ft ON ft.fileId = f.id
-       WHERE ft.tagId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
-      tagId,
-    )
-    return row?.count ?? 0
-  })
+  return useSWR(libraryStats.key(`tagCount:${tagId}`), () =>
+    ops.queryTagFileCount(db(), tagId),
+  )
 }
 
-// Count of files in a specific directory, excluding thumbnails.
 export function useDirectoryFileCount(directoryId: string) {
-  return useSWR(libraryStats.key(`dirCount:${directoryId}`), async () => {
-    if (directoryId === UNFILED_DIRECTORY_ID) {
-      const row = await db().getFirstAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM files
-         WHERE directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-      )
-      return row?.count ?? 0
-    }
-    const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files
-       WHERE directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-      directoryId,
-    )
-    return row?.count ?? 0
-  })
+  return useSWR(libraryStats.key(`dirCount:${directoryId}`), () =>
+    ops.queryDirectoryFileCount(db(), directoryId),
+  )
 }
 
 export function useUnfiledFileCount() {
-  return useSWR(libraryStats.key('unfiledCount'), async () => {
-    const row = await db().getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files
-       WHERE directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-    )
-    return row?.count ?? 0
-  })
-}
-
-// File View Store
-export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
-export type SortDir = 'ASC' | 'DESC'
-export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
-export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
-
-export function buildLibraryQueryParts(
-  opts: {
-    sortBy?: SortBy
-    sortDir?: SortDir
-    categories?: Category[]
-    query?: string
-    tags?: string[]
-    directoryId?: string
-    tableAlias?: string
-  } = {},
-): {
-  where: string
-  params: (string | number)[]
-  orderExpr: string
-} {
-  const {
-    sortBy = 'DATE',
-    sortDir,
-    categories = [],
-    query,
-    tags = [],
-    directoryId,
-    tableAlias = 'files',
-  } = opts
-  const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
-
-  const mediaCategories = categories.filter(
-    (c): c is MediaCategory => c in MEDIA_PREFIXES,
+  return useSWR(libraryStats.key('unfiledCount'), () =>
+    ops.queryUnfiledFileCount(db()),
   )
-  const includesFiles = categories.includes('Files')
-  const hasQuery = typeof query === 'string' && query.trim().length > 0
-
-  // If all 4 categories selected, no filter needed
-  const allSelected = mediaCategories.length === 3 && includesFiles
-
-  const whereParts: string[] = []
-  const params: (string | number)[] = []
-  whereParts.push(`${tableAlias}.kind = 'file'`)
-  whereParts.push(`${tableAlias}.trashedAt IS NULL`)
-  whereParts.push(`${tableAlias}.deletedAt IS NULL`)
-
-  if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
-    const categoryConditions: string[] = []
-
-    // Add LIKE conditions for selected media categories
-    for (const cat of mediaCategories) {
-      categoryConditions.push(`${tableAlias}.type LIKE ?`)
-      params.push(`${MEDIA_PREFIXES[cat]}%`)
-    }
-
-    // Add NOT LIKE conditions for Files (everything not video/image/audio)
-    if (includesFiles) {
-      const notLikeClauses = Object.values(MEDIA_PREFIXES)
-        .map(() => `${tableAlias}.type NOT LIKE ?`)
-        .join(' AND ')
-      categoryConditions.push(`(${notLikeClauses})`)
-      params.push(...Object.values(MEDIA_PREFIXES).map((p) => `${p}%`))
-    }
-
-    whereParts.push(`(${categoryConditions.join(' OR ')})`)
-  }
-  if (hasQuery) {
-    whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE '\\'`)
-    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
-    params.push(`%${escaped}%`)
-  }
-  // Tag filtering: file must have ALL selected tags (AND logic).
-  if (tags.length > 0) {
-    const placeholders = tags.map(() => '?').join(',')
-    whereParts.push(`
-      ${tableAlias}.id IN (
-        SELECT ft.fileId FROM file_tags ft
-        WHERE ft.tagId IN (${placeholders})
-        GROUP BY ft.fileId
-        HAVING COUNT(DISTINCT ft.tagId) = ?
-      )
-    `)
-    params.push(...tags, tags.length)
-  }
-  // Directory filtering.
-  if (directoryId === UNFILED_DIRECTORY_ID) {
-    whereParts.push(`${tableAlias}.directoryId IS NULL`)
-  } else if (directoryId) {
-    whereParts.push(`${tableAlias}.directoryId = ?`)
-    params.push(directoryId)
-  }
-  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
-
-  let orderExpr: string
-  switch (sortBy) {
-    case 'NAME':
-      orderExpr = `(${tableAlias}.name IS NULL) ASC, ${tableAlias}.name COLLATE NOCASE ${dir}, ${tableAlias}.id ${dir}`
-      break
-    case 'ADDED':
-      orderExpr = `${tableAlias}.addedAt ${dir}, ${tableAlias}.id ${dir}`
-      break
-    case 'SIZE':
-      orderExpr = `${tableAlias}.size ${dir}, ${tableAlias}.id ${dir}`
-      break
-    default:
-      orderExpr = `${tableAlias}.createdAt ${dir}, ${tableAlias}.id ${dir}`
-      break
-  }
-
-  return { where, params, orderExpr }
 }
+
+export const categories = ['Video', 'Image', 'Audio', 'Files'] as const
