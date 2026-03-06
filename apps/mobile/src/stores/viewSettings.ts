@@ -1,10 +1,10 @@
+import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
 import { create } from 'zustand'
 import {
   getAsyncStorageJSON,
   type JsonCodec,
   setAsyncStorageJSON,
 } from './asyncStore'
-import type { Category, SortBy, SortDir } from './library'
 
 export type ViewSettings = {
   viewMode: 'gallery' | 'list'

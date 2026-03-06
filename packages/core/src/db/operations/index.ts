@@ -15,6 +15,10 @@ export {
   syncDirectoryFromMetadata,
 } from './directories'
 export {
+  queryUploadCategoryStats,
+  type UploadCategoryStats,
+} from './fileStats'
+export {
   createFileRecordWithLocalObject,
   deleteAllFileRecords,
   deleteFileRecordAndThumbnails,
@@ -61,6 +65,23 @@ export {
   upsertFsFileMetadata,
 } from './fs'
 export {
+  buildLibraryQueryParts,
+  type Category,
+  type LibraryQueryParams,
+  queryDirectoryFileCount,
+  queryFileCountWithFilters,
+  queryFileExists,
+  queryFilePositionInSortedList,
+  queryLibraryFileCount,
+  queryMediaFileCount,
+  querySortedFileIds,
+  queryTagFileCount,
+  queryUnfiledFileCount,
+  type SortBy,
+  type SortDir,
+  UNFILED_DIRECTORY_ID,
+} from './library'
+export {
   countLocalObjectsForFile,
   deleteLocalObjectById,
   deleteLocalObjectsByFileId,
@@ -69,6 +90,13 @@ export {
   queryLocalObjectsForFile,
   queryLocalObjectsForFiles,
 } from './localObjects'
+export {
+  deleteAllLogs,
+  type LogRow,
+  queryAvailableLogScopes,
+  queryLogCount,
+  queryLogs,
+} from './logs'
 export {
   addTagToFile,
   addTagToFiles,

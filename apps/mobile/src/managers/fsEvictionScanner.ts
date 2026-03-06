@@ -1,6 +1,6 @@
 import { FS_EVICTION_FREQUENCY } from '@siastorage/core/config'
 import type { CacheEvictionResult } from '@siastorage/core/services'
-import { runCacheEviction } from '@siastorage/core/services'
+import * as services from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { db } from '../db'
 import {
@@ -23,7 +23,7 @@ export async function runFsEvictionScanner(): Promise<
     return
   }
   try {
-    return await runCacheEviction({
+    return await services.runCacheEviction({
       db: db(),
       deleteFile: async (fileId, fileType) => {
         await removeFsFile({ id: fileId, type: fileType })

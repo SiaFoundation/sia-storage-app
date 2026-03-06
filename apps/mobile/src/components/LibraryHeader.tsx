@@ -1,6 +1,6 @@
+import type { Category } from '@siastorage/core/db/operations'
 import { EllipsisIcon, ListFilterIcon, XIcon } from 'lucide-react-native'
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import type { Category } from '../stores/library'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { IconButton } from './IconButton'
 import { LibraryAppStatusIcon } from './LibraryAppStatusIcon'

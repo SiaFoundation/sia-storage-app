@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import type { Category } from '@siastorage/core/db/operations'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -38,7 +39,6 @@ import {
 } from '../stores/fileSelection'
 import type { FileRecord } from '../stores/files'
 import {
-  type Category,
   type FileListParams,
   useFileList,
   useLibraryCount,

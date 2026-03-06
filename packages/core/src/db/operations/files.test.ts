@@ -6,7 +6,11 @@ import {
   deleteManyFileRecordsByIds,
   insertFileRecord,
   insertManyFileRecords,
+  queryFileRecordByContentHash,
+  queryFileRecordByObjectId,
   queryFileRecords,
+  queryFileRecordsCount,
+  queryFileRecordsStats,
   readFileRecord,
   readFileRecordsByIds,
   updateFileRecordFields,
@@ -426,5 +430,82 @@ describe('readFileRecordsByIds edge cases', () => {
     const results = await readFileRecordsByIds(db(), ['f1'])
     expect(results).toHaveLength(1)
     expect(results[0].deletedAt).toBe(2000)
+  })
+})
+
+describe('queryFileRecordsCount', () => {
+  it('returns count matching filter options', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1'))
+    await insertFileRecord(db(), makeFileRecord('f2'))
+    await insertFileRecord(db(), makeFileRecord('f3', { trashedAt: 2000 }))
+    const count = await queryFileRecordsCount(db(), {
+      order: 'ASC',
+      activeOnly: true,
+    })
+    expect(count).toBe(2)
+  })
+
+  it('returns 0 when no records match', async () => {
+    const count = await queryFileRecordsCount(db(), {
+      order: 'ASC',
+      activeOnly: true,
+    })
+    expect(count).toBe(0)
+  })
+})
+
+describe('queryFileRecordsStats', () => {
+  it('returns count and totalBytes', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1', { size: 500 }))
+    await insertFileRecord(db(), makeFileRecord('f2', { size: 300 }))
+    const stats = await queryFileRecordsStats(db(), { order: 'ASC' })
+    expect(stats.count).toBe(2)
+    expect(stats.totalBytes).toBe(800)
+  })
+
+  it('returns zeros when no records match', async () => {
+    const stats = await queryFileRecordsStats(db(), {
+      order: 'ASC',
+      activeOnly: true,
+    })
+    expect(stats.count).toBe(0)
+    expect(stats.totalBytes).toBe(0)
+  })
+})
+
+describe('queryFileRecordByContentHash', () => {
+  it('finds file by hash', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'abc123' }))
+    const row = await queryFileRecordByContentHash(db(), 'abc123')
+    expect(row).not.toBeNull()
+    expect(row!.id).toBe('f1')
+  })
+
+  it('returns null when hash not found', async () => {
+    const row = await queryFileRecordByContentHash(db(), 'nonexistent')
+    expect(row).toBeNull()
+  })
+})
+
+describe('queryFileRecordByObjectId', () => {
+  it('finds file by object reference', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1'))
+    await insertLocalObject(db(), makeLocalObject('f1'))
+    const row = await queryFileRecordByObjectId(
+      db(),
+      'obj-f1',
+      'https://indexer.example.com',
+    )
+    expect(row).not.toBeNull()
+    expect(row!.id).toBe('f1')
+  })
+
+  it('returns null when object not found', async () => {
+    const row = await queryFileRecordByObjectId(
+      db(),
+      'nonexistent',
+      'https://indexer.example.com',
+    )
+    expect(row).toBeNull()
   })
 })
