@@ -54,21 +54,8 @@ type = "Command"
 command = "git push --force --set-upstream origin release"
 
 [[workflows.steps]]
-type = "CreatePullRequest"
-base = "main"
-
-[workflows.steps.title]
-template = "chore: release"
-
-[workflows.steps.body]
-template = """
-## Release
-
-$changelog
-
----
-Merging this PR will create a GitHub release.
-"""
+type = "Command"
+command = "bun scripts/create-release-pr.ts"
 
 [[workflows]]
 name = "release"
