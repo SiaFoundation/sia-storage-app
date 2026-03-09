@@ -21,6 +21,7 @@
     "./lib/types": "./src/lib/types.ts",
     "./lib/localObjects": "./src/lib/localObjects.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",
+    "./lib/yieldToEventLoop": "./src/lib/yieldToEventLoop.ts",
     "./types": "./src/types/index.ts",
     "./encoding/fileMetadata": "./src/encoding/fileMetadata.ts",
     "./encoding/localObject": "./src/encoding/localObject.ts",
