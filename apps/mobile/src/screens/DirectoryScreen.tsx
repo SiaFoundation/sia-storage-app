@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   ArrowLeftIcon,
   FilePlusIcon,
+  FolderIcon,
   ListFilterIcon,
   MoreVerticalIcon,
   PencilIcon,
@@ -35,6 +36,7 @@ import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
 import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
+import { ScreenHeaderTitle } from '../components/ScreenHeaderTitle'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import { useToast } from '../lib/toastContext'
@@ -234,12 +236,11 @@ export function DirectoryScreen({ route, navigation }: Props) {
           >
             <ArrowLeftIcon color={palette.gray[50]} size={22} />
           </IconButton>
-          <View>
-            <Text style={styles.titleLarge} numberOfLines={1}>
-              {directoryName}
-            </Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          </View>
+          <ScreenHeaderTitle
+            title={directoryName}
+            subtitle={subtitle}
+            icon={<FolderIcon color={palette.blue[400]} size={22} />}
+          />
         </View>
         <View style={styles.buttonRow}>
           <ViewSettingsMenu scope={scope}>
@@ -442,17 +443,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
-  },
-  titleLarge: {
-    color: palette.gray[50],
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: whiteA.a50,
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
   },
   buttonRow: {
     flexDirection: 'row',

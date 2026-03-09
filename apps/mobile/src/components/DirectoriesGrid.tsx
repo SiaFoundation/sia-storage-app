@@ -63,7 +63,7 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
       data={listData}
       keyExtractor={(dir) => dir.id}
       contentContainerStyle={styles.grid}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      showsVerticalScrollIndicator={false}
       renderItem={({ item }) => (
         <DirectoryCard
           dir={item}
@@ -114,16 +114,12 @@ const styles = StyleSheet.create({
     paddingTop: 140,
     paddingBottom: 120,
   },
-  separator: {
-    height: 12,
-  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: overlay.panelMedium,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: whiteA.a10,
     gap: 12,
   },

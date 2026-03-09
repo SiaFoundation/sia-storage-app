@@ -1,4 +1,4 @@
-import { TagIcon } from 'lucide-react-native'
+import { HeartIcon, TagIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
 import {
   ActivityIndicator,
@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { type TagWithCount, useAllTags } from '../stores/tags'
+import { SYSTEM_TAGS, type TagWithCount, useAllTags } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
 
 type TagOrSpacer = TagWithCount | { id: '__spacer' }
@@ -53,6 +53,7 @@ export function TagsGrid({ onSelectTag }: Props) {
       numColumns={2}
       contentContainerStyle={styles.grid}
       columnWrapperStyle={styles.row}
+      showsVerticalScrollIndicator={false}
       renderItem={({ item }) =>
         item.id === '__spacer' ? (
           <View style={styles.spacer} />
@@ -74,7 +75,11 @@ function TagCard({ tag, onPress }: { tag: TagWithCount; onPress: () => void }) {
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <TagIcon color={palette.blue[400]} size={24} />
+      {tag.id === SYSTEM_TAGS.favorites.id ? (
+        <HeartIcon color={palette.red[500]} fill={palette.red[500]} size={24} />
+      ) : (
+        <TagIcon color={palette.blue[400]} size={24} />
+      )}
       <View style={styles.cardText}>
         <Text style={styles.tagName} numberOfLines={1}>
           {tag.name}
