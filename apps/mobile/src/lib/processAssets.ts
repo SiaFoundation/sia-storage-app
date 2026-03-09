@@ -1,4 +1,5 @@
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import { File } from 'expo-file-system'
 import { generateThumbnails } from '../managers/thumbnailer'
@@ -29,6 +30,7 @@ async function processInBatches<T>(
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize)
     await Promise.all(batch.map(processor))
+    await yieldToEventLoop()
   }
 }
 

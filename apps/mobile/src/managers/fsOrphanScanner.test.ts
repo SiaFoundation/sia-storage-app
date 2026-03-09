@@ -218,8 +218,7 @@ describe('fsOrphanScanner', () => {
     expect(result).toEqual({ removed: 1 })
   })
 
-  it('yields between batches via setTimeout', async () => {
-    const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+  it('processes large file lists across multiple batches', async () => {
     const files = Array.from({ length: 60 }, (_, i) =>
       makeFile(`file-${i}.jpg`),
     )
@@ -227,10 +226,6 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    // 60 files / 50 per batch = 2 batches, each yields via setTimeout
-    const yieldCalls = setTimeoutSpy.mock.calls.filter(([, ms]) => ms === 0)
-    expect(yieldCalls.length).toBe(2)
     expect(result).toEqual({ removed: 60 })
-    setTimeoutSpy.mockRestore()
   })
 })

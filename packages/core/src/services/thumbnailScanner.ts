@@ -8,6 +8,7 @@ import {
   queryThumbnailSizesForFileId,
 } from '../db/operations/thumbnails'
 import { uniqueId } from '../lib/uniqueId'
+import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
 import { ThumbSizes } from '../types/files'
 
@@ -509,6 +510,7 @@ export class ThumbnailScanner {
               size,
               sourceUri,
             })
+            await yieldToEventLoop()
             if (outcome.status === 'produced') {
               producedCount++
               summary.produced.push({

@@ -1,3 +1,6 @@
+const path = require('path')
+const reactDir = path.dirname(require.resolve('react/package.json'))
+
 module.exports = {
   globalSetup: '<rootDir>/jest.globalSetup.cjs',
   preset: 'jest-expo',
@@ -12,6 +15,8 @@ module.exports = {
   ],
   testPathIgnorePatterns: ['/node_modules/', '/scripts/', '/test/'],
   moduleNameMapper: {
+    '^react$': reactDir,
+    '^react/(.*)$': `${reactDir}/$1`,
     '^@siastorage/core/(.*)$': '<rootDir>/../../packages/core/src/$1',
     '^@siastorage/core$': '<rootDir>/../../packages/core/src/index.ts',
     '^@siastorage/logger$': '<rootDir>/../../packages/logger/src/index.ts',
