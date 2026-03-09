@@ -1,5 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { ListFilterIcon, SearchIcon, XIcon } from 'lucide-react-native'
+import {
+  ArrowLeftIcon,
+  ListFilterIcon,
+  SearchIcon,
+  XIcon,
+} from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
@@ -216,7 +221,10 @@ export function SearchScreen({ navigation }: Props) {
         style={styles.topBlur}
       />
       <ScreenHeader>
-        <View style={styles.titles}>
+        <View style={styles.headerLeft}>
+          <IconButton onPress={handleExit} accessibilityLabel="Back">
+            <ArrowLeftIcon color={palette.gray[50]} size={22} />
+          </IconButton>
           <Text style={styles.titleLarge} pointerEvents="none">
             Search
           </Text>
@@ -427,8 +435,10 @@ const styles = StyleSheet.create({
     top: 0,
     height: 180,
   },
-  titles: {
-    flexDirection: 'column',
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   titleLarge: {
     color: palette.gray[50],

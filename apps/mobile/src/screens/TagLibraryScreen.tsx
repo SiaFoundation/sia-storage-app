@@ -2,9 +2,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
   ArrowLeftIcon,
   FilePlusIcon,
+  HeartIcon,
   ListFilterIcon,
   MoreVerticalIcon,
   PencilIcon,
+  TagIcon,
   Trash2Icon,
   XIcon,
 } from 'lucide-react-native'
@@ -34,6 +36,7 @@ import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
 import { RenameSheet } from '../components/RenameSheet'
 import { ScreenHeader } from '../components/ScreenHeader'
+import { ScreenHeaderTitle } from '../components/ScreenHeaderTitle'
 import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import { useToast } from '../lib/toastContext'
@@ -52,7 +55,12 @@ import {
   useTagFileCount,
 } from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFiles, deleteTag, renameTag } from '../stores/tags'
+import {
+  addTagToFiles,
+  deleteTag,
+  renameTag,
+  SYSTEM_TAGS,
+} from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
@@ -177,7 +185,8 @@ export function TagLibraryScreen({ route, navigation }: Props) {
   const tagCount = useTagFileCount(tagId)
   const fileCount = tagCount.data ?? 0
   const subtitle = `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`
-  const isSystemTag = tagId.startsWith('sys_')
+  const isFavoritesTag = tagId === SYSTEM_TAGS.favorites.id
+  const isSystemTag = tagId.startsWith('sys:')
   const tagActionsOpen = useSheetOpen('tagActions')
 
   const handleRenameTag = useCallback(
@@ -227,12 +236,21 @@ export function TagLibraryScreen({ route, navigation }: Props) {
           >
             <ArrowLeftIcon color={palette.gray[50]} size={22} />
           </IconButton>
-          <View>
-            <Text style={styles.titleLarge} numberOfLines={1}>
-              {tagName}
-            </Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          </View>
+          <ScreenHeaderTitle
+            title={tagName}
+            subtitle={subtitle}
+            icon={
+              isFavoritesTag ? (
+                <HeartIcon
+                  color={palette.red[500]}
+                  fill={palette.red[500]}
+                  size={22}
+                />
+              ) : (
+                <TagIcon color={palette.blue[400]} size={22} />
+              )
+            }
+          />
         </View>
         <View style={styles.buttonRow}>
           <ViewSettingsMenu scope={scope}>
@@ -430,17 +448,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
-  },
-  titleLarge: {
-    color: palette.gray[50],
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: whiteA.a50,
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
   },
   buttonRow: {
     flexDirection: 'row',
