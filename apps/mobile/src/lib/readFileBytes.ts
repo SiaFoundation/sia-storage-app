@@ -1,6 +1,12 @@
 import { logger } from '@siastorage/logger'
 import { File } from 'expo-file-system'
 
+function isFileUri(uri: string): boolean {
+  if (uri.startsWith('/') || uri.startsWith('file://')) return true
+  const colon = uri.indexOf(':')
+  return colon === -1
+}
+
 /**
  * Read the first N bytes from a file.
  * Handles variable chunk sizes by reading multiple chunks if needed.
@@ -9,6 +15,9 @@ export async function readFileBytes(
   uri: string,
   byteCount: number,
 ): Promise<Uint8Array | null> {
+  if (!isFileUri(uri)) {
+    return null
+  }
   try {
     const file = new File(uri)
     const readable = file.readableStream()

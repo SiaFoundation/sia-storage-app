@@ -143,6 +143,13 @@ export async function processAssets(
         return
       }
 
+      // The initial MIME detection may have returned octet-stream because the
+      // source URI was a ph:// or content:// asset reference that can't be read
+      // directly. Now that we have a local file:// URI, retry with byte detection.
+      if (f.type === 'application/octet-stream') {
+        f.type = await getMimeType({ name: f.name, uri: bestUri })
+      }
+
       // Copy the file to the app's file cache.
       const fileUri = await copyFileToFs(f, new File(bestUri))
       if (!fileUri) {
