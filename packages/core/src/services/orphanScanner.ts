@@ -1,5 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../adapters/db'
+import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 
 const BATCH_SIZE = 50
 
@@ -97,8 +98,7 @@ export async function runOrphanScanner<T extends FsEntry>(
 
       deps.onProgress?.(removed, files.length)
 
-      // Yield to event loop between batches
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await yieldToEventLoop()
     }
 
     if (removed > 0) {

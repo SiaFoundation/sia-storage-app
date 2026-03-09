@@ -19,6 +19,7 @@ import {
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
 import { uniqueId } from '../lib/uniqueId'
+import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecordRow } from '../types/files'
 
 export type BatchFile = {
@@ -909,6 +910,7 @@ export class UploadManager {
         this._uploadedCount++
         this._uploadedBytes += entry.size
         successfulFileIds.push(entry.fileId)
+        await yieldToEventLoop()
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
         logger.error('uploadManager', 'object_save_error', {
