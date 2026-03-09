@@ -2,34 +2,49 @@ import type {
   ThumbnailAdapter,
   ThumbnailResult,
 } from '@siastorage/core/adapters'
-import { computeTargetDimensions } from '@siastorage/core/services/thumbnailScanner'
 import type { ThumbSize } from '@siastorage/core/types'
 import { File } from 'expo-file-system'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
 
-async function getImageSize(
-  uri: string,
-): Promise<{ width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    Image.getSize(
-      uri,
-      (w, h) => resolve({ width: w, height: h }),
-      () => resolve(null),
-    )
+function getImageSize(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    Image.getSize(uri, (width, height) => resolve({ width, height }), reject)
   })
 }
 
 async function resizeToWebP(
   inputUri: string,
-  targetWidth?: number,
-  targetHeight?: number,
+  maxSize: number,
 ): Promise<ThumbnailResult> {
   const ctx = ImageManipulator.manipulate(inputUri)
-  ctx.resize({ width: targetWidth, height: targetHeight })
-  const ref = await ctx.renderAsync()
-  const result = await ref.saveAsync({
+  const rendered = await ctx.renderAsync()
+  let isPortrait = rendered.height > rendered.width
+
+  // RCTImageLoader on iOS does not apply EXIF orientation when loading
+  // full-size images, so raw pixel dimensions may differ from the visual
+  // orientation. Image.getSize returns EXIF-corrected dimensions — compare
+  // to detect the mismatch and apply a corrective rotation.
+  try {
+    const exifSize = await getImageSize(inputUri)
+    const rawIsLandscape = rendered.width >= rendered.height
+    const exifIsLandscape = exifSize.width >= exifSize.height
+    if (rawIsLandscape !== exifIsLandscape) {
+      ctx.rotate(90)
+    }
+    isPortrait = exifSize.height > exifSize.width
+  } catch {
+    // Fall back to raw dimensions if Image.getSize fails
+  }
+
+  if (isPortrait) {
+    ctx.resize({ height: maxSize })
+  } else {
+    ctx.resize({ width: maxSize })
+  }
+  const resized = await ctx.renderAsync()
+  const result = await resized.saveAsync({
     compress: 0.8,
     format: SaveFormat.WEBP,
   })
@@ -47,31 +62,18 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
       sourcePath: string,
       targetSize: number,
     ): Promise<ThumbnailResult> {
-      const size = targetSize as ThumbSize
-      const imgSize = await getImageSize(sourcePath)
-      const { targetWidth, targetHeight } = computeTargetDimensions(
-        imgSize?.width,
-        imgSize?.height,
-        size,
-      )
-      return resizeToWebP(sourcePath, targetWidth, targetHeight)
+      return resizeToWebP(sourcePath, targetSize as ThumbSize)
     },
 
     async generateVideoThumbnail(
       sourcePath: string,
       targetSize: number,
     ): Promise<ThumbnailResult> {
-      const size = targetSize as ThumbSize
       const thumb = await VideoThumbnails.getThumbnailAsync(sourcePath, {
         time: 1000,
         quality: 0.8,
       })
-      const { targetWidth, targetHeight } = computeTargetDimensions(
-        thumb.width ?? 0,
-        thumb.height ?? 0,
-        size,
-      )
-      return resizeToWebP(thumb.uri, targetWidth, targetHeight)
+      return resizeToWebP(thumb.uri, targetSize as ThumbSize)
     },
   }
 }
