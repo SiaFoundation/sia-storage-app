@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { createDirectory, useAllDirectories } from '../stores/directories'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
@@ -43,9 +44,7 @@ export function SelectDirectorySheet({
     query.trim().length > 0 &&
     dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (!isOpen) {
