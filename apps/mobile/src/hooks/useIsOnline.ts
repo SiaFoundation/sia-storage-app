@@ -22,7 +22,7 @@ export function useIsOnline() {
       isOnline.mutate()
     })
     return () => unsubscribe()
-  }, [isOnline])
+  }, [isOnline.mutate])
 
   useEffect(() => {
     if (isOnline.isLoading) {

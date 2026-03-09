@@ -23,7 +23,7 @@ export function useReconnectIndexer() {
 
   // Try to reconnect to the indexer when the app is online but not connected to the indexer.
   const isInitializing = useIsInitializing()
-  const isOnline = useIsOnline()
+  const { data: isOnline } = useIsOnline()
   const isIndexerConnected = useIsConnected()
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
