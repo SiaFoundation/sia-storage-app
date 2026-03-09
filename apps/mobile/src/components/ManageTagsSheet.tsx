@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import {
   addTagToFile,
@@ -51,9 +52,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
     query.trim().length > 0 &&
     allTagList.some((t) => t.name.toLowerCase() === query.trim().toLowerCase())
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (!isOpen) {

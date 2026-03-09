@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { createTag } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -21,9 +22,7 @@ export function CreateTagSheet() {
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (!isOpen) {

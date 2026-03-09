@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { createDirectory } from '../stores/directories'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -25,9 +26,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (!isOpen) {

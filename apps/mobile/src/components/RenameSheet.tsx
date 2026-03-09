@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
@@ -32,9 +33,7 @@ export function RenameSheet({
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (isOpen) {

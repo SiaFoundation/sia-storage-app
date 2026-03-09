@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
+import { useFocusOnShow } from '../lib/useFocusOnShow'
 import {
   countFilesWithDirectories,
   createDirectory,
@@ -55,9 +56,7 @@ export function MoveToDirectorySheet({
     query.trim().length > 0 &&
     dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
-  const handleShow = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (isOpen) {
