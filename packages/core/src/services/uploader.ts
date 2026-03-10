@@ -182,6 +182,8 @@ export class UploadManager {
   private _uploadedCount = 0
   /** Cumulative bytes successfully pinned and saved. */
   private _uploadedBytes = 0
+  /** Timestamp of last onProgress execution, for throttling. */
+  private lastProgressAt = 0
 
   /** Connect dependencies and start the async processing loop. */
   initialize(deps: UploadDeps): void {
@@ -838,30 +840,21 @@ export class UploadManager {
     return (this.batch.totalSize % SLAB_SIZE) / SLAB_SIZE
   }
 
-  /** Distribute batch upload progress across individual files by size weight. */
+  /** Distribute batch upload progress across individual files. */
   private onProgress(
     batch: BatchState,
     uploaded: bigint,
     encodedTotal: bigint,
   ): void {
+    const now = Date.now()
+    if (now - this.lastProgressAt < 250) return
+    this.lastProgressAt = now
+
     const batchProgress =
       encodedTotal > 0n ? Number(uploaded) / Number(encodedTotal) : 0
 
-    const batchInfo: BatchInfo = {
-      files: batch.files.map((f) => ({
-        fileId: f.fileId,
-        size: f.size,
-      })),
-      totalSize: batch.totalSize,
-    }
-
     for (const entry of batch.files) {
-      const fileProgress = calculateFileProgress(
-        batchInfo,
-        batchProgress,
-        entry.fileId,
-      )
-      this.deps.uploads.updateProgress(entry.fileId, fileProgress)
+      this.deps.uploads.updateProgress(entry.fileId, batchProgress)
     }
   }
 
