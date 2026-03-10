@@ -1,4 +1,3 @@
-import { setExpoFileSystemMockMethods } from '../../mocks/expo-file-system'
 import { db, initializeDB, resetDb } from '../db'
 import { readAllDirectoriesWithCounts } from '../stores/directories'
 import {
@@ -440,11 +439,10 @@ describe('processAssets', () => {
     })
   })
   it('adds file size to new files', async () => {
-    setExpoFileSystemMockMethods({
-      File: {
-        info: jest.fn((uri) => ({ exists: true, size: 333, uri })),
-      },
-    })
+    const { rnfsStat } = (
+      global as unknown as { __rnfs: { rnfsStat: jest.Mock } }
+    ).__rnfs
+    rnfsStat.mockResolvedValue({ size: 333 })
     const assets = [
       {
         id: undefined,
