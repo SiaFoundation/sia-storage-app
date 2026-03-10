@@ -1,6 +1,36 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.8.1 (2026-03-10)
+
+### Fixes
+
+- Replaced synchronous Expo FS calls with async RNFS APIs in hot-path file operations to reduce JS thread blocking.
+- Empty folder and tag lists now show create buttons to quickly get started.
+- Extract adapter implementations into reusable packages.
+- The favorites system tag now displays a heart icon in the tags grid and screen header.
+- Fixed Android auth browser closing with error due to background network restrictions killing SDK poll.
+- Fixed Android expo-sqlite NullPointerException crashes by automatically recovering the database connection.
+- Auto-capitalize folder and tag name inputs to "words" mode.
+- Redesigned multi-select bar with count on the left and dynamic overflow action icons. Download and upload actions only appear when applicable. Consistent action labels across single and multi-select menus.
+- Exit selection mode after completing bulk actions like move to folder or tag.
+- Fixed keyboard briefly flashing when opening sheet modals by using the modal's onShow callback for input focus.
+- Fixed maximum update depth exceeded error during photo sync caused by unstable SWR effect dependencies.
+- Fixed noisy error logs from ph:// and content:// URIs during photo sync, and added MIME re-detection from local file when initial detection returns octet-stream.
+- Fixed sheet overlay bug where transitioning between action sheet and folder picker could leave the screen unresponsive.
+- Increased the status indicator size and removed the percentage from the badge.
+- Fixed an issue where frequent new photos batches would trigger sync updates for the same files repeatedly.
+- Fixed system tag detection using wrong prefix, which allowed rename and delete actions on system tags.
+- Added success toast confirmations to all user-facing actions: create/rename/delete folders and tags, add/remove tags, toggle favorites, and move files to folders.
+- Fixed uncaught promise rejections in UploadManager.
+- Hide scroll bars on folder and tag lists.
+- Improved onboarding flow with better auth timeout handling, offline resilience, and polished UI.
+- Restyle folder rows from cards to simple rows with hairline separators.
+- Tag and directory screens now show their respective icons in the header.
+- Added a back button to the SearchScreen header for easier navigation.
+- Improved thumbnail scanner rendering performance by batching cache invalidation and moving hashing off the JS thread.
+- The file metadata tag editor now opens the same full-screen tag modal used by the selection bar.
+
 ## 1.8.0 (2026-03-03)
 
 ### Features
