@@ -5,7 +5,7 @@ import {
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
 import { initializeDB, resetDb } from '../db'
-import { calculateContentHash } from '../lib/contentHash'
+import { sha256File } from '../lib/contentHash'
 import {
   createFileRecord,
   readAllFileRecordsCount,
@@ -22,10 +22,12 @@ jest.mock('expo-image-manipulator', () => ({
 jest.mock('expo-video-thumbnails', () => ({
   getThumbnailAsync: jest.fn(),
 }))
-jest.mock('../lib/contentHash', () => ({ calculateContentHash: jest.fn() }))
+jest.mock('../lib/contentHash', () => ({
+  sha256File: jest.fn(),
+}))
 
 const getFsFileUriMock = jest.mocked(getFsFileUri)
-const calculateContentHashMock = jest.mocked(calculateContentHash)
+const sha256FileMock = jest.mocked(sha256File)
 const imageGetSizeMock = jest.mocked(Image.getSize)
 const imageManipulatorMock = jest.mocked(ImageManipulator.manipulate)
 const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
@@ -37,9 +39,11 @@ beforeEach(async () => {
 
   getFsFileUriMock.mockResolvedValue('file://source.jpg')
   let hashCounter = 0
-  calculateContentHashMock.mockImplementation(
-    async () => `sha256:thumb-hash-${++hashCounter}`,
-  )
+  sha256FileMock.mockImplementation(async () => `thumb-hash-${++hashCounter}`)
+  const { rnfsStat } = (
+    global as unknown as { __rnfs: { rnfsStat: jest.Mock } }
+  ).__rnfs
+  rnfsStat.mockResolvedValue({ size: 100 })
 
   imageGetSizeMock.mockImplementation((_, ok) => {
     ok?.(1920, 1080)
@@ -177,7 +181,7 @@ describe('thumbnailScanner', () => {
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    calculateContentHashMock.mockResolvedValue('sha256:thumb-64')
+    sha256FileMock.mockResolvedValue('thumb-64')
     const result = await runThumbnailScanner()
     const producedSizes = result.produced
       .filter((p) => p.originalId === 'file1')
@@ -336,9 +340,7 @@ describe('thumbnailScanner', () => {
       deletedAt: null,
     })
     let counter = 0
-    calculateContentHashMock.mockImplementation(
-      async () => `sha256:video-thumb-${++counter}`,
-    )
+    sha256FileMock.mockImplementation(async () => `video-thumb-${++counter}`)
 
     const result = await runThumbnailScanner()
 
@@ -372,9 +374,7 @@ describe('thumbnailScanner', () => {
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     let counter = 0
-    calculateContentHashMock.mockImplementation(
-      async () => `sha256:thumb-hash-${++counter}`,
-    )
+    sha256FileMock.mockImplementation(async () => `thumb-hash-${++counter}`)
     const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(10)
   })
@@ -413,7 +413,7 @@ describe('thumbnailScanner', () => {
     imageManipulatorMock.mockReturnValue(
       ctx as unknown as ImageManipulatorContext,
     )
-    calculateContentHashMock.mockResolvedValue('sha256:thumb-hash')
+    sha256FileMock.mockResolvedValue('thumb-hash')
     await runThumbnailScanner()
     expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
   })
@@ -464,9 +464,7 @@ describe('thumbnailScanner', () => {
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     let counter = 0
-    calculateContentHashMock.mockImplementation(
-      async () => `sha256:thumb-hash-${++counter}`,
-    )
+    sha256FileMock.mockImplementation(async () => `thumb-hash-${++counter}`)
 
     const ac = new AbortController()
     let manipCalls = 0
