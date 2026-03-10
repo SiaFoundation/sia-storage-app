@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
-  Image,
   StyleSheet,
   Text,
   View,
@@ -14,6 +13,7 @@ import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
 import { CreateTagSheet } from '../components/CreateTagSheet'
 import { DirectoriesGrid } from '../components/DirectoriesGrid'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
 import { FileGallery } from '../components/FileGallery'
@@ -53,7 +53,7 @@ import { openSheet } from '../stores/sheets'
 import { useIsSyncingDown } from '../stores/syncDown'
 import { useAllTags } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
-import { colors, overlay, palette, whiteA } from '../styles/colors'
+import { colors, overlay, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
@@ -268,9 +268,12 @@ export function LibraryScreen({ route, navigation }: Props) {
         onNavigateMenu={() => navigation.navigate('MenuTab' as never)}
       />
       {activeTab === 'files' ? (
-        <DirectoriesGrid onSelectDirectory={handleSelectDirectory} />
+        <DirectoriesGrid
+          onSelectDirectory={handleSelectDirectory}
+          onCreateDirectory={handleCreateDirectory}
+        />
       ) : activeTab === 'tags' ? (
-        <TagsGrid onSelectTag={handleSelectTag} />
+        <TagsGrid onSelectTag={handleSelectTag} onCreateTag={handleCreateTag} />
       ) : files.isLoading ? (
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
@@ -291,19 +294,17 @@ export function LibraryScreen({ route, navigation }: Props) {
             />
           )
         ) : (
-          <View style={styles.emptyWrap}>
-            <Image
-              style={styles.emptyImage}
-              source={require('../../assets/image-stack.png')}
-            />
-            <Text style={styles.emptyTitle}>No files found</Text>
-            <Text style={styles.emptyText}>
-              {files.error
+          <EmptyState
+            image={require('../../assets/image-stack.png')}
+            title="No files found"
+            message={
+              files.error
                 ? files.error.message
-                : 'No files matching the selected filters.'}
-            </Text>
+                : 'No files matching the selected filters.'
+            }
+          >
             {files.error ? <LibraryLocalResetButton /> : null}
-          </View>
+          </EmptyState>
         )
       ) : isSyncing && categorySet.size === 0 ? (
         <View style={styles.emptyWrap}>
@@ -311,17 +312,11 @@ export function LibraryScreen({ route, navigation }: Props) {
           <Text style={styles.emptyTitle}>Syncing your files</Text>
         </View>
       ) : (
-        <View style={styles.emptyWrap}>
-          <Image
-            style={styles.emptyImage}
-            source={require('../../assets/image-stack.png')}
-          />
-          <Text style={styles.emptyTitle}>Add files to get started</Text>
-          <Text style={styles.emptyText}>
-            Files are sharded and encrypted and synced directly to the Sia host
-            network.
-          </Text>
-        </View>
+        <EmptyState
+          image={require('../../assets/image-stack.png')}
+          title="Add files to get started"
+          message="Files are sharded and encrypted and synced directly to the Sia host network."
+        />
       )}
       <AddFileActionSheet />
       <CreateDirectorySheet onCreated={handleDirectoryCreated} />
@@ -416,7 +411,6 @@ const styles = StyleSheet.create({
     top: 0,
     height: 180,
   },
-  emptyImage: { width: 140, height: 140 },
   emptyWrap: {
     flex: 1,
     alignItems: 'center',
@@ -430,7 +424,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 6,
   },
-  emptyText: { color: whiteA.a70, textAlign: 'center' },
   carouselOverlay: {
     zIndex: 100,
   },

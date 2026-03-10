@@ -8,7 +8,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
-  Image,
   Keyboard,
   type KeyboardEvent,
   Platform,
@@ -20,6 +19,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
 import { FileGallery } from '../components/FileGallery'
@@ -256,15 +256,15 @@ export function SearchScreen({ navigation }: Props) {
       </ScreenHeader>
 
       {noResults ? (
-        <Pressable style={styles.emptyWrap} onPress={() => Keyboard.dismiss()}>
-          <Image
-            style={styles.emptyImage}
-            source={require('../../assets/image-stack.png')}
+        <Pressable
+          style={styles.emptyPressable}
+          onPress={() => Keyboard.dismiss()}
+        >
+          <EmptyState
+            image={require('../../assets/image-stack.png')}
+            title="No results found"
+            message="Try a different search term or filter."
           />
-          <Text style={styles.emptyTitle}>No results found</Text>
-          <Text style={styles.emptyText}>
-            Try a different search term or filter.
-          </Text>
         </Pressable>
       ) : vs.viewMode === 'gallery' ? (
         <FileGallery
@@ -499,23 +499,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     fontSize: 15,
   },
-  emptyWrap: {
+  emptyPressable: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyImage: { width: 140, height: 140 },
-  emptyTitle: {
-    color: palette.gray[100],
-    fontWeight: '800',
-    fontSize: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  emptyText: {
-    color: whiteA.a70,
-    textAlign: 'center',
   },
   suggestions: {
     flexDirection: 'row',

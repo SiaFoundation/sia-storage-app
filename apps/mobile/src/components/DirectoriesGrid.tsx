@@ -15,12 +15,17 @@ import {
 } from '../stores/directories'
 import { useUnfiledFileCount } from '../stores/library'
 import { overlay, palette, whiteA } from '../styles/colors'
+import { EmptyState } from './EmptyState'
 
 type Props = {
   onSelectDirectory: (directoryId: string, directoryName: string) => void
+  onCreateDirectory: () => void
 }
 
-export function DirectoriesGrid({ onSelectDirectory }: Props) {
+export function DirectoriesGrid({
+  onSelectDirectory,
+  onCreateDirectory,
+}: Props) {
   const allDirs = useAllDirectories()
   const unfiledCount = useUnfiledFileCount()
   const dirs = allDirs.data ?? []
@@ -48,13 +53,12 @@ export function DirectoriesGrid({ onSelectDirectory }: Props) {
 
   if (listData.length === 0) {
     return (
-      <View style={styles.emptyWrap}>
-        <FolderIcon color={whiteA.a50} size={48} />
-        <Text style={styles.emptyTitle}>No folders yet</Text>
-        <Text style={styles.emptyText}>
-          Create folders to organize your files.
-        </Text>
-      </View>
+      <EmptyState
+        image={require('../../assets/folder-stack.png')}
+        title="No folders yet"
+        message="Create folders to organize your files."
+        action={{ label: 'Create folder', onPress: onCreateDirectory }}
+      />
     )
   }
 
@@ -143,16 +147,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    color: palette.gray[100],
-    fontWeight: '800',
-    fontSize: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  emptyText: {
-    color: whiteA.a70,
-    textAlign: 'center',
   },
 })
