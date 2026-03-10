@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   release-android:
-    if: ${{ github.event_name == 'release' || inputs.platform == 'android' || inputs.platform == 'both' }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
     steps:
       - name: Free disk space
@@ -82,7 +82,7 @@ jobs:
 
 
   release-ios:
-    if: ${{ github.event_name == 'release' || inputs.platform == 'ios' || inputs.platform == 'both' }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both' }}
     runs-on: macos-26
     steps:
       - name: Checkout

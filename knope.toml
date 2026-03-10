@@ -43,6 +43,14 @@ command = "bun apps/mobile/scripts/syncAppVersion.ts"
 
 [[workflows.steps]]
 type = "Command"
+command = "bun install"
+
+[[workflows.steps]]
+type = "Command"
+command = "bunx biome format --write ."
+
+[[workflows.steps]]
+type = "Command"
 command = "git add -A"
 
 [[workflows.steps]]
