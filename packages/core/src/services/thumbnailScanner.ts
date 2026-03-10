@@ -1,5 +1,4 @@
 import { logger } from '@siastorage/logger'
-import type { CryptoAdapter } from '../adapters/crypto'
 import type { DatabaseAdapter } from '../adapters/db'
 import type { ThumbnailAdapter } from '../adapters/thumbnail'
 import { insertFileRecord } from '../db/operations/files'
@@ -15,13 +14,12 @@ import { ThumbSizes } from '../types/files'
 export type ThumbnailDeps = {
   db: DatabaseAdapter
   thumbnailAdapter: ThumbnailAdapter
-  cryptoAdapter: CryptoAdapter
   detectMimeType(path: string): Promise<string | null>
   getFsFileUri(file: { id: string; type: string }): Promise<string | null>
   copyToFs(
     file: { id: string; type: string },
     data: ArrayBuffer,
-  ): Promise<{ uri: string; size: number }>
+  ): Promise<{ uri: string; size: number; hash: string }>
   invalidateCache?(fileId: string): Promise<void>
 }
 
@@ -288,7 +286,6 @@ export class ThumbnailScanner {
     }
 
     try {
-      const thumbHash = await deps.cryptoAdapter.sha256(result.data)
       const thumbId = uniqueId()
       const thumbFileInfo = {
         id: thumbId,
@@ -303,7 +300,7 @@ export class ThumbnailScanner {
         type: result.mimeType,
         kind: 'thumb',
         size: copied.size,
-        hash: `sha256:${thumbHash}`,
+        hash: `sha256:${copied.hash}`,
         createdAt: now,
         updatedAt: now,
         addedAt: now,

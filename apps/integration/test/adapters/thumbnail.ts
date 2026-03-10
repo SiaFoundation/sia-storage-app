@@ -1,7 +1,6 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import type { ThumbnailDeps } from '@siastorage/core/services/thumbnailScanner'
-import { createNodeCryptoAdapter } from '@siastorage/node-adapters/crypto'
 import type { buildFsDeps } from './fs'
 
 export function buildThumbnailDeps(params: {
@@ -45,7 +44,6 @@ export function buildThumbnailDeps(params: {
         }
       },
     },
-    cryptoAdapter: createNodeCryptoAdapter(),
     async detectMimeType(filePath: string): Promise<string | null> {
       const resolved = filePath.replace('file://', '')
       const result = detectMimeType({ fileName: resolved })

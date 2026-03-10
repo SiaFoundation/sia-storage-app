@@ -8,6 +8,7 @@ import {
   getFsFileUri as coreGetFsFileUri,
   type FsFileUriAdapter,
 } from '@siastorage/core/services/fsFileUri'
+import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 
@@ -58,9 +59,11 @@ export function buildFsDeps(params: { db: DatabaseAdapter; tempDir: string }) {
   async function copyToFs(
     file: { id: string; type: string },
     data: ArrayBuffer,
-  ): Promise<{ uri: string; size: number }> {
+  ): Promise<{ uri: string; size: number; hash: string }> {
     const fp = fsFilePath(file.id, file.type)
-    nodeFs.writeFileSync(fp, Buffer.from(data))
+    const buf = Buffer.from(data)
+    nodeFs.writeFileSync(fp, buf)
+    const hash = crypto.createHash('sha256').update(buf).digest('hex')
     const now = Date.now()
     await upsertFsFileMetadata(db, {
       fileId: file.id,
@@ -68,7 +71,7 @@ export function buildFsDeps(params: { db: DatabaseAdapter; tempDir: string }) {
       addedAt: now,
       usedAt: now,
     })
-    return { uri: `file://${fp}`, size: data.byteLength }
+    return { uri: `file://${fp}`, size: data.byteLength, hash }
   }
 
   return {
