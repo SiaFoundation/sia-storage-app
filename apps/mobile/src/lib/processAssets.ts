@@ -2,6 +2,7 @@ import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import { File } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 import { generateThumbnails } from '../managers/thumbnailer'
 import {
   getOrCreateDirectory,
@@ -183,7 +184,7 @@ export async function processAssets(
       }
       f.hash = hash
 
-      const size = getFileSize(fileUri)
+      const size = await getFileSize(fileUri)
       if (!size) {
         f.status = 'incomplete'
         f.statusDetails = 'noFileSize'
@@ -291,7 +292,11 @@ export async function processAssets(
   }
 }
 
-function getFileSize(fileUri: string) {
-  const info = new File(fileUri).info()
-  return info.size ?? null
+async function getFileSize(fileUri: string) {
+  try {
+    const stat = await RNFS.stat(fileUri)
+    return stat.size ?? null
+  } catch {
+    return null
+  }
 }
