@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 
 /**
  * Temporary file system used for in-progress file downloads.
@@ -38,8 +39,9 @@ export async function removeTempDownloadFile(
   file: TempFsFileInfo,
 ): Promise<void> {
   const f = getTempDownloadFileForId(file)
-  const info = f.info()
-  if (info.exists) {
-    f.delete()
+  try {
+    await RNFS.unlink(f.uri)
+  } catch {
+    // File does not exist, nothing to delete.
   }
 }
