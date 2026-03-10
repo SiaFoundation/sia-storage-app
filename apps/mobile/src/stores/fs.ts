@@ -2,6 +2,7 @@ import type { FsMetaRow } from '@siastorage/core/db/operations'
 import * as ops from '@siastorage/core/db/operations'
 import { logger } from '@siastorage/logger'
 import { Directory, File, Paths } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 import useSWR from 'swr'
 import { db } from '../db'
 import { extFromMime } from '../lib/fileTypes'
@@ -49,24 +50,26 @@ const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 export async function getFsFileUri(file: FsFileInfo): Promise<string | null> {
   const existingMeta = await readFsFileMetadata(file.id)
   const fsFile = getFsFileForId(file)
-  const info = fsFile.info()
 
-  if (!info.exists) {
-    // If the file no longer exists, remove the metadata.
+  let size: number | null = null
+  try {
+    const stat = await RNFS.stat(fsFile.uri)
+    size = stat.size
+  } catch {
+    // File does not exist on disk.
     if (existingMeta) {
       await deleteFsFileMetadata(file.id)
     }
     return null
   }
 
-  const size = info.size ?? existingMeta?.size ?? 0
   const now = Date.now()
 
   // If the file is not tracked yet, insert the metadata.
   if (!existingMeta) {
     await upsertFsFileMetadata({
       fileId: file.id,
-      size,
+      size: size ?? 0,
       addedAt: now,
       usedAt: now,
     })
@@ -83,11 +86,12 @@ export async function getFsFileUri(file: FsFileInfo): Promise<string | null> {
 
 export async function removeFsFile(file: FsFileInfo): Promise<void> {
   const fsFile = getFsFileForId(file)
-  const info = fsFile.info()
   let changed = false
-  if (info.exists) {
-    fsFile.delete()
+  try {
+    await RNFS.unlink(fsFile.uri)
     changed = true
+  } catch {
+    // File does not exist, nothing to delete.
   }
   const meta = await readFsFileMetadata(file.id)
   if (meta) {
@@ -105,15 +109,27 @@ export async function copyFileToFs(
 ): Promise<string> {
   logger.debug('fs', 'copy_file', { fileId: file.id, uri: sourceFile.uri })
   const target = getFsFileForId(file)
-  const targetInfo = target.info()
-  if (targetInfo.exists) {
-    target.delete()
+  try {
+    await RNFS.unlink(target.uri)
+  } catch {
+    // Target does not exist yet, nothing to remove.
   }
-  sourceFile.copy(target)
-  const destinationInfo = target.info()
-  const sourceInfo = sourceFile.info()
+  await RNFS.copyFile(sourceFile.uri, target.uri)
+  let size = 0
+  try {
+    const stat = await RNFS.stat(target.uri)
+    size = stat.size
+  } catch {
+    // Fallback to source stat or metadata.
+    try {
+      const sourceStat = await RNFS.stat(sourceFile.uri)
+      size = sourceStat.size
+    } catch {
+      const previous = await readFsFileMetadata(file.id)
+      size = previous?.size ?? 0
+    }
+  }
   const previous = await readFsFileMetadata(file.id)
-  const size = destinationInfo.size ?? sourceInfo.size ?? previous?.size ?? 0
   await upsertFsFileMetadata({
     fileId: file.id,
     size,
