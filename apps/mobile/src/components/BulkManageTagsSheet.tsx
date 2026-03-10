@@ -19,13 +19,21 @@ import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
 
 type Props = {
+  sheetName?: string
+  fileIds?: string[]
   onComplete?: () => void
 }
 
-export function BulkManageTagsSheet({ onComplete }: Props) {
+export function BulkManageTagsSheet({
+  sheetName = 'bulkManageTags',
+  fileIds: fileIdsProp,
+  onComplete,
+}: Props) {
   const toast = useToast()
-  const isOpen = useSheetOpen('bulkManageTags')
+  const isOpen = useSheetOpen(sheetName)
   const selectedFileIds = useSelectedFileIds()
+  const fileIds = fileIdsProp ?? Array.from(selectedFileIds)
+  const fileCount = fileIds.length
   const allTags = useAllTags()
   const [query, setQuery] = useState('')
   const inputRef = useRef<TextInput | null>(null)
@@ -61,8 +69,10 @@ export function BulkManageTagsSheet({ onComplete }: Props) {
       const key = trimmed.toLowerCase()
       setLoadingTagNames((prev) => new Set([...prev, key]))
       try {
-        await addTagToFiles(Array.from(selectedFileIds), trimmed)
-        toast.show(`Added "${trimmed}" to ${selectedFileIds.size} files`)
+        await addTagToFiles(fileIds, trimmed)
+        toast.show(
+          `Added "${trimmed}" to ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`,
+        )
         const tag = allTagList.find((t) => t.name.toLowerCase() === key)
         if (tag) {
           setAddedTagIds((prev) => new Set([...prev, tag.id]))
@@ -76,7 +86,7 @@ export function BulkManageTagsSheet({ onComplete }: Props) {
         })
       }
     },
-    [selectedFileIds, allTagList, toast],
+    [fileIds, fileCount, allTagList, toast],
   )
 
   const handleClose = useCallback(() => {
@@ -86,8 +96,6 @@ export function BulkManageTagsSheet({ onComplete }: Props) {
     closeSheet()
     if (hasChanges) onComplete?.()
   }, [addedTagIds.size, onComplete])
-
-  const fileCount = selectedFileIds.size
 
   return (
     <ModalSheet

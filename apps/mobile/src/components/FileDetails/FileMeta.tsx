@@ -24,11 +24,11 @@ import {
   thumbnailsByFileIdCache,
 } from '../../stores/thumbnails'
 import { colors, palette } from '../../styles/colors'
+import { BulkManageTagsSheet } from '../BulkManageTagsSheet'
 import { RowGroup } from '../Group'
 import { InfoCard } from '../InfoCard'
 import { InputRow } from '../InputRow'
 import { LabeledValueRow } from '../LabeledValueRow'
-import { TagManageSheet } from '../TagManageSheet'
 import { TagPill } from '../TagPill'
 import { FileMap } from './FileMap'
 
@@ -66,7 +66,7 @@ export function FileMeta({
   const { height: windowHeight } = useWindowDimensions()
   const { data: allFileTags } = useTagsForFile(file.id)
   const userTags = allFileTags?.filter((t) => !t.system)
-  const tagManageSheetName = `tagManage-${file.id}`
+  const tagSheetName = `manageTags-${file.id}`
   return (
     <View style={styles.container}>
       <RowGroup title="Details">
@@ -154,7 +154,7 @@ export function FileMeta({
             )}
             <Pressable
               style={styles.addTagButton}
-              onPress={() => openSheet(tagManageSheetName)}
+              onPress={() => openSheet(tagSheetName)}
             >
               <PlusIcon size={14} color={palette.blue[400]} />
               <Text style={styles.addTagText}>Add Tag</Text>
@@ -162,7 +162,7 @@ export function FileMeta({
           </View>
         </InfoCard>
       </RowGroup>
-      <TagManageSheet sheetName={tagManageSheetName} fileId={file.id} />
+      <BulkManageTagsSheet sheetName={tagSheetName} fileIds={[file.id]} />
       <RowGroup title="File shard storage locations">
         <InfoCard>
           <View style={{ height: Math.round(windowHeight * 0.5) }}>
