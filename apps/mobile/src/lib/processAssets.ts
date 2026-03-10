@@ -78,13 +78,28 @@ type CandidateFileRecord = {
  * @returns The resulting files and warnings.
  * @throws If the assets cannot be processed.
  */
+type ProcessAssetsOptions = {
+  /** Allow importing files that already exist by content hash. When true,
+   * localId is nulled out and dedup checks are skipped so every import
+   * creates a new file record. Used for manual imports (camera, picker). */
+  allowDuplicates?: boolean
+  /** Move newly imported media files into the configured photo import
+   * directory. Used by auto-sync and archive sync. */
+  addToImportDirectory?: boolean
+  /** Skip updating DB records for files that already exist. Prevents
+   * spurious updatedAt bumps when the same assets are re-encountered
+   * on every polling tick. Used by syncNewPhotos. */
+  skipExistingUpdates?: boolean
+}
+
 export async function processAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
   {
     allowDuplicates = false,
     addToImportDirectory = false,
-  }: { allowDuplicates?: boolean; addToImportDirectory?: boolean } = {},
+    skipExistingUpdates = false,
+  }: ProcessAssetsOptions = {},
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => ({
@@ -236,14 +251,16 @@ export async function processAssets(
     )
   }
 
-  await updateManyFileRecords(
-    existingFiles.map((f) => ({
-      id: f.id,
-      name: f.name,
-      type: f.type,
-      localId: f.localId,
-    })),
-  )
+  if (!skipExistingUpdates) {
+    await updateManyFileRecords(
+      existingFiles.map((f) => ({
+        id: f.id,
+        name: f.name,
+        type: f.type,
+        localId: f.localId,
+      })),
+    )
+  }
   await createManyFileRecords(newFiles)
 
   // Move media files to the configured photo import directory.

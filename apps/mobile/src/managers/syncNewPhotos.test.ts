@@ -126,7 +126,7 @@ describe('syncNewPhotos', () => {
         expect.objectContaining({ id: 'a3', name: 'exact.jpg' }),
       ],
       'file',
-      { addToImportDirectory: true },
+      { addToImportDirectory: true, skipExistingUpdates: true },
     )
   })
 
@@ -176,7 +176,7 @@ describe('syncNewPhotos', () => {
         }),
       ],
       'file',
-      { addToImportDirectory: true },
+      { addToImportDirectory: true, skipExistingUpdates: true },
     )
   })
 

@@ -117,6 +117,51 @@ describe('processAssets', () => {
     })
     expect(copyFileToFs).toHaveBeenCalledTimes(0)
   })
+  it('skipExistingUpdates does not update existing records', async () => {
+    await createFileRecord(
+      {
+        id: 'existing-1',
+        name: 'old.jpg',
+        size: 5,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: '1',
+        hash: '',
+        addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
+      },
+      false,
+    )
+
+    jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
+      if (localId === '1') return 'file://1'
+      return null
+    })
+    const assets = [
+      {
+        id: '1',
+        name: 'new.jpg',
+        sourceUri: 'file://1',
+        type: 'image/jpeg',
+        timestamp: '2021-01-01',
+      },
+    ]
+    const { files, updatedFiles } = await processAssets(assets, 'file', {
+      skipExistingUpdates: true,
+    })
+
+    expect(updatedFiles).toHaveLength(1)
+    expect(files).toHaveLength(0)
+    const record = await readFileRecord('existing-1')
+    expect(record).toMatchObject({
+      id: 'existing-1',
+      name: 'old.jpg',
+      updatedAt: 1,
+    })
+  })
   it('allowDuplicates bypasses localId dedup', async () => {
     await createFileRecord(
       {
