@@ -432,7 +432,9 @@ export class UploadManager {
   private startLoop(): void {
     if (this.active) return
     this.active = true
-    this.runLoop()
+    this.runLoop().catch((e) => {
+      logger.error('uploadManager', 'loop_error', { error: e as Error })
+    })
   }
 
   /**
@@ -672,6 +674,16 @@ export class UploadManager {
         })
         this.deps.uploads.setError(entry.fileId, message)
       }
+    }
+
+    // Prevent uncaught rejections on promises skipped due to early break
+    for (const item of inflight) {
+      item.promise.catch((e) => {
+        logger.warn('uploadManager', 'abandoned_add_rejected', {
+          fileId: item.entry.fileId,
+          error: e as Error,
+        })
+      })
     }
   }
 

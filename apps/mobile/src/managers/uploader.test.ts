@@ -58,7 +58,11 @@ import {
   updateUploadProgress,
   useUploadsStore,
 } from '../stores/uploads'
-import { type FileEntry, getUploadManager } from './uploader'
+import {
+  type FileEntry,
+  getUploadManager,
+  initializeUploader,
+} from './uploader'
 
 jest.mock('react-native-sia', () => ({}))
 
@@ -1133,6 +1137,46 @@ describe('UploadManager', () => {
     })
   })
 
+  describe('abandoned promise handling', () => {
+    it('no uncaught rejections when packer.add() promises reject after shutdown', async () => {
+      type Deferred = {
+        resolve: (v: bigint) => void
+        reject: (e: Error) => void
+      }
+      const deferreds: Deferred[] = []
+      let addCount = 0
+
+      mockPacker.add.mockImplementation(() => {
+        addCount++
+        if (addCount === 1) return Promise.resolve(BigInt(1000))
+        return new Promise<bigint>((resolve, reject) => {
+          deferreds.push({ resolve, reject })
+        })
+      })
+
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      await jest.advanceTimersByTimeAsync(0)
+
+      manager.enqueue(
+        Array.from({ length: 5 }, (_, i) => createFileEntry(`ab-${i}`)),
+      )
+      await jest.advanceTimersByTimeAsync(5000)
+      await jest.advanceTimersByTimeAsync(0)
+      expect(deferreds).toHaveLength(4)
+
+      // Resolve first two, shutdown mid-processing, then reject the rest.
+      // Without the catch handler these would be uncaught rejections.
+      deferreds[0].resolve(BigInt(1000))
+      await jest.advanceTimersByTimeAsync(0)
+      manager.shutdown()
+      deferreds[1].resolve(BigInt(1000))
+      await jest.advanceTimersByTimeAsync(0)
+      deferreds[2].reject(new Error('buffer closed'))
+      deferreds[3].reject(new Error('buffer closed'))
+      await jest.advanceTimersByTimeAsync(0)
+    })
+  })
+
   describe('error recovery', () => {
     it('loop continues processing after finalize error', async () => {
       mockPacker.finalize
@@ -1157,6 +1201,26 @@ describe('UploadManager', () => {
       expect(manager.flushHistory).toHaveLength(2)
       expect(manager.flushHistory[1].fileCount).toBe(1)
       expect(getUploadState('ok-1')).toBeUndefined()
+    })
+  })
+
+  describe('initializeUploader', () => {
+    it('shuts down existing manager before re-initializing', async () => {
+      const shutdownSpy = jest.spyOn(manager, 'shutdown')
+
+      // First initialization — no existing manager to shut down
+      await initializeUploader(mockSdk as any)
+      // shutdown is called because getUploadManager() returns the existing
+      // singleton (created in beforeEach)
+      expect(shutdownSpy).toHaveBeenCalledTimes(1)
+
+      shutdownSpy.mockClear()
+
+      // Second initialization — should shut down the existing manager first
+      await initializeUploader(mockSdk as any)
+      expect(shutdownSpy).toHaveBeenCalledTimes(1)
+
+      shutdownSpy.mockRestore()
     })
   })
 })

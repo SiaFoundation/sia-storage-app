@@ -78,6 +78,9 @@ export function getUploadManager(): UploadManager {
 
 /** Connect the UploadManager to the SDK and start processing. */
 export async function initializeUploader(sdk: SdkAdapter): Promise<void> {
+  if (uploadManager) {
+    await uploadManager.shutdown()
+  }
   appStateSubscription?.remove()
   const indexerURL = await getIndexerURL()
   const deps = buildUploadDeps(sdk, indexerURL)
