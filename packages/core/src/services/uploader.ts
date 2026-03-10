@@ -19,7 +19,6 @@ import {
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
 import { uniqueId } from '../lib/uniqueId'
-import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecordRow } from '../types/files'
 
 export type BatchFile = {
@@ -875,55 +874,64 @@ export class UploadManager {
       })
     }
 
-    for (let i = 0; i < batch.files.length; i++) {
-      const entry = batch.files[i]
-      const pinnedObject = pinnedObjects[i]
-
-      if (!pinnedObject) {
-        logger.error('uploadManager', 'no_pinned_object', {
+    const saveOne = async (entry: FileEntry, pinnedObject: PinnedObjectRef) => {
+      const fileRecord = await this.deps.files.read(entry.fileId)
+      if (!fileRecord) {
+        logger.warn('uploadManager', 'file_deleted_during_upload', {
           fileId: entry.fileId,
-          index: i,
         })
-        this.deps.uploads.setError(entry.fileId, 'No pinned object returned')
-        continue
-      }
-
-      try {
-        const fileRecord = await this.deps.files.read(entry.fileId)
-        if (!fileRecord) {
-          logger.warn('uploadManager', 'file_deleted_during_upload', {
-            fileId: entry.fileId,
-          })
-          this.deps.uploads.remove(entry.fileId)
-          successfulFileIds.push(entry.fileId)
-          continue
-        }
-
-        pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
-        await this.deps.sdk.pinObject(pinnedObject)
-
-        const indexerURL = this.deps.platform.getIndexerURL()
-        const localObject = await this.deps.platform.pinnedObjectToLocalObject(
-          entry.fileId,
-          indexerURL,
-          pinnedObject,
-        )
-        await this.deps.localObjects.upsert(localObject)
         this.deps.uploads.remove(entry.fileId)
-
-        logger.debug('uploadManager', 'object_saved', { fileId: entry.fileId })
-        this._uploadedCount++
-        this._uploadedBytes += entry.size
         successfulFileIds.push(entry.fileId)
-        await yieldToEventLoop()
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        logger.error('uploadManager', 'object_save_error', {
-          fileId: entry.fileId,
-          error: e as Error,
-        })
-        this.deps.uploads.setError(entry.fileId, message)
+        return
       }
+
+      pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
+      await this.deps.sdk.pinObject(pinnedObject)
+
+      const indexerURL = this.deps.platform.getIndexerURL()
+      const localObject = await this.deps.platform.pinnedObjectToLocalObject(
+        entry.fileId,
+        indexerURL,
+        pinnedObject,
+      )
+      await this.deps.localObjects.upsert(localObject)
+      this.deps.uploads.remove(entry.fileId)
+
+      logger.debug('uploadManager', 'object_saved', { fileId: entry.fileId })
+      this._uploadedCount++
+      this._uploadedBytes += entry.size
+      successfulFileIds.push(entry.fileId)
+    }
+
+    const CONCURRENCY = 5
+    for (let i = 0; i < batch.files.length; i += CONCURRENCY) {
+      const group = batch.files.slice(i, i + CONCURRENCY)
+      await Promise.all(
+        group.map(async (entry, j) => {
+          const pinnedObject = pinnedObjects[i + j]
+          if (!pinnedObject) {
+            logger.error('uploadManager', 'no_pinned_object', {
+              fileId: entry.fileId,
+              index: i + j,
+            })
+            this.deps.uploads.setError(
+              entry.fileId,
+              'No pinned object returned',
+            )
+            return
+          }
+          try {
+            await saveOne(entry, pinnedObject)
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e)
+            logger.error('uploadManager', 'object_save_error', {
+              fileId: entry.fileId,
+              error: e as Error,
+            })
+            this.deps.uploads.setError(entry.fileId, message)
+          }
+        }),
+      )
     }
 
     return successfulFileIds
