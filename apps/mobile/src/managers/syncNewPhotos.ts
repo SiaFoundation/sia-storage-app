@@ -81,7 +81,7 @@ export async function workNew(signal?: AbortSignal): Promise<void> {
         ).toISOString(),
       })),
       'file',
-      { addToImportDirectory: true },
+      { addToImportDirectory: true, skipExistingUpdates: true },
     )
     if (files.length > 0) {
       await invalidateCacheLibraryAllStats()
