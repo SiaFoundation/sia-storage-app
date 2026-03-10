@@ -27,11 +27,6 @@ function createMockDeps(overrides?: Partial<ThumbnailDeps>): ThumbnailDeps {
         return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
       },
     },
-    cryptoAdapter: {
-      async sha256() {
-        return `thumb-hash-${++hashCounter}`
-      },
-    },
     async detectMimeType() {
       return 'image/jpeg'
     },
@@ -39,7 +34,11 @@ function createMockDeps(overrides?: Partial<ThumbnailDeps>): ThumbnailDeps {
       return 'file://source.jpg'
     },
     async copyToFs(_file, data) {
-      return { uri: 'file://thumb.webp', size: data.byteLength }
+      return {
+        uri: 'file://thumb.webp',
+        size: data.byteLength,
+        hash: `thumb-hash-${++hashCounter}`,
+      }
     },
     ...overrides,
   }

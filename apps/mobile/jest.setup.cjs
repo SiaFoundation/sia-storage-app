@@ -50,6 +50,8 @@ const rnfsStat = jest.fn()
 const rnfsRead = jest.fn()
 const rnfsReadFile = jest.fn()
 const rnfsHash = jest.fn()
+const rnfsMkdir = jest.fn().mockResolvedValue(undefined)
+const rnfsWriteFile = jest.fn().mockResolvedValue(undefined)
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
@@ -57,9 +59,11 @@ jest.mock('react-native-fs', () => ({
     read: rnfsRead,
     readFile: rnfsReadFile,
     hash: rnfsHash,
+    mkdir: rnfsMkdir,
+    writeFile: rnfsWriteFile,
   },
 }))
-global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile, rnfsHash }
+global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile, rnfsHash, rnfsMkdir, rnfsWriteFile }
 
 const { setExpoFileSystemMock } = require('./mocks/expo-file-system')
 
