@@ -10,14 +10,16 @@ import {
 } from 'react-native'
 import { SYSTEM_TAGS, type TagWithCount, useAllTags } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
+import { EmptyState } from './EmptyState'
 
 type TagOrSpacer = TagWithCount | { id: '__spacer' }
 
 type Props = {
   onSelectTag: (tagId: string, tagName: string) => void
+  onCreateTag: () => void
 }
 
-export function TagsGrid({ onSelectTag }: Props) {
+export function TagsGrid({ onSelectTag, onCreateTag }: Props) {
   const allTags = useAllTags()
   const tags = allTags.data ?? []
 
@@ -36,13 +38,12 @@ export function TagsGrid({ onSelectTag }: Props) {
 
   if (tags.length === 0) {
     return (
-      <View style={styles.emptyWrap}>
-        <TagIcon color={whiteA.a50} size={48} />
-        <Text style={styles.emptyTitle}>No tags yet</Text>
-        <Text style={styles.emptyText}>
-          Create tags to organize your files.
-        </Text>
-      </View>
+      <EmptyState
+        image={require('../../assets/tag-stack.png')}
+        title="No tags yet"
+        message="Create tags to organize your files."
+        action={{ label: 'Create tag', onPress: onCreateTag }}
+      />
     )
   }
 
@@ -137,16 +138,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    color: palette.gray[100],
-    fontWeight: '800',
-    fontSize: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  emptyText: {
-    color: whiteA.a70,
-    textAlign: 'center',
   },
 })

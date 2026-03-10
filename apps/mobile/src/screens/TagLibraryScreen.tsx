@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +25,7 @@ import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { BottomControlBar, FloatingPill } from '../components/BottomControlBar'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
 import { FileGallery } from '../components/FileGallery'
@@ -62,7 +62,7 @@ import {
   SYSTEM_TAGS,
 } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
-import { colors, overlay, palette, whiteA } from '../styles/colors'
+import { colors, overlay, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'TagLibrary'>
 
@@ -297,16 +297,11 @@ export function TagLibraryScreen({ route, navigation }: Props) {
           />
         )
       ) : (
-        <View style={styles.emptyWrap}>
-          <Image
-            style={styles.emptyImage}
-            source={require('../../assets/image-stack.png')}
-          />
-          <Text style={styles.emptyTitle}>No files with this tag</Text>
-          <Text style={styles.emptyText}>
-            Add files to this tag from the file actions menu.
-          </Text>
-        </View>
+        <EmptyState
+          image={require('../../assets/image-stack.png')}
+          title="No files with this tag"
+          message="Add files to this tag from the file actions menu."
+        />
       )}
 
       <AddFileActionSheet
@@ -471,15 +466,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  emptyImage: { width: 140, height: 140 },
-  emptyTitle: {
-    color: palette.gray[100],
-    fontWeight: '800',
-    fontSize: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  emptyText: { color: whiteA.a70, textAlign: 'center' },
   controlBar: {
     justifyContent: 'flex-end',
     alignItems: 'center',
