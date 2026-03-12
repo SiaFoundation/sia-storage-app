@@ -75,7 +75,7 @@ export async function syncDownEvents(
       },
       hooks: {
         onBatchChanged: async () => {
-          await invalidateCacheLibraryAllStats()
+          invalidateCacheLibraryAllStats()
           invalidateCacheLibraryLists()
         },
         onFileDeleted: async (fr) => {

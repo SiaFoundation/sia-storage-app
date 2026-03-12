@@ -28,7 +28,7 @@ export function LibraryLocalResetButton() {
               style: 'destructive',
               onPress: async () => {
                 await resetData()
-                await invalidateCacheLibraryAllStats()
+                invalidateCacheLibraryAllStats()
                 invalidateCacheLibraryLists()
               },
             },
