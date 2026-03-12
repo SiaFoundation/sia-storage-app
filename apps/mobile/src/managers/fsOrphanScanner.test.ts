@@ -1,5 +1,6 @@
 import { FS_ORPHAN_FREQUENCY } from '@siastorage/core/config'
 import type { File } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 import { initializeDB, resetDb } from '../db'
 import {
   getAsyncStorageNumber,
@@ -30,7 +31,8 @@ const now = 1_000_000_000
 describe('fsOrphanScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => [])
+    jest.mocked(RNFS.unlink).mockClear()
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [])
     await initializeDB()
     await setAsyncStorageNumber('fsOrphanLastRun', 0)
   })
@@ -65,11 +67,11 @@ describe('fsOrphanScanner', () => {
 
   it('removes files that have no metadata entry', async () => {
     const file = makeFile('file-1.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
 
     const result = await runFsOrphanScanner()
 
-    expect(file.delete).toHaveBeenCalledTimes(1)
+    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
     expect(await readFsFileMetadata('file-1')).toBeNull()
     expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toEqual({ removed: 1 })
@@ -77,7 +79,7 @@ describe('fsOrphanScanner', () => {
 
   it('keeps files that still have metadata', async () => {
     const file = makeFile('file-2.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
     await createFileRecord({
       id: 'file-2',
       name: 'file-2.jpg',
@@ -101,7 +103,7 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(file.delete).not.toHaveBeenCalled()
+    expect(RNFS.unlink).not.toHaveBeenCalled()
     expect((await readFsFileMetadata('file-2'))?.fileId).toBe('file-2')
     expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
     expect(result).toEqual({ removed: 0 })
@@ -109,7 +111,7 @@ describe('fsOrphanScanner', () => {
 
   it('deletes files that have no associated files table row', async () => {
     const file = makeFile('file-1.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
     await upsertFsFileMetadata({
       fileId: 'file-1',
       size: 100,
@@ -119,14 +121,14 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(file.delete).toHaveBeenCalledTimes(1)
+    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
     expect(await readFsFileMetadata('file-1')).toBeNull()
     expect(result).toEqual({ removed: 1 })
   })
 
   it('calls onProgress with correct removed/total counts', async () => {
     const files = [makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')]
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => files)
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => files)
     await createFileRecord({
       id: 'b',
       name: 'b.jpg',
@@ -190,7 +192,7 @@ describe('fsOrphanScanner', () => {
 
   it('treats tombstoned files as orphaned', async () => {
     const file = makeFile('file-tomb.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => [file])
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
     await createFileRecord({
       id: 'file-tomb',
       name: 'file-tomb.jpg',
@@ -214,7 +216,7 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(file.delete).toHaveBeenCalledTimes(1)
+    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
     expect(result).toEqual({ removed: 1 })
   })
 
@@ -222,7 +224,7 @@ describe('fsOrphanScanner', () => {
     const files = Array.from({ length: 60 }, (_, i) =>
       makeFile(`file-${i}.jpg`),
     )
-    listFilesInFsStorageDirectoryMock.mockImplementation(() => files)
+    listFilesInFsStorageDirectoryMock.mockImplementation(async () => files)
 
     const result = await runFsOrphanScanner()
 

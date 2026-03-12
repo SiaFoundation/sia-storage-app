@@ -13,10 +13,10 @@ type TempFsFileInfo = {
   localId: string | null
 }
 
-export function ensureTempFsStorageDirectory(): void {
-  const info = tempFsStorageDirectory.info()
-  if (!info.exists) {
-    tempFsStorageDirectory.create({ intermediates: true })
+export async function ensureTempFsStorageDirectory(): Promise<void> {
+  const exists = await RNFS.exists(tempFsStorageDirectory.uri)
+  if (!exists) {
+    await RNFS.mkdir(tempFsStorageDirectory.uri)
   }
 }
 
@@ -28,9 +28,10 @@ export async function getOrCreateTempDownloadFile(
   file: TempFsFileInfo,
 ): Promise<File> {
   const f = getTempDownloadFileForId(file)
-  const info = f.info()
-  if (!info.exists) {
-    f.create({ intermediates: true })
+  const exists = await RNFS.exists(f.uri)
+  if (!exists) {
+    await RNFS.mkdir(tempFsStorageDirectory.uri)
+    await RNFS.writeFile(f.uri, '')
   }
   return f
 }

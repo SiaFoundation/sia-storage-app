@@ -24,19 +24,21 @@ export type { FsMetaRow } from '@siastorage/core/db/operations'
 
 export const fsStorageDirectory = new Directory(Paths.document, 'files')
 
-export function listFilesInFsStorageDirectory(): File[] {
-  const info = fsStorageDirectory.info()
-  if (!info.exists) {
+export async function listFilesInFsStorageDirectory(): Promise<File[]> {
+  const exists = await RNFS.exists(fsStorageDirectory.uri)
+  if (!exists) {
     return []
   }
-  const entries = fsStorageDirectory.list()
-  return entries.filter((entry): entry is File => entry instanceof File)
+  const entries = await RNFS.readDir(fsStorageDirectory.uri)
+  return entries
+    .filter((item) => item.isFile())
+    .map((item) => new File(item.path))
 }
 
-export function ensureFsStorageDirectory(): void {
-  const info = fsStorageDirectory.info()
-  if (!info.exists) {
-    fsStorageDirectory.create({ intermediates: true })
+export async function ensureFsStorageDirectory(): Promise<void> {
+  const exists = await RNFS.exists(fsStorageDirectory.uri)
+  if (!exists) {
+    await RNFS.mkdir(fsStorageDirectory.uri)
   }
 }
 
@@ -141,7 +143,7 @@ export async function copyFileToFs(
 }
 
 export function useFsFileUri(file?: FsFileInfo) {
-  return useSWR(fsFileUriCache.key(file?.id ?? ''), () => {
+  return useSWR(file ? fsFileUriCache.key(file.id) : null, () => {
     return file ? getFsFileUri(file) : null
   })
 }

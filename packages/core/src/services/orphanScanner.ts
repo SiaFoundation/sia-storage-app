@@ -10,8 +10,8 @@ export type FsEntry = {
 
 export type OrphanScannerDeps<T extends FsEntry = FsEntry> = {
   db: DatabaseAdapter
-  listFiles: () => T[]
-  deleteFile: (file: T) => void
+  listFiles: () => T[] | Promise<T[]>
+  deleteFile: (file: T) => void | Promise<void>
   deleteFsMetadataBatch: (fileIds: string[]) => Promise<void>
   invalidateCache?: () => Promise<void>
   onProgress?: (removed: number, total: number) => void
@@ -59,7 +59,7 @@ export async function runOrphanScanner<T extends FsEntry>(
   const { db, listFiles, deleteFile, deleteFsMetadataBatch } = deps
 
   try {
-    const files = listFiles()
+    const files = await listFiles()
     if (files.length === 0) return undefined
 
     let removed = 0
@@ -79,7 +79,7 @@ export async function runOrphanScanner<T extends FsEntry>(
       for (const entry of entries) {
         if (!orphanedIds.has(entry.fileId)) continue
         try {
-          deleteFile(entry.file)
+          await deleteFile(entry.file)
           removed++
           logger.info('orphanScanner', 'file_removed', {
             fileId: entry.fileId,
