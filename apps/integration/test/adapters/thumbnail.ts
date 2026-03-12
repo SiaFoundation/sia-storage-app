@@ -33,6 +33,24 @@ export function buildThumbnailDeps(params: {
           mimeType: 'image/webp',
         }
       },
+      async generateImageThumbnails(sourcePath: string, sizes: number[]) {
+        const results = new Map()
+        for (const size of sizes) {
+          const filePath = sourcePath.replace('file://', '')
+          const buf = await sharp(filePath)
+            .resize(size, size, { fit: 'inside' })
+            .webp({ quality: 80 })
+            .toBuffer()
+          results.set(size, {
+            data: buf.buffer.slice(
+              buf.byteOffset,
+              buf.byteOffset + buf.byteLength,
+            ),
+            mimeType: 'image/webp',
+          })
+        }
+        return results
+      },
       async generateVideoThumbnail(_sourcePath: string, _targetSize: number) {
         const placeholder = Buffer.alloc(64)
         return {

@@ -23,6 +23,16 @@ function createMockDeps(overrides?: Partial<ThumbnailDeps>): ThumbnailDeps {
       async generateImageThumbnail() {
         return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
       },
+      async generateImageThumbnails(_sourcePath: string, sizes: number[]) {
+        const results = new Map()
+        for (const size of sizes) {
+          results.set(size, {
+            data: new ArrayBuffer(64),
+            mimeType: 'image/webp',
+          })
+        }
+        return results
+      },
       async generateVideoThumbnail() {
         return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
       },
@@ -333,6 +343,7 @@ describe('ThumbnailScanner', () => {
         data: new ArrayBuffer(64),
         mimeType: 'image/webp',
       }),
+      generateImageThumbnails: jest.fn().mockResolvedValue(new Map()),
       generateVideoThumbnail: jest.fn().mockResolvedValue({
         data: new ArrayBuffer(64),
         mimeType: 'image/webp',
@@ -381,7 +392,7 @@ describe('ThumbnailScanner', () => {
     }
     scanner.initialize(createMockDeps())
     const result = await scanner.runScan()
-    expect(result.produced).toHaveLength(10)
+    expect(result.produced).toHaveLength(20)
   })
 
   it('stops immediately when signal is already aborted', async () => {
@@ -402,6 +413,7 @@ describe('ThumbnailScanner', () => {
     })
     const adapter = {
       generateImageThumbnail: jest.fn(),
+      generateImageThumbnails: jest.fn(),
       generateVideoThumbnail: jest.fn(),
     }
     scanner.initialize(createMockDeps({ thumbnailAdapter: adapter }))
@@ -443,6 +455,9 @@ describe('ThumbnailScanner', () => {
             if (calls >= 2) ac.abort()
             return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
           },
+          async generateImageThumbnails() {
+            return new Map()
+          },
           async generateVideoThumbnail() {
             return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
           },
@@ -476,6 +491,9 @@ describe('ThumbnailScanner', () => {
         thumbnailAdapter: {
           async generateImageThumbnail() {
             throw new Error('Manipulation failed')
+          },
+          async generateImageThumbnails() {
+            return new Map()
           },
           async generateVideoThumbnail() {
             throw new Error('Manipulation failed')
