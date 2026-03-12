@@ -13,10 +13,6 @@ import { sha256File } from '../lib/contentHash'
 import { detectMimeType } from '../lib/detectMimeType'
 import { getMimeType } from '../lib/fileTypes'
 import { copyFileToFs, getFsFileUri } from '../stores/fs'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
 import { invalidateThumbnailsForFileId } from '../stores/thumbnails'
 
 export type {
@@ -47,7 +43,8 @@ function ensureInitialized(): void {
       })
       const tmpPath = `${file.id}.webp`
       const tmpDir = new Directory(Paths.cache, 'thumb-tmp')
-      if (!tmpDir.info().exists) await RNFS.mkdir(tmpDir.uri)
+      const tmpDirExists = await RNFS.exists(tmpDir.uri)
+      if (!tmpDirExists) await RNFS.mkdir(tmpDir.uri)
       const tmpFile = new File(tmpDir, tmpPath)
       await RNFS.writeFile(
         tmpFile.uri,
@@ -70,10 +67,6 @@ export async function runThumbnailScanner(
 ): Promise<ThumbnailScannerResult> {
   ensureInitialized()
   const result = await scanner.runScan(signal)
-  if (result.produced.length > 0) {
-    await invalidateCacheLibraryAllStats()
-    invalidateCacheLibraryLists()
-  }
   return result
 }
 

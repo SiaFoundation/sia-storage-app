@@ -45,8 +45,8 @@ export async function initApp(): Promise<void> {
       label: 'Starting application',
       message: 'Initializing...',
       runner: async () => {
-        ensureFsStorageDirectory()
-        ensureTempFsStorageDirectory()
+        await ensureFsStorageDirectory()
+        await ensureTempFsStorageDirectory()
         await initKeepAwake()
       },
     },

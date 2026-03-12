@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import RNFS from 'react-native-fs'
 import type { PinnedObjectInterface } from 'react-native-sia'
 import useSWR from 'swr'
 import { calculateContentHash } from '../../lib/contentHash'
@@ -110,14 +111,18 @@ async function downloadAndProcessFile(
     }
 
     const tempFile = new File(tempFsFileUri)
-    const fileInfo = tempFile.info()
-    const size = fileInfo.size ?? 0
+    const fileStat = await RNFS.stat(tempFsFileUri)
+    const size = fileStat.size ?? 0
 
     const finalFsFileUri = await copyFileToFs({ id, type }, tempFile)
     logger.debug('FileImport', 'copied_to_final', { uri: finalFsFileUri })
 
     if (finalFsFileUri !== tempFsFileUri) {
-      tempFile.delete()
+      try {
+        await RNFS.unlink(tempFsFileUri)
+      } catch {
+        // Temp file may already be gone.
+      }
     }
 
     logger.debug('FileImport', 'calculating_hash', { uri: finalFsFileUri })

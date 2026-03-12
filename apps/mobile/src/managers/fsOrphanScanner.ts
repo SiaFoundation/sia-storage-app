@@ -2,6 +2,7 @@ import { FS_ORPHAN_FREQUENCY } from '@siastorage/core/config'
 import type { OrphanScannerResult } from '@siastorage/core/services'
 import * as services from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
+import RNFS from 'react-native-fs'
 import { db } from '../db'
 import {
   getAsyncStorageNumber,
@@ -36,7 +37,7 @@ export async function runFsOrphanScanner(options?: {
     return await services.runOrphanScanner({
       db: db(),
       listFiles: () => listFilesInFsStorageDirectory(),
-      deleteFile: (file) => file.delete(),
+      deleteFile: (file) => RNFS.unlink(file.uri),
       deleteFsMetadataBatch: (fileIds) => deleteFsFileMetadataBatch(fileIds),
       invalidateCache: async () => void fsFileUriCache.invalidateAll(),
       onProgress: options?.onProgress,

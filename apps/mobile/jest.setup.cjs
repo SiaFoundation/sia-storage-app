@@ -46,8 +46,10 @@ jest.mock('react-native-quick-crypto', () => {
   }
 })
 
+const rnfsExists = jest.fn().mockResolvedValue(true)
 const rnfsStat = jest.fn().mockResolvedValue({ size: 100 })
 const rnfsRead = jest.fn()
+const rnfsReadDir = jest.fn().mockResolvedValue([])
 const rnfsReadFile = jest.fn()
 const rnfsHash = jest.fn()
 const rnfsMkdir = jest.fn().mockResolvedValue(undefined)
@@ -57,8 +59,10 @@ const rnfsUnlink = jest.fn().mockResolvedValue(undefined)
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
+    exists: rnfsExists,
     stat: rnfsStat,
     read: rnfsRead,
+    readDir: rnfsReadDir,
     readFile: rnfsReadFile,
     hash: rnfsHash,
     mkdir: rnfsMkdir,
@@ -67,7 +71,7 @@ jest.mock('react-native-fs', () => ({
     unlink: rnfsUnlink,
   },
 }))
-global.__rnfs = { rnfsStat, rnfsRead, rnfsReadFile, rnfsHash, rnfsMkdir, rnfsWriteFile, rnfsCopyFile, rnfsUnlink }
+global.__rnfs = { rnfsExists, rnfsStat, rnfsRead, rnfsReadDir, rnfsReadFile, rnfsHash, rnfsMkdir, rnfsWriteFile, rnfsCopyFile, rnfsUnlink }
 
 const { setExpoFileSystemMock } = require('./mocks/expo-file-system')
 
