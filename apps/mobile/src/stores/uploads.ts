@@ -1,3 +1,4 @@
+import { createDebouncedAction } from '@siastorage/core/lib/debouncedAction'
 import { logger } from '@siastorage/logger'
 import { create } from 'zustand'
 import { createGetterAndSelector } from '../lib/selectors'
@@ -37,9 +38,8 @@ export const useUploadsStore = create<UploadsStore>(() => ({ uploads: {} }))
 const { setState } = useUploadsStore
 
 const pendingUploadProgress = new Map<string, number>()
-let uploadRafScheduled = false
 
-function flushUploadProgress() {
+function applyPendingUploadProgress() {
   if (pendingUploadProgress.size === 0) return
   setState((state) => {
     const uploads = { ...state.uploads }
@@ -50,18 +50,16 @@ function flushUploadProgress() {
       }
     }
     pendingUploadProgress.clear()
-    uploadRafScheduled = false
     return { uploads }
   })
 }
 
-/**
- * Immediately flush any pending progress updates.
- * Primarily used for testing where RAF may not work correctly.
- */
-export function flushPendingUploadProgress(): void {
-  flushUploadProgress()
-}
+const uploadProgressFlusher = createDebouncedAction(
+  applyPendingUploadProgress,
+  1000,
+)
+
+export const flushPendingUploadProgress = uploadProgressFlusher.flush
 
 export function registerUpload(id: string, size: number): void {
   setState((state) => {
@@ -72,6 +70,19 @@ export function registerUpload(id: string, size: number): void {
       progress: 0,
     }
     return { uploads: { ...state.uploads, [id]: next } }
+  })
+}
+
+export function registerUploads(
+  entries: Array<{ id: string; size: number }>,
+): void {
+  if (entries.length === 0) return
+  setState((state) => {
+    const uploads = { ...state.uploads }
+    for (const { id, size } of entries) {
+      uploads[id] = { id, size, status: 'queued', progress: 0 }
+    }
+    return { uploads }
   })
 }
 
@@ -115,6 +126,25 @@ export function setUploadBatchInfo(
       batchFileCount,
     }
     return { uploads: { ...state.uploads, [id]: next } }
+  })
+}
+
+export function setBatchUploading(fileIds: string[], batchId: string): void {
+  if (fileIds.length === 0) return
+  setState((state) => {
+    const uploads = { ...state.uploads }
+    for (const id of fileIds) {
+      const prev = uploads[id]
+      if (prev) {
+        uploads[id] = {
+          ...prev,
+          status: 'uploading',
+          batchId,
+          batchFileCount: fileIds.length,
+        }
+      }
+    }
+    return { uploads }
   })
 }
 
@@ -169,10 +199,7 @@ export const [getUploadCounts, useUploadCounts] = createGetterAndSelector(
 
 export function updateUploadProgress(id: string, progress: number) {
   pendingUploadProgress.set(id, progress)
-  if (!uploadRafScheduled) {
-    uploadRafScheduled = true
-    requestAnimationFrame(flushUploadProgress)
-  }
+  uploadProgressFlusher.trigger()
 }
 
 export const [getUploadState, useUploadState] = createGetterAndSelector(

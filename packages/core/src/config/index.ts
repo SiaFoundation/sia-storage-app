@@ -68,3 +68,8 @@ export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
 export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)
+// Max concurrent pinObject calls during save phase.
+export const SAVE_BATCH_CONCURRENCY = 20
+// Delay before removing upload state after save, so cache invalidation
+// propagates and the UI transitions directly from uploading to uploaded.
+export const SAVE_REMOVAL_DELAY_MS = 500

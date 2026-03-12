@@ -14,6 +14,8 @@ jest.mock('@siastorage/core/config', () => ({
   PACKER_MAX_SLABS: 10,
   SLAB_FILL_THRESHOLD: 0.9,
   PACKER_POLL_INTERVAL: 5000,
+  SAVE_BATCH_CONCURRENCY: 50,
+  SAVE_REMOVAL_DELAY_MS: 0,
 }))
 
 import {
@@ -24,6 +26,7 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
+import { insertManyLocalObjects } from '@siastorage/core/db/operations'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { UploadDeps } from '@siastorage/core/services/uploader'
 import type {
@@ -31,7 +34,7 @@ import type {
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
-import { initializeDB, resetDb } from '../db'
+import { db, initializeDB, resetDb } from '../db'
 import { createFileReader } from '../lib/fileReader'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import {
@@ -40,10 +43,7 @@ import {
   readFileRecord,
 } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
-import {
-  readLocalObjectsForFile,
-  upsertLocalObject,
-} from '../stores/localObjects'
+import { readLocalObjectsForFile } from '../stores/localObjects'
 import { getIsConnected } from '../stores/sdk'
 import { getAutoScanUploads } from '../stores/settings'
 import {
@@ -51,7 +51,10 @@ import {
   getActiveUploads,
   getUploadState,
   registerUpload,
+  registerUploads,
   removeUpload,
+  removeUploads,
+  setBatchUploading,
   setUploadBatchInfo,
   setUploadError,
   setUploadStatus,
@@ -214,7 +217,8 @@ function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
       getFsFileUri: (file) => getFsFileUri(file),
     },
     localObjects: {
-      upsert: (lo) => upsertLocalObject(lo),
+      upsertMany: (objects) => insertManyLocalObjects(db(), objects),
+      invalidate: () => {},
     },
     platform: {
       isConnected: () => getIsConnected(),
@@ -226,11 +230,15 @@ function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
     },
     uploads: {
       register: (fileId, size) => registerUpload(fileId, size),
+      registerMany: (entries) => registerUploads(entries),
       remove: (fileId) => removeUpload(fileId),
+      removeMany: (ids) => removeUploads(ids),
       setStatus: (fileId, status) => setUploadStatus(fileId, status),
       setError: (fileId, message) => setUploadError(fileId, message),
       setBatchInfo: (fileId, batchId, count) =>
         setUploadBatchInfo(fileId, batchId, count),
+      setBatchUploading: (fileIds, batchId) =>
+        setBatchUploading(fileIds, batchId),
       updateProgress: (fileId, progress) =>
         updateUploadProgress(fileId, progress),
       getActive: () => getActiveUploads(),
@@ -267,6 +275,7 @@ describe('UploadManager', () => {
   })
 
   afterEach(async () => {
+    await manager.shutdown()
     jest.useRealTimers()
     await resetDb()
     resetUploadsStore()
@@ -411,13 +420,17 @@ describe('UploadManager', () => {
         mockPinnedObject,
         mockPinnedObject,
       ])
-      // pinObject succeeds for file1, fails for file2
+      // pinObject succeeds for file1, fails for file2 (all 3 retry attempts)
       mockSdk.pinObject
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Pin failed'))
+        .mockRejectedValueOnce(new Error('Pin failed'))
+        .mockRejectedValueOnce(new Error('Pin failed'))
 
       await manager.__testProcessFiles([entry1, entry2])
-      await manager.flush()
+      const flushPromise = manager.flush()
+      await jest.advanceTimersByTimeAsync(10000)
+      await flushPromise
 
       // file1 should be removed (success)
       expect(getUploadState('file1')).toBeUndefined()
@@ -456,16 +469,21 @@ describe('UploadManager', () => {
       const entry = await createTestFile('pin-fail-file')
       manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
-      mockSdk.pinObject.mockRejectedValueOnce(new Error('Indexer unavailable'))
+      mockSdk.pinObject
+        .mockRejectedValueOnce(new Error('Indexer unavailable'))
+        .mockRejectedValueOnce(new Error('Indexer unavailable'))
+        .mockRejectedValueOnce(new Error('Indexer unavailable'))
 
       await manager.__testProcessFiles([entry])
-      await manager.flush()
+      const flushPromise = manager.flush()
+      await jest.advanceTimersByTimeAsync(10000)
+      await flushPromise
 
       // File should have error status
       const upload = getUploadState('pin-fail-file')
       expect(upload).toBeDefined()
       expect(upload?.status).toBe('error')
-      expect(upload?.error).toBe('Indexer unavailable')
+      expect(upload?.error).toBe('Failed after 3 attempts: Indexer unavailable')
 
       // No local object should be created
       const localObjects = await readLocalObjectsForFile('pin-fail-file')
@@ -481,13 +499,17 @@ describe('UploadManager', () => {
         mockPinnedObject,
         mockPinnedObject,
       ])
-      // First call succeeds, second fails
+      // First call succeeds, second fails (all 3 retry attempts)
       mockSdk.pinObject
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Pin failed'))
+        .mockRejectedValueOnce(new Error('Pin failed'))
+        .mockRejectedValueOnce(new Error('Pin failed'))
 
       await manager.__testProcessFiles([entry1, entry2])
-      await manager.flush()
+      const flushPromise = manager.flush()
+      await jest.advanceTimersByTimeAsync(10000)
+      await flushPromise
 
       // pin-success should be removed from uploads (completed successfully)
       expect(getUploadState('pin-success')).toBeUndefined()
@@ -496,13 +518,33 @@ describe('UploadManager', () => {
       const upload2 = getUploadState('pin-fail')
       expect(upload2).toBeDefined()
       expect(upload2?.status).toBe('error')
-      expect(upload2?.error).toBe('Pin failed')
+      expect(upload2?.error).toBe('Failed after 3 attempts: Pin failed')
 
       // Only pin-success should have local object
       const objects1 = await readLocalObjectsForFile('pin-success')
       const objects2 = await readLocalObjectsForFile('pin-fail')
       expect(objects1).toHaveLength(1)
       expect(objects2).toHaveLength(0)
+    })
+
+    it('retries pinObject on transient failure and succeeds', async () => {
+      const entry = await createTestFile('retry-file')
+      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
+      // Fails once, succeeds on retry
+      mockSdk.pinObject
+        .mockRejectedValueOnce(new Error('Transient error'))
+        .mockResolvedValueOnce(undefined)
+
+      await manager.__testProcessFiles([entry])
+      const flushPromise = manager.flush()
+      await jest.advanceTimersByTimeAsync(10000)
+      await flushPromise
+
+      // Should succeed after retry — upload removed, local object created
+      expect(getUploadState('retry-file')).toBeUndefined()
+      const localObjects = await readLocalObjectsForFile('retry-file')
+      expect(localObjects).toHaveLength(1)
     })
 
     it('creates new packer for files added after flush', async () => {

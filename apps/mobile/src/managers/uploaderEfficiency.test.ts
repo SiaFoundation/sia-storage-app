@@ -14,6 +14,8 @@ jest.mock('@siastorage/core/config', () => ({
   PACKER_MAX_SLABS: 10,
   SLAB_FILL_THRESHOLD: 0.9,
   PACKER_POLL_INTERVAL: 5000,
+  SAVE_BATCH_CONCURRENCY: 50,
+  SAVE_REMOVAL_DELAY_MS: 0,
 }))
 
 import { PACKER_IDLE_TIMEOUT, SLAB_SIZE } from '@siastorage/core/config'
@@ -28,13 +30,15 @@ import { createFileReader } from '../lib/fileReader'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import { getFilesLocalOnly } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
-import { upsertLocalObject } from '../stores/localObjects'
 import { getIsConnected } from '../stores/sdk'
 import { getAutoScanUploads } from '../stores/settings'
 import {
   getActiveUploads,
   registerUpload,
+  registerUploads,
   removeUpload,
+  removeUploads,
+  setBatchUploading,
   setUploadBatchInfo,
   setUploadError,
   setUploadStatus,
@@ -162,7 +166,8 @@ function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
       getFsFileUri: (file) => getFsFileUri(file),
     },
     localObjects: {
-      upsert: (lo) => upsertLocalObject(lo),
+      upsertMany: async () => {},
+      invalidate: () => {},
     },
     platform: {
       isConnected: () => getIsConnected(),
@@ -174,11 +179,15 @@ function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
     },
     uploads: {
       register: (fileId, size) => registerUpload(fileId, size),
+      registerMany: (entries) => registerUploads(entries),
       remove: (fileId) => removeUpload(fileId),
+      removeMany: (ids) => removeUploads(ids),
       setStatus: (fileId, status) => setUploadStatus(fileId, status),
       setError: (fileId, message) => setUploadError(fileId, message),
       setBatchInfo: (fileId, batchId, count) =>
         setUploadBatchInfo(fileId, batchId, count),
+      setBatchUploading: (fileIds, batchId) =>
+        setBatchUploading(fileIds, batchId),
       updateProgress: (fileId, progress) =>
         updateUploadProgress(fileId, progress),
       getActive: () => getActiveUploads(),
@@ -297,6 +306,7 @@ describe('UploadManager packing efficiency', () => {
   })
 
   afterEach(async () => {
+    await manager.shutdown()
     jest.useRealTimers()
     await resetDb()
     useUploadsStore.setState({ uploads: {} })
