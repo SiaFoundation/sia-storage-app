@@ -376,7 +376,7 @@ describe('thumbnailScanner', () => {
     let counter = 0
     sha256FileMock.mockImplementation(async () => `thumb-hash-${++counter}`)
     const result = await runThumbnailScanner()
-    expect(result.produced).toHaveLength(10)
+    expect(result.produced).toHaveLength(20)
   })
 
   it('falls back when image size retrieval fails', async () => {

@@ -66,7 +66,7 @@ export type EnsureResult =
     }
   | { status: 'error'; error: unknown }
 
-const MAX_THUMBS_PER_TICK = 10
+const MAX_THUMBS_PER_TICK = 20
 const ERROR_COOLDOWN_MS = 60 * 60 * 1000 // 1 hour
 
 type CandidateRow = {
@@ -193,15 +193,26 @@ export class ThumbnailScanner {
         missingSizes,
       })
 
-      for (const size of missingSizes) {
-        await this.ensureThumbnailForSize({
+      if (fileRecord.type?.startsWith('image/') && missingSizes.length > 1) {
+        await this.ensureThumbnailsBatch({
           fileId: fileRecord.id,
           fileHash: fileRecord.hash,
           fileType: fileRecord.type,
           fileLocalId: fileRecord.localId,
-          size,
+          sizes: missingSizes,
           sourceUri,
         })
+      } else {
+        for (const size of missingSizes) {
+          await this.ensureThumbnailForSize({
+            fileId: fileRecord.id,
+            fileHash: fileRecord.hash,
+            fileType: fileRecord.type,
+            fileLocalId: fileRecord.localId,
+            size,
+            sourceUri,
+          })
+        }
       }
     } finally {
       this.processingFiles.delete(fileRecord.id)
@@ -336,6 +347,89 @@ export class ThumbnailScanner {
       })
       this.markFileErrored(fileId)
       return { status: 'error', error: e }
+    }
+  }
+
+  private async ensureThumbnailsBatch(params: {
+    fileId: string
+    fileHash: string
+    fileType: string
+    fileLocalId: string | null
+    sizes: ThumbSize[]
+    sourceUri: string
+  }): Promise<void> {
+    const deps = this.getDeps()
+    const { fileId, fileHash, fileType, sizes, sourceUri } = params
+
+    const detectedType = await deps.detectMimeType(sourceUri)
+    const actualType = detectedType ?? fileType
+
+    if (
+      !actualType?.startsWith('image/') &&
+      !actualType?.startsWith('video/')
+    ) {
+      this.markFileErrored(fileId)
+      return
+    }
+
+    let thumbnails: Map<number, { data: ArrayBuffer; mimeType: string }>
+    try {
+      thumbnails = await deps.thumbnailAdapter.generateImageThumbnails(
+        sourceUri,
+        sizes,
+      )
+    } catch (e) {
+      logger.error('thumbnailer', 'batch_generate_error', {
+        fileId,
+        fileHash,
+        sizes,
+        error: e as Error,
+      })
+      this.markFileErrored(fileId)
+      return
+    }
+
+    for (const size of sizes) {
+      const result = thumbnails.get(size)
+      if (!result) continue
+      try {
+        const thumbId = uniqueId()
+        const copied = await deps.copyToFs(
+          { id: thumbId, type: result.mimeType },
+          result.data,
+        )
+        const now = Date.now()
+        await insertFileRecord(deps.db, {
+          id: thumbId,
+          name: 'thumbnail.webp',
+          type: result.mimeType,
+          kind: 'thumb',
+          size: copied.size,
+          hash: `sha256:${copied.hash}`,
+          createdAt: now,
+          updatedAt: now,
+          addedAt: now,
+          localId: null,
+          thumbForId: fileId,
+          thumbSize: size,
+          trashedAt: null,
+          deletedAt: null,
+        })
+        logger.debug('thumbnailer', 'record_created', {
+          thumbId,
+          hash: fileHash,
+          size,
+        })
+        await deps.invalidateCache?.(fileId)
+      } catch (e) {
+        logger.error('thumbnailer', 'batch_save_error', {
+          fileId,
+          fileHash,
+          size,
+          error: e as Error,
+        })
+        this.markFileErrored(fileId)
+      }
     }
   }
 

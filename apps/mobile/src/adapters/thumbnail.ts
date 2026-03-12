@@ -14,28 +14,53 @@ function getImageSize(uri: string): Promise<{ width: number; height: number }> {
   })
 }
 
+/**
+ * Resize an image to fit within maxSize while preserving aspect ratio,
+ * applying EXIF orientation correction if needed.
+ *
+ * For the source image (first call), we detect EXIF rotation by comparing
+ * Image.getSize (EXIF-corrected) against the raw pixel dimensions from a
+ * single renderAsync. The rotation + resize are applied in the same
+ * ImageManipulator chain, so only 1 native decode happens.
+ *
+ * For cascaded calls (resizing from a previously saved thumbnail), set
+ * skipOrientationDetection=true to avoid the unnecessary EXIF check.
+ */
 async function resizeToWebP(
   inputUri: string,
   maxSize: number,
-): Promise<ThumbnailResult> {
+  skipOrientationDetection?: boolean,
+): Promise<{ result: ThumbnailResult; savedUri: string }> {
   const ctx = ImageManipulator.manipulate(inputUri)
-  const rendered = await ctx.renderAsync()
-  let isPortrait = rendered.height > rendered.width
 
-  // RCTImageLoader on iOS does not apply EXIF orientation when loading
-  // full-size images, so raw pixel dimensions may differ from the visual
-  // orientation. Image.getSize returns EXIF-corrected dimensions — compare
-  // to detect the mismatch and apply a corrective rotation.
-  try {
-    const exifSize = await getImageSize(inputUri)
-    const rawIsLandscape = rendered.width >= rendered.height
-    const exifIsLandscape = exifSize.width >= exifSize.height
-    if (rawIsLandscape !== exifIsLandscape) {
-      ctx.rotate(90)
+  let isPortrait: boolean
+  if (skipOrientationDetection) {
+    // Input is an already-oriented thumbnail — just check dimensions via
+    // a lightweight getImageSize call (no pixel decode).
+    try {
+      const size = await getImageSize(inputUri)
+      isPortrait = size.height > size.width
+    } catch {
+      isPortrait = false
     }
-    isPortrait = exifSize.height > exifSize.width
-  } catch {
-    // Fall back to raw dimensions if Image.getSize fails
+  } else {
+    // First resize from the original source: detect EXIF orientation.
+    // renderAsync decodes the full image — we use the same ctx for the
+    // subsequent resize so this is the only decode.
+    const rendered = await ctx.renderAsync()
+    isPortrait = rendered.height > rendered.width
+
+    try {
+      const exifSize = await getImageSize(inputUri)
+      const rawIsLandscape = rendered.width >= rendered.height
+      const exifIsLandscape = exifSize.width >= exifSize.height
+      if (rawIsLandscape !== exifIsLandscape) {
+        ctx.rotate(90)
+      }
+      isPortrait = exifSize.height > exifSize.width
+    } catch {
+      // Fall back to raw dimensions if Image.getSize fails
+    }
   }
 
   if (isPortrait) {
@@ -44,15 +69,21 @@ async function resizeToWebP(
     ctx.resize({ width: maxSize })
   }
   const resized = await ctx.renderAsync()
-  const result = await resized.saveAsync({
+  const saved = await resized.saveAsync({
     compress: 0.8,
     format: SaveFormat.WEBP,
   })
-  const file = new File(result.uri)
+  const file = new File(saved.uri)
   const data = await file.bytes()
   return {
-    data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-    mimeType: 'image/webp',
+    result: {
+      data: data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      ),
+      mimeType: 'image/webp',
+    },
+    savedUri: saved.uri,
   }
 }
 
@@ -62,7 +93,34 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
       sourcePath: string,
       targetSize: number,
     ): Promise<ThumbnailResult> {
-      return resizeToWebP(sourcePath, targetSize as ThumbSize)
+      const { result } = await resizeToWebP(sourcePath, targetSize as ThumbSize)
+      return result
+    },
+
+    async generateImageThumbnails(
+      sourcePath: string,
+      sizes: number[],
+    ): Promise<Map<number, ThumbnailResult>> {
+      const sorted = [...sizes].sort((a, b) => b - a)
+      const results = new Map<number, ThumbnailResult>()
+
+      let inputUri = sourcePath
+      let skipDetection = false
+      for (const size of sorted) {
+        const { result, savedUri } = await resizeToWebP(
+          inputUri,
+          size,
+          skipDetection,
+        )
+        results.set(size, result)
+        // Subsequent smaller sizes resize from the larger result.
+        // That file is already correctly oriented and much smaller,
+        // so decoding it is essentially free.
+        inputUri = savedUri
+        skipDetection = true
+      }
+
+      return results
     },
 
     async generateVideoThumbnail(
@@ -73,7 +131,8 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
         time: 1000,
         quality: 0.8,
       })
-      return resizeToWebP(thumb.uri, targetSize as ThumbSize)
+      const { result } = await resizeToWebP(thumb.uri, targetSize as ThumbSize)
+      return result
     },
   }
 }
