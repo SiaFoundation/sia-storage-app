@@ -40,7 +40,7 @@ export async function deleteDirectory(id: string): Promise<void> {
 export async function deleteDirectoryAndTrashFiles(id: string): Promise<void> {
   await ops.deleteDirectoryAndTrashFiles(db(), id)
   directoriesSwr.invalidateAll()
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 

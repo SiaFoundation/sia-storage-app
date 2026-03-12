@@ -1,10 +1,6 @@
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import type { FileRecord } from '../stores/files'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
 import { getThumbnailScanner } from './thumbnailScanner'
 
 export function isFileBeingProcessed(fileId: string): boolean {
@@ -35,8 +31,5 @@ export async function generateThumbnails(files: FileRecord[]) {
       })
     }
   }
-  if (produced > 0) {
-    await invalidateCacheLibraryAllStats()
-    invalidateCacheLibraryLists()
-  }
+  return produced
 }

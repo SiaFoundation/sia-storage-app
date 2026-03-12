@@ -18,7 +18,7 @@ export async function upsertLocalObject(
 ): Promise<void> {
   await ops.insertLocalObject(db(), object)
   if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -30,7 +30,7 @@ export async function deleteLocalObject(
 ): Promise<void> {
   await ops.deleteLocalObjectById(db(), objectId, indexerURL)
   if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -47,7 +47,7 @@ export async function deleteLocalObjects(
 ): Promise<void> {
   await ops.deleteLocalObjectsByFileId(db(), fileId)
   if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -55,7 +55,7 @@ export async function deleteLocalObjects(
 export async function deleteManyLocalObjects(fileIds: string[]): Promise<void> {
   if (fileIds.length === 0) return
   await ops.deleteManyLocalObjectsByFileIds(db(), fileIds)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 

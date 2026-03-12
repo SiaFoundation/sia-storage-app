@@ -1,3 +1,4 @@
+import { createDebouncedAction } from '@siastorage/core/lib/debouncedAction'
 import { logger } from '@siastorage/logger'
 import { create } from 'zustand'
 import { createGetterAndSelector } from '../lib/selectors'
@@ -24,9 +25,8 @@ export const useDownloadsStore = create<DownloadsStore>(() => ({
 const { getState, setState } = useDownloadsStore
 
 const pendingDownloadProgress = new Map<string, number>()
-let downloadRafScheduled = false
 
-function flushDownloadProgress() {
+const downloadProgressFlusher = createDebouncedAction(() => {
   if (pendingDownloadProgress.size === 0) return
   setState((state) => {
     const downloads = { ...state.downloads }
@@ -37,10 +37,9 @@ function flushDownloadProgress() {
       }
     }
     pendingDownloadProgress.clear()
-    downloadRafScheduled = false
     return { downloads }
   })
-}
+}, 1000)
 
 function registerDownload(id: string): AbortController {
   const controller = new AbortController()
@@ -141,10 +140,7 @@ export async function runDownloadWithSlot<T>(params: {
 
 export function updateDownloadProgress(id: string, progress: number) {
   pendingDownloadProgress.set(id, progress)
-  if (!downloadRafScheduled) {
-    downloadRafScheduled = true
-    requestAnimationFrame(flushDownloadProgress)
-  }
+  downloadProgressFlusher.trigger()
 }
 
 export const [getDownloadState, useDownloadState] = createGetterAndSelector(

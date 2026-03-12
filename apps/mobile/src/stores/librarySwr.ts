@@ -1,3 +1,4 @@
+import { createDebouncedAction } from '@siastorage/core/lib/debouncedAction'
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { swrCacheBy } from '../lib/swr'
@@ -5,7 +6,13 @@ import { swrCacheBy } from '../lib/swr'
 /** Library stat queries (count, stats, localOnly, etc.), keyed by stat name. invalidateAll() clears them together. */
 export const libraryStats = swrCacheBy()
 
-export const invalidateCacheLibraryAllStats = () => libraryStats.invalidateAll()
+const INVALIDATION_DEBOUNCE_MS = 200
+
+const statsFlusher = createDebouncedAction(
+  () => libraryStats.invalidateAll(),
+  INVALIDATION_DEBOUNCE_MS,
+)
+export const invalidateCacheLibraryAllStats = statsFlusher.trigger
 
 // Version counter for signaling library list changes. Subscribers use
 // useOnLibraryListChange to run a callback when the version bumps.
@@ -15,9 +22,11 @@ const useLibraryVersion = create<LibraryVersionState>(() => ({
   version: 0,
 }))
 
-export function invalidateCacheLibraryLists() {
-  useLibraryVersion.setState((s) => ({ version: s.version + 1 }))
-}
+const listsFlusher = createDebouncedAction(
+  () => useLibraryVersion.setState((s) => ({ version: s.version + 1 })),
+  INVALIDATION_DEBOUNCE_MS,
+)
+export const invalidateCacheLibraryLists = listsFlusher.trigger
 
 /** Runs `callback` whenever the library list version bumps. */
 export function useOnLibraryListChange(callback: () => void) {

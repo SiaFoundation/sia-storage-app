@@ -135,7 +135,7 @@ export async function workBackward(signal?: AbortSignal) {
         newFiles: files.length,
         totalAssets: assets.length,
       })
-      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryAllStats()
       invalidateCacheLibraryLists()
     } else {
       logger.info('syncPhotosArchive', 'batch_all_duplicates', {
