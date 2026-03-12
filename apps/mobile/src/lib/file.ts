@@ -15,6 +15,28 @@ export function fileHasASealedObject(file?: FileRecord): boolean {
   return !!Object.keys(file?.objects ?? {}).length
 }
 
+export type FileItemProps = {
+  file: FileRecord
+  onPressItem: (item: FileRecord) => void
+  onLongPressItem?: (item: FileRecord) => void
+}
+
+export function fileItemPropsAreEqual(
+  prev: FileItemProps,
+  next: FileItemProps,
+): boolean {
+  return (
+    prev.file.id === next.file.id &&
+    prev.file.updatedAt === next.file.updatedAt &&
+    // Re-render when sealed objects change (e.g., upload completes) since
+    // updatedAt doesn't change when a local object is added.
+    Object.keys(prev.file.objects).length ===
+      Object.keys(next.file.objects).length &&
+    prev.onPressItem === next.onPressItem &&
+    prev.onLongPressItem === next.onLongPressItem
+  )
+}
+
 export type FileStatus = {
   isUploading: boolean
   isDownloading: boolean

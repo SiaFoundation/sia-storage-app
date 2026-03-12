@@ -20,13 +20,13 @@ const cleanupDeps: FileCleanupDeps = {
 
 export async function trashFiles(fileIds: string[]): Promise<void> {
   await ops.trashFiles(db(), fileIds)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
 export async function restoreFiles(fileIds: string[]): Promise<void> {
   await ops.restoreFiles(db(), fileIds)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
@@ -39,12 +39,12 @@ export async function permanentlyDeleteFiles(
 ): Promise<void> {
   if (files.length === 0) return
   await ops.permanentlyDeleteFilesWithCleanup(db(), files, cleanupDeps)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
 export async function autoPurgeOldTrashedFiles() {
   await ops.autoPurgeOldTrashedFilesWithCleanup(db(), cleanupDeps)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }

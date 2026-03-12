@@ -128,7 +128,7 @@ describe('useFileCarousel hook', () => {
       await act(async () => {
         triggerSyncChange()
         // Give the async handler time to run
-        await new Promise((r) => setTimeout(r, 50))
+        await new Promise((r) => setTimeout(r, 300))
       })
 
       expect(onDeleted).toHaveBeenCalled()
@@ -158,7 +158,7 @@ describe('useFileCarousel hook', () => {
       await deleteRecord('file-3')
       await act(async () => {
         triggerSyncChange()
-        await new Promise((r) => setTimeout(r, 50))
+        await new Promise((r) => setTimeout(r, 300))
       })
 
       // Position and count stay frozen
@@ -222,9 +222,9 @@ describe('useFileCarousel hook', () => {
         })
       }
 
-      // Wait for everything to settle
+      // Wait for everything to settle (including 200ms debounce on invalidation)
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 200))
+        await new Promise((r) => setTimeout(r, 500))
       })
 
       // Every render after init completed must have currentFile non-null

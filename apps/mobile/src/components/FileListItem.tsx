@@ -6,20 +6,19 @@ import {
 } from 'lucide-react-native'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { useFileStatus } from '../lib/file'
+import {
+  type FileItemProps,
+  fileItemPropsAreEqual,
+  useFileStatus,
+} from '../lib/file'
 import { humanSize } from '../lib/humanSize'
 import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
-import type { FileRecord } from '../stores/files'
 import { useIsFavorite } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
 import { UploadStatusIcon } from './UploadStatusIcon'
 
-type Props = {
-  file: FileRecord
-  onPressItem: (item: FileRecord) => void
-  onLongPressItem?: (item: FileRecord) => void
-}
+type Props = FileItemProps
 
 function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   const isSelectionMode = useIsSelectionMode()
@@ -91,15 +90,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   )
 }
 
-export const FileListItem = memo(FileListItemComponent, (prev, next) => {
-  return (
-    prev.file.id === next.file.id &&
-    prev.file.updatedAt === next.file.updatedAt &&
-    prev.file.objects === next.file.objects &&
-    prev.onPressItem === next.onPressItem &&
-    prev.onLongPressItem === next.onLongPressItem
-  )
-})
+export const FileListItem = memo(FileListItemComponent, fileItemPropsAreEqual)
 
 const styles = StyleSheet.create({
   container: {

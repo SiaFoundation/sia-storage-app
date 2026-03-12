@@ -12,7 +12,7 @@ jest.mock('./librarySwr', () => ({
     key: jest.fn((...parts: string[]) => [`mock/${parts.join('/')}`]),
     invalidateAll: jest.fn(),
   },
-  invalidateCacheLibraryAllStats: jest.fn().mockResolvedValue(undefined),
+  invalidateCacheLibraryAllStats: jest.fn(),
   invalidateCacheLibraryLists: jest.fn(),
 }))
 

@@ -40,7 +40,7 @@ export async function createFileRecord(
 ): Promise<void> {
   await ops.insertFileRecord(db(), fileRecord)
   if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -50,7 +50,7 @@ export async function createManyFileRecords(
 ): Promise<void> {
   await ops.insertManyFileRecords(db(), files)
   if (files.length > 0) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -129,7 +129,7 @@ export async function deleteFileRecord(
 ): Promise<void> {
   await ops.deleteFileRecordById(db(), id)
   if (triggerUpdate) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
@@ -137,14 +137,14 @@ export async function deleteFileRecord(
 export async function deleteManyFileRecords(ids: string[]): Promise<void> {
   await ops.deleteManyFileRecordsByIds(db(), ids)
   if (ids.length > 0) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
 }
 
 export async function deleteFileRecordAndThumbnails(id: string): Promise<void> {
   await ops.deleteFileRecordAndThumbnails(db(), id)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
@@ -152,7 +152,7 @@ export async function deleteManyFileRecordsAndThumbnails(
   ids: string[],
 ): Promise<void> {
   await ops.deleteFileRecordsAndThumbnails(db(), ids)
-  await invalidateCacheLibraryAllStats()
+  invalidateCacheLibraryAllStats()
   invalidateCacheLibraryLists()
 }
 
@@ -160,7 +160,7 @@ export async function deleteLostFiles(): Promise<number> {
   const currentIndexerURL = await getIndexerURL()
   const lostIds = await ops.deleteLostFiles(db(), currentIndexerURL)
   if (lostIds.length > 0) {
-    await invalidateCacheLibraryAllStats()
+    invalidateCacheLibraryAllStats()
     invalidateCacheLibraryLists()
   }
   return lostIds.length
@@ -178,7 +178,7 @@ export async function createFileRecordWithLocalObject(
   try {
     await ops.createFileRecordWithLocalObject(db(), fileRecord, localObject)
     if (triggerUpdate) {
-      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryAllStats()
       invalidateCacheLibraryLists()
     }
   } catch (e) {
@@ -201,7 +201,7 @@ export async function updateFileRecordWithLocalObject(
       options,
     )
     if (triggerUpdate) {
-      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryAllStats()
       invalidateCacheLibraryLists()
     }
   } catch (e) {

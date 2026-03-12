@@ -84,7 +84,7 @@ export async function workNew(signal?: AbortSignal): Promise<void> {
       { addToImportDirectory: true, skipExistingUpdates: true },
     )
     if (files.length > 0) {
-      await invalidateCacheLibraryAllStats()
+      invalidateCacheLibraryAllStats()
       invalidateCacheLibraryLists()
     }
   } catch (e) {
