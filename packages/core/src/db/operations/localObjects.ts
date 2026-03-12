@@ -89,6 +89,18 @@ export async function queryLocalObjectsForFiles(
   return map
 }
 
+export async function insertManyLocalObjects(
+  db: DatabaseAdapter,
+  objects: LocalObject[],
+): Promise<void> {
+  if (objects.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const object of objects) {
+      await insertLocalObject(db, object)
+    }
+  })
+}
+
 export async function deleteManyLocalObjectsByFileIds(
   db: DatabaseAdapter,
   fileIds: string[],

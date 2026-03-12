@@ -87,6 +87,7 @@ export {
   deleteLocalObjectsByFileId,
   deleteManyLocalObjectsByFileIds,
   insertLocalObject,
+  insertManyLocalObjects,
   queryLocalObjectsForFile,
   queryLocalObjectsForFiles,
 } from './localObjects'

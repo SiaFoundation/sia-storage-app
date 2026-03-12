@@ -1,4 +1,5 @@
 import type { SdkAdapter } from '@siastorage/core/adapters'
+import { insertManyLocalObjects } from '@siastorage/core/db/operations'
 import {
   type FileEntry,
   type FlushRecord,
@@ -8,6 +9,7 @@ import {
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import { AppState } from 'react-native'
+import { db } from '../db'
 import { createFileReader } from '../lib/fileReader'
 import { pinnedObjectToLocalObject } from '../lib/localObjects'
 import {
@@ -16,13 +18,19 @@ import {
   readFileRecord,
 } from '../stores/files'
 import { getFsFileUri } from '../stores/fs'
-import { upsertLocalObject } from '../stores/localObjects'
+import {
+  invalidateCacheLibraryAllStats,
+  invalidateCacheLibraryLists,
+} from '../stores/librarySwr'
 import { getIsConnected, getSdk, useSdk } from '../stores/sdk'
 import { getAutoScanUploads, getIndexerURL } from '../stores/settings'
 import {
   getActiveUploads,
   registerUpload,
+  registerUploads,
   removeUpload,
+  removeUploads,
+  setBatchUploading,
   setUploadBatchInfo,
   setUploadError,
   setUploadStatus,
@@ -40,7 +48,11 @@ function buildUploadDeps(sdk: SdkAdapter, indexerURL: string): UploadDeps {
       getFsFileUri: (file) => getFsFileUri(file),
     },
     localObjects: {
-      upsert: (lo) => upsertLocalObject(lo),
+      upsertMany: (objects) => insertManyLocalObjects(db(), objects),
+      invalidate: () => {
+        invalidateCacheLibraryAllStats()
+        invalidateCacheLibraryLists()
+      },
     },
     platform: {
       isConnected: () => getIsConnected(),
@@ -52,11 +64,15 @@ function buildUploadDeps(sdk: SdkAdapter, indexerURL: string): UploadDeps {
     },
     uploads: {
       register: (fileId, size) => registerUpload(fileId, size),
+      registerMany: (entries) => registerUploads(entries),
       remove: (fileId) => removeUpload(fileId),
+      removeMany: (ids) => removeUploads(ids),
       setStatus: (fileId, status) => setUploadStatus(fileId, status),
       setError: (fileId, message) => setUploadError(fileId, message),
       setBatchInfo: (fileId, batchId, count) =>
         setUploadBatchInfo(fileId, batchId, count),
+      setBatchUploading: (fileIds, batchId) =>
+        setBatchUploading(fileIds, batchId),
       updateProgress: (fileId, progress) =>
         updateUploadProgress(fileId, progress),
       getActive: () => getActiveUploads(),

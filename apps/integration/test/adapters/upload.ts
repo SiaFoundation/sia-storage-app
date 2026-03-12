@@ -4,7 +4,7 @@ import type {
   Reader,
 } from '@siastorage/core/adapters'
 import {
-  insertLocalObject,
+  insertManyLocalObjects,
   queryFileRecordById,
   queryLocalOnlyFiles,
 } from '@siastorage/core/db/operations'
@@ -41,7 +41,8 @@ export function buildUploadDeps(params: {
       getFsFileUri: (file) => getFsFileUri(file),
     },
     localObjects: {
-      upsert: (lo) => insertLocalObject(db, lo),
+      upsertMany: (objects) => insertManyLocalObjects(db, objects),
+      invalidate: () => {},
     },
     platform: {
       isConnected: () => connected(),
@@ -71,8 +72,23 @@ export function buildUploadDeps(params: {
           size,
         })
       },
+      registerMany: (entries) => {
+        for (const { id, size } of entries) {
+          uploads.set(id, {
+            id,
+            status: 'pending',
+            progress: 0,
+            size,
+          })
+        }
+      },
       remove: (fileId) => {
         uploads.delete(fileId)
+      },
+      removeMany: (ids) => {
+        for (const id of ids) {
+          uploads.delete(id)
+        }
       },
       setStatus: (fileId, status) => {
         const u = uploads.get(fileId)
@@ -90,6 +106,16 @@ export function buildUploadDeps(params: {
         if (u) {
           u.batchId = batchId
           u.batchCount = count
+        }
+      },
+      setBatchUploading: (fileIds, batchId) => {
+        for (const fileId of fileIds) {
+          const u = uploads.get(fileId)
+          if (u) {
+            u.batchId = batchId
+            u.batchCount = fileIds.length
+            u.status = 'uploading'
+          }
         }
       },
       updateProgress: (fileId, progress) => {

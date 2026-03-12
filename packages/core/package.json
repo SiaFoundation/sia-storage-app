@@ -11,6 +11,7 @@
     "./db": "./src/db/index.ts",
     "./db/migrations": "./src/db/migrations/index.ts",
     "./lib/detectMimeType": "./src/lib/detectMimeType.ts",
+    "./lib/debouncedAction": "./src/lib/debouncedAction.ts",
     "./lib/fileTypes": "./src/lib/fileTypes.ts",
     "./lib/mutex": "./src/lib/mutex.ts",
     "./lib/retry": "./src/lib/retry.ts",
