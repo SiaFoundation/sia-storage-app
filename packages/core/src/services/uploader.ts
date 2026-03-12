@@ -10,6 +10,8 @@ import {
   PACKER_MAX_BATCH_DURATION,
   PACKER_MAX_SLABS,
   PACKER_POLL_INTERVAL,
+  SAVE_BATCH_CONCURRENCY,
+  SAVE_REMOVAL_DELAY_MS,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
   UPLOAD_DATA_SHARDS,
@@ -18,8 +20,9 @@ import {
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
+import { retry } from '../lib/retry'
+import { SlotPool } from '../lib/slotPool'
 import { uniqueId } from '../lib/uniqueId'
-import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecordRow } from '../types/files'
 
 export type BatchFile = {
@@ -65,7 +68,8 @@ export type UploadDeps = {
     getFsFileUri(file: FileRecordRow): Promise<string | null>
   }
   localObjects: {
-    upsert(object: LocalObject): Promise<void>
+    upsertMany(objects: LocalObject[]): Promise<void>
+    invalidate(): void
   }
   platform: {
     isConnected(): boolean
@@ -80,10 +84,13 @@ export type UploadDeps = {
   }
   uploads: {
     register(fileId: string, size: number): void
+    registerMany(entries: Array<{ id: string; size: number }>): void
     remove(fileId: string): void
+    removeMany(ids: string[]): void
     setStatus(fileId: string, status: 'packing' | 'packed' | 'uploading'): void
     setError(fileId: string, message: string): void
     setBatchInfo(fileId: string, batchId: string, fileCount: number): void
+    setBatchUploading(fileIds: string[], batchId: string): void
     updateProgress(fileId: string, progress: number): void
     getActive(): Array<{ id: string }>
   }
@@ -172,6 +179,8 @@ export class UploadManager {
   private active = false
   /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
   private wakeResolver: (() => void) | null = null
+  /** Whether saveBatchObjects succeeded and invalidation is pending. */
+  private _needsInvalidation = false
   /** Recorded flush events for efficiency analysis and testing. */
   private _flushHistory: FlushRecord[] = []
   /** Cumulative count of files passed to packer.add(). */
@@ -191,9 +200,9 @@ export class UploadManager {
 
   /** Add files to the explicit queue and wake the loop. */
   enqueue(files: FileEntry[]): void {
-    for (const file of files) {
-      this.deps.uploads.register(file.fileId, file.size)
-    }
+    this.deps.uploads.registerMany(
+      files.map((f) => ({ id: f.fileId, size: f.size })),
+    )
     this.explicitQueue.push(...files)
     this.wake()
   }
@@ -260,11 +269,8 @@ export class UploadManager {
     })
 
     try {
-      const fileCount = batch.files.length
-      for (const entry of batch.files) {
-        this.deps.uploads.setBatchInfo(entry.fileId, batch.batchId, fileCount)
-        this.deps.uploads.setStatus(entry.fileId, 'uploading')
-      }
+      const fileIds = batch.files.map((f) => f.fileId)
+      this.deps.uploads.setBatchUploading(fileIds, batch.batchId)
 
       const finalizeStart = Date.now()
       const pinnedObjects = await packer.finalize()
@@ -279,6 +285,9 @@ export class UploadManager {
         batch,
         pinnedObjects,
       )
+      if (successfulFileIds.length > 0) {
+        this._needsInvalidation = true
+      }
       logger.info('uploadManager', 'batch_completed', {
         batchId: batch.batchId,
         files: successfulFileIds.length,
@@ -316,12 +325,6 @@ export class UploadManager {
         })
       }
     }
-    if (this.batch) {
-      for (const entry of this.batch.files) {
-        this.deps.uploads.remove(entry.fileId)
-      }
-    }
-
     if (this.uploadingPacker) {
       logger.info('uploadManager', 'uploading_batch_cancel', {
         batchId: this.uploadingBatch?.batchId,
@@ -334,14 +337,19 @@ export class UploadManager {
         })
       }
     }
-    if (this.uploadingBatch) {
-      for (const entry of this.uploadingBatch.files) {
-        this.deps.uploads.remove(entry.fileId)
-      }
-    }
 
-    for (const entry of this.explicitQueue) {
-      this.deps.uploads.remove(entry.fileId)
+    const idsToRemove: string[] = []
+    if (this.batch) {
+      for (const entry of this.batch.files) idsToRemove.push(entry.fileId)
+    }
+    if (this.uploadingBatch) {
+      for (const entry of this.uploadingBatch.files)
+        idsToRemove.push(entry.fileId)
+    }
+    for (const entry of this.explicitQueue) idsToRemove.push(entry.fileId)
+
+    if (idsToRemove.length > 0) {
+      this.deps.uploads.removeMany(idsToRemove)
     }
     this.explicitQueue = []
     this.polledFiles = []
@@ -383,6 +391,7 @@ export class UploadManager {
     this.explicitQueue = []
     this.polledFiles = []
     this.deps = null as unknown as UploadDeps
+    this._needsInvalidation = false
     this._flushHistory = []
     this._packedCount = 0
     this._packedBytes = 0
@@ -457,6 +466,11 @@ export class UploadManager {
       if (next) {
         await this.processEntries(this.drainQueues(next))
         continue
+      }
+
+      if (this._needsInvalidation) {
+        this._needsInvalidation = false
+        this.deps.localObjects.invalidate()
       }
 
       const newFiles = await this.pollDB()
@@ -743,17 +757,18 @@ export class UploadManager {
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
       })
 
+      const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
         const fileUri = await this.deps.files.getFsFileUri(file)
         if (!fileUri) continue
-        const entry: FileEntry = {
-          fileId: file.id,
-          fileUri,
-          file,
-          size: file.size,
-        }
-        this.deps.uploads.register(entry.fileId, entry.size)
-        this.polledFiles.push(entry)
+        newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
+      }
+
+      if (newEntries.length > 0) {
+        this.deps.uploads.registerMany(
+          newEntries.map((e) => ({ id: e.fileId, size: e.size })),
+        )
+        this.polledFiles.push(...newEntries)
       }
 
       return this.polledFiles.length
@@ -868,13 +883,16 @@ export class UploadManager {
   /**
    * After finalize, pin each object and save it locally. Files deleted
    * during upload are skipped (their upload entry is still cleaned up).
+   *
+   * Three phases:
+   * 1. Parallel pin — up to SAVE_BATCH_CONCURRENCY concurrent pinObject calls
+   * 2. Batch DB write — single transaction for all local objects
+   * 3. Remove completed uploads
    */
   private async saveBatchObjects(
     batch: BatchState,
     pinnedObjects: PinnedObjectRef[],
   ): Promise<string[]> {
-    const successfulFileIds: string[] = []
-
     if (pinnedObjects.length !== batch.files.length) {
       logger.warn('uploadManager', 'object_count_mismatch', {
         objects: pinnedObjects.length,
@@ -882,55 +900,113 @@ export class UploadManager {
       })
     }
 
-    for (let i = 0; i < batch.files.length; i++) {
-      const entry = batch.files[i]
-      const pinnedObject = pinnedObjects[i]
-
-      if (!pinnedObject) {
-        logger.error('uploadManager', 'no_pinned_object', {
-          fileId: entry.fileId,
-          index: i,
-        })
-        this.deps.uploads.setError(entry.fileId, 'No pinned object returned')
-        continue
-      }
-
-      try {
-        const fileRecord = await this.deps.files.read(entry.fileId)
-        if (!fileRecord) {
-          logger.warn('uploadManager', 'file_deleted_during_upload', {
-            fileId: entry.fileId,
-          })
-          this.deps.uploads.remove(entry.fileId)
-          successfulFileIds.push(entry.fileId)
-          continue
+    type PinResult =
+      | {
+          type: 'success'
+          fileId: string
+          size: number
+          localObject: LocalObject
         }
+      | { type: 'deleted'; fileId: string }
+      | { type: 'error'; fileId: string }
+      | { type: 'missing'; fileId: string }
 
-        pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
-        await this.deps.sdk.pinObject(pinnedObject)
+    // Phase 1: Parallel pin
+    const pool = new SlotPool(SAVE_BATCH_CONCURRENCY)
+    const results = await Promise.all(
+      batch.files.map((entry, i) =>
+        pool.withSlot(async (): Promise<PinResult> => {
+          const pinnedObject = pinnedObjects[i]
+          if (!pinnedObject) {
+            logger.error('uploadManager', 'no_pinned_object', {
+              fileId: entry.fileId,
+              index: i,
+            })
+            this.deps.uploads.setError(
+              entry.fileId,
+              'No pinned object returned',
+            )
+            return { type: 'missing', fileId: entry.fileId }
+          }
 
-        const indexerURL = this.deps.platform.getIndexerURL()
-        const localObject = await this.deps.platform.pinnedObjectToLocalObject(
-          entry.fileId,
-          indexerURL,
-          pinnedObject,
-        )
-        await this.deps.localObjects.upsert(localObject)
-        this.deps.uploads.remove(entry.fileId)
+          try {
+            const fileRecord = await this.deps.files.read(entry.fileId)
+            if (!fileRecord) {
+              logger.warn('uploadManager', 'file_deleted_during_upload', {
+                fileId: entry.fileId,
+              })
+              return { type: 'deleted', fileId: entry.fileId }
+            }
 
-        logger.debug('uploadManager', 'object_saved', { fileId: entry.fileId })
+            pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
+            await retry(
+              'pinObject',
+              () => this.deps.sdk.pinObject(pinnedObject),
+              3,
+              1000,
+            )
+
+            const indexerURL = this.deps.platform.getIndexerURL()
+            const localObject =
+              await this.deps.platform.pinnedObjectToLocalObject(
+                entry.fileId,
+                indexerURL,
+                pinnedObject,
+              )
+            logger.debug('uploadManager', 'object_saved', {
+              fileId: entry.fileId,
+            })
+            return {
+              type: 'success',
+              fileId: entry.fileId,
+              size: entry.size,
+              localObject,
+            }
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e)
+            logger.error('uploadManager', 'object_save_error', {
+              fileId: entry.fileId,
+              error: e as Error,
+            })
+            this.deps.uploads.setError(entry.fileId, message)
+            return { type: 'error', fileId: entry.fileId }
+          }
+        }),
+      ),
+    )
+
+    // Phase 2: Batch DB write
+    const localObjects = results
+      .filter(
+        (r): r is Extract<PinResult, { type: 'success' }> =>
+          r.type === 'success',
+      )
+      .map((r) => r.localObject)
+    await this.deps.localObjects.upsertMany(localObjects)
+
+    for (const r of results) {
+      if (r.type === 'success') {
         this._uploadedCount++
-        this._uploadedBytes += entry.size
-        successfulFileIds.push(entry.fileId)
-        await yieldToEventLoop()
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        logger.error('uploadManager', 'object_save_error', {
-          fileId: entry.fileId,
-          error: e as Error,
-        })
-        this.deps.uploads.setError(entry.fileId, message)
+        this._uploadedBytes += r.size
       }
+    }
+
+    // Phase 3: Invalidate cache then remove completed uploads.
+    // Invalidation must happen before removal so the file record refreshes
+    // with the sealed object before the uploading state clears — otherwise
+    // the UI briefly shows a "needs upload" icon.
+    const successfulFileIds = results
+      .filter((r) => r.type !== 'error' && r.type !== 'missing')
+      .map((r) => r.fileId)
+    if (successfulFileIds.length > 0) {
+      this.deps.localObjects.invalidate()
+      this._needsInvalidation = false
+      if (SAVE_REMOVAL_DELAY_MS > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, SAVE_REMOVAL_DELAY_MS),
+        )
+      }
+      this.deps.uploads.removeMany(successfulFileIds)
     }
 
     return successfulFileIds
