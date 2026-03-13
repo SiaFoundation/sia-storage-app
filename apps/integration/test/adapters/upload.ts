@@ -18,7 +18,7 @@ export function buildTestSdkAdapter(
     sharedObject: (url) => sdk.sharedObject(url),
     shareObject: () => '',
     appKey: () => appKey,
-    downloadByObjectId: async () => new ArrayBuffer(0),
+    downloadByObjectId: (id) => sdk.downloadByObjectId(id),
     hosts: async () => [],
     account: async () =>
       ({ publicKey: '', storage: BigInt(0), app: null }) as any,
