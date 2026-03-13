@@ -267,7 +267,7 @@ export async function queryFileRecordsByLocalIds(
   localIds: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND localId IN (${localIds
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds,
@@ -279,7 +279,7 @@ export async function queryFileRecordsByContentHashes(
   contentHashes: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND hash IN (${contentHashes
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
     ...contentHashes,
@@ -291,7 +291,7 @@ export async function queryFileRecordByContentHash(
   hash: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE hash = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?',
     hash,
   )
   if (!row) {

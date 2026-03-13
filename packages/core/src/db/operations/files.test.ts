@@ -9,6 +9,8 @@ import {
   queryFileRecordByContentHash,
   queryFileRecordByObjectId,
   queryFileRecords,
+  queryFileRecordsByContentHashes,
+  queryFileRecordsByLocalIds,
   queryFileRecordsCount,
   queryFileRecordsStats,
   readFileRecord,
@@ -484,6 +486,83 @@ describe('queryFileRecordByContentHash', () => {
   it('returns null when hash not found', async () => {
     const row = await queryFileRecordByContentHash(db(), 'nonexistent')
     expect(row).toBeNull()
+  })
+
+  it('excludes trashed files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { hash: 'abc123', trashedAt: 2000 }),
+    )
+    const row = await queryFileRecordByContentHash(db(), 'abc123')
+    expect(row).toBeNull()
+  })
+
+  it('excludes deleted files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { hash: 'abc123', deletedAt: 2000 }),
+    )
+    const row = await queryFileRecordByContentHash(db(), 'abc123')
+    expect(row).toBeNull()
+  })
+})
+
+describe('queryFileRecordsByLocalIds', () => {
+  it('finds files by local IDs', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1', { localId: 'local-1' }))
+    await insertFileRecord(db(), makeFileRecord('f2', { localId: 'local-2' }))
+    await insertFileRecord(db(), makeFileRecord('f3', { localId: 'local-3' }))
+    const rows = await queryFileRecordsByLocalIds(db(), ['local-1', 'local-3'])
+    expect(rows.map((r) => r.id).sort()).toEqual(['f1', 'f3'])
+  })
+
+  it('excludes trashed files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { localId: 'local-1', trashedAt: 2000 }),
+    )
+    const rows = await queryFileRecordsByLocalIds(db(), ['local-1'])
+    expect(rows).toEqual([])
+  })
+
+  it('excludes deleted files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { localId: 'local-1', deletedAt: 2000 }),
+    )
+    const rows = await queryFileRecordsByLocalIds(db(), ['local-1'])
+    expect(rows).toEqual([])
+  })
+})
+
+describe('queryFileRecordsByContentHashes', () => {
+  it('finds files by content hashes', async () => {
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'hash-a' }))
+    await insertFileRecord(db(), makeFileRecord('f2', { hash: 'hash-b' }))
+    await insertFileRecord(db(), makeFileRecord('f3', { hash: 'hash-c' }))
+    const rows = await queryFileRecordsByContentHashes(db(), [
+      'hash-a',
+      'hash-c',
+    ])
+    expect(rows.map((r) => r.id).sort()).toEqual(['f1', 'f3'])
+  })
+
+  it('excludes trashed files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { hash: 'hash-a', trashedAt: 2000 }),
+    )
+    const rows = await queryFileRecordsByContentHashes(db(), ['hash-a'])
+    expect(rows).toEqual([])
+  })
+
+  it('excludes deleted files', async () => {
+    await insertFileRecord(
+      db(),
+      makeFileRecord('f1', { hash: 'hash-a', deletedAt: 2000 }),
+    )
+    const rows = await queryFileRecordsByContentHashes(db(), ['hash-a'])
+    expect(rows).toEqual([])
   })
 })
 
