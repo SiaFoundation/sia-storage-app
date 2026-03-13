@@ -1,5 +1,5 @@
 import type { ThumbnailAdapter } from '@siastorage/core/adapters'
-import type { AppService } from '@siastorage/core/app'
+import type { AppService, AppServiceInternal } from '@siastorage/core/app'
 import { createAppService } from '@siastorage/core/app'
 import { runMigrations } from '@siastorage/core/db'
 import { coreMigrations, sortMigrations } from '@siastorage/core/db/migrations'
@@ -70,6 +70,7 @@ export interface TestApp {
   resume(): void
 
   app: AppService
+  internal: AppServiceInternal
   sdk: MockSdk
   uploadManager: UploadManager
   thumbnailScanner: ThumbnailScanner
@@ -248,6 +249,7 @@ export function createTestApp(
 
   return {
     app: appService,
+    internal,
     sdk,
     uploadManager,
     thumbnailScanner,
