@@ -4,7 +4,7 @@ import * as path from 'path'
 
 export interface UploadState {
   id: string
-  status: 'pending' | 'uploading' | 'complete' | 'error'
+  status: 'queued' | 'packing' | 'packed' | 'uploading' | 'done' | 'error'
   progress: number
   size: number
   error?: string

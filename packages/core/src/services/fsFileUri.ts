@@ -9,9 +9,23 @@ import {
 const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
 export type FsFileUriAdapter = {
-  exists(fileId: string, type: string): boolean
+  exists(fileId: string, type: string): Promise<boolean>
   uri(fileId: string, type: string): string
-  size(fileId: string, type: string): number | null
+  size(fileId: string, type: string): Promise<number | null>
+}
+
+export type FsIOAdapter = FsFileUriAdapter & {
+  remove(fileId: string, type: string): Promise<void>
+  copy(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<{ uri: string; size: number }>
+  writeFile?(
+    file: { id: string; type: string },
+    data: ArrayBuffer,
+  ): Promise<{ uri: string; size: number }>
+  list(): Promise<string[]>
+  ensureDirectory(): Promise<void>
 }
 
 export async function getFsFileUri(
@@ -21,7 +35,7 @@ export async function getFsFileUri(
   opts?: { usedAtUpdateInterval?: number },
 ): Promise<string | null> {
   const existingMeta = await readFsFileMetadata(db, file.id)
-  const fileExists = adapter.exists(file.id, file.type)
+  const fileExists = await adapter.exists(file.id, file.type)
 
   if (!fileExists) {
     if (existingMeta) {
@@ -30,7 +44,8 @@ export async function getFsFileUri(
     return null
   }
 
-  const size = adapter.size(file.id, file.type) ?? existingMeta?.size ?? 0
+  const size =
+    (await adapter.size(file.id, file.type)) ?? existingMeta?.size ?? 0
   const now = Date.now()
 
   if (!existingMeta) {

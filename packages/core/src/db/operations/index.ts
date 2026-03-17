@@ -9,14 +9,18 @@ export {
   moveFileToDirectory,
   queryAllDirectoriesWithCounts,
   queryCountFilesWithDirectories,
+  queryDirectoryByName,
   queryDirectoryNameForFile,
+  queryFileByNameInDirectory,
+  queryFilesByDirectoryName,
   renameDirectory,
   sanitizeDirectoryName,
   syncDirectoryFromMetadata,
 } from './directories'
 export {
-  queryUploadCategoryStats,
+  queryUploadStats,
   type UploadCategoryStats,
+  type UploadStats,
 } from './fileStats'
 export {
   createFileRecordWithLocalObject,
@@ -30,8 +34,10 @@ export {
   type FileRecordsQueryOpts,
   insertFileRecord,
   insertManyFileRecords,
+  queryActiveFileSummaries,
   queryFileRecordByContentHash,
   queryFileRecordById,
+  queryFileRecordByName,
   queryFileRecordByObjectId,
   queryFileRecords,
   queryFileRecordsByContentHashes,
@@ -43,8 +49,12 @@ export {
   queryLocalOnlyFiles,
   queryLostFileCount,
   queryLostFileStats,
+  queryUnuploadedFileCount,
+  queryUnuploadedFiles,
+  queryUploadedFileIds,
   readFileRecord,
   readFileRecordByContentHash,
+  readFileRecordByName,
   readFileRecordByObjectId,
   readFileRecordsByContentHashes,
   readFileRecordsByIds,
@@ -60,11 +70,14 @@ export {
   deleteFsFileMetadata,
   deleteFsFileMetadataBatch,
   type FsMetaRow,
+  queryFsCacheEvictionCandidates,
+  queryOrphanedFileIds,
   readFsFileMetadata,
   updateFsFileMetadataUsedAt,
   upsertFsFileMetadata,
 } from './fs'
 export {
+  ALL_CATEGORIES,
   buildLibraryQueryParts,
   type Category,
   type LibraryQueryParams,
@@ -73,6 +86,7 @@ export {
   queryFileExists,
   queryFilePositionInSortedList,
   queryLibraryFileCount,
+  queryLibraryFiles,
   queryMediaFileCount,
   querySortedFileIds,
   queryTagFileCount,
@@ -93,10 +107,12 @@ export {
 } from './localObjects'
 export {
   deleteAllLogs,
+  insertLog,
   type LogRow,
   queryAvailableLogScopes,
   queryLogCount,
   queryLogs,
+  rotateLogs,
 } from './logs'
 export {
   addTagToFile,
@@ -122,18 +138,18 @@ export {
 } from './tags'
 export {
   queryBestThumbnailByFileId,
+  queryThumbnailCandidatePage,
   queryThumbnailExistsForFileIdAndSize,
   queryThumbnailFileInfoByFileIds,
   queryThumbnailRecordByFileIdAndSize,
+  queryThumbnailScanProgress,
   queryThumbnailSizesForFileId,
   queryThumbnailsByFileId,
+  type ThumbnailCandidateRow,
 } from './thumbnails'
 export {
   autoPurgeOldTrashedFiles,
-  autoPurgeOldTrashedFilesWithCleanup,
-  type FileCleanupDeps,
   permanentlyDeleteFiles,
-  permanentlyDeleteFilesWithCleanup,
   restoreFiles,
   trashFiles,
 } from './trash'

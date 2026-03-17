@@ -14,8 +14,6 @@ import { logger } from '@siastorage/logger'
 import { z } from 'zod'
 import type { FileKind, FileMetadata, ThumbSize } from '../types/files'
 
-export type { FileMetadata } from '../types/files'
-
 export const MAX_SUPPORTED_VERSION = 1
 
 const ThumbSizeSchema = z.union([z.literal(64), z.literal(512)])

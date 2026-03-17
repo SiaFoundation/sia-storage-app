@@ -21,6 +21,7 @@
     "./lib/timeout": "./src/lib/timeout.ts",
     "./lib/types": "./src/lib/types.ts",
     "./lib/localObjects": "./src/lib/localObjects.ts",
+    "./lib/progressThrottle": "./src/lib/progressThrottle.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",
     "./lib/yieldToEventLoop": "./src/lib/yieldToEventLoop.ts",
     "./types": "./src/types/index.ts",
@@ -36,12 +37,29 @@
     "./services/thumbnailScanner": "./src/services/thumbnailScanner.ts",
     "./services/cacheEviction": "./src/services/cacheEviction.ts",
     "./services/uploader": "./src/services/uploader.ts",
-    "./services/fsFileUri": "./src/services/fsFileUri.ts"
+    "./services/fsFileUri": "./src/services/fsFileUri.ts",
+    "./app": "./src/app/index.ts",
+    "./stores": "./src/stores/index.ts",
+    "./stores/swr": "./src/stores/swr.ts",
+    "./stores/tags": "./src/stores/tags.ts",
+    "./stores/directories": "./src/stores/directories.ts",
+    "./stores/files": "./src/stores/files.ts",
+    "./stores/thumbnails": "./src/stores/thumbnails.ts",
+    "./stores/library": "./src/stores/library.ts",
+    "./stores/settings": "./src/stores/settings.ts"
   },
   "scripts": {
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "jest"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@siastorage/logger": "workspace:*",

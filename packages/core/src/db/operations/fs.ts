@@ -62,6 +62,42 @@ export async function deleteFsFileMetadataBatch(
   )
 }
 
+export async function queryFsCacheEvictionCandidates(
+  db: DatabaseAdapter,
+  thresholdUsedAt: number,
+  limit: number,
+): Promise<{ fileId: string; size: number; type: string }[]> {
+  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
+    `SELECT fs.fileId, fs.size, f.type FROM fs
+     JOIN files f ON f.id = fs.fileId
+     WHERE fs.usedAt <= ?
+       AND EXISTS (
+         SELECT 1 FROM objects o WHERE o.fileId = fs.fileId
+       )
+     ORDER BY fs.usedAt ASC, fs.fileId ASC
+     LIMIT ?`,
+    thresholdUsedAt,
+    limit,
+  )
+}
+
+export async function queryOrphanedFileIds(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<Set<string>> {
+  if (fileIds.length === 0) return new Set()
+  const rows = await db.getAllAsync<{ fileId: string }>(
+    `SELECT value AS fileId FROM json_each(?)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM fs WHERE fs.fileId = value
+     ) OR NOT EXISTS (
+       SELECT 1 FROM files WHERE files.id = value AND files.deletedAt IS NULL
+     )`,
+    JSON.stringify(fileIds),
+  )
+  return new Set(rows.map((r) => r.fileId))
+}
+
 export async function calcFsFilesMetadataTotalSize(
   db: DatabaseAdapter,
 ): Promise<number> {

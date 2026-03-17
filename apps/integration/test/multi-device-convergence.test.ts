@@ -1,19 +1,19 @@
 /**
  * Tests that two devices converge to identical state through syncDown/syncUp.
  * Uses sequential Device A -> Device B pattern with pause/resume on a single
- * app, sharing MockSdkStorage so both see the same indexer state.
+ * app, sharing MockIndexerStorage so both see the same indexer state.
  */
 
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import {
-  createEmptyStorage,
+  createEmptyIndexerStorage,
+  type MockIndexerStorage,
   MockSdk,
-  type MockSdkStorage,
 } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, waitForCondition } from './app'
 
 async function waitForAllObjectsV1(
-  storage: MockSdkStorage,
+  storage: MockIndexerStorage,
   expectedCount: number,
   timeout = 15_000,
 ): Promise<void> {
@@ -34,7 +34,7 @@ async function waitForAllObjectsV1(
   )
 }
 
-function deduplicateEvents(storage: MockSdkStorage): void {
+function deduplicateEvents(storage: MockIndexerStorage): void {
   const latestByObjectId = new Map<string, (typeof storage.events)[number]>()
   for (const event of storage.events) {
     latestByObjectId.set(event.id, event)
@@ -44,10 +44,10 @@ function deduplicateEvents(storage: MockSdkStorage): void {
 
 describe('Multi-Device Convergence', () => {
   it('v1 ↔ v1: files uploaded by Device A appear on Device B simultaneously', async () => {
-    const sharedStorage = createEmptyStorage()
+    const indexerStorage = createEmptyIndexerStorage()
 
-    const appA = createTestApp(sharedStorage)
-    const appB = createTestApp(sharedStorage)
+    const appA = createTestApp(indexerStorage)
+    const appB = createTestApp(indexerStorage)
     await appA.start()
     await appB.start()
 
@@ -55,7 +55,7 @@ describe('Multi-Device Convergence', () => {
     await appA.addFiles(fileFactories)
     await appA.waitForNoActiveUploads()
 
-    await waitForAllObjectsV1(sharedStorage, 3)
+    await waitForAllObjectsV1(indexerStorage, 3)
 
     const deviceAFiles = await appA.getFiles()
     expect(deviceAFiles).toHaveLength(3)
@@ -79,15 +79,15 @@ describe('Multi-Device Convergence', () => {
   }, 60_000)
 
   it('v1 thumbnail with thumbForId syncs correctly to Device B', async () => {
-    const sharedStorage = createEmptyStorage()
+    const indexerStorage = createEmptyIndexerStorage()
 
-    const appA = createTestApp(sharedStorage)
+    const appA = createTestApp(indexerStorage)
     await appA.start()
 
     const fileFactories = generateTestFiles(1, { type: 'data' })
     await appA.addFiles(fileFactories)
     await appA.waitForNoActiveUploads()
-    await waitForAllObjectsV1(sharedStorage, 1)
+    await waitForAllObjectsV1(indexerStorage, 1)
 
     const deviceAFiles = await appA.getFiles()
     const parentFileId = deviceAFiles[0].id
@@ -114,7 +114,7 @@ describe('Multi-Device Convergence', () => {
     const deviceAThumb = deviceAAllFiles.find((f) => f.kind === 'thumb')!
     expect(deviceAThumb.thumbForId).toBe(parentFileId)
 
-    const appB = createTestApp(sharedStorage)
+    const appB = createTestApp(indexerStorage)
     await appB.start()
 
     await appB.waitForFileCount(2)
@@ -138,24 +138,24 @@ describe('Multi-Device Convergence', () => {
   }, 60_000)
 
   it('delete propagation: file deleted on Device A is removed on Device B', async () => {
-    const sharedStorage = createEmptyStorage()
+    const indexerStorage = createEmptyIndexerStorage()
 
-    const appA = createTestApp(sharedStorage)
-    const appB = createTestApp(sharedStorage)
+    const appA = createTestApp(indexerStorage)
+    const appB = createTestApp(indexerStorage)
     await appA.start()
     await appB.start()
 
     const fileFactories = generateTestFiles(3, { type: 'data' })
     await appA.addFiles(fileFactories)
     await appA.waitForNoActiveUploads()
-    await waitForAllObjectsV1(sharedStorage, 3)
+    await waitForAllObjectsV1(indexerStorage, 3)
 
     const deviceAFiles = await appA.getFiles()
     expect(deviceAFiles).toHaveLength(3)
 
     await appB.waitForFileCount(3)
 
-    const objectToDelete = Array.from(sharedStorage.objects.entries()).find(
+    const objectToDelete = Array.from(indexerStorage.objects.entries()).find(
       ([_, obj]) => {
         try {
           const meta = decodeFileMetadata(obj.metadata)
@@ -200,17 +200,17 @@ describe('Multi-Device Convergence', () => {
   }, 60_000)
 
   it('rename propagation: file renamed on Device A is updated on Device B', async () => {
-    const sharedStorage = createEmptyStorage()
+    const indexerStorage = createEmptyIndexerStorage()
 
-    const appA = createTestApp(sharedStorage)
-    const appB = createTestApp(sharedStorage)
+    const appA = createTestApp(indexerStorage)
+    const appB = createTestApp(indexerStorage)
     await appA.start()
     await appB.start()
 
     const fileFactories = generateTestFiles(1, { type: 'data' })
     await appA.addFiles(fileFactories)
     await appA.waitForNoActiveUploads()
-    await waitForAllObjectsV1(sharedStorage, 1)
+    await waitForAllObjectsV1(indexerStorage, 1)
 
     const deviceAFiles = await appA.getFiles()
     expect(deviceAFiles).toHaveLength(1)
@@ -220,7 +220,7 @@ describe('Multi-Device Convergence', () => {
     const deviceBFile = (await appB.getFiles())[0]
     expect(deviceBFile.name).toBe(originalName)
 
-    const objectId = Array.from(sharedStorage.objects.keys())[0]
+    const objectId = Array.from(indexerStorage.objects.keys())[0]
     appA.sdk.injectMetadataChange(objectId, {
       name: 'renamed-file.bin',
       updatedAt: Date.now() + 5000,
@@ -248,22 +248,22 @@ describe('Multi-Device Convergence', () => {
   }, 60_000)
 
   it('trash and tombstone converge across two devices', async () => {
-    const sharedStorage = createEmptyStorage()
+    const indexerStorage = createEmptyIndexerStorage()
 
-    const appA = createTestApp(sharedStorage)
+    const appA = createTestApp(indexerStorage)
     await appA.start()
 
     const fileFactories = generateTestFiles(2, { type: 'data' })
     const testFiles = await appA.addFiles(fileFactories)
     await appA.waitForNoActiveUploads()
-    await waitForAllObjectsV1(sharedStorage, 2)
+    await waitForAllObjectsV1(indexerStorage, 2)
 
     const fileIdA = testFiles[0].id
     const fileIdB = testFiles[1].id
 
-    deduplicateEvents(sharedStorage)
+    deduplicateEvents(indexerStorage)
 
-    const appB = createTestApp(sharedStorage)
+    const appB = createTestApp(indexerStorage)
     await appB.start()
 
     await appB.waitForFileCount(2)
@@ -276,7 +276,7 @@ describe('Multi-Device Convergence', () => {
     expect(file2!.deletedAt).toBeNull()
 
     appB.pause()
-    const objectEntries = Array.from(sharedStorage.objects.entries())
+    const objectEntries = Array.from(indexerStorage.objects.entries())
     const obj1Entry = objectEntries.find(([_, obj]) => {
       try {
         const meta = decodeFileMetadata(obj.metadata)
@@ -325,7 +325,7 @@ describe('Multi-Device Convergence', () => {
       () => {
         try {
           const meta = decodeFileMetadata(
-            sharedStorage.objects.get(obj2Entry[0])!.metadata,
+            indexerStorage.objects.get(obj2Entry[0])!.metadata,
           )
           return meta.trashedAt != null
         } catch {
@@ -339,7 +339,7 @@ describe('Multi-Device Convergence', () => {
     )
 
     appB.pause()
-    const deleteSdk = new MockSdk(sharedStorage)
+    const deleteSdk = new MockSdk(indexerStorage)
     await deleteSdk.deleteObject(obj1Entry[0])
     appB.resume()
 

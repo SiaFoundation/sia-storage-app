@@ -1,29 +1,20 @@
 export {
-  type CacheEvictionDeps,
+  type CacheEvictionConfig,
   type CacheEvictionResult,
   runCacheEviction,
 } from './cacheEviction'
 export {
   type FsFileUriAdapter,
+  type FsIOAdapter,
   getFsFileUri,
 } from './fsFileUri'
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
-export {
-  findOrphanedFileIds,
-  type OrphanScannerDeps,
-  type OrphanScannerResult,
-  runOrphanScanner,
-} from './orphanScanner'
-export {
-  type SyncDownDeps,
-  syncDownEventsBatch,
-} from './syncDownEvents'
+export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'
+export { syncDownEventsBatch } from './syncDownEvents'
 export {
   diffFileMetadata,
   runSyncUpMetadataBatch,
   type SyncUpCursor,
-  type SyncUpDeps,
-  type SyncUpProgressState,
 } from './syncUpMetadata'
 export {
   computeTargetDimensions,
@@ -31,7 +22,7 @@ export {
   type EnsureThumbnailParams,
   type ProducedThumbnail,
   type ThumbnailAttempt,
-  type ThumbnailDeps,
+  type ThumbnailCandidateRow,
   type ThumbnailGenerationError,
   ThumbnailScanner,
   type ThumbnailScannerResult,
@@ -43,6 +34,6 @@ export {
   calculateFileProgress,
   type FileEntry,
   type FlushRecord,
-  type UploadDeps,
+  type UploaderAdapters,
   UploadManager,
 } from './uploader'

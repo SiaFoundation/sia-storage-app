@@ -1,6 +1,7 @@
-export { buildCursorDeps } from './cursors'
-export { buildFsDeps } from './fs'
-export { buildSyncDownDeps } from './syncDown'
-export { buildSyncUpDeps } from './syncUp'
-export { buildThumbnailDeps } from './thumbnail'
-export { buildUploadDeps } from './upload'
+export { createFsAdapter } from './fs'
+export { createMockFsIO } from './fsIO'
+export {
+  createMockThumbnailAdapter,
+  createSharpThumbnailAdapter,
+} from './thumbnail'
+export { buildTestSdkAdapter, createTestUploaderAdapters } from './upload'

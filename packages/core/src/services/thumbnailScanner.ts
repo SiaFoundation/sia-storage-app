@@ -1,26 +1,16 @@
 import { logger } from '@siastorage/logger'
-import type { DatabaseAdapter } from '../adapters/db'
-import type { ThumbnailAdapter } from '../adapters/thumbnail'
-import { insertFileRecord } from '../db/operations/files'
-import {
-  queryThumbnailExistsForFileIdAndSize,
-  queryThumbnailSizesForFileId,
-} from '../db/operations/thumbnails'
+import type { AppService } from '../app/service'
 import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
 import { ThumbSizes } from '../types/files'
 
-export type ThumbnailDeps = {
-  db: DatabaseAdapter
-  thumbnailAdapter: ThumbnailAdapter
-  detectMimeType(path: string): Promise<string | null>
-  getFsFileUri(file: { id: string; type: string }): Promise<string | null>
-  copyToFs(
-    file: { id: string; type: string },
-    data: ArrayBuffer,
-  ): Promise<{ uri: string; size: number; hash: string }>
-  invalidateCache?(fileId: string): Promise<void>
+export type ThumbnailCandidateRow = {
+  id: string
+  hash: string
+  type: string
+  localId: string | null
+  createdAt: number
 }
 
 export type ThumbnailAttempt = {
@@ -69,19 +59,6 @@ export type EnsureResult =
 const MAX_THUMBS_PER_TICK = 20
 const ERROR_COOLDOWN_MS = 60 * 60 * 1000 // 1 hour
 
-type CandidateRow = {
-  id: string
-  hash: string
-  type: string
-  localId: string | null
-  createdAt: number
-}
-
-type CandidateCursor = {
-  createdAt: number
-  id: string
-}
-
 export function computeTargetDimensions(
   sourceWidth: number | null | undefined,
   sourceHeight: number | null | undefined,
@@ -112,22 +89,22 @@ export function computeTargetDimensions(
 }
 
 export class ThumbnailScanner {
-  private deps: ThumbnailDeps | null = null
+  private app: AppService | null = null
   private processingFiles = new Set<string>()
   private erroredFiles = new Map<string, number>()
 
-  initialize(deps: ThumbnailDeps): void {
-    this.deps = deps
+  initialize(app: AppService): void {
+    this.app = app
   }
 
   reset(): void {
-    this.deps = null
+    this.app = null
     this.processingFiles.clear()
     this.erroredFiles.clear()
   }
 
   isInitialized(): boolean {
-    return this.deps !== null
+    return this.app !== null
   }
 
   isFileBeingProcessed(fileId: string): boolean {
@@ -149,9 +126,9 @@ export class ThumbnailScanner {
     this.erroredFiles.set(fileId, Date.now())
   }
 
-  private getDeps(): ThumbnailDeps {
-    if (!this.deps) throw new Error('ThumbnailScanner not initialized')
-    return this.deps
+  private getApp(): AppService {
+    if (!this.app) throw new Error('ThumbnailScanner not initialized')
+    return this.app
   }
 
   async generateThumbnailsForFile(fileRecord: FileRecord): Promise<void> {
@@ -162,10 +139,10 @@ export class ThumbnailScanner {
       return
     }
 
-    const deps = this.getDeps()
+    const app = this.getApp()
     this.processingFiles.add(fileRecord.id)
     try {
-      const sourceUri = await deps.getFsFileUri({
+      const sourceUri = await app.fs.getFileUri({
         id: fileRecord.id,
         type: fileRecord.type,
       })
@@ -176,10 +153,7 @@ export class ThumbnailScanner {
         return
       }
 
-      const existingSizes = await queryThumbnailSizesForFileId(
-        deps.db,
-        fileRecord.id,
-      )
+      const existingSizes = await app.thumbnails.getSizesForFile(fileRecord.id)
       const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
       if (missingSizes.length === 0) {
         logger.debug('generateThumbnailsForFile', 'all_exist', {
@@ -222,19 +196,15 @@ export class ThumbnailScanner {
   async ensureThumbnailForSize(
     params: EnsureThumbnailParams,
   ): Promise<EnsureResult> {
-    const deps = this.getDeps()
+    const app = this.getApp()
     const { fileId, fileHash, fileType, size, sourceUri } = params
 
-    const exactExists = await queryThumbnailExistsForFileIdAndSize(
-      deps.db,
-      fileId,
-      size,
-    )
+    const exactExists = await app.thumbnails.existsForFileAndSize(fileId, size)
     if (exactExists) {
       return { status: 'exists' }
     }
 
-    const detectedType = await deps.detectMimeType(sourceUri)
+    const detectedType = await app.fs.detectMimeType(sourceUri)
     const actualType = detectedType ?? fileType
 
     if (detectedType && detectedType !== fileType) {
@@ -272,15 +242,9 @@ export class ThumbnailScanner {
     let result: { data: ArrayBuffer; mimeType: string }
     try {
       if (actualType?.startsWith('video/')) {
-        result = await deps.thumbnailAdapter.generateVideoThumbnail(
-          sourceUri,
-          size,
-        )
+        result = await app.thumbnails.generateVideo(sourceUri, size)
       } else {
-        result = await deps.thumbnailAdapter.generateImageThumbnail(
-          sourceUri,
-          size,
-        )
+        result = await app.thumbnails.generate(sourceUri, size)
       }
     } catch (e) {
       logger.error('thumbnailer', 'source_prepare_error', {
@@ -302,10 +266,10 @@ export class ThumbnailScanner {
         id: thumbId,
         type: result.mimeType,
       }
-      const copied = await deps.copyToFs(thumbFileInfo, result.data)
+      const copied = await app.fs.writeFileData(thumbFileInfo, result.data)
 
       const now = Date.now()
-      await insertFileRecord(deps.db, {
+      await app.files.create({
         id: thumbId,
         name: 'thumbnail.webp',
         type: result.mimeType,
@@ -327,7 +291,8 @@ export class ThumbnailScanner {
         size,
       })
 
-      await deps.invalidateCache?.(fileId)
+      await app.caches.thumbnails.byFileId.invalidate(fileId)
+      await app.caches.thumbnails.best.invalidate(fileId, String(size))
 
       return {
         status: 'produced',
@@ -358,10 +323,10 @@ export class ThumbnailScanner {
     sizes: ThumbSize[]
     sourceUri: string
   }): Promise<void> {
-    const deps = this.getDeps()
+    const app = this.getApp()
     const { fileId, fileHash, fileType, sizes, sourceUri } = params
 
-    const detectedType = await deps.detectMimeType(sourceUri)
+    const detectedType = await app.fs.detectMimeType(sourceUri)
     const actualType = detectedType ?? fileType
 
     if (
@@ -374,10 +339,7 @@ export class ThumbnailScanner {
 
     let thumbnails: Map<number, { data: ArrayBuffer; mimeType: string }>
     try {
-      thumbnails = await deps.thumbnailAdapter.generateImageThumbnails(
-        sourceUri,
-        sizes,
-      )
+      thumbnails = await app.thumbnails.generateBatch(sourceUri, sizes)
     } catch (e) {
       logger.error('thumbnailer', 'batch_generate_error', {
         fileId,
@@ -394,12 +356,12 @@ export class ThumbnailScanner {
       if (!result) continue
       try {
         const thumbId = uniqueId()
-        const copied = await deps.copyToFs(
+        const copied = await app.fs.writeFileData(
           { id: thumbId, type: result.mimeType },
           result.data,
         )
         const now = Date.now()
-        await insertFileRecord(deps.db, {
+        await app.files.create({
           id: thumbId,
           name: 'thumbnail.webp',
           type: result.mimeType,
@@ -420,7 +382,8 @@ export class ThumbnailScanner {
           hash: fileHash,
           size,
         })
-        await deps.invalidateCache?.(fileId)
+        await app.caches.thumbnails.byFileId.invalidate(fileId)
+        await app.caches.thumbnails.best.invalidate(fileId, String(size))
       } catch (e) {
         logger.error('thumbnailer', 'batch_save_error', {
           fileId,
@@ -436,39 +399,15 @@ export class ThumbnailScanner {
   private async queryCandidateOriginals(
     limit: number,
     excludeIds?: Set<string>,
-  ): Promise<CandidateRow[]> {
-    const deps = this.getDeps()
-    const results: CandidateRow[] = []
+  ): Promise<ThumbnailCandidateRow[]> {
+    const app = this.getApp()
+    const results: ThumbnailCandidateRow[] = []
     const seenIds = excludeIds ?? new Set<string>()
-    let cursor: CandidateCursor | undefined
+    let cursor: { createdAt: number; id: string } | undefined
     const pageSize = Math.max(limit, 25)
 
     while (results.length < limit) {
-      const params: (string | number)[] = []
-      const cursorClause = cursor
-        ? `AND (f.createdAt < ? OR (f.createdAt = ? AND f.id < ?))`
-        : ''
-      if (cursor) {
-        params.push(cursor.createdAt, cursor.createdAt, cursor.id)
-      }
-      params.push(pageSize)
-
-      const batch = await deps.db.getAllAsync<CandidateRow>(
-        `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
-         FROM files f
-         LEFT JOIN files t
-           ON t.thumbForId = f.id
-          AND t.thumbSize IN (${ThumbSizes.join(',')})
-         WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
-           AND f.kind = 'file'
-           AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-           ${cursorClause}
-         GROUP BY f.id
-         HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
-         ORDER BY f.createdAt DESC, f.id DESC
-         LIMIT ?`,
-        ...params,
-      )
+      const batch = await app.thumbnails.queryCandidatePage(pageSize, cursor)
 
       if (batch.length === 0) break
 
@@ -488,16 +427,9 @@ export class ThumbnailScanner {
   }
 
   private async logOverallProgress(): Promise<void> {
-    const deps = this.getDeps()
+    const app = this.getApp()
     try {
-      const originalsRow = await deps.db.getFirstAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
-      )
-      const thumbsRow = await deps.db.getFirstAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND deletedAt IS NULL AND thumbSize IN (${ThumbSizes.join(',')})`,
-      )
-      const originals = originalsRow?.count ?? 0
-      const thumbs = thumbsRow?.count ?? 0
+      const { originals, thumbs } = await app.thumbnails.queryProgress()
       const targetThumbs = originals * ThumbSizes.length
       const remaining = Math.max(targetThumbs - thumbs, 0)
       const percent = targetThumbs > 0 ? Math.min(1, thumbs / targetThumbs) : 1
@@ -516,7 +448,7 @@ export class ThumbnailScanner {
   }
 
   async runScan(signal?: AbortSignal): Promise<ThumbnailScannerResult> {
-    const deps = this.getDeps()
+    const app = this.getApp()
     const summary: ThumbnailScannerResult = {
       processedCandidates: 0,
       attempts: [],
@@ -553,10 +485,7 @@ export class ThumbnailScanner {
 
           summary.processedCandidates += 1
           // Determine missing sizes for this original so we don't attempt existing ones.
-          const existingSizes = await queryThumbnailSizesForFileId(
-            deps.db,
-            c.id,
-          )
+          const existingSizes = await app.thumbnails.getSizesForFile(c.id)
           const missingSizes = ThumbSizes.filter(
             (s) => !existingSizes.includes(s),
           )
@@ -566,7 +495,7 @@ export class ThumbnailScanner {
           }
 
           // Check if we can get source URI before attempting sizes.
-          const sourceUri = await deps.getFsFileUri({
+          const sourceUri = await app.fs.getFileUri({
             id: c.id,
             type: c.type,
           })
