@@ -1,5 +1,4 @@
-import type { LogRow } from '@siastorage/core/db/operations'
-import * as ops from '@siastorage/core/db/operations'
+import { swrCacheBy } from '@siastorage/core/stores'
 import {
   type LogEntry,
   type LogLevel,
@@ -7,24 +6,12 @@ import {
   serializeData,
   setLogAppender,
 } from '@siastorage/logger'
-import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
-import { db, dbInitialized } from '../db'
-import { insert } from '../db/sql'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import { getAsyncStorageString, setAsyncStorageString } from './asyncStore'
+import useSWR from 'swr'
+import { app } from './appService'
 
-export type LogsState = {
-  logLevel: LogLevel
-  logScopes: string[]
-}
-
-export const useLogsStore = create<LogsState>(() => ({
-  logLevel: 'debug',
-  logScopes: [],
-}))
-
-const { setState } = useLogsStore
+const cache = swrCacheBy()
+let logLevel: LogLevel = 'debug'
+let logScopes: string[] = []
 
 let hasInit = false
 
@@ -33,50 +20,45 @@ export async function initLogger(): Promise<void> {
     return
   }
 
-  // Register the log appender to persist logs to the database.
   setLogAppender(appendLogToDb)
-
-  // Now we can log.
   logger.info('logs', 'init')
 
-  // Init state with stored values.
   const storedLevel = await getLogLevel()
-  const storedScopes = await getLogScopes()
-  setState((state) => {
-    return {
-      ...state,
-      logLevel: storedLevel,
-      logScopes: storedScopes,
-    }
-  })
+  const storedScopes = await app().settings.getLogScopes()
+  logLevel = storedLevel
+  logScopes = storedScopes
+  cache.invalidate('level')
+  cache.invalidate('scopes')
 
   hasInit = true
 }
 
-async function fetchAvailableScopes(): Promise<string[]> {
-  try {
-    if (!dbInitialized) return []
-    return ops.queryAvailableLogScopes(db())
-  } catch (error) {
-    console.error('[logs] Failed to get scopes:', error)
-    return []
-  }
+export function useAvailableScopes() {
+  return useSWR(cache.key('availableScopes'), () =>
+    app().logs.availableScopes(),
+  )
 }
 
-export const [getAvailableScopes, useAvailableScopes] =
-  createGetterAndSWRHook<string[]>(fetchAvailableScopes)
-
 export function useLogLevel(): LogLevel {
-  return useLogsStore(useShallow((s) => s.logLevel))
+  const { data } = useSWR(cache.key('level'), () => logLevel)
+  return data ?? 'debug'
 }
 
 export function useLogScopes(): string[] {
-  return useLogsStore(useShallow((s) => s.logScopes))
+  const { data } = useSWR(cache.key('scopes'), () => logScopes)
+  return data ?? []
 }
 
-// Get the log level from async storage.
+export function getLogLevelSync(): LogLevel {
+  return logLevel
+}
+
+export function getLogScopesSync(): string[] {
+  return logScopes
+}
+
 export async function getLogLevel(): Promise<LogLevel> {
-  const stored = await getAsyncStorageString('logLevel', 'debug')
+  const stored = await app().settings.getLogLevel()
   if (
     stored === 'debug' ||
     stored === 'info' ||
@@ -88,64 +70,47 @@ export async function getLogLevel(): Promise<LogLevel> {
   return 'debug'
 }
 
-// Set the log level in both async storage and store state.
 export async function setLogLevel(value: LogLevel): Promise<void> {
-  await setAsyncStorageString('logLevel', value)
-  setState((state) => {
-    return { ...state, logLevel: value }
-  })
+  await app().settings.setLogLevel(value)
+  logLevel = value
+  cache.invalidate('level')
 }
 
-// Get the log scopes from async storage.
-export async function getLogScopes(): Promise<string[]> {
-  const stored = await getAsyncStorageString<string>('logScopes', '')
-  if (!stored) {
-    return []
-  }
-  return stored
-    .split(',')
-    .map((s: string) => s.trim())
-    .filter(Boolean)
-}
-
-// Set the log scopes in both async storage and store state.
 export async function setLogScopes(value: string[]): Promise<void> {
-  const valueStr = value.join(',')
-  await setAsyncStorageString<string>('logScopes', valueStr)
-  setState((state) => {
-    return { ...state, logScopes: value }
-  })
+  await app().settings.setLogScopes(value)
+  logScopes = value
+  cache.invalidate('scopes')
 }
 
-// Toggle a scope in the filter.
 export async function toggleLogScope(scope: string): Promise<void> {
-  const current = await getLogScopes()
+  const current = await app().settings.getLogScopes()
   const newScopes = current.includes(scope)
     ? current.filter((s) => s !== scope)
     : [...current, scope]
   await setLogScopes(newScopes)
 }
 
-/** Append log entry directly to database (internal, registered as appender). */
 async function appendLogToDb(entry: LogEntry): Promise<void> {
   try {
-    if (!dbInitialized) {
-      return
-    }
-    await insert('logs', {
+    await app().logs.append({
       timestamp: entry.timestamp,
       level: entry.level,
       scope: entry.scope,
       message: entry.message,
       data: serializeData(entry.data),
-      createdAt: Date.now(),
     })
   } catch (error) {
     console.warn('[logs] Failed to append log:', error)
   }
 }
 
-function parseLogRow(row: LogRow): LogEntry {
+function parseLogRow(row: {
+  timestamp: string
+  level: string
+  scope: string
+  message: string
+  data: string | null
+}): LogEntry {
   let data: Record<string, unknown> | undefined
   if (row.data) {
     try {
@@ -167,10 +132,7 @@ export async function readLogs(
   limit?: number,
 ): Promise<LogEntry[]> {
   try {
-    if (!dbInitialized) {
-      return []
-    }
-    const rows = await ops.queryLogs(db(), { logLevel, logScopes, limit })
+    const rows = await app().logs.read({ logLevel, logScopes, limit })
     return rows.map(parseLogRow)
   } catch (error) {
     console.error('[logs] Failed to read logs:', error)
@@ -183,17 +145,13 @@ export async function countLogs(
   logScopes?: string[],
 ): Promise<number> {
   try {
-    if (!dbInitialized) {
-      return 0
-    }
-    return ops.queryLogCount(db(), { logLevel, logScopes })
+    return await app().logs.count({ logLevel, logScopes })
   } catch (error) {
     console.error('[logs] Failed to count logs:', error)
     return 0
   }
 }
 
-/** Extract unique scopes from entries. */
 export function extractScopes(entries: LogEntry[]): string[] {
   const scopes = new Set<string>()
   for (const entry of entries) {
@@ -204,10 +162,7 @@ export function extractScopes(entries: LogEntry[]): string[] {
 
 export async function clearLogs(): Promise<void> {
   try {
-    if (!dbInitialized) {
-      return
-    }
-    await ops.deleteAllLogs(db())
+    await app().logs.clear()
   } catch (error) {
     console.error('[logs] Failed to clear logs:', error)
     throw error

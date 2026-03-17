@@ -2,18 +2,15 @@ import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { File, Paths } from 'expo-file-system'
 import { queueUploadForFileId } from '../managers/uploader'
-import { createFileRecord, readFileRecordByContentHash } from '../stores/files'
+import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
-import { readLogs, useLogsStore } from '../stores/logs'
+import { getLogLevelSync, getLogScopesSync, readLogs } from '../stores/logs'
 import { calculateContentHash } from './contentHash'
 
 /** Export logs to a library file. */
 export async function exportLogs(): Promise<string | null> {
   try {
-    // Get current filter state.
-    const state = useLogsStore.getState()
-    // Read logs from database with current filters applied.
-    const logs = await readLogs(state.logLevel, state.logScopes)
+    const logs = await readLogs(getLogLevelSync(), getLogScopesSync())
     if (logs.length === 0) {
       return null
     }
@@ -55,7 +52,7 @@ export async function exportLogs(): Promise<string | null> {
     // Copy temp file to FS storage.
     const fsFileUri = await copyFileToFs(
       { id: fileId, type: 'application/x-ndjson' },
-      tempFile,
+      tempFile.uri,
     )
 
     // Clean up temp file.
@@ -68,14 +65,14 @@ export async function exportLogs(): Promise<string | null> {
     }
 
     // Check for duplicates.
-    const existingFile = await readFileRecordByContentHash(hash)
+    const existingFile = await app().files.getByContentHash(hash)
     if (existingFile) {
       return existingFile.id
     }
 
     // Create file record.
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: fileId,
       name: fileName,
       type: 'application/x-ndjson',

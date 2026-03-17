@@ -1,24 +1,9 @@
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
-import {
-  createFileRecordWithLocalObject,
-  type FileRecord,
-  updateFileRecord,
-} from '../stores/files'
-import {
-  getSyncUpCursor,
-  runSyncUpMetadata,
-  setSyncUpCursor,
-} from './syncUpMetadata'
+import { app, internal } from '../stores/appService'
+import { runSyncUpMetadata } from './syncUpMetadata'
 
-jest.mock('../stores/sdk', () => ({
-  getIsConnected: jest.fn(),
-  getPinnedObject: jest.fn(),
-  getSdk: jest.fn(),
-}))
-jest.mock('../stores/settings', () => ({
-  getIndexerURL: jest.fn(),
-}))
 jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
   decodeFileMetadata: jest.fn(),
   encodeFileMetadata: jest.fn(),
@@ -47,33 +32,34 @@ function makeLocalObject(params: {
 }
 
 describe('syncUpMetadata', () => {
-  const sdk = require('../stores/sdk') as jest.Mocked<any>
-  const settings = require('../stores/settings') as jest.Mocked<any>
   const meta =
     require('@siastorage/core/encoding/fileMetadata') as jest.Mocked<any>
   const INDEXER_URL = 'indexer-url'
   const NOW_BASE = 400
   const mockUpdateObjectMetadata = jest.fn()
   const mockDeleteObject = jest.fn()
+  const mockGetPinnedObject = jest.fn()
 
   beforeEach(async () => {
     await initializeDB()
     jest.clearAllMocks()
-    settings.getIndexerURL.mockResolvedValue(INDEXER_URL)
-    await setSyncUpCursor(undefined)
-    sdk.getIsConnected.mockReturnValue(true)
-    sdk.getSdk.mockReturnValue({
+    await app().settings.setIndexerURL(INDEXER_URL)
+    await app().sync.setSyncUpCursor(undefined)
+    app().connection.setState({ isConnected: true })
+    internal().setSdk({
       updateObjectMetadata: mockUpdateObjectMetadata,
       deleteObject: mockDeleteObject,
-    })
+      getPinnedObject: mockGetPinnedObject,
+    } as any)
   })
 
   afterEach(async () => {
+    internal().setSdk(null)
     await resetDb()
   })
 
   test('updates files where local is newer, skips files where remote is newer', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     // File A: local updatedAt=200, remote updatedAt=150 -> LOCAL NEWER -> should UPDATE
     const localA: Omit<FileRecord, 'objects'> = {
@@ -92,7 +78,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       localA,
       makeLocalObject({
         fileId: localA.id,
@@ -120,7 +106,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       localB,
       makeLocalObject({
         fileId: localB.id,
@@ -131,7 +117,7 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    sdk.getPinnedObject.mockImplementation(async (_objectId: string) => {
+    mockGetPinnedObject.mockImplementation(async (_objectId: string) => {
       return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
     })
 
@@ -170,15 +156,15 @@ describe('syncUpMetadata', () => {
   })
 
   test('early exit when disconnected', async () => {
-    sdk.getIsConnected.mockReturnValue(false)
+    app().connection.setState({ isConnected: false })
     await runSyncUpMetadata(5)
     expect(true).toBe(true)
   })
 
   test('cursor reset when no items', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
     await runSyncUpMetadata(5)
-    const cur = await getSyncUpCursor()
+    const cur = await app().sync.getSyncUpCursor()
     expect(cur).toBeUndefined()
   })
 
@@ -201,7 +187,7 @@ describe('syncUpMetadata', () => {
         trashedAt: null,
         deletedAt: null,
       }
-      await createFileRecordWithLocalObject(
+      await app().files.create(
         file,
         makeLocalObject({
           fileId: file.id,
@@ -213,7 +199,7 @@ describe('syncUpMetadata', () => {
       )
     }
 
-    sdk.getPinnedObject.mockResolvedValue({
+    mockGetPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
       updateMetadata: jest.fn(),
     })
@@ -231,7 +217,7 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(batchSize)
 
-    const cur = await getSyncUpCursor()
+    const cur = await app().sync.getSyncUpCursor()
     expect(cur).toEqual({
       updatedAt: NOW_BASE + (batchSize - 1),
       id: `file-${batchSize - 1}`,
@@ -258,7 +244,7 @@ describe('syncUpMetadata', () => {
         trashedAt: null,
         deletedAt: null,
       }
-      await createFileRecordWithLocalObject(
+      await app().files.create(
         file,
         makeLocalObject({
           fileId: file.id,
@@ -270,7 +256,7 @@ describe('syncUpMetadata', () => {
       )
     }
 
-    sdk.getPinnedObject.mockResolvedValue({
+    mockGetPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
       updateMetadata: jest.fn(),
     })
@@ -288,14 +274,14 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(batchSize)
 
-    const cur = await getSyncUpCursor()
+    const cur = await app().sync.getSyncUpCursor()
     expect(cur).toEqual({
       updatedAt: NOW_BASE + count,
       id: `file-${count - 1}`,
     })
   })
   test('skips files at or before cursor updatedAt', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
     const batchSize = 10
 
     const records: Omit<FileRecord, 'objects'>[] = [
@@ -350,7 +336,7 @@ describe('syncUpMetadata', () => {
     ]
 
     for (const record of records) {
-      await createFileRecordWithLocalObject(
+      await app().files.create(
         record,
         makeLocalObject({
           fileId: record.id,
@@ -362,7 +348,7 @@ describe('syncUpMetadata', () => {
       )
     }
 
-    await setSyncUpCursor({ updatedAt: NOW_BASE + 1, id: 'file-1' })
+    await app().sync.setSyncUpCursor({ updatedAt: NOW_BASE + 1, id: 'file-1' })
 
     const remoteNewer = {
       name: 'name-2',
@@ -379,12 +365,12 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(batchSize)
 
-    expect(sdk.getPinnedObject).toHaveBeenCalledTimes(1)
-    expect(sdk.getPinnedObject).toHaveBeenCalledWith('obj-file-2')
+    expect(mockGetPinnedObject).toHaveBeenCalledTimes(1)
+    expect(mockGetPinnedObject).toHaveBeenCalledWith('obj-file-2')
   })
 
   test('pushes local id when remote id differs', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const localFile: Omit<FileRecord, 'objects'> = {
       id: 'local-id',
@@ -402,7 +388,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       localFile,
       makeLocalObject({
         fileId: localFile.id,
@@ -413,7 +399,7 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    sdk.getPinnedObject.mockResolvedValue({
+    mockGetPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
       updateMetadata: jest.fn(),
     })
@@ -441,7 +427,7 @@ describe('syncUpMetadata', () => {
   })
 
   test('skips all work when signal is already aborted', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-0',
@@ -459,7 +445,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -474,11 +460,11 @@ describe('syncUpMetadata', () => {
     ac.abort()
     await runSyncUpMetadata(5, ac.signal)
 
-    expect(sdk.getPinnedObject).not.toHaveBeenCalled()
+    expect(mockGetPinnedObject).not.toHaveBeenCalled()
   })
 
   test('stops fetching objects when signal is aborted mid-batch', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     for (let i = 0; i < 5; i++) {
       const file: Omit<FileRecord, 'objects'> = {
@@ -497,7 +483,7 @@ describe('syncUpMetadata', () => {
         trashedAt: null,
         deletedAt: null,
       }
-      await createFileRecordWithLocalObject(
+      await app().files.create(
         file,
         makeLocalObject({
           fileId: file.id,
@@ -511,7 +497,7 @@ describe('syncUpMetadata', () => {
 
     const ac = new AbortController()
     let callCount = 0
-    sdk.getPinnedObject.mockImplementation(async () => {
+    mockGetPinnedObject.mockImplementation(async () => {
       callCount++
       if (callCount >= 2) ac.abort()
       return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
@@ -530,11 +516,11 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(5, ac.signal)
 
-    expect(sdk.getPinnedObject).toHaveBeenCalledTimes(2)
+    expect(mockGetPinnedObject).toHaveBeenCalledTimes(2)
   })
 
   test('pushes local id when pushing field changes with different remote id', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const localFile: Omit<FileRecord, 'objects'> = {
       id: 'local-id',
@@ -552,7 +538,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       localFile,
       makeLocalObject({
         fileId: localFile.id,
@@ -563,7 +549,7 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    sdk.getPinnedObject.mockResolvedValue({
+    mockGetPinnedObject.mockResolvedValue({
       metadata: () => new ArrayBuffer(0),
       updateMetadata: jest.fn(),
     })
@@ -589,7 +575,7 @@ describe('syncUpMetadata', () => {
   })
 
   test('syncUp calls deleteObject for tombstoned files', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-tomb',
@@ -607,7 +593,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -617,9 +603,13 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
-      includeUpdatedAt: false,
-    })
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      {
+        includeUpdatedAt: false,
+        skipInvalidation: true,
+      },
+    )
 
     mockDeleteObject.mockResolvedValue(undefined)
 
@@ -629,7 +619,7 @@ describe('syncUpMetadata', () => {
   })
 
   test('syncUp advances cursor after successful deleteObject for tombstoned files', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-tomb2',
@@ -647,7 +637,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -657,20 +647,24 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
-      includeUpdatedAt: false,
-    })
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      {
+        includeUpdatedAt: false,
+        skipInvalidation: true,
+      },
+    )
 
     mockDeleteObject.mockResolvedValue(undefined)
 
     await runSyncUpMetadata(5)
 
-    const cur = await getSyncUpCursor()
+    const cur = await app().sync.getSyncUpCursor()
     expect(cur).toBeDefined()
   })
 
   test('syncUp stalls on network error for tombstoned file', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-tomb3',
@@ -688,7 +682,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -698,20 +692,24 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
-      includeUpdatedAt: false,
-    })
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      {
+        includeUpdatedAt: false,
+        skipInvalidation: true,
+      },
+    )
 
     mockDeleteObject.mockRejectedValue(new Error('network error'))
 
     await runSyncUpMetadata(5)
 
-    const cur = await getSyncUpCursor()
+    const cur = await app().sync.getSyncUpCursor()
     expect(cur).toBeUndefined()
   })
 
   test('syncUp skips metadata path and only calls deleteObject for tombstoned files', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
 
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-tomb4',
@@ -729,7 +727,7 @@ describe('syncUpMetadata', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -739,21 +737,25 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
-      includeUpdatedAt: false,
-    })
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      {
+        includeUpdatedAt: false,
+        skipInvalidation: true,
+      },
+    )
 
     mockDeleteObject.mockResolvedValue(undefined)
 
     await runSyncUpMetadata(5)
 
-    expect(sdk.getPinnedObject).not.toHaveBeenCalled()
+    expect(mockGetPinnedObject).not.toHaveBeenCalled()
     expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
     expect(mockDeleteObject).toHaveBeenCalledWith('obj-tomb4')
   })
 
   test('tombstoned file with object on another indexer leaves that object row dangling', async () => {
-    sdk.getIsConnected.mockReturnValue(true)
+    app().connection.setState({ isConnected: true })
     const OTHER_INDEXER = 'other-indexer-url'
 
     const file: Omit<FileRecord, 'objects'> = {
@@ -774,7 +776,7 @@ describe('syncUpMetadata', () => {
     }
 
     // Create file with objects on both the current indexer and another indexer.
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -784,8 +786,7 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    const { upsertLocalObject } = require('../stores/localObjects')
-    await upsertLocalObject(
+    await app().localObjects.upsert(
       makeLocalObject({
         fileId: file.id,
         objectId: 'obj-other',
@@ -793,13 +794,16 @@ describe('syncUpMetadata', () => {
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
       }),
-      false,
     )
 
     // Tombstone the file.
-    await updateFileRecord({ id: file.id, deletedAt: Date.now() }, false, {
-      includeUpdatedAt: false,
-    })
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      {
+        includeUpdatedAt: false,
+        skipInvalidation: true,
+      },
+    )
 
     mockDeleteObject.mockResolvedValue(undefined)
     await runSyncUpMetadata(5)
@@ -812,8 +816,7 @@ describe('syncUpMetadata', () => {
     // limitation: we can only connect to one indexer at a time, so we
     // can't delete objects on other indexers. A future cleanup service
     // is needed to handle this (see TODO in syncUpMetadata.ts).
-    const { readLocalObjectsForFile } = require('../stores/localObjects')
-    const remaining = await readLocalObjectsForFile(file.id)
+    const remaining = await app().localObjects.getForFile(file.id)
     expect(remaining).toHaveLength(1)
     expect(remaining[0].id).toBe('obj-other')
     expect(remaining[0].indexerURL).toBe(OTHER_INDEXER)

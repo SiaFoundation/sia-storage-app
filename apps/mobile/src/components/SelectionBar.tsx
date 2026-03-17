@@ -9,13 +9,12 @@ import {
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
-import { trashFiles } from '../lib/deleteFile'
 import { fetchBulkCounts, fileHasASealedObject } from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile } from '../managers/downloader'
 import { queueUploadForFileId } from '../managers/uploader'
+import { app } from '../stores/appService'
 import { useSelectedCount, useSelectedFileIds } from '../stores/fileSelection'
-import { getFsFileUri } from '../stores/fs'
 import { openSheet } from '../stores/sheets'
 import { palette } from '../styles/colors'
 import { BottomControlBar, iconColors } from './BottomControlBar'
@@ -36,7 +35,7 @@ export function SelectionBar({
   const toast = useToast()
 
   const disabled = selectedCount === 0
-  const ids = useMemo(() => Array.from(selectedFileIds), [selectedFileIds])
+  const ids = selectedFileIds
 
   const { data: counts } = useSWR(
     ids.length > 0 ? ['selectionCounts', ...ids] : null,
@@ -56,7 +55,7 @@ export function SelectionBar({
     try {
       for (const file of counts.files) {
         const hasSealed = fileHasASealedObject(file)
-        const uri = await getFsFileUri(file)
+        const uri = await app().fs.getFileUri(file)
         if (hasSealed && !uri) {
           void downloadFile(file)
         }
@@ -76,7 +75,7 @@ export function SelectionBar({
     try {
       for (const file of counts.files) {
         const hasSealed = fileHasASealedObject(file)
-        const uri = await getFsFileUri(file)
+        const uri = await app().fs.getFileUri(file)
         if (uri && !hasSealed) {
           queueUploadForFileId(file.id)
         }
@@ -94,7 +93,7 @@ export function SelectionBar({
   const handleTrash = useCallback(async () => {
     if (!counts) return
     try {
-      await trashFiles(counts.files.map((f) => f.id))
+      await app().files.trash(counts.files.map((f) => f.id))
       toast.show(`Moved ${counts.total} files to trash`)
       onComplete?.()
     } catch (e) {

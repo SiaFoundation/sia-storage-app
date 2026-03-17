@@ -1,34 +1,5 @@
-import type { FileCleanupDeps } from '@siastorage/core/db/operations'
-import * as ops from '@siastorage/core/db/operations'
-import { db } from '../db'
-import type { FileRecord } from '../stores/files'
-import { removeFsFile } from '../stores/fs'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
-import { removeTempDownloadFile } from '../stores/tempFs'
-import { removeUploads } from '../stores/uploads'
-
-const cleanupDeps: FileCleanupDeps = {
-  removeFile: async (f) => {
-    await removeFsFile(f)
-    await removeTempDownloadFile(f)
-  },
-  removeUploads,
-}
-
-export async function trashFiles(fileIds: string[]): Promise<void> {
-  await ops.trashFiles(db(), fileIds)
-  invalidateCacheLibraryAllStats()
-  invalidateCacheLibraryLists()
-}
-
-export async function restoreFiles(fileIds: string[]): Promise<void> {
-  await ops.restoreFiles(db(), fileIds)
-  invalidateCacheLibraryAllStats()
-  invalidateCacheLibraryLists()
-}
+import type { FileRecord } from '@siastorage/core/types'
+import { app } from '../stores/appService'
 
 export async function permanentlyDeleteFile(file: FileRecord) {
   await permanentlyDeleteFiles([file])
@@ -38,13 +9,9 @@ export async function permanentlyDeleteFiles(
   files: FileRecord[],
 ): Promise<void> {
   if (files.length === 0) return
-  await ops.permanentlyDeleteFilesWithCleanup(db(), files, cleanupDeps)
-  invalidateCacheLibraryAllStats()
-  invalidateCacheLibraryLists()
+  await app().files.permanentlyDeleteWithCleanup(files)
 }
 
 export async function autoPurgeOldTrashedFiles() {
-  await ops.autoPurgeOldTrashedFilesWithCleanup(db(), cleanupDeps)
-  invalidateCacheLibraryAllStats()
-  invalidateCacheLibraryLists()
+  await app().files.autoPurgeWithCleanup()
 }

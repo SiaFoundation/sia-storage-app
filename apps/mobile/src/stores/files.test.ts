@@ -1,35 +1,13 @@
 import { initializeDB, resetDb } from '../db'
-import {
-  createFileRecord,
-  createManyFileRecords,
-  deleteFileRecord,
-  readFileRecord,
-  updateFileRecord,
-} from './files'
+import { app } from './appService'
 
-jest.mock('./librarySwr', () => ({
-  libraryStats: {
-    key: jest.fn((...parts: string[]) => [`mock/${parts.join('/')}`]),
-    invalidateAll: jest.fn(),
-  },
-  invalidateCacheLibraryAllStats: jest.fn(),
-  invalidateCacheLibraryLists: jest.fn(),
-}))
-
-const { invalidateCacheLibraryAllStats, invalidateCacheLibraryLists } =
-  require('./librarySwr') as {
-    invalidateCacheLibraryAllStats: jest.Mock
-    invalidateCacheLibraryLists: jest.Mock
-  }
-
-describe('files store (mobile wrappers)', () => {
+describe('files store (core functions with appService)', () => {
   beforeEach(async () => {
     await initializeDB()
   })
 
   afterEach(async () => {
     await resetDb()
-    jest.clearAllMocks()
   })
 
   function makeFileRecord(id: string) {
@@ -49,66 +27,44 @@ describe('files store (mobile wrappers)', () => {
     }
   }
 
-  test('createFileRecord invalidates stats and lists', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    expect(invalidateCacheLibraryAllStats).toHaveBeenCalled()
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+  test('createFileRecord persists record', async () => {
+    await app().files.create(makeFileRecord('f1'))
+    const record = await app().files.getById('f1')
+    expect(record).not.toBeNull()
+    expect(record!.name).toBe('f1.jpg')
   })
 
-  test('createFileRecord skips invalidation when triggerUpdate=false', async () => {
-    await createFileRecord(makeFileRecord('f1'), false)
-    expect(invalidateCacheLibraryAllStats).not.toHaveBeenCalled()
-    expect(invalidateCacheLibraryLists).not.toHaveBeenCalled()
+  test('createManyFileRecords persists multiple records', async () => {
+    await app().files.createMany([makeFileRecord('f1'), makeFileRecord('f2')])
+    expect(await app().files.getById('f1')).not.toBeNull()
+    expect(await app().files.getById('f2')).not.toBeNull()
   })
 
-  test('createManyFileRecords invalidates on non-empty', async () => {
-    await createManyFileRecords([makeFileRecord('f1'), makeFileRecord('f2')])
-    expect(invalidateCacheLibraryAllStats).toHaveBeenCalled()
+  test('createManyFileRecords handles empty array', async () => {
+    await app().files.createMany([])
   })
 
-  test('createManyFileRecords skips invalidation on empty', async () => {
-    await createManyFileRecords([])
-    expect(invalidateCacheLibraryAllStats).not.toHaveBeenCalled()
-  })
-
-  test('updateFileRecord invalidates library lists', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    jest.clearAllMocks()
-    await updateFileRecord({ id: 'f1', name: 'renamed.jpg' })
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
-  })
-
-  test('updateFileRecord skips invalidation when triggerUpdate=false', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    jest.clearAllMocks()
-    await updateFileRecord({ id: 'f1', name: 'renamed.jpg' }, false)
-    expect(invalidateCacheLibraryLists).not.toHaveBeenCalled()
+  test('updateFileRecord modifies record', async () => {
+    await app().files.create(makeFileRecord('f1'))
+    await app().files.update({ id: 'f1', name: 'renamed.jpg' })
+    const record = await app().files.getById('f1')
+    expect(record!.name).toBe('renamed.jpg')
   })
 
   test('updateFileRecord passes includeUpdatedAt option', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    await updateFileRecord(
+    await app().files.create(makeFileRecord('f1'))
+    await app().files.update(
       { id: 'f1', updatedAt: 9999, name: 'updated.jpg' },
-      false,
-      { includeUpdatedAt: true },
+      { includeUpdatedAt: true, skipInvalidation: true },
     )
-    const record = await readFileRecord('f1')
+    const record = await app().files.getById('f1')
     expect(record!.updatedAt).toBe(9999)
   })
 
-  test('deleteFileRecord invalidates stats and lists', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    jest.clearAllMocks()
-    await deleteFileRecord('f1')
-    expect(invalidateCacheLibraryAllStats).toHaveBeenCalled()
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
-  })
-
-  test('deleteFileRecord skips invalidation when triggerUpdate=false', async () => {
-    await createFileRecord(makeFileRecord('f1'))
-    jest.clearAllMocks()
-    await deleteFileRecord('f1', false)
-    expect(invalidateCacheLibraryAllStats).not.toHaveBeenCalled()
-    expect(invalidateCacheLibraryLists).not.toHaveBeenCalled()
+  test('deleteFileRecord removes record', async () => {
+    await app().files.create(makeFileRecord('f1'))
+    await app().files.delete('f1')
+    const record = await app().files.getById('f1')
+    expect(record).toBeNull()
   })
 })

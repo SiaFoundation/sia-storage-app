@@ -1,3 +1,4 @@
+import { useAllDirectories } from '@siastorage/core/stores'
 import { CheckIcon, FolderIcon, PlusIcon, XIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -10,7 +11,7 @@ import {
   View,
 } from 'react-native'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
-import { createDirectory, useAllDirectories } from '../stores/directories'
+import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
@@ -72,7 +73,7 @@ export function SelectDirectorySheet({
       const trimmed = name.trim()
       if (!trimmed) return
       try {
-        const dir = await createDirectory(trimmed)
+        const dir = await app().directories.create(trimmed)
         handleSelect(dir.name)
       } catch {
         const existing = dirs.find(

@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useShowAdvanced } from '@siastorage/core/stores'
 import { Switch } from 'react-native'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
@@ -7,11 +8,7 @@ import { SettingsAdvancedTransfers } from '../components/SettingsAdvancedTransfe
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { SettingsSyncPhotos } from '../components/SettingsSyncPhotos'
 import type { MenuStackParamList } from '../stacks/types'
-import {
-  toggleKeepAwake,
-  useKeepAwake,
-  useShowAdvanced,
-} from '../stores/settings'
+import { toggleKeepAwake, useKeepAwake } from '../stores/settings'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Sync'>
 

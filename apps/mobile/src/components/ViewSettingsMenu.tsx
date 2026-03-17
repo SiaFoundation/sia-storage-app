@@ -1,7 +1,10 @@
-import type { Category, SortBy } from '@siastorage/core/db/operations'
+import {
+  ALL_CATEGORIES,
+  type Category,
+  type SortBy,
+} from '@siastorage/core/db/operations'
 import type React from 'react'
 import { useMemo } from 'react'
-import { categories } from '../stores/library'
 import {
   setSortBy,
   setSortDir,
@@ -30,7 +33,7 @@ export function ViewSettingsMenu({
   allowedCategories,
 }: Props) {
   const vs = useViewSettings(scope)
-  const visibleCategories = allowedCategories ?? categories
+  const visibleCategories = allowedCategories ?? ALL_CATEGORIES
 
   const items: MenuItem[] = useMemo(() => {
     const categorySet = new Set(vs.selectedCategories)

@@ -1,16 +1,8 @@
 import { daysInMs } from '@siastorage/core'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
-import {
-  getAsyncStorageNumber,
-  setAsyncStorageNumber,
-} from '../stores/asyncStore'
-import {
-  createFileRecord,
-  createFileRecordWithLocalObject,
-  type FileRecord,
-} from '../stores/files'
-import { readFsFileMetadata, upsertFsFileMetadata } from '../stores/fs'
+import { app } from '../stores/appService'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 
 jest.mock('@siastorage/core/config', () => {
@@ -31,7 +23,7 @@ describe('fsEvictionScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     await initializeDB()
-    await setAsyncStorageNumber('fsEvictionLastRun', 0)
+    await app().storage.setItem('fsEvictionLastRun', '0')
   })
 
   afterEach(async () => {
@@ -47,8 +39,8 @@ describe('fsEvictionScanner', () => {
     })
     const result = await runFsEvictionScanner()
 
-    expect(await readFsFileMetadata('file-1')).toBeDefined()
-    expect(await getAsyncStorageNumber('fsEvictionLastRun', now)).toBe(now)
+    expect(await app().fs.readMeta('file-1')).toBeDefined()
+    expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
     expect(result).toBeUndefined()
   })
 
@@ -65,9 +57,9 @@ describe('fsEvictionScanner', () => {
     })
     const result = await runFsEvictionScanner()
 
-    expect(await readFsFileMetadata('file-2')).toBeDefined()
-    expect(await readFsFileMetadata('file-3')).toBeDefined()
-    expect(await getAsyncStorageNumber('fsEvictionLastRun', now)).toBe(now)
+    expect(await app().fs.readMeta('file-2')).toBeDefined()
+    expect(await app().fs.readMeta('file-3')).toBeDefined()
+    expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
     expect(result).toBeUndefined()
   })
 
@@ -105,17 +97,19 @@ describe('fsEvictionScanner', () => {
     })
     const result = await runFsEvictionScanner()
 
-    expect(result).toEqual({
-      processedRows: 2,
-      evicted: 2,
-      currentSize: 1200,
-    })
-    expect(await readFsFileMetadata('file-1')).toBeDefined()
-    expect(await readFsFileMetadata('file-2')).toBeNull()
-    expect(await readFsFileMetadata('file-3')).toBeDefined()
-    expect(await readFsFileMetadata('file-4')).toBeNull()
-    expect(await readFsFileMetadata('file-5')).toBeDefined()
-    expect(await getAsyncStorageNumber('fsEvictionLastRun', 0)).toBe(now)
+    expect(result).toEqual(
+      expect.objectContaining({
+        processedRows: 2,
+        evicted: 2,
+        currentSize: 1200,
+      }),
+    )
+    expect(await app().fs.readMeta('file-1')).toBeDefined()
+    expect(await app().fs.readMeta('file-2')).toBeNull()
+    expect(await app().fs.readMeta('file-3')).toBeDefined()
+    expect(await app().fs.readMeta('file-4')).toBeNull()
+    expect(await app().fs.readMeta('file-5')).toBeDefined()
+    expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
   })
 })
 
@@ -132,8 +126,8 @@ async function createRemoteFile(params: {
     createdAt: params.usedAt,
     updatedAt: params.usedAt,
   })
-  await createFileRecordWithLocalObject(record, localObject)
-  await upsertFsFileMetadata({
+  await app().files.create(record, localObject)
+  await app().fs.upsertMeta({
     fileId: params.id,
     size: params.size,
     addedAt: params.usedAt,
@@ -146,8 +140,8 @@ async function createLocalOnlyFile(params: {
   size: number
   usedAt: number
 }) {
-  await createFileRecord(makeFileRecord(params.id, params.size))
-  await upsertFsFileMetadata({
+  await app().files.create(makeFileRecord(params.id, params.size))
+  await app().fs.upsertMeta({
     fileId: params.id,
     size: params.size,
     addedAt: params.usedAt,

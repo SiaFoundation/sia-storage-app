@@ -1,52 +1,10 @@
 import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { FileMetadata, FileRecord } from '@siastorage/core/types'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
-import { getAppKeyForIndexer } from '../stores/appKey'
-import {
-  createFileRecordWithLocalObject,
-  type FileMetadata,
-  type FileRecord,
-  readFileRecord,
-  readFileRecordByObjectId,
-  updateFileRecord,
-} from '../stores/files'
-import { removeFsFile } from '../stores/fs'
-import {
-  readLocalObjectsForFile,
-  upsertLocalObject,
-} from '../stores/localObjects'
-import { getIsConnected, getSdk } from '../stores/sdk'
-import { getIndexerURL } from '../stores/settings'
-import { removeTempDownloadFile } from '../stores/tempFs'
-import { removeUpload } from '../stores/uploads'
-import {
-  getSyncDownCursor,
-  resetSyncDownCursor,
-  setSyncDownCursor,
-  syncDownEvents,
-} from './syncDownEvents'
-
-jest.mock('../stores/sdk', () => ({
-  getIsConnected: jest.fn(),
-  getSdk: jest.fn(),
-}))
-jest.mock('../stores/settings', () => ({
-  getAutoSyncDownEvents: jest.fn(),
-  getIndexerURL: jest.fn(),
-}))
-jest.mock('../stores/fs', () => ({
-  removeFsFile: jest.fn(),
-}))
-jest.mock('../stores/tempFs', () => ({
-  removeTempDownloadFile: jest.fn(),
-}))
-jest.mock('../stores/uploads', () => ({
-  removeUpload: jest.fn(),
-}))
-jest.mock('../stores/appKey', () => ({
-  getAppKeyForIndexer: jest.fn(),
-}))
+import { app, internal } from '../stores/appService'
+import { syncDownEvents } from './syncDownEvents'
 
 function makeLocalObject(params: {
   fileId: string
@@ -115,14 +73,9 @@ function makeObjectEvent(params: {
   }
 }
 
-const getSdkMock = jest.mocked(getSdk)
-const getIndexerURLMock = jest.mocked(getIndexerURL)
-const removeFsFileMock = jest.mocked(removeFsFile)
-const removeTempDownloadFileMock = jest.mocked(removeTempDownloadFile)
-const removeUploadMock = jest.mocked(removeUpload)
-const getAppKeyForIndexerMock = jest.mocked(getAppKeyForIndexer)
-const getIsConnectedMock = jest.mocked(getIsConnected)
+const mockAppKey = { export_: () => new Uint8Array(32) }
 
+let removeFileSpy: jest.SpyInstance
 const cursorIncrement = 1
 
 describe('syncDownEvents', () => {
@@ -132,30 +85,27 @@ describe('syncDownEvents', () => {
   beforeEach(async () => {
     await initializeDB()
     jest.clearAllMocks()
-    await resetSyncDownCursor()
-    getIsConnectedMock.mockReturnValue(true)
-    getIndexerURLMock.mockResolvedValue(INDEXER_URL)
-    removeFsFileMock.mockResolvedValue(undefined)
-    removeTempDownloadFileMock.mockResolvedValue(undefined)
-    removeUploadMock.mockReturnValue(undefined)
-    getAppKeyForIndexerMock.mockResolvedValue({} as any)
+    await app().sync.setSyncDownCursor(undefined)
+    app().connection.setState({ isConnected: true })
+    await app().settings.setIndexerURL(INDEXER_URL)
+    removeFileSpy = jest.spyOn(app().fs, 'removeFile')
   })
 
   afterEach(async () => {
+    internal().setSdk(null)
     await resetDb()
   })
 
   test('early exit when not connected', async () => {
-    getIsConnectedMock.mockReturnValue(false)
+    app().connection.setState({ isConnected: false })
     await syncDownEvents(new AbortController().signal)
-    expect(getSdkMock).not.toHaveBeenCalled()
   })
 
   test('early exit when no sdk', async () => {
-    getIsConnectedMock.mockReturnValue(true)
-    getSdkMock.mockReturnValue(null)
+    app().connection.setState({ isConnected: true })
+    internal().setSdk(null)
     await syncDownEvents(new AbortController().signal)
-    const cur = await getSyncDownCursor()
+    const cur = await app().sync.getSyncDownCursor()
     expect(cur).toBeUndefined()
   })
 
@@ -201,30 +151,27 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    expect(getSdkMock).toHaveBeenCalledTimes(1)
-
-    // Verify cursor was updated correctly.
-    const cursor = await getSyncDownCursor()
+    const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-2',
       after: new Date(NOW_BASE + 1 + cursorIncrement),
     })
 
-    // Verify files were inserted into database.
-    const file1 = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(file1).not.toBeNull()
-    const objects1 = await readLocalObjectsForFile(file1!.id)
+    const objects1 = await app().localObjects.getForFile(file1!.id)
     expect(objects1).toHaveLength(1)
 
-    const file2 = await readFileRecordByObjectId('obj-2', INDEXER_URL)
+    const file2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
     expect(file2).not.toBeNull()
-    const objects2 = await readLocalObjectsForFile(file2!.id)
+    const objects2 = await app().localObjects.getForFile(file2!.id)
     expect(objects2).toHaveLength(1)
   })
 
@@ -251,15 +198,14 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Should only call once since batch is not full.
-    expect(getSdkMock).toHaveBeenCalledTimes(1)
-    const cursor = await getSyncDownCursor()
+    const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-1',
       after: new Date(NOW_BASE + cursorIncrement),
@@ -267,7 +213,6 @@ describe('syncDownEvents', () => {
   })
 
   test('handles delete event by removing file record and fs files', async () => {
-    // Create existing file.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'test.jpg',
@@ -284,7 +229,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -303,25 +248,22 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    expect(removeFsFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-1' }),
-    )
-    expect(removeTempDownloadFileMock).toHaveBeenCalledWith(
+    expect(removeFileSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'file-1' }),
     )
 
-    const deletedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(deletedFile).toBeNull()
   })
 
   test('handles update event for existing file', async () => {
-    // Create existing file.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'test.jpg',
@@ -338,7 +280,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -371,14 +313,14 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    expect(removeUploadMock).toHaveBeenCalledWith('file-1')
-    const updatedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const updatedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(updatedFile).not.toBeNull()
   })
 
@@ -405,18 +347,18 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    const newFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const newFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(newFile).not.toBeNull()
   })
 
   test('merges metadata correctly when remote is newer', async () => {
-    // Create existing file with older metadata.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'old-name.jpg',
@@ -433,7 +375,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -444,7 +386,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Remote has newer metadata with different values.
     const newerRemoteMetadata: FileMetadata = {
       id: 'file-1',
       name: 'new-name.jpg',
@@ -453,7 +394,7 @@ describe('syncDownEvents', () => {
       size: 100,
       hash: 'hash-1',
       createdAt: NOW_BASE,
-      updatedAt: NOW_BASE + 100, // Newer timestamp.
+      updatedAt: NOW_BASE + 100,
       thumbForId: undefined,
       thumbSize: undefined,
       trashedAt: null,
@@ -467,14 +408,14 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Verify all metadata fields were merged from remote since it's newer.
-    const updatedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const updatedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(updatedFile).not.toBeNull()
     expect(updatedFile).toEqual(
       expect.objectContaining({
@@ -487,8 +428,7 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Verify object was updated in objects table.
-    const objects = await readLocalObjectsForFile(updatedFile!.id)
+    const objects = await app().localObjects.getForFile(updatedFile!.id)
     expect(objects).toHaveLength(1)
     expect(objects).toEqual(
       expect.arrayContaining([
@@ -501,7 +441,6 @@ describe('syncDownEvents', () => {
   })
 
   test('does not merge metadata when remote is older', async () => {
-    // Create existing file with newer metadata.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'newer-name.jpg',
@@ -510,7 +449,7 @@ describe('syncDownEvents', () => {
       size: 100,
       hash: 'hash-1',
       createdAt: NOW_BASE,
-      updatedAt: NOW_BASE + 100, // Newer timestamp.
+      updatedAt: NOW_BASE + 100,
       localId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
@@ -518,7 +457,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -529,7 +468,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Remote has older metadata with different values.
     const olderRemoteMetadata: FileMetadata = {
       id: 'file-1',
       name: 'older-name.jpg',
@@ -538,7 +476,7 @@ describe('syncDownEvents', () => {
       size: 100,
       hash: 'hash-1',
       createdAt: NOW_BASE,
-      updatedAt: NOW_BASE, // Older timestamp.
+      updatedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
       trashedAt: null,
@@ -552,14 +490,14 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Verify local metadata was preserved since it's newer.
-    const file2 = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const file2 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(file2).not.toBeNull()
     expect(file2).toEqual(
       expect.objectContaining({
@@ -568,8 +506,7 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Verify object was still updated in objects table.
-    const objects = await readLocalObjectsForFile(file2!.id)
+    const objects = await app().localObjects.getForFile(file2!.id)
     expect(objects).toHaveLength(1)
   })
 
@@ -596,18 +533,18 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    jest.mocked(getSdk).mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    const file = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const file = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(file).toBeNull()
   })
 
   test('FS error in delete cleanup does not prevent cursor advancement', async () => {
-    // Create existing file.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'test.jpg',
@@ -624,7 +561,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -648,35 +585,35 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    jest.mocked(getSdk).mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
-    // Simulate error during file system removal (cleanup phase).
-    jest.mocked(removeFsFile).mockRejectedValueOnce(new Error('FS error'))
+    removeFileSpy.mockRejectedValueOnce(new Error('FS error'))
 
     await syncDownEvents(new AbortController().signal)
 
-    // Cursor should have advanced because DB commit succeeded (FS cleanup is non-fatal).
-    const cursor = await getSyncDownCursor()
+    const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-2',
       after: new Date(NOW_BASE + 2 + cursorIncrement),
     })
 
-    // File should be deleted from DB.
-    const deletedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(deletedFile).toBeNull()
 
-    // Verify that removeFsFile was still called.
-    expect(removeFsFile).toHaveBeenCalled()
+    expect(removeFileSpy).toHaveBeenCalled()
   })
 
   test('error in update event breaks loop without advancing cursor', async () => {
     const mockSdk = {
       objectEvents: jest.fn(),
+      appKey: () => {
+        throw new Error('AppKey error')
+      },
     }
-    jest.mocked(getSdk).mockReturnValue(mockSdk as any)
+    internal().setSdk(mockSdk as any)
 
     const metadata1: FileMetadata = {
       id: 'file-1',
@@ -721,19 +658,12 @@ describe('syncDownEvents', () => {
 
     mockSdk.objectEvents.mockResolvedValueOnce(events)
 
-    // Simulate error during seal operation by making appKey throw.
-    jest
-      .mocked(getAppKeyForIndexer)
-      .mockRejectedValueOnce(new Error('AppKey error'))
-
     await syncDownEvents(new AbortController().signal)
 
-    // Cursor should not have advanced because error broke the loop.
-    const cursor = await getSyncDownCursor()
+    const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toBeUndefined()
 
-    // Second event should not have been processed.
-    const file = await readFileRecordByObjectId('obj-2', INDEXER_URL)
+    const file = await app().files.getByObjectId('obj-2', INDEXER_URL)
     expect(file).toBeNull()
   })
 
@@ -760,19 +690,18 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Verify the thumbnail was created.
-    const thumb = await readFileRecordByObjectId('obj-thumb', INDEXER_URL)
+    const thumb = await app().files.getByObjectId('obj-thumb', INDEXER_URL)
     expect(thumb).not.toBeNull()
   })
 
   test('cursor persists across multiple runs', async () => {
-    // First run events.
     const metadata1: FileMetadata = {
       id: 'file-1',
       name: 'test.jpg',
@@ -794,7 +723,6 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    // Second run events.
     const metadata2: FileMetadata = {
       id: 'file-2',
       name: 'test2.jpg',
@@ -808,7 +736,6 @@ describe('syncDownEvents', () => {
       thumbSize: undefined,
       trashedAt: null,
     }
-    // Second run should use cursor from first run.
     const events2: ObjectEvent[] = [
       makeObjectEvent({
         id: 'obj-2',
@@ -817,24 +744,23 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest
         .fn()
         .mockResolvedValueOnce(events1)
         .mockResolvedValueOnce(events2),
+      appKey: () => mockAppKey,
     } as any)
 
-    // First run.
     await syncDownEvents(new AbortController().signal)
-    const cursor1 = await getSyncDownCursor()
+    const cursor1 = await app().sync.getSyncDownCursor()
     expect(cursor1).toEqual({
       id: 'obj-1',
       after: new Date(NOW_BASE + cursorIncrement),
     })
 
-    // Second run.
     await syncDownEvents(new AbortController().signal)
-    const cursor2 = await getSyncDownCursor()
+    const cursor2 = await app().sync.getSyncDownCursor()
     expect(cursor2).toEqual({
       id: 'obj-2',
       after: new Date(NOW_BASE + 1 + cursorIncrement),
@@ -842,17 +768,17 @@ describe('syncDownEvents', () => {
   })
 
   test('reset cursor clears saved cursor', async () => {
-    await setSyncDownCursor({
+    await app().sync.setSyncDownCursor({
       id: 'obj-1',
       after: new Date(NOW_BASE),
     })
 
-    let cursor = await getSyncDownCursor()
+    let cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toBeDefined()
 
-    await resetSyncDownCursor()
+    await app().sync.setSyncDownCursor(undefined)
 
-    cursor = await getSyncDownCursor()
+    cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toBeUndefined()
   })
 
@@ -898,8 +824,9 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     const result = await syncDownEvents(new AbortController().signal)
@@ -929,8 +856,9 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     const result = await syncDownEvents(new AbortController().signal)
@@ -938,8 +866,9 @@ describe('syncDownEvents', () => {
   })
 
   test('returns undefined (use default interval) when no events found', async () => {
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce([]),
+      appKey: () => mockAppKey,
     } as any)
 
     const result = await syncDownEvents(new AbortController().signal)
@@ -984,14 +913,15 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    const file1 = await readFileRecordByObjectId('obj-1', INDEXER_URL)
-    const file2 = await readFileRecordByObjectId('obj-2', INDEXER_URL)
+    const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
+    const file2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
     expect(file1).not.toBeNull()
     expect(file2).not.toBeNull()
     expect(file1!.id).not.toBe(file2!.id)
@@ -999,7 +929,6 @@ describe('syncDownEvents', () => {
   })
 
   test('creates separate records for files with identical content hash across batches', async () => {
-    // File A already in DB from a previous sync.
     const fileA: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'photo-a.jpg',
@@ -1014,7 +943,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       fileA,
       makeLocalObject({
         fileId: fileA.id,
@@ -1025,7 +954,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // File B arrives in a new batch with different ID but same hash.
     const metadataB: FileMetadata = {
       id: 'file-2',
       name: 'photo-b.jpg',
@@ -1046,14 +974,15 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    const file1 = await readFileRecordByObjectId('obj-1', INDEXER_URL)
-    const file2 = await readFileRecordByObjectId('obj-2', INDEXER_URL)
+    const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
+    const file2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
     expect(file1).not.toBeNull()
     expect(file2).not.toBeNull()
     expect(file1!.id).toBe('file-1')
@@ -1103,14 +1032,15 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    const t1 = await readFileRecordByObjectId('obj-t1', INDEXER_URL)
-    const t2 = await readFileRecordByObjectId('obj-t2', INDEXER_URL)
+    const t1 = await app().files.getByObjectId('obj-t1', INDEXER_URL)
+    const t2 = await app().files.getByObjectId('obj-t2', INDEXER_URL)
     expect(t1).not.toBeNull()
     expect(t2).not.toBeNull()
     expect(t1!.id).not.toBe(t2!.id)
@@ -1130,8 +1060,6 @@ describe('syncDownEvents', () => {
       trashedAt: null,
     }
 
-    // Two different objects on the indexer share the same metadata.id
-    // (e.g., same file uploaded from two devices pre-migration)
     const events: ObjectEvent[] = [
       makeObjectEvent({
         id: 'obj-1',
@@ -1145,27 +1073,25 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // One file record, but both objects associated
-    const fromObj1 = await readFileRecordByObjectId('obj-1', INDEXER_URL)
-    const fromObj2 = await readFileRecordByObjectId('obj-2', INDEXER_URL)
+    const fromObj1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
+    const fromObj2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
     expect(fromObj1).not.toBeNull()
     expect(fromObj2).not.toBeNull()
     expect(fromObj1!.id).toBe('file-1')
     expect(fromObj2!.id).toBe('file-1')
 
-    // Both local objects point to the same file
-    const objects = await readLocalObjectsForFile('file-1')
+    const objects = await app().localObjects.getForFile('file-1')
     expect(objects).toHaveLength(2)
   })
 
   test('delete event only removes the object for the current indexer', async () => {
-    // File with two objects: one on the current indexer, one on another.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'photo.jpg',
@@ -1182,7 +1108,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -1192,7 +1118,7 @@ describe('syncDownEvents', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await upsertLocalObject(
+    await app().localObjects.upsert(
       makeLocalObject({
         fileId: file.id,
         objectId: 'obj-1',
@@ -1202,7 +1128,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Delete event for obj-1 from the current indexer.
     const events: ObjectEvent[] = [
       makeObjectEvent({
         id: 'obj-1',
@@ -1211,25 +1136,23 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Tombstoned file row must persist — tombstones are never removed.
-    const fileRecord = await readFileRecord('file-1')
+    const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
     expect(fileRecord!.deletedAt).not.toBeNull()
 
-    // The other indexer's object should still be present.
-    const objects = await readLocalObjectsForFile('file-1')
+    const objects = await app().localObjects.getForFile('file-1')
     expect(objects).toHaveLength(1)
     expect(objects[0].indexerURL).toBe('other-indexer')
   })
 
   test('update event does not affect objects from a different indexer', async () => {
-    // File with an object on a different indexer.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'photo.jpg',
@@ -1246,7 +1169,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -1257,9 +1180,6 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Event arrives with the same objectId but from the current indexer.
-    // Since readFileRecordByObjectId is scoped, it should NOT find the
-    // existing file and should create a new one.
     const remoteMetadata: FileMetadata = {
       id: 'file-1',
       name: 'photo-updated.jpg',
@@ -1280,21 +1200,20 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // File should exist and have objects from both indexers.
-    const fileRecord = await readFileRecord('file-1')
+    const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
-    const objects = await readLocalObjectsForFile('file-1')
+    const objects = await app().localObjects.getForFile('file-1')
     expect(objects).toHaveLength(2)
   })
 
   test('delete event sets deletedAt tombstone on file when other objects remain', async () => {
-    // Create a file with two objects: one on the current indexer, one on another.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'photo.jpg',
@@ -1311,7 +1230,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -1321,7 +1240,7 @@ describe('syncDownEvents', () => {
         updatedAt: NOW_BASE,
       }),
     )
-    await upsertLocalObject(
+    await app().localObjects.upsert(
       makeLocalObject({
         fileId: file.id,
         objectId: 'obj-other',
@@ -1339,19 +1258,18 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Tombstoned file row must persist — tombstones are never removed.
-    const fileRecord = await readFileRecord('file-1')
+    const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
     expect(fileRecord!.deletedAt).not.toBeNull()
 
-    // Only the other indexer's object should remain.
-    const remainingObjects = await readLocalObjectsForFile('file-1')
+    const remainingObjects = await app().localObjects.getForFile('file-1')
     expect(remainingObjects).toHaveLength(1)
     expect(remainingObjects[0].indexerURL).toBe('other-indexer')
   })
@@ -1373,7 +1291,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -1384,7 +1302,7 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    await updateFileRecord({ id: 'file-1', deletedAt: 5000 })
+    await app().files.update({ id: 'file-1', deletedAt: 5000 })
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
@@ -1394,24 +1312,22 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // Object row should be gone.
-    const deletedFile = await readFileRecordByObjectId('obj-1', INDEXER_URL)
+    const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(deletedFile).toBeNull()
 
-    // Tombstoned file row must persist even with zero objects remaining.
-    const fileRecord = await readFileRecord('file-1')
+    const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
     expect(fileRecord!.deletedAt).toBe(5000)
   })
 
   test('tombstone blocks syncDown from clearing deletedAt via metadata update', async () => {
-    // Create a file with a single object.
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',
       name: 'photo.jpg',
@@ -1428,7 +1344,7 @@ describe('syncDownEvents', () => {
       trashedAt: null,
       deletedAt: null,
     }
-    await createFileRecordWithLocalObject(
+    await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
@@ -1439,10 +1355,8 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    // Tombstone the file.
-    await updateFileRecord({ id: 'file-1', deletedAt: 5000 })
+    await app().files.update({ id: 'file-1', deletedAt: 5000 })
 
-    // Inject a metadata UPDATE event for the same object with a newer updatedAt.
     const updatedMetadata: FileMetadata = {
       id: 'file-1',
       name: 'photo.jpg',
@@ -1465,15 +1379,14 @@ describe('syncDownEvents', () => {
       }),
     ]
 
-    getSdkMock.mockReturnValue({
+    internal().setSdk({
       objectEvents: jest.fn().mockResolvedValueOnce(events),
+      appKey: () => mockAppKey,
     } as any)
 
     await syncDownEvents(new AbortController().signal)
 
-    // The tombstone must NOT be cleared by the metadata merge, because
-    // toFileRecordFields does not include deletedAt.
-    const fileRecord = await readFileRecord('file-1')
+    const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
     expect(fileRecord!.deletedAt).not.toBeNull()
   })

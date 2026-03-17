@@ -1,4 +1,7 @@
+import type { DownloadEntry } from '@siastorage/core/app'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { useDownloadEntry } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
 import {
   PinnedObject,
@@ -6,9 +9,8 @@ import {
   type SealedObject,
 } from 'react-native-sia'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { type DownloadState, useDownloadState } from '../stores/downloads'
-import { type FileRecord, readFileRecord } from '../stores/files'
-import { getFsFileUri, useFsFileUri } from '../stores/fs'
+import { app } from '../stores/appService'
+import { useFsFileUri } from '../stores/fs'
 import { type UploadState, useUploadState } from '../stores/uploads'
 
 export function fileHasASealedObject(file?: FileRecord): boolean {
@@ -65,7 +67,7 @@ function computeFileStatus({
   file?: FileRecord
   isShared?: boolean
   uploadState: UploadState | undefined
-  downloadState: DownloadState | undefined
+  downloadState: DownloadEntry | undefined
   fileUri: string | null
   errorText: string | null
 }) {
@@ -75,7 +77,8 @@ function computeFileStatus({
   )
   const isPacking = uploadStatus === 'packing' || uploadStatus === 'packed'
   const isDownloading =
-    downloadState?.status === 'running' || downloadState?.status === 'queued'
+    downloadState?.status === 'downloading' ||
+    downloadState?.status === 'queued'
   const hasSealedObject = fileHasASealedObject(file)
   const isDownloaded = !!fileUri
   return {
@@ -106,7 +109,7 @@ export function useFileStatus(
   isShared?: boolean,
 ): FileStatusResponse {
   const uploadState = useUploadState(file?.id || '')
-  const downloadState = useDownloadState(file?.id || '')
+  const { data: downloadState } = useDownloadEntry(file?.id || '')
   const fileUri = useFsFileUri(file)
 
   const data = useMemo(() => {
@@ -146,11 +149,11 @@ export async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
   let uploadable = 0
 
   for (const id of fileIds) {
-    const file = await readFileRecord(id)
+    const file = await app().files.getById(id)
     if (file) {
       files.push(file)
       const hasSealed = fileHasASealedObject(file)
-      const uri = await getFsFileUri(file)
+      const uri = await app().fs.getFileUri(file)
       if (hasSealed) {
         onNetwork++
       }

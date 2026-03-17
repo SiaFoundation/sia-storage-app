@@ -1,3 +1,4 @@
+import { useAllTags, useTagsForFile } from '@siastorage/core/stores'
 import { CheckIcon, PlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -11,13 +12,8 @@ import {
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
+import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import {
-  addTagToFile,
-  removeTagFromFile,
-  useAllTags,
-  useTagsForFile,
-} from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
@@ -69,7 +65,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
       const key = trimmed.toLowerCase()
       setLoadingTagNames((prev) => new Set([...prev, key]))
       try {
-        await addTagToFile(fileId, trimmed)
+        await app().tags.add(fileId, trimmed)
         setQuery('')
         toast.show(`Added "${trimmed}"`)
       } finally {
@@ -87,7 +83,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
     async (tagId: string) => {
       setLoadingTagIds((prev) => new Set([...prev, tagId]))
       try {
-        await removeTagFromFile(fileId, tagId)
+        await app().tags.remove(fileId, tagId)
         toast.show('Tag removed')
       } finally {
         setLoadingTagIds((prev) => {

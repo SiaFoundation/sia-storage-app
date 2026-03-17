@@ -11,7 +11,7 @@ module.exports = {
     '<rootDir>/jest.setup.cjs',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-fs|react-native-quick-crypto|expo|@expo|expo-.*|expo-sqlite|expo-modules-core|@siastorage)/)',
+    'node_modules/(?!(react-native|@react-native|react-native-fs|react-native-quick-crypto|react-native-sia|expo|@expo|expo-.*|expo-sqlite|expo-modules-core|@siastorage)/)',
   ],
   testPathIgnorePatterns: ['/node_modules/', '/scripts/', '/test/'],
   moduleNameMapper: {
@@ -29,5 +29,6 @@ module.exports = {
       '<rootDir>/test/mocks/expo-video-thumbnails.ts',
     '^expo-media-library$': '<rootDir>/test/mocks/expo-media-library.ts',
     '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
+    '^react-native-sia$': '<rootDir>/test/mocks/react-native-sia.ts',
   },
 }

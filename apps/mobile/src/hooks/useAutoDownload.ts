@@ -1,8 +1,8 @@
+import { useIsInitializing } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { useEffect } from 'react'
 import { useFileStatus } from '../lib/file'
 import { useDownload, useDownloadFromShareURL } from '../managers/downloader'
-import { useIsInitializing } from '../stores/app'
-import type { FileRecord } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
 
 /**

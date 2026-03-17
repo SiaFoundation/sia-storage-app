@@ -1,8 +1,8 @@
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { PinnedObject, type PinnedObjectInterface } from 'react-native-sia'
 import useSWR from 'swr'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import type { FileRecord } from '../stores/files'
 
 export function usePinnedObjects(file: FileRecord) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(

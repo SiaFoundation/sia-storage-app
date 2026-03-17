@@ -1,22 +1,11 @@
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
-import { File } from 'expo-file-system'
 import RNFS from 'react-native-fs'
 import { generateThumbnails } from '../managers/thumbnailer'
-import {
-  getOrCreateDirectory,
-  moveFilesToDirectory,
-} from '../stores/directories'
-import {
-  createManyFileRecords,
-  type FileRecord,
-  readFileRecordsByContentHashes,
-  readFileRecordsByLocalIds,
-  updateManyFileRecords,
-} from '../stores/files'
+import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
-import { getPhotoImportDirectory } from '../stores/settings'
 import { calculateContentHash } from './contentHash'
 import { getMimeType, type MimeType } from './fileTypes'
 import { getMediaLibraryUri } from './mediaLibrary'
@@ -128,7 +117,7 @@ export async function processAssets(
   // This is quick but will only detect duplicates from the same device.
   const existingLocalIds = allowDuplicates
     ? []
-    : await readFileRecordsByLocalIds(
+    : await app().files.getByLocalIds(
         candidateFiles.filter((a) => !!a.localId).map((a) => a.localId!),
       )
   for (const f of existingLocalIds) {
@@ -169,7 +158,7 @@ export async function processAssets(
       }
 
       // Copy the file to the app's file cache.
-      const fileUri = await copyFileToFs(f, new File(bestUri))
+      const fileUri = await copyFileToFs(f, bestUri)
       if (!fileUri) {
         f.status = 'incomplete'
         f.statusDetails = 'invalidUri'
@@ -197,7 +186,7 @@ export async function processAssets(
   // Check for content hash duplicates. Auto-sync blocks them to prevent
   // re-importing files already synced from another device. Manual imports
   // warn but allow.
-  const existingContentHashes = await readFileRecordsByContentHashes(
+  const existingContentHashes = await app().files.getByContentHashes(
     candidateFiles
       .filter((f) => f.status === 'new' && f.hash !== null)
       .map((f) => f.hash!),
@@ -253,7 +242,7 @@ export async function processAssets(
   }
 
   if (!skipExistingUpdates) {
-    await updateManyFileRecords(
+    await app().files.updateMany(
       existingFiles.map((f) => ({
         id: f.id,
         name: f.name,
@@ -262,18 +251,18 @@ export async function processAssets(
       })),
     )
   }
-  await createManyFileRecords(newFiles)
+  await app().files.createMany(newFiles)
 
   // Move media files to the configured photo import directory.
   // Skipped when importing from a directory or tag context.
-  const photoImportDir = await getPhotoImportDirectory()
+  const photoImportDir = await app().settings.getPhotoImportDirectory()
   if (photoImportDir && addToImportDirectory) {
     const mediaFileIds = newFiles
       .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
       .map((f) => f.id)
     if (mediaFileIds.length > 0) {
-      const dir = await getOrCreateDirectory(photoImportDir)
-      await moveFilesToDirectory(mediaFileIds, dir.id)
+      const dir = await app().directories.getOrCreate(photoImportDir)
+      await app().directories.moveFiles(mediaFileIds, dir.id)
     }
   }
 

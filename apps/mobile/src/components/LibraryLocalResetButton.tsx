@@ -1,9 +1,5 @@
 import { Alert } from 'react-native'
 import { resetData } from '../managers/app'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
 import { Button } from './Button'
 
 /**
@@ -26,11 +22,7 @@ export function LibraryLocalResetButton() {
             {
               text: 'Reset',
               style: 'destructive',
-              onPress: async () => {
-                await resetData()
-                invalidateCacheLibraryAllStats()
-                invalidateCacheLibraryLists()
-              },
+              onPress: () => resetData(),
             },
           ],
         )

@@ -1,6 +1,6 @@
+import type { Host } from '@siastorage/core/adapters'
 import { Dimensions } from 'react-native'
 import type { Region } from 'react-native-maps'
-import type { Host } from 'react-native-sia'
 
 type Pt = { latitude: number; longitude: number }
 

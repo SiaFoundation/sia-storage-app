@@ -1,85 +1,83 @@
-import { create } from 'zustand'
+import { swrState } from '@siastorage/core/stores'
 
-type FileSelectionState = {
-  selectedFileIds: Set<string>
+type SelectionState = {
   isSelectionMode: boolean
+  selectedIds: string[]
 }
 
-export const useFileSelectionStore = create<FileSelectionState>(() => ({
-  selectedFileIds: new Set(),
+const store = swrState<SelectionState>({
   isSelectionMode: false,
-}))
+  selectedIds: [],
+})
 
-const { setState, getState } = useFileSelectionStore
+function selectedSet(): Set<string> {
+  return new Set(store.getState().selectedIds)
+}
 
 export function enterSelectionMode(): void {
-  setState({ isSelectionMode: true })
+  store.setState({ ...store.getState(), isSelectionMode: true })
 }
 
 export function exitSelectionMode(): void {
-  setState({ isSelectionMode: false, selectedFileIds: new Set() })
+  store.setState({ isSelectionMode: false, selectedIds: [] })
 }
 
 export function toggleFileSelection(id: string): void {
-  setState((state) => {
-    const next = new Set(state.selectedFileIds)
-    if (next.has(id)) {
-      next.delete(id)
-    } else {
-      next.add(id)
-    }
-    return { selectedFileIds: next }
-  })
+  const s = store.getState()
+  const set = selectedSet()
+  set.has(id) ? set.delete(id) : set.add(id)
+  store.setState({ ...s, selectedIds: [...set] })
 }
 
 export function selectFile(id: string): void {
-  setState((state) => {
-    const next = new Set(state.selectedFileIds)
-    next.add(id)
-    return { selectedFileIds: next }
-  })
+  const s = store.getState()
+  const set = selectedSet()
+  set.add(id)
+  store.setState({ ...s, selectedIds: [...set] })
 }
 
 export function selectFiles(ids: string[]): void {
-  setState((state) => {
-    const next = new Set(state.selectedFileIds)
-    ids.forEach((id) => next.add(id))
-    return { selectedFileIds: next }
-  })
+  const s = store.getState()
+  const set = selectedSet()
+  for (const id of ids) set.add(id)
+  store.setState({ ...s, selectedIds: [...set] })
 }
 
 export function deselectFile(id: string): void {
-  setState((state) => {
-    const next = new Set(state.selectedFileIds)
-    next.delete(id)
-    return { selectedFileIds: next }
-  })
+  const s = store.getState()
+  const set = selectedSet()
+  set.delete(id)
+  store.setState({ ...s, selectedIds: [...set] })
 }
 
 export function clearSelection(): void {
-  setState({ selectedFileIds: new Set() })
+  store.setState({ ...store.getState(), selectedIds: [] })
 }
 
-export function getSelectedFileIds(): Set<string> {
-  return getState().selectedFileIds
+export function resetFileSelection(): void {
+  store.setState({ isSelectionMode: false, selectedIds: [] })
+}
+
+export function getSelectedFileIds(): string[] {
+  return store.getState().selectedIds
 }
 
 export function getIsSelectionMode(): boolean {
-  return getState().isSelectionMode
+  return store.getState().isSelectionMode
 }
 
 export function useIsSelectionMode(): boolean {
-  return useFileSelectionStore((s) => s.isSelectionMode)
+  return store.useValue((s) => s.isSelectionMode, 'mode')
 }
 
-export function useSelectedFileIds(): Set<string> {
-  return useFileSelectionStore((s) => s.selectedFileIds)
+export function useSelectedFileIds(): string[] {
+  return store.useValue((s) => s.selectedIds, 'ids')
 }
 
 export function useIsFileSelected(id: string): boolean {
-  return useFileSelectionStore((s) => s.selectedFileIds.has(id))
+  return store.useValue((s) => s.selectedIds.includes(id), 'selected', id)
 }
 
 export function useSelectedCount(): number {
-  return useFileSelectionStore((s) => s.selectedFileIds.size)
+  return store.useValue((s) => s.selectedIds.length, 'count')
 }

@@ -14,7 +14,6 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { generateRecoveryPhrase } from 'react-native-sia'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
@@ -23,9 +22,8 @@ import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistr
 import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
 import { useToast } from '../lib/toastContext'
 import type { OnboardingStackParamList } from '../stacks/types'
-import { clearAppKeys } from '../stores/appKey'
-import { clearMnemonicHash } from '../stores/mnemonic'
-import { cancelAuth, useSdkStore } from '../stores/sdk'
+import { app } from '../stores/appService'
+import { cancelAuth, setPendingApproval } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
@@ -50,15 +48,15 @@ export default function OnboardingRecoveryPhraseScreen() {
   // Abort any in-flight auth poll and clear pending state before leaving.
   const handleBack = () => {
     cancelAuth()
-    useSdkStore.setState({ pendingApproval: null })
+    setPendingApproval(null)
     nav.goBack()
   }
 
   // Ensure onboarding starts with a fresh app key and no stale mnemonic
   // hash to validate against.
   useEffect(() => {
-    clearMnemonicHash()
-    clearAppKeys()
+    app().auth.clearMnemonicHash()
+    app().auth.clearAppKeys()
   }, [])
 
   const handleContinue = async () => {
@@ -77,7 +75,8 @@ export default function OnboardingRecoveryPhraseScreen() {
   }
 
   const makeNewRecoveryPhrase = async () => {
-    setRecoveryPhrase(generateRecoveryPhrase())
+    const phrase = await app().auth.generateRecoveryPhrase()
+    setRecoveryPhrase(phrase)
     setAckSaved(false)
   }
 

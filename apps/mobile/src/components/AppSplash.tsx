@@ -1,8 +1,11 @@
+import {
+  useCurrentInitStep,
+  useInitializationError,
+} from '@siastorage/core/stores'
 import { TriangleAlertIcon } from 'lucide-react-native'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { resetApp } from '../managers/app'
-import { useCurrentInitStep, useInitializationError } from '../stores/app'
 import { palette } from '../styles/colors'
 import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'

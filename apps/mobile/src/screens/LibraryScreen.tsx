@@ -1,5 +1,15 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { Category } from '@siastorage/core/db/operations'
+import {
+  type FileListParams,
+  useAllDirectories,
+  useAllTags,
+  useFileList,
+  useLibraryCount,
+  useMediaCount,
+  useSyncState,
+} from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -28,7 +38,7 @@ import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
 import { SelectionBar } from '../components/SelectionBar'
 import { TagsGrid } from '../components/TagsGrid'
 import type { MainStackParamList } from '../stacks/types'
-import { useAllDirectories } from '../stores/directories'
+import { app } from '../stores/appService'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -37,21 +47,8 @@ import {
   useSelectedCount,
   useSelectedFileIds,
 } from '../stores/fileSelection'
-import type { FileRecord } from '../stores/files'
-import {
-  type FileListParams,
-  useFileList,
-  useLibraryCount,
-  useMediaCount,
-} from '../stores/library'
-import {
-  type ActiveLibraryTab,
-  setActiveLibraryTab,
-  useActiveLibraryTab,
-} from '../stores/settings'
+import { type ActiveLibraryTab, useActiveLibraryTab } from '../stores/settings'
 import { openSheet } from '../stores/sheets'
-import { useIsSyncingDown } from '../stores/syncDown'
-import { useAllTags } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette } from '../styles/colors'
 
@@ -59,7 +56,8 @@ type Props = NativeStackScreenProps<MainStackParamList, 'LibraryHome'>
 
 export function LibraryScreen({ route, navigation }: Props) {
   const vs = useViewSettings('library')
-  const isSyncing = useIsSyncingDown()
+  const { data: syncState } = useSyncState()
+  const isSyncing = syncState?.isSyncingDown ?? false
   const mediaAllowed: Category[] = useMemo(() => ['Video', 'Image'], [])
   const filters: FileListParams = useMemo(() => {
     const filtered = vs.selectedCategories.filter((c) =>
@@ -78,7 +76,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   const activeTabSetting = useActiveLibraryTab()
   const activeTab: ActiveLibraryTab = activeTabSetting.data ?? 'files'
   const handleChangeTab = useCallback((tab: ActiveLibraryTab) => {
-    void setActiveLibraryTab(tab)
+    void app().settings.setActiveLibraryTab(tab)
   }, [])
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(() => {
     const openFileId = route.params?.openFileId
@@ -196,7 +194,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   }, [selectedFile, fadeAnim, scaleAnim])
 
   const actionSheetFileIds = isSelectionMode
-    ? Array.from(selectedFileIds)
+    ? selectedFileIds
     : selectedFile
       ? [selectedFile.id]
       : actionFileId

@@ -1,5 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import {
+  type FileListParams,
+  useAllTags,
+  useFileList,
+} from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
+import {
   ArrowLeftIcon,
   ListFilterIcon,
   SearchIcon,
@@ -41,10 +47,7 @@ import {
   useIsSelectionMode,
   useSelectedFileIds,
 } from '../stores/fileSelection'
-import type { FileRecord } from '../stores/files'
-import { type FileListParams, useFileList } from '../stores/library'
 import { openSheet } from '../stores/sheets'
-import { useAllTags } from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 
@@ -205,7 +208,7 @@ export function SearchScreen({ navigation }: Props) {
   const noResults = hasQuery && files.data?.length === 0 && !files.isLoading
 
   const actionSheetFileIds = isSelectionMode
-    ? Array.from(selectedFileIds)
+    ? selectedFileIds
     : selectedFile
       ? [selectedFile.id]
       : actionFileId

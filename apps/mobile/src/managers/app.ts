@@ -3,41 +3,33 @@ import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterva
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
 import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
-import { type InitStep, setAppState } from '../stores/app'
-import { clearAppKeys } from '../stores/appKey'
-import { cancelAllDownloads, useDownloadsStore } from '../stores/downloads'
-import { useFileSelectionStore } from '../stores/fileSelection'
-import { ensureFsStorageDirectory } from '../stores/fs'
-import { invalidateCacheLibraryLists } from '../stores/librarySwr'
+import { app } from '../stores/appService'
+import { resetFileSelection } from '../stores/fileSelection'
 import { initLogger } from '../stores/logs'
-import { clearMnemonicHash } from '../stores/mnemonic'
-import { reconnectIndexer, resetSdk, useSdkStore } from '../stores/sdk'
-import { getHasOnboarded, initKeepAwake } from '../stores/settings'
-import { useSheetsStore } from '../stores/sheets'
-import { useSyncDownStore } from '../stores/syncDown'
-import { useSyncUpMetadataStore } from '../stores/syncUpMetadata'
+import { reconnectIndexer, resetSdk } from '../stores/sdk'
+import { initKeepAwake } from '../stores/settings'
+import { resetSheets } from '../stores/sheets'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
-import { clearAllUploads, useUploadsStore } from '../stores/uploads'
 import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
-import { initSyncDownEvents, resetSyncDownCursor } from './syncDownEvents'
+import { initSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
 import {
   initSyncPhotosArchive,
   resetPhotosArchiveCursor,
 } from './syncPhotosArchive'
-import { initSyncUpMetadata, resetSyncUpCursor } from './syncUpMetadata'
+import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
 
 export async function initApp(): Promise<void> {
   startInitState()
 
-  const hasOnboarded = await getHasOnboarded()
+  const hasOnboarded = await app().settings.getHasOnboarded()
 
   const steps: StepDefinition[] = [
     {
@@ -45,9 +37,11 @@ export async function initApp(): Promise<void> {
       label: 'Starting application',
       message: 'Initializing...',
       runner: async () => {
-        await ensureFsStorageDirectory()
+        await app().fs.ensureStorageDirectory()
         await ensureTempFsStorageDirectory()
         await initKeepAwake()
+        const maxDownloads = await app().settings.getMaxDownloads()
+        await app().downloads.setMaxSlots(maxDownloads)
       },
     },
     {
@@ -122,9 +116,10 @@ export async function initApp(): Promise<void> {
 }
 
 async function cancelAllTransfers() {
-  await getUploadManager().shutdown()
-  clearAllUploads()
-  cancelAllDownloads()
+  const manager = getUploadManager()
+  if (manager) await manager.shutdown()
+  app().uploads.clear()
+  app().downloads.cancelAll()
 }
 
 export async function shutdownApp() {
@@ -133,9 +128,11 @@ export async function shutdownApp() {
 
 export async function resetData() {
   await resetDb()
-  await resetSyncDownCursor()
-  await resetSyncUpCursor()
+  await app().sync.setSyncDownCursor(undefined)
+  await app().sync.setSyncUpCursor(undefined)
   await cancelAllTransfers()
+  await app().caches.library.invalidateAll()
+  app().caches.libraryVersion.invalidate()
 }
 
 export async function resetApp() {
@@ -162,8 +159,8 @@ export async function resetApp() {
 
         // 5. Wipe all persisted state.
         await AsyncStorage.clear()
-        await clearAppKeys()
-        await clearMnemonicHash()
+        await app().auth.clearAppKeys()
+        await app().auth.clearMnemonicHash()
 
         // 6. Reset all in-memory state (zustand stores).
         resetAllStores()
@@ -186,66 +183,42 @@ export async function resetApp() {
 }
 
 function resetAllStores() {
-  useSdkStore.setState({
-    sdk: null,
+  app().connection.setState({
     isConnected: false,
     connectionError: null,
     isAuthing: false,
     isReconnecting: false,
-    pendingApproval: null,
   })
-  useSyncDownStore.setState({ isSyncing: false })
-  useSyncUpMetadataStore.setState({ isSyncing: false, processed: 0, total: 0 })
-  useUploadsStore.setState({ uploads: {} })
-  useDownloadsStore.setState({ downloads: {} })
-  useFileSelectionStore.setState({
-    selectedFileIds: new Set(),
-    isSelectionMode: false,
+  app().sync.setState({
+    isSyncingDown: false,
+    syncDownExisting: 0,
+    syncDownAdded: 0,
+    syncDownDeleted: 0,
+    isSyncingUp: false,
+    syncUpProcessed: 0,
+    syncUpTotal: 0,
   })
-  useSheetsStore.setState({ openName: '' })
+  app().uploads.clear()
+  app().downloads.cancelAll()
+  resetFileSelection()
+  resetSheets()
   resetViewSettings()
-  invalidateCacheLibraryLists()
+  app().caches.libraryVersion.invalidate()
 }
 
 function startInitState(): void {
-  setAppState({
-    steps: new Map<string, InitStep>(),
+  app().init.setState({
+    steps: {},
     isInitializing: true,
     initializationError: null,
   })
 }
 
 function endInitState(): void {
-  setAppState({
-    steps: new Map<string, InitStep>(),
+  app().init.setState({
+    steps: {},
     isInitializing: false,
     initializationError: null,
-  })
-}
-
-function nextInitStep(step: Omit<InitStep, 'startedAt'>): void {
-  const nextStep = {
-    ...step,
-    startedAt: Date.now(),
-  }
-  setAppState((state) => {
-    const newSteps = new Map(state.steps)
-    newSteps.set(step.id, nextStep)
-    return { steps: newSteps }
-  })
-}
-
-function updateInitStep(step: { id: string; message?: string }): void {
-  setAppState((state) => {
-    const prev = state.steps.get(step.id)
-    if (!prev) return state
-    const next: InitStep = {
-      ...prev,
-      ...step,
-    }
-    const newSteps = new Map(state.steps)
-    newSteps.set(step.id, next)
-    return { steps: newSteps }
   })
 }
 
@@ -258,16 +231,20 @@ type StepDefinition = {
 
 async function runSteps(steps: StepDefinition[]): Promise<boolean> {
   for (const stepDef of steps) {
-    nextInitStep({
+    app().init.setStep({
       id: stepDef.id,
       label: stepDef.label,
       message: stepDef.message,
+      startedAt: Date.now(),
     })
 
     const updateMessage = (message: string) => {
-      updateInitStep({
+      const prev = app().init.getState().steps[stepDef.id]
+      app().init.setStep({
         id: stepDef.id,
+        label: stepDef.label,
         message,
+        startedAt: prev?.startedAt ?? Date.now(),
       })
     }
 
@@ -276,7 +253,7 @@ async function runSteps(steps: StepDefinition[]): Promise<boolean> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       updateMessage(message)
-      setAppState((state) => ({ ...state, initializationError: message }))
+      app().init.setState({ initializationError: message })
       return false
     }
   }

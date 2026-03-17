@@ -1,10 +1,7 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
-import { create } from 'zustand'
-import {
-  getAsyncStorageJSON,
-  type JsonCodec,
-  setAsyncStorageJSON,
-} from './asyncStore'
+import { swrCache } from '@siastorage/core/stores'
+import useSWR from 'swr'
+import { app } from './appService'
 
 export type ViewSettings = {
   viewMode: 'gallery' | 'list'
@@ -12,15 +9,6 @@ export type ViewSettings = {
   sortDir: SortDir
   selectedCategories: Category[]
 }
-
-type StoredMap = Record<string, ViewSettings>
-
-const codec: JsonCodec<StoredMap, StoredMap> = {
-  encode: (v) => v,
-  decode: (v) => v,
-}
-
-const STORAGE_KEY = 'viewSettings'
 
 const GALLERY_DEFAULTS: ViewSettings = {
   viewMode: 'gallery',
@@ -41,63 +29,49 @@ function defaultsForScope(scope: string): ViewSettings {
   return LIST_DEFAULTS
 }
 
-type ViewSettingsState = {
-  settings: Record<string, ViewSettings>
-  loaded: boolean
-}
-
-const useViewSettingsStore = create<ViewSettingsState>(() => ({
-  settings: {},
-  loaded: false,
-}))
-
+const cache = swrCache()
+let settings: Record<string, ViewSettings> = {}
+let loaded = false
 let loadPromise: Promise<void> | null = null
 
 async function ensureLoaded(): Promise<void> {
-  if (useViewSettingsStore.getState().loaded) return
+  if (loaded) return
   if (loadPromise) return loadPromise
   loadPromise = (async () => {
-    const stored = await getAsyncStorageJSON<StoredMap, StoredMap>(
-      STORAGE_KEY,
-      codec,
-    )
-
-    useViewSettingsStore.setState({
-      settings: stored ?? {},
-      loaded: true,
-    })
+    const stored = (await app().settings.getViewSettings()) as Record<
+      string,
+      ViewSettings
+    >
+    settings = stored ?? {}
+    loaded = true
+    cache.invalidate()
   })()
   return loadPromise
 }
 
 async function persist() {
-  const { settings } = useViewSettingsStore.getState()
-  await setAsyncStorageJSON(STORAGE_KEY, settings, codec)
+  await app().settings.setViewSettings(settings)
 }
 
 function getSettings(scope: string): ViewSettings {
-  const { settings } = useViewSettingsStore.getState()
   return settings[scope] ?? defaultsForScope(scope)
 }
 
 function updateScope(scope: string, patch: Partial<ViewSettings>) {
-  useViewSettingsStore.setState((state) => {
-    const current = state.settings[scope] ?? defaultsForScope(scope)
-    return {
-      settings: {
-        ...state.settings,
-        [scope]: { ...current, ...patch },
-      },
-    }
-  })
+  const current = settings[scope] ?? defaultsForScope(scope)
+  settings = {
+    ...settings,
+    [scope]: { ...current, ...patch },
+  }
+  cache.invalidate()
   void persist()
 }
 
 export function useViewSettings(scope: string): ViewSettings {
   void ensureLoaded()
-  return useViewSettingsStore((state) => {
-    return state.settings[scope] ?? defaultsForScope(scope)
-  })
+  const { data } = useSWR(cache.key(), () => ({ settings }))
+  const s = data?.settings ?? settings
+  return s[scope] ?? defaultsForScope(scope)
 }
 
 export function setViewMode(scope: string, viewMode: 'gallery' | 'list') {
@@ -124,7 +98,9 @@ export function clearCategories(scope: string) {
 }
 
 export function resetViewSettings() {
-  useViewSettingsStore.setState({ settings: {}, loaded: false })
+  settings = {}
+  loaded = false
   loadPromise = null
-  void setAsyncStorageJSON(STORAGE_KEY, {}, codec)
+  cache.invalidate()
+  void app().settings.setViewSettings({})
 }

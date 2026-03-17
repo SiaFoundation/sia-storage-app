@@ -1,10 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native'
+import { swrCache } from '@siastorage/core/stores'
 import * as MediaLibrary from 'expo-media-library'
 import { useCallback, useMemo } from 'react'
 import { Linking, Platform } from 'react-native'
 import useSWR from 'swr'
 import { palette } from '../styles/colors'
-import { swrCache } from './swr'
 
 export async function ensureMediaLibraryPermission(): Promise<boolean> {
   const res = await MediaLibrary.requestPermissionsAsync()

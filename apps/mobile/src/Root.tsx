@@ -4,7 +4,9 @@ import {
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native'
+import { AppProvider } from '@siastorage/core/app'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
@@ -26,8 +28,7 @@ import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { ToastProvider } from './lib/toastContext'
 import { initApp, shutdownApp } from './managers/app'
 import { RootTabs } from './stacks/RootTabs'
-import { useShowSplash } from './stores/app'
-import { useHasOnboarded } from './stores/settings'
+import { app } from './stores/appService'
 import { palette } from './styles/colors'
 
 const darkNavigationTheme = {
@@ -41,11 +42,6 @@ const darkNavigationTheme = {
 }
 
 export function Root() {
-  const navigationRef = useNavigationContainerRef<any>()
-  useReconnectIndexer()
-  const { data: hasOnboarded } = useHasOnboarded()
-  const showSplash = useShowSplash()
-
   // Track the previous AppState for logging transitions.
   const appStateRef = useRef(AppState.currentState)
 
@@ -82,24 +78,6 @@ export function Root() {
     })
   }, [])
 
-  useLinkedURL((shareUrl) => {
-    // If we're onboarding, we want to ignore this import logic.
-    if (!hasOnboarded) return
-
-    try {
-      new URL(shareUrl)
-    } catch (_error) {
-      // Ignore invalid URLs.
-      return
-    }
-    if (shareUrl && navigationRef.isReady() && isShareUrl(shareUrl)) {
-      navigationRef.navigate('ImportTab', {
-        screen: 'ImportFile',
-        params: { shareUrl, id: uniqueId() },
-      })
-    }
-  })
-
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
       <ErrorBoundary>
@@ -113,28 +91,57 @@ export function Root() {
                   default: 'light-content',
                 })}
               />
-              <ShareIntentProvider>
-                <BottomSheetModalProvider>
-                  {showSplash ? (
-                    <AppSplash />
-                  ) : (
-                    <>
-                      <ShareIntentConsumer />
-                      <NavigationContainer
-                        ref={navigationRef}
-                        theme={darkNavigationTheme}
-                      >
-                        <RootTabs />
-                      </NavigationContainer>
-                    </>
-                  )}
-                </BottomSheetModalProvider>
-              </ShareIntentProvider>
+              <AppProvider value={app()}>
+                <RootContent />
+              </AppProvider>
             </SafeAreaView>
           </ToastProvider>
         </SafeAreaProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
+  )
+}
+
+function RootContent() {
+  const navigationRef = useNavigationContainerRef<any>()
+  useReconnectIndexer()
+  const { data: hasOnboarded } = useHasOnboarded()
+  const showSplash = useShowSplash()
+
+  useLinkedURL((shareUrl) => {
+    if (!hasOnboarded) return
+
+    try {
+      new URL(shareUrl)
+    } catch (_error) {
+      return
+    }
+    if (shareUrl && navigationRef.isReady() && isShareUrl(shareUrl)) {
+      navigationRef.navigate('ImportTab', {
+        screen: 'ImportFile',
+        params: { shareUrl, id: uniqueId() },
+      })
+    }
+  })
+
+  return (
+    <ShareIntentProvider>
+      <BottomSheetModalProvider>
+        {showSplash ? (
+          <AppSplash />
+        ) : (
+          <>
+            <ShareIntentConsumer />
+            <NavigationContainer
+              ref={navigationRef}
+              theme={darkNavigationTheme}
+            >
+              <RootTabs />
+            </NavigationContainer>
+          </>
+        )}
+      </BottomSheetModalProvider>
+    </ShareIntentProvider>
   )
 }
 

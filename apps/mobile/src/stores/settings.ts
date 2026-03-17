@@ -1,141 +1,50 @@
-import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import {
-  getAsyncStorageBoolean,
-  getAsyncStorageString,
-  setAsyncStorageBoolean,
-  setAsyncStorageString,
-} from './asyncStore'
+import useSWR from 'swr'
+import { app } from './appService'
 
-// Active Indexer URL
+export type StatusDisplayMode = 'count' | 'size'
+export type ActiveLibraryTab = 'files' | 'tags' | 'media'
 
-export const [getIndexerURL, useIndexerURL, indexerURLCache] =
-  createGetterAndSWRHook<string>(() =>
-    getAsyncStorageString<string>('indexerURL', DEFAULT_INDEXER_URL),
+export function useStatusDisplayMode() {
+  return useSWR(
+    app().caches.settings.key('statusDisplayMode'),
+    () => app().settings.getStatusDisplayMode() as Promise<StatusDisplayMode>,
   )
-
-export async function setIndexerURL(value: string) {
-  await setAsyncStorageString('indexerURL', value)
-  await indexerURLCache.set(value)
 }
 
-// Has Onboarded
-
-export const [getHasOnboarded, useHasOnboarded, hasOnboardedCache] =
-  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('hasOnboarded'))
-
-export async function setHasOnboarded(value: boolean) {
-  await setAsyncStorageBoolean('hasOnboarded', value)
-  await hasOnboardedCache.set(value)
-}
-
-// Show Advanced
-
-export const [getShowAdvanced, useShowAdvanced, showAdvancedCache] =
-  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('showAdvanced'))
-
-export async function setShowAdvanced(value: boolean) {
-  await setAsyncStorageBoolean('showAdvanced', value)
-  await showAdvancedCache.set(value)
-}
-
-// Auto Scan Uploads
-
-export const [getAutoScanUploads, useAutoScanUploads, autoScanUploadsCache] =
-  createGetterAndSWRHook<boolean>(() =>
-    getAsyncStorageBoolean('autoScanUploads', true),
+export function useActiveLibraryTab() {
+  return useSWR(
+    app().caches.settings.key('activeLibraryTab'),
+    () => app().settings.getActiveLibraryTab() as Promise<ActiveLibraryTab>,
   )
-
-export async function setAutoScanUploads(value: boolean) {
-  await setAsyncStorageBoolean('autoScanUploads', value)
-  await autoScanUploadsCache.set(value)
 }
 
 export async function toggleAutoScanUploads() {
-  const current = await getAutoScanUploads()
-  const next = !current
-  await setAutoScanUploads(next)
-}
-
-// Auto Sync Down Events
-
-export const [
-  getAutoSyncDownEvents,
-  useAutoSyncDownEvents,
-  autoSyncDownEventsCache,
-] = createGetterAndSWRHook<boolean>(() =>
-  getAsyncStorageBoolean('autoSyncDownEvents', true),
-)
-
-export async function setAutoSyncDownEvents(value: boolean) {
-  await setAsyncStorageBoolean('autoSyncDownEvents', value)
-  await autoSyncDownEventsCache.set(value)
+  const current = await app().settings.getAutoScanUploads()
+  await app().settings.setAutoScanUploads(!current)
 }
 
 export async function toggleAutoSyncDownEvents() {
-  const current = await getAutoSyncDownEvents()
-  const next = !current
-  await setAutoSyncDownEvents(next)
+  const current = await app().settings.getAutoSyncDownEvents()
+  await app().settings.setAutoSyncDownEvents(!current)
 }
 
-// Status display mode (count vs size)
+// Keep Awake (platform-specific: uses expo-keep-awake)
 
-export type StatusDisplayMode = 'count' | 'size'
-
-export const [
-  getStatusDisplayMode,
-  useStatusDisplayMode,
-  statusDisplayModeCache,
-] = createGetterAndSWRHook<StatusDisplayMode>(() =>
-  getAsyncStorageString<StatusDisplayMode>('statusDisplayMode', 'count'),
-)
-
-export async function setStatusDisplayMode(value: StatusDisplayMode) {
-  await setAsyncStorageString<StatusDisplayMode>('statusDisplayMode', value)
-  await statusDisplayModeCache.set(value)
-}
-
-// Photo import directory
-
-export const [
-  getPhotoImportDirectory,
-  usePhotoImportDirectory,
-  photoImportDirectoryCache,
-] = createGetterAndSWRHook<string>(() =>
-  getAsyncStorageString<string>('photoImportDirectory', 'Media'),
-)
-
-export async function setPhotoImportDirectory(value: string) {
-  await setAsyncStorageString('photoImportDirectory', value)
-  await photoImportDirectoryCache.set(value)
-}
-
-// Active library tab
-
-export type ActiveLibraryTab = 'files' | 'tags' | 'media'
-
-export const [getActiveLibraryTab, useActiveLibraryTab, activeLibraryTabCache] =
-  createGetterAndSWRHook<ActiveLibraryTab>(() =>
-    getAsyncStorageString<ActiveLibraryTab>('activeLibraryTab', 'files'),
-  )
-
-export async function setActiveLibraryTab(value: ActiveLibraryTab) {
-  await setAsyncStorageString<ActiveLibraryTab>('activeLibraryTab', value)
-  await activeLibraryTabCache.set(value)
-}
-
-// Keep Awake
-
-// Named lock so other keep-awake callers don't interfere.
 const KEEP_AWAKE_TAG = 'sync'
 
-export const [getKeepAwake, useKeepAwake, keepAwakeCache] =
-  createGetterAndSWRHook<boolean>(() => getAsyncStorageBoolean('keepAwake'))
+export async function getKeepAwake(): Promise<boolean> {
+  const raw = await app().storage.getItem('keepAwake')
+  return raw === null ? false : raw === 'true'
+}
+
+export function useKeepAwake() {
+  return useSWR(app().caches.settings.key('keepAwake'), () => getKeepAwake())
+}
 
 export async function setKeepAwake(value: boolean) {
-  await setAsyncStorageBoolean('keepAwake', value)
-  await keepAwakeCache.set(value)
+  await app().storage.setItem('keepAwake', String(value))
+  app().caches.settings.invalidate('keepAwake')
   if (value) {
     await activateKeepAwakeAsync(KEEP_AWAKE_TAG)
   } else {

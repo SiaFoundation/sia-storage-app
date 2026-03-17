@@ -1,3 +1,4 @@
+import { useIsFavorite } from '@siastorage/core/stores'
 import {
   CircleCheckIcon,
   CircleIcon,
@@ -13,7 +14,6 @@ import {
 } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
 import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
-import { useIsFavorite } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
 import { UploadStatusIcon } from './UploadStatusIcon'

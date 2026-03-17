@@ -1,7 +1,9 @@
 import type { NavigationProp } from '@react-navigation/native'
+import type { PinnedObjectRef, SdkAdapter } from '@siastorage/core/adapters'
 import { SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD } from '@siastorage/core/config'
+import { useDownloadEntry, useSdk } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
-import { File } from 'expo-file-system'
 import { PlusIcon } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
 import {
@@ -12,7 +14,6 @@ import {
   View,
 } from 'react-native'
 import RNFS from 'react-native-fs'
-import type { PinnedObjectInterface } from 'react-native-sia'
 import useSWR from 'swr'
 import { calculateContentHash } from '../../lib/contentHash'
 import {
@@ -28,15 +29,8 @@ import {
   useDownloadFromShareURL,
 } from '../../managers/downloader'
 import type { RootTabParamList } from '../../stacks/types'
-import { useDownloadState } from '../../stores/downloads'
-import {
-  createFileRecordWithLocalObject,
-  type FileRecord,
-  readFileRecordByContentHash,
-} from '../../stores/files'
-import { copyFileToFs, getFsFileUri } from '../../stores/fs'
-import { useSdk } from '../../stores/sdk'
-import { getIndexerURL } from '../../stores/settings'
+import { app, internal } from '../../stores/appService'
+import { copyFileToFs } from '../../stores/fs'
 import { colors } from '../../styles/colors'
 import { BottomActionButton } from '../BottomActionButton'
 import { FileViewer } from '../FileViewer'
@@ -45,8 +39,8 @@ import { FileMetaImport } from './FileMetaImport'
 
 // Helper function to detect file type from first few bytes.
 async function detectFileType(
-  sdk: ReturnType<typeof useSdk>,
-  sharedObject: PinnedObjectInterface,
+  sdk: SdkAdapter | null,
+  sharedObject: PinnedObjectRef,
   id: string,
 ): Promise<string> {
   logger.debug('FileImport', 'detecting_type', {
@@ -92,7 +86,7 @@ async function downloadAndProcessFile(
     await downloadFromShareURL(id, shareUrl)
     logger.debug('FileImport', 'download_complete')
 
-    const tempFsFileUri = await getFsFileUri({
+    const tempFsFileUri = await app().fs.getFileUri({
       id,
       type: 'application/octet-stream',
     })
@@ -110,11 +104,10 @@ async function downloadAndProcessFile(
       type = 'application/octet-stream'
     }
 
-    const tempFile = new File(tempFsFileUri)
     const fileStat = await RNFS.stat(tempFsFileUri)
     const size = fileStat.size ?? 0
 
-    const finalFsFileUri = await copyFileToFs({ id, type }, tempFile)
+    const finalFsFileUri = await copyFileToFs({ id, type }, tempFsFileUri)
     logger.debug('FileImport', 'copied_to_final', { uri: finalFsFileUri })
 
     if (finalFsFileUri !== tempFsFileUri) {
@@ -162,15 +155,16 @@ export function FileImport({
   navigation: NavigationProp<RootTabParamList>
 }) {
   const toast = useToast()
-  const sdk = useSdk()
+  const { data: isConnected } = useSdk()
   const downloadFromShareURL = useDownloadFromShareURL()
   const [hasConfirmedLargeDownload, setHasConfirmedLargeDownload] =
     useState(false)
 
   const sharedObject = useSWR(
-    sdk ? ['sharedObject', shareUrl, id] : null,
+    isConnected ? ['sharedObject', shareUrl, id] : null,
     async () => {
       try {
+        const sdk = internal().getSdk()
         if (!sdk || !shareUrl) return null
         return sdk.sharedObject(shareUrl)
       } catch (e) {
@@ -180,18 +174,17 @@ export function FileImport({
     },
   )
 
-  // Check if file requires confirmation - auto-download if less than 5MB.
   const fileSize = sharedObject.data ? Number(sharedObject.data.size()) : null
   const shouldAutoDownload =
     fileSize !== null && fileSize <= SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD
   const requiresConfirmation = !hasConfirmedLargeDownload && !shouldAutoDownload
 
-  // Automatically detect type by downloading only first few bytes.
   const detectedType = useSWR(
-    sharedObject.data && shareUrl && sdk
+    sharedObject.data && shareUrl && isConnected
       ? ['detectedType', id, shareUrl]
       : null,
     async () => {
+      const sdk = internal().getSdk()
       if (!sdk || !sharedObject.data) {
         throw new Error('Missing SDK or shared object')
       }
@@ -244,9 +237,10 @@ export function FileImport({
     sharedFile.data.size > 0
 
   const displayFile = sharedFile.data || previewFile
-  const downloadState = useDownloadState(id)
+  const { data: downloadState } = useDownloadEntry(id)
   const isDownloading =
-    downloadState?.status === 'running' || downloadState?.status === 'queued'
+    downloadState?.status === 'downloading' ||
+    downloadState?.status === 'queued'
 
   const hasMissingMetadata =
     !displayFile ||
@@ -258,14 +252,13 @@ export function FileImport({
 
   const [isAddingToDatabase, setIsAddingToDatabase] = useState(false)
   const handleAddToDatabase = useCallback(async () => {
-    if (!sharedObject.data || !sdk || !sharedFile.data) {
+    if (!sharedObject.data || !isConnected || !sharedFile.data) {
       toast.show('File not ready')
       return
     }
 
-    // Check for duplicates before setting loading state.
     if (sharedFile.data.hash) {
-      const existingFile = await readFileRecordByContentHash(
+      const existingFile = await app().files.getByContentHash(
         sharedFile.data.hash,
       )
       if (existingFile) {
@@ -278,16 +271,15 @@ export function FileImport({
     try {
       logger.info('FileImport', 'importing_file', { id: sharedFile.data.id })
 
-      // Pin the shared object and create file record.
-      const indexerURL = await getIndexerURL()
-      // sharedObject.data is already a PinnedObjectInterface from sdk.sharedObject()
+      const sdk = internal().requireSdk()
+      const indexerURL = await app().settings.getIndexerURL()
       await sdk.pinObject(sharedObject.data)
       const localObject = await pinnedObjectToLocalObject(
         sharedFile.data.id,
         indexerURL,
         sharedObject.data,
       )
-      await createFileRecordWithLocalObject(sharedFile.data, localObject)
+      await app().files.create(sharedFile.data, localObject)
 
       toast.show('File added')
       navigation.navigate('MainTab', {
@@ -300,7 +292,7 @@ export function FileImport({
     } finally {
       setIsAddingToDatabase(false)
     }
-  }, [sharedObject.data, sdk, sharedFile.data, toast, navigation])
+  }, [sharedObject.data, isConnected, sharedFile.data, toast, navigation])
 
   return (
     <View style={styles.container}>

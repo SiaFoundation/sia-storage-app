@@ -1,6 +1,6 @@
+import { useHosts } from '@siastorage/core/stores'
 import { useMemo } from 'react'
 import type { Region } from 'react-native-maps'
-import { useHosts } from '../stores/hosts'
 import Map from './Map/Map'
 import { MapMarker } from './Map/MapMarker'
 import { determineBestRegion } from './Map/mapHelpers'

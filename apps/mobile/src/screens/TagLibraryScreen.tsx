@@ -1,4 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { SYSTEM_TAGS } from '@siastorage/core/db/operations'
+import {
+  type FileListParams,
+  useFileList,
+  useTagFileCount,
+} from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import {
   ArrowLeftIcon,
   FilePlusIcon,
@@ -41,6 +48,7 @@ import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import { useToast } from '../lib/toastContext'
 import type { MainStackParamList } from '../stacks/types'
+import { app } from '../stores/appService'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -48,19 +56,7 @@ import {
   useIsSelectionMode,
   useSelectedFileIds,
 } from '../stores/fileSelection'
-import type { FileRecord } from '../stores/files'
-import {
-  type FileListParams,
-  useFileList,
-  useTagFileCount,
-} from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import {
-  addTagToFiles,
-  deleteTag,
-  renameTag,
-  SYSTEM_TAGS,
-} from '../stores/tags'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette } from '../styles/colors'
 
@@ -166,7 +162,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
 
   const handleFilesAdded = useCallback(
     (files: FileRecord[]) => {
-      void addTagToFiles(
+      void app().tags.addToFiles(
         files.map((f) => f.id),
         tagName,
       )
@@ -175,7 +171,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
   )
 
   const actionSheetFileIds = isSelectionMode
-    ? Array.from(selectedFileIds)
+    ? selectedFileIds
     : selectedFile
       ? [selectedFile.id]
       : actionFileId
@@ -191,7 +187,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
 
   const handleRenameTag = useCallback(
     async (newName: string) => {
-      await renameTag(tagId, newName)
+      await app().tags.rename(tagId, newName)
       setTagName(newName)
       toast.show(`Renamed to "${newName}"`)
     },
@@ -210,7 +206,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
-              await deleteTag(tagId)
+              await app().tags.delete(tagId)
               navigation.goBack()
               toast.show(`Deleted "${tagName}"`)
             },
