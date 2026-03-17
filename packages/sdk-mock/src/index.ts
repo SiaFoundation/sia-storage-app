@@ -1,6 +1,8 @@
 import type {
+  Account,
   AppKeyRef,
   DownloadOptions,
+  Host,
   ObjectEvent,
   ObjectsCursor,
   PackedUploadRef,
@@ -26,7 +28,7 @@ export type StoredObject = {
   updatedAt: Date
 }
 
-export interface MockSdkStorage {
+export interface MockIndexerStorage {
   objects: Map<string, StoredObject>
   events: ObjectEvent[]
   eventCursor: number
@@ -34,7 +36,7 @@ export interface MockSdkStorage {
   uploadFailures: Map<string, Error>
 }
 
-export function createEmptyStorage(): MockSdkStorage {
+export function createEmptyIndexerStorage(): MockIndexerStorage {
   return {
     objects: new Map(),
     events: [],
@@ -85,7 +87,7 @@ function createMockPinnedObject(stored: StoredObject): PinnedObjectRef {
 }
 
 class MockPacker implements PackedUploadRef {
-  private storage: MockSdkStorage
+  private storage: MockIndexerStorage
   private options: {
     progressCallback?: { progress: (uploaded: bigint, total: bigint) => void }
   }
@@ -94,7 +96,7 @@ class MockPacker implements PackedUploadRef {
   private slabSize = 120n * 1024n * 1024n
 
   constructor(
-    storage: MockSdkStorage,
+    storage: MockIndexerStorage,
     options: {
       progressCallback?: { progress: (uploaded: bigint, total: bigint) => void }
     },
@@ -186,11 +188,11 @@ class MockPacker implements PackedUploadRef {
 }
 
 export class MockSdk implements SdkAdapter {
-  private storage: MockSdkStorage
+  private storage: MockIndexerStorage
   private connected = true
 
-  constructor(storage?: MockSdkStorage) {
-    this.storage = storage ?? createEmptyStorage()
+  constructor(storage?: MockIndexerStorage) {
+    this.storage = storage ?? createEmptyIndexerStorage()
   }
 
   setConnected(connected: boolean): void {
@@ -242,6 +244,16 @@ export class MockSdk implements SdkAdapter {
     _control?: { signal: AbortSignal },
   ): Promise<void> {
     throw new Error('Not implemented in mock')
+  }
+
+  async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
+    if (!this.connected) throw new Error('Network unavailable')
+    const data = this.storage.fileData.get(objectId)
+    if (!data) throw new Error(`No data for object: ${objectId}`)
+    return data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength,
+    ) as ArrayBuffer
   }
 
   async objectEvents(
@@ -315,6 +327,27 @@ export class MockSdk implements SdkAdapter {
   async sharedObject(_url: string): Promise<PinnedObjectRef> {
     if (!this.connected) throw new Error('Network unavailable')
     throw new Error('Not implemented in mock')
+  }
+
+  shareObject(_object: PinnedObjectRef, _validUntil: Date): string {
+    return 'https://mock-share-url.com'
+  }
+
+  async hosts(): Promise<Host[]> {
+    return []
+  }
+
+  async account(): Promise<Account> {
+    return {
+      accountKey: '0'.repeat(64),
+      maxPinnedData: 1000000000n,
+      pinnedData: 0n,
+      app: {
+        id: 'mock-app',
+        description: 'Mock App',
+      },
+      lastUsed: new Date(),
+    }
   }
 
   injectMetadataChange(objectId: string, changes: Partial<FileMetadata>): void {
@@ -394,7 +427,7 @@ export class MockSdk implements SdkAdapter {
     return [...this.storage.events]
   }
 
-  getStorage(): MockSdkStorage {
+  getStorage(): MockIndexerStorage {
     return this.storage
   }
 

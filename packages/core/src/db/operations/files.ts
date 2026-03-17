@@ -642,6 +642,80 @@ export async function deleteManyFileRecordsByIds(
   })
 }
 
+export async function queryFileRecordByName(
+  db: DatabaseAdapter,
+  name: string,
+): Promise<FileRecordRow | null> {
+  return db.getFirstAsync<FileRecordRow>(
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt
+     FROM files WHERE name = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+    name,
+  )
+}
+
+export async function readFileRecordByName(
+  db: DatabaseAdapter,
+  name: string,
+): Promise<FileRecord | null> {
+  const row = await queryFileRecordByName(db, name)
+  if (!row) return null
+  const objects = await queryLocalObjectsForFile(db, row.id)
+  return transformRow(row, objects)
+}
+
+export async function queryUnuploadedFileCount(
+  db: DatabaseAdapter,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files f
+     WHERE f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)`,
+  )
+  return row?.count ?? 0
+}
+
+export async function queryUnuploadedFiles(
+  db: DatabaseAdapter,
+): Promise<{ id: string; name: string; type: string; size: number }[]> {
+  return db.getAllAsync<{
+    id: string
+    name: string
+    type: string
+    size: number
+  }>(
+    `SELECT f.id, f.name, f.type, f.size FROM files f
+     WHERE f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
+     ORDER BY f.addedAt DESC`,
+  )
+}
+
+export async function queryActiveFileSummaries(
+  db: DatabaseAdapter,
+): Promise<{ id: string; kind: string; type: string; size: number }[]> {
+  return db.getAllAsync<{
+    id: string
+    kind: string
+    type: string
+    size: number
+  }>(
+    'SELECT id, kind, type, size FROM files WHERE trashedAt IS NULL AND deletedAt IS NULL',
+  )
+}
+
+export async function queryUploadedFileIds(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<string[]> {
+  const rows = await db.getAllAsync<{ fileId: string }>(
+    'SELECT DISTINCT fileId FROM objects WHERE indexerURL = ?',
+    indexerURL,
+  )
+  return rows.map((r) => r.fileId)
+}
+
 export async function deleteLostFiles(
   db: DatabaseAdapter,
   indexerURL: string,

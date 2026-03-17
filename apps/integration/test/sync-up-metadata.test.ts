@@ -1,5 +1,5 @@
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
-import { createEmptyStorage } from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import {
   createTestApp,
   generateTestFiles,
@@ -11,7 +11,7 @@ describe('Sync Up Metadata', () => {
   let app: TestApp
 
   beforeEach(async () => {
-    app = createTestApp(createEmptyStorage())
+    app = createTestApp(createEmptyIndexerStorage())
     await app.start()
   })
 

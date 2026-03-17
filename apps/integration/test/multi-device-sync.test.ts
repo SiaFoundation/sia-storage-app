@@ -1,11 +1,7 @@
 import {
-  queryDirectoryNameForFile,
-  queryTagsForFile,
-} from '@siastorage/core/db/operations'
-import {
-  createEmptyStorage,
+  createEmptyIndexerStorage,
   generateMockFileMetadata,
-  type MockSdkStorage,
+  type MockIndexerStorage,
   resetObjectIdCounter,
 } from '@siastorage/sdk-mock'
 import {
@@ -22,10 +18,10 @@ beforeEach(() => {
 describe('Multi-Device Sync (simultaneous instances)', () => {
   let appA: TestApp
   let appB: TestApp
-  let shared: MockSdkStorage
+  let shared: MockIndexerStorage
 
   beforeEach(async () => {
-    shared = createEmptyStorage()
+    shared = createEmptyIndexerStorage()
     appA = createTestApp(shared)
     appB = createTestApp(shared)
     await appA.start()
@@ -220,13 +216,13 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
 
     await Promise.all([appA.waitForFileCount(1), appB.waitForFileCount(1)])
 
-    const tagsA = await queryTagsForFile(appA.db, 'tagged-file')
-    const tagsB = await queryTagsForFile(appB.db, 'tagged-file')
+    const tagsA = await appA.app.tags.getForFile('tagged-file')
+    const tagsB = await appB.app.tags.getForFile('tagged-file')
     expect(tagsA.map((t) => t.name).sort()).toEqual(['summer', 'vacation'])
     expect(tagsB.map((t) => t.name).sort()).toEqual(['summer', 'vacation'])
 
-    const dirA = await queryDirectoryNameForFile(appA.db, 'tagged-file')
-    const dirB = await queryDirectoryNameForFile(appB.db, 'tagged-file')
+    const dirA = await appA.app.directories.getNameForFile('tagged-file')
+    const dirB = await appB.app.directories.getNameForFile('tagged-file')
     expect(dirA).toBe('Photos')
     expect(dirB).toBe('Photos')
   })
@@ -278,10 +274,10 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
 describe('Multi-Device Sync (upload + sync)', () => {
   let appA: TestApp
   let appB: TestApp
-  let shared: MockSdkStorage
+  let shared: MockIndexerStorage
 
   beforeEach(async () => {
-    shared = createEmptyStorage()
+    shared = createEmptyIndexerStorage()
     appA = createTestApp(shared)
     appB = createTestApp(shared)
     await appA.start()

@@ -129,6 +129,12 @@
         "ts-jest": "29.4.6",
         "typescript": "5.9.3",
       },
+      "peerDependencies": {
+        "react": "^18 || ^19",
+      },
+      "optionalPeers": [
+        "react",
+      ],
     },
     "packages/logger": {
       "name": "@siastorage/logger",

@@ -1,9 +1,5 @@
-import {
-  readFsFileMetadata,
-  upsertFsFileMetadata,
-} from '@siastorage/core/db/operations'
 import { runCacheEviction } from '@siastorage/core/services'
-import { createEmptyStorage } from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
 
@@ -11,7 +7,7 @@ describe('FS Cache Eviction', () => {
   let app: TestApp
 
   beforeEach(async () => {
-    app = createTestApp(createEmptyStorage())
+    app = createTestApp(createEmptyIndexerStorage())
     await app.start()
   })
 
@@ -30,7 +26,7 @@ describe('FS Cache Eviction', () => {
     // Backdate usedAt on first two files so they're eviction candidates
     const oldTime = Date.now() - 8 * 24 * 60 * 60 * 1000 // 8 days ago
     for (const file of files.slice(0, 2)) {
-      await upsertFsFileMetadata(app.db, {
+      await app.app.fs.upsertMeta({
         fileId: file.id,
         size: file.size,
         addedAt: oldTime,
@@ -38,19 +34,14 @@ describe('FS Cache Eviction', () => {
       })
     }
 
-    const deleted: string[] = []
-    await runCacheEviction({
-      db: app.db,
-      deleteFile: async (fileId, type) => {
-        await app.removeFsFile(fileId, type)
-        deleted.push(fileId)
-      },
+    const result = await runCacheEviction(app.app, {
       maxBytes: 1500,
       minAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     })
 
-    expect(deleted.length).toBeGreaterThanOrEqual(1)
-    for (const fileId of deleted) {
+    expect(result).toBeDefined()
+    expect(result!.evictedFileIds.length).toBeGreaterThanOrEqual(1)
+    for (const fileId of result!.evictedFileIds) {
       const uri = await app.getFsFileUri({
         id: fileId,
         type: 'application/octet-stream',
@@ -70,7 +61,7 @@ describe('FS Cache Eviction', () => {
     // Backdate usedAt so they'd be eviction candidates if they had objects
     const oldTime = Date.now() - 30 * 24 * 60 * 60 * 1000
     for (const file of files) {
-      await upsertFsFileMetadata(app.db, {
+      await app.app.fs.upsertMeta({
         fileId: file.id,
         size: file.size,
         addedAt: oldTime,
@@ -80,18 +71,13 @@ describe('FS Cache Eviction', () => {
 
     app.setConnected(false)
 
-    const deleted: string[] = []
-    await runCacheEviction({
-      db: app.db,
-      deleteFile: async (fileId, type) => {
-        await app.removeFsFile(fileId, type)
-        deleted.push(fileId)
-      },
+    const result = await runCacheEviction(app.app, {
       maxBytes: 100,
       minAge: 0,
     })
 
-    expect(deleted).toHaveLength(0)
+    expect(result).toBeDefined()
+    expect(result!.evictedFileIds).toHaveLength(0)
 
     for (const file of files) {
       const uri = await app.getFsFileUri({
@@ -110,18 +96,13 @@ describe('FS Cache Eviction', () => {
     await app.addFiles(fileFactories)
     await app.waitForNoActiveUploads()
 
-    const deleted: string[] = []
-    await runCacheEviction({
-      db: app.db,
-      deleteFile: async (fileId, type) => {
-        await app.removeFsFile(fileId, type)
-        deleted.push(fileId)
-      },
+    const result = await runCacheEviction(app.app, {
       maxBytes: 100,
       minAge: 7 * 24 * 60 * 60 * 1000,
     })
 
-    expect(deleted).toHaveLength(0)
+    expect(result).toBeDefined()
+    expect(result!.evictedFileIds).toHaveLength(0)
   }, 60_000)
 
   it('skips eviction when total size is under limit', async () => {
@@ -132,9 +113,7 @@ describe('FS Cache Eviction', () => {
     await app.addFiles(fileFactories)
     await app.waitForNoActiveUploads()
 
-    const result = await runCacheEviction({
-      db: app.db,
-      deleteFile: async () => {},
+    const result = await runCacheEviction(app.app, {
       maxBytes: 1_000_000,
     })
 
@@ -151,7 +130,7 @@ describe('FS Cache Eviction', () => {
     })
     expect(uriBefore).not.toBeNull()
 
-    const metaBefore = await readFsFileMetadata(app.db, file.id)
+    const metaBefore = await app.app.fs.readMeta(file.id)
     expect(metaBefore).not.toBeNull()
 
     // Delete the file from disk without updating metadata
@@ -164,7 +143,7 @@ describe('FS Cache Eviction', () => {
     })
     expect(uriAfter).toBeNull()
 
-    const metaAfter = await readFsFileMetadata(app.db, file.id)
+    const metaAfter = await app.app.fs.readMeta(file.id)
     expect(metaAfter).toBeNull()
   })
 
@@ -176,15 +155,15 @@ describe('FS Cache Eviction', () => {
     expect(uri).not.toBeNull()
 
     // Manually delete the metadata but keep the file on disk
-    await app.db.runAsync('DELETE FROM fs WHERE fileId = ?', file.id)
-    const metaGone = await readFsFileMetadata(app.db, file.id)
+    await app.app.fs.deleteMeta(file.id)
+    const metaGone = await app.app.fs.readMeta(file.id)
     expect(metaGone).toBeNull()
 
     // getFsFileUri should re-insert the metadata
     const uri2 = await app.getFsFileUri({ id: file.id, type: file.type })
     expect(uri2).not.toBeNull()
 
-    const metaRestored = await readFsFileMetadata(app.db, file.id)
+    const metaRestored = await app.app.fs.readMeta(file.id)
     expect(metaRestored).not.toBeNull()
     expect(metaRestored!.fileId).toBe(file.id)
   })
@@ -194,11 +173,11 @@ describe('FS Cache Eviction', () => {
     const [file] = await app.addFiles(fileFactories)
 
     await app.getFsFileUri({ id: file.id, type: file.type })
-    const meta1 = await readFsFileMetadata(app.db, file.id)
+    const meta1 = await app.app.fs.readMeta(file.id)
 
     // Second call within throttle window should not update usedAt
     await app.getFsFileUri({ id: file.id, type: file.type })
-    const meta2 = await readFsFileMetadata(app.db, file.id)
+    const meta2 = await app.app.fs.readMeta(file.id)
     expect(meta2!.usedAt).toBe(meta1!.usedAt)
   })
 })

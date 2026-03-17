@@ -1,12 +1,12 @@
 import type { FlushRecord } from '@siastorage/core/services/uploader'
-import { createEmptyStorage } from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
 
 describe('Upload Packing', () => {
   let app: TestApp
 
   beforeEach(async () => {
-    app = createTestApp(createEmptyStorage())
+    app = createTestApp(createEmptyIndexerStorage())
     await app.start()
   })
 

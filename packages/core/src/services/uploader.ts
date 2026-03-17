@@ -1,10 +1,7 @@
 import { logger } from '@siastorage/logger'
 import type { Reader } from '../adapters/fs'
-import type {
-  PackedUploadRef,
-  PinnedObjectRef,
-  SdkAdapter,
-} from '../adapters/sdk'
+import type { PackedUploadRef, PinnedObjectRef } from '../adapters/sdk'
+import type { AppService, AppServiceInternal } from '../app/service'
 import {
   PACKER_IDLE_TIMEOUT,
   PACKER_MAX_BATCH_DURATION,
@@ -20,6 +17,7 @@ import {
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
+import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
 import { uniqueId } from '../lib/uniqueId'
@@ -56,44 +54,10 @@ export function calculateAllFileProgress(
   return result
 }
 
-export type UploadDeps = {
-  sdk: Pick<SdkAdapter, 'uploadPacked' | 'pinObject'>
-  files: {
-    read(id: string): Promise<FileRecordRow | null>
-    getLocalOnly(opts: {
-      limit: number
-      order: 'ASC'
-      excludeIds?: string[]
-    }): Promise<FileRecordRow[]>
-    getFsFileUri(file: FileRecordRow): Promise<string | null>
-  }
-  localObjects: {
-    upsertMany(objects: LocalObject[]): Promise<void>
-    invalidate(): void
-  }
-  platform: {
-    isConnected(): boolean
-    autoScanEnabled(): Promise<boolean>
-    getIndexerURL(): string
-    createFileReader(uri: string): Reader
-    pinnedObjectToLocalObject(
-      fileId: string,
-      indexerURL: string,
-      object: PinnedObjectRef,
-    ): Promise<LocalObject>
-  }
-  uploads: {
-    register(fileId: string, size: number): void
-    registerMany(entries: Array<{ id: string; size: number }>): void
-    remove(fileId: string): void
-    removeMany(ids: string[]): void
-    setStatus(fileId: string, status: 'packing' | 'packed' | 'uploading'): void
-    setError(fileId: string, message: string): void
-    setBatchInfo(fileId: string, batchId: string, fileCount: number): void
-    setBatchUploading(fileIds: string[], batchId: string): void
-    updateProgress(fileId: string, progress: number): void
-    getActive(): Array<{ id: string }>
-  }
+/** Platform-specific adapters for the upload system. */
+export interface UploaderAdapters {
+  createFileReader: (uri: string) => Reader
+  progressScheduler?: (cb: () => void) => void
 }
 
 /** A file queued for upload with its resolved URI and size. */
@@ -161,8 +125,12 @@ export type FlushRecord = {
  * and small files for efficient slab packing.
  */
 export class UploadManager {
-  /** Injected dependencies; set by initialize(). */
-  private deps!: UploadDeps
+  private app!: AppService
+  private internal!: AppServiceInternal
+  private adapters!: UploaderAdapters
+  private progressThrottle:
+    | ((fileId: string, progress: number) => void)
+    | null = null
   /** Native packed upload handle; null when no batch is open. */
   private packer: PackedUploadRef | null = null
   /** The batch currently being packed (accumulating files). */
@@ -193,14 +161,39 @@ export class UploadManager {
   private _uploadedBytes = 0
 
   /** Connect dependencies and start the async processing loop. */
-  initialize(deps: UploadDeps): void {
-    this.deps = deps
+  initialize(
+    app: AppService,
+    internal: AppServiceInternal,
+    adapters: UploaderAdapters,
+  ): void {
+    this.app = app
+    this.internal = internal
+    this.adapters = adapters
+    this.progressThrottle = adapters.progressScheduler
+      ? (() => {
+          const pending = new Map<string, number>()
+          let scheduled = false
+          return (fileId: string, progress: number) => {
+            pending.set(fileId, progress)
+            if (!scheduled) {
+              scheduled = true
+              adapters.progressScheduler!(() => {
+                scheduled = false
+                for (const [id, p] of pending) {
+                  this.app.uploads.update(id, { progress: p })
+                }
+                pending.clear()
+              })
+            }
+          }
+        })()
+      : null
     this.startLoop()
   }
 
   /** Add files to the explicit queue and wake the loop. */
   enqueue(files: FileEntry[]): void {
-    this.deps.uploads.registerMany(
+    this.app.uploads.registerMany(
       files.map((f) => ({ id: f.fileId, size: f.size })),
     )
     this.explicitQueue.push(...files)
@@ -270,7 +263,7 @@ export class UploadManager {
 
     try {
       const fileIds = batch.files.map((f) => f.fileId)
-      this.deps.uploads.setBatchUploading(fileIds, batch.batchId)
+      this.app.uploads.setBatchUploading(fileIds, batch.batchId)
 
       const finalizeStart = Date.now()
       const pinnedObjects = await packer.finalize()
@@ -301,7 +294,7 @@ export class UploadManager {
       })
 
       for (const entry of batch.files) {
-        this.deps.uploads.setError(entry.fileId, message)
+        this.app.uploads.setError(entry.fileId, message)
       }
     } finally {
       this.uploadingBatch = null
@@ -349,7 +342,7 @@ export class UploadManager {
     for (const entry of this.explicitQueue) idsToRemove.push(entry.fileId)
 
     if (idsToRemove.length > 0) {
-      this.deps.uploads.removeMany(idsToRemove)
+      this.app.uploads.removeMany(idsToRemove)
     }
     this.explicitQueue = []
     this.polledFiles = []
@@ -390,7 +383,8 @@ export class UploadManager {
     this.uploadingPacker = null
     this.explicitQueue = []
     this.polledFiles = []
-    this.deps = null as unknown as UploadDeps
+    this.app = null!
+    this.internal = null!
     this._needsInvalidation = false
     this._flushHistory = []
     this._packedCount = 0
@@ -404,8 +398,10 @@ export class UploadManager {
    * async loop. Allows deterministic control over file order and timing.
    */
   async __testProcessFiles(files: FileEntry[]): Promise<void> {
+    this.app.uploads.registerMany(
+      files.map((f) => ({ id: f.fileId, size: f.size })),
+    )
     for (const file of files) {
-      this.deps.uploads.register(file.fileId, file.size)
       await this.processEntry(file)
     }
   }
@@ -470,7 +466,8 @@ export class UploadManager {
 
       if (this._needsInvalidation) {
         this._needsInvalidation = false
-        this.deps.localObjects.invalidate()
+        this.app.caches.library.invalidateAll()
+        this.app.caches.libraryVersion.invalidate()
       }
 
       const newFiles = await this.pollDB()
@@ -525,6 +522,7 @@ export class UploadManager {
       }
 
       if (!this.packer) {
+        const sdk = this.internal.requireSdk()
         const batchId = uniqueId()
         logger.info('uploadManager', 'packer_create', { batchId })
         const batch: BatchState = {
@@ -539,7 +537,7 @@ export class UploadManager {
           slabUploadAdds: 0,
         }
         this.batch = batch
-        this.packer = await this.deps.sdk.uploadPacked({
+        this.packer = await sdk.uploadPacked({
           maxInflight: UPLOAD_MAX_INFLIGHT,
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
@@ -550,7 +548,7 @@ export class UploadManager {
         })
       }
 
-      this.deps.uploads.setStatus(entry.fileId, 'packing')
+      this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
         size: entry.size,
@@ -558,7 +556,7 @@ export class UploadManager {
       })
 
       const t0 = Date.now()
-      const reader = this.deps.platform.createFileReader(entry.fileUri)
+      const reader = this.adapters.createFileReader(entry.fileUri)
       const t1 = Date.now()
       await this.packer.add(reader)
       const t2 = Date.now()
@@ -584,7 +582,7 @@ export class UploadManager {
         fileId: entry.fileId,
         error: e as Error,
       })
-      this.deps.uploads.setError(entry.fileId, message)
+      this.app.uploads.setError(entry.fileId, message)
     }
   }
 
@@ -639,14 +637,14 @@ export class UploadManager {
     for (let j = from; j < end; j++) {
       if (!this.active) break
       const entry = entries[j]
-      this.deps.uploads.setStatus(entry.fileId, 'packing')
+      this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
         size: entry.size,
         batchId: this.batch!.batchId,
       })
       const t0 = Date.now()
-      const reader = this.deps.platform.createFileReader(entry.fileUri)
+      const reader = this.adapters.createFileReader(entry.fileUri)
       inflight.push({
         entry,
         t0,
@@ -686,7 +684,7 @@ export class UploadManager {
           fileId: entry.fileId,
           error: e as Error,
         })
-        this.deps.uploads.setError(entry.fileId, message)
+        this.app.uploads.setError(entry.fileId, message)
       }
     }
 
@@ -741,31 +739,32 @@ export class UploadManager {
    * @returns Number of new files added to the polledFiles queue.
    */
   private async pollDB(): Promise<number> {
-    const isConnected = this.deps.platform.isConnected()
-    if (!isConnected) return 0
+    if (!this.app.connection.getState().isConnected) return 0
 
-    const autoScan = await this.deps.platform.autoScanEnabled()
+    const autoScan = await this.app.settings.getAutoScanUploads()
     if (!autoScan) return 0
 
     try {
-      const activeUploads = this.deps.uploads.getActive()
-      const activeIds = activeUploads.map((u) => u.id)
-
-      const candidateFiles = await this.deps.files.getLocalOnly({
+      const activeIds = this.app.uploads.getActiveIds()
+      const indexerURL = await this.app.settings.getIndexerURL()
+      const candidateFiles = await this.app.files.query({
         limit: 200,
         order: 'ASC',
+        pinned: { indexerURL, isPinned: false },
+        fileExistsLocally: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
+        activeOnly: true,
       })
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
-        const fileUri = await this.deps.files.getFsFileUri(file)
+        const fileUri = await this.app.fs.getFileUri(file)
         if (!fileUri) continue
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
       }
 
       if (newEntries.length > 0) {
-        this.deps.uploads.registerMany(
+        this.app.uploads.registerMany(
           newEntries.map((e) => ({ id: e.fileId, size: e.size })),
         )
         this.polledFiles.push(...newEntries)
@@ -811,7 +810,7 @@ export class UploadManager {
     this.batch!.totalSize += entry.size
     this._packedCount++
     this._packedBytes += entry.size
-    this.deps.uploads.setStatus(entry.fileId, 'packed')
+    this.app.uploads.setStatus(entry.fileId, 'packed')
     const slabsBefore = this.batch!.slabsFilled
     this.batch!.slabsFilled = Math.floor(this.batch!.totalSize / SLAB_SIZE)
     this.batch!.totalAddMs += addMs
@@ -876,7 +875,11 @@ export class UploadManager {
         batchProgress,
         entry.fileId,
       )
-      this.deps.uploads.updateProgress(entry.fileId, fileProgress)
+      if (this.progressThrottle) {
+        this.progressThrottle(entry.fileId, fileProgress)
+      } else {
+        this.app.uploads.update(entry.fileId, { progress: fileProgress })
+      }
     }
   }
 
@@ -900,6 +903,9 @@ export class UploadManager {
       })
     }
 
+    const sdk = this.internal.requireSdk()
+    const indexerURL = await this.app.settings.getIndexerURL()
+
     type PinResult =
       | {
           type: 'success'
@@ -922,15 +928,12 @@ export class UploadManager {
               fileId: entry.fileId,
               index: i,
             })
-            this.deps.uploads.setError(
-              entry.fileId,
-              'No pinned object returned',
-            )
+            this.app.uploads.setError(entry.fileId, 'No pinned object returned')
             return { type: 'missing', fileId: entry.fileId }
           }
 
           try {
-            const fileRecord = await this.deps.files.read(entry.fileId)
+            const fileRecord = await this.app.files.getById(entry.fileId)
             if (!fileRecord) {
               logger.warn('uploadManager', 'file_deleted_during_upload', {
                 fileId: entry.fileId,
@@ -939,20 +942,15 @@ export class UploadManager {
             }
 
             pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
-            await retry(
-              'pinObject',
-              () => this.deps.sdk.pinObject(pinnedObject),
-              3,
-              1000,
-            )
+            await retry('pinObject', () => sdk.pinObject(pinnedObject), 3, 1000)
 
-            const indexerURL = this.deps.platform.getIndexerURL()
-            const localObject =
-              await this.deps.platform.pinnedObjectToLocalObject(
-                entry.fileId,
-                indexerURL,
-                pinnedObject,
-              )
+            const appKey = sdk.appKey()
+            const localObject = sealPinnedObject(
+              entry.fileId,
+              indexerURL,
+              pinnedObject,
+              appKey,
+            )
             logger.debug('uploadManager', 'object_saved', {
               fileId: entry.fileId,
             })
@@ -968,7 +966,7 @@ export class UploadManager {
               fileId: entry.fileId,
               error: e as Error,
             })
-            this.deps.uploads.setError(entry.fileId, message)
+            this.app.uploads.setError(entry.fileId, message)
             return { type: 'error', fileId: entry.fileId }
           }
         }),
@@ -982,7 +980,9 @@ export class UploadManager {
           r.type === 'success',
       )
       .map((r) => r.localObject)
-    await this.deps.localObjects.upsertMany(localObjects)
+    await this.app.localObjects.upsertMany(localObjects, {
+      skipInvalidation: true,
+    })
 
     for (const r of results) {
       if (r.type === 'success') {
@@ -999,14 +999,15 @@ export class UploadManager {
       .filter((r) => r.type !== 'error' && r.type !== 'missing')
       .map((r) => r.fileId)
     if (successfulFileIds.length > 0) {
-      this.deps.localObjects.invalidate()
+      this.app.caches.library.invalidateAll()
+      this.app.caches.libraryVersion.invalidate()
       this._needsInvalidation = false
       if (SAVE_REMOVAL_DELAY_MS > 0) {
         await new Promise((resolve) =>
           setTimeout(resolve, SAVE_REMOVAL_DELAY_MS),
         )
       }
-      this.deps.uploads.removeMany(successfulFileIds)
+      this.app.uploads.removeMany(successfulFileIds)
     }
 
     return successfulFileIds

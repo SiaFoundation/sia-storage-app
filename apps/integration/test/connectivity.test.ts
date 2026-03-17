@@ -1,5 +1,5 @@
 import {
-  createEmptyStorage,
+  createEmptyIndexerStorage,
   generateMockFileMetadata,
 } from '@siastorage/sdk-mock'
 import {
@@ -14,7 +14,7 @@ describe('Connectivity Integration', () => {
   let app: TestApp
 
   beforeEach(async () => {
-    app = createTestApp(createEmptyStorage())
+    app = createTestApp(createEmptyIndexerStorage())
     await app.start()
   })
 
