@@ -1,11 +1,11 @@
-import { createEmptyStorage } from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
 
 describe('App Boot', () => {
   let app: TestApp
 
   beforeEach(() => {
-    app = createTestApp(createEmptyStorage())
+    app = createTestApp(createEmptyIndexerStorage())
   })
 
   afterEach(async () => {

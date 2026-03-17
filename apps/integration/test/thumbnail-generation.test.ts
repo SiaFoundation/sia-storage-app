@@ -8,7 +8,7 @@
  */
 
 import { ThumbSizes } from '@siastorage/core/types'
-import { createEmptyStorage } from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -37,7 +37,7 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
-  app = createTestApp(createEmptyStorage())
+  app = createTestApp(createEmptyIndexerStorage())
   await app.start()
 })
 

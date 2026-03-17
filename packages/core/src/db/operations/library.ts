@@ -1,8 +1,15 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import type { FileRecordRow } from '../../types/files'
 
 export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
+export const ALL_CATEGORIES: readonly Category[] = [
+  'Video',
+  'Image',
+  'Audio',
+  'Files',
+]
 
 type MediaCategory = 'Video' | 'Image' | 'Audio'
 const MEDIA_PREFIXES: Record<MediaCategory, string> = {
@@ -288,6 +295,36 @@ export async function querySortedFileIds(
     offset,
   )
   return rows.map((r) => r.id)
+}
+
+export async function queryLibraryFiles(
+  db: DatabaseAdapter,
+  opts: LibraryQueryParams & { limit?: number; offset?: number },
+): Promise<FileRecordRow[]> {
+  const { limit, offset, ...queryOpts } = opts
+  const {
+    where,
+    params: queryParams,
+    orderExpr,
+  } = buildLibraryQueryParts({
+    ...queryOpts,
+    tableAlias: 'files',
+  })
+
+  let pageClause = ''
+  if (limit != null && offset != null) {
+    pageClause = ` LIMIT ${limit | 0} OFFSET ${offset | 0}`
+  } else if (limit != null) {
+    pageClause = ` LIMIT ${limit | 0}`
+  }
+
+  return db.getAllAsync<FileRecordRow>(
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt
+     FROM files
+     ${where}
+     ORDER BY ${orderExpr}${pageClause}`,
+    ...queryParams,
+  )
 }
 
 export async function queryFileExists(

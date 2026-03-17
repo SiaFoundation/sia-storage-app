@@ -2,10 +2,7 @@ import { insertFileRecord } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   autoPurgeOldTrashedFiles,
-  autoPurgeOldTrashedFilesWithCleanup,
-  type FileCleanupDeps,
   permanentlyDeleteFiles,
-  permanentlyDeleteFilesWithCleanup,
   restoreFiles,
   trashFiles,
 } from './trash'
@@ -199,102 +196,5 @@ describe('autoPurgeOldTrashedFiles', () => {
     const purgedIds = await autoPurgeOldTrashedFiles(db())
 
     expect(purgedIds).toEqual([])
-  })
-})
-
-describe('permanentlyDeleteFilesWithCleanup', () => {
-  it('tombstones files, removes uploads, and cleans up file + thumbnail assets', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1', { localId: 'local-f1' }))
-    await insertFileRecord(
-      db(),
-      makeFileRecord('t1', {
-        kind: 'thumb',
-        thumbForId: 'f1',
-        thumbSize: 64,
-        localId: null,
-      }),
-    )
-
-    const removedFiles: string[] = []
-    const removedUploadIds: string[] = []
-    const deps: FileCleanupDeps = {
-      removeFile: async (f) => {
-        removedFiles.push(f.id)
-      },
-      removeUploads: (ids) => {
-        removedUploadIds.push(...ids)
-      },
-    }
-
-    const files = [{ id: 'f1', type: 'image/jpeg', localId: 'local-f1' }]
-    await permanentlyDeleteFilesWithCleanup(db(), files, deps)
-
-    const f1 = await getFile('f1')
-    expect(f1!.deletedAt).not.toBeNull()
-
-    expect(removedUploadIds).toEqual(['f1'])
-    expect(removedFiles.sort()).toEqual(['f1', 't1'])
-  })
-
-  it('no-ops on empty files array', async () => {
-    const deps: FileCleanupDeps = {
-      removeFile: jest.fn(),
-      removeUploads: jest.fn(),
-    }
-
-    await permanentlyDeleteFilesWithCleanup(db(), [], deps)
-
-    expect(deps.removeFile).not.toHaveBeenCalled()
-    expect(deps.removeUploads).not.toHaveBeenCalled()
-  })
-})
-
-describe('autoPurgeOldTrashedFilesWithCleanup', () => {
-  it('purges old trashed files and calls cleanup deps', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { trashedAt: 1, localId: 'local-f1' }),
-    )
-    await insertFileRecord(
-      db(),
-      makeFileRecord('t1', {
-        kind: 'thumb',
-        thumbForId: 'f1',
-        thumbSize: 64,
-        trashedAt: 1,
-        localId: null,
-      }),
-    )
-
-    const removedFiles: string[] = []
-    const removedUploadIds: string[] = []
-    const deps: FileCleanupDeps = {
-      removeFile: async (f) => {
-        removedFiles.push(f.id)
-      },
-      removeUploads: (ids) => {
-        removedUploadIds.push(...ids)
-      },
-    }
-
-    await autoPurgeOldTrashedFilesWithCleanup(db(), deps)
-
-    const f1 = await getFile('f1')
-    expect(f1!.deletedAt).not.toBeNull()
-
-    expect(removedUploadIds).toEqual(['f1'])
-    expect(removedFiles.sort()).toEqual(['f1', 't1'])
-  })
-
-  it('does nothing when no files to purge', async () => {
-    const deps: FileCleanupDeps = {
-      removeFile: jest.fn(),
-      removeUploads: jest.fn(),
-    }
-
-    await autoPurgeOldTrashedFilesWithCleanup(db(), deps)
-
-    expect(deps.removeFile).not.toHaveBeenCalled()
-    expect(deps.removeUploads).not.toHaveBeenCalled()
   })
 })

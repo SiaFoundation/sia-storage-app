@@ -1,5 +1,6 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import { uniqueId } from '../../lib/uniqueId'
+import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { trashFiles } from './trash'
 export type Directory = {
@@ -185,6 +186,52 @@ export async function queryCountFilesWithDirectories(
     ...fileIds,
   )
   return row?.count ?? 0
+}
+
+export async function queryDirectoryByName(
+  db: DatabaseAdapter,
+  name: string,
+): Promise<Directory | null> {
+  return db.getFirstAsync<Directory>(
+    'SELECT id, name, createdAt FROM directories WHERE name = ? COLLATE NOCASE LIMIT 1',
+    name,
+  )
+}
+
+export async function queryFileByNameInDirectory(
+  db: DatabaseAdapter,
+  fileName: string,
+  directoryName: string,
+): Promise<FileRecordRow | null> {
+  if (!fileName) return null
+  return db.getFirstAsync<FileRecordRow>(
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind,
+            f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
+     FROM files f
+     INNER JOIN directories d ON f.directoryId = d.id
+     WHERE f.name = ? AND f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND d.name = ?
+     LIMIT 1`,
+    fileName,
+    directoryName,
+  )
+}
+
+export async function queryFilesByDirectoryName(
+  db: DatabaseAdapter,
+  directoryName: string,
+): Promise<FileRecordRow[]> {
+  return db.getAllAsync<FileRecordRow>(
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind,
+            f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
+     FROM files f
+     INNER JOIN directories d ON f.directoryId = d.id
+     WHERE d.name = ? AND f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+     ORDER BY f.name`,
+    directoryName,
+  )
 }
 
 export async function renameDirectory(

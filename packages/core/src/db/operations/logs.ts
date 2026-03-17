@@ -1,6 +1,28 @@
 import type { LogLevel } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
 
+export async function insertLog(
+  db: DatabaseAdapter,
+  entry: {
+    timestamp: string
+    level: string
+    scope: string
+    message: string
+    data: string | null
+    createdAt: number
+  },
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+    entry.timestamp,
+    entry.level,
+    entry.scope,
+    entry.message,
+    entry.data,
+    entry.createdAt,
+  )
+}
+
 export async function queryAvailableLogScopes(
   db: DatabaseAdapter,
 ): Promise<string[]> {
@@ -81,4 +103,23 @@ export async function queryLogCount(
 
 export async function deleteAllLogs(db: DatabaseAdapter): Promise<void> {
   await db.runAsync('DELETE FROM logs')
+}
+
+export async function rotateLogs(
+  db: DatabaseAdapter,
+  maxLogs: number,
+): Promise<number> {
+  const countResult = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM logs',
+  )
+  const count = countResult?.count ?? 0
+  if (count <= maxLogs) return 0
+  const toDelete = count - maxLogs
+  await db.runAsync(
+    `DELETE FROM logs WHERE id IN (
+      SELECT id FROM logs ORDER BY createdAt ASC, id ASC LIMIT ?
+    )`,
+    toDelete,
+  )
+  return toDelete
 }

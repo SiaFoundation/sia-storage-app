@@ -1,14 +1,13 @@
 import { logger } from '@siastorage/logger'
-import type { SdkAdapter } from '../adapters/sdk'
+import type { AppService, AppServiceInternal } from '../app/service'
 import type { FileRecordsQueryOpts } from '../db/operations/files'
 import {
   decodeFileMetadata,
   encodeFileMetadata,
-  type FileMetadata,
   MAX_SUPPORTED_VERSION,
 } from '../encoding/fileMetadata'
 import { SlotPool } from '../lib/slotPool'
-import type { FileRecord } from '../types/files'
+import type { FileMetadata } from '../types/files'
 import { fileMetadataKeys } from '../types/files'
 
 type DiffEntry = { local: unknown; remote: unknown }
@@ -31,41 +30,6 @@ export function diffFileMetadata(
 export type SyncUpCursor = {
   updatedAt: number
   id: string
-}
-
-export type SyncUpProgressState = {
-  isSyncing: boolean
-  processed?: number
-  total?: number
-}
-
-export type SyncUpDeps = {
-  sdk: Pick<
-    SdkAdapter,
-    'getPinnedObject' | 'updateObjectMetadata' | 'deleteObject'
-  >
-  files: {
-    readAll(opts: FileRecordsQueryOpts): Promise<FileRecord[]>
-    readAllCount(opts: FileRecordsQueryOpts): Promise<number>
-  }
-  localObjects: {
-    delete(objectId: string, indexerURL: string): Promise<void>
-    countForFile(fileId: string): Promise<number>
-  }
-  tags: {
-    readNamesForFile(fileId: string): Promise<string[] | undefined>
-  }
-  directories: {
-    readNameForFile(fileId: string): Promise<string | undefined>
-  }
-  platform: {
-    isConnected(): boolean
-    getIndexerURL(): Promise<string>
-  }
-  hooks: {
-    onProgress(state: SyncUpProgressState): void
-    getIsSyncing(): boolean
-  }
 }
 
 type LogContext = { fileId: string; objectId: string; fileName: string }
@@ -106,23 +70,24 @@ export async function runSyncUpMetadataBatch(
   batchSize: number,
   concurrency: number,
   signal: AbortSignal,
-  deps: SyncUpDeps,
-  getCursor: () => Promise<SyncUpCursor | undefined>,
-  setCursor: (cursor: SyncUpCursor | undefined) => Promise<void>,
+  app: AppService,
+  internal: AppServiceInternal,
 ): Promise<void> {
-  if (!deps.platform.isConnected()) {
+  if (!app.connection.getState().isConnected) {
     logger.debug('syncUpMetadata', 'skipped', { reason: 'not_connected' })
-    deps.hooks.onProgress({ isSyncing: false })
+    app.sync.setState({ isSyncingUp: false })
     return
   }
   if (signal.aborted) return
-  const indexerURL = await deps.platform.getIndexerURL()
-  const after = await getCursor()
+
+  const sdk = internal.requireSdk()
+  const indexerURL = await app.settings.getIndexerURL()
+  const after = await app.sync.getSyncUpCursor()
   logger.debug('syncUpMetadata', 'tick', {
     fromId: after?.id ?? 'begin',
     afterUpdatedAt: after?.updatedAt,
   })
-  const batch = await deps.files.readAll({
+  const batch = await app.files.query({
     order: 'ASC',
     orderBy: 'updatedAt',
     pinned: { indexerURL, isPinned: true },
@@ -136,18 +101,26 @@ export async function runSyncUpMetadataBatch(
   })
   if (batch.length === 0) {
     logger.debug('syncUpMetadata', 'no_updates')
-    deps.hooks.onProgress({ isSyncing: false, processed: 0, total: 0 })
+    app.sync.setState({
+      isSyncingUp: false,
+      syncUpProcessed: 0,
+      syncUpTotal: 0,
+    })
     return
   }
-  if (!deps.hooks.getIsSyncing()) {
+  if (!app.sync.getState().isSyncingUp) {
     const queryOpts: FileRecordsQueryOpts = {
       order: 'ASC',
       orderBy: 'updatedAt',
       pinned: { indexerURL, isPinned: true },
       after: after ? { value: after.updatedAt, id: after.id } : undefined,
     }
-    const total = await deps.files.readAllCount(queryOpts)
-    deps.hooks.onProgress({ isSyncing: true, processed: 0, total })
+    const total = await app.files.queryCount(queryOpts)
+    app.sync.setState({
+      isSyncingUp: true,
+      syncUpProcessed: 0,
+      syncUpTotal: total,
+    })
   }
   let hasErrors = false
   const pool = new SlotPool(concurrency)
@@ -174,7 +147,7 @@ export async function runSyncUpMetadataBatch(
         // never retry. The batch stalls and retries on the next tick.
         if (f.deletedAt) {
           const result = await tryWithLog(
-            () => deps.sdk.deleteObject(obj.id),
+            () => sdk.deleteObject(obj.id),
             'deleteObject',
             ctx,
           )
@@ -182,12 +155,12 @@ export async function runSyncUpMetadataBatch(
             hasErrors = true
             return
           }
-          await deps.localObjects.delete(obj.id, indexerURL)
+          await app.localObjects.delete(obj.id, indexerURL)
           return
         }
 
         const remote = await tryWithLog(
-          () => deps.sdk.getPinnedObject(obj.id),
+          () => sdk.getPinnedObject(obj.id),
           'getPinnedObject',
           ctx,
         )
@@ -238,11 +211,11 @@ export async function runSyncUpMetadataBatch(
         if (isLocalNewer) {
           let fileToEncode: FileMetadata = f
           if (f.kind === 'file') {
-            const tags = await deps.tags.readNamesForFile(f.id)
+            const tags = await app.tags.getNamesForFile(f.id)
             if (tags) {
               fileToEncode = { ...fileToEncode, tags }
             }
-            const directory = await deps.directories.readNameForFile(f.id)
+            const directory = await app.directories.getNameForFile(f.id)
             if (directory) {
               fileToEncode = { ...fileToEncode, directory }
             }
@@ -257,7 +230,7 @@ export async function runSyncUpMetadataBatch(
           const result = await tryWithLog(
             () => {
               remote.updateMetadata(encodeFileMetadata(fileToEncode))
-              return deps.sdk.updateObjectMetadata(remote)
+              return sdk.updateObjectMetadata(remote)
             },
             'updateMetadata',
             ctx,
@@ -270,22 +243,30 @@ export async function runSyncUpMetadataBatch(
       })
     }),
   )
-  deps.hooks.onProgress({ isSyncing: true, processed: batch.length })
+  app.sync.setState({ isSyncingUp: true, syncUpProcessed: batch.length })
   if (hasErrors) {
     logger.warn('syncUpMetadata', 'batch_had_errors_cursor_not_advanced')
-    deps.hooks.onProgress({ isSyncing: false, processed: 0, total: 0 })
+    app.sync.setState({
+      isSyncingUp: false,
+      syncUpProcessed: 0,
+      syncUpTotal: 0,
+    })
     return
   }
   const last = batch[batch.length - 1]
   if (batch.length < batchSize) {
-    deps.hooks.onProgress({ isSyncing: false, processed: 0, total: 0 })
-    await setCursor({
+    app.sync.setState({
+      isSyncingUp: false,
+      syncUpProcessed: 0,
+      syncUpTotal: 0,
+    })
+    await app.sync.setSyncUpCursor({
       updatedAt: last.updatedAt + 1,
       id: last.id,
     })
     logger.debug('syncUpMetadata', 'end_reached')
   } else {
-    await setCursor({
+    await app.sync.setSyncUpCursor({
       updatedAt: last.updatedAt,
       id: last.id,
     })

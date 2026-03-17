@@ -1,18 +1,14 @@
 import { logger } from '@siastorage/logger'
-import type {
-  AppKeyRef,
-  ObjectsCursor,
-  PinnedObjectRef,
-  SdkAdapter,
-} from '../adapters/sdk'
+import type { PinnedObjectRef } from '../adapters/sdk'
+import type { AppService, AppServiceInternal } from '../app/service'
 import {
   decodeFileMetadata,
-  type FileMetadata,
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
-import type { FileRecord, FileRecordRow } from '../types/files'
+import { sealPinnedObject } from '../lib/localObjects'
+import type { FileMetadata, FileRecord, FileRecordRow } from '../types/files'
 
 const batchSize = 500
 
@@ -55,55 +51,6 @@ type PreparedDelete = {
 
 type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
 
-export type SyncDownDeps = {
-  sdk: Pick<SdkAdapter, 'objectEvents'>
-  files: {
-    read(id: string): Promise<FileRecord | null>
-    readByObjectId(
-      objectId: string,
-      indexerURL: string,
-    ): Promise<FileRecord | null>
-    create(fileRecord: Omit<FileRecord, 'objects'>): Promise<void>
-    update(
-      record: Partial<FileRecordRow> & { id: string },
-      options?: { includeUpdatedAt?: boolean },
-    ): Promise<void>
-  }
-  localObjects: {
-    upsert(localObject: LocalObject): Promise<void>
-    delete(objectId: string, indexerURL: string): Promise<void>
-    countForFile(fileId: string): Promise<number>
-  }
-  tags: {
-    syncFromMetadata(
-      fileId: string,
-      tagNames: string[] | undefined,
-    ): Promise<void>
-  }
-  directories: {
-    syncFromMetadata(
-      fileId: string,
-      directoryName: string | undefined,
-    ): Promise<void>
-  }
-  platform: {
-    getIndexerURL(): Promise<string>
-    getAppKey(indexerURL: string): Promise<AppKeyRef | null>
-    pinnedObjectToLocalObject(
-      fileId: string,
-      indexerURL: string,
-      object: PinnedObjectRef,
-    ): Promise<LocalObject>
-    withTransaction(fn: () => Promise<void>): Promise<void>
-  }
-  hooks: {
-    onBatchChanged(): Promise<void>
-    onFileDeleted(fileRecord: FileRecordRow): Promise<void>
-    onFileUpdated(fileId: string): void
-    onProgress(counts: Counts & { isSyncing: boolean; cursorAt?: number }): void
-  }
-}
-
 /**
  * Syncs down events from the indexer to the local database. The service works by
  * starting with a cursor saved in secure store. It iterates until there are no
@@ -115,11 +62,12 @@ export type SyncDownDeps = {
  */
 export async function syncDownEventsBatch(
   signal: AbortSignal,
-  deps: SyncDownDeps,
-  getCursor: () => Promise<ObjectsCursor | undefined>,
-  setCursor: (cursor: ObjectsCursor | undefined) => Promise<void>,
+  app: AppService,
+  internal: AppServiceInternal,
 ): Promise<number | void> {
   logger.debug('syncDownEvents', 'tick')
+
+  const sdk = internal.requireSdk()
 
   const counts: Counts = {
     existing: 0,
@@ -132,17 +80,22 @@ export async function syncDownEventsBatch(
   while (true) {
     if (signal.aborted) break
     try {
-      const cursor = await getCursor()
+      const cursor = await app.sync.getSyncDownCursor()
       logger.debug('syncDownEvents', 'syncing', {
         id: cursor?.id,
         after: cursor?.after,
       })
 
-      const events = await deps.sdk.objectEvents(cursor, batchSize)
+      const events = await sdk.objectEvents(cursor, batchSize)
       totalEventsFetched += events.length
 
       if (totalEventsFetched > 1) {
-        deps.hooks.onProgress({ isSyncing: true, ...counts })
+        app.sync.setState({
+          isSyncingDown: true,
+          syncDownExisting: counts.existing,
+          syncDownAdded: counts.added,
+          syncDownDeleted: counts.deleted,
+        })
       }
 
       // If the batch size is 1, we are probably synced and repeatedly polling the last event.
@@ -153,7 +106,7 @@ export async function syncDownEventsBatch(
       }
 
       const prevTotal = counts.added + counts.deleted + counts.existing
-      await processBatch(events, counts, signal, deps)
+      await processBatch(events, counts, signal, app, internal)
       const batchChanged =
         counts.added + counts.deleted + counts.existing > prevTotal
 
@@ -161,7 +114,7 @@ export async function syncDownEventsBatch(
       const lastEvent = events[events.length - 1]
       const nextTimestamp = lastEvent ? lastEvent.updatedAt.getTime() + 1 : 0
       if (lastEvent) {
-        await setCursor({
+        await app.sync.setSyncDownCursor({
           id: lastEvent.id,
           after: new Date(nextTimestamp),
         })
@@ -170,13 +123,15 @@ export async function syncDownEventsBatch(
       // Update progress after each batch. Only report isSyncing when there are
       // real events to process (>1), not on the periodic heartbeat check which
       // returns a single cursor-marker event.
-      deps.hooks.onProgress({
-        ...counts,
-        cursorAt: nextTimestamp,
-        isSyncing: totalEventsFetched > 1,
+      app.sync.setState({
+        isSyncingDown: totalEventsFetched > 1,
+        syncDownExisting: counts.existing,
+        syncDownAdded: counts.added,
+        syncDownDeleted: counts.deleted,
       })
       if (batchChanged) {
-        await deps.hooks.onBatchChanged()
+        app.caches.library.invalidateAll()
+        app.caches.libraryVersion.invalidate()
       }
 
       // If the batch is not full, we're done for now.
@@ -195,7 +150,12 @@ export async function syncDownEventsBatch(
     deleted: counts.deleted,
   })
 
-  deps.hooks.onProgress({ isSyncing: false, ...counts })
+  app.sync.setState({
+    isSyncingDown: false,
+    syncDownExisting: counts.existing,
+    syncDownAdded: counts.added,
+    syncDownDeleted: counts.deleted,
+  })
 
   if (totalEventsFetched > 1) {
     return 0 // Zero interval — poll again immediately.
@@ -211,23 +171,24 @@ async function processBatch(
   }[],
   counts: Counts,
   signal: AbortSignal,
-  deps: SyncDownDeps,
+  app: AppService,
+  internal: AppServiceInternal,
 ) {
   // Phase 1: Prepare — read DB state without holding any locks. Each event
   // is classified as create/update/delete based on whether a matching
   // file record exists.
   const prepared: PreparedEvent[] = []
-  const indexerURL = await deps.platform.getIndexerURL()
+  const indexerURL = await app.settings.getIndexerURL()
 
   for (const { object, deleted, id } of events) {
     if (signal.aborted) return
     if (deleted) {
-      const result = await prepareDelete(id, indexerURL, deps)
+      const result = await prepareDelete(id, indexerURL, app)
       if (result) prepared.push(result)
       continue
     }
     if (!object) continue
-    const result = await prepareUpsert(id, object, indexerURL, deps)
+    const result = await prepareUpsert(id, object, indexerURL, app, internal)
     if (result) prepared.push(result)
   }
 
@@ -253,20 +214,27 @@ async function processBatch(
   // Phase 2: Commit — apply all prepared events in a single DB transaction.
   // Per-event error handling ensures one failure doesn't abort the batch.
   const deletedFileIds = new Set<string>()
-  await deps.platform.withTransaction(async () => {
+  await internal.withTransaction(async () => {
     for (const event of prepared) {
       try {
         switch (event.kind) {
           case 'create':
-            await deps.files.create(event.fileRecord)
-            await deps.localObjects.upsert(event.localObject)
+            await app.files.create(event.fileRecord, undefined, {
+              skipInvalidation: true,
+            })
+            await app.localObjects.upsert(event.localObject, {
+              skipInvalidation: true,
+            })
             counts.added++
             break
           case 'update':
-            await deps.files.update(event.fileRecord, {
+            await app.files.update(event.fileRecord, {
               includeUpdatedAt: true,
+              skipInvalidation: true,
             })
-            await deps.localObjects.upsert(event.localObject)
+            await app.localObjects.upsert(event.localObject, {
+              skipInvalidation: true,
+            })
             counts.existing++
             break
           case 'delete':
@@ -286,19 +254,21 @@ async function processBatch(
             // eventually process the tombstone and call deleteObject for
             // each remaining object. The object rows get cleaned up but
             // the file row with its tombstone persists indefinitely.
-            await deps.localObjects.delete(event.objectId, event.indexerURL)
+            await app.localObjects.delete(event.objectId, event.indexerURL, {
+              skipInvalidation: true,
+            })
             if (!event.fileRecord.deletedAt) {
               const now = Date.now()
-              await deps.files.update(
+              await app.files.update(
                 {
                   id: event.fileId,
                   deletedAt: now,
                   trashedAt: event.fileRecord.trashedAt ?? now,
                 },
-                { includeUpdatedAt: false },
+                { includeUpdatedAt: false, skipInvalidation: true },
               )
             }
-            if ((await deps.localObjects.countForFile(event.fileId)) === 0) {
+            if ((await app.localObjects.countForFile(event.fileId)) === 0) {
               deletedFileIds.add(event.fileId)
               counts.deleted++
             }
@@ -318,14 +288,18 @@ async function processBatch(
   for (const event of prepared) {
     if (event.kind === 'delete' && deletedFileIds.has(event.fileId)) {
       try {
-        await deps.hooks.onFileDeleted(event.fileRecord)
+        await app.fs.removeFile({
+          id: event.fileRecord.id,
+          type: event.fileRecord.type,
+        })
       } catch (e) {
         logger.error('syncDownEvents', 'cleanup_error', {
           error: e as Error,
         })
       }
     } else if (event.kind === 'update') {
-      deps.hooks.onFileUpdated(event.fileId)
+      app.caches.fileById.invalidate(event.fileId)
+      app.caches.libraryVersion.invalidate()
     }
     // Sync tags and directories from remote metadata for file records.
     if (event.kind !== 'delete' && event.isFile) {
@@ -334,7 +308,7 @@ async function processBatch(
         (event.kind === 'update' && event.isRemoteNewer)
       if (shouldSync) {
         try {
-          await deps.tags.syncFromMetadata(event.fileRecord.id, event.tags)
+          await app.tags.syncFromMetadata(event.fileRecord.id, event.tags)
         } catch (e) {
           logger.error('syncDownEvents', 'tag_sync_error', {
             fileId: event.fileRecord.id,
@@ -342,7 +316,7 @@ async function processBatch(
           })
         }
         try {
-          await deps.directories.syncFromMetadata(
+          await app.directories.syncFromMetadata(
             event.fileRecord.id,
             event.directory,
           )
@@ -360,10 +334,10 @@ async function processBatch(
 async function prepareDelete(
   id: string,
   indexerURL: string,
-  deps: SyncDownDeps,
+  app: AppService,
 ): Promise<PreparedDelete | null> {
   try {
-    const existingFileRecord = await deps.files.readByObjectId(id, indexerURL)
+    const existingFileRecord = await app.files.getByObjectId(id, indexerURL)
     if (!existingFileRecord) {
       logger.debug('syncDownEvents', 'skipped', {
         reason: 'no_file_record',
@@ -391,30 +365,33 @@ async function prepareUpsert(
   id: string,
   object: PinnedObjectRef,
   indexerURL: string,
-  deps: SyncDownDeps,
+  app: AppService,
+  internal: AppServiceInternal,
 ): Promise<PreparedCreate | PreparedUpdate | null> {
   try {
     const metadata = decodeFileMetadata(object.metadata())
     if (hasCompleteThumbnailMetadata(metadata)) {
-      const existingThumbnail = await deps.files.read(metadata.id)
+      const existingThumbnail = await app.files.getById(metadata.id)
       return prepareFileRecord(
         'thumbnail',
         existingThumbnail,
         indexerURL,
         object,
         metadata,
-        deps,
+        app,
+        internal,
       )
     }
     if (hasCompleteFileMetadata(metadata)) {
-      const existingFile = await deps.files.read(metadata.id)
+      const existingFile = await app.files.getById(metadata.id)
       return prepareFileRecord(
         'file',
         existingFile,
         indexerURL,
         object,
         metadata,
-        deps,
+        app,
+        internal,
       )
     }
     logger.debug('syncDownEvents', 'skipped', {
@@ -433,9 +410,11 @@ async function prepareFileRecord(
   indexerURL: string,
   object: PinnedObjectRef,
   metadata: FileMetadata,
-  deps: SyncDownDeps,
+  app: AppService,
+  internal: AppServiceInternal,
 ): Promise<PreparedCreate | PreparedUpdate> {
   const existing = existingFile
+  const appKey = internal.requireSdk().appKey()
 
   if (existing) {
     if (type === 'file') {
@@ -445,10 +424,11 @@ async function prepareFileRecord(
         thumbForId: existing.thumbForId,
       })
     }
-    const localObject = await deps.platform.pinnedObjectToLocalObject(
+    const localObject = sealPinnedObject(
       existing.id,
       indexerURL,
       object,
+      appKey,
     )
     let mergedMetadata: Partial<
       Omit<FileRecordRow, 'id' | 'localId' | 'addedAt'>
@@ -483,11 +463,7 @@ async function prepareFileRecord(
       thumbForId: metadata.thumbForId,
     })
   }
-  const localObject = await deps.platform.pinnedObjectToLocalObject(
-    fileId,
-    indexerURL,
-    object,
-  )
+  const localObject = sealPinnedObject(fileId, indexerURL, object, appKey)
   const fileRecord: FileRecordRow = {
     ...toFileRecordFields(metadata),
     id: fileId,

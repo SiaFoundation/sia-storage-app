@@ -80,6 +80,40 @@ export interface ObjectEvent {
   updatedAt: Date
 }
 
+export enum AddressProtocol {
+  SiaMux = 0,
+  Quic = 1,
+}
+
+export interface NetAddress {
+  protocol: AddressProtocol
+  address: string
+}
+
+export interface Host {
+  publicKey: string
+  addresses: NetAddress[]
+  countryCode: string
+  latitude: number
+  longitude: number
+  goodForUpload: boolean
+}
+
+export interface AccountApp {
+  id: string
+  description: string
+  serviceUrl?: string
+  logoUrl?: string
+}
+
+export interface Account {
+  accountKey: string
+  maxPinnedData: bigint
+  pinnedData: bigint
+  app: AccountApp
+  lastUsed: Date
+}
+
 export interface SdkAdapter {
   objectEvents(
     cursor: ObjectsCursor | undefined,
@@ -97,5 +131,9 @@ export interface SdkAdapter {
   deleteObject(objectId: string): Promise<void>
   getPinnedObject(objectId: string): Promise<PinnedObjectRef>
   sharedObject(url: string): Promise<PinnedObjectRef>
+  shareObject(object: PinnedObjectRef, validUntil: Date): string
   appKey(): AppKeyRef
+  downloadByObjectId(objectId: string): Promise<ArrayBuffer>
+  hosts(): Promise<Host[]>
+  account(): Promise<Account>
 }

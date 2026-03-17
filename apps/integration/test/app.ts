@@ -1,48 +1,40 @@
-import type { DatabaseAdapter } from '@siastorage/core/adapters'
+import type { ThumbnailAdapter } from '@siastorage/core/adapters'
+import type { AppService } from '@siastorage/core/app'
+import { createAppService } from '@siastorage/core/app'
 import { runMigrations } from '@siastorage/core/db'
 import { coreMigrations, sortMigrations } from '@siastorage/core/db/migrations'
-import {
-  addTagToFile as coreAddTagToFile,
-  moveFileToDirectory as coreMoveFileToDirectory,
-  renameDirectory as coreRenameDirectory,
-  type Directory,
-  type DirectoryWithCount,
-  insertDirectory,
-  insertFileRecord,
-  queryAllDirectoriesWithCounts,
-  queryAllTagsWithCounts,
-  queryDirectoryNameForFile,
-  queryFileRecords,
-  queryLocalObjectsForFile,
-  queryTagsForFile,
-  queryThumbnailsByFileId,
-  readFileRecord,
-  renameTag,
-  type Tag,
-  type TagWithCount,
-  updateFileRecordFields,
-  upsertFsFileMetadata,
+import type {
+  Directory,
+  DirectoryWithCount,
+  Tag,
+  TagWithCount,
 } from '@siastorage/core/db/operations'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
+import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { runSyncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
-import { UploadManager } from '@siastorage/core/services/uploader'
+import type { UploadManager } from '@siastorage/core/services/uploader'
 import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
 import { createInMemoryStorage } from '@siastorage/node-adapters/storage'
-import { MockSdk, type MockSdkStorage } from '@siastorage/sdk-mock'
+import {
+  createEmptyIndexerStorage,
+  type MockIndexerStorage,
+  MockSdk,
+} from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import {
-  buildCursorDeps,
-  buildFsDeps,
-  buildSyncDownDeps,
-  buildSyncUpDeps,
-  buildThumbnailDeps,
-  buildUploadDeps,
+  buildTestSdkAdapter,
+  createFsAdapter,
+  createMockFsIO,
+  createMockThumbnailAdapter,
+  createSharpThumbnailAdapter,
+  createTestUploaderAdapters,
 } from './adapters'
 import {
   type TestFileFactory,
@@ -64,14 +56,21 @@ const INDEXER_URL = 'https://test.indexer'
 const SYNC_INTERVAL = 200
 const THUMBNAIL_SCAN_INTERVAL = 1000
 
+export interface TestAppOptions {
+  fsIO?: Partial<FsIOAdapter>
+  thumbnail?: Partial<ThumbnailAdapter>
+  crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
+  detectMimeType?: (path: string) => Promise<string | null>
+}
+
 export interface TestApp {
   start(): Promise<void>
   shutdown(): Promise<void>
   pause(): void
   resume(): void
 
+  app: AppService
   sdk: MockSdk
-  db: DatabaseAdapter
   uploadManager: UploadManager
   thumbnailScanner: ThumbnailScanner
   tempDir: string
@@ -104,6 +103,23 @@ export interface TestApp {
 
   readThumbnailsByFileId(fileId: string): Promise<FileRecord[]>
 
+  createFileRecord(record: {
+    id: string
+    name: string
+    type: string
+    kind: string
+    size: number
+    hash: string
+    createdAt: number
+    updatedAt: number
+    localId?: string | null
+    addedAt?: number
+    trashedAt?: number | null
+    deletedAt?: number | null
+    thumbForId?: string
+    thumbSize?: number
+  }): Promise<void>
+
   addFiles(fileFactories: TestFileFactory[]): Promise<TestFileInput[]>
 
   addTagToFile(fileId: string, tagName: string): Promise<void>
@@ -124,43 +140,91 @@ export interface TestApp {
   readLocalObjectsForFile(fileId: string): Promise<LocalObject[]>
 
   removeFsFile(fileId: string, type: string): Promise<void>
-  listFsFiles(): string[]
+  listFsFiles(): Promise<string[]>
   getFsFileUri(file: { id: string; type: string }): Promise<string | null>
 
   setConnected(connected: boolean): void
   areServicesRunning(): boolean
 }
 
-export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
+export function createTestApp(
+  indexerStorage?: MockIndexerStorage,
+  options?: TestAppOptions,
+): TestApp {
   const db = createBetterSqlite3Database()
   const storage = createInMemoryStorage()
   const scheduler = new ServiceScheduler()
-  const sdk = new MockSdk(sharedStorage)
+  const sdk = new MockSdk(indexerStorage ?? createEmptyIndexerStorage())
   const appKey = sdk.appKey()
-  const uploadManager = new UploadManager()
   const thumbnailScanner = new ThumbnailScanner()
-  const uploads = new Map<string, UploadState>()
   let connected = true
-  const tempDir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
 
-  const fs = buildFsDeps({ db, tempDir })
-  const cursors = buildCursorDeps(storage)
+  const hasMockAdapters = options?.fsIO || options?.thumbnail
+  const tempDir = hasMockAdapters
+    ? ''
+    : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
 
+  const secrets = createInMemoryStorage()
+  const crypto = options?.crypto ?? {
+    sha256: async (data: ArrayBuffer) => {
+      const { createHash } = await import('crypto')
+      const hash = createHash('sha256').update(Buffer.from(data)).digest('hex')
+      return hash
+    },
+  }
+
+  const fsIO = options?.fsIO
+    ? createMockFsIO(options.fsIO)
+    : createFsAdapter({ tempDir }).fsIO
+  const testSdkAdapter = buildTestSdkAdapter(sdk, appKey)
+
+  const thumbnailAdapter = options?.thumbnail
+    ? createMockThumbnailAdapter(options.thumbnail)
+    : createSharpThumbnailAdapter()
+
+  const detectMimeTypeFn =
+    options?.detectMimeType ??
+    (async (filePath: string) => {
+      const resolved = filePath.replace('file://', '')
+      const result = detectMimeType({ fileName: resolved })
+      return result === 'application/octet-stream' ? null : result
+    })
+
+  const {
+    service: appService,
+    internal,
+    uploadManager,
+  } = createAppService({
+    db,
+    storage,
+    secrets,
+    crypto,
+    fsIO,
+    downloadObject: {
+      async download({ file, object, sdk, onProgress }) {
+        const data = await sdk.downloadByObjectId(object.id)
+        onProgress(1)
+        if (!fsIO.writeFile) throw new Error('writeFile not implemented')
+        await fsIO.writeFile(file, data)
+      },
+    },
+    uploader: createTestUploaderAdapters(),
+    sdkAuth: {
+      createBuilder: async () => {},
+      requestConnection: async () => '',
+      waitForApproval: async () => {},
+      connectWithKey: async () => false,
+      register: async () => '',
+      generateRecoveryPhrase: () => '',
+      validateRecoveryPhrase: () => {},
+      cancelAuth: () => {},
+    },
+    thumbnail: thumbnailAdapter,
+    detectMimeType: detectMimeTypeFn,
+  })
   const syncDown = scheduler.createInterval({
     name: 'syncDownEvents',
-    worker: (signal) =>
-      syncDownEventsBatch(
-        signal,
-        buildSyncDownDeps({
-          db,
-          sdk,
-          appKey,
-          indexerURL: INDEXER_URL,
-          connected: () => connected,
-        }),
-        cursors.getSyncDownCursor,
-        cursors.setSyncDownCursor,
-      ),
+    worker: (signal) => syncDownEventsBatch(signal, appService, internal),
     getState: async () => connected,
     interval: SYNC_INTERVAL,
   })
@@ -168,19 +232,7 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
   const syncUp = scheduler.createInterval({
     name: 'syncUpMetadata',
     worker: (signal) =>
-      runSyncUpMetadataBatch(
-        100,
-        5,
-        signal,
-        buildSyncUpDeps({
-          db,
-          sdk,
-          indexerURL: INDEXER_URL,
-          connected: () => connected,
-        }),
-        cursors.getSyncUpCursor,
-        cursors.setSyncUpCursor,
-      ),
+      runSyncUpMetadataBatch(100, 5, signal, appService, internal),
     getState: async () => connected,
     interval: SYNC_INTERVAL,
   })
@@ -195,41 +247,36 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
   })
 
   return {
+    app: appService,
     sdk,
-    db,
     uploadManager,
     thumbnailScanner,
     tempDir,
 
     async start() {
       await runMigrations(db, sortMigrations(coreMigrations))
+      internal.setSdk(testSdkAdapter)
+      appService.connection.setState({ isConnected: true })
+      await appService.settings.setIndexerURL(INDEXER_URL)
+      internal.initUploader()
       syncDown.init()
       syncUp.init()
-      uploadManager.initialize(
-        buildUploadDeps({
-          db,
-          sdk,
-          appKey,
-          indexerURL: INDEXER_URL,
-          connected: () => connected,
-          uploads,
-          getFsFileUri: fs.getFsFileUri,
-        }),
-      )
-      thumbnailScanner.initialize(buildThumbnailDeps({ db, fs }))
+      thumbnailScanner.initialize(appService)
       thumbScan.init()
     },
 
     async shutdown() {
-      uploadManager.reset()
+      await appService.uploader.shutdown()
       thumbnailScanner.reset()
       await scheduler.shutdown()
       await new Promise((r) => setTimeout(r, 100))
       db.close()
-      try {
-        nodeFs.rmSync(tempDir, { recursive: true })
-      } catch {
-        // ignore cleanup errors
+      if (tempDir) {
+        try {
+          nodeFs.rmSync(tempDir, { recursive: true })
+        } catch {
+          // ignore cleanup errors
+        }
       }
     },
 
@@ -254,21 +301,21 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
     },
 
     async getFiles() {
-      return queryFileRecords(db, { order: 'ASC' })
+      return appService.files.query({ order: 'ASC' })
     },
 
     async getFileById(id) {
-      return readFileRecord(db, id)
+      return appService.files.getById(id)
     },
 
     async waitForFileCount(count, timeout = 15_000) {
       const start = Date.now()
       while (Date.now() - start < timeout) {
-        const files = await queryFileRecords(db, { order: 'ASC' })
+        const files = await appService.files.query({ order: 'ASC' })
         if (files.length === count) return
         await new Promise((r) => setTimeout(r, 50))
       }
-      const final = await queryFileRecords(db, { order: 'ASC' })
+      const final = await appService.files.query({ order: 'ASC' })
       throw new Error(
         `Expected ${count} files but got ${final.length} within ${timeout}ms`,
       )
@@ -286,11 +333,12 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
     async waitForNoActiveUploads(timeout = 30_000) {
       await waitForCondition(
         async () => {
-          const active = Array.from(uploads.values()).filter(
-            (u) => u.status !== 'error',
+          const { uploads } = appService.uploads.getState()
+          const active = Object.values(uploads).filter(
+            (u) => u.status !== 'error' && u.status !== 'done',
           )
           if (active.length > 0) return false
-          const pending = await queryFileRecords(db, {
+          const pending = await appService.files.query({
             limit: 1,
             order: 'ASC',
             pinned: { indexerURL: INDEXER_URL, isPinned: false },
@@ -305,26 +353,32 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
     async waitForUploadStatus(fileId, status, timeout = 30_000) {
       await waitForCondition(
         () => {
-          const state = uploads.get(fileId)
-          if (status === 'removed') return state === undefined
-          return state?.status === status
+          const entry = appService.uploads.getEntry(fileId)
+          if (status === 'removed') return entry === undefined
+          return entry?.status === status
         },
         { timeout, message: `Upload ${fileId} to reach ${status}` },
       )
     },
 
     async waitForUploadCount(count, timeout = 30_000) {
-      await waitForCondition(() => uploads.size === count, {
-        timeout,
-        message: `Upload count to be ${count}`,
-      })
+      await waitForCondition(
+        () => {
+          const { uploads } = appService.uploads.getState()
+          return Object.keys(uploads).length === count
+        },
+        {
+          timeout,
+          message: `Upload count to be ${count}`,
+        },
+      )
     },
 
     async waitForThumbnails(fileIds, timeout = 30_000) {
       await waitForCondition(
         async () => {
           for (const fileId of fileIds) {
-            const thumbs = await queryThumbnailsByFileId(db, fileId)
+            const thumbs = await appService.thumbnails.getForFile(fileId)
             if (thumbs.length === 0) return false
           }
           return true
@@ -333,16 +387,49 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
       )
     },
 
-    getUploadState: (fileId) => uploads.get(fileId),
-    getUploadCounts: () => ({ total: uploads.size }),
-    getActiveUploads: () =>
-      Array.from(uploads.values())
-        .filter((u) => u.status !== 'error')
-        .map((u) => ({ id: u.id, status: u.status })),
-    getActiveUploadCount: () =>
-      Array.from(uploads.values()).filter((u) => u.status !== 'error').length,
+    getUploadState: (fileId) => {
+      const entry = appService.uploads.getEntry(fileId)
+      if (!entry) return undefined
+      return {
+        id: entry.id,
+        status: entry.status,
+        progress: entry.progress,
+        size: entry.size,
+        error: entry.error,
+        batchId: entry.batchId,
+        batchCount: entry.batchFileCount,
+      }
+    },
+    getUploadCounts: () => {
+      const { uploads } = appService.uploads.getState()
+      return { total: Object.keys(uploads).length }
+    },
+    getActiveUploads: () => {
+      const { uploads } = appService.uploads.getState()
+      return Object.values(uploads)
+        .filter((u) => u.status !== 'error' && u.status !== 'done')
+        .map((u) => ({ id: u.id, status: u.status }))
+    },
+    getActiveUploadCount: () => {
+      const { uploads } = appService.uploads.getState()
+      return Object.values(uploads).filter(
+        (u) => u.status !== 'error' && u.status !== 'done',
+      ).length
+    },
 
-    readThumbnailsByFileId: (fileId) => queryThumbnailsByFileId(db, fileId),
+    readThumbnailsByFileId: (fileId) =>
+      appService.thumbnails.getForFile(fileId),
+
+    async createFileRecord(record) {
+      const now = Date.now()
+      await appService.files.create({
+        addedAt: now,
+        trashedAt: null,
+        deletedAt: null,
+        localId: null,
+        ...record,
+      } as Parameters<AppService['files']['create']>[0])
+    },
 
     async addFiles(fileFactories) {
       const now = Date.now()
@@ -350,7 +437,7 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
       for (const factory of fileFactories) {
         const file = factory(tempDir)
         files.push(file)
-        await insertFileRecord(db, {
+        await appService.files.create({
           id: file.id,
           name: file.name,
           type: file.type,
@@ -364,7 +451,7 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
           trashedAt: null,
           deletedAt: null,
         })
-        await upsertFsFileMetadata(db, {
+        await appService.fs.upsertMeta({
           fileId: file.id,
           size: file.size,
           addedAt: now,
@@ -375,47 +462,49 @@ export function createTestApp(sharedStorage: MockSdkStorage): TestApp {
     },
 
     async addTagToFile(fileId, tagName) {
-      await coreAddTagToFile(db, fileId, tagName)
+      await appService.tags.add(fileId, tagName)
     },
 
-    readTagsForFile: (fileId) => queryTagsForFile(db, fileId),
-    readAllTagsWithCounts: () => queryAllTagsWithCounts(db),
+    readTagsForFile: (fileId) => appService.tags.getForFile(fileId),
+    readAllTagsWithCounts: () => appService.tags.getAll(),
 
     async renameTag(tagId, newName) {
-      await renameTag(db, tagId, newName)
+      await appService.tags.rename(tagId, newName)
     },
 
-    createDirectory: (name) => insertDirectory(db, name),
+    createDirectory: (name) => appService.directories.create(name),
 
     async moveFileToDirectory(fileId, dirId) {
-      await coreMoveFileToDirectory(db, fileId, dirId)
+      await appService.directories.moveFile(fileId, dirId)
     },
 
     async renameDirectory(dirId, newName) {
-      await coreRenameDirectory(db, dirId, newName)
+      await appService.directories.rename(dirId, newName)
     },
 
-    readDirectoryNameForFile: (fileId) => queryDirectoryNameForFile(db, fileId),
-    readAllDirectoriesWithCounts: () => queryAllDirectoriesWithCounts(db),
+    readDirectoryNameForFile: (fileId) =>
+      appService.directories.getNameForFile(fileId),
+    readAllDirectoriesWithCounts: () => appService.directories.getAll(),
 
-    updateFileRecord: (update, opts) =>
-      updateFileRecordFields(db, update, opts),
+    updateFileRecord: (update, opts) => appService.files.update(update, opts),
 
-    readLocalObjectsForFile: (fileId) => queryLocalObjectsForFile(db, fileId),
+    readLocalObjectsForFile: (fileId) =>
+      appService.localObjects.getForFile(fileId),
 
     async removeFsFile(fileId, type) {
-      await fs.removeFsFile(fileId, type)
+      await appService.fs.removeFile({ id: fileId, type })
     },
 
     listFsFiles() {
-      return fs.listFsFiles()
+      return appService.fs.listFiles()
     },
 
-    getFsFileUri: (file) => fs.getFsFileUri(file),
+    getFsFileUri: (file) => appService.fs.getFileUri(file),
 
     setConnected(c) {
       connected = c
       sdk.setConnected(c)
+      appService.connection.setState({ isConnected: c })
     },
 
     areServicesRunning() {

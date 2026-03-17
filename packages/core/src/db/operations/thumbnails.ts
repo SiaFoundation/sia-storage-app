@@ -4,6 +4,14 @@ import { ThumbSizes } from '../../types/files'
 import { transformRow } from './files'
 import { queryLocalObjectsForFile } from './localObjects'
 
+export type ThumbnailCandidateRow = {
+  id: string
+  hash: string
+  type: string
+  localId: string | null
+  createdAt: number
+}
+
 export async function queryThumbnailsByFileId(
   db: DatabaseAdapter,
   fileId: string,
@@ -94,4 +102,51 @@ export async function queryThumbnailRecordByFileIdAndSize(
   if (!row) return null
   const objects = await queryLocalObjectsForFile(db, row.id)
   return transformRow(row, objects)
+}
+
+export async function queryThumbnailCandidatePage(
+  db: DatabaseAdapter,
+  pageSize: number,
+  cursor?: { createdAt: number; id: string },
+): Promise<ThumbnailCandidateRow[]> {
+  const params: (string | number)[] = []
+  const cursorClause = cursor
+    ? 'AND (f.createdAt < ? OR (f.createdAt = ? AND f.id < ?))'
+    : ''
+  if (cursor) {
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id)
+  }
+  params.push(pageSize)
+
+  return db.getAllAsync<ThumbnailCandidateRow>(
+    `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
+     FROM files f
+     LEFT JOIN files t
+       ON t.thumbForId = f.id
+      AND t.thumbSize IN (${ThumbSizes.join(',')})
+     WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
+       AND f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       ${cursorClause}
+     GROUP BY f.id
+     HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
+     ORDER BY f.createdAt DESC, f.id DESC
+     LIMIT ?`,
+    ...params,
+  )
+}
+
+export async function queryThumbnailScanProgress(
+  db: DatabaseAdapter,
+): Promise<{ originals: number; thumbs: number }> {
+  const originalsRow = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files WHERE (type LIKE 'image/%' OR type LIKE 'video/%') AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+  )
+  const thumbsRow = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND deletedAt IS NULL AND thumbSize IN (${ThumbSizes.join(',')})`,
+  )
+  return {
+    originals: originalsRow?.count ?? 0,
+    thumbs: thumbsRow?.count ?? 0,
+  }
 }

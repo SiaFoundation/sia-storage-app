@@ -1,10 +1,8 @@
 import { logger } from '@siastorage/logger'
-import type { DatabaseAdapter } from '../adapters/db'
+import type { AppService } from '../app/service'
 import { FS_EVICTABLE_MIN_AGE, FS_MAX_BYTES } from '../config'
 
-export type CacheEvictionDeps = {
-  db: DatabaseAdapter
-  deleteFile: (fileId: string, fileType: string) => Promise<void>
+export type CacheEvictionConfig = {
   maxBytes?: number
   minAge?: number
   batchSize?: number
@@ -13,6 +11,7 @@ export type CacheEvictionDeps = {
 export type CacheEvictionResult = {
   processedRows: number
   evicted: number
+  evictedFileIds: string[]
   currentSize: number
 }
 
@@ -22,18 +21,15 @@ export type CacheEvictionResult = {
  * Local-only files are never evicted. Processes in batches ordered by least recently used.
  */
 export async function runCacheEviction(
-  deps: CacheEvictionDeps,
+  app: AppService,
+  config?: CacheEvictionConfig,
 ): Promise<CacheEvictionResult | undefined> {
-  const { db, deleteFile } = deps
-  const maxBytes = deps.maxBytes ?? FS_MAX_BYTES
-  const minAge = deps.minAge ?? FS_EVICTABLE_MIN_AGE
-  const batchSize = deps.batchSize ?? 100
+  const maxBytes = config?.maxBytes ?? FS_MAX_BYTES
+  const minAge = config?.minAge ?? FS_EVICTABLE_MIN_AGE
+  const batchSize = config?.batchSize ?? 100
 
   try {
-    const totalRow = await db.getFirstAsync<{ total: number }>(
-      'SELECT COALESCE(SUM(size), 0) as total FROM fs',
-    )
-    const totalSize = totalRow?.total ?? 0
+    const totalSize = await app.fs.calcTotalSize()
 
     if (totalSize <= maxBytes) return undefined
 
@@ -42,23 +38,12 @@ export async function runCacheEviction(
     let currentSize = totalSize
     let processedRows = 0
     let evicted = 0
+    const evictedFileIds: string[] = []
 
     while (currentSize > maxBytes) {
       const thresholdUsedAt = Date.now() - minAge
 
-      const candidates = await db.getAllAsync<{
-        fileId: string
-        size: number
-        type: string
-      }>(
-        `SELECT fs.fileId, fs.size, f.type FROM fs
-         JOIN files f ON f.id = fs.fileId
-         WHERE fs.usedAt <= ?
-           AND EXISTS (
-             SELECT 1 FROM objects o WHERE o.fileId = fs.fileId
-           )
-         ORDER BY fs.usedAt ASC, fs.fileId ASC
-         LIMIT ?`,
+      const candidates = await app.fs.evictionCandidates(
         thresholdUsedAt,
         batchSize,
       )
@@ -66,9 +51,10 @@ export async function runCacheEviction(
       for (const { fileId, size, type } of candidates) {
         if (currentSize <= maxBytes) break
         try {
-          await deleteFile(fileId, type)
+          await app.fs.removeFile({ id: fileId, type })
           currentSize -= size
           evicted++
+          evictedFileIds.push(fileId)
         } catch (e) {
           logger.error('cacheEviction', 'remove_failed', {
             fileId,
@@ -87,7 +73,7 @@ export async function runCacheEviction(
       evicted,
       currentSize,
     })
-    return { processedRows, evicted, currentSize }
+    return { processedRows, evicted, evictedFileIds, currentSize }
   } catch (e) {
     logger.error('cacheEviction', 'failed', { error: e as Error })
     return undefined
