@@ -1,7 +1,7 @@
+import type { FileRecord } from '@siastorage/core/types'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
 import { useDownloadFromShareURL } from '../../managers/downloader'
-import type { FileRecord } from '../../stores/files'
 import { colors } from '../../styles/colors'
 import { FileViewer } from '../FileViewer'
 import { FileMetaImport } from './FileMetaImport'

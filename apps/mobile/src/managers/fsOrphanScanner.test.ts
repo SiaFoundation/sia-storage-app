@@ -1,58 +1,41 @@
 import { FS_ORPHAN_FREQUENCY } from '@siastorage/core/config'
-import type { File } from 'expo-file-system'
-import RNFS from 'react-native-fs'
 import { initializeDB, resetDb } from '../db'
-import {
-  getAsyncStorageNumber,
-  setAsyncStorageNumber,
-} from '../stores/asyncStore'
-import { createFileRecord } from '../stores/files'
-import {
-  listFilesInFsStorageDirectory,
-  readFsFileMetadata,
-  upsertFsFileMetadata,
-} from '../stores/fs'
-import { findOrphanedFileIds, runFsOrphanScanner } from './fsOrphanScanner'
+import { app } from '../stores/appService'
+import { runFsOrphanScanner } from './fsOrphanScanner'
 
-const listFilesInFsStorageDirectoryMock = jest.mocked(
-  listFilesInFsStorageDirectory,
-)
-
-function makeFile(name: string): jest.Mocked<File> {
-  return {
-    name,
-    uri: `file://${name}`,
-    delete: jest.fn(),
-  } as unknown as jest.Mocked<File>
-}
+let listFilesSpy: jest.SpyInstance
+let removeFileSpy: jest.SpyInstance
 
 const now = 1_000_000_000
 
 describe('fsOrphanScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
-    jest.mocked(RNFS.unlink).mockClear()
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [])
+    listFilesSpy = jest.spyOn(app().fs, 'listFiles').mockResolvedValue([])
+    removeFileSpy = jest
+      .spyOn(app().fs, 'removeFile')
+      .mockResolvedValue(undefined)
     await initializeDB()
-    await setAsyncStorageNumber('fsOrphanLastRun', 0)
+    await app().storage.setItem('fsOrphanLastRun', '0')
   })
 
   afterEach(async () => {
     jest.spyOn(Date, 'now').mockRestore()
-    listFilesInFsStorageDirectoryMock.mockRestore()
+    listFilesSpy.mockRestore()
+    removeFileSpy.mockRestore()
     await resetDb()
   })
 
   it('skips run when last run was recent', async () => {
-    await setAsyncStorageNumber(
+    await app().storage.setItem(
       'fsOrphanLastRun',
-      now - FS_ORPHAN_FREQUENCY / 2,
+      String(now - FS_ORPHAN_FREQUENCY / 2),
     )
 
     const result = await runFsOrphanScanner()
 
-    expect(listFilesInFsStorageDirectoryMock).not.toHaveBeenCalled()
-    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(
+    expect(listFilesSpy).not.toHaveBeenCalled()
+    expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(
       now - FS_ORPHAN_FREQUENCY / 2,
     )
     expect(result).toBeUndefined()
@@ -61,26 +44,24 @@ describe('fsOrphanScanner', () => {
   it('records timestamp even when there are no files', async () => {
     const result = await runFsOrphanScanner()
 
-    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
     expect(result).toBeUndefined()
   })
 
   it('removes files that have no metadata entry', async () => {
-    const file = makeFile('file-1.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
+    listFilesSpy.mockResolvedValue(['file-1.jpg'])
 
     const result = await runFsOrphanScanner()
 
-    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
-    expect(await readFsFileMetadata('file-1')).toBeNull()
-    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(removeFileSpy).toHaveBeenCalledTimes(1)
+    expect(await app().fs.readMeta('file-1')).toBeNull()
+    expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
     expect(result).toEqual({ removed: 1 })
   })
 
   it('keeps files that still have metadata', async () => {
-    const file = makeFile('file-2.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
-    await createFileRecord({
+    listFilesSpy.mockResolvedValue(['file-2.jpg'])
+    await app().files.create({
       id: 'file-2',
       name: 'file-2.jpg',
       type: 'image/jpeg',
@@ -94,7 +75,7 @@ describe('fsOrphanScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await upsertFsFileMetadata({
+    await app().fs.upsertMeta({
       fileId: 'file-2',
       size: 100,
       addedAt: now,
@@ -103,16 +84,15 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(RNFS.unlink).not.toHaveBeenCalled()
-    expect((await readFsFileMetadata('file-2'))?.fileId).toBe('file-2')
-    expect(await getAsyncStorageNumber('fsOrphanLastRun', 0)).toBe(now)
+    expect(removeFileSpy).not.toHaveBeenCalled()
+    expect((await app().fs.readMeta('file-2'))?.fileId).toBe('file-2')
+    expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
     expect(result).toEqual({ removed: 0 })
   })
 
   it('deletes files that have no associated files table row', async () => {
-    const file = makeFile('file-1.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
-    await upsertFsFileMetadata({
+    listFilesSpy.mockResolvedValue(['file-1.jpg'])
+    await app().fs.upsertMeta({
       fileId: 'file-1',
       size: 100,
       addedAt: now,
@@ -121,15 +101,14 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
-    expect(await readFsFileMetadata('file-1')).toBeNull()
+    expect(removeFileSpy).toHaveBeenCalledTimes(1)
+    expect(await app().fs.readMeta('file-1')).toBeNull()
     expect(result).toEqual({ removed: 1 })
   })
 
   it('calls onProgress with correct removed/total counts', async () => {
-    const files = [makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')]
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => files)
-    await createFileRecord({
+    listFilesSpy.mockResolvedValue(['a.jpg', 'b.jpg', 'c.jpg'])
+    await app().files.create({
       id: 'b',
       name: 'b.jpg',
       type: 'image/jpeg',
@@ -143,7 +122,7 @@ describe('fsOrphanScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await upsertFsFileMetadata({
+    await app().fs.upsertMeta({
       fileId: 'b',
       size: 100,
       addedAt: now,
@@ -157,7 +136,7 @@ describe('fsOrphanScanner', () => {
   })
 
   it('correctly identifies orphaned and non-orphaned files in batch', async () => {
-    await createFileRecord({
+    await app().files.create({
       id: 'keep-1',
       name: 'keep-1.jpg',
       type: 'image/jpeg',
@@ -171,14 +150,14 @@ describe('fsOrphanScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await upsertFsFileMetadata({
+    await app().fs.upsertMeta({
       fileId: 'keep-1',
       size: 100,
       addedAt: now,
       usedAt: now,
     })
 
-    const orphaned = await findOrphanedFileIds([
+    const orphaned = await app().fs.findOrphanedFileIds([
       'keep-1',
       'orphan-1',
       'orphan-2',
@@ -191,9 +170,8 @@ describe('fsOrphanScanner', () => {
   })
 
   it('treats tombstoned files as orphaned', async () => {
-    const file = makeFile('file-tomb.jpg')
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => [file])
-    await createFileRecord({
+    listFilesSpy.mockResolvedValue(['file-tomb.jpg'])
+    await app().files.create({
       id: 'file-tomb',
       name: 'file-tomb.jpg',
       type: 'image/jpeg',
@@ -207,7 +185,7 @@ describe('fsOrphanScanner', () => {
       trashedAt: now,
       deletedAt: now,
     })
-    await upsertFsFileMetadata({
+    await app().fs.upsertMeta({
       fileId: 'file-tomb',
       size: 100,
       addedAt: now,
@@ -216,15 +194,13 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(RNFS.unlink).toHaveBeenCalledWith(file.uri)
+    expect(removeFileSpy).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ removed: 1 })
   })
 
   it('processes large file lists across multiple batches', async () => {
-    const files = Array.from({ length: 60 }, (_, i) =>
-      makeFile(`file-${i}.jpg`),
-    )
-    listFilesInFsStorageDirectoryMock.mockImplementation(async () => files)
+    const uris = Array.from({ length: 60 }, (_, i) => `file-${i}.jpg`)
+    listFilesSpy.mockResolvedValue(uris)
 
     const result = await runFsOrphanScanner()
 

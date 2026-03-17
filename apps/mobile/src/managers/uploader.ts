@@ -1,178 +1,62 @@
-import type { SdkAdapter } from '@siastorage/core/adapters'
-import { insertManyLocalObjects } from '@siastorage/core/db/operations'
-import {
-  type FileEntry,
-  type FlushRecord,
-  type UploadDeps,
-  UploadManager,
-} from '@siastorage/core/services/uploader'
-import { logger } from '@siastorage/logger'
+import type { FileEntry, FlushRecord } from '@siastorage/core/services/uploader'
 import { useCallback } from 'react'
 import { AppState } from 'react-native'
-import { db } from '../db'
-import { createFileReader } from '../lib/fileReader'
-import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import {
-  type FileRecordRow,
-  getFilesLocalOnly,
-  readFileRecord,
-} from '../stores/files'
-import { getFsFileUri } from '../stores/fs'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
-import { getIsConnected, getSdk, useSdk } from '../stores/sdk'
-import { getAutoScanUploads, getIndexerURL } from '../stores/settings'
-import {
-  getActiveUploads,
-  registerUpload,
-  registerUploads,
-  removeUpload,
-  removeUploads,
-  setBatchUploading,
-  setUploadBatchInfo,
-  setUploadError,
-  setUploadStatus,
-  updateUploadProgress,
-} from '../stores/uploads'
+import { app, getUploadManager, internal } from '../stores/appService'
 
+export { getUploadManager }
 export type { FileEntry, FlushRecord }
 
-function buildUploadDeps(sdk: SdkAdapter, indexerURL: string): UploadDeps {
-  return {
-    sdk,
-    files: {
-      read: (id) => readFileRecord(id),
-      getLocalOnly: (opts) => getFilesLocalOnly(opts),
-      getFsFileUri: (file) => getFsFileUri(file),
-    },
-    localObjects: {
-      upsertMany: (objects) => insertManyLocalObjects(db(), objects),
-      invalidate: () => {
-        invalidateCacheLibraryAllStats()
-        invalidateCacheLibraryLists()
-      },
-    },
-    platform: {
-      isConnected: () => getIsConnected(),
-      autoScanEnabled: () => getAutoScanUploads(),
-      getIndexerURL: () => indexerURL,
-      createFileReader: (uri) => createFileReader(uri),
-      pinnedObjectToLocalObject: (fileId, url, po: any) =>
-        pinnedObjectToLocalObject(fileId, url, po),
-    },
-    uploads: {
-      register: (fileId, size) => registerUpload(fileId, size),
-      registerMany: (entries) => registerUploads(entries),
-      remove: (fileId) => removeUpload(fileId),
-      removeMany: (ids) => removeUploads(ids),
-      setStatus: (fileId, status) => setUploadStatus(fileId, status),
-      setError: (fileId, message) => setUploadError(fileId, message),
-      setBatchInfo: (fileId, batchId, count) =>
-        setUploadBatchInfo(fileId, batchId, count),
-      setBatchUploading: (fileIds, batchId) =>
-        setBatchUploading(fileIds, batchId),
-      updateProgress: (fileId, progress) =>
-        updateUploadProgress(fileId, progress),
-      getActive: () => getActiveUploads(),
-    },
-  }
-}
-
-let uploadManager: UploadManager | null = null
 let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
   null
 
-/** Returns the singleton UploadManager, creating it on first access. */
-export function getUploadManager(): UploadManager {
-  if (!uploadManager) {
-    uploadManager = new UploadManager()
-  }
-  return uploadManager
-}
-
-/** Connect the UploadManager to the SDK and start processing. */
-export async function initializeUploader(sdk: SdkAdapter): Promise<void> {
-  if (uploadManager) {
-    await uploadManager.shutdown()
+export async function initializeUploader(): Promise<void> {
+  const currentManager = getUploadManager()
+  if (currentManager) {
+    await currentManager.shutdown()
   }
   appStateSubscription?.remove()
-  const indexerURL = await getIndexerURL()
-  const deps = buildUploadDeps(sdk, indexerURL)
+  internal().initUploader()
   const manager = getUploadManager()
-  manager.initialize(deps)
-  appStateSubscription = AppState.addEventListener('change', (state) => {
-    if (state === 'active') {
-      manager.adjustBatchForSuspension()
-    }
-  })
+  if (manager) {
+    appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        manager.adjustBatchForSuspension()
+      }
+    })
+  }
 }
 
-/** React hook: returns a callback that enqueues files for upload. */
 export function useUploader() {
-  const sdk = useSdk()
-
   return useCallback(
-    async (files: FileRecordRow[]) => {
-      if (!sdk) {
-        logger.warn('useUploader', 'sdk_not_initialized')
-        return
-      }
-
-      const entries: FileEntry[] = []
+    async (files: Array<{ id: string; type: string; size: number }>) => {
+      const entries: Array<{
+        fileId: string
+        fileUri: string
+        size: number
+      }> = []
       for (const file of files) {
-        const fileUri = await getFsFileUri(file)
-        if (!fileUri) {
-          logger.warn('useUploader', 'file_not_local', { fileId: file.id })
-          continue
-        }
-        entries.push({ fileId: file.id, fileUri, file, size: file.size })
+        const fileUri = await app().fs.getFileUri(file)
+        if (!fileUri) continue
+        entries.push({ fileId: file.id, fileUri, size: file.size })
       }
-
       if (entries.length > 0) {
-        getUploadManager().enqueue(entries)
+        await app().uploader.enqueueWithUri(entries)
       }
     },
-    [sdk],
+    [],
   )
 }
 
-/** Re-enqueue a single file for upload (e.g. after a previous failure). */
-export async function reuploadFile(fileId: string): Promise<void> {
-  const sdk = getSdk()
-  if (!sdk) throw new Error('SDK not initialized')
-
-  const file = await readFileRecord(fileId)
-  if (!file) throw new Error('File not found')
-
-  const fileUri = await getFsFileUri(file)
-  if (!fileUri) throw new Error('File not available locally')
-
-  getUploadManager().enqueue([
-    { fileId: file.id, fileUri, file, size: file.size },
-  ])
-}
-
-/** React hook wrapper for reuploadFile. */
 export function useReuploadFile() {
   return useCallback(async (fileId: string) => {
-    await reuploadFile(fileId)
+    await app().uploader.enqueueByIds([fileId])
   }, [])
 }
 
-/** Enqueue a file by ID if it exists locally and SDK is available. */
 export async function queueUploadForFileId(fileId: string): Promise<void> {
-  const sdk = getSdk()
-  if (!sdk) return
-
-  const file = await readFileRecord(fileId)
-  if (!file) return
-
-  const fileUri = await getFsFileUri(file)
-  if (!fileUri) return
-
-  getUploadManager().enqueue([
-    { fileId: file.id, fileUri, file, size: file.size },
-  ])
+  try {
+    await app().uploader.enqueueByIds([fileId])
+  } catch {
+    // SDK not connected — silently skip
+  }
 }

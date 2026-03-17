@@ -1,41 +1,18 @@
 import { initializeDB, resetDb } from '../db'
-import { createFileRecord } from './files'
-import {
-  addTagToFile,
-  createTag,
-  deleteTag,
-  readTagsForFile,
-  renameTag,
-  syncTagsFromMetadata,
-  tagsSwr,
-  toggleFavorite,
-} from './tags'
+import { app } from './appService'
 
-jest.mock('./librarySwr', () => ({
-  libraryStats: {
-    key: jest.fn((...parts: string[]) => [`mock/${parts.join('/')}`]),
-    invalidateAll: jest.fn(),
-  },
-  invalidateCacheLibraryAllStats: jest.fn(),
-  invalidateCacheLibraryLists: jest.fn(),
-}))
-
-const { invalidateCacheLibraryLists } = require('./librarySwr') as {
-  invalidateCacheLibraryLists: jest.Mock
-}
-
-describe('tags store (mobile wrappers)', () => {
+describe('tags store (core stores)', () => {
   beforeEach(async () => {
     await initializeDB()
   })
 
   afterEach(async () => {
     await resetDb()
-    jest.clearAllMocks()
+    jest.restoreAllMocks()
   })
 
   async function createTestFile(id: string) {
-    await createFileRecord({
+    await app().files.create({
       id,
       name: `${id}.jpg`,
       type: 'image/jpeg',
@@ -52,52 +29,56 @@ describe('tags store (mobile wrappers)', () => {
   }
 
   test('createTag invalidates cache', async () => {
-    const spy = jest.spyOn(tagsSwr, 'invalidateAll')
-    await createTag('vacation')
+    const spy = jest.spyOn(app().caches.tags, 'invalidateAll')
+    await app().tags.create('vacation')
     expect(spy).toHaveBeenCalled()
   })
 
-  test('addTagToFile invalidates library lists', async () => {
+  test('addTagToFile associates tag with file', async () => {
     await createTestFile('f1')
-    await addTagToFile('f1', 'tag1')
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+    await app().tags.add('f1', 'tag1')
+    const tags = await app().tags.getForFile('f1')
+    expect(tags.some((t) => t.name === 'tag1')).toBe(true)
   })
 
-  test('toggleFavorite invalidates library lists', async () => {
+  test('toggleFavorite adds favorite tag', async () => {
     await createTestFile('f1')
-    await toggleFavorite('f1')
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+    app().tags.ensureSystemTags()
+    await app().tags.toggleFavorite('f1')
+    const tags = await app().tags.getForFile('f1')
+    expect(tags.some((t) => t.name === 'Favorites')).toBe(true)
   })
 
-  test('renameTag invalidates library lists', async () => {
-    const tag = await createTag('old')
-    jest.clearAllMocks()
-    await renameTag(tag.id, 'new')
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
-  })
-
-  test('deleteTag invalidates library lists', async () => {
-    const tag = await createTag('toDelete')
-    jest.clearAllMocks()
-    await deleteTag(tag.id)
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
-  })
-
-  test('syncTagsFromMetadata skips core call when undefined', async () => {
+  test('renameTag updates tag name', async () => {
+    const tag = await app().tags.create('old')
+    await app().tags.rename(tag.id, 'new')
     await createTestFile('f1')
-    await addTagToFile('f1', 'existing')
-    jest.clearAllMocks()
-
-    await syncTagsFromMetadata('f1', undefined)
-
-    expect(invalidateCacheLibraryLists).not.toHaveBeenCalled()
-    const tags = await readTagsForFile('f1')
-    expect(tags.some((t) => t.name === 'existing')).toBe(true)
+    await app().tags.add('f1', 'new')
+    const tags = await app().tags.getForFile('f1')
+    expect(tags.some((t: { name: string }) => t.name === 'new')).toBe(true)
   })
 
-  test('syncTagsFromMetadata invalidates on defined tags', async () => {
+  test('deleteTag removes tag', async () => {
+    const tag = await app().tags.create('toDelete')
+    await app().tags.delete(tag.id)
+    const newTag = await app().tags.create('toDelete')
+    expect(newTag.id).not.toBe(tag.id)
+  })
+
+  test('syncTagsFromMetadata skips when undefined', async () => {
     await createTestFile('f1')
-    await syncTagsFromMetadata('f1', ['newTag'])
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+    await app().tags.add('f1', 'existing')
+
+    await app().tags.syncFromMetadata('f1', undefined)
+
+    const tags = await app().tags.getForFile('f1')
+    expect(tags.some((t: { name: string }) => t.name === 'existing')).toBe(true)
+  })
+
+  test('syncTagsFromMetadata applies defined tags', async () => {
+    await createTestFile('f1')
+    await app().tags.syncFromMetadata('f1', ['newTag'])
+    const tags = await app().tags.getForFile('f1')
+    expect(tags.some((t: { name: string }) => t.name === 'newTag')).toBe(true)
   })
 })

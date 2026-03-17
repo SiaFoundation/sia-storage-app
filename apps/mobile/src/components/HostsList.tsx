@@ -1,6 +1,6 @@
+import { useHosts } from '@siastorage/core/stores'
 import { ChevronRightIcon } from 'lucide-react-native'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useHosts } from '../stores/hosts'
 import { colors, palette } from '../styles/colors'
 import { SWRList } from './SWRList'
 

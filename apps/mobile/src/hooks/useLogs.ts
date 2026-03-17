@@ -1,6 +1,6 @@
+import { swrCacheBy } from '@siastorage/core/stores'
 import type { LogEntry } from '@siastorage/logger'
 import useSWR from 'swr'
-import { swrCacheBy } from '../lib/swr'
 import { countLogs, readLogs, useLogLevel, useLogScopes } from '../stores/logs'
 
 /** Filtered log entries, keyed by (level, scopes). */

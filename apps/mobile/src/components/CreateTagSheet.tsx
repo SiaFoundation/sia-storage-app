@@ -10,8 +10,8 @@ import {
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
+import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { createTag } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 
@@ -42,7 +42,7 @@ export function CreateTagSheet() {
     const trimmed = name.trim()
     if (!trimmed) return
     try {
-      await createTag(trimmed)
+      await app().tags.create(trimmed)
       setName('')
       setError('')
       closeSheet()

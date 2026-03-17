@@ -1,3 +1,6 @@
+import type { TagWithCount } from '@siastorage/core/db/operations'
+import { SYSTEM_TAGS } from '@siastorage/core/db/operations'
+import { useAllTags } from '@siastorage/core/stores'
 import { HeartIcon, TagIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
 import {
@@ -8,7 +11,6 @@ import {
   Text,
   View,
 } from 'react-native'
-import { SYSTEM_TAGS, type TagWithCount, useAllTags } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
 

@@ -1,35 +1,26 @@
-jest.mock('../stores/fs', () => ({
-  removeFsFile: jest.fn().mockResolvedValue(undefined),
-}))
-jest.mock('../stores/tempFs', () => ({
-  removeTempDownloadFile: jest.fn().mockResolvedValue(undefined),
-}))
-jest.mock('../stores/uploads', () => ({
-  removeUploads: jest.fn(),
-}))
-
+import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
-import {
-  createFileRecord,
-  type FileRecord,
-  readFileRecord,
-} from '../stores/files'
-import { removeFsFile } from '../stores/fs'
-import { removeTempDownloadFile } from '../stores/tempFs'
-import { permanentlyDeleteFiles, restoreFiles, trashFiles } from './deleteFile'
+import { app } from '../stores/appService'
+import { permanentlyDeleteFiles } from './deleteFile'
+
+let removeFileSpy: jest.SpyInstance
 
 describe('deleteFile', () => {
   beforeEach(async () => {
     await initializeDB()
+    removeFileSpy = jest
+      .spyOn(app().fs, 'removeFile')
+      .mockResolvedValue(undefined)
   })
 
   afterEach(async () => {
+    removeFileSpy.mockRestore()
     await resetDb()
     jest.clearAllMocks()
   })
 
   test('trashFiles sets trashedAt and bumps updatedAt', async () => {
-    await createFileRecord({
+    await app().files.create({
       id: 'file-1',
       name: 'test1.jpg',
       type: 'image/jpeg',
@@ -45,7 +36,7 @@ describe('deleteFile', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'file-2',
       name: 'test2.jpg',
       type: 'image/jpeg',
@@ -61,7 +52,7 @@ describe('deleteFile', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'thumb-1',
       name: 'thumb1.jpg',
       type: 'image/jpeg',
@@ -78,11 +69,11 @@ describe('deleteFile', () => {
       deletedAt: null,
     })
 
-    await trashFiles(['file-1', 'file-2'])
+    await app().files.trash(['file-1', 'file-2'])
 
-    const file1 = await readFileRecord('file-1')
-    const file2 = await readFileRecord('file-2')
-    const thumb = await readFileRecord('thumb-1')
+    const file1 = await app().files.getById('file-1')
+    const file2 = await app().files.getById('file-2')
+    const thumb = await app().files.getById('thumb-1')
 
     expect(file1?.trashedAt).not.toBeNull()
     expect(file1?.updatedAt).toBeGreaterThan(1000)
@@ -97,7 +88,7 @@ describe('deleteFile', () => {
   })
 
   test('restoreFiles clears trashedAt and bumps updatedAt', async () => {
-    await createFileRecord({
+    await app().files.create({
       id: 'file-1',
       name: 'test1.jpg',
       type: 'image/jpeg',
@@ -114,9 +105,9 @@ describe('deleteFile', () => {
       deletedAt: null,
     })
 
-    await trashFiles(['file-1'])
+    await app().files.trash(['file-1'])
 
-    await createFileRecord({
+    await app().files.create({
       id: 'thumb-1',
       name: 'thumb1.jpg',
       type: 'image/jpeg',
@@ -133,19 +124,19 @@ describe('deleteFile', () => {
       deletedAt: null,
     })
 
-    await trashFiles(['thumb-1'])
+    await app().files.trash(['thumb-1'])
 
-    const trashedFile = await readFileRecord('file-1')
-    const trashedThumb = await readFileRecord('thumb-1')
+    const trashedFile = await app().files.getById('file-1')
+    const trashedThumb = await app().files.getById('thumb-1')
     const trashedAt = trashedFile?.updatedAt ?? 0
 
     expect(trashedFile?.trashedAt).not.toBeNull()
     expect(trashedThumb?.trashedAt).not.toBeNull()
 
-    await restoreFiles(['file-1'])
+    await app().files.restore(['file-1'])
 
-    const file1 = await readFileRecord('file-1')
-    const thumb = await readFileRecord('thumb-1')
+    const file1 = await app().files.getById('file-1')
+    const thumb = await app().files.getById('thumb-1')
 
     expect(file1?.trashedAt).toBeNull()
     expect(file1?.updatedAt).toBeGreaterThanOrEqual(trashedAt)
@@ -154,7 +145,7 @@ describe('deleteFile', () => {
   })
 
   test('permanentlyDeleteFiles sets tombstone without remote calls', async () => {
-    await createFileRecord({
+    await app().files.create({
       id: 'file-1',
       name: 'test1.jpg',
       type: 'image/jpeg',
@@ -170,7 +161,7 @@ describe('deleteFile', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'file-2',
       name: 'test2.jpg',
       type: 'image/jpeg',
@@ -186,7 +177,7 @@ describe('deleteFile', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'thumb-1',
       name: 'thumb1.jpg',
       type: 'image/jpeg',
@@ -240,9 +231,9 @@ describe('deleteFile', () => {
 
     await permanentlyDeleteFiles([file1, file2])
 
-    const result1 = await readFileRecord('file-1')
-    const result2 = await readFileRecord('file-2')
-    const thumb = await readFileRecord('thumb-1')
+    const result1 = await app().files.getById('file-1')
+    const result2 = await app().files.getById('file-2')
+    const thumb = await app().files.getById('thumb-1')
 
     expect(result1?.deletedAt).not.toBeNull()
     expect(result1?.trashedAt).not.toBeNull()
@@ -255,23 +246,20 @@ describe('deleteFile', () => {
     expect(thumb?.deletedAt).not.toBeNull()
     expect(thumb?.trashedAt).not.toBeNull()
 
-    expect(removeFsFile).toHaveBeenCalledTimes(3)
-    expect(removeFsFile).toHaveBeenCalledWith(file1)
-    expect(removeFsFile).toHaveBeenCalledWith(file2)
-    expect(removeFsFile).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'thumb-1', type: 'image/jpeg' }),
+    expect(removeFileSpy).toHaveBeenCalledTimes(3)
+    expect(removeFileSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'file-1' }),
     )
-
-    expect(removeTempDownloadFile).toHaveBeenCalledTimes(3)
-    expect(removeTempDownloadFile).toHaveBeenCalledWith(file1)
-    expect(removeTempDownloadFile).toHaveBeenCalledWith(file2)
-    expect(removeTempDownloadFile).toHaveBeenCalledWith(
+    expect(removeFileSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'file-2' }),
+    )
+    expect(removeFileSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thumb-1', type: 'image/jpeg' }),
     )
   })
 
   test('trash and restore cycle covers both files and thumbnails', async () => {
-    await createFileRecord({
+    await app().files.create({
       id: 'file-1',
       name: 'test1.jpg',
       type: 'image/jpeg',
@@ -287,7 +275,7 @@ describe('deleteFile', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'thumb-1',
       name: 'thumb1.webp',
       type: 'image/webp',
@@ -304,21 +292,21 @@ describe('deleteFile', () => {
       deletedAt: null,
     })
 
-    await trashFiles(['file-1'])
-    let file = await readFileRecord('file-1')
-    let thumb = await readFileRecord('thumb-1')
+    await app().files.trash(['file-1'])
+    let file = await app().files.getById('file-1')
+    let thumb = await app().files.getById('thumb-1')
     expect(file?.trashedAt).not.toBeNull()
     expect(thumb?.trashedAt).not.toBeNull()
 
-    await restoreFiles(['file-1'])
-    file = await readFileRecord('file-1')
-    thumb = await readFileRecord('thumb-1')
+    await app().files.restore(['file-1'])
+    file = await app().files.getById('file-1')
+    thumb = await app().files.getById('thumb-1')
     expect(file?.trashedAt).toBeNull()
     expect(thumb?.trashedAt).toBeNull()
 
-    await trashFiles(['file-1'])
-    file = await readFileRecord('file-1')
-    thumb = await readFileRecord('thumb-1')
+    await app().files.trash(['file-1'])
+    file = await app().files.getById('file-1')
+    thumb = await app().files.getById('thumb-1')
     expect(file?.trashedAt).not.toBeNull()
     expect(thumb?.trashedAt).not.toBeNull()
   })

@@ -1,11 +1,11 @@
+import { useDownloadEntry } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
 import { useDownload } from '../../managers/downloader'
-import { useDownloadState } from '../../stores/downloads'
-import type { FileRecord } from '../../stores/files'
 import { colors } from '../../styles/colors'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
 import { ImageViewer } from '../MediaConsumers/ImageViewer'
@@ -40,7 +40,7 @@ export function FileViewer({
   const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
   const fileDownload = useDownload(file)
-  const fileDownloadState = useDownloadState(file.id)
+  const { data: fileDownloadState } = useDownloadEntry(file.id)
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset

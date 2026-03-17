@@ -1,6 +1,8 @@
 import type {
+  Account,
   AppKeyRef,
   DownloadOptions,
+  Host,
   ObjectEvent,
   ObjectsCursor,
   PackedUploadRef,
@@ -38,6 +40,29 @@ export class MobileSdkAdapter implements SdkAdapter {
     await this.sdk.download(writer, pinnedObject, options, control)
   }
 
+  async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
+    const obj = await this.sdk.object(objectId)
+    const chunks: ArrayBuffer[] = []
+    const writer: Writer = {
+      write: async (data: ArrayBuffer) => {
+        chunks.push(data)
+      },
+    }
+    await this.sdk.download(writer, obj as PinnedObjectRef, {
+      maxInflight: 1,
+      offset: 0n,
+      length: undefined,
+    })
+    const totalLength = chunks.reduce((sum, c) => sum + c.byteLength, 0)
+    const combined = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      combined.set(new Uint8Array(chunk), offset)
+      offset += chunk.byteLength
+    }
+    return combined.buffer.slice(0, totalLength) as ArrayBuffer
+  }
+
   async uploadPacked(options: UploadOptions): Promise<PackedUploadRef> {
     return this.sdk.uploadPacked(options) as Promise<PackedUploadRef>
   }
@@ -58,7 +83,19 @@ export class MobileSdkAdapter implements SdkAdapter {
     return this.sdk.sharedObject(url) as Promise<PinnedObjectRef>
   }
 
+  shareObject(object: PinnedObjectRef, validUntil: Date): string {
+    return this.sdk.shareObject(object, validUntil)
+  }
+
   appKey(): AppKeyRef {
     return this.sdk.appKey() as AppKeyRef
+  }
+
+  async hosts(): Promise<Host[]> {
+    return this.sdk.hosts() as Promise<Host[]>
+  }
+
+  async account(): Promise<Account> {
+    return this.sdk.account() as Promise<Account>
   }
 }

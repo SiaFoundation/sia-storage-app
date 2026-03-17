@@ -26,100 +26,21 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
-import { insertManyLocalObjects } from '@siastorage/core/db/operations'
-import type { LocalObject } from '@siastorage/core/encoding/localObject'
-import type { UploadDeps } from '@siastorage/core/services/uploader'
+import {
+  type UploaderAdapters,
+  UploadManager,
+} from '@siastorage/core/services/uploader'
 import type {
   PackedUploadInterface,
   PinnedObjectInterface,
   SdkInterface,
 } from 'react-native-sia'
-import { db, initializeDB, resetDb } from '../db'
-import { createFileReader } from '../lib/fileReader'
-import { pinnedObjectToLocalObject } from '../lib/localObjects'
-import {
-  createFileRecord,
-  getFilesLocalOnly,
-  readFileRecord,
-} from '../stores/files'
-import { getFsFileUri } from '../stores/fs'
-import { readLocalObjectsForFile } from '../stores/localObjects'
-import { getIsConnected } from '../stores/sdk'
-import { getAutoScanUploads } from '../stores/settings'
-import {
-  flushPendingUploadProgress,
-  getActiveUploads,
-  getUploadState,
-  registerUpload,
-  registerUploads,
-  removeUpload,
-  removeUploads,
-  setBatchUploading,
-  setUploadBatchInfo,
-  setUploadError,
-  setUploadStatus,
-  updateUploadProgress,
-  useUploadsStore,
-} from '../stores/uploads'
-import {
-  type FileEntry,
-  getUploadManager,
-  initializeUploader,
-} from './uploader'
+import { initializeDB, resetDb } from '../db'
+import { app, internal } from '../stores/appService'
+import { getActiveUploads } from '../stores/uploads'
+import type { FileEntry } from './uploader'
 
 jest.mock('react-native-sia', () => ({}))
-
-jest.mock('../stores/sdk', () => ({
-  useSdk: jest.fn(),
-  getSdk: jest.fn(),
-  getIsConnected: jest.fn(() => false),
-}))
-
-jest.mock('../stores/settings', () => ({
-  useIndexerURL: jest.fn(() => ({ data: 'https://test.indexer' })),
-  getIndexerURL: jest.fn(() => 'https://test.indexer'),
-  getAutoScanUploads: jest.fn(() => false),
-  useAutoScanUploads: jest.fn(() => ({ data: false })),
-}))
-
-jest.mock('../stores/files', () => {
-  const actual = jest.requireActual('../stores/files')
-  return {
-    ...actual,
-    getFilesLocalOnly: jest.fn(() => []),
-    useFileCountAll: jest.fn(() => ({ data: 0 })),
-    useFileCountLocal: jest.fn(() => ({ data: 0 })),
-    useFileStatsAll: jest.fn(() => ({ data: { count: 0, totalBytes: 0 } })),
-    useFileStatsLocal: jest.fn(() => ({ data: { count: 0, totalBytes: 0 } })),
-  }
-})
-
-jest.mock('../stores/fs', () => ({
-  getFsFileUri: jest.fn((file: any) => `file://${file.id}`),
-}))
-
-jest.mock('../lib/fileReader', () => ({
-  createFileReader: jest.fn(() => ({
-    read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-  })),
-}))
-jest.mock('../lib/localObjects', () => ({
-  pinnedObjectToLocalObject: jest.fn(
-    (fileId: string, indexerURL: string): LocalObject => ({
-      id: `object-${fileId}`,
-      fileId,
-      indexerURL,
-      slabs: [],
-      encryptedDataKey: new ArrayBuffer(32),
-      encryptedMetadataKey: new ArrayBuffer(32),
-      encryptedMetadata: new ArrayBuffer(64),
-      dataSignature: new ArrayBuffer(64),
-      metadataSignature: new ArrayBuffer(64),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }),
-  ),
-}))
 
 jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
   encodeFileMetadata: jest.fn(() => new Uint8Array()),
@@ -129,7 +50,7 @@ const TEST_INDEXER_URL = 'https://test.indexer'
 
 async function createTestFile(id: string, size = 1000): Promise<FileEntry> {
   const now = Date.now()
-  await createFileRecord({
+  await app().files.create({
     id,
     name: `${id}.txt`,
     type: 'text/plain',
@@ -144,7 +65,7 @@ async function createTestFile(id: string, size = 1000): Promise<FileEntry> {
     deletedAt: null,
   })
 
-  const file = await readFileRecord(id)
+  const file = await app().files.getById(id)
   if (!file) throw new Error(`Failed to create test file: ${id}`)
 
   return {
@@ -177,12 +98,29 @@ function createFileEntry(id: string, size = 1000): FileEntry {
   }
 }
 
+let mockObjectCounter = 0
 function createMockPinnedObject(): jest.Mocked<PinnedObjectInterface> {
+  const objectId = `mock-object-${++mockObjectCounter}`
   return {
+    id: jest.fn().mockReturnValue(objectId),
+    metadata: jest.fn().mockReturnValue(new ArrayBuffer(0)),
     updateMetadata: jest.fn(),
     key: jest.fn().mockReturnValue('mock-key'),
     size: jest.fn().mockReturnValue(BigInt(1000)),
     slabs: jest.fn().mockReturnValue([]),
+    createdAt: jest.fn().mockReturnValue(new Date()),
+    updatedAt: jest.fn().mockReturnValue(new Date()),
+    seal: jest.fn().mockReturnValue({
+      id: objectId,
+      slabs: [],
+      encryptedDataKey: new ArrayBuffer(32),
+      encryptedMetadataKey: new ArrayBuffer(32),
+      encryptedMetadata: new ArrayBuffer(0),
+      dataSignature: new ArrayBuffer(64),
+      metadataSignature: new ArrayBuffer(64),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
   } as unknown as jest.Mocked<PinnedObjectInterface>
 }
 
@@ -196,53 +134,23 @@ function createMockPacker(
   } as unknown as jest.Mocked<PackedUploadInterface>
 }
 
+const mockAppKey = { export_: () => new Uint8Array(32) }
+
 function createMockSdk(
   packer: jest.Mocked<PackedUploadInterface>,
 ): jest.Mocked<SdkInterface> {
   return {
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
+    appKey: jest.fn().mockReturnValue(mockAppKey),
   } as unknown as jest.Mocked<SdkInterface>
 }
 
-function buildTestDeps(sdk: any, indexerURL: string): UploadDeps {
+function defaultAdapters(): UploaderAdapters {
   return {
-    sdk: {
-      uploadPacked: (opts: any) => sdk.uploadPacked(opts),
-      pinObject: (po: any) => sdk.pinObject(po),
-    },
-    files: {
-      read: (id) => readFileRecord(id),
-      getLocalOnly: (opts) => getFilesLocalOnly(opts),
-      getFsFileUri: (file) => getFsFileUri(file),
-    },
-    localObjects: {
-      upsertMany: (objects) => insertManyLocalObjects(db(), objects),
-      invalidate: () => {},
-    },
-    platform: {
-      isConnected: () => getIsConnected(),
-      autoScanEnabled: () => getAutoScanUploads(),
-      getIndexerURL: () => indexerURL,
-      createFileReader: (uri) => createFileReader(uri),
-      pinnedObjectToLocalObject: (fileId, url, po: any) =>
-        pinnedObjectToLocalObject(fileId, url, po),
-    },
-    uploads: {
-      register: (fileId, size) => registerUpload(fileId, size),
-      registerMany: (entries) => registerUploads(entries),
-      remove: (fileId) => removeUpload(fileId),
-      removeMany: (ids) => removeUploads(ids),
-      setStatus: (fileId, status) => setUploadStatus(fileId, status),
-      setError: (fileId, message) => setUploadError(fileId, message),
-      setBatchInfo: (fileId, batchId, count) =>
-        setUploadBatchInfo(fileId, batchId, count),
-      setBatchUploading: (fileIds, batchId) =>
-        setBatchUploading(fileIds, batchId),
-      updateProgress: (fileId, progress) =>
-        updateUploadProgress(fileId, progress),
-      getActive: () => getActiveUploads(),
-    },
+    createFileReader: jest.fn(() => ({
+      read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    })),
   }
 }
 
@@ -250,21 +158,49 @@ describe('UploadManager', () => {
   let mockPinnedObject: jest.Mocked<PinnedObjectInterface>
   let mockPacker: jest.Mocked<PackedUploadInterface>
   let mockSdk: jest.Mocked<SdkInterface>
-  let manager: ReturnType<typeof getUploadManager>
+  let manager: UploadManager
+
+  const realConfig = jest.requireActual('@siastorage/core/config') as Record<
+    string,
+    any
+  >
+  const savedConfig: Record<string, any> = {}
+  const configPatches: Record<string, any> = {
+    UPLOAD_MAX_INFLIGHT: 15,
+    UPLOAD_DATA_SHARDS: 10,
+    UPLOAD_PARITY_SHARDS: 0,
+    SECTOR_SIZE: 4 * 1024 * 1024,
+    SLAB_SIZE: 4 * 1024 * 1024 * 10,
+    PACKER_IDLE_TIMEOUT: 5000,
+    PACKER_MAX_BATCH_DURATION: 60000,
+    PACKER_MAX_SLABS: 10,
+    SLAB_FILL_THRESHOLD: 0.9,
+    PACKER_POLL_INTERVAL: 5000,
+    SAVE_BATCH_CONCURRENCY: 50,
+    SAVE_REMOVAL_DELAY_MS: 0,
+  }
 
   function resetManager() {
-    manager = getUploadManager()
-    manager.reset()
+    manager = new UploadManager()
   }
 
   function resetUploadsStore() {
-    useUploadsStore.setState({ uploads: {} })
+    app().uploads.clear()
   }
 
   beforeEach(async () => {
+    for (const [key, val] of Object.entries(configPatches)) {
+      savedConfig[key] = realConfig[key]
+      realConfig[key] = val
+    }
     await initializeDB()
     jest.clearAllMocks()
     jest.useFakeTimers()
+    mockObjectCounter = 0
+
+    jest
+      .spyOn(app().fs, 'getFileUri')
+      .mockImplementation(async (file: any) => `file://${file.id}`)
 
     resetManager()
     resetUploadsStore()
@@ -272,10 +208,17 @@ describe('UploadManager', () => {
     mockPinnedObject = createMockPinnedObject()
     mockPacker = createMockPacker(mockPinnedObject)
     mockSdk = createMockSdk(mockPacker)
+
+    internal().setSdk(mockSdk as any)
+    await app().settings.setIndexerURL(TEST_INDEXER_URL)
+    app().connection.setState({ isConnected: true })
   })
 
   afterEach(async () => {
     await manager.shutdown()
+    for (const [key, val] of Object.entries(savedConfig)) {
+      realConfig[key] = val
+    }
     jest.useRealTimers()
     await resetDb()
     resetUploadsStore()
@@ -283,15 +226,15 @@ describe('UploadManager', () => {
 
   describe('__testProcessFiles (test helper)', () => {
     it('adds files to packer and sets status to packed', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([
         createFileEntry('file1'),
         createFileEntry('file2'),
       ])
 
-      const upload1 = getUploadState('file1')
-      const upload2 = getUploadState('file2')
+      const upload1 = app().uploads.getEntry('file1')
+      const upload2 = app().uploads.getEntry('file2')
       expect(upload1?.status).toBe('packed')
       expect(upload2?.status).toBe('packed')
       expect(getActiveUploads()).toHaveLength(2)
@@ -300,7 +243,7 @@ describe('UploadManager', () => {
 
   describe('processEntry', () => {
     it('creates packer on first file', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
@@ -313,7 +256,7 @@ describe('UploadManager', () => {
     })
 
     it('reuses packer for subsequent files in same batch', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.__testProcessFiles([createFileEntry('file2')])
@@ -323,13 +266,13 @@ describe('UploadManager', () => {
     })
 
     it('sets error status on add failure', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
       // Verify error state in upload store
-      const upload = getUploadState('file1')
+      const upload = app().uploads.getEntry('file1')
       expect(upload?.status).toBe('error')
       expect(upload?.error).toBe('Add failed')
     })
@@ -337,7 +280,7 @@ describe('UploadManager', () => {
 
   describe('flush', () => {
     it('calls finalize on packer', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
@@ -350,7 +293,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = await createTestFile('file2')
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -365,20 +308,20 @@ describe('UploadManager', () => {
 
       // After flush, uploads should be removed
       expect(getActiveUploads()).toHaveLength(0)
-      expect(getUploadState('file1')).toBeUndefined()
-      expect(getUploadState('file2')).toBeUndefined()
+      expect(app().uploads.getEntry('file1')).toBeUndefined()
+      expect(app().uploads.getEntry('file2')).toBeUndefined()
     })
 
     it('creates local object in DB after successful upload', async () => {
       const entry = await createTestFile('file1')
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
       await manager.__testProcessFiles([entry])
       await manager.flush()
 
       // Verify local object was created in DB
-      const localObjects = await readLocalObjectsForFile('file1')
+      const localObjects = await app().localObjects.getForFile('file1')
       expect(localObjects).toHaveLength(1)
       expect(localObjects[0].fileId).toBe('file1')
       expect(localObjects[0].indexerURL).toBe(TEST_INDEXER_URL)
@@ -386,27 +329,27 @@ describe('UploadManager', () => {
 
     it('file record remains in DB after upload completes', async () => {
       const entry = await createTestFile('file1')
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
       await manager.__testProcessFiles([entry])
       await manager.flush()
 
       // Verify file record still exists
-      const file = await readFileRecord('file1')
+      const file = await app().files.getById('file1')
       expect(file).not.toBeNull()
       expect(file?.id).toBe('file1')
     })
 
     it('sets error on all files when finalize fails', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockRejectedValueOnce(new Error('Network error'))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
 
       // Verify error state
-      const upload = getUploadState('file1')
+      const upload = app().uploads.getEntry('file1')
       expect(upload?.status).toBe('error')
       expect(upload?.error).toBe('Network error')
     })
@@ -415,7 +358,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = await createTestFile('file2')
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -433,10 +376,10 @@ describe('UploadManager', () => {
       await flushPromise
 
       // file1 should be removed (success)
-      expect(getUploadState('file1')).toBeUndefined()
+      expect(app().uploads.getEntry('file1')).toBeUndefined()
 
       // file2 should remain with error status (failed to save)
-      const upload2 = getUploadState('file2')
+      const upload2 = app().uploads.getEntry('file2')
       expect(upload2).toBeDefined()
       expect(upload2?.status).toBe('error')
     })
@@ -446,7 +389,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('file1')
       const entry2 = createFileEntry('file2-no-db-record')
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -456,10 +399,10 @@ describe('UploadManager', () => {
       await manager.flush()
 
       // file1 should be removed (success)
-      expect(getUploadState('file1')).toBeUndefined()
+      expect(app().uploads.getEntry('file1')).toBeUndefined()
 
       // file2 should be removed (skipped because file was deleted)
-      expect(getUploadState('file2-no-db-record')).toBeUndefined()
+      expect(app().uploads.getEntry('file2-no-db-record')).toBeUndefined()
 
       // pinObject should only be called once (for file1, not file2)
       expect(mockSdk.pinObject).toHaveBeenCalledTimes(1)
@@ -467,7 +410,7 @@ describe('UploadManager', () => {
 
     it('sets error when pinObject fails and does not save to local DB', async () => {
       const entry = await createTestFile('pin-fail-file')
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
       mockSdk.pinObject
         .mockRejectedValueOnce(new Error('Indexer unavailable'))
@@ -480,13 +423,13 @@ describe('UploadManager', () => {
       await flushPromise
 
       // File should have error status
-      const upload = getUploadState('pin-fail-file')
+      const upload = app().uploads.getEntry('pin-fail-file')
       expect(upload).toBeDefined()
       expect(upload?.status).toBe('error')
       expect(upload?.error).toBe('Failed after 3 attempts: Indexer unavailable')
 
       // No local object should be created
-      const localObjects = await readLocalObjectsForFile('pin-fail-file')
+      const localObjects = await app().localObjects.getForFile('pin-fail-file')
       expect(localObjects).toHaveLength(0)
     })
 
@@ -494,7 +437,7 @@ describe('UploadManager', () => {
       const entry1 = await createTestFile('pin-success')
       const entry2 = await createTestFile('pin-fail')
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([
         mockPinnedObject,
         mockPinnedObject,
@@ -512,24 +455,24 @@ describe('UploadManager', () => {
       await flushPromise
 
       // pin-success should be removed from uploads (completed successfully)
-      expect(getUploadState('pin-success')).toBeUndefined()
+      expect(app().uploads.getEntry('pin-success')).toBeUndefined()
 
       // pin-fail should have error status
-      const upload2 = getUploadState('pin-fail')
+      const upload2 = app().uploads.getEntry('pin-fail')
       expect(upload2).toBeDefined()
       expect(upload2?.status).toBe('error')
       expect(upload2?.error).toBe('Failed after 3 attempts: Pin failed')
 
       // Only pin-success should have local object
-      const objects1 = await readLocalObjectsForFile('pin-success')
-      const objects2 = await readLocalObjectsForFile('pin-fail')
+      const objects1 = await app().localObjects.getForFile('pin-success')
+      const objects2 = await app().localObjects.getForFile('pin-fail')
       expect(objects1).toHaveLength(1)
       expect(objects2).toHaveLength(0)
     })
 
     it('retries pinObject on transient failure and succeeds', async () => {
       const entry = await createTestFile('retry-file')
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
       // Fails once, succeeds on retry
       mockSdk.pinObject
@@ -542,13 +485,13 @@ describe('UploadManager', () => {
       await flushPromise
 
       // Should succeed after retry — upload removed, local object created
-      expect(getUploadState('retry-file')).toBeUndefined()
-      const localObjects = await readLocalObjectsForFile('retry-file')
+      expect(app().uploads.getEntry('retry-file')).toBeUndefined()
+      const localObjects = await app().localObjects.getForFile('retry-file')
       expect(localObjects).toHaveLength(1)
     })
 
     it('creates new packer for files added after flush', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.flush()
@@ -560,7 +503,7 @@ describe('UploadManager', () => {
 
   describe('idle timeout via loop', () => {
     it('flushes batch after idle timeout', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Let the loop start and enter its initial poll wait
       await jest.advanceTimersByTimeAsync(0)
@@ -578,7 +521,7 @@ describe('UploadManager', () => {
     })
 
     it('resets idle timer when new file is enqueued', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       // Flush microtasks so the loop starts, polls DB (empty), and enters wait
       await jest.advanceTimersByTimeAsync(0)
 
@@ -610,7 +553,7 @@ describe('UploadManager', () => {
     // At 90% threshold with 40 MiB slab, threshold is 36 MiB
 
     it('does NOT flush when below threshold', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // 80% of slab = 96 MiB, below 90% threshold
       const file = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.8))
@@ -620,7 +563,7 @@ describe('UploadManager', () => {
     })
 
     it('does NOT flush when at threshold but next file would not overflow', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
@@ -634,7 +577,7 @@ describe('UploadManager', () => {
     })
 
     it('flushes when at threshold AND next file would overflow', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // 91% of slab, above threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.91))
@@ -650,7 +593,7 @@ describe('UploadManager', () => {
     })
 
     it('does NOT flush before overflow if below threshold', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // 50% of slab, below threshold
       const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * 0.5))
@@ -665,7 +608,7 @@ describe('UploadManager', () => {
     })
 
     it('correctly calculates fill percent for partial slabs', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Fill exactly to threshold (90%)
       const file1 = createFileEntry(
@@ -686,7 +629,7 @@ describe('UploadManager', () => {
 
   describe('shutdown', () => {
     it('removes all files from upload store', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([
         createFileEntry('file1'),
@@ -700,12 +643,12 @@ describe('UploadManager', () => {
 
       // After cancel, all uploads should be removed
       expect(getActiveUploads()).toHaveLength(0)
-      expect(getUploadState('file1')).toBeUndefined()
-      expect(getUploadState('file2')).toBeUndefined()
+      expect(app().uploads.getEntry('file1')).toBeUndefined()
+      expect(app().uploads.getEntry('file2')).toBeUndefined()
     })
 
     it('stops the loop', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
       await manager.shutdown()
@@ -716,7 +659,7 @@ describe('UploadManager', () => {
     })
 
     it('cancels inflight uploads via packer.cancel()', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await manager.__testProcessFiles([createFileEntry('file1')])
 
       expect(mockPacker.cancel).not.toHaveBeenCalled()
@@ -727,18 +670,18 @@ describe('UploadManager', () => {
     })
 
     it('removes enqueued files from upload store', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Enqueue files (they get registered in store)
       manager.enqueue([createFileEntry('queued-file')])
 
       // Before shutdown, file should be in store
-      expect(getUploadState('queued-file')).toBeDefined()
+      expect(app().uploads.getEntry('queued-file')).toBeDefined()
 
       await manager.shutdown()
 
       // After shutdown, queued file should be removed
-      expect(getUploadState('queued-file')).toBeUndefined()
+      expect(app().uploads.getEntry('queued-file')).toBeUndefined()
     })
 
     it('stops processing remaining files in the current batch', async () => {
@@ -751,7 +694,7 @@ describe('UploadManager', () => {
         return BigInt(1000)
       })
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       const files = Array.from({ length: 15 }, (_, i) =>
         createFileEntry(`s-file${i}`),
       )
@@ -774,7 +717,12 @@ describe('UploadManager', () => {
 
   describe('progress callback', () => {
     it('updates progress in upload store when reported', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), {
+        createFileReader: jest.fn(() => ({
+          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        })),
+        progressScheduler: (cb) => cb(),
+      })
 
       let progressCallback: ((uploaded: bigint, total: bigint) => void) | null =
         null
@@ -788,17 +736,14 @@ describe('UploadManager', () => {
       expect(progressCallback).not.toBeNull()
 
       // Initial progress should be 0
-      const uploadBefore = getUploadState('file1')
+      const uploadBefore = app().uploads.getEntry('file1')
       expect(uploadBefore?.progress).toBe(0)
 
       // Simulate progress update (50%)
       progressCallback!(BigInt(50), BigInt(100))
 
-      // Flush the RAF-batched progress update
-      flushPendingUploadProgress()
-
-      // Progress should be updated in store
-      const uploadAfter = getUploadState('file1')
+      // Progress should be updated in store (progressScheduler applies synchronously)
+      const uploadAfter = app().uploads.getEntry('file1')
       expect(uploadAfter?.progress).toBeGreaterThan(0)
     })
   })
@@ -807,18 +752,16 @@ describe('UploadManager', () => {
     it('creates separate local objects for each file', async () => {
       const entry1 = await createTestFile('batch-file-1')
       const entry2 = await createTestFile('batch-file-2')
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
-      mockPacker.finalize.mockResolvedValueOnce([
-        mockPinnedObject,
-        mockPinnedObject,
-      ])
+      manager.initialize(app(), internal(), defaultAdapters())
+      const po2 = createMockPinnedObject()
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject, po2])
 
       await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
 
       // Each file should have its own local object
-      const objects1 = await readLocalObjectsForFile('batch-file-1')
-      const objects2 = await readLocalObjectsForFile('batch-file-2')
+      const objects1 = await app().localObjects.getForFile('batch-file-1')
+      const objects2 = await app().localObjects.getForFile('batch-file-2')
 
       expect(objects1).toHaveLength(1)
       expect(objects2).toHaveLength(1)
@@ -829,7 +772,7 @@ describe('UploadManager', () => {
 
   describe('upload serialization', () => {
     it('files enqueued during flush end up in a new batch', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
@@ -865,7 +808,7 @@ describe('UploadManager', () => {
     // 40 MiB slab, 10 slabs max = 400 MiB absolute limit
 
     it('max slabs limit triggers flush at 400MB', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Add files to fill exactly 10 slabs (400 MiB)
       // Using 40 MiB files = exactly 1 slab each
@@ -879,7 +822,7 @@ describe('UploadManager', () => {
     })
 
     it('duration exceeded triggers flush on next loop iteration', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Enqueue files through the loop with gaps just under
       // PACKER_IDLE_TIMEOUT so they count as active time.
@@ -904,7 +847,7 @@ describe('UploadManager', () => {
     })
 
     it('duration exceeded mid-window triggers flush after window completes', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Flush microtasks so the loop starts, polls DB (empty), and enters poll wait
       await jest.advanceTimersByTimeAsync(0)
@@ -929,7 +872,7 @@ describe('UploadManager', () => {
       mgr.batch.lastProcessedAt = Date.now()
 
       // Enqueue 10 more files at once. The loop drains them all into
-      // processEntries → processWindow (pipelined path). Duration is checked
+      // processEntries -> processWindow (pipelined path). Duration is checked
       // after the window completes, so all 10 files are packed before flush.
       const files = Array.from({ length: 10 }, (_, i) =>
         createFileEntry(`window-dur-${i}`, 1000),
@@ -950,7 +893,7 @@ describe('UploadManager', () => {
     })
 
     it('app suspension does not count toward max batch duration', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Process first file to start a batch
       manager.enqueue([createFileEntry('pre-suspend', 1000)])
@@ -974,7 +917,7 @@ describe('UploadManager', () => {
     })
 
     it('app suspension before first file does not trigger max_duration', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Simulate suspension before any files are processed
       jest.advanceTimersByTime(5 * 60 * 1000)
@@ -996,7 +939,7 @@ describe('UploadManager', () => {
     })
 
     it('many small photos hit max slabs limit before 400MB', async () => {
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // 2MB photos: 20 per slab, 200 photos = 10 slabs = 400 MiB
       for (let i = 0; i < 200; i++) {
@@ -1009,15 +952,23 @@ describe('UploadManager', () => {
   })
 
   describe('loop with DB polling', () => {
+    let queryFilesSpy: jest.SpyInstance
+
     function enablePolling() {
-      jest.mocked(getIsConnected).mockReturnValue(true)
-      jest.mocked(getAutoScanUploads).mockResolvedValue(true)
+      app().connection.setState({ isConnected: true })
+      void app().settings.setAutoScanUploads(true)
     }
 
+    beforeEach(() => {
+      queryFilesSpy = jest
+        .spyOn(app().files, 'query')
+        .mockResolvedValue([] as any)
+    })
+
     afterEach(() => {
-      jest.mocked(getIsConnected).mockReturnValue(false)
-      jest.mocked(getAutoScanUploads).mockResolvedValue(false as any)
-      jest.mocked(getFilesLocalOnly).mockResolvedValue([] as any)
+      queryFilesSpy.mockRestore()
+      app().connection.setState({ isConnected: false })
+      void app().settings.setAutoScanUploads(false)
     })
 
     function createDBFiles(
@@ -1041,20 +992,19 @@ describe('UploadManager', () => {
 
     it('drains all polled files into one batch before idle flush', async () => {
       enablePolling()
-      jest
-        .mocked(getFilesLocalOnly)
+      queryFilesSpy
         .mockResolvedValueOnce(createDBFiles(20))
         .mockResolvedValue([] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
-      // Flush microtasks: loop starts → pollDB finds 20 files →
-      // drainQueues → processEntries adds all 20
+      manager.initialize(app(), internal(), defaultAdapters())
+      // Flush microtasks: loop starts -> pollDB finds 20 files ->
+      // drainQueues -> processEntries adds all 20
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(20)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      // Idle timeout triggers: loop re-polls (empty) → flushes
+      // Idle timeout triggers: loop re-polls (empty) -> flushes
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
       expect(manager.flushHistory).toHaveLength(1)
@@ -1066,19 +1016,18 @@ describe('UploadManager', () => {
       enablePolling()
       const wave1 = createDBFiles(5, { prefix: 'w1' })
       const wave2 = createDBFiles(5, { prefix: 'w2' })
-      jest
-        .mocked(getFilesLocalOnly)
+      queryFilesSpy
         .mockResolvedValueOnce(wave1)
         .mockResolvedValueOnce(wave2)
         .mockResolvedValue([] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
-      // Flush microtasks: loop polls twice (wave1 → wave2) and processes all 10
+      manager.initialize(app(), internal(), defaultAdapters())
+      // Flush microtasks: loop polls twice (wave1 -> wave2) and processes all 10
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(10)
 
-      // Idle timeout → re-poll (empty) → flush
+      // Idle timeout -> re-poll (empty) -> flush
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
       expect(manager.flushHistory[0].fileCount).toBe(10)
@@ -1088,27 +1037,23 @@ describe('UploadManager', () => {
       enablePolling()
       const wave1 = createDBFiles(3, { prefix: 'w1' })
       const wave2 = createDBFiles(3, { prefix: 'w2' })
-      jest
-        .mocked(getFilesLocalOnly)
+      queryFilesSpy
         .mockResolvedValueOnce(wave1)
         .mockResolvedValueOnce([] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
       expect(mockPacker.add).toHaveBeenCalledTimes(3)
 
       // Wave2 appears in DB during idle wait
-      jest
-        .mocked(getFilesLocalOnly)
-        .mockResolvedValueOnce(wave2)
-        .mockResolvedValue([] as any)
+      queryFilesSpy.mockResolvedValueOnce(wave2).mockResolvedValue([] as any)
 
-      // Idle timeout → re-poll → finds wave2 → processes them
+      // Idle timeout -> re-poll -> finds wave2 -> processes them
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.add).toHaveBeenCalledTimes(6)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      // Second idle timeout → re-poll (all excluded) → flush
+      // Second idle timeout -> re-poll (all excluded) -> flush
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.finalize).toHaveBeenCalledTimes(1)
       expect(manager.flushHistory[0].fileCount).toBe(6)
@@ -1116,12 +1061,11 @@ describe('UploadManager', () => {
 
     it('processes explicit and polled files together', async () => {
       enablePolling()
-      jest
-        .mocked(getFilesLocalOnly)
+      queryFilesSpy
         .mockResolvedValueOnce(createDBFiles(3))
         .mockResolvedValue([] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       manager.enqueue([createFileEntry('explicit-1')])
       await jest.advanceTimersByTimeAsync(0)
 
@@ -1129,23 +1073,23 @@ describe('UploadManager', () => {
     })
 
     it('does not poll when disconnected', async () => {
-      jest.mocked(getIsConnected).mockReturnValue(false)
-      jest.mocked(getAutoScanUploads).mockResolvedValue(true)
-      jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
+      app().connection.setState({ isConnected: false })
+      void app().settings.setAutoScanUploads(true)
+      queryFilesSpy.mockResolvedValue(createDBFiles(5))
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).not.toHaveBeenCalled()
-      expect(getFilesLocalOnly).not.toHaveBeenCalled()
+      expect(queryFilesSpy).not.toHaveBeenCalled()
     })
 
     it('does not poll when auto-scan is disabled', async () => {
-      jest.mocked(getIsConnected).mockReturnValue(true)
-      jest.mocked(getAutoScanUploads).mockResolvedValue(false)
-      jest.mocked(getFilesLocalOnly).mockResolvedValue(createDBFiles(5))
+      app().connection.setState({ isConnected: true })
+      void app().settings.setAutoScanUploads(false)
+      queryFilesSpy.mockResolvedValue(createDBFiles(5))
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).not.toHaveBeenCalled()
@@ -1159,13 +1103,12 @@ describe('UploadManager', () => {
       enablePolling()
       const batch1 = createDBFiles(200, { prefix: 'a', size: 100 })
       const batch2 = createDBFiles(100, { prefix: 'b', size: 100 })
-      jest
-        .mocked(getFilesLocalOnly)
+      queryFilesSpy
         .mockResolvedValueOnce(batch1)
         .mockResolvedValueOnce(batch2)
         .mockResolvedValue([] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(300)
@@ -1196,7 +1139,7 @@ describe('UploadManager', () => {
         })
       })
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
       manager.enqueue(
@@ -1225,7 +1168,7 @@ describe('UploadManager', () => {
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValue([mockPinnedObject] as any)
 
-      manager.initialize(buildTestDeps(mockSdk, TEST_INDEXER_URL))
+      manager.initialize(app(), internal(), defaultAdapters())
 
       // Batch 1 — finalize will fail
       manager.enqueue([createFileEntry('fail-1', 100)])
@@ -1233,7 +1176,7 @@ describe('UploadManager', () => {
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
 
       expect(manager.flushHistory).toHaveLength(1)
-      expect(getUploadState('fail-1')?.status).toBe('error')
+      expect(app().uploads.getEntry('fail-1')?.status).toBe('error')
 
       // Batch 2 — loop should still be alive and process new files
       manager.enqueue([createFileEntry('ok-1', 100)])
@@ -1242,27 +1185,30 @@ describe('UploadManager', () => {
 
       expect(manager.flushHistory).toHaveLength(2)
       expect(manager.flushHistory[1].fileCount).toBe(1)
-      expect(getUploadState('ok-1')).toBeUndefined()
+      expect(app().uploads.getEntry('ok-1')).toBeUndefined()
     })
   })
 
   describe('initializeUploader', () => {
     it('shuts down existing manager before re-initializing', async () => {
+      const { initializeUploader } = require('./uploader')
       const shutdownSpy = jest.spyOn(manager, 'shutdown')
+      const getManagerSpy = jest
+        .spyOn(require('../stores/appService'), 'getUploadManager')
+        .mockReturnValue(manager)
 
-      // First initialization — no existing manager to shut down
-      await initializeUploader(mockSdk as any)
-      // shutdown is called because getUploadManager() returns the existing
-      // singleton (created in beforeEach)
+      // First initialization — shuts down the existing manager
+      await initializeUploader()
       expect(shutdownSpy).toHaveBeenCalledTimes(1)
 
       shutdownSpy.mockClear()
 
       // Second initialization — should shut down the existing manager first
-      await initializeUploader(mockSdk as any)
+      await initializeUploader()
       expect(shutdownSpy).toHaveBeenCalledTimes(1)
 
       shutdownSpy.mockRestore()
+      getManagerSpy.mockRestore()
     })
   })
 })

@@ -1,3 +1,4 @@
+import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { StyleSheet, View } from 'react-native'
 // RNGH ScrollView instead of RN ScrollView so it can negotiate with other
@@ -5,7 +6,6 @@ import { StyleSheet, View } from 'react-native'
 // scroll events on Android when nested inside a GestureHandlerRootView.
 import { ScrollView } from 'react-native-gesture-handler'
 import { useFileStatus } from '../../lib/file'
-import type { FileRecord } from '../../stores/files'
 import { colors, palette } from '../../styles/colors'
 import { FileMeta } from './FileMeta'
 

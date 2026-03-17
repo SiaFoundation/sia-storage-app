@@ -4,23 +4,7 @@ import {
   ThumbnailScanner,
   type ThumbnailScannerResult,
 } from '@siastorage/core/services/thumbnailScanner'
-import { Buffer } from 'buffer'
-import { Directory, File, Paths } from 'expo-file-system'
-import RNFS from 'react-native-fs'
-import { createMobileThumbnailAdapter } from '../adapters/thumbnail'
-import { db } from '../db'
-import { sha256File } from '../lib/contentHash'
-import { detectMimeType } from '../lib/detectMimeType'
-import { getMimeType } from '../lib/fileTypes'
-import { copyFileToFs, getFsFileUri } from '../stores/fs'
-import { invalidateThumbnailsForFileId } from '../stores/thumbnails'
-
-export type {
-  ProducedThumbnail,
-  ThumbnailAttempt,
-  ThumbnailGenerationError,
-  ThumbnailScannerResult,
-} from '@siastorage/core/services/thumbnailScanner'
+import { app } from '../stores/appService'
 
 const scanner = new ThumbnailScanner()
 
@@ -31,35 +15,7 @@ export function getThumbnailScanner(): ThumbnailScanner {
 
 function ensureInitialized(): void {
   if (scanner.isInitialized()) return
-  scanner.initialize({
-    db: db(),
-    thumbnailAdapter: createMobileThumbnailAdapter(),
-    detectMimeType: (path: string) => detectMimeType(path),
-    getFsFileUri: (file) => getFsFileUri(file),
-    async copyToFs(file, data) {
-      const type = await getMimeType({
-        type: file.type,
-        name: 'thumbnail.webp',
-      })
-      const tmpPath = `${file.id}.webp`
-      const tmpDir = new Directory(Paths.cache, 'thumb-tmp')
-      const tmpDirExists = await RNFS.exists(tmpDir.uri)
-      if (!tmpDirExists) await RNFS.mkdir(tmpDir.uri)
-      const tmpFile = new File(tmpDir, tmpPath)
-      await RNFS.writeFile(
-        tmpFile.uri,
-        Buffer.from(data).toString('base64'),
-        'base64',
-      )
-      const hash = await sha256File(tmpFile.uri)
-      const uri = await copyFileToFs({ id: file.id, type }, tmpFile)
-      const stat = await RNFS.stat(uri)
-      return { uri, size: stat.size ?? data.byteLength, hash }
-    },
-    async invalidateCache(fileId) {
-      invalidateThumbnailsForFileId(fileId)
-    },
-  })
+  scanner.initialize(app())
 }
 
 export async function runThumbnailScanner(
@@ -67,6 +23,10 @@ export async function runThumbnailScanner(
 ): Promise<ThumbnailScannerResult> {
   ensureInitialized()
   const result = await scanner.runScan(signal)
+  if (result.produced.length > 0) {
+    await app().caches.library.invalidateAll()
+    app().caches.libraryVersion.invalidate()
+  }
   return result
 }
 

@@ -1,10 +1,10 @@
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import * as DocumentPicker from 'expo-document-picker'
 import { useCallback, useRef } from 'react'
 import { processAssets } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
-import type { FileRecord } from '../stores/files'
 
 export function useDocumentPicker() {
   const toast = useToast()

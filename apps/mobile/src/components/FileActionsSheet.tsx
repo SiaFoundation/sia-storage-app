@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useFileDetails, useIsFavorite } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import {
   ArrowDownToLineIcon,
@@ -14,7 +15,6 @@ import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
-import { trashFiles } from '../lib/deleteFile'
 import {
   fetchBulkCounts,
   fileHasASealedObject,
@@ -24,10 +24,8 @@ import { useToast } from '../lib/toastContext'
 import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
 import type { MainStackParamList } from '../stacks/types'
-import { useFileDetails } from '../stores/files'
-import { getFsFileUri } from '../stores/fs'
+import { app } from '../stores/appService'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
-import { toggleFavorite, useIsFavorite } from '../stores/tags'
 import { palette } from '../styles/colors'
 import { ActionSheet } from './ActionSheet'
 import { ActionSheetButton } from './ActionSheetButton'
@@ -93,7 +91,7 @@ function SingleFileActionsSheet({
   const handleToggleFavorite = useCallback(async () => {
     const wasFavorite = favorite.data
     closeSheet(sheetName)
-    await toggleFavorite(fileId)
+    await app().tags.toggleFavorite(fileId)
     toast.show(wasFavorite ? 'Removed from Favorites' : 'Added to Favorites')
   }, [fileId, sheetName, favorite.data, toast])
 
@@ -121,7 +119,7 @@ function SingleFileActionsSheet({
   const handleDelete = useCallback(async () => {
     if (!file) return
     try {
-      await trashFiles([file.id])
+      await app().files.trash([file.id])
       if (navigation) navigation.goBack()
       toast.show('Moved to trash')
       onComplete?.()
@@ -251,7 +249,7 @@ function BulkFileActionsSheet({
     try {
       for (const file of counts.files) {
         const hasSealed = fileHasASealedObject(file)
-        const uri = await getFsFileUri(file)
+        const uri = await app().fs.getFileUri(file)
         if (hasSealed && !uri) {
           void downloadFile(file)
         }
@@ -271,7 +269,7 @@ function BulkFileActionsSheet({
       let queued = 0
       for (const file of counts.files) {
         const hasSealed = fileHasASealedObject(file)
-        const uri = await getFsFileUri(file)
+        const uri = await app().fs.getFileUri(file)
         if (uri && !hasSealed) {
           queueUploadForFileId(file.id)
           queued++
@@ -290,7 +288,7 @@ function BulkFileActionsSheet({
   const handleDeleteAll = useCallback(async () => {
     if (!counts) return
     try {
-      await trashFiles(counts.files.map((f) => f.id))
+      await app().files.trash(counts.files.map((f) => f.id))
       toast.show(`Moved ${counts.total} files to trash`)
       onComplete?.()
     } catch (e) {

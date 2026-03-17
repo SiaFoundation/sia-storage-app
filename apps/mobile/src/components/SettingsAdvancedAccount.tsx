@@ -1,4 +1,4 @@
-import { useAccount } from '../hooks/useAccount'
+import { useAccount } from '@siastorage/core/stores'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'

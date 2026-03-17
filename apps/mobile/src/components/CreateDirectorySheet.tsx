@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
-import { createDirectory } from '../stores/directories'
+import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
@@ -46,7 +46,7 @@ export function CreateDirectorySheet({ onCreated }: Props) {
     const trimmed = name.trim()
     if (!trimmed) return
     try {
-      const dir = await createDirectory(trimmed)
+      const dir = await app().directories.create(trimmed)
       setName('')
       setError('')
       closeSheet()

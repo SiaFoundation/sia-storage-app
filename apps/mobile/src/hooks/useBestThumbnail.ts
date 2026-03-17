@@ -1,15 +1,12 @@
+import { useIsInitializing } from '@siastorage/core/stores'
+import type { FileRecord, ThumbSize } from '@siastorage/core/types'
 import { useEffect } from 'react'
 import useSWR from 'swr'
 import { useFileStatus } from '../lib/file'
 import { useDownload } from '../managers/downloader'
-import { useIsInitializing } from '../stores/app'
-import type { FileRecord, ThumbSize } from '../stores/files'
+import { app } from '../stores/appService'
 import { useFsFileUri } from '../stores/fs'
 import { useIsConnected } from '../stores/sdk'
-import {
-  bestThumbnailCache,
-  readBestThumbnailByFileId,
-} from '../stores/thumbnails'
 
 /**
  * useBestThumbnailUri returns the local URI of the best available thumbnail for a file.
@@ -27,8 +24,8 @@ export function useBestThumbnailUri(
 ) {
   // Fetch the best thumbnail record.
   const thumbRecord = useSWR(
-    file ? bestThumbnailCache.key(file.id, String(thumbSize)) : null,
-    () => (file ? readBestThumbnailByFileId(file.id, thumbSize) : null),
+    file ? app().caches.thumbnails.best.key(file.id, String(thumbSize)) : null,
+    () => (file ? app().thumbnails.getBest(file.id, thumbSize) : null),
   )
 
   // Auto-download the chosen thumbnail.

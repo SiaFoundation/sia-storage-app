@@ -1,4 +1,5 @@
 import { SYNC_ARCHIVE_RESUME_THRESHOLD } from '@siastorage/core/config'
+import { usePhotoImportDirectory } from '@siastorage/core/stores'
 import { useCallback } from 'react'
 import { Linking, Pressable, StyleSheet, Switch, Text } from 'react-native'
 import { humanSize } from '../lib/humanSize'
@@ -14,11 +15,8 @@ import {
   usePhotosArchiveCursor,
   usePhotosArchiveDisplayDate,
 } from '../managers/syncPhotosArchive'
+import { app } from '../stores/appService'
 import { useFileStatsLocal } from '../stores/files'
-import {
-  setPhotoImportDirectory,
-  usePhotoImportDirectory,
-} from '../stores/settings'
 import { openSheet } from '../stores/sheets'
 import { colors } from '../styles/colors'
 import { Button } from './Button'
@@ -48,11 +46,11 @@ export function SettingsSyncPhotos() {
   }, [])
 
   const handleSelectDirectory = useCallback((name: string) => {
-    void setPhotoImportDirectory(name)
+    void app().settings.setPhotoImportDirectory(name)
   }, [])
 
   const handleClearDirectory = useCallback(() => {
-    void setPhotoImportDirectory('')
+    void app().settings.setPhotoImportDirectory('')
   }, [])
 
   return (

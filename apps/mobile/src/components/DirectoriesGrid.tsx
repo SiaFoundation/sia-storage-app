@@ -1,3 +1,6 @@
+import type { DirectoryWithCount } from '@siastorage/core/db/operations'
+import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
+import { useAllDirectories, useUnfiledFileCount } from '@siastorage/core/stores'
 import { FolderIcon, InboxIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
 import {
@@ -8,12 +11,6 @@ import {
   Text,
   View,
 } from 'react-native'
-import {
-  type DirectoryWithCount,
-  UNFILED_DIRECTORY_ID,
-  useAllDirectories,
-} from '../stores/directories'
-import { useUnfiledFileCount } from '../stores/library'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
 

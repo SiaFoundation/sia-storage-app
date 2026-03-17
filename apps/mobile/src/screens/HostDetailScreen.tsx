@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useHost } from '@siastorage/core/stores'
 import { useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { RowGroup } from '../components/Group'
@@ -9,7 +10,6 @@ import { MapMarker } from '../components/Map/MapMarker'
 import { determineBestRegion } from '../components/Map/mapHelpers'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 import type { MenuStackParamList } from '../stacks/types'
-import { useHost } from '../stores/hosts'
 import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'HostDetail'>

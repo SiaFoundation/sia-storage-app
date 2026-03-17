@@ -24,6 +24,8 @@ import { useToast } from '../lib/toastContext'
 import type { MenuStackParamList } from '../stacks/types'
 import {
   clearLogs,
+  getLogLevelSync,
+  getLogScopesSync,
   readLogs,
   setLogLevel,
   setLogScopes,
@@ -31,7 +33,6 @@ import {
   useAvailableScopes,
   useLogLevel,
   useLogScopes,
-  useLogsStore,
 } from '../stores/logs'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
@@ -132,8 +133,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
 
   const handleShareLogs = useCallback(async () => {
     try {
-      const state = useLogsStore.getState()
-      const logs = await readLogs(state.logLevel, state.logScopes)
+      const logs = await readLogs(getLogLevelSync(), getLogScopesSync())
       if (logs.length === 0) {
         toast.show('No logs to share')
         return

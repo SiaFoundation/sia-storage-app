@@ -21,27 +21,19 @@
  *   iCloud-synced metadata timestamp (not local arrival time).
  */
 
+import { useApp } from '@siastorage/core/app'
 import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
+import useSWR from 'swr'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
   mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import {
-  getAsyncStorageBoolean,
-  getAsyncStorageNumber,
-  setAsyncStorageBoolean,
-  setAsyncStorageNumber,
-} from '../stores/asyncStore'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
+import { app } from '../stores/appService'
 
 const PAGE_SIZE = 50
 
@@ -84,8 +76,8 @@ export async function workNew(signal?: AbortSignal): Promise<void> {
       { addToImportDirectory: true, skipExistingUpdates: true },
     )
     if (files.length > 0) {
-      invalidateCacheLibraryAllStats()
-      invalidateCacheLibraryLists()
+      await app().caches.library.invalidateAll()
+      app().caches.libraryVersion.invalidate()
     }
   } catch (e) {
     logger.error('syncNewPhotos', 'batch_error', {
@@ -101,17 +93,21 @@ export const { init: initSyncNewPhotos } = createServiceInterval({
   interval: SYNC_NEW_PHOTOS_INTERVAL,
 })
 
-export const [
-  getAutoSyncNewPhotos,
-  useAutoSyncNewPhotos,
-  autoSyncNewPhotosCache,
-] = createGetterAndSWRHook<boolean>(() =>
-  getAsyncStorageBoolean('autoSyncNewPhotos', false),
-)
+export async function getAutoSyncNewPhotos(): Promise<boolean> {
+  const raw = await app().storage.getItem('autoSyncNewPhotos')
+  return raw === null ? false : raw === 'true'
+}
+
+export function useAutoSyncNewPhotos() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('autoSyncNewPhotos'), () =>
+    getAutoSyncNewPhotos(),
+  )
+}
 
 export async function setAutoSyncNewPhotos(value: boolean) {
-  await setAsyncStorageBoolean('autoSyncNewPhotos', value)
-  await autoSyncNewPhotosCache.set(value)
+  await app().storage.setItem('autoSyncNewPhotos', String(value))
+  app().caches.settings.invalidate('autoSyncNewPhotos')
   if (value) {
     await setSyncNewPhotosEnabledAt(Date.now())
     ensureMediaLibraryPermission()
@@ -125,12 +121,13 @@ export async function toggleAutoSyncNewPhotos() {
   await setAutoSyncNewPhotos(next)
 }
 
-export const [getSyncNewPhotosEnabledAt, , syncNewPhotosEnabledAtCache] =
-  createGetterAndSWRHook<number>(() =>
-    getAsyncStorageNumber('syncNewPhotosEnabledAt', 0),
-  )
+export async function getSyncNewPhotosEnabledAt(): Promise<number> {
+  const raw = await app().storage.getItem('syncNewPhotosEnabledAt')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
+}
 
 export async function setSyncNewPhotosEnabledAt(value: number) {
-  await setAsyncStorageNumber('syncNewPhotosEnabledAt', value)
-  await syncNewPhotosEnabledAtCache.set(value)
+  await app().storage.setItem('syncNewPhotosEnabledAt', String(value))
+  app().caches.settings.invalidate('syncNewPhotosEnabledAt')
 }

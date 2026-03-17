@@ -44,21 +44,28 @@ jest.mock('../stores/files', () => ({
   getFileStatsLocal: (...args: unknown[]) => mockGetFileStatsLocal(...args),
 }))
 
-jest.mock('../stores/sdk', () => ({
-  getIsConnected: jest.fn(() => true),
-}))
+jest.mock('../stores/sdk', () => ({}))
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
-jest.mock('../stores/settings', () => ({
-  getHasOnboarded: jest.fn(() => true),
-}))
-
-jest.mock('../stores/app', () => ({
-  getIsInitializing: jest.fn(() => false),
-  getInitializationError: jest.fn(() => null),
+jest.mock('../stores/appService', () => ({
+  app: jest.fn(() => ({
+    init: {
+      getState: () => ({
+        isInitializing: false,
+        initializationError: null,
+        steps: {},
+      }),
+    },
+    settings: {
+      getHasOnboarded: jest.fn(() => true),
+    },
+    connection: {
+      getState: () => ({ isConnected: true }),
+    },
+  })),
 }))
 
 const mockRunFsEvictionScanner = jest.fn(() => Promise.resolve(undefined))

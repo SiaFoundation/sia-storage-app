@@ -13,7 +13,7 @@ import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { initApp } from '../managers/app'
-import { setHasOnboarded } from '../stores/settings'
+import { app } from '../stores/appService'
 import { palette } from '../styles/colors'
 
 export default function OnboardingFinishedScreen() {
@@ -141,7 +141,7 @@ export default function OnboardingFinishedScreen() {
           testID="finished-upload-button"
           variant="primary"
           onPress={async () => {
-            await setHasOnboarded(true)
+            await app().settings.setHasOnboarded(true)
             await initApp()
           }}
         >

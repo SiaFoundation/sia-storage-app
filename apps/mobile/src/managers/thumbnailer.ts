@@ -1,9 +1,9 @@
 import { SlotPool } from '@siastorage/core/lib/slotPool'
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
-import type { FileRecord } from '../stores/files'
+import { app } from '../stores/appService'
 import { getThumbnailScanner } from './thumbnailScanner'
 
-// TODO: consider file-size-based concurrency (e.g., fewer slots for large images)
 const THUMBNAIL_CONCURRENCY = 5
 
 export function isFileBeingProcessed(fileId: string): boolean {
@@ -38,5 +38,8 @@ export async function generateThumbnails(files: FileRecord[]) {
       }),
     ),
   )
-  return produced
+  if (produced > 0) {
+    await app().caches.library.invalidateAll()
+    app().caches.libraryVersion.invalidate()
+  }
 }

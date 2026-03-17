@@ -1,8 +1,7 @@
+import { useDownloadCounts, useMaxDownloads } from '@siastorage/core/stores'
 import { useInputValue } from '../hooks/useInputValue'
-import { setMaxDownloads, useMaxDownloads } from '../managers/downloadsPool'
-import { getUploadManager } from '../managers/uploader'
-import { cancelAllDownloads, useDownloadCounts } from '../stores/downloads'
-import { clearAllUploads, useUploadCounts } from '../stores/uploads'
+import { app } from '../stores/appService'
+import { useUploadCounts } from '../stores/uploads'
 import { Button } from './Button'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
@@ -11,14 +10,18 @@ import { LabeledValueRow } from './LabeledValueRow'
 
 export function SettingsAdvancedTransfers() {
   const uploadCounts = useUploadCounts()
-  const downloadCounts = useDownloadCounts()
+  const { data: downloadCounts } = useDownloadCounts()
   const maxDownloads = useMaxDownloads()
+
+  const totalDownloads = downloadCounts?.total ?? 0
+  const totalDownloadsActive = downloadCounts?.totalActive ?? 0
+  const totalDownloadsQueued = downloadCounts?.totalQueued ?? 0
 
   const maxDownloadsInputProps = useInputValue({
     value: String(maxDownloads.data),
     save: (text) => {
       const n = Number(text.replace(/[^0-9]/g, ''))
-      if (Number.isFinite(n) && n > 0) setMaxDownloads(n)
+      if (Number.isFinite(n) && n > 0) app().downloads.setMaxSlots(n)
     },
   })
 
@@ -41,8 +44,8 @@ export function SettingsAdvancedTransfers() {
           style={{ marginTop: 10 }}
           disabled={uploadCounts.total === 0}
           onPress={async () => {
-            await getUploadManager().shutdown()
-            clearAllUploads()
+            await app().uploader.shutdown()
+            app().uploads.clear()
           }}
         >
           Cancel uploads
@@ -58,20 +61,20 @@ export function SettingsAdvancedTransfers() {
           />
           <LabeledValueRow
             label="Queued"
-            value={String(downloadCounts.totalQueued)}
+            value={String(totalDownloadsQueued)}
             canCopy={false}
           />
           <LabeledValueRow
             label="Active"
-            value={String(downloadCounts.totalActive)}
+            value={String(totalDownloadsActive)}
             canCopy={false}
           />
         </InfoCard>
         <Button
           style={{ marginTop: 10 }}
-          disabled={downloadCounts.total === 0}
+          disabled={totalDownloads === 0}
           onPress={() => {
-            cancelAllDownloads()
+            app().downloads.cancelAll()
           }}
         >
           Cancel downloads
