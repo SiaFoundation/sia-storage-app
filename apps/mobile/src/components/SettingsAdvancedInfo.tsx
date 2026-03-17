@@ -1,9 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useShowAdvanced } from '@siastorage/core/stores'
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Share from 'react-native-share'
 import { database } from '../db'
 import type { MenuStackParamList } from '../stacks/types'
-import { setShowAdvanced, useShowAdvanced } from '../stores/settings'
+import { app } from '../stores/appService'
 import { colors, palette } from '../styles/colors'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
@@ -23,7 +24,7 @@ export function SettingsAdvancedInfo({ navigation }: Props) {
           value={
             <Switch
               value={showAdvanced.data}
-              onValueChange={(val) => setShowAdvanced(val)}
+              onValueChange={(val) => app().settings.setShowAdvanced(val)}
             />
           }
         />

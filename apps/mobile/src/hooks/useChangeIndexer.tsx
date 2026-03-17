@@ -1,7 +1,7 @@
+import { useIndexerURL } from '@siastorage/core/stores'
 import { useCallback, useState } from 'react'
 import { useToast } from '../lib/toastContext'
 import { authenticateIndexer } from '../stores/sdk'
-import { useIndexerURL } from '../stores/settings'
 import { useInputValue } from './useInputValue'
 
 function validateURL(url: string) {

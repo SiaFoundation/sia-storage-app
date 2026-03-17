@@ -5,10 +5,8 @@ import BackgroundFetch, {
   type BackgroundFetchConfig,
 } from 'react-native-background-fetch'
 import { createBackgroundDelay } from '../lib/backgroundDelay'
-import { getInitializationError, getIsInitializing } from '../stores/app'
+import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
-import { getIsConnected } from '../stores/sdk'
-import { getHasOnboarded } from '../stores/settings'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
 import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
@@ -213,7 +211,7 @@ async function waitForInitialization(
   const pollIntervalMs = secondsInMs(1)
   let elapsed = 0
 
-  while (getIsInitializing() && elapsed < maxWaitMs) {
+  while (app().init.getState().isInitializing && elapsed < maxWaitMs) {
     const result = await delayFn(pollIntervalMs)
     if (result === 'aborted') {
       return 'aborted'
@@ -221,7 +219,7 @@ async function waitForInitialization(
     elapsed += pollIntervalMs
   }
 
-  if (getIsInitializing()) {
+  if (app().init.getState().isInitializing) {
     return 'timeout'
   }
   return 'ready'
@@ -250,7 +248,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   state.abort = abort
 
   // Check if user has onboarded - if not, there's nothing to do
-  const hasOnboarded = await getHasOnboarded()
+  const hasOnboarded = await app().settings.getHasOnboarded()
   if (!hasOnboarded) {
     log('skipped', { reason: 'not_onboarded' })
     return
@@ -259,7 +257,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // Wait for app initialization to complete (handles both warm and cold starts)
   // On warm start, init is already done. On cold start, initApp() runs the full
   // initialization sequence including reconnectIndexer().
-  const isInitializing = getIsInitializing()
+  const isInitializing = app().init.getState().isInitializing
   if (isInitializing) {
     log('waiting_for_init')
     const initResult = await waitForInitialization(delayFn)
@@ -274,20 +272,20 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   }
 
   // Check if initialization failed
-  const initError = getInitializationError()
+  const initError = app().init.getState().initializationError
   if (initError) {
     log('skipped', { reason: 'init_failed', initError })
     return
   }
 
-  const isConnected = getIsConnected()
+  const isConnected = app().connection.getState().isConnected
   log('app_ready', { connected: isConnected })
 
   await runFsOrphanScanner()
   await runFsEvictionScanner()
   await triggerRecentScanIfNeeded()
 
-  const manager = getUploadManager()
+  const manager = getUploadManager()!
   const initialStats = await getFileStatsLocal({ localOnly: true })
   const initialSnapshot: UploadSnapshot = {
     packed: manager.packedCount,

@@ -1,11 +1,12 @@
+import {
+  useAutoScanUploads,
+  useAutoSyncDownEvents,
+} from '@siastorage/core/stores'
 import { Alert, Switch } from 'react-native'
-import { resetSyncDownCursor } from '../managers/syncDownEvents'
-import { resetSyncUpCursor } from '../managers/syncUpMetadata'
+import { app } from '../stores/appService'
 import {
   toggleAutoScanUploads,
   toggleAutoSyncDownEvents,
-  useAutoScanUploads,
-  useAutoSyncDownEvents,
 } from '../stores/settings'
 import { Button } from './Button'
 import { RowGroup } from './Group'
@@ -55,7 +56,7 @@ export function SettingsAdvancedSync() {
                     {
                       text: 'Reset',
                       style: 'destructive',
-                      onPress: () => resetSyncDownCursor(),
+                      onPress: () => app().sync.setSyncDownCursor(undefined),
                     },
                   ],
                 )
@@ -81,7 +82,7 @@ export function SettingsAdvancedSync() {
                     {
                       text: 'Reset',
                       style: 'destructive',
-                      onPress: () => resetSyncUpCursor(),
+                      onPress: () => app().sync.setSyncUpCursor(undefined),
                     },
                   ],
                 )

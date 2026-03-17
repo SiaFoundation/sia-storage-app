@@ -1,3 +1,4 @@
+import type { FileRecord, ThumbSize } from '@siastorage/core/types'
 import {
   FileAudioIcon,
   FileIcon,
@@ -8,7 +9,6 @@ import {
 } from 'lucide-react-native'
 import { Image, StyleSheet, View } from 'react-native'
 import { useBestThumbnailUri } from '../hooks/useBestThumbnail'
-import type { FileRecord, ThumbSize } from '../stores/files'
 import { palette } from '../styles/colors'
 
 export function FileThumbnail({

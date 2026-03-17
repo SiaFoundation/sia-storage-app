@@ -28,6 +28,7 @@
  * Misses: newly taken photos (covered by syncNewPhotos).
  */
 
+import { useApp } from '@siastorage/core/app'
 import {
   SYNC_ARCHIVE_RECENT_SCAN_INTERVAL,
   SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
@@ -37,26 +38,15 @@ import {
 import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
+import useSWR from 'swr'
 import {
   ensureMediaLibraryPermission,
   getMediaLibraryPermissions,
   mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
 import { processAssets } from '../lib/processAssets'
-import { createGetterAndSWRHook } from '../lib/selectors'
-import {
-  getAsyncStorageBoolean,
-  getAsyncStorageNumber,
-  getAsyncStorageString,
-  setAsyncStorageBoolean,
-  setAsyncStorageNumber,
-  setAsyncStorageString,
-} from '../stores/asyncStore'
+import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
-import {
-  invalidateCacheLibraryAllStats,
-  invalidateCacheLibraryLists,
-} from '../stores/librarySwr'
 
 const PAGE_SIZE = 50
 const CURSOR_DONE = 'done'
@@ -135,8 +125,8 @@ export async function workBackward(signal?: AbortSignal) {
         newFiles: files.length,
         totalAssets: assets.length,
       })
-      invalidateCacheLibraryAllStats()
-      invalidateCacheLibraryLists()
+      await app().caches.library.invalidateAll()
+      app().caches.libraryVersion.invalidate()
     } else {
       logger.info('syncPhotosArchive', 'batch_all_duplicates', {
         totalAssets: assets.length,
@@ -177,17 +167,21 @@ export const { init: initSyncPhotosArchive } = createServiceInterval({
   interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
 })
 
-export const [
-  getAutoSyncPhotosArchive,
-  useAutoSyncPhotosArchive,
-  autoSyncPhotosArchiveCache,
-] = createGetterAndSWRHook<boolean>(() =>
-  getAsyncStorageBoolean('autoSyncPhotosArchive', false),
-)
+export async function getAutoSyncPhotosArchive(): Promise<boolean> {
+  const raw = await app().storage.getItem('autoSyncPhotosArchive')
+  return raw === null ? false : raw === 'true'
+}
+
+export function useAutoSyncPhotosArchive() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('autoSyncPhotosArchive'), () =>
+    getAutoSyncPhotosArchive(),
+  )
+}
 
 export async function setAutoSyncPhotosArchive(value: boolean) {
-  await setAsyncStorageBoolean('autoSyncPhotosArchive', value)
-  await autoSyncPhotosArchiveCache.set(value)
+  await app().storage.setItem('autoSyncPhotosArchive', String(value))
+  app().caches.settings.invalidate('autoSyncPhotosArchive')
   if (value) {
     ensureMediaLibraryPermission()
   }
@@ -200,17 +194,21 @@ export async function toggleAutoSyncPhotosArchive() {
   await setAutoSyncPhotosArchive(next)
 }
 
-export const [
-  getPhotosArchiveCursor,
-  usePhotosArchiveCursor,
-  photosArchiveCursorCache,
-] = createGetterAndSWRHook<string>(() =>
-  getAsyncStorageString('archiveSyncCursor', CURSOR_DONE),
-)
+export async function getPhotosArchiveCursor(): Promise<string> {
+  const raw = await app().storage.getItem('archiveSyncCursor')
+  return (raw ?? CURSOR_DONE) as string
+}
+
+export function usePhotosArchiveCursor() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('archiveSyncCursor'), () =>
+    getPhotosArchiveCursor(),
+  )
+}
 
 export async function setPhotosArchiveCursor(value: string) {
-  await setAsyncStorageString('archiveSyncCursor', value)
-  await photosArchiveCursorCache.set(value)
+  await app().storage.setItem('archiveSyncCursor', value)
+  app().caches.settings.invalidate('archiveSyncCursor')
 }
 
 export async function restartPhotosArchiveCursor() {
@@ -226,27 +224,33 @@ export async function resetPhotosArchiveCursor() {
   await setPhotosArchiveDisplayDate(0)
 }
 
-export const [
-  getPhotosArchiveDisplayDate,
-  usePhotosArchiveDisplayDate,
-  photosArchiveDisplayDateCache,
-] = createGetterAndSWRHook<number>(() =>
-  getAsyncStorageNumber('photosArchiveDisplayDate', 0),
-)
-
-export async function setPhotosArchiveDisplayDate(value: number) {
-  await setAsyncStorageNumber('photosArchiveDisplayDate', value)
-  await photosArchiveDisplayDateCache.set(value)
+export async function getPhotosArchiveDisplayDate(): Promise<number> {
+  const raw = await app().storage.getItem('photosArchiveDisplayDate')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
 }
 
-export const [getLastRecentScanAt, , lastRecentScanAtCache] =
-  createGetterAndSWRHook<number>(() =>
-    getAsyncStorageNumber('lastRecentScanAt', 0),
+export function usePhotosArchiveDisplayDate() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('photosArchiveDisplayDate'), () =>
+    getPhotosArchiveDisplayDate(),
   )
+}
+
+export async function setPhotosArchiveDisplayDate(value: number) {
+  await app().storage.setItem('photosArchiveDisplayDate', String(value))
+  app().caches.settings.invalidate('photosArchiveDisplayDate')
+}
+
+export async function getLastRecentScanAt(): Promise<number> {
+  const raw = await app().storage.getItem('lastRecentScanAt')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
+}
 
 export async function setLastRecentScanAt(value: number) {
-  await setAsyncStorageNumber('lastRecentScanAt', value)
-  await lastRecentScanAtCache.set(value)
+  await app().storage.setItem('lastRecentScanAt', String(value))
+  app().caches.settings.invalidate('lastRecentScanAt')
 }
 
 export async function triggerRecentScanIfNeeded(): Promise<boolean> {

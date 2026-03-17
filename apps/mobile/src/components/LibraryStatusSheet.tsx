@@ -1,4 +1,8 @@
-import type { UploadCategoryStats } from '@siastorage/core/db/operations'
+import type {
+  UploadCategoryStats,
+  UploadStats,
+} from '@siastorage/core/db/operations'
+import { useSyncState } from '@siastorage/core/stores'
 import { useCallback } from 'react'
 import {
   Alert,
@@ -13,20 +17,15 @@ import useSWR from 'swr'
 import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
-import { getUploadStats } from '../stores/fileStats'
+import { app } from '../stores/appService'
 import {
   deleteLostFiles,
   useFileStatsLocal,
   useFileStatsLost,
 } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
-import { setStatusDisplayMode, useStatusDisplayMode } from '../stores/settings'
+import { useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { useIsSyncingDown, useSyncDownProgress } from '../stores/syncDown'
-import {
-  useIsSyncingUpMetadata,
-  useSyncUpMetadataProgress,
-} from '../stores/syncUpMetadata'
 import { palette, whiteA } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup, RowSubGroup } from './Group'
@@ -70,15 +69,19 @@ function formatCategoryValue(
 export function LibraryStatusSheet() {
   const isConnected = useIsConnected()
   const isOnline = useIsOnline()
-  const isSyncingDown = useIsSyncingDown()
-  const syncDownProgress = useSyncDownProgress()
-  const isSyncingUpMetadata = useIsSyncingUpMetadata()
-  const syncUpMetadataProgress = useSyncUpMetadataProgress()
+  const { data: syncState } = useSyncState()
+  const isSyncingDown = syncState?.isSyncingDown ?? false
+  const isSyncingUpMetadata = syncState?.isSyncingUp ?? false
+  const syncUpProcessed = syncState?.syncUpProcessed ?? 0
+  const syncUpTotal = syncState?.syncUpTotal ?? 0
   const isOpen = useSheetOpen('libraryStatus')
   const { data: displayMode = 'count' } = useStatusDisplayMode()
   const stats = useSWR(
     ['upload-stats', isOpen ?? null],
-    () => getUploadStats(),
+    async (): Promise<UploadStats> => {
+      const indexerURL = await app().settings.getIndexerURL()
+      return app().stats.uploadStats(indexerURL)
+    },
     {
       refreshInterval,
     },
@@ -103,7 +106,7 @@ export function LibraryStatusSheet() {
             styles.toggleSegment,
             displayMode === mode && styles.toggleSegmentSelected,
           ]}
-          onPress={() => setStatusDisplayMode(mode)}
+          onPress={() => app().settings.setStatusDisplayMode(mode)}
         >
           <Text
             style={[
@@ -171,11 +174,7 @@ export function LibraryStatusSheet() {
                 <View style={styles.valueRight}>
                   <View style={{ flex: 1 }} />
                   <Text style={styles.valueText}>
-                    {isSyncingDown
-                      ? syncDownProgress.cursorAt
-                        ? new Date(syncDownProgress.cursorAt).toLocaleString()
-                        : 'Starting...'
-                      : 'Synced'}
+                    {isSyncingDown ? 'Syncing...' : 'Synced'}
                   </Text>
                   <View
                     style={isSyncingDown ? styles.dotSyncing : styles.dotOnline}
@@ -193,7 +192,7 @@ export function LibraryStatusSheet() {
                   <View style={{ flex: 1 }} />
                   <Text style={styles.valueText}>
                     {isSyncingUpMetadata
-                      ? `${syncUpMetadataProgress.processed.toLocaleString()} / ${syncUpMetadataProgress.total.toLocaleString()}`
+                      ? `${syncUpProcessed.toLocaleString()} / ${syncUpTotal.toLocaleString()}`
                       : 'Synced'}
                   </Text>
                   <View

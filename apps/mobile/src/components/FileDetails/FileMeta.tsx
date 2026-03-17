@@ -1,4 +1,6 @@
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
+import { useShowAdvanced, useTagsForFile } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { PlusIcon } from 'lucide-react-native'
 import { Fragment, useMemo } from 'react'
 import {
@@ -14,15 +16,8 @@ import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 import type { FileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
-import { type FileRecord, updateFileRecord } from '../../stores/files'
-import { getFsFileUri } from '../../stores/fs'
-import { useShowAdvanced } from '../../stores/settings'
+import { app } from '../../stores/appService'
 import { openSheet } from '../../stores/sheets'
-import { useTagsForFile } from '../../stores/tags'
-import {
-  readThumbnailsByFileId,
-  thumbnailsByFileIdCache,
-} from '../../stores/thumbnails'
 import { colors, palette } from '../../styles/colors'
 import { BulkManageTagsSheet } from '../BulkManageTagsSheet'
 import { RowGroup } from '../Group'
@@ -47,18 +42,18 @@ export function FileMeta({
   const fileNameInputProps = useInputValue({
     value: file.name ?? '',
     save: (value) => {
-      updateFileRecord({ id: file.id, name: value })
+      app().files.update({ id: file.id, name: value })
     },
   })
   const pinnedObjects = usePinnedObjects(file)
   const thumbnails = useSWR(
-    showAdvanced.data ? thumbnailsByFileIdCache.key(file.id) : null,
+    showAdvanced.data ? app().caches.thumbnails.byFileId.key(file.id) : null,
     async () => {
-      const records = await readThumbnailsByFileId(file.id)
+      const records = await app().thumbnails.getForFile(file.id)
       return Promise.all(
         records.map(async (thumb) => ({
           record: thumb,
-          uri: await getFsFileUri(thumb),
+          uri: await app().fs.getFileUri(thumb),
         })),
       )
     },

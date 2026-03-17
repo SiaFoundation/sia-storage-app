@@ -2,7 +2,7 @@ import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import * as MediaLibrary from 'expo-media-library'
 import { processAssets } from '../lib/processAssets'
-import { getAsyncStorageNumber } from '../stores/asyncStore'
+import { app } from '../stores/appService'
 import {
   initSyncNewPhotos,
   setAutoSyncNewPhotos,
@@ -31,10 +31,6 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
 }))
 jest.mock('../lib/processAssets', () => ({
   processAssets: jest.fn(),
-}))
-jest.mock('../stores/librarySwr', () => ({
-  invalidateCacheLibraryAllStats: jest.fn(),
-  invalidateCacheLibraryLists: jest.fn(),
 }))
 
 const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
@@ -183,7 +179,9 @@ describe('syncNewPhotos', () => {
   it('setAutoSyncNewPhotos saves enablement timestamp', async () => {
     jest.setSystemTime(new Date(1_700_000_000_000))
     await setAutoSyncNewPhotos(true)
-    const enabledAt = await getAsyncStorageNumber('syncNewPhotosEnabledAt', 0)
+    const enabledAt = Number(
+      await app().storage.getItem('syncNewPhotosEnabledAt'),
+    )
     expect(enabledAt).toBe(1_700_000_000_000)
   })
 

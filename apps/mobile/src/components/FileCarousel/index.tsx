@@ -1,4 +1,6 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
+import { useIsFavorite } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { EyeIcon, EyeOffIcon } from 'lucide-react-native'
@@ -18,9 +20,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Share from 'react-native-share'
 import { useFileStatus } from '../../lib/file'
 import { useToast } from '../../lib/toastContext'
+import { app } from '../../stores/appService'
 import { useFileCarousel } from '../../stores/fileCarousel'
-import type { FileRecord } from '../../stores/files'
-import { toggleFavorite, useIsFavorite } from '../../stores/tags'
 import { palette } from '../../styles/colors'
 import BlocksLoader from '../BlocksLoader'
 import { useDragToDismissGesture } from '../DragToDismiss'
@@ -210,7 +211,7 @@ export function FileCarousel({
   const favorite = useIsFavorite(currentFile?.id ?? null)
   const handleToggleFavorite = useCallback(() => {
     if (currentFile) {
-      void toggleFavorite(currentFile.id)
+      void app().tags.toggleFavorite(currentFile.id)
     }
   }, [currentFile])
 

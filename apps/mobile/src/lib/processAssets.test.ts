@@ -1,12 +1,6 @@
 import { db, initializeDB, resetDb } from '../db'
-import { readAllDirectoriesWithCounts } from '../stores/directories'
-import {
-  createFileRecord,
-  readAllFileRecords,
-  readFileRecord,
-} from '../stores/files'
-import { copyFileToFs, readFsFileMetadata } from '../stores/fs'
-import { setPhotoImportDirectory } from '../stores/settings'
+import { app } from '../stores/appService'
+import { copyFileToFs } from '../stores/fs'
 import { calculateContentHash } from './contentHash'
 import { getMimeType } from './fileTypes'
 import { getMediaLibraryUri } from './mediaLibrary'
@@ -31,8 +25,6 @@ jest.mock('./fileTypes', () => {
 
 beforeEach(async () => {
   await initializeDB()
-  jest.spyOn(require('../stores/files'), 'createFileRecord')
-  jest.spyOn(require('../stores/fs'), 'upsertFsFileMetadata')
   jest.spyOn(require('../stores/fs'), 'copyFileToFs')
   jest.clearAllMocks()
 })
@@ -59,35 +51,32 @@ describe('processAssets', () => {
 
     const { files } = await processAssets(assets)
     expect(files).toHaveLength(1)
-    const rows = await readAllFileRecords({ order: 'ASC' })
+    const rows = await app().files.query({ order: 'ASC' })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       id: fileId,
       name: 'a.jpg',
     })
-    const meta = await readFsFileMetadata(fileId)
+    const meta = await app().fs.readMeta(fileId)
     expect(meta).toMatchObject({
       fileId,
     })
   })
   it('updates existing by localId and does not create new records', async () => {
-    await createFileRecord(
-      {
-        id: 'existing-1',
-        name: 'old.jpg',
-        size: 5,
-        createdAt: 1,
-        updatedAt: 1,
-        type: 'image/jpeg',
-        kind: 'file',
-        localId: '1',
-        hash: '',
-        addedAt: 1,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      false,
-    )
+    await app().files.create({
+      id: 'existing-1',
+      name: 'old.jpg',
+      size: 5,
+      createdAt: 1,
+      updatedAt: 1,
+      type: 'image/jpeg',
+      kind: 'file',
+      localId: '1',
+      hash: '',
+      addedAt: 1,
+      trashedAt: null,
+      deletedAt: null,
+    })
 
     jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
       if (localId === '1') return 'file://1'
@@ -108,7 +97,7 @@ describe('processAssets', () => {
     expect(files).toHaveLength(0)
     // Should not hash when localId duplicate is detected.
     expect(calculateContentHash).not.toHaveBeenCalled()
-    const updated = await readFileRecord('existing-1')
+    const updated = await app().files.getById('existing-1')
     expect(updated).toMatchObject({
       id: 'existing-1',
       name: 'new.jpg',
@@ -117,23 +106,20 @@ describe('processAssets', () => {
     expect(copyFileToFs).toHaveBeenCalledTimes(0)
   })
   it('skipExistingUpdates does not update existing records', async () => {
-    await createFileRecord(
-      {
-        id: 'existing-1',
-        name: 'old.jpg',
-        size: 5,
-        createdAt: 1,
-        updatedAt: 1,
-        type: 'image/jpeg',
-        kind: 'file',
-        localId: '1',
-        hash: '',
-        addedAt: 1,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      false,
-    )
+    await app().files.create({
+      id: 'existing-1',
+      name: 'old.jpg',
+      size: 5,
+      createdAt: 1,
+      updatedAt: 1,
+      type: 'image/jpeg',
+      kind: 'file',
+      localId: '1',
+      hash: '',
+      addedAt: 1,
+      trashedAt: null,
+      deletedAt: null,
+    })
 
     jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
       if (localId === '1') return 'file://1'
@@ -154,7 +140,7 @@ describe('processAssets', () => {
 
     expect(updatedFiles).toHaveLength(1)
     expect(files).toHaveLength(0)
-    const record = await readFileRecord('existing-1')
+    const record = await app().files.getById('existing-1')
     expect(record).toMatchObject({
       id: 'existing-1',
       name: 'old.jpg',
@@ -162,23 +148,20 @@ describe('processAssets', () => {
     })
   })
   it('allowDuplicates bypasses localId dedup', async () => {
-    await createFileRecord(
-      {
-        id: 'existing-1',
-        name: 'old.jpg',
-        size: 5,
-        createdAt: 1,
-        updatedAt: 1,
-        type: 'image/jpeg',
-        kind: 'file',
-        localId: '1',
-        hash: '',
-        addedAt: 1,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      false,
-    )
+    await app().files.create({
+      id: 'existing-1',
+      name: 'old.jpg',
+      size: 5,
+      createdAt: 1,
+      updatedAt: 1,
+      type: 'image/jpeg',
+      kind: 'file',
+      localId: '1',
+      hash: '',
+      addedAt: 1,
+      trashedAt: null,
+      deletedAt: null,
+    })
 
     jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
       if (localId === '1') return 'file://1'
@@ -200,23 +183,20 @@ describe('processAssets', () => {
     expect(files).toHaveLength(1)
   })
   it('blocks content hash duplicates during auto-sync', async () => {
-    await createFileRecord(
-      {
-        id: 'existing',
-        name: 'existing.jpg',
-        size: 10,
-        createdAt: 1,
-        updatedAt: 1,
-        type: 'image/jpeg',
-        kind: 'file',
-        hash: 'sha256:existing-hash',
-        localId: null,
-        addedAt: 1,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      false,
-    )
+    await app().files.create({
+      id: 'existing',
+      name: 'existing.jpg',
+      size: 10,
+      createdAt: 1,
+      updatedAt: 1,
+      type: 'image/jpeg',
+      kind: 'file',
+      hash: 'sha256:existing-hash',
+      localId: null,
+      addedAt: 1,
+      trashedAt: null,
+      deletedAt: null,
+    })
 
     jest
       .mocked(calculateContentHash)
@@ -237,23 +217,20 @@ describe('processAssets', () => {
     expect(updatedFiles[0]).toMatchObject({ id: 'existing' })
   })
   it('allowDuplicates bypasses content hash dedup', async () => {
-    await createFileRecord(
-      {
-        id: 'existing',
-        name: 'existing.jpg',
-        size: 10,
-        createdAt: 1,
-        updatedAt: 1,
-        type: 'image/jpeg',
-        kind: 'file',
-        hash: 'sha256:existing-hash',
-        localId: null,
-        addedAt: 1,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      false,
-    )
+    await app().files.create({
+      id: 'existing',
+      name: 'existing.jpg',
+      size: 10,
+      createdAt: 1,
+      updatedAt: 1,
+      type: 'image/jpeg',
+      kind: 'file',
+      hash: 'sha256:existing-hash',
+      localId: null,
+      addedAt: 1,
+      trashedAt: null,
+      deletedAt: null,
+    })
 
     jest
       .mocked(calculateContentHash)
@@ -328,7 +305,7 @@ describe('processAssets', () => {
     expect(copyFileToFs).toHaveBeenCalledTimes(1)
     expect(copyFileToFs).toHaveBeenCalledWith(
       expect.objectContaining({ id: files[0].id, type: 'image/jpeg' }),
-      expect.objectContaining({ uri: 'file:///full-quality.jpg' }),
+      'file:///full-quality.jpg',
     )
   })
   it('uses sourceUri when localId is not valid', async () => {
@@ -351,17 +328,17 @@ describe('processAssets', () => {
     expect(getMediaLibraryUri).toHaveBeenCalledTimes(1)
     expect(getMediaLibraryUri).toHaveBeenCalledWith('invalid')
     expect(copyFileToFs).toHaveBeenCalledTimes(1)
-    const file = await readFileRecord(files[0].id)
+    const file = await app().files.getById(files[0].id)
     expect(file).toMatchObject({
       id: files[0].id,
     })
-    const meta = await readFsFileMetadata(files[0].id)
+    const meta = await app().fs.readMeta(files[0].id)
     expect(meta).toMatchObject({
       fileId: files[0].id,
     })
   })
   it('does not auto-move files by default', async () => {
-    await setPhotoImportDirectory('Camera Roll')
+    await app().settings.setPhotoImportDirectory('Camera Roll')
     const assets = [
       {
         id: undefined,
@@ -378,11 +355,11 @@ describe('processAssets', () => {
       files[0].id,
     )
     expect(row?.directoryId).toBeNull()
-    const dirs = await readAllDirectoriesWithCounts()
+    const dirs = await app().directories.getAll()
     expect(dirs).toHaveLength(0)
   })
   it('addToImportDirectory moves media files to photo import directory', async () => {
-    await setPhotoImportDirectory('Camera Roll')
+    await app().settings.setPhotoImportDirectory('Camera Roll')
     const assets = [
       {
         id: undefined,
@@ -401,7 +378,7 @@ describe('processAssets', () => {
       files[0].id,
     )
     expect(row?.directoryId).toBeTruthy()
-    const dirs = await readAllDirectoriesWithCounts()
+    const dirs = await app().directories.getAll()
     expect(dirs).toHaveLength(1)
     expect(dirs[0].name).toBe('Camera Roll')
   })

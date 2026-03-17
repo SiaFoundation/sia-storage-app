@@ -1,72 +1,34 @@
-import {
-  ImageManipulator,
-  type ImageManipulatorContext,
-} from 'expo-image-manipulator'
-import * as VideoThumbnails from 'expo-video-thumbnails'
-import { Image } from 'react-native'
+import { ThumbSizes } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
-import { sha256File } from '../lib/contentHash'
-import {
-  createFileRecord,
-  readAllFileRecordsCount,
-  ThumbSizes,
-} from '../stores/files'
-import { getFsFileUri } from '../stores/fs'
-import { readThumbnailSizesForFileId } from '../stores/thumbnails'
+import { app } from '../stores/appService'
 import { getThumbnailScanner, runThumbnailScanner } from './thumbnailScanner'
 
-jest.mock('expo-image-manipulator', () => ({
-  ImageManipulator: { manipulate: jest.fn() },
-  SaveFormat: { WEBP: 'webp' },
-}))
-jest.mock('expo-video-thumbnails', () => ({
-  getThumbnailAsync: jest.fn(),
-}))
-jest.mock('../lib/contentHash', () => ({
-  sha256File: jest.fn(),
-}))
+let getFsFileUriMock: jest.SpyInstance
+let generateMock: jest.SpyInstance
+let generateVideoMock: jest.SpyInstance
 
-const getFsFileUriMock = jest.mocked(getFsFileUri)
-const sha256FileMock = jest.mocked(sha256File)
-const imageGetSizeMock = jest.mocked(Image.getSize)
-const imageManipulatorMock = jest.mocked(ImageManipulator.manipulate)
-const videoThumbMock = jest.mocked(VideoThumbnails.getThumbnailAsync)
+const thumbData = new ArrayBuffer(100)
+const thumbResult = { data: thumbData, mimeType: 'image/webp' }
 
 beforeEach(async () => {
   getThumbnailScanner().reset()
   await initializeDB()
   jest.clearAllMocks()
 
-  getFsFileUriMock.mockResolvedValue('file://source.jpg')
-  let hashCounter = 0
-  sha256FileMock.mockImplementation(async () => `thumb-hash-${++hashCounter}`)
+  getFsFileUriMock = jest
+    .spyOn(app().fs, 'getFileUri')
+    .mockResolvedValue('file://source.jpg')
   const { rnfsStat } = (
     global as unknown as { __rnfs: { rnfsStat: jest.Mock } }
   ).__rnfs
   rnfsStat.mockResolvedValue({ size: 100 })
 
-  imageGetSizeMock.mockImplementation((_, ok) => {
-    ok?.(1920, 1080)
-    return Promise.resolve()
-  })
-  imageManipulatorMock.mockImplementation(() => {
-    const renderAsync = jest.fn().mockResolvedValue({
-      saveAsync: jest.fn().mockResolvedValue({
-        uri: 'file://temp/thumb.webp',
-        width: 64,
-        height: 36,
-      }),
-    })
-    return {
-      resize: jest.fn().mockReturnThis(),
-      renderAsync,
-    } as unknown as ImageManipulatorContext
-  })
-  videoThumbMock.mockResolvedValue({
-    uri: 'file://frame.jpg',
-    width: 1920,
-    height: 1080,
-  })
+  generateMock = jest
+    .spyOn(app().thumbnails, 'generate')
+    .mockResolvedValue(thumbResult)
+  generateVideoMock = jest
+    .spyOn(app().thumbnails, 'generateVideo')
+    .mockResolvedValue(thumbResult)
 })
 
 afterEach(async () => {
@@ -83,7 +45,7 @@ describe('thumbnailScanner', () => {
 
   it('skips files without source URI', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -100,12 +62,12 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue(null)
     const result = await runThumbnailScanner()
     expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
-    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(1)
+    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(1)
   })
 
   it('skips files that already have all thumbnail sizes', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -120,7 +82,7 @@ describe('thumbnailScanner', () => {
       deletedAt: null,
     })
     for (const size of ThumbSizes) {
-      await createFileRecord({
+      await app().files.create({
         id: `thumb-${size}`,
         name: 'thumbnail.webp',
         type: 'image/webp',
@@ -142,12 +104,12 @@ describe('thumbnailScanner', () => {
     expect(result.produced).toHaveLength(0)
     expect(result.attempts).toHaveLength(0)
     expect(result.skippedFullyCovered).toHaveLength(0)
-    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('generates a missing thumbnail (64px)', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -163,7 +125,7 @@ describe('thumbnailScanner', () => {
     })
     for (const size of ThumbSizes) {
       if (size === 64) continue
-      await createFileRecord({
+      await app().files.create({
         id: `thumb-${size}`,
         name: 'thumbnail.webp',
         type: 'image/webp',
@@ -181,16 +143,15 @@ describe('thumbnailScanner', () => {
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    sha256FileMock.mockResolvedValue('thumb-64')
     const result = await runThumbnailScanner()
     const producedSizes = result.produced
       .filter((p) => p.originalId === 'file1')
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedSizes).toEqual([64])
-    const sizes = await readThumbnailSizesForFileId('file1')
+    const sizes = await app().thumbnails.getSizesForFile('file1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('pages past skipped candidates to find eligible originals', async () => {
@@ -199,7 +160,7 @@ describe('thumbnailScanner', () => {
     for (let i = 0; i < 5; i++) {
       const id = `nosource-${i}`
       noSourceIds.add(id)
-      await createFileRecord({
+      await app().files.create({
         id,
         name: `no-source-${i}.jpg`,
         type: 'image/jpeg',
@@ -217,7 +178,7 @@ describe('thumbnailScanner', () => {
 
     for (let i = 0; i < 10; i++) {
       const id = `covered-${i}`
-      await createFileRecord({
+      await app().files.create({
         id,
         name: `covered-${i}.jpg`,
         type: 'image/jpeg',
@@ -232,7 +193,7 @@ describe('thumbnailScanner', () => {
         deletedAt: null,
       })
       for (const size of ThumbSizes) {
-        await createFileRecord({
+        await app().files.create({
           id: `${id}-thumb-${size}`,
           name: 'thumbnail.webp',
           type: 'image/webp',
@@ -251,7 +212,7 @@ describe('thumbnailScanner', () => {
       }
     }
 
-    await createFileRecord({
+    await app().files.create({
       id: 'eligible-1',
       name: 'eligible.jpg',
       type: 'image/jpeg',
@@ -287,7 +248,7 @@ describe('thumbnailScanner', () => {
 
   it('skips generation for an exact existing size', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -301,7 +262,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    await createFileRecord({
+    await app().files.create({
       id: 'thumb-64',
       name: 'thumbnail.webp',
       type: 'image/webp',
@@ -320,12 +281,12 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
     expect(result.produced.filter((p) => p.size === 64)).toHaveLength(0)
-    expect(await readAllFileRecordsCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
   })
 
   it('generates thumbnails for video files using captured frames', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'video1',
       name: 'clip.mp4',
       type: 'video/mp4',
@@ -339,25 +300,23 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
-    let counter = 0
-    sha256FileMock.mockImplementation(async () => `video-thumb-${++counter}`)
 
     const result = await runThumbnailScanner()
 
-    expect(videoThumbMock).toHaveBeenCalledTimes(ThumbSizes.length)
+    expect(generateVideoMock).toHaveBeenCalledTimes(ThumbSizes.length)
     const producedForVideo = result.produced
       .filter((p) => p.originalId === 'video1')
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedForVideo).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    const sizes = await readThumbnailSizesForFileId('video1')
+    const sizes = await app().thumbnails.getSizesForFile('video1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
   })
 
-  it('limits production per tick (10)', async () => {
+  it('limits production per tick (20)', async () => {
     const now = Date.now()
     for (let i = 0; i < 15; i++) {
-      await createFileRecord({
+      await app().files.create({
         id: `file${i}`,
         name: `test${i}.jpg`,
         type: 'image/jpeg',
@@ -373,15 +332,13 @@ describe('thumbnailScanner', () => {
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    let counter = 0
-    sha256FileMock.mockImplementation(async () => `thumb-hash-${++counter}`)
     const result = await runThumbnailScanner()
     expect(result.produced).toHaveLength(20)
   })
 
-  it('falls back when image size retrieval fails', async () => {
+  it('falls back to error when generation fails', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -396,31 +353,19 @@ describe('thumbnailScanner', () => {
       deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    imageGetSizeMock.mockImplementation((_, _ok, err) => {
-      err?.(new Error('Failed to get size'))
-      return Promise.resolve()
+    generateMock.mockRejectedValue(new Error('Failed to get size'))
+    const result = await runThumbnailScanner()
+    expect(result.errors).toHaveLength(ThumbSizes.length)
+    expect(result.errors[0]).toMatchObject({
+      originalId: 'file1',
+      originalHash: 'hash1',
+      size: 64,
     })
-    const ctx = {
-      resize: jest.fn().mockReturnThis(),
-      renderAsync: jest.fn().mockResolvedValue({
-        saveAsync: jest.fn().mockResolvedValue({
-          uri: 'file://temp/thumb.webp',
-          width: 64,
-          height: undefined,
-        }),
-      }),
-    }
-    imageManipulatorMock.mockReturnValue(
-      ctx as unknown as ImageManipulatorContext,
-    )
-    sha256FileMock.mockResolvedValue('thumb-hash')
-    await runThumbnailScanner()
-    expect(ctx.resize).toHaveBeenCalledWith({ width: 64, height: undefined })
   })
 
   it('stops immediately when signal is already aborted', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -441,13 +386,13 @@ describe('thumbnailScanner', () => {
     const result = await runThumbnailScanner(ac.signal)
     expect(result.produced).toHaveLength(0)
     expect(result.processedCandidates).toBe(0)
-    expect(imageManipulatorMock).not.toHaveBeenCalled()
+    expect(generateMock).not.toHaveBeenCalled()
   })
 
   it('stops mid-scan when signal is aborted', async () => {
     const now = Date.now()
     for (let i = 0; i < 5; i++) {
-      await createFileRecord({
+      await app().files.create({
         id: `file${i}`,
         name: `test${i}.jpg`,
         type: 'image/jpeg',
@@ -463,25 +408,13 @@ describe('thumbnailScanner', () => {
       })
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    let counter = 0
-    sha256FileMock.mockImplementation(async () => `thumb-hash-${++counter}`)
 
     const ac = new AbortController()
-    let manipCalls = 0
-    imageManipulatorMock.mockImplementation(() => {
-      manipCalls++
-      if (manipCalls >= 2) ac.abort()
-      const renderAsync = jest.fn().mockResolvedValue({
-        saveAsync: jest.fn().mockResolvedValue({
-          uri: 'file://temp/thumb.webp',
-          width: 64,
-          height: 36,
-        }),
-      })
-      return {
-        resize: jest.fn().mockReturnThis(),
-        renderAsync,
-      } as unknown as ImageManipulatorContext
+    let generateCalls = 0
+    generateMock.mockImplementation(async () => {
+      generateCalls++
+      if (generateCalls >= 2) ac.abort()
+      return thumbResult
     })
 
     const result = await runThumbnailScanner(ac.signal)
@@ -489,9 +422,9 @@ describe('thumbnailScanner', () => {
     expect(result.produced.length).toBeLessThan(ThumbSizes.length * 5)
   })
 
-  it('logs and continues when manipulation throws', async () => {
+  it('logs and continues when generation throws', async () => {
     const now = Date.now()
-    await createFileRecord({
+    await app().files.create({
       id: 'file1',
       name: 'test.jpg',
       type: 'image/jpeg',
@@ -506,13 +439,7 @@ describe('thumbnailScanner', () => {
       deletedAt: null,
     })
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    imageGetSizeMock.mockImplementation((_, ok) => {
-      ok?.(1920, 1080)
-      return Promise.resolve()
-    })
-    imageManipulatorMock.mockImplementation(() => {
-      throw new Error('Manipulation failed')
-    })
+    generateMock.mockRejectedValue(new Error('Manipulation failed'))
     const result = await runThumbnailScanner()
     expect(result.errors).toHaveLength(ThumbSizes.length)
     expect(result.errors[0]).toMatchObject({
@@ -520,7 +447,7 @@ describe('thumbnailScanner', () => {
       originalHash: 'hash1',
       size: 64,
     })
-    const sizes = await readThumbnailSizesForFileId('file1')
+    const sizes = await app().thumbnails.getSizesForFile('file1')
     expect(sizes).not.toContain(64)
   })
 })

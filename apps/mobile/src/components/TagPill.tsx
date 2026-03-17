@@ -1,7 +1,7 @@
+import type { Tag } from '@siastorage/core/db/operations'
 import { XIcon } from 'lucide-react-native'
 import type React from 'react'
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
-import type { Tag } from '../stores/tags'
 import { overlay, palette, whiteA } from '../styles/colors'
 
 type TagPillProps = {

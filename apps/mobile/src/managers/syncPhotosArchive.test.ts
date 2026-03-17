@@ -41,11 +41,6 @@ jest.mock('../lib/processAssets', () => ({
 jest.mock('../stores/files', () => ({
   getFileStatsLocal: jest.fn().mockResolvedValue({ count: 0, totalBytes: 0 }),
 }))
-jest.mock('../stores/librarySwr', () => ({
-  __esModule: true,
-  invalidateCacheLibraryAllStats: jest.fn(),
-  invalidateCacheLibraryLists: jest.fn(),
-}))
 
 const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
 const processAssetsMock = jest.mocked(processAssets)

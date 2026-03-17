@@ -1,3 +1,4 @@
+import { useAllDirectories } from '@siastorage/core/stores'
 import { FolderIcon, FoldersIcon, PlusIcon, XIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -11,14 +12,7 @@ import {
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
-import {
-  countFilesWithDirectories,
-  createDirectory,
-  moveFilesToDirectory,
-  moveFileToDirectory,
-  readDirectoryNameForFile,
-  useAllDirectories,
-} from '../stores/directories'
+import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
@@ -61,11 +55,13 @@ export function MoveToDirectorySheet({
   useEffect(() => {
     if (isOpen) {
       if (isSingleFile) {
-        readDirectoryNameForFile(fileIds[0]).then((name) =>
-          setCurrentDirName(name ?? null),
-        )
+        app()
+          .directories.getNameForFile(fileIds[0])
+          .then((name) => setCurrentDirName(name ?? null))
       } else {
-        countFilesWithDirectories(fileIds).then(setFilesInDirCount)
+        app()
+          .directories.countFilesWithDirectories(fileIds)
+          .then(setFilesInDirCount)
       }
     } else {
       setQuery('')
@@ -81,9 +77,9 @@ export function MoveToDirectorySheet({
       try {
         const targetDir = dirs.find((d) => d.id === directoryId)
         if (fileIds.length === 1) {
-          await moveFileToDirectory(fileIds[0], directoryId)
+          await app().directories.moveFile(fileIds[0], directoryId)
         } else if (fileIds.length > 1) {
-          await moveFilesToDirectory(fileIds, directoryId)
+          await app().directories.moveFiles(fileIds, directoryId)
         }
         closeSheet()
         toast.show(
@@ -103,9 +99,9 @@ export function MoveToDirectorySheet({
     setLoadingDirId('none')
     try {
       if (fileIds.length === 1) {
-        await moveFileToDirectory(fileIds[0], null)
+        await app().directories.moveFile(fileIds[0], null)
       } else if (fileIds.length > 1) {
-        await moveFilesToDirectory(fileIds, null)
+        await app().directories.moveFiles(fileIds, null)
       }
       closeSheet()
       toast.show('Removed from folder')
@@ -121,7 +117,7 @@ export function MoveToDirectorySheet({
       setLoadingDirId('create')
       try {
         try {
-          const dir = await createDirectory(name.trim())
+          const dir = await app().directories.create(name.trim())
           await handleMoveToDirectory(dir.id)
         } catch {
           const existing = dirs.find(

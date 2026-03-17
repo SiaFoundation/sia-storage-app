@@ -1,10 +1,10 @@
+import { useHasOnboarded } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useShareIntentContext } from 'expo-share-intent'
 import { useEffect } from 'react'
 import { processAssets } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 import { useUploader } from '../managers/uploader'
-import { useHasOnboarded } from '../stores/settings'
 
 export function ShareIntentConsumer() {
   const { data: hasOnboarded } = useHasOnboarded()

@@ -1,5 +1,5 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { useHasOnboarded } from '../stores/settings'
+import { useHasOnboarded } from '@siastorage/core/stores'
 import { ImportStack } from './ImportStack'
 import { MainStack } from './MainStack'
 import { MenuStack } from './MenuStack'

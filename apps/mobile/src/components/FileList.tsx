@@ -1,3 +1,5 @@
+import { type FileListParams, useFileList } from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import { useCallback } from 'react'
 import {
   ActivityIndicator,
@@ -6,8 +8,6 @@ import {
   Platform,
 } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
-import type { FileRecord } from '../stores/files'
-import { type FileListParams, useFileList } from '../stores/library'
 import { FileListItem } from './FileListItem'
 
 type Props = {

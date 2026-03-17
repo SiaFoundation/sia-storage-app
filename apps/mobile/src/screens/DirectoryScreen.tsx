@@ -1,4 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
+import {
+  type FileListParams,
+  useDirectoryFileCount,
+  useFileList,
+} from '@siastorage/core/stores'
+import type { FileRecord } from '@siastorage/core/types'
 import {
   ArrowLeftIcon,
   FilePlusIcon,
@@ -41,12 +48,7 @@ import { SelectionBar } from '../components/SelectionBar'
 import { ViewSettingsMenu } from '../components/ViewSettingsMenu'
 import { useToast } from '../lib/toastContext'
 import type { MainStackParamList } from '../stacks/types'
-import {
-  deleteDirectoryAndTrashFiles,
-  moveFilesToDirectory,
-  renameDirectory,
-  UNFILED_DIRECTORY_ID,
-} from '../stores/directories'
+import { app } from '../stores/appService'
 import {
   enterSelectionMode,
   exitSelectionMode,
@@ -54,12 +56,6 @@ import {
   useIsSelectionMode,
   useSelectedFileIds,
 } from '../stores/fileSelection'
-import type { FileRecord } from '../stores/files'
-import {
-  type FileListParams,
-  useDirectoryFileCount,
-  useFileList,
-} from '../stores/library'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette } from '../styles/colors'
@@ -168,7 +164,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
   const handleFilesAdded = useCallback(
     (addedFiles: FileRecord[]) => {
       if (isUnfiled) return
-      void moveFilesToDirectory(
+      void app().directories.moveFiles(
         addedFiles.map((f) => f.id),
         directoryId,
       )
@@ -177,7 +173,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
   )
 
   const actionSheetFileIds = isSelectionMode
-    ? Array.from(selectedFileIds)
+    ? selectedFileIds
     : selectedFile
       ? [selectedFile.id]
       : actionFileId
@@ -191,7 +187,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
 
   const handleRenameDirectory = useCallback(
     async (newName: string) => {
-      await renameDirectory(directoryId, newName)
+      await app().directories.rename(directoryId, newName)
       setDirectoryName(newName)
       toast.show(`Renamed to "${newName}"`)
     },
@@ -210,7 +206,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
-              await deleteDirectoryAndTrashFiles(directoryId)
+              await app().directories.deleteAndTrashFiles(directoryId)
               navigation.goBack()
               toast.show(`Deleted "${directoryName}"`)
             },

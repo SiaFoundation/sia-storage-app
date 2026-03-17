@@ -1,12 +1,13 @@
+import {
+  useHasOnboarded,
+  useIsInitializing,
+  useSyncState,
+} from '@siastorage/core/stores'
 import { CircleCheckIcon, TriangleAlertIcon } from 'lucide-react-native'
 import type React from 'react'
 import { SpinnerIcon } from '../components/SpinnerIcon'
 import { compactUploadPercent } from '../lib/uploadPercent'
-import { useIsInitializing } from '../stores/app'
 import { useIsConnected } from '../stores/sdk'
-import { useHasOnboarded } from '../stores/settings'
-import { useIsSyncingDown } from '../stores/syncDown'
-import { useIsSyncingUpMetadata } from '../stores/syncUpMetadata'
 import { useUploadProgress } from '../stores/uploads'
 import { palette } from '../styles/colors'
 import { useIsOnline } from './useIsOnline'
@@ -23,8 +24,9 @@ export function useAppStatus(): AppStatus {
   const isConnected = useIsConnected()
   const hasOnboarded = useHasOnboarded()
   const uploadsProgress = useUploadProgress()
-  const isSyncingDown = useIsSyncingDown()
-  const isSyncingUpMetadata = useIsSyncingUpMetadata()
+  const { data: syncState } = useSyncState()
+  const isSyncingDown = syncState?.isSyncingDown ?? false
+  const isSyncingUpMetadata = syncState?.isSyncingUp ?? false
   const isOnline = useIsOnline()
 
   if (!hasOnboarded || isInitializing) {

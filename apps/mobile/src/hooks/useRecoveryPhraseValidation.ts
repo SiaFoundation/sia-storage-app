@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
-import { useMemo } from 'react'
-import { validateRecoveryPhrase } from 'react-native-sia'
+import { useEffect, useMemo, useState } from 'react'
+import { app } from '../stores/appService'
 
 export function useRecoveryPhraseValidation(manualPhrase: string) {
   const normalizedManualPhrase = useMemo(() => {
@@ -11,16 +11,25 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
     return trimmed.replace(/\s+/g, ' ').toLowerCase()
   }, [manualPhrase])
 
-  const { isValid: isManualPhraseValid, error: manualValidationError } =
-    useMemo(() => {
-      if (!normalizedManualPhrase) {
-        return { isValid: false, error: null as string | null }
-      }
+  const [isManualPhraseValid, setIsManualPhraseValid] = useState(false)
+  const [manualValidationError, setManualValidationError] = useState<
+    string | null
+  >(null)
 
-      try {
-        validateRecoveryPhrase(normalizedManualPhrase)
-        return { isValid: true, error: null }
-      } catch (e) {
+  useEffect(() => {
+    if (!normalizedManualPhrase) {
+      setIsManualPhraseValid(false)
+      setManualValidationError(null)
+      return
+    }
+
+    app()
+      .auth.validateRecoveryPhrase(normalizedManualPhrase)
+      .then(() => {
+        setIsManualPhraseValid(true)
+        setManualValidationError(null)
+      })
+      .catch((e) => {
         if (__DEV__)
           logger.debug('recoveryPhraseValidation', 'validation_failed', {
             error: e as Error,
@@ -33,9 +42,10 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
               ? e
               : 'Invalid recovery phrase.'
 
-        return { isValid: false, error: message }
-      }
-    }, [normalizedManualPhrase])
+        setIsManualPhraseValid(false)
+        setManualValidationError(message)
+      })
+  }, [normalizedManualPhrase])
 
   return {
     normalizedManualPhrase,

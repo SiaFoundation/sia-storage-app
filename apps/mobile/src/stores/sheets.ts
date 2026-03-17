@@ -1,31 +1,27 @@
-import { create } from 'zustand'
+import { swrCache } from '@siastorage/core/stores'
+import useSWR from 'swr'
 
-type SheetsState = {
-  openName: string
-}
-
-export const useSheetsStore = create<SheetsState>(() => ({
-  openName: '',
-}))
-
-const { setState } = useSheetsStore
+const cache = swrCache()
+let openName = ''
 
 export function openSheet(name: string): void {
-  setState(() => {
-    return { openName: name }
-  })
+  openName = name
+  cache.invalidate()
 }
 
 export async function closeSheet(name?: string): Promise<void> {
-  setState((state) => {
-    // Only close if this sheet is actually open, so callers don't
-    // accidentally dismiss a different sheet that opened in the meantime.
-    if (name && state.openName !== name) return state
-    return { openName: '' }
-  })
+  if (name && openName !== name) return
+  openName = ''
+  cache.invalidate()
   await new Promise((resolve) => setTimeout(resolve, 220))
 }
 
+export function resetSheets(): void {
+  openName = ''
+  cache.invalidate()
+}
+
 export function useSheetOpen(name: string): boolean {
-  return useSheetsStore((s) => s.openName === name)
+  const { data } = useSWR(cache.key(), () => ({ openName }))
+  return data?.openName === name
 }

@@ -1,3 +1,4 @@
+import { useDownloadEntry } from '@siastorage/core/stores'
 import { CloudDownloadIcon } from 'lucide-react-native'
 import {
   ActivityIndicator,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { useDownloadState } from '../../stores/downloads'
 import { colors, palette } from '../../styles/colors'
 
 type DownloadPromptProps = {
@@ -22,7 +22,7 @@ export function DownloadPrompt({
   onDownloadPress,
   isDownloading,
 }: DownloadPromptProps) {
-  const downloadState = useDownloadState(fileId)
+  const { data: downloadState } = useDownloadEntry(fileId)
 
   if (isDownloading) {
     return (

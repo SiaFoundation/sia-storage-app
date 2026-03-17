@@ -17,59 +17,39 @@
  *   existing account with the indexer.
  */
 
-import { err, hexToUint8, ok, type Result } from '@siastorage/core'
+import { err, ok, type Result, uint8ToHex } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
 import { withTimeout } from '@siastorage/core/lib/timeout'
+import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
-import {
-  type AppKey,
-  Builder,
-  type BuilderInterface,
-  type PinnedObjectInterface,
-  type SdkInterface,
-} from 'react-native-sia'
-import { create } from 'zustand'
+import type { SdkInterface } from 'react-native-sia'
 import { MobileSdkAdapter } from '../adapters/sdk'
 import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
-import { createGetterAndSelector } from '../lib/selectors'
-import { getUploadManager, initializeUploader } from '../managers/uploader'
-import { getAppKey, getAppKeyForIndexer, setAppKeyForIndexer } from './appKey'
-import { setMnemonicHash, validateMnemonic } from './mnemonic'
-import { getIndexerURL, setIndexerURL } from './settings'
+import { initializeUploader } from '../managers/uploader'
+import { app, getMobileSdkAuth, internal } from './appService'
 
-export type SdkState = {
-  sdk: SdkInterface | null
-  isConnected: boolean
-  connectionError: string | null
-  isAuthing: boolean
-  isReconnecting: boolean
-  /**
-   * Stores pendingApproval from authenticateIndexer, used by registerWithIndexer.
-   * This allows browser auth to happen once on the Choose Indexer screen,
-   * and the Recovery Phrase screen can reuse the approval.
-   * Cleared after registration completes or on error.
-   */
-  pendingApproval: {
-    indexerURL: string
-    builder: BuilderInterface
-  } | null
-}
-
-export const useSdkStore = create<SdkState>(() => {
-  return {
-    sdk: null,
-    isConnected: false,
-    connectionError: null,
-    isAuthing: false,
-    isReconnecting: false,
-    pendingApproval: null,
-  }
+const APP_META_JSON = JSON.stringify({
+  appID: APP_KEY,
+  name: 'Sia Storage',
+  description: 'Privacy-first, decentralized cloud storage',
+  serviceURL: 'https://sia.storage',
+  callbackUrl: 'sia://callback',
+  logoUrl: 'https://app.sia.storage/icon.png',
 })
 
-const { getState, setState } = useSdkStore
+let pendingApproval: {
+  indexerURL: string
+} | null = null
 
 const CONNECTION_TIMEOUT_MS = 10_000
+
+getMobileSdkAuth().setOnConnected(async () => {
+  const sdk = getMobileSdkAuth().getLastSdk()
+  if (sdk) {
+    await setSdkWithUploader(sdk)
+  }
+})
 
 /**
  * Sets SDK and manages uploader lifecycle.
@@ -79,13 +59,20 @@ const CONNECTION_TIMEOUT_MS = 10_000
 export async function setSdkWithUploader(
   sdk: SdkInterface | null,
 ): Promise<void> {
-  const currentSdk = getState().sdk
-  if (currentSdk && currentSdk !== sdk) {
-    await getUploadManager().shutdown()
+  const currentSdk = internal().getSdk()
+  if (currentSdk && sdk) {
+    try {
+      await app().uploader.shutdown()
+    } catch {
+      // uploader may not be configured
+    }
   }
-  setState({ sdk })
   if (sdk) {
-    await initializeUploader(new MobileSdkAdapter(sdk))
+    const adapter = new MobileSdkAdapter(sdk)
+    internal().setSdk(adapter)
+    await initializeUploader()
+  } else {
+    internal().setSdk(null)
   }
 }
 
@@ -96,21 +83,28 @@ export async function setSdkWithUploader(
  */
 export async function connectSdk(): Promise<SdkInterface | null> {
   try {
-    const indexerURL = await getIndexerURL()
-    const appKey = await getAppKey()
-    const builder = new Builder(indexerURL)
-
-    const [sdk, err] = await builderConnected(builder, appKey)
-    if (err) {
-      logger.error('sdk', 'connect_error', { error: err as Error })
+    const indexerURL = await app().settings.getIndexerURL()
+    const keyBytes = await app().auth.getAppKey(indexerURL)
+    if (!keyBytes) {
+      logger.warn('sdk', 'auth_required')
       return null
     }
 
-    if (sdk) {
-      await setSdkWithUploader(sdk)
-      // Warm up the HTTP connection pool so the first real request doesn't timeout.
-      sdk.objectEvents(undefined, 1).catch(() => {})
-      return sdk
+    const keyHex = uint8ToHex(keyBytes)
+    await app().auth.builder.create(indexerURL)
+
+    const connected = await withTimeout(
+      app().auth.builder.connectWithKey(keyHex),
+      CONNECTION_TIMEOUT_MS,
+    )
+
+    if (connected) {
+      const sdk = getMobileSdkAuth().getLastSdk()
+      if (sdk) {
+        await setSdkWithUploader(sdk)
+        sdk.objectEvents(undefined, 1).catch(() => {})
+        return sdk
+      }
     }
 
     logger.warn('sdk', 'auth_required')
@@ -127,17 +121,17 @@ export async function connectSdk(): Promise<SdkInterface | null> {
  * @returns true if successful, false if already reconnecting or authing or not authenticated
  */
 export async function reconnectIndexer(): Promise<boolean> {
-  if (getState().isReconnecting) {
+  if (app().connection.getState().isReconnecting) {
     logger.debug('sdk', 'reconnect_skipped')
     return false
   }
-  setState({ isReconnecting: true })
+  app().connection.setState({ isReconnecting: true })
 
   logger.info('sdk', 'reconnecting')
-  const isAuthing = getState().isAuthing
+  const isAuthing = app().connection.getState().isAuthing
   if (isAuthing) {
     logger.debug('sdk', 'auth_skipped')
-    setState({ isReconnecting: false })
+    app().connection.setState({ isReconnecting: false })
     return false
   }
 
@@ -146,12 +140,12 @@ export async function reconnectIndexer(): Promise<boolean> {
     const connected = !!sdk
 
     if (connected) {
-      setState({
+      app().connection.setState({
         isConnected: true,
         connectionError: null,
       })
     } else {
-      setState({
+      app().connection.setState({
         isConnected: false,
         connectionError: 'Failed to connect to indexer.',
       })
@@ -159,17 +153,16 @@ export async function reconnectIndexer(): Promise<boolean> {
     return connected
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    setState({
+    app().connection.setState({
       isConnected: false,
       connectionError: message,
     })
     return false
   } finally {
-    setState({ isReconnecting: false })
+    app().connection.setState({ isReconnecting: false })
   }
 }
 
-// Used internally for browser auth flow results.
 type AuthError = { type: 'cancelled' } | { type: 'error'; message: string }
 
 export type AuthenticateError =
@@ -199,60 +192,65 @@ export async function authenticateIndexer(
 ): Promise<AuthenticateResult> {
   logger.info('sdk', 'authenticating', { indexerURL })
 
-  // Check if we have an AppKey for this indexer (returning user).
-  const appKey = await getAppKeyForIndexer(indexerURL)
-  if (appKey) {
-    setState({ isAuthing: true })
-    const builder = new Builder(indexerURL)
-    const [sdk, connectedErr] = await builderConnected(builder, appKey)
-    if (connectedErr) {
-      setState({ isAuthing: false })
-      logger.error('sdk', 'connect_error', { error: connectedErr as Error })
-      return err({ type: 'error', message: connectedErr.message })
+  const keyBytes = await app().auth.getAppKey(indexerURL)
+  if (keyBytes) {
+    app().connection.setState({ isAuthing: true })
+    const keyHex = uint8ToHex(keyBytes)
+    try {
+      await app().auth.builder.create(indexerURL)
+      const connected = await withTimeout(
+        app().auth.builder.connectWithKey(keyHex),
+        CONNECTION_TIMEOUT_MS,
+      )
+      if (connected) {
+        logger.info('sdk', 'already_registered')
+        app().settings.setIndexerURL(indexerURL)
+        const sdk = getMobileSdkAuth().getLastSdk()
+        if (sdk) {
+          await setSdkWithUploader(sdk)
+        }
+        app().connection.setState({ isAuthing: false, isConnected: true })
+        return ok({ alreadyConnected: true })
+      }
+    } catch (e) {
+      app().connection.setState({ isAuthing: false })
+      logger.error('sdk', 'connect_error', { error: e as Error })
+      return err({
+        type: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      })
     }
-    if (sdk) {
-      logger.info('sdk', 'already_registered')
-      setIndexerURL(indexerURL)
-      await setSdkWithUploader(sdk)
-      setState({ isAuthing: false, isConnected: true })
-      return ok({ alreadyConnected: true })
-    }
-    setState({ isAuthing: false })
+    app().connection.setState({ isAuthing: false })
   }
 
-  // New user - run browser auth and save approved builder for registerWithIndexer.
   logger.info('sdk', 'browser_auth_start')
-  setState({ isAuthing: true, pendingApproval: null })
+  app().connection.setState({ isAuthing: true })
+  pendingApproval = null
 
-  const builder = new Builder(indexerURL)
-  const [approvedBuilder, authErr] = await runBrowserAuthFlow(builder)
+  const [, authErr] = await runBrowserAuthFlow(indexerURL)
 
   if (authErr) {
-    setState({ isAuthing: false })
+    app().connection.setState({ isAuthing: false })
     if (authErr.type === 'cancelled') {
       return err({ type: 'cancelled' })
     }
     return err({ type: 'error', message: authErr.message })
   }
 
-  // Save approved builder for registerWithIndexer.
-  setState({
-    isAuthing: false,
-    pendingApproval: approvedBuilder
-      ? { indexerURL, builder: approvedBuilder }
-      : null,
-  })
+  app().connection.setState({ isAuthing: false })
+  pendingApproval = { indexerURL }
 
   logger.info('sdk', 'browser_auth_complete')
   return ok({ alreadyConnected: false })
 }
 
-export function setIsConnected(connected: boolean) {
-  return useSdkStore.setState({ isConnected: connected })
-}
-
 export function setSdk(sdk: SdkInterface | null) {
-  return useSdkStore.setState({ sdk, isConnected: sdk !== null })
+  if (sdk) {
+    internal().setSdk(new MobileSdkAdapter(sdk))
+  } else {
+    internal().setSdk(null)
+  }
+  app().connection.setState({ isConnected: sdk !== null })
 }
 
 /**
@@ -268,136 +266,61 @@ export async function registerWithIndexer(
   mnemonic: string,
   indexerURL: string,
 ): Promise<RegisterResult> {
-  setState({ isAuthing: true })
+  app().connection.setState({ isAuthing: true })
 
-  // Validate mnemonic against stored hash if one exists.
-  const mnemonicValid = await validateMnemonic(mnemonic)
+  const mnemonicValid = await app().auth.validateMnemonic(mnemonic)
   if (mnemonicValid === 'invalid') {
     logger.warn('sdk', 'mnemonic_hash_mismatch')
-    // Keep pendingApproval so user can fix mnemonic and retry.
-    setState({ isAuthing: false })
+    app().connection.setState({ isAuthing: false })
     return err({ type: 'mnemonicMismatch' })
   }
 
-  // Use pending approval from authenticateIndexer if available.
-  const { pendingApproval } = getState()
-  let approvedBuilder: BuilderInterface | null = null
-
-  if (pendingApproval && pendingApproval.indexerURL === indexerURL) {
-    logger.debug('sdk', 'using_pending_approval')
-    approvedBuilder = pendingApproval.builder
-  } else {
-    // No pending approval - run browser auth (fallback for edge cases).
+  if (!pendingApproval || pendingApproval.indexerURL !== indexerURL) {
     logger.info('sdk', 'browser_auth_start')
-    const builder = new Builder(indexerURL)
-    const [result, authErr] = await runBrowserAuthFlow(builder)
+    const [, authErr] = await runBrowserAuthFlow(indexerURL)
     if (authErr) {
-      setState({ isAuthing: false, pendingApproval: null })
+      app().connection.setState({ isAuthing: false })
+      pendingApproval = null
       return err(authErr)
     }
-    approvedBuilder = result
+  } else {
+    logger.debug('sdk', 'using_pending_approval')
   }
 
-  if (!approvedBuilder) {
-    setState({ isAuthing: false, pendingApproval: null })
-    return err({ type: 'error', message: 'Unexpected null builder' })
-  }
-
-  // Register with mnemonic.
-  const [sdk, registerErr] = await builderRegister(approvedBuilder, mnemonic)
-  if (registerErr) {
-    setState({ isAuthing: false, pendingApproval: null })
-    logger.error('sdk', 'register_error', { error: registerErr as Error })
-    return err({ type: 'error', message: registerErr.message })
-  }
-
-  // Save credentials for future sessions.
-  await setAppKeyForIndexer(indexerURL, sdk.appKey())
-  await setMnemonicHash(mnemonic)
-  await setIndexerURL(indexerURL)
-
-  await setSdkWithUploader(sdk)
-  setState({ isAuthing: false, isConnected: true, pendingApproval: null })
-  return ok(undefined)
-}
-
-/**
- * Attempts to connect using an existing AppKey.
- * Returns SDK if already registered, null otherwise.
- */
-async function builderConnected(
-  builder: Builder,
-  appKey: AppKey,
-): Promise<Result<SdkInterface | null>> {
   try {
-    logger.debug('sdk', 'builder_connected_attempt')
-    const sdk = await withTimeout(
-      builder.connected(appKey),
+    logger.info('sdk', 'registering')
+    const keyHex = await withTimeout(
+      app().auth.builder.register(mnemonic),
       CONNECTION_TIMEOUT_MS,
     )
-    return ok(sdk ?? null)
+
+    await app().auth.setMnemonicHash(mnemonic)
+    await app().auth.onConnected(keyHex, indexerURL)
+    await app().settings.setIndexerURL(indexerURL)
+
+    app().connection.setState({ isAuthing: false, isConnected: true })
+    pendingApproval = null
+    return ok(undefined)
   } catch (e) {
-    return err(e as Error)
+    app().connection.setState({ isAuthing: false })
+    pendingApproval = null
+    logger.error('sdk', 'register_error', { error: e as Error })
+    return err({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    })
   }
 }
 
-/**
- * Requests app connection from the indexer.
- */
-async function builderRequestConnection(
-  builder: Builder,
-): Promise<Result<BuilderInterface>> {
-  try {
-    logger.debug('sdk', 'connection_request')
-    const result = await withTimeout(
-      builder.requestConnection({
-        id: hexToUint8(APP_KEY).buffer,
-        name: 'Sia Storage',
-        description: 'Privacy-first, decentralized cloud storage',
-        serviceUrl: 'https://sia.storage',
-        callbackUrl: 'sia://callback',
-        logoUrl: 'https://app.sia.storage/icon.png',
-      }),
-      CONNECTION_TIMEOUT_MS,
-    )
-    return ok(result)
-  } catch (e) {
-    return err(e as Error)
-  }
-}
-
-// Slightly longer than the SDK's 5s poll interval so one full cycle can complete.
 const BROWSER_CLOSE_GRACE_MS = 6_000
-
-let authAbortController: AbortController | null = null
 
 /**
  * Cancels any in-flight auth flow. Aborts the SDK's waitForApproval poll
- * via AbortSignal and closes the auth browser.
+ * via the adapter's internal AbortController and closes the auth browser.
  */
 export function cancelAuth() {
-  authAbortController?.abort()
-  authAbortController = null
+  app().auth.builder.cancel()
   closeAuthBrowser()
-}
-
-/**
- * Registers the app with a mnemonic, deriving the AppKey.
- */
-async function builderRegister(
-  builder: BuilderInterface,
-  mnemonic: string,
-): Promise<Result<SdkInterface>> {
-  try {
-    logger.info('sdk', 'registering')
-    const result = await withTimeout(
-      builder.register(mnemonic),
-      CONNECTION_TIMEOUT_MS,
-    )
-    return ok(result)
-  } catch (e) {
-    return err(e as Error)
-  }
 }
 
 /**
@@ -424,53 +347,34 @@ function createAppStateDismissal() {
 /**
  * Browser auth state machine. Races three concurrent signals:
  *
- * 1. SDK approval poll — builder.waitForApproval() (internal 5s poll loop)
+ * 1. SDK approval poll — app().auth.builder.waitForApproval() (internal 5s poll loop)
  * 2. Browser dismissal — openAuthURL() resolves true (deep link) or false (manual close)
  * 3. Android AppState   — foreground after background (Chrome Custom Tab backstop)
  *
- * The SDK's waitForApproval() accepts an AbortSignal, which we use to cancel
- * the poll cleanly when the user navigates away or a grace period expires.
- *
- * Signal handling:
- * - Approval poll resolves → close browser, return result
- * - Browser dismissed       → wait for poll up to 6s, then cancel
- * - cancelAuth()            → abort poll immediately, return cancelled
+ * The adapter manages its own AbortController internally.
+ * cancelAuth() / grace period timeout calls app().auth.builder.cancel() to abort.
  */
 async function waitForUserApproval(
-  builder: BuilderInterface,
-): Promise<Result<BuilderInterface, AuthError>> {
-  const responseUrl = builder.responseUrl()
-
-  const abortController = new AbortController()
-  authAbortController = abortController
-  const { signal } = abortController
-
-  type ApprovalOutcome =
-    | { ok: true; result: BuilderInterface }
-    | { ok: false; error: Error }
-
-  const startApprovalPoll = (): Promise<ApprovalOutcome> =>
-    builder
-      .waitForApproval({ signal })
-      .then((result): ApprovalOutcome => ({ ok: true, result }))
-      .catch((e): ApprovalOutcome => ({ ok: false, error: e as Error }))
+  responseUrl: string,
+): Promise<Result<void, AuthError>> {
+  type ApprovalOutcome = { ok: true } | { ok: false; error: Error }
 
   const isAndroid = Platform.OS === 'android'
 
-  // iOS: start polling immediately (app stays in foreground).
-  // Android: defer polling until user returns — background network is unreliable.
+  const startApprovalPoll = (): Promise<ApprovalOutcome> =>
+    app()
+      .auth.builder.waitForApproval()
+      .then((): ApprovalOutcome => ({ ok: true }))
+      .catch((e): ApprovalOutcome => ({ ok: false, error: e as Error }))
+
   let approvalPromise: Promise<ApprovalOutcome> | null = isAndroid
     ? null
     : startApprovalPoll()
 
   const browserPromise = openAuthURL(responseUrl)
 
-  // Android backstop: detect foreground via AppState in case Chrome Custom
-  // Tab dismissal doesn't cause openAuthURL to resolve on some devices.
   const androidDismissal = isAndroid ? createAppStateDismissal() : null
 
-  // Dismissal = browser closed (deep link or manual) OR Android AppState foreground.
-  // Swallow any rejection from openAuthURL so dismissalPromise never rejects.
   const browserResult: { error: Error | null } = { error: null }
   const dismissalPromise = Promise.race(
     [
@@ -485,8 +389,6 @@ async function waitForUserApproval(
   )
 
   try {
-    // Race: on iOS the approval poll can win; on Android only dismissal wins
-    // because the poll is deferred until the browser is dismissed.
     const raceCandidates: Promise<'dismissed' | 'approval'>[] = [
       dismissalPromise.then(() => 'dismissed' as const),
     ]
@@ -495,25 +397,21 @@ async function waitForUserApproval(
     }
     const winner = await Promise.race(raceCandidates)
 
-    if (signal.aborted) return err({ type: 'cancelled' })
     if (browserResult.error)
       return err({ type: 'error', message: browserResult.error.message })
 
-    // iOS only: approval poll resolved before browser was dismissed.
     if (winner === 'approval') {
       closeAuthBrowser()
       const outcome = await approvalPromise!
-      if (outcome.ok) return ok(outcome.result)
+      if (outcome.ok) return ok(undefined)
+      if (outcome.error.name === 'AbortError') return err({ type: 'cancelled' })
       return err({ type: 'error', message: outcome.error.message })
     }
 
-    // Browser dismissed (deep link, manual close, or AppState foreground).
-    // Start deferred poll (Android) or reuse existing (iOS).
     if (!approvalPromise) {
       approvalPromise = startApprovalPoll()
     }
 
-    // Give the poll one cycle (6s) to confirm approval, then cancel.
     const grace = await Promise.race([
       approvalPromise.then(() => 'approved' as const),
       new Promise<'timeout'>((r) =>
@@ -521,115 +419,90 @@ async function waitForUserApproval(
       ),
     ])
 
-    if (signal.aborted) return err({ type: 'cancelled' })
-
     if (grace === 'approved') {
       const outcome = await approvalPromise
-      if (outcome.ok) return ok(outcome.result)
+      if (outcome.ok) return ok(undefined)
+      if (outcome.error.name === 'AbortError') return err({ type: 'cancelled' })
       return err({ type: 'error', message: outcome.error.message })
     }
 
-    // Grace period expired — abort the SDK poll and cancel.
-    abortController.abort()
+    app().auth.builder.cancel()
     return err({ type: 'cancelled' })
   } finally {
     androidDismissal?.subscription.remove()
-    if (authAbortController === abortController) {
-      authAbortController = null
-    }
   }
 }
 
 /**
- * Runs the browser auth flow: request connection → open browser → wait for approval.
- * Returns the builder after approval, or an error if cancelled/failed.
+ * Runs the browser auth flow: create builder → request connection → open browser → wait for approval.
+ * Returns void after approval, or an error if cancelled/failed.
  */
 async function runBrowserAuthFlow(
-  builder: Builder,
-): Promise<Result<BuilderInterface, AuthError>> {
-  const [builderAfterRequest, requestErr] =
-    await builderRequestConnection(builder)
-  if (requestErr) {
-    logger.error('sdk', 'connection_request_error', {
-      error: requestErr as Error,
-    })
-    return err({ type: 'error', message: requestErr.message })
-  }
+  indexerURL: string,
+): Promise<Result<void, AuthError>> {
+  try {
+    await app().auth.builder.create(indexerURL)
+    logger.debug('sdk', 'connection_request')
+    const responseUrl = await withTimeout(
+      app().auth.builder.requestConnection(APP_META_JSON),
+      CONNECTION_TIMEOUT_MS,
+    )
 
-  const [builderAfterApproval, approvalErr] =
-    await waitForUserApproval(builderAfterRequest)
-  if (approvalErr) {
-    if (approvalErr.type === 'cancelled') {
-      logger.info('sdk', 'auth_cancelled')
-    } else {
-      logger.error('sdk', 'approval_error', {
-        error: new Error(approvalErr.message),
-      })
+    const [, approvalErr] = await waitForUserApproval(responseUrl)
+    if (approvalErr) {
+      if (approvalErr.type === 'cancelled') {
+        logger.info('sdk', 'auth_cancelled')
+      } else {
+        logger.error('sdk', 'approval_error', {
+          error: new Error(approvalErr.message),
+        })
+      }
+      return err(approvalErr)
     }
-    return err(approvalErr)
-  }
 
-  return ok(builderAfterApproval)
+    return ok(undefined)
+  } catch (e) {
+    logger.error('sdk', 'connection_request_error', { error: e as Error })
+    return err({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    })
+  }
 }
 
-// selectors
-
-export const [getIsConnected, useIsConnected] = createGetterAndSelector(
-  useSdkStore,
-  (s) => s.isConnected,
-)
+export function useIsConnected(): boolean {
+  const { data } = useConnectionState()
+  return data?.isConnected ?? false
+}
 
 export function useIsAuthing(): boolean {
-  return useSdkStore((s) => s.isAuthing)
-}
-
-export function getSdk(): SdkInterface | null {
-  return useSdkStore.getState().sdk
-}
-
-/**
- * Update the metadata of a pinned object.
- */
-export async function updateMetadata(
-  pinnedObject: PinnedObjectInterface,
-  metadata: ArrayBuffer,
-): Promise<void> {
-  const sdk = getSdk()
-  if (!sdk) {
-    throw new Error('SDK not initialized')
-  }
-  pinnedObject.updateMetadata(metadata)
-  await sdk.updateObjectMetadata(pinnedObject)
-}
-
-/**
- * Fetch a pinned object by id.
- */
-export async function getPinnedObject(
-  objectId: string,
-): Promise<PinnedObjectInterface> {
-  const sdk = getSdk()
-  if (!sdk) {
-    throw new Error('SDK not initialized')
-  }
-  return sdk.object(objectId)
+  const { data } = useConnectionState()
+  return data?.isAuthing ?? false
 }
 
 /**
  * Resets the SDK state and shuts down uploader.
  */
 export async function resetSdk() {
-  await getUploadManager().shutdown()
-  setState({
-    sdk: null,
+  try {
+    await app().uploader.shutdown()
+  } catch {
+    // uploader may not be configured
+  }
+  internal().setSdk(null)
+  pendingApproval = null
+  app().connection.setState({
     isConnected: false,
     connectionError: null,
     isAuthing: false,
     isReconnecting: false,
-    pendingApproval: null,
   })
 }
 
-export function useSdk(): SdkInterface | null {
-  return useSdkStore((s) => s.sdk)
+export function getPendingApproval() {
+  return pendingApproval
+}
+
+export function setPendingApproval(value: { indexerURL: string } | null) {
+  pendingApproval = value
 }

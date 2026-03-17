@@ -1,9 +1,13 @@
+import { AppProvider } from '@siastorage/core/app'
 import { act, renderHook, waitFor } from '@testing-library/react-native'
+import type { ReactNode } from 'react'
 import { database, db, initializeDB, resetDb } from '../db'
+import { app } from './appService'
 import { fetchFilesByIDs, useFileCarousel } from './fileCarousel'
-import { createFileRecord } from './files'
 
-import { invalidateCacheLibraryLists } from './librarySwr'
+function wrapper({ children }: { children: ReactNode }) {
+  return <AppProvider value={app()}>{children}</AppProvider>
+}
 
 describe('fetchFilesByIDs', () => {
   const base = 1_000
@@ -22,7 +26,7 @@ describe('fetchFilesByIDs', () => {
     name: string
     createdAt: number
   }) {
-    await createFileRecord({
+    await app().files.create({
       id: params.id,
       name: params.name,
       type: 'image/jpeg',
@@ -79,7 +83,7 @@ describe('useFileCarousel hook', () => {
     name: string
     createdAt: number
   }) {
-    await createFileRecord({
+    await app().files.create({
       id: params.id,
       name: params.name,
       type: 'image/jpeg',
@@ -100,7 +104,7 @@ describe('useFileCarousel hook', () => {
   }
 
   function triggerSyncChange() {
-    invalidateCacheLibraryLists()
+    app().caches.libraryVersion.invalidate()
   }
 
   describe('sync event handling', () => {
@@ -109,11 +113,13 @@ describe('useFileCarousel hook', () => {
       await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
 
       const onDeleted = jest.fn()
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-2',
-          onDeleted,
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-2',
+            onDeleted,
+          }),
+        { wrapper },
       )
 
       // Wait for hook to initialize
@@ -139,10 +145,12 @@ describe('useFileCarousel hook', () => {
       await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
       await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
 
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-2',
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-2',
+          }),
+        { wrapper },
       )
 
       await waitFor(() => {
@@ -177,14 +185,17 @@ describe('useFileCarousel hook', () => {
         currentFile: { id: string } | null
         isLoading: boolean
       }[] = []
-      const { result } = renderHook(() => {
-        const hook = useFileCarousel({ initialId: 'file-2' })
-        renders.push({
-          currentFile: hook.currentFile ? { id: hook.currentFile.id } : null,
-          isLoading: hook.isLoading,
-        })
-        return hook
-      })
+      const { result } = renderHook(
+        () => {
+          const hook = useFileCarousel({ initialId: 'file-2' })
+          renders.push({
+            currentFile: hook.currentFile ? { id: hook.currentFile.id } : null,
+            isLoading: hook.isLoading,
+          })
+          return hook
+        },
+        { wrapper },
+      )
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false)
@@ -251,10 +262,12 @@ describe('useFileCarousel hook', () => {
       await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
       await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
 
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-2',
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-2',
+          }),
+        { wrapper },
       )
 
       await waitFor(() => {
@@ -338,12 +351,14 @@ describe('useFileCarousel hook', () => {
       }
 
       // file-3 is at position 3, prefetchRadius: 1 means positions 2-4 are fetched
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-3',
-          initialFile,
-          prefetchRadius: 1,
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-3',
+            initialFile,
+            prefetchRadius: 1,
+          }),
+        { wrapper },
       )
 
       await waitFor(() => {
@@ -368,11 +383,13 @@ describe('useFileCarousel hook', () => {
       await createRecord({ id: 'file-6', name: 'f.jpg', createdAt: base + 50 })
 
       // User taps on file-2 (which is at position 4 in DESC order)
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-2',
-          prefetchRadius: 5,
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-2',
+            prefetchRadius: 5,
+          }),
+        { wrapper },
       )
 
       await waitFor(() => {
@@ -406,11 +423,13 @@ describe('useFileCarousel hook', () => {
       await createRecord({ id: 'file-3', name: 'c.jpg', createdAt: base + 20 })
 
       // User taps on file-3 (which is at position 0 in DESC order)
-      const { result } = renderHook(() =>
-        useFileCarousel({
-          initialId: 'file-3',
-          prefetchRadius: 2,
-        }),
+      const { result } = renderHook(
+        () =>
+          useFileCarousel({
+            initialId: 'file-3',
+            prefetchRadius: 2,
+          }),
+        { wrapper },
       )
 
       await waitFor(() => {

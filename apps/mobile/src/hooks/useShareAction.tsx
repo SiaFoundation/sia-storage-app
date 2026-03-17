@@ -1,20 +1,22 @@
 import Clipboard from '@react-native-clipboard/clipboard'
+import { useFileDetails, useSdk } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import Share from 'react-native-share'
 import { getOneSealedObject, getPinnedObject, useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
-import { useFileDetails } from '../stores/files'
-import { useSdk } from '../stores/sdk'
+import { internal } from '../stores/appService'
 
 export function useShareAction({ fileId }: { fileId: string }) {
   const toast = useToast()
   const { data: file } = useFileDetails(fileId)
   const status = useFileStatus(file ?? undefined)
-  const sdk = useSdk()
+  const { data: isConnected } = useSdk()
 
   const getShareUrl = useCallback(async () => {
     if (!file) return
+    if (!isConnected) return
+    const sdk = internal().getSdk()
     if (!sdk) return
 
     const result = getOneSealedObject(file)
@@ -26,16 +28,16 @@ export function useShareAction({ fileId }: { fileId: string }) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
     return sdk.shareObject(pinnedObject, expiresAt)
-  }, [file, sdk])
+  }, [file, isConnected])
 
   const handleShareURL = useCallback(async () => {
     if (!file) return
-    if (!sdk) return
+    if (!isConnected) return
     const shareUrl = await getShareUrl()
     if (!shareUrl) return
     Clipboard.setString(shareUrl)
     toast.show('Share URL copied')
-  }, [file, sdk, getShareUrl, toast])
+  }, [file, isConnected, getShareUrl, toast])
 
   const handleShareFile = useCallback(async () => {
     if (!file) return

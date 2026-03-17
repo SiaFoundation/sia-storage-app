@@ -1,3 +1,4 @@
+import { useAllTags } from '@siastorage/core/stores'
 import { CheckIcon, PlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -11,9 +12,9 @@ import {
 } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
+import { app } from '../stores/appService'
 import { useSelectedFileIds } from '../stores/fileSelection'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { addTagToFiles, useAllTags } from '../stores/tags'
 import { palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
@@ -69,7 +70,7 @@ export function BulkManageTagsSheet({
       const key = trimmed.toLowerCase()
       setLoadingTagNames((prev) => new Set([...prev, key]))
       try {
-        await addTagToFiles(fileIds, trimmed)
+        await app().tags.addToFiles(fileIds, trimmed)
         toast.show(
           `Added "${trimmed}" to ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`,
         )

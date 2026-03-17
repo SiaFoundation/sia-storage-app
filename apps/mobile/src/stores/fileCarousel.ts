@@ -1,9 +1,8 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
-import * as ops from '@siastorage/core/db/operations'
+import { useOnLibraryListChange } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { db } from '../db'
-import { useOnLibraryListChange } from './librarySwr'
+import { app } from './appService'
 
 type VirtualListQueryParams = {
   sortBy: SortBy
@@ -14,25 +13,19 @@ type VirtualListQueryParams = {
   query?: string
 }
 
-export async function fetchTotalCount(
-  params: VirtualListQueryParams,
-): Promise<number> {
-  return ops.queryFileCountWithFilters(db(), params)
-}
-
-export async function fetchFilePosition(
+async function fetchFilePosition(
   fileId: string,
   params: VirtualListQueryParams,
 ): Promise<number> {
-  return ops.queryFilePositionInSortedList(db(), fileId, params)
+  return app().library.filePosition(fileId, params)
 }
 
-export async function fetchSortedFileIds(
+async function fetchSortedFileIds(
   params: VirtualListQueryParams,
   limit: number,
   offset: number,
 ): Promise<string[]> {
-  return ops.querySortedFileIds(db(), params, limit, offset)
+  return app().library.sortedFileIds(params, limit, offset)
 }
 
 export async function fetchFilesByIDs(
@@ -41,7 +34,7 @@ export async function fetchFilesByIDs(
   const result = new Map<string, FileRecord>()
   if (ids.length === 0) return result
 
-  const files = await ops.readFileRecordsByIds(db(), ids)
+  const files = await app().files.getByIds(ids)
   for (const file of files) {
     result.set(file.id, file)
   }
@@ -325,10 +318,10 @@ export function useFileCarousel({
     const currentFileID = currentFileIdRef.current
     if (!currentFileID) return
 
-    ops
-      .queryFileExists(db(), currentFileID)
-      .then((exists) => {
-        if (!exists) {
+    app()
+      .files.getById(currentFileID)
+      .then((file) => {
+        if (!file) {
           onDeleted?.()
         }
       })

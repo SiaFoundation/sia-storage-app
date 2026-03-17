@@ -100,6 +100,32 @@ jest.mock('react-native', () => ({
   },
 }))
 
+// jest-expo's ImageLoader.getSize mock uses a callback API that doesn't match
+// modern RN's promise-based NativeImageLoaderAndroid.getSize(url). Patch it to
+// avoid "success is not a function" errors from stale native module references.
+{
+  const rn = jest.requireActual('react-native')
+  const nm = rn?.NativeModules
+  if (nm) {
+    Object.defineProperty(nm, 'ImageLoader', {
+      configurable: true,
+      enumerable: true,
+      get: () => ({
+        prefetchImage: jest.fn(),
+        getSize: jest.fn(async () => ({ width: 320, height: 240 })),
+      }),
+    })
+    Object.defineProperty(nm, 'ImageViewManager', {
+      configurable: true,
+      enumerable: true,
+      get: () => ({
+        prefetchImage: jest.fn(),
+        getSize: jest.fn(async () => ({ width: 320, height: 240 })),
+      }),
+    })
+  }
+}
+
 jest.mock('@siastorage/core/lib/uniqueId', () => {
   let c = 0
   return { uniqueId: () => `uid-${++c}` }

@@ -1,42 +1,18 @@
 import { initializeDB, resetDb } from '../db'
-import {
-  createDirectory,
-  deleteDirectory,
-  deleteDirectoryAndTrashFiles,
-  directoriesSwr,
-  moveFileToDirectory,
-  renameDirectory,
-  syncDirectoryFromMetadata,
-} from './directories'
-import { createFileRecord } from './files'
+import { app } from './appService'
 
-jest.mock('./librarySwr', () => ({
-  libraryStats: {
-    key: jest.fn((...parts: string[]) => [`mock/${parts.join('/')}`]),
-    invalidateAll: jest.fn(),
-  },
-  invalidateCacheLibraryAllStats: jest.fn(),
-  invalidateCacheLibraryLists: jest.fn(),
-}))
-
-const { invalidateCacheLibraryAllStats, invalidateCacheLibraryLists } =
-  require('./librarySwr') as {
-    invalidateCacheLibraryAllStats: jest.Mock
-    invalidateCacheLibraryLists: jest.Mock
-  }
-
-describe('directories store (mobile wrappers)', () => {
+describe('directories store', () => {
   beforeEach(async () => {
     await initializeDB()
   })
 
   afterEach(async () => {
     await resetDb()
-    jest.clearAllMocks()
+    jest.restoreAllMocks()
   })
 
   async function createTestFile(id: string) {
-    await createFileRecord({
+    await app().files.create({
       id,
       name: `${id}.jpg`,
       type: 'image/jpeg',
@@ -53,49 +29,54 @@ describe('directories store (mobile wrappers)', () => {
   }
 
   test('createDirectory invalidates directory cache', async () => {
-    const spy = jest.spyOn(directoriesSwr, 'invalidate')
-    await createDirectory('Photos')
+    const spy = jest.spyOn(app().caches.directories, 'invalidate')
+    await app().directories.create('Photos')
     expect(spy).toHaveBeenCalledWith('all')
   })
 
-  test('deleteDirectory invalidates library lists', async () => {
-    const dir = await createDirectory('Photos')
-    jest.clearAllMocks()
-    await deleteDirectory(dir.id)
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+  test('deleteDirectory removes directory', async () => {
+    const dir = await app().directories.create('Photos')
+    await app().directories.delete(dir.id)
+    const dirs = await app().directories.getAll()
+    expect(dirs.find((d: { id: string }) => d.id === dir.id)).toBeUndefined()
   })
 
-  test('deleteDirectoryAndTrashFiles invalidates stats and lists', async () => {
-    const dir = await createDirectory('Photos')
+  test('deleteDirectoryAndTrashFiles trashes associated files', async () => {
+    const dir = await app().directories.create('Photos')
     await createTestFile('f1')
-    await moveFileToDirectory('f1', dir.id)
-    jest.clearAllMocks()
+    await app().directories.moveFile('f1', dir.id)
 
-    await deleteDirectoryAndTrashFiles(dir.id)
+    await app().directories.deleteAndTrashFiles(dir.id)
 
-    expect(invalidateCacheLibraryAllStats).toHaveBeenCalled()
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+    const record = await app().files.getById('f1')
+    expect(record!.trashedAt).not.toBeNull()
   })
 
-  test('renameDirectory invalidates library lists', async () => {
-    const dir = await createDirectory('Photos')
-    jest.clearAllMocks()
-    await renameDirectory(dir.id, 'Images')
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+  test('renameDirectory updates name', async () => {
+    const dir = await app().directories.create('Photos')
+    await app().directories.rename(dir.id, 'Images')
+    const dirs = await app().directories.getAll()
+    expect(dirs.find((d: { id: string }) => d.id === dir.id)?.name).toBe(
+      'Images',
+    )
   })
 
   test('syncDirectoryFromMetadata skips when undefined', async () => {
     await createTestFile('f1')
-    await syncDirectoryFromMetadata('f1', 'Photos')
-    jest.clearAllMocks()
+    await app().directories.syncFromMetadata('f1', 'Photos')
 
-    await syncDirectoryFromMetadata('f1', undefined)
-    expect(invalidateCacheLibraryLists).not.toHaveBeenCalled()
+    const dirsBefore = await app().directories.getAll()
+    await app().directories.syncFromMetadata('f1', undefined)
+    const dirsAfter = await app().directories.getAll()
+
+    expect(dirsAfter.length).toBe(dirsBefore.length)
   })
 
-  test('syncDirectoryFromMetadata invalidates on defined name', async () => {
+  test('syncDirectoryFromMetadata creates directory for file', async () => {
     await createTestFile('f1')
-    await syncDirectoryFromMetadata('f1', 'Photos')
-    expect(invalidateCacheLibraryLists).toHaveBeenCalled()
+    await app().directories.syncFromMetadata('f1', 'Photos')
+
+    const dirs = await app().directories.getAll()
+    expect(dirs.some((d: { name: string }) => d.name === 'Photos')).toBe(true)
   })
 })

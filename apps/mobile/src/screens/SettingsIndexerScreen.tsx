@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useAccount, useIndexerURL } from '@siastorage/core/stores'
 import { DotIcon } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
@@ -7,12 +8,10 @@ import { RowGroup } from '../components/Group'
 import { InfoCard } from '../components/InfoCard'
 import { LabeledValueRow } from '../components/LabeledValueRow'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
-import { useAccount } from '../hooks/useAccount'
 import { humanSize } from '../lib/humanSize'
 import { useToast } from '../lib/toastContext'
 import type { MenuStackParamList } from '../stacks/types'
 import { reconnectIndexer, useIsConnected } from '../stores/sdk'
-import { useIndexerURL } from '../stores/settings'
 import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Indexer'>
