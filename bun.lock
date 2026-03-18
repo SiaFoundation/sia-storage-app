@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "siastorage",
@@ -30,7 +31,7 @@
     },
     "apps/mobile": {
       "name": "@siastorage/mobile",
-      "version": "1.8.1",
+      "version": "1.8.2",
       "dependencies": {
         "@azure/core-asynciterator-polyfill": "1.0.2",
         "@bacons/text-decoder": "0.0.0",
