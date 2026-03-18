@@ -32,12 +32,7 @@ export class MobileSdkAuthAdapter implements SdkAuthAdapters {
     return this.lastSdk
   }
 
-  createBuilder(indexerUrl: string): void {
-    this.builder = new Builder(indexerUrl)
-  }
-
-  async requestConnection(appMetaJson: string): Promise<string> {
-    if (!this.builder) throw new Error('No builder instance')
+  createBuilder(indexerUrl: string, appMetaJson: string): void {
     const meta = JSON.parse(appMetaJson) as {
       appID: string
       name: string
@@ -46,7 +41,7 @@ export class MobileSdkAuthAdapter implements SdkAuthAdapters {
       callbackUrl?: string
       logoUrl?: string
     }
-    await this.builder.requestConnection({
+    this.builder = new Builder(indexerUrl, {
       id: hexToUint8(meta.appID).buffer as ArrayBuffer,
       name: meta.name,
       description: meta.description,
@@ -54,6 +49,11 @@ export class MobileSdkAuthAdapter implements SdkAuthAdapters {
       callbackUrl: meta.callbackUrl,
       logoUrl: meta.logoUrl,
     })
+  }
+
+  async requestConnection(): Promise<string> {
+    if (!this.builder) throw new Error('No builder instance')
+    await this.builder.requestConnection()
     return this.builder.responseUrl()
   }
 

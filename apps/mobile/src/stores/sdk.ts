@@ -91,7 +91,7 @@ export async function connectSdk(): Promise<SdkInterface | null> {
     }
 
     const keyHex = uint8ToHex(keyBytes)
-    await app().auth.builder.create(indexerURL)
+    await app().auth.builder.create(indexerURL, APP_META_JSON)
 
     const connected = await withTimeout(
       app().auth.builder.connectWithKey(keyHex),
@@ -197,7 +197,7 @@ export async function authenticateIndexer(
     app().connection.setState({ isAuthing: true })
     const keyHex = uint8ToHex(keyBytes)
     try {
-      await app().auth.builder.create(indexerURL)
+      await app().auth.builder.create(indexerURL, APP_META_JSON)
       const connected = await withTimeout(
         app().auth.builder.connectWithKey(keyHex),
         CONNECTION_TIMEOUT_MS,
@@ -441,10 +441,10 @@ async function runBrowserAuthFlow(
   indexerURL: string,
 ): Promise<Result<void, AuthError>> {
   try {
-    await app().auth.builder.create(indexerURL)
+    await app().auth.builder.create(indexerURL, APP_META_JSON)
     logger.debug('sdk', 'connection_request')
     const responseUrl = await withTimeout(
-      app().auth.builder.requestConnection(APP_META_JSON),
+      app().auth.builder.requestConnection(),
       CONNECTION_TIMEOUT_MS,
     )
 
