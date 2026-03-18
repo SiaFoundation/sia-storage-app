@@ -110,6 +110,7 @@ export interface Account {
   accountKey: string
   maxPinnedData: bigint
   pinnedData: bigint
+  pinnedSize: bigint
   app: AccountApp
   lastUsed: Date
 }
