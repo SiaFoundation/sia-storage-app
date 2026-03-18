@@ -36,47 +36,70 @@ describe('directories store', () => {
 
   test('deleteDirectory removes directory', async () => {
     const dir = await app().directories.create('Photos')
+    const dirSpy = jest.spyOn(app().caches.directories, 'invalidateAll')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
     await app().directories.delete(dir.id)
     const dirs = await app().directories.getAll()
     expect(dirs.find((d: { id: string }) => d.id === dir.id)).toBeUndefined()
+    expect(dirSpy).toHaveBeenCalled()
+    expect(verSpy).toHaveBeenCalled()
   })
 
   test('deleteDirectoryAndTrashFiles trashes associated files', async () => {
     const dir = await app().directories.create('Photos')
     await createTestFile('f1')
     await app().directories.moveFile('f1', dir.id)
+    const dirSpy = jest.spyOn(app().caches.directories, 'invalidateAll')
+    const libSpy = jest.spyOn(app().caches.library, 'invalidateAll')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
 
     await app().directories.deleteAndTrashFiles(dir.id)
 
     const record = await app().files.getById('f1')
     expect(record!.trashedAt).not.toBeNull()
+    expect(dirSpy).toHaveBeenCalled()
+    expect(libSpy).toHaveBeenCalled()
+    expect(verSpy).toHaveBeenCalled()
   })
 
   test('renameDirectory updates name', async () => {
     const dir = await app().directories.create('Photos')
+    const dirSpy = jest.spyOn(app().caches.directories, 'invalidate')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
     await app().directories.rename(dir.id, 'Images')
     const dirs = await app().directories.getAll()
     expect(dirs.find((d: { id: string }) => d.id === dir.id)?.name).toBe(
       'Images',
     )
+    expect(dirSpy).toHaveBeenCalledWith('all')
+    expect(verSpy).toHaveBeenCalled()
   })
 
   test('syncDirectoryFromMetadata skips when undefined', async () => {
     await createTestFile('f1')
     await app().directories.syncFromMetadata('f1', 'Photos')
+    const dirSpy = jest.spyOn(app().caches.directories, 'invalidate')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
 
-    const dirsBefore = await app().directories.getAll()
     await app().directories.syncFromMetadata('f1', undefined)
     const dirsAfter = await app().directories.getAll()
 
-    expect(dirsAfter.length).toBe(dirsBefore.length)
+    expect(dirsAfter.some((d: { name: string }) => d.name === 'Photos')).toBe(
+      true,
+    )
+    expect(dirSpy).not.toHaveBeenCalled()
+    expect(verSpy).not.toHaveBeenCalled()
   })
 
   test('syncDirectoryFromMetadata creates directory for file', async () => {
     await createTestFile('f1')
+    const dirSpy = jest.spyOn(app().caches.directories, 'invalidate')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
     await app().directories.syncFromMetadata('f1', 'Photos')
 
     const dirs = await app().directories.getAll()
     expect(dirs.some((d: { name: string }) => d.name === 'Photos')).toBe(true)
+    expect(dirSpy).toHaveBeenCalledWith('all')
+    expect(verSpy).toHaveBeenCalled()
   })
 })
