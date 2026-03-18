@@ -9,7 +9,7 @@
     "postinstall": "npm rebuild better-sqlite3",
     "lint": "biome check .",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun run --filter '*' test",
+    "test": "bun --cwd packages/core test && bun --cwd apps/mobile test && bun --cwd apps/integration test",
     "mobile:fresh": "bun --cwd apps/mobile fresh",
     "mobile:start": "bun --cwd apps/mobile start",
     "mobile:dev:ios:simulator": "bun --cwd apps/mobile dev:ios:simulator",
