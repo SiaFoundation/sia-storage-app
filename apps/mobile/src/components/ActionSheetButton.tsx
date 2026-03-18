@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   type TextStyle,
+  View,
 } from 'react-native'
 import { palette } from '../styles/colors'
 
@@ -46,7 +47,7 @@ export function ActionSheetButton({
       onPress={onPress}
       testID={testID}
     >
-      <Text style={iconStyle}>{renderedIcon}</Text>
+      <View>{renderedIcon}</View>
       <Text style={textStyle}>{children}</Text>
     </Pressable>
   )
