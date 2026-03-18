@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.8.2 (2026-03-18)
+
+### Fixes
+
+- Improved upload performance by parallelizing the save phase, batching state updates, and reducing progress-driven re-renders.
+- Fixed significant lag caused by synchronous file system calls blocking the JS thread during background operations.
+- The upload progress bar now shows for large files. It was previously hidden until the final slab.
+- Upload progress now advances smoothly for multi-slab uploads.
+- Fixed an issue where the wrong thumbnail could briefly display before the actual thumbnail was computed.
+- Optimized thumbnail generation to decode each image fewer times using a batch adapter with size cascading and concurrent file processing.
+- Reduced unnecessary gallery re-renders by debouncing cache invalidation and fixing memo comparators.
+
 ## 1.8.1 (2026-03-10)
 
 ### Fixes
