@@ -342,6 +342,7 @@ export class MockSdk implements SdkAdapter {
       accountKey: '0'.repeat(64),
       maxPinnedData: 1000000000n,
       pinnedData: 0n,
+      pinnedSize: 0n,
       app: {
         id: 'mock-app',
         description: 'Mock App',

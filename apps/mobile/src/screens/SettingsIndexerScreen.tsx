@@ -59,19 +59,31 @@ export function SettingsIndexerScreen({ navigation }: Props) {
         }
       >
         <InfoCard>
-          <LabeledValueRow label="URL" value={currentIndexerURL.data} />
+          <LabeledValueRow
+            label="URL"
+            description="Indexer service pinning your data"
+            value={currentIndexerURL.data}
+          />
           {account.data ? (
             <>
               <LabeledValueRow
                 label="Account Key"
+                description="Derived from your recovery phrase"
                 value={account.data.accountKey}
               />
               <LabeledValueRow
-                label="Used Storage"
+                label="Library Size"
+                description="Total size of files in your library"
                 value={humanSize(Number(account.data.pinnedData))}
               />
               <LabeledValueRow
+                label="Usage"
+                description="Data is stored at 3x redundancy"
+                value={humanSize(Number(account.data.pinnedSize))}
+              />
+              <LabeledValueRow
                 label="Storage Limit"
+                description="Maximum storage for your account"
                 value={humanSize(Number(account.data.maxPinnedData))}
               />
             </>
