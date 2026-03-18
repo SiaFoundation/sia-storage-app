@@ -1,7 +1,7 @@
 module.exports = {
+  maxWorkers: 8,
   testEnvironment: 'node',
   testTimeout: 60000,
-  maxWorkers: 8,
   testMatch: ['<rootDir>/test/**/*.test.ts'],
   setupFiles: ['<rootDir>/test/setup.ts'],
   transform: {

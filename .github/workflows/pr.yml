@@ -36,7 +36,7 @@ jobs:
           bun_version: 1.2.19
       - run: bun run typecheck
 
-  test:
+  test-core:
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'
     steps:
@@ -44,4 +44,24 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           bun_version: 1.2.19
-      - run: bun run test
+      - run: bun --cwd packages/core test
+
+  test-mobile:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun --cwd apps/mobile test
+
+  test-integration:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun --cwd apps/integration test

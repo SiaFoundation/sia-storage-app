@@ -1,4 +1,5 @@
 module.exports = {
+  maxWorkers: 8,
   testEnvironment: 'node',
   testMatch: ['<rootDir>/src/**/*.test.ts'],
   transform: {
