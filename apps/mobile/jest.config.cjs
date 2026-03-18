@@ -2,6 +2,7 @@ const path = require('path')
 const reactDir = path.dirname(require.resolve('react/package.json'))
 
 module.exports = {
+  maxWorkers: 8,
   globalSetup: '<rootDir>/jest.globalSetup.cjs',
   preset: 'jest-expo',
   testEnvironment: 'node',
