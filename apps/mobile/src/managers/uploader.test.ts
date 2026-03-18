@@ -20,6 +20,7 @@ jest.mock('@siastorage/core/config', () => ({
 
 import {
   PACKER_IDLE_TIMEOUT,
+  SECTOR_SIZE,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
   UPLOAD_DATA_SHARDS,
@@ -745,6 +746,52 @@ describe('UploadManager', () => {
       // Progress should be updated in store (progressScheduler applies synchronously)
       const uploadAfter = app().uploads.getEntry('file1')
       expect(uploadAfter?.progress).toBeGreaterThan(0)
+    })
+
+    it('progress never decreases when SDK encoded total grows at slab boundaries', async () => {
+      const fileSize = Math.floor(SLAB_SIZE * 1.5)
+      manager.initialize(app(), internal(), {
+        createFileReader: jest.fn(() => ({
+          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        })),
+        progressScheduler: (cb) => cb(),
+      })
+
+      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null =
+        null
+      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+        progressCallback = opts.progressCallback.progress
+        return mockPacker
+      })
+
+      await manager.__testProcessFiles([
+        createFileEntry('multi-slab', fileSize),
+      ])
+      expect(progressCallback).not.toBeNull()
+
+      // Our stable denominator: ceil(1.5 slabs) = 2 slabs worth of encoded sectors
+      const expectedEncoded =
+        2 * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
+
+      // Simulate SDK sawtooth: first slab uploads with total = 1 slab of sectors,
+      // then second slab starts and total jumps to 2 slabs of sectors.
+      const oneSlab = (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
+
+      const calls: [bigint, bigint][] = [
+        [BigInt(oneSlab / 2), BigInt(oneSlab)], // 50% of first slab
+        [BigInt(oneSlab), BigInt(oneSlab)], // first slab done (SDK: 100%)
+        [BigInt(oneSlab), BigInt(expectedEncoded)], // SDK total jumps (SDK: 50% — sawtooth!)
+        [BigInt(oneSlab * 1.5), BigInt(expectedEncoded)], // more progress
+      ]
+
+      let prevProgress = 0
+      for (const [uploaded, total] of calls) {
+        progressCallback!(uploaded, total)
+        const entry = app().uploads.getEntry('multi-slab')
+        expect(entry?.progress).toBeGreaterThanOrEqual(prevProgress)
+        prevProgress = entry?.progress ?? 0
+      }
+      expect(prevProgress).toBeGreaterThan(0)
     })
   })
 

@@ -40,11 +40,9 @@ export function UploadStatusIcon({
 
   const iconEL = status.isErrored ? (
     <CloudAlertIcon color={iconColor} size={size} />
-  ) : status.isUploadQueued || status.isPacking ? (
-    // Queued or packing states show spinner
+  ) : status.isUploadQueued ? (
     <SpinnerIcon color={iconColor} size={size} />
-  ) : status.isUploading ? (
-    // Uploading shows progress circle or spinner
+  ) : status.isUploading || status.isPacking ? (
     status.uploadProgress > 0 ? (
       <CircularProgress
         progress={status.uploadProgress}

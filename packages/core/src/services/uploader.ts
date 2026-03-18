@@ -9,6 +9,7 @@ import {
   PACKER_POLL_INTERVAL,
   SAVE_BATCH_CONCURRENCY,
   SAVE_REMOVAL_DELAY_MS,
+  SECTOR_SIZE,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
   UPLOAD_DATA_SHARDS,
@@ -856,10 +857,13 @@ export class UploadManager {
   private onProgress(
     batch: BatchState,
     uploaded: bigint,
-    encodedTotal: bigint,
+    _encodedTotal: bigint,
   ): void {
+    const slabs = Math.ceil(batch.totalSize / SLAB_SIZE)
+    const expectedEncoded =
+      slabs * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
     const batchProgress =
-      encodedTotal > 0n ? Number(uploaded) / Number(encodedTotal) : 0
+      expectedEncoded > 0 ? Number(uploaded) / expectedEncoded : 0
 
     const batchInfo: BatchInfo = {
       files: batch.files.map((f) => ({
