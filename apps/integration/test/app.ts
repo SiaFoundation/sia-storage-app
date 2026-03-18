@@ -210,7 +210,7 @@ export function createTestApp(
     },
     uploader: createTestUploaderAdapters(),
     sdkAuth: {
-      createBuilder: async () => {},
+      createBuilder: async (_indexerUrl: string, _appMeta: string) => {},
       requestConnection: async () => '',
       waitForApproval: async () => {},
       connectWithKey: async () => false,

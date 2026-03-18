@@ -502,10 +502,10 @@ export interface AppService {
     clearAppKeys(): Promise<void>
     /** Step-by-step connection builder for pairing with an indexer. */
     builder: {
-      /** Initializes a new connection flow for the given indexer URL. */
-      create(indexerUrl: string): Promise<void>
-      /** Sends a connection request with app metadata; returns the request ID. */
-      requestConnection(appMeta: string): Promise<string>
+      /** Initializes a new connection flow for the given indexer URL with app metadata. */
+      create(indexerUrl: string, appMeta: string): Promise<void>
+      /** Sends a connection request; returns the response URL. */
+      requestConnection(): Promise<string>
       /** Submits the approval response received from the indexer. */
       setConnectionResponse(appKey: string, response: string): Promise<void>
       /** Blocks until the connection is approved or rejected. */
