@@ -1,6 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type LogLevel, logger } from '@siastorage/logger'
-import { File, Paths } from 'expo-file-system'
 import {
   ChevronDownIcon,
   DownloadIcon,
@@ -17,6 +16,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import RNFS from 'react-native-fs'
 import Share from 'react-native-share'
 import { logsCache } from '../hooks/useLogs'
 import { exportLogs } from '../lib/exportLogs'
@@ -151,17 +151,11 @@ export function SettingsLogsControlBar({ navigation }: Props) {
         .join('\n')
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const fileName = `logs-${timestamp}.jsonl`
-      const tempFile = new File(Paths.cache, fileName)
-      tempFile.create({ intermediates: true })
-      const writer = tempFile.writableStream().getWriter()
-      try {
-        await writer.write(new TextEncoder().encode(content))
-      } finally {
-        await writer.close()
-      }
+      const tempFilePath = `${RNFS.CachesDirectoryPath}/${fileName}`
+      await RNFS.writeFile(tempFilePath, content, 'utf8')
       try {
         await Share.open({
-          url: `file://${tempFile.uri}`,
+          url: `file://${tempFilePath}`,
           type: 'application/x-ndjson',
           filename: fileName,
         })
@@ -170,7 +164,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
           return
         throw e
       } finally {
-        tempFile.delete()
+        await RNFS.unlink(tempFilePath)
       }
     } catch (error) {
       logger.error('logs', 'share_failed', { error: error as Error })

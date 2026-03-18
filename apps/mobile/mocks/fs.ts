@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noRestrictedImports: File constructor for mock URI refs only
 import { File } from 'expo-file-system'
 import { extFromMime } from '../src/lib/fileTypes'
 import type { FsFileInfo } from '../src/stores/fs'

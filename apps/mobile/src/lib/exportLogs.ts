@@ -1,6 +1,6 @@
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
-import { File, Paths } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 import { queueUploadForFileId } from '../managers/uploader'
 import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
@@ -30,33 +30,22 @@ export async function exportLogs(): Promise<string | null> {
 
     // Write to temporary file.
     const tempFileName = `logs-export-${Date.now()}.jsonl`
-    const tempFile = new File(Paths.document, tempFileName)
-    const contentBytes = new TextEncoder().encode(content)
-
-    // Create empty file first.
-    tempFile.create({ intermediates: true })
-
-    // Write content.
-    const writer = tempFile.writableStream().getWriter()
-    try {
-      await writer.write(contentBytes)
-    } finally {
-      await writer.close()
-    }
+    const tempFilePath = `${RNFS.DocumentDirectoryPath}/${tempFileName}`
+    await RNFS.writeFile(tempFilePath, content, 'utf8')
 
     const fileId = uniqueId()
-    const size = contentBytes.length
+    const size = new TextEncoder().encode(content).length
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const fileName = `logs-${timestamp}.jsonl`
 
     // Copy temp file to FS storage.
     const fsFileUri = await copyFileToFs(
       { id: fileId, type: 'application/x-ndjson' },
-      tempFile.uri,
+      tempFilePath,
     )
 
     // Clean up temp file.
-    tempFile.delete()
+    await RNFS.unlink(tempFilePath)
 
     // Calculate hash.
     const hash = await calculateContentHash(fsFileUri)
