@@ -1,4 +1,5 @@
 import { logger } from '@siastorage/logger'
+// biome-ignore lint/style/noRestrictedImports: type-only import for .writableStream() (async)
 import type { File } from 'expo-file-system'
 import type { Writer } from 'react-native-sia'
 import { getOrCreateTempDownloadFile } from '../stores/tempFs'

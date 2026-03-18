@@ -1,4 +1,5 @@
 import { logger } from '@siastorage/logger'
+// biome-ignore lint/style/noRestrictedImports: File constructor + .readableStream() (async)
 import { File } from 'expo-file-system'
 
 function isFileUri(uri: string): boolean {

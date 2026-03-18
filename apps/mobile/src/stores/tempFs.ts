@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noRestrictedImports: constructors for URI refs only, all ops use RNFS
 import { Directory, File, Paths } from 'expo-file-system'
 import RNFS from 'react-native-fs'
 

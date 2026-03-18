@@ -28,7 +28,17 @@
         "useImportType": "error",
         "noUnusedTemplateLiteral": "off",
         "noNonNullAssertion": "off",
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "expo-file-system": {
+                "message": "expo-file-system has sync JSI methods (.info(), .delete(), .create(), .list()) that block the JS thread. Use react-native-fs (RNFS) instead. If you need expo-file-system streaming APIs, add a biome-ignore comment."
+              }
+            }
+          }
+        }
       },
       "suspicious": {
         "noExplicitAny": "off",

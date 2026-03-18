@@ -3,6 +3,7 @@ import type {
   ThumbnailResult,
 } from '@siastorage/core/adapters'
 import type { ThumbSize } from '@siastorage/core/types'
+// biome-ignore lint/style/noRestrictedImports: File constructor + .bytes() (async)
 import { File } from 'expo-file-system'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'

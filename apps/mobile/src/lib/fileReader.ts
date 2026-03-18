@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noRestrictedImports: File constructor + .stream() (async)
 import { File } from 'expo-file-system'
 import type { Reader } from 'react-native-sia'
 
