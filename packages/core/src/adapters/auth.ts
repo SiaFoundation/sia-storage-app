@@ -1,6 +1,6 @@
 export interface SdkAuthAdapters {
-  createBuilder(indexerUrl: string): void | Promise<void>
-  requestConnection(appMeta: string): Promise<string>
+  createBuilder(indexerUrl: string, appMeta: string): void | Promise<void>
+  requestConnection(): Promise<string>
   setConnectionResponse?(appKey: string, response: string): void | Promise<void>
   waitForApproval(): Promise<void>
   connectWithKey(keyHex: string): Promise<boolean>

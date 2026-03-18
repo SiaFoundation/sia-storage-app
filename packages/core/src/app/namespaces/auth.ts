@@ -75,11 +75,11 @@ export function buildAuthNamespace(
       await secrets.deleteItem(APP_KEYS_KEY)
     },
     builder: {
-      async create(indexerUrl: string) {
-        await sdkAuth.createBuilder(indexerUrl)
+      async create(indexerUrl: string, appMeta: string) {
+        await sdkAuth.createBuilder(indexerUrl, appMeta)
       },
-      async requestConnection(appMeta: string) {
-        return sdkAuth.requestConnection(appMeta)
+      async requestConnection() {
+        return sdkAuth.requestConnection()
       },
       async setConnectionResponse(appKey: string, response: string) {
         if (sdkAuth.setConnectionResponse) {
