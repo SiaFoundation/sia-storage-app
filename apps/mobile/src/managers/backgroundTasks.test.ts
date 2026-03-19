@@ -48,6 +48,7 @@ jest.mock('../stores/sdk', () => ({}))
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
+  AppState: { currentState: 'background' },
 }))
 
 jest.mock('../stores/appService', () => ({
