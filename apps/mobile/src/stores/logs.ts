@@ -104,36 +104,13 @@ async function appendLogToDb(entry: LogEntry): Promise<void> {
   }
 }
 
-function parseLogRow(row: {
-  timestamp: string
-  level: string
-  scope: string
-  message: string
-  data: string | null
-}): LogEntry {
-  let data: Record<string, unknown> | undefined
-  if (row.data) {
-    try {
-      data = JSON.parse(row.data)
-    } catch {}
-  }
-  return {
-    timestamp: row.timestamp,
-    level: row.level as LogEntry['level'],
-    scope: row.scope,
-    message: row.message,
-    data,
-  }
-}
-
 export async function readLogs(
   logLevel?: LogLevel,
   logScopes?: string[],
   limit?: number,
 ): Promise<LogEntry[]> {
   try {
-    const rows = await app().logs.read({ logLevel, logScopes, limit })
-    return rows.map(parseLogRow)
+    return await app().logs.read({ logLevel, logScopes, limit })
   } catch (error) {
     console.error('[logs] Failed to read logs:', error)
     return []
