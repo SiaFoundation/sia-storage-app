@@ -37,8 +37,20 @@ function getLatestEntry(filePath: string): {
   return body ? { version, body } : null
 }
 
+function wasChangedFromMain(filePath: string): boolean {
+  try {
+    const result = execSync(`git diff main -- "${filePath}"`, {
+      encoding: 'utf-8',
+    })
+    return result.trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 const sections: string[] = []
 for (const { name, path } of changelogs) {
+  if (!wasChangedFromMain(path)) continue
   const entry = getLatestEntry(path)
   if (entry) {
     sections.push(`## ${name} ${entry.version}\n\n${entry.body}`)
