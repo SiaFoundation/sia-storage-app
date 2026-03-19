@@ -24,56 +24,49 @@ export async function runOrphanScanner(
   app: AppService,
   onProgress?: (removed: number, total: number) => void,
 ): Promise<OrphanScannerResult | undefined> {
-  try {
-    const files = await app.fs.listFiles()
-    if (files.length === 0) return undefined
+  const files = await app.fs.listFiles()
+  if (files.length === 0) return undefined
 
-    let removed = 0
+  let removed = 0
 
-    for (let i = 0; i < files.length; i += BATCH_SIZE) {
-      const batch = files.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    const batch = files.slice(i, i + BATCH_SIZE)
 
-      const entries = batch
-        .map((name) => ({ name, fileId: extractFileIdFromName(name) }))
-        .filter((e): e is { name: string; fileId: string } => e.fileId !== null)
+    const entries = batch
+      .map((name) => ({ name, fileId: extractFileIdFromName(name) }))
+      .filter((e): e is { name: string; fileId: string } => e.fileId !== null)
 
-      const orphanedIds = await app.fs.findOrphanedFileIds(
-        entries.map((e) => e.fileId),
-      )
+    const orphanedIds = await app.fs.findOrphanedFileIds(
+      entries.map((e) => e.fileId),
+    )
 
-      for (const entry of entries) {
-        if (!orphanedIds.has(entry.fileId)) continue
-        try {
-          const type =
-            getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
-          await app.fs.removeFile({ id: entry.fileId, type })
-          removed++
-          logger.info('orphanScanner', 'file_removed', {
-            fileId: entry.fileId,
-          })
-        } catch (error) {
-          logger.error('orphanScanner', 'delete_failed', {
-            fileId: entry.fileId,
-            error: error as Error,
-          })
-        }
+    for (const entry of entries) {
+      if (!orphanedIds.has(entry.fileId)) continue
+      try {
+        const type =
+          getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
+        await app.fs.removeFile({ id: entry.fileId, type })
+        removed++
+      } catch (error) {
+        logger.error('orphanScanner', 'delete_failed', {
+          fileId: entry.fileId,
+          error: error as Error,
+        })
       }
-
-      if (orphanedIds.size > 0) {
-        await app.fs.deleteMetaBatch([...orphanedIds])
-      }
-
-      onProgress?.(removed, files.length)
-
-      await yieldToEventLoop()
     }
 
-    if (removed > 0) {
-      logger.info('orphanScanner', 'summary', { removed })
+    if (orphanedIds.size > 0) {
+      await app.fs.deleteMetaBatch([...orphanedIds])
     }
-    return { removed }
-  } catch (e) {
-    logger.error('orphanScanner', 'failed', { error: e as Error })
-    return undefined
+
+    onProgress?.(removed, files.length)
+
+    await yieldToEventLoop()
   }
+
+  logger.info('orphanScanner', 'summary', {
+    removed,
+    total: files.length,
+  })
+  return { removed }
 }

@@ -22,12 +22,12 @@ export async function runFsEvictionScanner(): Promise<
   }
   return flight.run(async () => {
     try {
-      return await runCacheEviction(app())
+      const result = await runCacheEviction(app())
+      await app().settings.setFsEvictionLastRun(Date.now())
+      return result
     } catch (error) {
       logger.error('fsEvictionScanner', 'scan_error', { error: error as Error })
       return undefined
-    } finally {
-      await app().settings.setFsEvictionLastRun(Date.now())
     }
   })
 }

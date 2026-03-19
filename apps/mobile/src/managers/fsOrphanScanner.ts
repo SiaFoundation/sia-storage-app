@@ -25,12 +25,11 @@ export async function runFsOrphanScanner(options?: {
     try {
       const result = await runOrphanScanner(app(), options?.onProgress)
       fsFileUriCache.invalidateAll()
+      await app().settings.setFsOrphanLastRun(Date.now())
       return result
     } catch (error) {
       logger.error('fsOrphanScanner', 'scan_error', { error: error as Error })
       return undefined
-    } finally {
-      await app().settings.setFsOrphanLastRun(Date.now())
     }
   })
 }
