@@ -399,6 +399,8 @@ export function DirectoryScreen({ route, navigation }: Props) {
           <FileActionsSheet
             fileIds={actionSheetFileIds}
             sheetName="directoryFileActions"
+            manageTagsSheet="directoryManageTags"
+            moveToDirectorySheet="directoryMoveToDir"
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (

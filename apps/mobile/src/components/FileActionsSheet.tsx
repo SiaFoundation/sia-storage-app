@@ -32,6 +32,8 @@ import { ActionSheetButton } from './ActionSheetButton'
 
 type Props = {
   sheetName?: string
+  manageTagsSheet?: string
+  moveToDirectorySheet?: string
   fileIds: string[]
   navigation?: NativeStackScreenProps<
     MainStackParamList,
@@ -43,6 +45,8 @@ type Props = {
 export function FileActionsSheet({
   navigation,
   sheetName = 'fileActions',
+  manageTagsSheet = 'manageFileTags',
+  moveToDirectorySheet = 'moveToDirectory',
   fileIds,
   onComplete,
 }: Props) {
@@ -52,6 +56,8 @@ export function FileActionsSheet({
   return isSingleFile && singleFileId ? (
     <SingleFileActionsSheet
       sheetName={sheetName}
+      manageTagsSheet={manageTagsSheet}
+      moveToDirectorySheet={moveToDirectorySheet}
       fileId={singleFileId}
       navigation={navigation}
       onComplete={onComplete}
@@ -59,6 +65,7 @@ export function FileActionsSheet({
   ) : (
     <BulkFileActionsSheet
       sheetName={sheetName}
+      moveToDirectorySheet={moveToDirectorySheet}
       fileIds={fileIds}
       onComplete={onComplete}
     />
@@ -67,6 +74,8 @@ export function FileActionsSheet({
 
 type SingleFileProps = {
   sheetName: string
+  manageTagsSheet: string
+  moveToDirectorySheet: string
   fileId: string
   navigation?: Props['navigation']
   onComplete?: () => void
@@ -75,6 +84,8 @@ type SingleFileProps = {
 function SingleFileActionsSheet({
   navigation,
   sheetName,
+  manageTagsSheet,
+  moveToDirectorySheet,
   fileId,
   onComplete,
 }: SingleFileProps) {
@@ -191,7 +202,7 @@ function SingleFileActionsSheet({
         icon={<TagIcon size={18} />}
         onPress={() => {
           closeSheet(sheetName)
-          setTimeout(() => openSheet('manageFileTags'), 300)
+          setTimeout(() => openSheet(manageTagsSheet), 300)
         }}
       >
         Manage tags
@@ -201,7 +212,7 @@ function SingleFileActionsSheet({
         icon={<FolderIcon size={18} />}
         onPress={() => {
           closeSheet(sheetName)
-          setTimeout(() => openSheet('moveToDirectory'), 300)
+          setTimeout(() => openSheet(moveToDirectorySheet), 300)
         }}
       >
         Move to folder
@@ -219,12 +230,14 @@ function SingleFileActionsSheet({
 
 type BulkFileProps = {
   sheetName: string
+  moveToDirectorySheet: string
   fileIds: string[]
   onComplete?: () => void
 }
 
 function BulkFileActionsSheet({
   sheetName,
+  moveToDirectorySheet,
   fileIds,
   onComplete,
 }: BulkFileProps) {
@@ -325,7 +338,7 @@ function BulkFileActionsSheet({
         icon={<FolderIcon size={18} />}
         onPress={() => {
           closeSheet(sheetName)
-          setTimeout(() => openSheet('moveToDirectory'), 300)
+          setTimeout(() => openSheet(moveToDirectorySheet), 300)
         }}
       >
         Move to folder

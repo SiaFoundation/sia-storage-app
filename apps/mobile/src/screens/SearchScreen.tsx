@@ -405,6 +405,8 @@ export function SearchScreen({ navigation }: Props) {
           <FileActionsSheet
             fileIds={actionSheetFileIds}
             sheetName="searchFileActions"
+            manageTagsSheet="searchManageTags"
+            moveToDirectorySheet="searchMoveToDir"
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
