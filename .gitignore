@@ -10,9 +10,11 @@ node_modules/
 # build
 dist/
 .build-cache/
+.build-cache
 
 # Expo
 .expo/
+.expo
 
 # Signing
 android-release.keystore
@@ -36,6 +38,7 @@ android/
 # Claude Code
 CLAUDE.md
 .claude/
+.claude
 
 # docs
 docs/
