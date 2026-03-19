@@ -1,8 +1,11 @@
 import { FS_EVICTION_FREQUENCY } from '@siastorage/core/config'
+import { SingleInit } from '@siastorage/core/lib/singleflight'
 import type { CacheEvictionResult } from '@siastorage/core/services'
 import { runCacheEviction } from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
+
+const flight = new SingleInit()
 
 /**
  * fsEvictionScanner evicts stale files from the file system under the following rules:
@@ -17,11 +20,14 @@ export async function runFsEvictionScanner(): Promise<
   if (Date.now() - lastRun < FS_EVICTION_FREQUENCY) {
     return
   }
-  try {
-    return await runCacheEviction(app())
-  } catch (error) {
-    logger.error('fsEvictionScanner', 'scan_error', { error: error as Error })
-  } finally {
-    await app().settings.setFsEvictionLastRun(Date.now())
-  }
+  return flight.run(async () => {
+    try {
+      return await runCacheEviction(app())
+    } catch (error) {
+      logger.error('fsEvictionScanner', 'scan_error', { error: error as Error })
+      return undefined
+    } finally {
+      await app().settings.setFsEvictionLastRun(Date.now())
+    }
+  })
 }

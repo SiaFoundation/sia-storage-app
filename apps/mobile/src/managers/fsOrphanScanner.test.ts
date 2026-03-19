@@ -206,4 +206,24 @@ describe('fsOrphanScanner', () => {
 
     expect(result).toEqual({ removed: 60 })
   })
+
+  it('coalesces concurrent calls into a single scan', async () => {
+    let resolveList!: (value: string[]) => void
+    listFilesSpy.mockReturnValue(
+      new Promise<string[]>((r) => {
+        resolveList = r
+      }),
+    )
+
+    const call1 = runFsOrphanScanner()
+    const call2 = runFsOrphanScanner()
+
+    resolveList(['orphan.jpg'])
+
+    const [result1, result2] = await Promise.all([call1, call2])
+
+    expect(listFilesSpy).toHaveBeenCalledTimes(1)
+    expect(result1).toEqual({ removed: 1 })
+    expect(result2).toEqual({ removed: 1 })
+  })
 })
