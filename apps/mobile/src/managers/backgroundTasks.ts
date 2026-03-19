@@ -1,6 +1,6 @@
 import { minutesInMs, secondsInMs } from '@siastorage/core'
 import { logger } from '@siastorage/logger'
-import { Platform } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import BackgroundFetch, {
   type BackgroundFetchConfig,
 } from 'react-native-background-fetch'
@@ -281,9 +281,13 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isConnected = app().connection.getState().isConnected
   log('app_ready', { connected: isConnected })
 
-  await runFsOrphanScanner()
-  await runFsEvictionScanner()
-  await triggerRecentScanIfNeeded()
+  // Skip one-shot scanners if the app is foregrounded — startup already
+  // runs these. The upload polling loop below still runs regardless.
+  if (AppState.currentState !== 'active') {
+    await runFsOrphanScanner()
+    await runFsEvictionScanner()
+    await triggerRecentScanIfNeeded()
+  }
 
   const manager = getUploadManager()!
   const initialStats = await getFileStatsLocal({ localOnly: true })
