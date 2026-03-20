@@ -1,0 +1,126 @@
+diff --git a/RNFSManager.m b/RNFSManager.m
+index 5ddd9417de101a0b18a298434dbc57f46b130f21..f51c88cbf81b017dd59790c5b9760ca08710880f 100755
+--- a/RNFSManager.m
++++ b/RNFSManager.m
+@@ -361,43 +361,97 @@ + (BOOL)requiresMainQueueSetup
+     return reject(@"EISDIR", @"EISDIR: illegal operation on a directory, read", nil);
+   }
+ 
+-  NSData *content = [[NSFileManager defaultManager] contentsAtPath:filepath];
+-
+-  NSArray *keys = [NSArray arrayWithObjects:@"md5", @"sha1", @"sha224", @"sha256", @"sha384", @"sha512", nil];
++  // Patch: stream the file in chunks instead of loading it all into memory.
++  // The original implementation used [[NSFileManager contentsAtPath:]] which
++  // loads the entire file into a single NSData allocation — a 500 MB file
++  // means 500 MB of RAM. This streaming version uses NSInputStream with a
++  // 64 KB buffer, matching the chunked approach Android already uses.
++  //
++  // If this patch is ever removed, consider replacing RNFS.hash() with a
++  // custom Expo local module (apps/mobile/modules/) using the same
++  // CC_*_Init/Update/Final streaming pattern in Swift.
++
++  int digestLength;
++  if ([algorithm isEqualToString:@"md5"]) {
++    digestLength = CC_MD5_DIGEST_LENGTH;
++  } else if ([algorithm isEqualToString:@"sha1"]) {
++    digestLength = CC_SHA1_DIGEST_LENGTH;
++  } else if ([algorithm isEqualToString:@"sha224"]) {
++    digestLength = CC_SHA224_DIGEST_LENGTH;
++  } else if ([algorithm isEqualToString:@"sha256"]) {
++    digestLength = CC_SHA256_DIGEST_LENGTH;
++  } else if ([algorithm isEqualToString:@"sha384"]) {
++    digestLength = CC_SHA384_DIGEST_LENGTH;
++  } else if ([algorithm isEqualToString:@"sha512"]) {
++    digestLength = CC_SHA512_DIGEST_LENGTH;
++  } else {
++    return reject(@"Error", [NSString stringWithFormat:@"Invalid hash algorithm '%@'", algorithm], nil);
++  }
+ 
+-  NSArray *digestLengths = [NSArray arrayWithObjects:
+-    @CC_MD5_DIGEST_LENGTH,
+-    @CC_SHA1_DIGEST_LENGTH,
+-    @CC_SHA224_DIGEST_LENGTH,
+-    @CC_SHA256_DIGEST_LENGTH,
+-    @CC_SHA384_DIGEST_LENGTH,
+-    @CC_SHA512_DIGEST_LENGTH,
+-    nil];
++  // Initialize the appropriate digest context.
++  CC_MD5_CTX md5ctx;
++  CC_SHA1_CTX sha1ctx;
++  CC_SHA256_CTX sha256ctx; // Also used by sha224
++  CC_SHA512_CTX sha512ctx; // Also used by sha384
+ 
+-  NSDictionary *keysToDigestLengths = [NSDictionary dictionaryWithObjects:digestLengths forKeys:keys];
++  if ([algorithm isEqualToString:@"md5"]) {
++    CC_MD5_Init(&md5ctx);
++  } else if ([algorithm isEqualToString:@"sha1"]) {
++    CC_SHA1_Init(&sha1ctx);
++  } else if ([algorithm isEqualToString:@"sha224"]) {
++    CC_SHA224_Init(&sha256ctx);
++  } else if ([algorithm isEqualToString:@"sha256"]) {
++    CC_SHA256_Init(&sha256ctx);
++  } else if ([algorithm isEqualToString:@"sha384"]) {
++    CC_SHA384_Init(&sha512ctx);
++  } else if ([algorithm isEqualToString:@"sha512"]) {
++    CC_SHA512_Init(&sha512ctx);
++  }
+ 
+-  int digestLength = [[keysToDigestLengths objectForKey:algorithm] intValue];
++  // Stream the file in 64 KB chunks.
++  NSInputStream *inputStream = [NSInputStream inputStreamWithFileAtPath:filepath];
++  if (!inputStream) {
++    return reject(@"Error", [NSString stringWithFormat:@"Failed to open stream for '%@'", filepath], nil);
++  }
++  [inputStream open];
++
++  uint8_t readBuffer[65536];
++  NSInteger bytesRead;
++  while ((bytesRead = [inputStream read:readBuffer maxLength:sizeof(readBuffer)]) > 0) {
++    if ([algorithm isEqualToString:@"md5"]) {
++      CC_MD5_Update(&md5ctx, readBuffer, (CC_LONG)bytesRead);
++    } else if ([algorithm isEqualToString:@"sha1"]) {
++      CC_SHA1_Update(&sha1ctx, readBuffer, (CC_LONG)bytesRead);
++    } else if ([algorithm isEqualToString:@"sha224"]) {
++      CC_SHA224_Update(&sha256ctx, readBuffer, (CC_LONG)bytesRead);
++    } else if ([algorithm isEqualToString:@"sha256"]) {
++      CC_SHA256_Update(&sha256ctx, readBuffer, (CC_LONG)bytesRead);
++    } else if ([algorithm isEqualToString:@"sha384"]) {
++      CC_SHA384_Update(&sha512ctx, readBuffer, (CC_LONG)bytesRead);
++    } else if ([algorithm isEqualToString:@"sha512"]) {
++      CC_SHA512_Update(&sha512ctx, readBuffer, (CC_LONG)bytesRead);
++    }
++  }
++  [inputStream close];
+ 
+-  if (!digestLength) {
+-    return reject(@"Error", [NSString stringWithFormat:@"Invalid hash algorithm '%@'", algorithm], nil);
++  if (bytesRead < 0) {
++    return reject(@"Error", [NSString stringWithFormat:@"Failed to read file '%@': %@", filepath, [inputStream streamError].localizedDescription], nil);
+   }
+ 
++  // Finalize the digest.
+   unsigned char buffer[digestLength];
+-
+   if ([algorithm isEqualToString:@"md5"]) {
+-    CC_MD5(content.bytes, (CC_LONG)content.length, buffer);
++    CC_MD5_Final(buffer, &md5ctx);
+   } else if ([algorithm isEqualToString:@"sha1"]) {
+-    CC_SHA1(content.bytes, (CC_LONG)content.length, buffer);
++    CC_SHA1_Final(buffer, &sha1ctx);
+   } else if ([algorithm isEqualToString:@"sha224"]) {
+-    CC_SHA224(content.bytes, (CC_LONG)content.length, buffer);
++    CC_SHA224_Final(buffer, &sha256ctx);
+   } else if ([algorithm isEqualToString:@"sha256"]) {
+-    CC_SHA256(content.bytes, (CC_LONG)content.length, buffer);
++    CC_SHA256_Final(buffer, &sha256ctx);
+   } else if ([algorithm isEqualToString:@"sha384"]) {
+-    CC_SHA384(content.bytes, (CC_LONG)content.length, buffer);
++    CC_SHA384_Final(buffer, &sha512ctx);
+   } else if ([algorithm isEqualToString:@"sha512"]) {
+-    CC_SHA512(content.bytes, (CC_LONG)content.length, buffer);
+-  } else {
+-    return reject(@"Error", [NSString stringWithFormat:@"Invalid hash algorithm '%@'", algorithm], nil);
++    CC_SHA512_Final(buffer, &sha512ctx);
+   }
+ 
+   NSMutableString *output = [NSMutableString stringWithCapacity:digestLength * 2];

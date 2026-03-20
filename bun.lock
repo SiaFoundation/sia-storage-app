@@ -166,6 +166,9 @@
   "trustedDependencies": [
     "better-sqlite3",
   ],
+  "patchedDependencies": {
+    "react-native-fs@2.20.0": "patches/react-native-fs@2.20.0.patch",
+  },
   "packages": {
     "@azure/core-asynciterator-polyfill": ["@azure/core-asynciterator-polyfill@1.0.2", "", {}, "sha512-3rkP4LnnlWawl0LZptJOdXNrT/fHp2eQMadoasa6afspXdpGrtPZuAQc2PD0cpgyuoXtUWyC3tv7xfntjGS5Dw=="],
 
