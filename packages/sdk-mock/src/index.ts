@@ -31,7 +31,6 @@ export type StoredObject = {
 export interface MockIndexerStorage {
   objects: Map<string, StoredObject>
   events: ObjectEvent[]
-  eventCursor: number
   fileData: Map<string, Uint8Array>
   uploadFailures: Map<string, Error>
 }
@@ -40,7 +39,6 @@ export function createEmptyIndexerStorage(): MockIndexerStorage {
   return {
     objects: new Map(),
     events: [],
-    eventCursor: 0,
     fileData: new Map(),
     uploadFailures: new Map(),
   }
@@ -195,6 +193,14 @@ export class MockSdk implements SdkAdapter {
     this.storage = storage ?? createEmptyIndexerStorage()
   }
 
+  private upsertEvent(event: ObjectEvent): void {
+    const idx = this.storage.events.findIndex((e) => e.id === event.id)
+    if (idx >= 0) {
+      this.storage.events.splice(idx, 1)
+    }
+    this.storage.events.push(event)
+  }
+
   setConnected(connected: boolean): void {
     this.connected = connected
   }
@@ -219,7 +225,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.objects.delete(key)
     this.storage.fileData.delete(key)
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: key,
       deleted: true,
       updatedAt: new Date(),
@@ -262,26 +268,23 @@ export class MockSdk implements SdkAdapter {
   ): Promise<ObjectEvent[]> {
     if (!this.connected) throw new Error('Network unavailable')
 
-    let startIndex = 0
+    const sorted = [...this.storage.events].sort((a, b) => {
+      const timeDiff = a.updatedAt.getTime() - b.updatedAt.getTime()
+      if (timeDiff !== 0) return timeDiff
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    })
 
+    let filtered = sorted
     if (cursor) {
-      let cursorIndex = -1
-      for (let i = this.storage.events.length - 1; i >= 0; i--) {
-        const e = this.storage.events[i]
-        if (
-          e.id === cursor.id &&
-          e.updatedAt.getTime() <= cursor.after.getTime()
-        ) {
-          cursorIndex = i
-          break
-        }
-      }
-      if (cursorIndex >= 0) {
-        startIndex = cursorIndex + 1
-      }
+      const after = cursor.after.getTime()
+      filtered = sorted.filter(
+        (e) =>
+          e.updatedAt.getTime() > after ||
+          (e.updatedAt.getTime() === after && e.id > cursor.id),
+      )
     }
 
-    return this.storage.events.slice(startIndex, startIndex + limit)
+    return filtered.slice(0, limit)
   }
 
   async pinObject(object: PinnedObjectRef): Promise<void> {
@@ -291,7 +294,7 @@ export class MockSdk implements SdkAdapter {
     const stored = this.storage.objects.get(objectId)
     if (!stored) return
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: objectId,
       deleted: false,
       updatedAt: stored.updatedAt,
@@ -311,7 +314,7 @@ export class MockSdk implements SdkAdapter {
     stored.metadata = object.metadata()
     stored.updatedAt = new Date()
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: objectId,
       deleted: false,
       updatedAt: stored.updatedAt,
@@ -366,7 +369,7 @@ export class MockSdk implements SdkAdapter {
     stored.metadata = encodeFileMetadata(newMetadata)
     stored.updatedAt = new Date(newMetadata.updatedAt)
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: objectId,
       deleted: false,
       updatedAt: stored.updatedAt,
@@ -396,7 +399,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.objects.set(objectId, stored)
     this.storage.fileData.set(objectId, data)
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: objectId,
       deleted: false,
       updatedAt: now,
@@ -413,7 +416,7 @@ export class MockSdk implements SdkAdapter {
       this.storage.fileData.delete(objectId)
     }
 
-    this.storage.events.push({
+    this.upsertEvent({
       id: objectId,
       deleted: true,
       updatedAt: new Date(),
@@ -424,10 +427,6 @@ export class MockSdk implements SdkAdapter {
     return Array.from(this.storage.objects.values())
   }
 
-  getAllEvents(): ObjectEvent[] {
-    return [...this.storage.events]
-  }
-
   getStorage(): MockIndexerStorage {
     return this.storage
   }
@@ -435,7 +434,6 @@ export class MockSdk implements SdkAdapter {
   reset(): void {
     this.storage.objects.clear()
     this.storage.events = []
-    this.storage.eventCursor = 0
     this.storage.fileData.clear()
     this.storage.uploadFailures.clear()
     objectIdCounter = 0
