@@ -34,14 +34,6 @@ async function waitForAllObjectsV1(
   )
 }
 
-function deduplicateEvents(storage: MockIndexerStorage): void {
-  const latestByObjectId = new Map<string, (typeof storage.events)[number]>()
-  for (const event of storage.events) {
-    latestByObjectId.set(event.id, event)
-  }
-  storage.events = Array.from(latestByObjectId.values())
-}
-
 describe('Multi-Device Convergence', () => {
   it('v1 ↔ v1: files uploaded by Device A appear on Device B simultaneously', async () => {
     const indexerStorage = createEmptyIndexerStorage()
@@ -223,7 +215,6 @@ describe('Multi-Device Convergence', () => {
     const objectId = Array.from(indexerStorage.objects.keys())[0]
     appA.sdk.injectMetadataChange(objectId, {
       name: 'renamed-file.bin',
-      updatedAt: Date.now() + 5000,
     })
 
     await appA.waitForCondition(async () => {
@@ -261,8 +252,6 @@ describe('Multi-Device Convergence', () => {
     const fileIdA = testFiles[0].id
     const fileIdB = testFiles[1].id
 
-    deduplicateEvents(indexerStorage)
-
     const appB = createTestApp(indexerStorage)
     await appB.start()
 
@@ -294,10 +283,8 @@ describe('Multi-Device Convergence', () => {
       }
     })!
 
-    const trashTime = Date.now() + 5000
     appB.sdk.injectMetadataChange(obj1Entry[0], {
-      trashedAt: trashTime,
-      updatedAt: trashTime,
+      trashedAt: Date.now(),
     })
     appB.resume()
 
