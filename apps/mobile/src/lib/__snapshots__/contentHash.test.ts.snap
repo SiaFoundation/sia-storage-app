@@ -1,7 +1,0 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
-
-exports[`calculateContentHash falls back to QuickCrypto when RNFS.hash fails 1`] = `"sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"`;
-
-exports[`calculateContentHash handles binary data with null bytes via fallback 1`] = `"sha256:7f07808cb0745837d54ca4174b39ceed57db3bddc520b1402ed0c14ccc2cce76"`;
-
-exports[`calculateContentHash handles empty files via fallback 1`] = `"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`;

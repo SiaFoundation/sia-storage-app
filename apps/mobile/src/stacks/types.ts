@@ -22,7 +22,6 @@ export type MenuStackParamList = {
   Sync: undefined
   Logs: undefined
   Advanced: undefined
-  Debug: undefined
   LearnRecoveryPhrase: undefined
   LearnHowItWorks: undefined
   LearnIndexer: undefined
