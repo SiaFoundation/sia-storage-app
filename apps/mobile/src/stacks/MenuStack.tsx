@@ -8,7 +8,6 @@ import { LearnRecoveryPhraseScreen } from '../screens/learn/LearnRecoveryPhraseS
 import { LearnSiaNetworkScreen } from '../screens/learn/LearnSiaNetworkScreen'
 import { MenuScreen } from '../screens/MenuScreen'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
-import { SettingsDebugScreen } from '../screens/SettingsDebugScreen'
 import { SettingsIndexerScreen } from '../screens/SettingsIndexerScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
 import { SettingsSyncScreen } from '../screens/SettingsSyncScreen'
@@ -61,11 +60,6 @@ export function MenuStack() {
         name="Advanced"
         component={SettingsAdvancedScreen}
         options={{ title: 'Advanced' }}
-      />
-      <Stack.Screen
-        name="Debug"
-        component={SettingsDebugScreen}
-        options={{ title: 'Debug' }}
       />
       <Stack.Screen
         name="LearnRecoveryPhrase"

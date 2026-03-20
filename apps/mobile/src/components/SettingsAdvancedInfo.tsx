@@ -54,17 +54,6 @@ export function SettingsAdvancedInfo({ navigation }: Props) {
             <Text style={styles.rowChevron}>›</Text>
           </View>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Debug"
-          onPress={() => navigation.navigate('Debug')}
-          style={styles.debugButton}
-        >
-          <View style={styles.rowItem}>
-            <Text style={styles.rowLabel}>Debug</Text>
-            <Text style={styles.rowChevron}>›</Text>
-          </View>
-        </Pressable>
       </InfoCard>
     </RowGroup>
   )
