@@ -2,6 +2,7 @@ import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
 import { useOnLibraryListChange } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fileRecordEqual } from '../lib/file'
 import { app } from './appService'
 
 type VirtualListQueryParams = {
@@ -155,14 +156,7 @@ export function useFileCarousel({
       indexToFile.forEach((file, index) => {
         positionMapRef.current.set(index, file.id)
         const existing = fileCacheRef.current.get(file.id)
-        if (
-          existing &&
-          existing.updatedAt === file.updatedAt &&
-          Object.keys(existing.objects).length ===
-            Object.keys(file.objects).length
-        ) {
-          return
-        }
+        if (existing && fileRecordEqual(existing, file)) return
         fileCacheRef.current.set(file.id, file)
         changed = true
       })
@@ -313,6 +307,10 @@ export function useFileCarousel({
     populateCaches,
   ])
 
+  // The prefetch loop only queries files near the current index — it won't
+  // re-fetch a file already in cache. This listener handles the case where
+  // the current file's record changes while being viewed (e.g. import
+  // scanner finalizes hash, upload adds a sealed object).
   useOnLibraryListChange(() => {
     if (isLoading) return
     const currentFileID = currentFileIdRef.current
@@ -323,6 +321,12 @@ export function useFileCarousel({
       .then((file) => {
         if (!file) {
           onDeleted?.()
+          return
+        }
+        const existing = fileCacheRef.current.get(currentFileID)
+        if (!existing || !fileRecordEqual(existing, file)) {
+          fileCacheRef.current.set(currentFileID, file)
+          setCacheVersion((v) => v + 1)
         }
       })
       .catch(() => {})
