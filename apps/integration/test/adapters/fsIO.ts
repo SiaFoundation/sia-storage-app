@@ -2,9 +2,8 @@ import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 
 export function createMockFsIO(overrides?: Partial<FsIOAdapter>): FsIOAdapter {
   return {
-    exists: async () => true,
     uri: () => 'file://source.jpg',
-    size: async () => null,
+    size: async () => ({ value: 1000 }),
     remove: async () => {},
     copy: async () => ({ uri: '', size: 0 }),
     writeFile: async (_file, data) => ({

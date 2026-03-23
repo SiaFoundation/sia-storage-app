@@ -30,7 +30,9 @@ describe('ThumbnailScanner', () => {
   it('skips files without source URI', async () => {
     const now = Date.now()
     const noSourceApp = createTestApp(undefined, {
-      fsIO: { exists: async () => false },
+      fsIO: {
+        size: async () => ({ value: null, error: 'not_found' as const }),
+      },
       thumbnail: {},
       crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
       detectMimeType: async () => 'image/jpeg',
@@ -135,7 +137,12 @@ describe('ThumbnailScanner', () => {
     }
 
     const customApp = createTestApp(undefined, {
-      fsIO: { exists: async (fileId) => !noSourceIds.has(fileId) },
+      fsIO: {
+        size: async (fileId) =>
+          noSourceIds.has(fileId)
+            ? { value: null, error: 'not_found' as const }
+            : { value: 1000 },
+      },
       thumbnail: {},
       crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
       detectMimeType: async () => 'image/jpeg',

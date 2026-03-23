@@ -74,8 +74,8 @@ export function buildDownloadsNamespace(
     const file = await ops.readFileRecord(db, fileId)
     if (!file) throw new Error('File record not found')
 
-    const exists = await fsIO.exists(fileId, file.type).catch(() => false)
-    if (exists) return
+    const { value: size } = await fsIO.size(fileId, file.type)
+    if (size !== null) return
 
     const sdk = getSdk()
     if (!sdk) throw new Error('SDK not initialized')
