@@ -1,11 +1,15 @@
 import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
+import { getAppGroup } from '../lib/sharedContainer'
 
 // Use AFTER_FIRST_UNLOCK on iOS to allow keychain access in background mode
 // when the device is locked (after it has been unlocked once since boot).
 // This is required for background upload tasks to access credentials.
 const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = Platform.select({
-  ios: { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK },
+  ios: {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+    ...(getAppGroup() && { accessGroup: getAppGroup() }),
+  },
   default: {},
 })
 

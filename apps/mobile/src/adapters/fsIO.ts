@@ -1,11 +1,10 @@
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { Buffer } from 'buffer'
-// biome-ignore lint/style/noRestrictedImports: Paths.document.uri constant only
-import { Paths } from 'expo-file-system'
 import RNFS from 'react-native-fs'
+import { getStorageDirectoryUri } from '../lib/sharedContainer'
 
-const fsStorageDirectoryUri = `${Paths.document.uri}/files`
+const fsStorageDirectoryUri = `${getStorageDirectoryUri()}/files`
 
 function fsFileUri(fileId: string, type: string): string {
   return `${fsStorageDirectoryUri}/${fileId}${extFromMime(type)}`

@@ -2,9 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { StorageAdapter } from '@siastorage/core/adapters'
 import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
+import { getAppGroup } from '../lib/sharedContainer'
 
 const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = Platform.select({
-  ios: { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK },
+  ios: {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+    ...(getAppGroup() && { accessGroup: getAppGroup() }),
+  },
   default: {},
 })
 
