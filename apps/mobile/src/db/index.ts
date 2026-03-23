@@ -3,11 +3,13 @@ import { runMigrations } from '@siastorage/core/db'
 import { Mutex } from '@siastorage/core/lib/mutex'
 import { logger } from '@siastorage/logger'
 import * as SQLite from 'expo-sqlite'
+import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
 
 export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
 let dbName = 'app.db'
+const dbDirectory = getSharedDbDirectory()
 
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
@@ -16,9 +18,11 @@ export async function initializeDB(options?: {
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
   dbName = name
-  logger.info('db', 'initializing', { name })
-  database = await SQLite.openDatabaseAsync(name)
-  await db().execAsync('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON')
+  logger.info('db', 'initializing', { name, directory: dbDirectory })
+  database = await SQLite.openDatabaseAsync(name, undefined, dbDirectory)
+  await db().execAsync(
+    'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
+  )
   await runMigrations(db(), migrations, {
     log: logger,
     onProgress: options?.onProgress,
@@ -59,11 +63,13 @@ async function reopenDb(): Promise<boolean> {
         await database.closeAsync()
       } catch {}
       // useNewConnection bypasses expo-sqlite's per-name connection cache.
-      database = await SQLite.openDatabaseAsync(dbName, {
-        useNewConnection: true,
-      })
+      database = await SQLite.openDatabaseAsync(
+        dbName,
+        { useNewConnection: true },
+        dbDirectory,
+      )
       await database.execAsync(
-        'PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
+        'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
       )
       dbInitialized = true
       logger.warn('db', 'reopened_successfully')

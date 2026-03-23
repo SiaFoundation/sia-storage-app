@@ -1,5 +1,6 @@
 const { version } = require('./package.json')
 const RELEASE = process.env.RELEASE === 'true'
+const APP_GROUP = RELEASE ? 'group.sia.storage' : 'group.sia.storage.dev'
 
 // Calculate Android versionCode from semver (1.2.3 → 10203)
 // This ensures versionCode always increases with version bumps
@@ -26,6 +27,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: RELEASE ? 'sia.storage' : 'sia.storage.dev',
+      entitlements: {
+        'com.apple.security.application-groups': [APP_GROUP],
+      },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSPhotoLibraryUsageDescription:
@@ -121,6 +125,7 @@ export default {
     },
     extra: {
       prod: RELEASE,
+      appGroup: APP_GROUP,
     },
   },
 }
