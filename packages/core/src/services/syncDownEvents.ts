@@ -150,14 +150,15 @@ export async function syncDownEventsBatch(
     deleted: counts.deleted,
   })
 
+  const willContinue = totalEventsFetched > 1 && !signal.aborted
   app.sync.setState({
-    isSyncingDown: false,
+    isSyncingDown: willContinue,
     syncDownExisting: counts.existing,
     syncDownAdded: counts.added,
     syncDownDeleted: counts.deleted,
   })
 
-  if (totalEventsFetched > 1) {
+  if (willContinue) {
     return 0 // Zero interval — poll again immediately.
   }
 }

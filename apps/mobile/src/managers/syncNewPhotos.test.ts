@@ -5,9 +5,9 @@ import { processAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
 import {
   initSyncNewPhotos,
+  run,
   setAutoSyncNewPhotos,
   setSyncNewPhotosEnabledAt,
-  workNew,
 } from './syncNewPhotos'
 
 jest.useFakeTimers()
@@ -78,6 +78,7 @@ describe('syncNewPhotos', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     getAssetsAsyncMock.mockReset()
+    await setAutoSyncNewPhotos(true)
     await setSyncNewPhotosEnabledAt(0)
     mockProcessAssetsSuccess()
   })
@@ -86,7 +87,7 @@ describe('syncNewPhotos', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 5_000 })]),
     )
-    await workNew()
+    await run()
     expect(getAssetsAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sortBy: [['modificationTime', false]],
@@ -98,7 +99,7 @@ describe('syncNewPhotos', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 5_000 })]),
     )
-    await workNew()
+    await run()
     const opts = getAssetsAsyncMock.mock.calls[0][0]
     expect(opts).not.toHaveProperty('createdAfter')
     expect(opts).not.toHaveProperty('createdBefore')
@@ -114,7 +115,7 @@ describe('syncNewPhotos', () => {
         asset('a4', 'old.jpg', { modificationTime: 2_000 }),
       ]),
     )
-    await workNew()
+    await run()
     expect(processAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({ id: 'a1', name: 'new1.jpg' }),
@@ -134,13 +135,13 @@ describe('syncNewPhotos', () => {
         asset('a2', '2.jpg', { modificationTime: 3_000 }),
       ]),
     )
-    await workNew()
+    await run()
     expect(processAssetsMock).not.toHaveBeenCalled()
   })
 
   it('no photos returns early without processing', async () => {
     getAssetsAsyncMock.mockResolvedValueOnce(page([]))
-    await workNew()
+    await run()
     expect(processAssetsMock).not.toHaveBeenCalled()
   })
 
@@ -149,7 +150,7 @@ describe('syncNewPhotos', () => {
       asset(`a${i}`, `${i}.jpg`, { modificationTime: 10_000 - i }),
     )
     getAssetsAsyncMock.mockResolvedValueOnce(page(fullPage, 'cursor-page-1'))
-    await workNew()
+    await run()
     expect(getAssetsAsyncMock).toHaveBeenCalledTimes(1)
     expect(processAssetsMock).toHaveBeenCalledTimes(1)
     expect(processAssetsMock.mock.calls[0][0]).toHaveLength(50)
@@ -164,7 +165,7 @@ describe('syncNewPhotos', () => {
         }),
       ]),
     )
-    await workNew()
+    await run()
     expect(processAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({

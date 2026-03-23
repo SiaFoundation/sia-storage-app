@@ -11,7 +11,6 @@ type ServiceIntervalOptions = {
   worker: (
     signal: AbortSignal,
   ) => void | undefined | number | Promise<void | undefined | number>
-  getState: () => Promise<boolean>
   interval: number
 }
 
@@ -40,12 +39,10 @@ export class ServiceScheduler {
     return this.paused
   }
 
-  createInterval({
-    name,
-    worker,
-    getState,
-    interval,
-  }: ServiceIntervalOptions): { init: () => void; triggerNow: () => void } {
+  createInterval({ name, worker, interval }: ServiceIntervalOptions): {
+    init: () => void
+    triggerNow: () => void
+  } {
     let running = false
     let runTick: (() => void) | null = null
 
@@ -78,18 +75,6 @@ export class ServiceScheduler {
         // Guard against stale ticks created before the latest init.
         const current = this.schedulerStateMap.get(name)
         if (!current || current.token !== token) return
-
-        const enabled = await getState()
-
-        // Re-check after awaiting, in case another init occurred while waiting.
-        const stillCurrent = this.schedulerStateMap.get(name)
-        if (!stillCurrent || stillCurrent.token !== token) return
-
-        if (!enabled) {
-          // Service disabled: skip work but still schedule the next check.
-          scheduleNextRun(interval)
-          return
-        }
 
         running = true
         let nextInterval = interval

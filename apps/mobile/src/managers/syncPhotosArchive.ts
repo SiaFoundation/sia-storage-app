@@ -54,9 +54,15 @@ const CURSOR_START = 'start'
 
 let recentScanBoundary = 0
 
-export async function workBackward(signal?: AbortSignal) {
-  logger.debug('syncPhotosArchive', 'tick')
-  if (!(await getMediaLibraryPermissions())) return
+export async function run(signal?: AbortSignal) {
+  if (!(await getAutoSyncPhotosArchive())) {
+    logger.debug('syncPhotosArchive', 'skipped', { reason: 'disabled' })
+    return
+  }
+  if (!(await getMediaLibraryPermissions())) {
+    logger.debug('syncPhotosArchive', 'skipped', { reason: 'no_permission' })
+    return
+  }
   if (signal?.aborted) return
   const { count, totalBytes } = await getFileStatsLocal({ localOnly: true })
   if (totalBytes >= SYNC_ARCHIVE_RESUME_THRESHOLD) {
@@ -68,7 +74,10 @@ export async function workBackward(signal?: AbortSignal) {
     return
   }
   const cursor = await getPhotosArchiveCursor()
-  if (cursor === CURSOR_DONE) return
+  if (cursor === CURSOR_DONE) {
+    logger.debug('syncPhotosArchive', 'skipped', { reason: 'fully_synced' })
+    return
+  }
 
   logger.info('syncPhotosArchive', 'query', {
     cursor: cursor === CURSOR_START ? 'start' : cursor,
@@ -162,8 +171,7 @@ export async function workBackward(signal?: AbortSignal) {
 
 export const { init: initSyncPhotosArchive } = createServiceInterval({
   name: 'syncPhotosArchive',
-  worker: workBackward,
-  getState: async () => getAutoSyncPhotosArchive(),
+  worker: run,
   interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
 })
 

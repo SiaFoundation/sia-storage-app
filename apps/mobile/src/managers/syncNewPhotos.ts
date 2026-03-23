@@ -37,9 +37,15 @@ import { app } from '../stores/appService'
 
 const PAGE_SIZE = 50
 
-export async function workNew(signal?: AbortSignal): Promise<void> {
-  logger.debug('syncNewPhotos', 'tick')
-  if (!(await getMediaLibraryPermissions())) return
+export async function run(signal?: AbortSignal): Promise<void> {
+  if (!(await getAutoSyncNewPhotos())) {
+    logger.debug('syncNewPhotos', 'skipped', { reason: 'disabled' })
+    return
+  }
+  if (!(await getMediaLibraryPermissions())) {
+    logger.debug('syncNewPhotos', 'skipped', { reason: 'no_permission' })
+    return
+  }
   if (signal?.aborted) return
   const enabledAt = await getSyncNewPhotosEnabledAt()
 
@@ -88,8 +94,7 @@ export async function workNew(signal?: AbortSignal): Promise<void> {
 
 export const { init: initSyncNewPhotos } = createServiceInterval({
   name: 'syncNewPhotos',
-  worker: workNew,
-  getState: () => getAutoSyncNewPhotos(),
+  worker: run,
   interval: SYNC_NEW_PHOTOS_INTERVAL,
 })
 

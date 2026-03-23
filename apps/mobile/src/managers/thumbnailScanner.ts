@@ -4,6 +4,7 @@ import {
   ThumbnailScanner,
   type ThumbnailScannerResult,
 } from '@siastorage/core/services/thumbnailScanner'
+import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
 
 const scanner = new ThumbnailScanner()
@@ -30,11 +31,16 @@ export async function runThumbnailScanner(
   return result
 }
 
+async function run(signal: AbortSignal): Promise<void> {
+  if (app().sync.getState().isSyncingDown) {
+    logger.debug('thumbnailScanner', 'skipped', { reason: 'syncing_down' })
+    return
+  }
+  await runThumbnailScanner(signal)
+}
+
 export const { init: initThumbnailScanner } = createServiceInterval({
   name: 'thumbnailScanner',
-  worker: async (signal) => {
-    await runThumbnailScanner(signal)
-  },
-  getState: async () => true,
+  worker: run,
   interval: THUMBNAIL_SCANNER_INTERVAL,
 })

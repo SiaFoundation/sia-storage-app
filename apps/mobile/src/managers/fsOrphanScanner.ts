@@ -19,6 +19,7 @@ export async function runFsOrphanScanner(options?: {
 }): Promise<OrphanScannerResult | undefined> {
   const lastRun = await app().settings.getFsOrphanLastRun()
   if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {
+    logger.debug('fsOrphanScanner', 'skipped', { reason: 'too_recent' })
     return
   }
   return flight.run(async () => {

@@ -14,6 +14,7 @@ export async function runLogRotation(app: AppService): Promise<void> {
   try {
     const count = await app.logs.count()
     if (count <= MAX_LOGS) {
+      logger.debug('logRotation', 'skipped', { reason: 'under_limit', count })
       return
     }
     const deleted = await app.logs.rotate(MAX_LOGS)

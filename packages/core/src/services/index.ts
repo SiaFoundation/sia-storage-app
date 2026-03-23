@@ -13,8 +13,8 @@ export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'
 export { syncDownEventsBatch } from './syncDownEvents'
 export {
   diffFileMetadata,
-  runSyncUpMetadataBatch,
   type SyncUpCursor,
+  syncUpMetadataBatch,
 } from './syncUpMetadata'
 export {
   computeTargetDimensions,

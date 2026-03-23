@@ -14,7 +14,7 @@ import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
-import { runSyncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
+import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
 import type { UploadManager } from '@siastorage/core/services/uploader'
 import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
@@ -223,27 +223,35 @@ export function createTestApp(
     thumbnail: thumbnailAdapter,
     detectMimeType: detectMimeTypeFn,
   })
+  function runSyncDown(signal: AbortSignal) {
+    if (!connected) return
+    return syncDownEventsBatch(signal, appService, internal)
+  }
+
+  function runSyncUp(signal: AbortSignal) {
+    if (!connected) return
+    return syncUpMetadataBatch(100, 5, signal, appService, internal)
+  }
+
+  async function runThumbScan(signal: AbortSignal) {
+    await thumbnailScanner.runScan(signal)
+  }
+
   const syncDown = scheduler.createInterval({
     name: 'syncDownEvents',
-    worker: (signal) => syncDownEventsBatch(signal, appService, internal),
-    getState: async () => connected,
+    worker: runSyncDown,
     interval: SYNC_INTERVAL,
   })
 
   const syncUp = scheduler.createInterval({
     name: 'syncUpMetadata',
-    worker: (signal) =>
-      runSyncUpMetadataBatch(100, 5, signal, appService, internal),
-    getState: async () => connected,
+    worker: runSyncUp,
     interval: SYNC_INTERVAL,
   })
 
   const thumbScan = scheduler.createInterval({
     name: 'thumbnailScanner',
-    worker: async (signal) => {
-      await thumbnailScanner.runScan(signal)
-    },
-    getState: async () => true,
+    worker: runThumbScan,
     interval: THUMBNAIL_SCAN_INTERVAL,
   })
 

@@ -18,6 +18,7 @@ export async function runFsEvictionScanner(): Promise<
 > {
   const lastRun = await app().settings.getFsEvictionLastRun()
   if (Date.now() - lastRun < FS_EVICTION_FREQUENCY) {
+    logger.debug('fsEvictionScanner', 'skipped', { reason: 'too_recent' })
     return
   }
   return flight.run(async () => {

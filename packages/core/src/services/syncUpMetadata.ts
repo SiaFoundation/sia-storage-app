@@ -66,7 +66,7 @@ async function tryWithLog<T>(
  * rows on non-current indexers. Alternatively, the cursor could be reset
  * or stored per-indexer when multi-indexer support is added.
  */
-export async function runSyncUpMetadataBatch(
+export async function syncUpMetadataBatch(
   batchSize: number,
   concurrency: number,
   signal: AbortSignal,
