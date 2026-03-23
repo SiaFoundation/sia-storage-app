@@ -8,10 +8,13 @@ import {
 
 const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
+export type SizeResult =
+  | { value: number; error?: undefined }
+  | { value: null; error: 'not_found' | 'stat_error' }
+
 export type FsFileUriAdapter = {
-  exists(fileId: string, type: string): Promise<boolean>
   uri(fileId: string, type: string): string
-  size(fileId: string, type: string): Promise<number | null>
+  size(fileId: string, type: string): Promise<SizeResult>
 }
 
 export type FsIOAdapter = FsFileUriAdapter & {
@@ -35,17 +38,16 @@ export async function getFsFileUri(
   opts?: { usedAtUpdateInterval?: number },
 ): Promise<string | null> {
   const existingMeta = await readFsFileMetadata(db, file.id)
-  const fileExists = await adapter.exists(file.id, file.type)
+  const { value: size, error } = await adapter.size(file.id, file.type)
 
-  if (!fileExists) {
-    if (existingMeta) {
+  if (size === null) {
+    if (error === 'not_found' && existingMeta) {
       await deleteFsFileMetadata(db, file.id)
     }
+    // On stat_error, preserve existing metadata so we don't lose
+    // track of files that haven't been uploaded yet.
     return null
   }
-
-  const size =
-    (await adapter.size(file.id, file.type)) ?? existingMeta?.size ?? 0
   const now = Date.now()
 
   if (!existingMeta) {

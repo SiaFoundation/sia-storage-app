@@ -12,17 +12,17 @@ export function createFsAdapter(params: { tempDir: string }) {
   }
 
   const fsIO: FsIOAdapter = {
-    async exists(fileId, type) {
-      return nodeFs.existsSync(fsFilePath(fileId, type))
-    },
     uri(fileId, type) {
       return `file://${fsFilePath(fileId, type)}`
     },
     async size(fileId, type) {
       try {
-        return nodeFs.statSync(fsFilePath(fileId, type)).size
-      } catch {
-        return null
+        return { value: nodeFs.statSync(fsFilePath(fileId, type)).size }
+      } catch (e: any) {
+        if (e?.code === 'ENOENT') {
+          return { value: null, error: 'not_found' as const }
+        }
+        return { value: null, error: 'stat_error' as const }
       }
     },
     async remove(fileId, type) {

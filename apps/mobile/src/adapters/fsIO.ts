@@ -12,18 +12,19 @@ function fsFileUri(fileId: string, type: string): string {
 
 export function createFsIOAdapter(): FsIOAdapter {
   return {
-    async exists(fileId, type) {
-      return RNFS.exists(fsFileUri(fileId, type))
-    },
     uri(fileId, type) {
       return fsFileUri(fileId, type)
     },
     async size(fileId, type) {
       try {
         const stat = await RNFS.stat(fsFileUri(fileId, type))
-        return stat.size
-      } catch {
-        return null
+        return { value: stat.size }
+      } catch (e: any) {
+        const msg = e?.message ?? ''
+        if (msg.includes('does not exist') || msg.includes('ENOENT')) {
+          return { value: null, error: 'not_found' as const }
+        }
+        return { value: null, error: 'stat_error' as const }
       }
     },
     async remove(fileId, type) {
