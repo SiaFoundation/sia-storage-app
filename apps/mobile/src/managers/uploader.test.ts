@@ -1142,6 +1142,62 @@ describe('UploadManager', () => {
       expect(mockPacker.add).not.toHaveBeenCalled()
     })
 
+    it('skips files with empty hash (placeholder files still processing)', async () => {
+      enablePolling()
+      const filesWithEmptyHash = [
+        {
+          id: 'empty-hash-1',
+          name: 'empty-hash-1.bin',
+          size: 400,
+          type: 'application/octet-stream',
+          hash: '',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          localId: null,
+          addedAt: Date.now(),
+          objects: {},
+        },
+        {
+          id: 'has-hash-1',
+          name: 'has-hash-1.bin',
+          size: 400,
+          type: 'application/octet-stream',
+          hash: 'sha256:abc123',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          localId: null,
+          addedAt: Date.now(),
+          objects: {},
+        },
+        {
+          id: 'empty-hash-2',
+          name: 'empty-hash-2.bin',
+          size: 400,
+          type: 'application/octet-stream',
+          hash: '',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          localId: null,
+          addedAt: Date.now(),
+          objects: {},
+        },
+      ]
+      queryFilesSpy
+        .mockResolvedValueOnce(filesWithEmptyHash)
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+
+      // Only the file with a hash should be added to the packer
+      expect(mockPacker.add).toHaveBeenCalledTimes(1)
+
+      // Only has-hash-1 should be registered in the upload store
+      expect(app().uploads.getEntry('has-hash-1')).toBeDefined()
+      expect(app().uploads.getEntry('empty-hash-1')).toBeUndefined()
+      expect(app().uploads.getEntry('empty-hash-2')).toBeUndefined()
+    })
+
     it('excludeIds allows polling past the 200-file query limit', async () => {
       // Without excludeIds, a second poll would return the same 200 files
       // (still local-only until pin), JS filter removes them all, and idle

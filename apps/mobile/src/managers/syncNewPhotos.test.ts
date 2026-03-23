@@ -1,7 +1,7 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import * as MediaLibrary from 'expo-media-library'
-import { processAssets } from '../lib/processAssets'
+import { syncAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
 import {
   initSyncNewPhotos,
@@ -30,11 +30,11 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
   },
 }))
 jest.mock('../lib/processAssets', () => ({
-  processAssets: jest.fn(),
+  syncAssets: jest.fn(),
 }))
 
 const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-const processAssetsMock = jest.mocked(processAssets)
+const syncAssetsMock = jest.mocked(syncAssets)
 
 function asset(
   id: string,
@@ -67,7 +67,7 @@ function page(
 }
 
 function mockProcessAssetsSuccess() {
-  processAssetsMock.mockResolvedValue({
+  syncAssetsMock.mockResolvedValue({
     files: [{ id: '1' }] as never,
     updatedFiles: [],
     warnings: [],
@@ -115,7 +115,7 @@ describe('syncNewPhotos', () => {
       ]),
     )
     await workNew()
-    expect(processAssetsMock).toHaveBeenCalledWith(
+    expect(syncAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({ id: 'a1', name: 'new1.jpg' }),
         expect.objectContaining({ id: 'a2', name: 'new2.jpg' }),
@@ -135,13 +135,13 @@ describe('syncNewPhotos', () => {
       ]),
     )
     await workNew()
-    expect(processAssetsMock).not.toHaveBeenCalled()
+    expect(syncAssetsMock).not.toHaveBeenCalled()
   })
 
   it('no photos returns early without processing', async () => {
     getAssetsAsyncMock.mockResolvedValueOnce(page([]))
     await workNew()
-    expect(processAssetsMock).not.toHaveBeenCalled()
+    expect(syncAssetsMock).not.toHaveBeenCalled()
   })
 
   it('does not paginate even when page is full', async () => {
@@ -151,8 +151,8 @@ describe('syncNewPhotos', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(page(fullPage, 'cursor-page-1'))
     await workNew()
     expect(getAssetsAsyncMock).toHaveBeenCalledTimes(1)
-    expect(processAssetsMock).toHaveBeenCalledTimes(1)
-    expect(processAssetsMock.mock.calls[0][0]).toHaveLength(50)
+    expect(syncAssetsMock).toHaveBeenCalledTimes(1)
+    expect(syncAssetsMock.mock.calls[0][0]).toHaveLength(50)
   })
 
   it('falls back to modificationTime for timestamp when creationTime is 0', async () => {
@@ -165,7 +165,7 @@ describe('syncNewPhotos', () => {
       ]),
     )
     await workNew()
-    expect(processAssetsMock).toHaveBeenCalledWith(
+    expect(syncAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({
           timestamp: new Date(5_000).toISOString(),
@@ -185,9 +185,9 @@ describe('syncNewPhotos', () => {
     expect(enabledAt).toBe(1_700_000_000_000)
   })
 
-  it('aborts before processAssets when shutdown is called mid-tick', async () => {
+  it('aborts before syncAssets when shutdown is called mid-tick', async () => {
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-    const processAssetsMock = jest.mocked(processAssets)
+    const syncAssetsMock = jest.mocked(syncAssets)
 
     await setAutoSyncNewPhotos(true)
 
@@ -209,6 +209,6 @@ describe('syncNewPhotos', () => {
     await jest.advanceTimersByTimeAsync(0)
     await shutdownPromise
 
-    expect(processAssetsMock).not.toHaveBeenCalled()
+    expect(syncAssetsMock).not.toHaveBeenCalled()
   })
 })

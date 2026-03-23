@@ -103,6 +103,7 @@ export interface AppService {
     syncFromMetadata(
       fileId: string,
       tagNames: string[] | undefined,
+      opts?: { skipInvalidation?: boolean },
     ): Promise<void>
   }
   /** File record CRUD, queries, trash, and purge operations. */
@@ -142,8 +143,12 @@ export interface AppService {
       localObject?: LocalObject,
       opts?: { skipInvalidation?: boolean },
     ): Promise<void>
-    /** Creates multiple file records in a single transaction. */
-    createMany(records: Omit<FileRecord, 'objects'>[]): Promise<void>
+    /** Creates multiple file records via bulk insert. Pass conflictClause
+     * 'OR IGNORE' to silently skip duplicates (e.g. localId conflicts). */
+    createMany(
+      records: Omit<FileRecord, 'objects'>[],
+      opts?: { conflictClause?: 'OR IGNORE' },
+    ): Promise<void>
     /** Partially updates a file record by ID. */
     update(
       update: Partial<FileRecordRow> & { id: string },
@@ -198,6 +203,12 @@ export interface AppService {
     ): Promise<void>
     /** Runs auto-purge and cleans up local files and uploads for purged files. */
     autoPurgeWithCleanup(): Promise<void>
+    /** Returns the count of lost files for the given indexer. */
+    getLostCount(indexerURL: string): Promise<number>
+    /** Returns count and total byte size of lost files for the given indexer. */
+    getLostStats(
+      indexerURL: string,
+    ): Promise<{ count: number; totalBytes: number }>
   }
   /** Directory operations: create, rename, delete, and organize files into directories. */
   directories: {
@@ -224,7 +235,11 @@ export interface AppService {
     /** Returns how many of the given files belong to a directory. */
     countFilesWithDirectories(fileIds: string[]): Promise<number>
     /** Reconciles a file's directory assignment with metadata. */
-    syncFromMetadata(fileId: string, dirName: string | undefined): Promise<void>
+    syncFromMetadata(
+      fileId: string,
+      dirName: string | undefined,
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<void>
   }
   /** Thumbnail queries and generation. */
   thumbnails: {

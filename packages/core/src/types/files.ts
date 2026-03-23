@@ -47,12 +47,14 @@ export type FileLocalMetadata = {
   localId: string | null
   addedAt: number
   deletedAt: number | null
+  lostReason?: string | null
 }
 
 export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
   'localId',
   'addedAt',
   'deletedAt',
+  'lostReason',
 ])
 
 export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &

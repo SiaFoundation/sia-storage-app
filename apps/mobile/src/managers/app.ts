@@ -14,6 +14,7 @@ import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
+import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents } from './syncDownEvents'
@@ -89,6 +90,7 @@ export async function initApp(): Promise<void> {
       label: 'Starting background services',
       message: 'Launching background services...',
       runner: async () => {
+        initImportScanner()
         initSyncDownEvents()
         initSyncNewPhotos()
         initSyncPhotosArchive()

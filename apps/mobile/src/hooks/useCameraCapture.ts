@@ -3,9 +3,8 @@ import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
 import { extFromMime, getMimeType } from '../lib/fileTypes'
-import { processAssets } from '../lib/processAssets'
+import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
-import { useUploader } from '../managers/uploader'
 
 export function useCameraCapture() {
   const toast = useToast()
@@ -22,7 +21,6 @@ export function useCameraCapture() {
         mediaType: 'mixed',
         saveToPhotos: false,
         includeExtra: true,
-        // Docs: A mode that determines which representation to use if an asset contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android if set to 'current'.
         assetRepresentationMode: 'current',
         quality: 1,
         videoQuality: 'high',
@@ -46,7 +44,7 @@ export function useCameraCapture() {
         return []
       }
 
-      const { files, warnings } = await processAssets(
+      return importFiles(
         await Promise.all(
           (result.assets ?? []).map(async (a) => ({
             id: a.id,
@@ -65,13 +63,7 @@ export function useCameraCapture() {
           })),
         ),
         'file',
-        { allowDuplicates: true },
       )
-      if (warnings.length > 0) {
-        warnings.forEach((warning) => toast.show(warning))
-      }
-
-      return files
     } catch (e) {
       logger.error('cameraCapture', 'error', { error: e as Error })
       return []
@@ -81,19 +73,8 @@ export function useCameraCapture() {
   }, [toast])
 }
 
-export function useCameraCaptureAndUpload() {
-  const capture = useCameraCapture()
-  const uploader = useUploader()
-  return useCallback(async () => {
-    const files = await capture()
-    if (files && files.length > 0) {
-      await uploader(files)
-    }
-  }, [capture, uploader])
-}
-
 /* Build a date-based file name from a timestamp and mime type.
- * eg: Camera Capture 2025-11-03 2.36.59 PM.jpg
+ * eg: Camera Capture 2025-11-03 2.36.59 PM.jpg
  */
 function buildDateFileName(
   timestamp: string | undefined,

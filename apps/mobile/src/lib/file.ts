@@ -23,23 +23,30 @@ export type FileItemProps = {
   onLongPressItem?: (item: FileRecord) => void
 }
 
+export function fileRecordEqual(a: FileRecord, b: FileRecord): boolean {
+  return (
+    a.updatedAt === b.updatedAt &&
+    a.hash === b.hash &&
+    Object.keys(a.objects).length === Object.keys(b.objects).length
+  )
+}
+
 export function fileItemPropsAreEqual(
   prev: FileItemProps,
   next: FileItemProps,
 ): boolean {
   return (
     prev.file.id === next.file.id &&
-    prev.file.updatedAt === next.file.updatedAt &&
-    // Re-render when sealed objects change (e.g., upload completes) since
-    // updatedAt doesn't change when a local object is added.
-    Object.keys(prev.file.objects).length ===
-      Object.keys(next.file.objects).length &&
+    fileRecordEqual(prev.file, next.file) &&
     prev.onPressItem === next.onPressItem &&
     prev.onLongPressItem === next.onLongPressItem
   )
 }
 
 export type FileStatus = {
+  isProcessing: boolean
+  isDeferredImport: boolean
+  isImportFailed: boolean
   isUploading: boolean
   isDownloading: boolean
   isUploaded: boolean
@@ -56,7 +63,7 @@ export type FileStatus = {
   errorText: string | null
 }
 
-function computeFileStatus({
+export function computeFileStatus({
   file,
   isShared,
   uploadState,
@@ -71,6 +78,11 @@ function computeFileStatus({
   fileUri: string | null
   errorText: string | null
 }) {
+  const isProcessing = !!file && file.hash === ''
+  // Deferred import: placeholder created by archive sync with localId,
+  // waiting for the scanner to copy from the media library.
+  const isDeferredImport = isProcessing && !fileUri && !!file?.localId
+  const isImportFailed = !!file?.lostReason
   const uploadStatus = uploadState?.status
   const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(
     uploadStatus ?? '',
@@ -82,6 +94,9 @@ function computeFileStatus({
   const hasSealedObject = fileHasASealedObject(file)
   const isDownloaded = !!fileUri
   return {
+    isProcessing,
+    isDeferredImport,
+    isImportFailed,
     isUploading,
     isDownloading,
     isUploadQueued: uploadStatus === 'queued',
@@ -90,12 +105,21 @@ function computeFileStatus({
     batchFileCount: uploadState?.batchFileCount ?? 0,
     isUploaded: hasSealedObject || !!isShared,
     isDownloaded,
-    isErrored: uploadStatus === 'error' || downloadState?.status === 'error',
+    isErrored:
+      isImportFailed ||
+      uploadStatus === 'error' ||
+      downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,
     fileUri,
-    fileIsGone: !isUploading && !isDownloading && !hasSealedObject && !fileUri,
-    errorText,
+    fileIsGone:
+      !!file?.lostReason ||
+      (!isProcessing &&
+        !isUploading &&
+        !isDownloading &&
+        !hasSealedObject &&
+        !fileUri),
+    errorText: isImportFailed ? 'Import failed' : errorText,
   }
 }
 

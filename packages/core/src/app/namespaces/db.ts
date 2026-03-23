@@ -161,11 +161,13 @@ export function buildDbNamespaces(
         return tag
       },
       ensureSystemTags: () => ops.ensureSystemTags(db),
-      syncFromMetadata: async (fileId, tagNames) => {
+      syncFromMetadata: async (fileId, tagNames, opts) => {
         if (tagNames === undefined) return
         await ops.syncTagsFromMetadata(db, fileId, tagNames)
-        caches.tags.invalidateAll()
-        caches.libraryVersion.invalidate()
+        if (!opts?.skipInvalidation) {
+          caches.tags.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
       },
     },
     files: {
@@ -192,8 +194,14 @@ export function buildDbNamespaces(
           invalidateLibrary()
         }
       },
-      createMany: async (records) => {
-        await ops.insertManyFileRecords(db, records)
+      createMany: async (records, opts) => {
+        await ops.insertManyFileRecords(
+          db,
+          records,
+          opts?.conflictClause
+            ? { conflictClause: opts.conflictClause }
+            : undefined,
+        )
         if (records.length > 0) {
           invalidateLibrary()
         }
@@ -208,6 +216,9 @@ export function buildDbNamespaces(
       updateMany: async (updates, opts) => {
         await ops.updateManyFileRecordFields(db, updates, opts)
         if (updates.length > 0) {
+          for (const u of updates) {
+            caches.fileById.invalidate(u.id)
+          }
           caches.libraryVersion.invalidate()
         }
       },
@@ -257,6 +268,8 @@ export function buildDbNamespaces(
         await ops.restoreFiles(db, ids)
         invalidateLibrary()
       },
+      getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
+      getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
       getUnuploadedCount: () => ops.queryUnuploadedFileCount(db),
       getUnuploaded: () => ops.queryUnuploadedFiles(db),
       getActiveSummaries: () => ops.queryActiveFileSummaries(db),
@@ -333,12 +346,14 @@ export function buildDbNamespaces(
       },
       countFilesWithDirectories: (fileIds) =>
         ops.queryCountFilesWithDirectories(db, fileIds),
-      syncFromMetadata: async (fileId, dirName) => {
+      syncFromMetadata: async (fileId, dirName, opts) => {
         if (dirName === undefined) return
         await ops.syncDirectoryFromMetadata(db, fileId, dirName)
-        caches.directories.invalidate('all')
-        caches.directories.invalidate(`file/${fileId}`)
-        caches.libraryVersion.invalidate()
+        if (!opts?.skipInvalidation) {
+          caches.directories.invalidate('all')
+          caches.directories.invalidate(`file/${fileId}`)
+          caches.libraryVersion.invalidate()
+        }
       },
     },
     thumbnails: {

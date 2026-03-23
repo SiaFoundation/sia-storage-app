@@ -43,15 +43,7 @@ export function useFilesLocalOnly(params: {
 
 async function getFileCountLost() {
   const currentIndexerURL = await app().settings.getIndexerURL()
-  return app().files.queryCount({
-    order: 'ASC',
-    pinned: {
-      indexerURL: currentIndexerURL,
-      isPinned: false,
-    },
-    fileExistsLocally: false,
-    activeOnly: true,
-  })
+  return app().files.getLostCount(currentIndexerURL)
 }
 
 export function useFileCountLost(config?: SWRConfiguration) {
@@ -61,15 +53,7 @@ export function useFileCountLost(config?: SWRConfiguration) {
 
 async function getFileStatsLost() {
   const currentIndexerURL = await app().settings.getIndexerURL()
-  return app().files.queryStats({
-    order: 'ASC',
-    pinned: {
-      indexerURL: currentIndexerURL,
-      isPinned: false,
-    },
-    fileExistsLocally: false,
-    activeOnly: true,
-  })
+  return app().files.getLostStats(currentIndexerURL)
 }
 
 export function useFileStatsLost(config?: SWRConfiguration) {

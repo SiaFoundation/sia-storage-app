@@ -49,6 +49,46 @@ export async function insert<
   return await run(db, sql, params)
 }
 
+const CHUNK_SIZE = 50
+
+export async function insertMany<
+  T extends Record<string, string | number | boolean | null | undefined>,
+>(
+  db: DatabaseAdapter,
+  table: string,
+  rows: T[],
+  options?: InsertOptions,
+): Promise<void> {
+  if (rows.length === 0) return
+  const columns = Object.keys(rows[0])
+  const verb = options?.conflictClause
+    ? `INSERT ${options.conflictClause}`
+    : 'INSERT'
+
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE)
+    const allValuesSql: string[] = []
+    const params: SqlBindable[] = []
+
+    for (const row of chunk) {
+      const rowValues: string[] = []
+      for (const key of columns) {
+        const value = row[key]
+        if (value === null || value === undefined) {
+          rowValues.push('NULL')
+        } else {
+          rowValues.push('?')
+          params.push(value)
+        }
+      }
+      allValuesSql.push(`(${rowValues.join(', ')})`)
+    }
+
+    const sql = `${verb} INTO ${table} (${columns.join(', ')}) VALUES ${allValuesSql.join(', ')}`
+    await run(db, sql, params)
+  }
+}
+
 function normalizeSqlValue(value: SqlValue): string | number {
   if (value === null || value === undefined) {
     throw new Error(

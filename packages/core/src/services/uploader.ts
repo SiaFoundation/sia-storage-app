@@ -556,6 +556,11 @@ export class UploadManager {
         batchId: this.batch!.batchId,
       })
 
+      // Add to batch state BEFORE packer.add() so onProgress can
+      // distribute progress to this file while data streams to the network.
+      this.batch!.files.push(entry)
+      this.batch!.totalSize += entry.size
+
       const t0 = Date.now()
       const reader = this.adapters.createFileReader(entry.fileUri)
       const t1 = Date.now()
@@ -644,6 +649,10 @@ export class UploadManager {
         size: entry.size,
         batchId: this.batch!.batchId,
       })
+      // Add to batch state before packer.add() so onProgress can
+      // distribute progress while data streams to the network.
+      this.batch!.files.push(entry)
+      this.batch!.totalSize += entry.size
       const t0 = Date.now()
       const reader = this.adapters.createFileReader(entry.fileUri)
       inflight.push({
@@ -759,6 +768,7 @@ export class UploadManager {
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
+        if (!file.hash) continue
         const fileUri = await this.app.fs.getFileUri(file)
         if (!fileUri) continue
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
@@ -807,8 +817,6 @@ export class UploadManager {
   /** Update batch state after a successful packer.add(). */
   private recordAdd(entry: FileEntry, addMs: number): void {
     this.batch!.lastProcessedAt = Date.now()
-    this.batch!.files.push(entry)
-    this.batch!.totalSize += entry.size
     this._packedCount++
     this._packedBytes += entry.size
     this.app.uploads.setStatus(entry.fileId, 'packed')

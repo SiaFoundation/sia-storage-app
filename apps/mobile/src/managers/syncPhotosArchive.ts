@@ -44,7 +44,7 @@ import {
   getMediaLibraryPermissions,
   mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
-import { processAssets } from '../lib/processAssets'
+import { catalogAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 
@@ -106,7 +106,7 @@ export async function workBackward(signal?: AbortSignal) {
       nextCursor: page.endCursor,
     })
     if (signal?.aborted) return
-    const { files } = await processAssets(
+    const { files } = await catalogAssets(
       assets.map((asset) => ({
         id: asset.id,
         sourceUri: asset.uri,
