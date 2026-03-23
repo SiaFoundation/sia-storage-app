@@ -4,7 +4,7 @@ import type { FileMetadata, FileRecord } from '@siastorage/core/types'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
-import { syncDownEvents } from './syncDownEvents'
+import { run } from './syncDownEvents'
 
 function makeLocalObject(params: {
   fileId: string
@@ -98,13 +98,13 @@ describe('syncDownEvents', () => {
 
   test('early exit when not connected', async () => {
     app().connection.setState({ isConnected: false })
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
   })
 
   test('early exit when no sdk', async () => {
     app().connection.setState({ isConnected: true })
     internal().setSdk(null)
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
     const cur = await app().sync.getSyncDownCursor()
     expect(cur).toBeUndefined()
   })
@@ -156,7 +156,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
@@ -203,7 +203,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
@@ -253,7 +253,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     expect(removeFileSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'file-1' }),
@@ -318,7 +318,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const updatedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(updatedFile).not.toBeNull()
@@ -352,7 +352,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const newFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(newFile).not.toBeNull()
@@ -413,7 +413,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const updatedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(updatedFile).not.toBeNull()
@@ -495,7 +495,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const file2 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(file2).not.toBeNull()
@@ -538,7 +538,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const file = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(file).toBeNull()
@@ -592,7 +592,7 @@ describe('syncDownEvents', () => {
 
     removeFileSpy.mockRejectedValueOnce(new Error('FS error'))
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
@@ -658,7 +658,7 @@ describe('syncDownEvents', () => {
 
     mockSdk.objectEvents.mockResolvedValueOnce(events)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toBeUndefined()
@@ -695,7 +695,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const thumb = await app().files.getByObjectId('obj-thumb', INDEXER_URL)
     expect(thumb).not.toBeNull()
@@ -752,14 +752,14 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
     const cursor1 = await app().sync.getSyncDownCursor()
     expect(cursor1).toEqual({
       id: 'obj-1',
       after: new Date(NOW_BASE + cursorIncrement),
     })
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
     const cursor2 = await app().sync.getSyncDownCursor()
     expect(cursor2).toEqual({
       id: 'obj-2',
@@ -829,7 +829,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    const result = await syncDownEvents(new AbortController().signal)
+    const result = await run(new AbortController().signal)
     expect(result).toBe(0)
   })
 
@@ -861,7 +861,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    const result = await syncDownEvents(new AbortController().signal)
+    const result = await run(new AbortController().signal)
     expect(result).toBeUndefined()
   })
 
@@ -871,7 +871,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    const result = await syncDownEvents(new AbortController().signal)
+    const result = await run(new AbortController().signal)
     expect(result).toBeUndefined()
   })
 
@@ -918,7 +918,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     const file2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
@@ -979,7 +979,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     const file2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
@@ -1037,7 +1037,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const t1 = await app().files.getByObjectId('obj-t1', INDEXER_URL)
     const t2 = await app().files.getByObjectId('obj-t2', INDEXER_URL)
@@ -1078,7 +1078,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const fromObj1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
     const fromObj2 = await app().files.getByObjectId('obj-2', INDEXER_URL)
@@ -1141,7 +1141,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
@@ -1205,7 +1205,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
@@ -1263,7 +1263,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
@@ -1317,7 +1317,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(deletedFile).toBeNull()
@@ -1384,7 +1384,7 @@ describe('syncDownEvents', () => {
       appKey: () => mockAppKey,
     } as any)
 
-    await syncDownEvents(new AbortController().signal)
+    await run(new AbortController().signal)
 
     const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()

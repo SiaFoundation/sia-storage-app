@@ -9,11 +9,11 @@ import {
   getPhotosArchiveCursor,
   getPhotosArchiveDisplayDate,
   restartPhotosArchiveCursor,
+  run,
   setAutoSyncPhotosArchive,
   setLastRecentScanAt,
   setPhotosArchiveCursor,
   triggerRecentScanIfNeeded,
-  workBackward,
 } from './syncPhotosArchive'
 
 jest.useFakeTimers()
@@ -101,7 +101,7 @@ describe('syncPhotosArchive', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 50_000 })], 'ref1'),
     )
-    await workBackward()
+    await run()
     expect(getAssetsAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sortBy: [['modificationTime', false]],
@@ -114,7 +114,7 @@ describe('syncPhotosArchive', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 50_000 })], 'ref1'),
     )
-    await workBackward()
+    await run()
     const opts = getAssetsAsyncMock.mock.calls[0][0]
     expect(opts).not.toHaveProperty('createdBefore')
     expect(opts).not.toHaveProperty('createdAfter')
@@ -125,7 +125,7 @@ describe('syncPhotosArchive', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 50_000 })], 'ref1'),
     )
-    await workBackward()
+    await run()
     expect(getAssetsAsyncMock.mock.calls[0][0]?.after).toBeUndefined()
   })
 
@@ -134,7 +134,7 @@ describe('syncPhotosArchive', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([asset('a1', '1.jpg', { modificationTime: 30_000 })], 'next-ref'),
     )
-    await workBackward()
+    await run()
     expect(getAssetsAsyncMock.mock.calls[0][0]?.after).toBe('some-asset-ref')
   })
 
@@ -149,20 +149,20 @@ describe('syncPhotosArchive', () => {
         'page-end-ref',
       ),
     )
-    await workBackward()
+    await run()
     expect(await getPhotosArchiveCursor()).toBe('page-end-ref')
   })
 
   it('cursor "done" means fully synced — returns early', async () => {
     await setPhotosArchiveCursor('done')
-    await workBackward()
+    await run()
     expect(getAssetsAsyncMock).not.toHaveBeenCalled()
   })
 
   it('sets cursor to "done" when no assets remain', async () => {
     await setPhotosArchiveCursor('some-ref')
     getAssetsAsyncMock.mockResolvedValueOnce(page([]))
-    await workBackward()
+    await run()
     expect(await getPhotosArchiveCursor()).toBe('done')
     expect(processAssetsMock).not.toHaveBeenCalled()
   })
@@ -179,7 +179,7 @@ describe('syncPhotosArchive', () => {
         'ref3',
       ),
     )
-    await workBackward()
+    await run()
     expect(await getPhotosArchiveDisplayDate()).toBe(40_000)
   })
 
@@ -203,7 +203,7 @@ describe('syncPhotosArchive', () => {
         'ref1',
       ),
     )
-    await workBackward()
+    await run()
     expect(processAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({
@@ -227,7 +227,7 @@ describe('syncPhotosArchive', () => {
         'ref3',
       ),
     )
-    await workBackward()
+    await run()
     expect(processAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({ id: 'a1' }),
@@ -250,7 +250,7 @@ describe('syncPhotosArchive', () => {
     })
 
     await restartPhotosArchiveCursor()
-    await workBackward(ac.signal)
+    await run(ac.signal)
 
     expect(processAssetsMock).not.toHaveBeenCalled()
   })
@@ -298,7 +298,7 @@ describe('syncPhotosArchive', () => {
           'ref1',
         ),
       )
-      await workBackward()
+      await run()
 
       expect(processAssetsMock).toHaveBeenCalledTimes(1)
       expect(await getPhotosArchiveCursor()).toBe('done')
@@ -318,7 +318,7 @@ describe('syncPhotosArchive', () => {
           'ref2',
         ),
       )
-      await workBackward()
+      await run()
 
       expect(await getPhotosArchiveCursor()).toBe('ref2')
       expect(await getPhotosArchiveDisplayDate()).toBe(1_000)
@@ -340,7 +340,7 @@ describe('syncPhotosArchive', () => {
           'ref1',
         ),
       )
-      await workBackward()
+      await run()
 
       expect(processAssetsMock).toHaveBeenCalledWith(
         [

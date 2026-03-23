@@ -8,15 +8,16 @@ import {
   getUiFps,
 } from 'react-native-performance-toolkit'
 
+function run(): void {
+  const cpu = getCpuUsage()
+  const mem = getMemoryUsage()
+  const jsFps = getJsFps()
+  const uiFps = getUiFps()
+  logger.info('perfMonitor', 'tick', { cpu, mem, jsFps, uiFps })
+}
+
 export const { init: initPerfMonitor } = createServiceInterval({
   name: 'perfMonitor',
-  worker: () => {
-    const cpu = getCpuUsage()
-    const mem = getMemoryUsage()
-    const jsFps = getJsFps()
-    const uiFps = getUiFps()
-    logger.info('perfMonitor', 'tick', { cpu, mem, jsFps, uiFps })
-  },
-  getState: async () => true,
+  worker: run,
   interval: PERF_MONITOR_INTERVAL,
 })

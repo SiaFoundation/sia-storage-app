@@ -4,9 +4,11 @@ import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { logger } from '@siastorage/logger'
 import { app, internal } from '../stores/appService'
 
-export async function syncDownEvents(
-  signal: AbortSignal,
-): Promise<number | void> {
+export async function run(signal: AbortSignal): Promise<number | void> {
+  if (!(await app().settings.getAutoSyncDownEvents())) {
+    logger.debug('syncDownEvents', 'skipped', { reason: 'disabled' })
+    return
+  }
   if (!app().connection.getState().isConnected) {
     logger.debug('syncDownEvents', 'skipped', { reason: 'not_connected' })
     return
@@ -23,7 +25,6 @@ export async function syncDownEvents(
 export const { init: initSyncDownEvents, triggerNow: triggerSyncDownEvents } =
   createServiceInterval({
     name: 'syncDownEvents',
-    worker: syncDownEvents,
-    getState: () => app().settings.getAutoSyncDownEvents(),
+    worker: run,
     interval: SYNC_EVENTS_INTERVAL,
   })

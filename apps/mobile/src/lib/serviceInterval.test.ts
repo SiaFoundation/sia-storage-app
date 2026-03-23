@@ -32,7 +32,6 @@ test('shutdown waits for in-flight worker with abort signal loop', async () => {
         })
       }
     },
-    getState: async () => true,
     interval: 1000,
   })
 
@@ -81,7 +80,7 @@ test('shutdown waits for multiple services concurrently', async () => {
     worker: async () => {
       fastDone = true
     },
-    getState: async () => true,
+
     interval: 100,
   })
 
@@ -92,7 +91,7 @@ test('shutdown waits for multiple services concurrently', async () => {
         slowResolve = r
       })
     },
-    getState: async () => true,
+
     interval: 100,
   })
 
@@ -133,7 +132,7 @@ test('triggerNow is a noop while worker is running', async () => {
         resolveWork = r
       })
     },
-    getState: async () => true,
+
     interval: 5000,
   })
 
