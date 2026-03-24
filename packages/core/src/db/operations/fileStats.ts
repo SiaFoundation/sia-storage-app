@@ -87,7 +87,9 @@ export async function queryUploadStats(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<UploadStats> {
-  const active = `f.trashedAt IS NULL AND f.deletedAt IS NULL`
+  // Exclude pending imports (hash = '') — they have no size yet and are
+  // shown separately in the "Pending import" row.
+  const active = `f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.hash != ''`
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
   const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([

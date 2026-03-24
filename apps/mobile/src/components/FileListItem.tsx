@@ -53,8 +53,12 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
                 <DotIcon size={16} color="grey" />
               </>
             ) : null}
-            <Text style={styles.fileText}>{humanSize(file.size)}</Text>
-            <DotIcon size={16} color="grey" />
+            {file.size > 0 ? (
+              <>
+                <Text style={styles.fileText}>{humanSize(file.size)}</Text>
+                <DotIcon size={16} color="grey" />
+              </>
+            ) : null}
             <Text style={styles.fileText}>{file.type}</Text>
             {isFavorite.data ? (
               <>
