@@ -127,6 +127,7 @@ export async function queryThumbnailCandidatePage(
      WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
        AND f.type != 'image/tiff'
        AND f.kind = 'file'
+       AND f.hash != ''
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        ${cursorClause}
      GROUP BY f.id

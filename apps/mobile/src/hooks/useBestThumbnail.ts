@@ -22,9 +22,12 @@ export function useBestThumbnailUri(
   file?: FileRecord,
   thumbSize: ThumbSize = 512,
 ) {
-  // Fetch the best thumbnail record.
+  // Skip thumbnail lookup for files still being imported (no hash yet).
+  const isImported = !!file && file.hash !== ''
   const thumbRecord = useSWR(
-    file ? app().caches.thumbnails.best.key(file.id, String(thumbSize)) : null,
+    isImported
+      ? app().caches.thumbnails.best.key(file.id, String(thumbSize))
+      : null,
     () => (file ? app().thumbnails.getBest(file.id, thumbSize) : null),
   )
 

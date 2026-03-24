@@ -26,6 +26,7 @@ import {
 import { useIsConnected } from '../stores/sdk'
 import { useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
+import { getActiveUploads } from '../stores/uploads'
 import { palette, whiteA } from '../styles/colors'
 import { Button } from './Button'
 import { RowGroup, RowSubGroup } from './Group'
@@ -86,12 +87,36 @@ export function LibraryStatusSheet() {
       refreshInterval,
     },
   )
+  const importing = useSWR(
+    ['importing-stats', isOpen ?? null],
+    async () =>
+      app().files.queryStats({
+        hashEmpty: true,
+        activeOnly: true,
+        order: 'ASC',
+      }),
+    { refreshInterval },
+  )
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
   const pendingBackup = useFileStatsLocal(
     { localOnly: true },
     { refreshInterval },
   )
   const lost = useFileStatsLost({ refreshInterval })
+  const batch = useSWR(
+    ['active-batch', isOpen ?? null],
+    () => {
+      const uploads = getActiveUploads()
+      const count = uploads.length
+      const totalBytes = uploads.reduce((s, u) => s + u.size, 0)
+      const uploadedBytes = uploads.reduce((s, u) => s + u.progress * u.size, 0)
+      const percent = totalBytes
+        ? `${((uploadedBytes / totalBytes) * 100).toFixed(1)}%`
+        : ''
+      return { count, totalBytes, percent }
+    },
+    { refreshInterval },
+  )
 
   const handleClose = useCallback(() => {
     closeSheet()
@@ -210,7 +235,89 @@ export function LibraryStatusSheet() {
         </RowGroup>
 
         <RowGroup title="Files" indicator={toggle} style={styles.groupSpacing}>
-          <RowSubGroup title="Network" style={styles.subGroupSpacing}>
+          <RowSubGroup title="Library" style={styles.subGroupSpacing}>
+            <Text style={styles.sectionDesc}>
+              All files tracked in the library. Pending imports are waiting to
+              be copied from your device's photo library.
+            </Text>
+            <InfoCard>
+              <LabeledValueRow
+                label="Device and network"
+                labelWidth={180}
+                value={
+                  <View style={styles.valueRight}>
+                    <Text style={styles.valueText}>
+                      {`${(stats.data?.files.total ?? 0).toLocaleString()} files`}
+                    </Text>
+                  </View>
+                }
+                align="right"
+                canCopy={false}
+              />
+              {(importing.data?.count ?? 0) > 0 && (
+                <LabeledValueRow
+                  label="Pending import"
+                  labelWidth={120}
+                  value={
+                    <View style={styles.valueRight}>
+                      <Text style={styles.valueText}>
+                        {`${(importing.data?.count ?? 0).toLocaleString()} files`}
+                      </Text>
+                      <View style={styles.dotSyncing} />
+                    </View>
+                  }
+                  align="right"
+                  canCopy={false}
+                  showDividerTop
+                />
+              )}
+              <LabeledValueRow
+                label="Total"
+                labelWidth={120}
+                value={
+                  <View style={styles.valueRight}>
+                    <Text style={styles.valueText}>
+                      {`${((stats.data?.files.total ?? 0) + (importing.data?.count ?? 0)).toLocaleString()} files`}
+                    </Text>
+                  </View>
+                }
+                align="right"
+                canCopy={false}
+                showDividerTop
+              />
+            </InfoCard>
+          </RowSubGroup>
+          <RowSubGroup title="Sync" style={styles.subGroupSpacing}>
+            <Text style={styles.sectionDesc}>
+              Upload progress across all files ready to be synced to the
+              network.
+            </Text>
+            {(batch.data?.count ?? 0) > 0 && (
+              <InfoCard>
+                <LabeledValueRow
+                  label="Active uploads"
+                  labelWidth={120}
+                  value={
+                    <View style={styles.valueRight}>
+                      <Text style={styles.valueText}>
+                        {displayMode === 'size'
+                          ? (humanSize(batch.data?.totalBytes ?? 0) ?? '0 B')
+                          : `${(batch.data?.count ?? 0).toLocaleString()} files`}
+                      </Text>
+                      <Text style={styles.valuePercent}>
+                        {batch.data?.percent}
+                      </Text>
+                      <View style={styles.dotSyncing} />
+                    </View>
+                  }
+                  align="right"
+                  canCopy={false}
+                />
+              </InfoCard>
+            )}
+            {(batch.data?.count ?? 0) > 0 && (
+              <View style={styles.networkGroupGap} />
+            )}
             <InfoCard>
               <LabeledValueRow
                 label="Files"
@@ -371,6 +478,7 @@ export function LibraryStatusSheet() {
             </InfoCard>
           </RowSubGroup>
           <RowSubGroup title="Device" style={styles.subGroupSpacing}>
+            <Text style={styles.sectionDesc}>Files cached on this device.</Text>
             <InfoCard>
               <LabeledValueRow
                 label="On device"
@@ -380,13 +488,13 @@ export function LibraryStatusSheet() {
                     <Text style={styles.valueText}>
                       {formatDeviceValue(
                         onDevice.data,
-                        stats.data?.overall,
+                        stats.data?.files,
                         displayMode,
                       )}
                     </Text>
                     <Text style={styles.valuePercent}>
                       {humanUploadPercent(
-                        devicePercent(onDevice.data, stats.data?.overall),
+                        devicePercent(onDevice.data, stats.data?.files),
                       )}
                     </Text>
                   </View>
@@ -402,13 +510,13 @@ export function LibraryStatusSheet() {
                     <Text style={styles.valueText}>
                       {formatDeviceValue(
                         pendingBackup.data,
-                        stats.data?.overall,
+                        stats.data?.files,
                         displayMode,
                       )}
                     </Text>
                     <Text style={styles.valuePercent}>
                       {humanUploadPercent(
-                        devicePercent(pendingBackup.data, stats.data?.overall),
+                        devicePercent(pendingBackup.data, stats.data?.files),
                       )}
                     </Text>
                   </View>
@@ -425,13 +533,13 @@ export function LibraryStatusSheet() {
                     <Text style={styles.valueText}>
                       {formatDeviceValue(
                         lost.data,
-                        stats.data?.overall,
+                        stats.data?.files,
                         displayMode,
                       )}
                     </Text>
                     <Text style={styles.valuePercent}>
                       {humanUploadPercent(
-                        devicePercent(lost.data, stats.data?.overall),
+                        devicePercent(lost.data, stats.data?.files),
                       )}
                     </Text>
                   </View>
@@ -495,6 +603,11 @@ const styles = StyleSheet.create({
   },
   groupSpacing: { marginTop: 8 },
   subGroupSpacing: { marginTop: 12 },
+  sectionDesc: {
+    color: palette.gray[400],
+    fontSize: 12,
+    marginBottom: 8,
+  },
   networkGroupGap: { height: 8 },
   boldLabel: { fontWeight: '700' },
   toggleTrack: {
