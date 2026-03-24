@@ -1,4 +1,6 @@
 import {
+  ClockArrowUpIcon,
+  ClockIcon,
   CloudAlertIcon,
   CloudCheckIcon,
   CloudDownloadIcon,
@@ -22,10 +24,14 @@ export function UploadStatusIcon({
   variant?: 'badge' | 'icon'
   color?: string
 }) {
-  const pillColor = status.isErrored ? palette.red[500] : overlay.pill
+  const pillColor =
+    status.isErrored || status.fileIsGone ? palette.red[500] : overlay.pill
   const iconColor = color ?? palette.gray[50]
 
   const label = useMemo(() => {
+    if (status.isImportFailed) return 'Import failed'
+    if (status.isDeferredImport) return 'Import queued'
+    if (status.isProcessing) return 'Importing'
     if (status.isErrored) return status.errorText || 'Error'
     if (status.isUploadQueued) return 'Queued'
     if (status.isDownloadQueued) return 'Download queued'
@@ -35,10 +41,15 @@ export function UploadStatusIcon({
       return 'File on network and device'
     if (status.isUploaded && !status.isDownloaded) return 'File only on network'
     if (!status.isUploaded && status.isDownloaded) return 'File only on device'
+    if (status.fileIsGone) return 'File unavailable'
     return ''
   }, [status])
 
-  const iconEL = status.isErrored ? (
+  const iconEL = status.isDeferredImport ? (
+    <ClockIcon color={iconColor} size={size} />
+  ) : status.isProcessing ? (
+    <ClockArrowUpIcon color={iconColor} size={size} />
+  ) : status.isErrored ? (
     <CloudAlertIcon color={iconColor} size={size} />
   ) : status.isUploadQueued ? (
     <SpinnerIcon color={iconColor} size={size} />
@@ -53,6 +64,8 @@ export function UploadStatusIcon({
     ) : (
       <SpinnerIcon color={iconColor} size={size} />
     )
+  ) : status.fileIsGone ? (
+    <CloudAlertIcon color={iconColor} size={size} />
   ) : status.isUploaded ? (
     status.isDownloaded ? (
       <CloudCheckIcon color={iconColor} size={size} />
@@ -77,17 +90,19 @@ export function UploadStatusIcon({
       textColor={palette.gray[50]}
       accessibilityLabel={`Status: ${label}`}
       testID={`upload-status-${
-        status.isErrored
-          ? 'error'
-          : status.isUploadQueued
-            ? 'queued'
-            : status.isPacking
-              ? 'packing'
-              : status.isUploading
-                ? 'uploading'
-                : status.isUploaded
-                  ? 'uploaded'
-                  : 'local'
+        status.isProcessing
+          ? 'processing'
+          : status.isErrored
+            ? 'error'
+            : status.isUploadQueued
+              ? 'queued'
+              : status.isPacking
+                ? 'packing'
+                : status.isUploading
+                  ? 'uploading'
+                  : status.isUploaded
+                    ? 'uploaded'
+                    : 'local'
       }`}
     >
       {iconEL}

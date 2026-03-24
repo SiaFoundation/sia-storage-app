@@ -36,6 +36,7 @@ export function FileMeta({
 }) {
   const showAdvanced = useShowAdvanced()
   const fileSize = useMemo(() => {
+    if (file.size === 0) return null
     return humanSize(file.size)
   }, [file.size])
 
