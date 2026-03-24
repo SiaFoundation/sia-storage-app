@@ -83,21 +83,21 @@ describe('syncNewPhotos', () => {
     mockProcessAssetsSuccess()
   })
 
-  it('sorts by modificationTime DESC', async () => {
+  it('sorts by creationTime DESC', async () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
-      page([asset('a1', '1.jpg', { modificationTime: 5_000 })]),
+      page([asset('a1', '1.jpg', { creationTime: 5_000 })]),
     )
     await run()
     expect(getAssetsAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        sortBy: [['modificationTime', false]],
+        sortBy: [['creationTime', false]],
       }),
     )
   })
 
   it('does not pass createdBefore or createdAfter', async () => {
     getAssetsAsyncMock.mockResolvedValueOnce(
-      page([asset('a1', '1.jpg', { modificationTime: 5_000 })]),
+      page([asset('a1', '1.jpg', { creationTime: 5_000 })]),
     )
     await run()
     const opts = getAssetsAsyncMock.mock.calls[0][0]
@@ -105,14 +105,14 @@ describe('syncNewPhotos', () => {
     expect(opts).not.toHaveProperty('createdBefore')
   })
 
-  it('only processes assets with modificationTime >= enabledAt', async () => {
+  it('only processes assets with creationTime >= enabledAt', async () => {
     await setSyncNewPhotosEnabledAt(3_000)
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([
-        asset('a1', 'new1.jpg', { modificationTime: 5_000 }),
-        asset('a2', 'new2.jpg', { modificationTime: 4_000 }),
-        asset('a3', 'exact.jpg', { modificationTime: 3_000 }),
-        asset('a4', 'old.jpg', { modificationTime: 2_000 }),
+        asset('a1', 'new1.jpg', { creationTime: 5_000 }),
+        asset('a2', 'new2.jpg', { creationTime: 4_000 }),
+        asset('a3', 'exact.jpg', { creationTime: 3_000 }),
+        asset('a4', 'old.jpg', { creationTime: 2_000 }),
       ]),
     )
     await run()
@@ -131,8 +131,8 @@ describe('syncNewPhotos', () => {
     await setSyncNewPhotosEnabledAt(10_000)
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([
-        asset('a1', '1.jpg', { modificationTime: 5_000 }),
-        asset('a2', '2.jpg', { modificationTime: 3_000 }),
+        asset('a1', '1.jpg', { creationTime: 5_000 }),
+        asset('a2', '2.jpg', { creationTime: 3_000 }),
       ]),
     )
     await run()
@@ -147,7 +147,7 @@ describe('syncNewPhotos', () => {
 
   it('does not paginate even when page is full', async () => {
     const fullPage = Array.from({ length: 50 }, (_, i) =>
-      asset(`a${i}`, `${i}.jpg`, { modificationTime: 10_000 - i }),
+      asset(`a${i}`, `${i}.jpg`, { creationTime: 10_000 - i }),
     )
     getAssetsAsyncMock.mockResolvedValueOnce(page(fullPage, 'cursor-page-1'))
     await run()
@@ -156,25 +156,18 @@ describe('syncNewPhotos', () => {
     expect(processAssetsMock.mock.calls[0][0]).toHaveLength(50)
   })
 
-  it('falls back to modificationTime for timestamp when creationTime is 0', async () => {
+  it('excludes old photo with AI-bumped modificationTime', async () => {
+    await setSyncNewPhotosEnabledAt(10_000)
     getAssetsAsyncMock.mockResolvedValueOnce(
       page([
-        asset('a1', 'downloaded.jpg', {
-          creationTime: 0,
-          modificationTime: 5_000,
+        asset('a1', 'ai-bumped.jpg', {
+          creationTime: 1_000,
+          modificationTime: 20_000,
         }),
       ]),
     )
     await run()
-    expect(processAssetsMock).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({
-          timestamp: new Date(5_000).toISOString(),
-        }),
-      ],
-      'file',
-      { addToImportDirectory: true, skipExistingUpdates: true },
-    )
+    expect(processAssetsMock).not.toHaveBeenCalled()
   })
 
   it('setAutoSyncNewPhotos saves enablement timestamp', async () => {
