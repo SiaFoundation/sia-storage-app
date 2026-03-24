@@ -13,6 +13,7 @@ export const MimeTypes = [
   'image/png',
   'image/webp',
   'image/gif',
+  'image/tiff',
   // audio
   'audio/mpeg',
   'audio/mp4',
@@ -44,6 +45,7 @@ export type Ext =
   | '.png'
   | '.webp'
   | '.gif'
+  | '.tiff'
   // audio
   | '.mp3'
   | '.m4a'
@@ -71,6 +73,8 @@ const extensionToMimeMap: Record<string, MimeType> = {
   png: 'image/png',
   webp: 'image/webp',
   gif: 'image/gif',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
   // audio
   mp3: 'audio/mpeg',
   m4a: 'audio/mp4',
@@ -111,6 +115,7 @@ export function extFromMime(mime?: string | null): Ext {
   if (mime === 'image/png') return '.png'
   if (mime === 'image/webp') return '.webp'
   if (mime === 'image/gif') return '.gif'
+  if (mime === 'image/tiff') return '.tiff'
   // audio
   if (mime === 'audio/mpeg') return '.mp3'
   if (mime === 'audio/mp4' || mime === 'audio/x-m4a') return '.m4a'
