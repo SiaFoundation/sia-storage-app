@@ -84,7 +84,11 @@ export function SettingsIndexerScreen({ navigation }: Props) {
               <LabeledValueRow
                 label="Storage Limit"
                 description="Maximum storage for your account"
-                value={humanSize(Number(account.data.maxPinnedData))}
+                value={
+                  Number(account.data.maxPinnedData) >= 2 ** 62
+                    ? 'No limit'
+                    : humanSize(Number(account.data.maxPinnedData))
+                }
               />
             </>
           ) : null}
