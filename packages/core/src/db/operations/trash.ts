@@ -1,11 +1,24 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import { TRASH_AUTO_PURGE_AGE } from '../../config'
+import { recalculateCurrentForGroups } from './files'
+
+async function getGroupsForFileIds(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<{ name: string; directoryId: string | null }[]> {
+  const placeholders = fileIds.map(() => '?').join(',')
+  return db.getAllAsync<{ name: string; directoryId: string | null }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+    ...fileIds,
+  )
+}
 
 export async function trashFiles(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
+  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const placeholders = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async () => {
@@ -22,6 +35,7 @@ export async function trashFiles(
       ...fileIds,
     )
   })
+  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function restoreFiles(
@@ -29,6 +43,7 @@ export async function restoreFiles(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
+  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const placeholders = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async () => {
@@ -43,6 +58,7 @@ export async function restoreFiles(
       ...fileIds,
     )
   })
+  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function permanentlyDeleteFiles(
@@ -50,6 +66,7 @@ export async function permanentlyDeleteFiles(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
+  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const placeholders = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async () => {
@@ -68,6 +85,7 @@ export async function permanentlyDeleteFiles(
       ...fileIds,
     )
   })
+  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function autoPurgeOldTrashedFiles(

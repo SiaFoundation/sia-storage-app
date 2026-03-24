@@ -10,7 +10,6 @@ export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
 let dbName = 'app.db'
 const dbDirectory = getSharedDbDirectory()
-
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
@@ -171,7 +170,20 @@ export function db(): SQLite.SQLiteDatabase {
         const value = (database as any)[prop]
         if (typeof prop === 'string' && RECOVERY_METHODS.has(prop)) {
           return (...args: unknown[]) =>
-            withRecovery(() => (database as any)[prop](...args))
+            withRecovery(async () => {
+              const start = performance.now()
+              const result = await (database as any)[prop](...args)
+              const duration = performance.now() - start
+              const sql = typeof args[0] === 'string' ? args[0] : undefined
+              if (duration > 500 && !sql?.startsWith('INSERT INTO logs')) {
+                logger.warn('db', 'slow_query', {
+                  method: prop,
+                  duration: Math.round(duration),
+                  sql,
+                })
+              }
+              return result
+            })
         }
         if (typeof value === 'function') {
           return value.bind(database)

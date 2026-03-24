@@ -1,0 +1,18 @@
+{
+  "name": "@siastorage/benchmark",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "bench": "node --import tsx src/main.ts",
+    "bench:10m": "node --import tsx src/main.ts --scale 10"
+  },
+  "devDependencies": {
+    "@siastorage/core": "workspace:*",
+    "@siastorage/logger": "workspace:*",
+    "@siastorage/node-adapters": "workspace:*",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "tsx": "4.21.0"
+  }
+}

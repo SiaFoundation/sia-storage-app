@@ -1,16 +1,18 @@
 import type { LogLevel } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
 
+type LogInsert = {
+  timestamp: string
+  level: string
+  scope: string
+  message: string
+  data: string | null
+  createdAt: number
+}
+
 export async function insertLog(
   db: DatabaseAdapter,
-  entry: {
-    timestamp: string
-    level: string
-    scope: string
-    message: string
-    data: string | null
-    createdAt: number
-  },
+  entry: LogInsert,
 ): Promise<void> {
   await db.runAsync(
     'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
@@ -21,6 +23,26 @@ export async function insertLog(
     entry.data,
     entry.createdAt,
   )
+}
+
+export async function insertManyLogs(
+  db: DatabaseAdapter,
+  entries: LogInsert[],
+): Promise<void> {
+  if (entries.length === 0) return
+  await db.withTransactionAsync(async () => {
+    for (const entry of entries) {
+      await db.runAsync(
+        'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+        entry.timestamp,
+        entry.level,
+        entry.scope,
+        entry.message,
+        entry.data,
+        entry.createdAt,
+      )
+    }
+  })
 }
 
 export async function queryAvailableLogScopes(

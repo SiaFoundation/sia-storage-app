@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { buildLatestVersionFilter } from './library'
 
 export type UploadCategoryStats = {
   total: number
@@ -90,17 +91,24 @@ export async function queryUploadStats(
   // Exclude pending imports (hash = '') — they have no size yet and are
   // shown separately in the "Pending import" row.
   const active = `f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.hash != ''`
+  const latestVersion = buildLatestVersionFilter('f')
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
   const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'image/%'`),
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'video/%'`),
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'audio/%'`),
     q(
-      `f.kind = 'file' AND ${active} AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')`,
+      `f.kind = 'file' AND ${active} AND f.type LIKE 'image/%' AND ${latestVersion}`,
     ),
     q(
-      `f.kind = 'file' AND ${active} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
+      `f.kind = 'file' AND ${active} AND f.type LIKE 'video/%' AND ${latestVersion}`,
+    ),
+    q(
+      `f.kind = 'file' AND ${active} AND f.type LIKE 'audio/%' AND ${latestVersion}`,
+    ),
+    q(
+      `f.kind = 'file' AND ${active} AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%') AND ${latestVersion}`,
+    ),
+    q(
+      `f.kind = 'file' AND ${active} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%' AND ${latestVersion}`,
     ),
     q(`f.kind = 'thumb' AND ${active}`),
   ])

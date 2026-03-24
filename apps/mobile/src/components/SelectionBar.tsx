@@ -93,7 +93,9 @@ export function SelectionBar({
   const handleTrash = useCallback(async () => {
     if (!counts) return
     try {
-      await app().files.trash(counts.files.map((f) => f.id))
+      for (const f of counts.files) {
+        await app().files.trashFile(f.id)
+      }
       toast.show(`Moved ${counts.total} files to trash`)
       onComplete?.()
     } catch (e) {

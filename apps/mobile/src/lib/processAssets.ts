@@ -284,6 +284,7 @@ export async function syncAssets(
     )
   }
   await app().files.createMany(newFiles)
+  await app().optimize()
 
   if (addToImportDirectory) {
     await moveMediaToImportDirectory(newFiles)
@@ -351,6 +352,7 @@ export async function catalogAssets(
   })
 
   await app().files.createMany(candidates, { conflictClause: 'OR IGNORE' })
+  await app().optimize()
 
   if (addToImportDirectory) {
     const newFiles = candidates.filter(
@@ -416,6 +418,7 @@ export async function importFiles(
 
   if (placeholders.length > 0) {
     await app().files.createMany(placeholders)
+    await app().optimize()
   }
 
   // Fire-and-forget: sourceURIs are ephemeral (document picker content://

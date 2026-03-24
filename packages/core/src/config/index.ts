@@ -70,6 +70,8 @@ export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
 // How often to check for trashed files to auto-purge.
 export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
+// SQLite PRAGMA optimize interval.
+export const DB_OPTIMIZE_INTERVAL = secondsInMs(60) // 60 seconds
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)
 // Max concurrent pinObject calls during save phase.

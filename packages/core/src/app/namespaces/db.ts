@@ -54,6 +54,7 @@ export function buildDbNamespaces(
   | 'uploader'
   | 'hosts'
   | 'account'
+  | 'optimize'
 > {
   async function removeFile(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
@@ -169,6 +170,13 @@ export function buildDbNamespaces(
           caches.libraryVersion.invalidate()
         }
       },
+      syncManyFromMetadata: async (entries, opts) => {
+        await ops.syncManyTagsFromMetadata(db, entries)
+        if (!opts?.skipInvalidation) {
+          caches.tags.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
+      },
     },
     files: {
       getById: (id) => ops.readFileRecord(db, id),
@@ -188,33 +196,55 @@ export function buildDbNamespaces(
         if (localObject) {
           await ops.createFileRecordWithLocalObject(db, record, localObject)
         } else {
-          await ops.insertFileRecord(db, record)
+          await ops.insertFileRecord(db, record, {
+            skipCurrentRecalc: opts?.skipCurrentRecalc,
+          })
         }
         if (!opts?.skipInvalidation) {
           invalidateLibrary()
         }
       },
       createMany: async (records, opts) => {
-        await ops.insertManyFileRecords(
-          db,
-          records,
-          opts?.conflictClause
-            ? { conflictClause: opts.conflictClause }
-            : undefined,
-        )
-        if (records.length > 0) {
+        await ops.insertManyFileRecords(db, records, {
+          conflictClause: opts?.conflictClause,
+          skipCurrentRecalc: opts?.skipCurrentRecalc,
+        })
+        if (records.length > 0 && !opts?.skipCurrentRecalc) {
+          invalidateLibrary()
+        }
+      },
+      upsertMany: async (records, opts) => {
+        await ops.upsertManyFileRecords(db, records, {
+          skipCurrentRecalc: opts?.skipCurrentRecalc,
+        })
+        if (records.length > 0 && !opts?.skipCurrentRecalc) {
+          invalidateLibrary()
+        }
+      },
+      getRowsByIds: (ids) => ops.queryFileRecordRowsByIds(db, ids),
+      getRowsByObjectIds: (objectIds, indexerURL) =>
+        ops.queryFileRecordRowsByObjectIds(db, objectIds, indexerURL),
+      tombstone: async (fileIds, opts) => {
+        await ops.tombstoneFileRecords(db, fileIds, Date.now())
+        if (!opts?.skipInvalidation) {
           invalidateLibrary()
         }
       },
       update: async (update, opts) => {
-        await ops.updateFileRecordFields(db, update, opts)
+        await ops.updateFileRecordFields(db, update, {
+          includeUpdatedAt: opts?.includeUpdatedAt,
+          skipCurrentRecalc: opts?.skipCurrentRecalc,
+        })
         if (!opts?.skipInvalidation) {
           caches.fileById.invalidate(update.id)
           caches.libraryVersion.invalidate()
         }
       },
       updateMany: async (updates, opts) => {
-        await ops.updateManyFileRecordFields(db, updates, opts)
+        await ops.updateManyFileRecordFields(db, updates, {
+          includeUpdatedAt: opts?.includeUpdatedAt,
+          skipCurrentRecalc: opts?.skipCurrentRecalc,
+        })
         if (updates.length > 0) {
           for (const u of updates) {
             caches.fileById.invalidate(u.id)
@@ -253,6 +283,10 @@ export function buildDbNamespaces(
         await ops.deleteFileRecordsAndThumbnails(db, ids)
         invalidateLibrary()
       },
+      recalculateCurrent: (fileIds) =>
+        ops.recalculateCurrentForFileIds(db, fileIds),
+      recalculateCurrentForGroups: (groups) =>
+        ops.recalculateCurrentForGroups(db, groups),
       deleteLost: async (indexerURL) => {
         const lostIds = await ops.deleteLostFiles(db, indexerURL)
         if (lostIds.length > 0) {
@@ -302,6 +336,50 @@ export function buildDbNamespaces(
         )
         invalidateLibrary()
       },
+      getVersionHistory: async (name, directoryId) => {
+        const rows = await ops.queryFileVersions(db, name, directoryId)
+        return rows.map((r) => ops.transformRow(r))
+      },
+      renameFile: async (id, newName) => {
+        const file = await db.getFirstAsync<{
+          name: string
+          directoryId: string | null
+        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
+        if (!file) return
+        await ops.renameAllFileVersions(
+          db,
+          file.name,
+          file.directoryId,
+          newName,
+        )
+        invalidateLibrary()
+      },
+      moveFile: async (id, dirId) => {
+        const file = await db.getFirstAsync<{
+          name: string
+          directoryId: string | null
+        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
+        if (!file) return
+        await ops.moveAllFileVersions(db, file.name, file.directoryId, dirId)
+        caches.directories.invalidateAll()
+        invalidateLibrary()
+      },
+      trashFile: async (id) => {
+        const file = await db.getFirstAsync<{
+          name: string
+          directoryId: string | null
+        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
+        if (!file) return
+        await ops.trashAllFileVersions(db, file.name, file.directoryId)
+        invalidateLibrary()
+      },
+      trashAllVersions: async (name, directoryId) => {
+        const ids = await ops.trashAllFileVersions(db, name, directoryId)
+        if (ids.length > 0) {
+          invalidateLibrary()
+        }
+        return ids
+      },
     },
     directories: {
       getAll: () => ops.queryAllDirectoriesWithCounts(db),
@@ -348,12 +426,22 @@ export function buildDbNamespaces(
         ops.queryCountFilesWithDirectories(db, fileIds),
       syncFromMetadata: async (fileId, dirName, opts) => {
         if (dirName === undefined) return
-        await ops.syncDirectoryFromMetadata(db, fileId, dirName)
+        await ops.syncDirectoryFromMetadata(db, fileId, dirName, {
+          skipCurrentRecalc: opts?.skipCurrentRecalc,
+        })
         if (!opts?.skipInvalidation) {
           caches.directories.invalidate('all')
           caches.directories.invalidate(`file/${fileId}`)
           caches.libraryVersion.invalidate()
         }
+      },
+      syncManyFromMetadata: async (entries, opts) => {
+        const oldGroups = await ops.syncManyDirectoriesFromMetadata(db, entries)
+        if (!opts?.skipInvalidation) {
+          caches.directories.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
+        return oldGroups
       },
     },
     thumbnails: {
@@ -424,6 +512,15 @@ export function buildDbNamespaces(
         }
       },
       countForFile: (fileId) => ops.countLocalObjectsForFile(db, fileId),
+      deleteManyByObjectIds: async (objectIds, indexerURL, opts) => {
+        await ops.deleteManyLocalObjectsByObjectIds(db, objectIds, indexerURL)
+        if (!opts?.skipInvalidation) {
+          await caches.library.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
+      },
+      queryFilesWithNoObjects: (fileIds) =>
+        ops.queryFilesWithNoObjects(db, fileIds),
     },
     fs: fsNamespace,
     library: {
@@ -445,6 +542,11 @@ export function buildDbNamespaces(
     },
     logs: {
       append: (entry) => ops.insertLog(db, { ...entry, createdAt: Date.now() }),
+      appendMany: (entries) =>
+        ops.insertManyLogs(
+          db,
+          entries.map((e) => ({ ...e, createdAt: Date.now() })),
+        ),
       read: async (opts?: {
         logLevel?: string
         logScopes?: string[]

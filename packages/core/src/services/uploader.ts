@@ -1040,13 +1040,24 @@ export class UploadManager {
       }
     }
 
+    // Bump updatedAt on successfully uploaded files so sync-up picks them
+    // up even if the cursor already advanced past their previous updatedAt
+    // (e.g., file was assigned to a directory before upload finished).
+    const successfulFileIds = results
+      .filter((r) => r.type !== 'error' && r.type !== 'missing')
+      .map((r) => r.fileId)
+    if (successfulFileIds.length > 0) {
+      const now = Date.now()
+      await this.app.files.updateMany(
+        successfulFileIds.map((id) => ({ id, updatedAt: now })),
+        { includeUpdatedAt: true, skipCurrentRecalc: true },
+      )
+    }
+
     // Phase 3: Invalidate cache then remove completed uploads.
     // Invalidation must happen before removal so the file record refreshes
     // with the sealed object before the uploading state clears — otherwise
     // the UI briefly shows a "needs upload" icon.
-    const successfulFileIds = results
-      .filter((r) => r.type !== 'error' && r.type !== 'missing')
-      .map((r) => r.fileId)
     if (successfulFileIds.length > 0) {
       this.app.caches.library.invalidateAll()
       this.app.caches.libraryVersion.invalidate()

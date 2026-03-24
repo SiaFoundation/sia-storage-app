@@ -1,4 +1,9 @@
-export { appendLog, setLogAppender } from './logAppender'
+export {
+  appendLog,
+  flushLogs,
+  setLogAppender,
+  stopLogAppender,
+} from './logAppender'
 export {
   ANSI_BOLD,
   ANSI_RESET,

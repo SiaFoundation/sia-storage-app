@@ -264,4 +264,89 @@ describe('Sync Down', () => {
     expect(vacationDir).toBeDefined()
     expect(vacationDir!.fileCount).toBe(1)
   })
+
+  it('addedAt preserved across sync updates', async () => {
+    const stored = app.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, { name: 'keep-added.jpg' }),
+    })
+
+    let fileId: string | undefined
+    let originalAddedAt: number | undefined
+    await waitForCondition(
+      async () => {
+        const files = await app.getFiles()
+        if (files.length === 1) {
+          fileId = files[0].id
+          originalAddedAt = files[0].addedAt
+          return true
+        }
+        return false
+      },
+      { timeout: 10_000, message: 'Initial file to sync' },
+    )
+
+    app.sdk.injectMetadataChange(stored.id, {
+      name: 'keep-added-renamed.jpg',
+    })
+
+    await waitForCondition(
+      async () => {
+        const file = await app.getFileById(fileId!)
+        return file?.name === 'keep-added-renamed.jpg'
+      },
+      { timeout: 10_000, message: 'File renamed via sync' },
+    )
+
+    const updated = await app.getFileById(fileId!)
+    expect(updated!.addedAt).toBe(originalAddedAt)
+  })
+
+  it('older remote metadata still upserts local object', async () => {
+    const now = Date.now()
+
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        id: 'obj-test-file',
+        name: 'photo.jpg',
+        type: 'image/jpeg',
+        createdAt: now,
+        updatedAt: now + 1000,
+      }),
+    })
+
+    await waitForCondition(
+      async () => {
+        const files = await app.getFiles()
+        return files.length === 1
+      },
+      { timeout: 10_000, message: 'Initial file synced' },
+    )
+
+    // Inject a second object with OLDER updatedAt but different object ID
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(2, {
+        id: 'obj-test-file',
+        name: 'photo-old.jpg',
+        type: 'image/jpeg',
+        createdAt: now,
+        updatedAt: now + 500,
+      }),
+    })
+
+    await waitForCondition(
+      async () => {
+        const objects = await app.readLocalObjectsForFile('obj-test-file')
+        return objects.length === 2
+      },
+      { timeout: 10_000, message: 'Second object upserted' },
+    )
+
+    // Name should NOT have changed (older metadata not merged)
+    const file = await app.getFileById('obj-test-file')
+    expect(file!.name).toBe('photo.jpg')
+
+    // But both objects exist
+    const objects = await app.readLocalObjectsForFile('obj-test-file')
+    expect(objects).toHaveLength(2)
+  })
 })
