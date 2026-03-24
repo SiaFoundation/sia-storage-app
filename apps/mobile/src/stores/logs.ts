@@ -20,7 +20,7 @@ export async function initLogger(): Promise<void> {
     return
   }
 
-  setLogAppender(appendLogToDb)
+  setLogAppender(appendLogsToDb)
   logger.info('logs', 'init')
 
   const storedLevel = await getLogLevel()
@@ -90,17 +90,19 @@ export async function toggleLogScope(scope: string): Promise<void> {
   await setLogScopes(newScopes)
 }
 
-async function appendLogToDb(entry: LogEntry): Promise<void> {
+async function appendLogsToDb(entries: LogEntry[]): Promise<void> {
   try {
-    await app().logs.append({
-      timestamp: entry.timestamp,
-      level: entry.level,
-      scope: entry.scope,
-      message: entry.message,
-      data: serializeData(entry.data),
-    })
+    await app().logs.appendMany(
+      entries.map((entry) => ({
+        timestamp: entry.timestamp,
+        level: entry.level,
+        scope: entry.scope,
+        message: entry.message,
+        data: serializeData(entry.data),
+      })),
+    )
   } catch (error) {
-    console.warn('[logs] Failed to append log:', error)
+    console.warn('[logs] Failed to append logs:', error)
   }
 }
 

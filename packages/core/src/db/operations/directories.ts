@@ -2,6 +2,11 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
+import {
+  recalculateCurrentForGroup,
+  recalculateCurrentForGroups,
+} from './files'
+import { buildLatestVersionFilter } from './library'
 import { trashFiles } from './trash'
 export type Directory = {
   id: string
@@ -91,6 +96,7 @@ export async function queryAllDirectoriesWithCounts(
     `SELECT d.id, d.name, d.createdAt, COUNT(f.id) as fileCount
      FROM directories d
      LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}
      GROUP BY d.id
      ORDER BY d.name COLLATE NOCASE`,
   )
@@ -113,10 +119,65 @@ export async function syncDirectoryFromMetadata(
   db: DatabaseAdapter,
   fileId: string,
   directoryName: string | undefined,
+  options?: { skipCurrentRecalc?: boolean },
 ): Promise<void> {
   if (directoryName === undefined) return
   const dir = await getOrCreateDirectory(db, directoryName)
+  if (options?.skipCurrentRecalc) {
+    await sql.update(db, 'files', { directoryId: dir.id }, { id: fileId })
+    return
+  }
+  const row = await db.getFirstAsync<{
+    name: string
+    directoryId: string | null
+  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
   await sql.update(db, 'files', { directoryId: dir.id }, { id: fileId })
+  if (row) {
+    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+    await recalculateCurrentForGroup(db, row.name, dir.id)
+  }
+}
+
+export async function syncManyDirectoriesFromMetadata(
+  db: DatabaseAdapter,
+  entries: { fileId: string; directoryName: string }[],
+): Promise<{ name: string; directoryId: string | null }[]> {
+  if (entries.length === 0) return []
+
+  const dirNames = [...new Set(entries.map((e) => e.directoryName))]
+  const dirMap = new Map<string, string>()
+  for (const name of dirNames) {
+    const dir = await getOrCreateDirectory(db, name)
+    dirMap.set(name, dir.id)
+  }
+
+  const fileIds = entries.map((e) => e.fileId)
+  const placeholders = fileIds.map(() => '?').join(',')
+  const oldGroups = await db.getAllAsync<{
+    name: string
+    directoryId: string | null
+  }>(
+    `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${placeholders}) AND f.kind = 'file'`,
+    ...fileIds,
+  )
+
+  const byDirId = new Map<string, string[]>()
+  for (const entry of entries) {
+    const dirId = dirMap.get(entry.directoryName)!
+    const list = byDirId.get(dirId) || []
+    list.push(entry.fileId)
+    byDirId.set(dirId, list)
+  }
+  for (const [dirId, ids] of byDirId) {
+    const ph = ids.map(() => '?').join(',')
+    await db.runAsync(
+      `UPDATE files SET directoryId = ? WHERE id IN (${ph})`,
+      dirId,
+      ...ids,
+    )
+  }
+
+  return oldGroups
 }
 
 export async function moveFileToDirectory(
@@ -124,12 +185,20 @@ export async function moveFileToDirectory(
   fileId: string,
   dirId: string | null,
 ): Promise<void> {
+  const row = await db.getFirstAsync<{
+    name: string
+    directoryId: string | null
+  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
   await sql.update(
     db,
     'files',
     { directoryId: dirId, updatedAt: Date.now() },
     { id: fileId },
   )
+  if (row) {
+    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+    await recalculateCurrentForGroup(db, row.name, dirId)
+  }
 }
 
 export async function moveFilesToDirectory(
@@ -138,25 +207,51 @@ export async function moveFilesToDirectory(
   dirId: string | null,
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const now = Date.now()
   const placeholders = fileIds.map(() => '?').join(',')
+  const groups = await db.getAllAsync<{
+    name: string
+    directoryId: string | null
+  }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+    ...fileIds,
+  )
+  const now = Date.now()
   await db.runAsync(
     `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${placeholders})`,
     dirId,
     now,
     ...fileIds,
   )
+  await recalculateCurrentForGroups(db, groups)
+  const newGroups = new Map<
+    string,
+    { name: string; directoryId: string | null }
+  >()
+  for (const g of groups) {
+    const key = `${g.name}|${dirId ?? ''}`
+    newGroups.set(key, { name: g.name, directoryId: dirId })
+  }
+  for (const g of newGroups.values()) {
+    await recalculateCurrentForGroup(db, g.name, g.directoryId)
+  }
 }
 
 export async function deleteDirectory(
   db: DatabaseAdapter,
   id: string,
 ): Promise<void> {
+  const groups = await db.getAllAsync<{ name: string }>(
+    `SELECT DISTINCT name FROM files WHERE directoryId = ? AND kind = 'file'`,
+    id,
+  )
   await db.runAsync(
     'UPDATE files SET directoryId = NULL WHERE directoryId = ?',
     id,
   )
   await sql.del(db, 'directories', { id })
+  for (const g of groups) {
+    await recalculateCurrentForGroup(db, g.name, null)
+  }
 }
 
 export async function deleteDirectoryAndTrashFiles(
@@ -212,6 +307,8 @@ export async function queryFileByNameInDirectory(
      WHERE f.name = ? AND f.kind = 'file'
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND d.name = ?
+       AND ${buildLatestVersionFilter('f')}
+     ORDER BY f.updatedAt DESC, f.id DESC
      LIMIT 1`,
     fileName,
     directoryName,
@@ -229,6 +326,7 @@ export async function queryFilesByDirectoryName(
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE d.name = ? AND f.kind = 'file'
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}
      ORDER BY f.name`,
     directoryName,
   )

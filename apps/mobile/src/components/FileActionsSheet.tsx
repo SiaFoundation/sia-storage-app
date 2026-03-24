@@ -130,7 +130,7 @@ function SingleFileActionsSheet({
   const handleDelete = useCallback(async () => {
     if (!file) return
     try {
-      await app().files.trash([file.id])
+      await app().files.trashFile(file.id)
       if (navigation) navigation.goBack()
       toast.show('Moved to trash')
       onComplete?.()
@@ -301,7 +301,9 @@ function BulkFileActionsSheet({
   const handleDeleteAll = useCallback(async () => {
     if (!counts) return
     try {
-      await app().files.trash(counts.files.map((f) => f.id))
+      for (const f of counts.files) {
+        await app().files.trashFile(f.id)
+      }
       toast.show(`Moved ${counts.total} files to trash`)
       onComplete?.()
     } catch (e) {

@@ -69,6 +69,8 @@ export interface AppCaches {
 
 /** Primary API contract for all platform apps. All state and mutations flow through this facade. */
 export interface AppService {
+  /** Runs PRAGMA optimize to refresh query planner statistics for tables with stale stats. */
+  optimize(): Promise<void>
   /** Tag operations: create, query, and manage file tags. */
   tags: {
     /** Returns all tags with their associated file counts. */
@@ -103,6 +105,11 @@ export interface AppService {
     syncFromMetadata(
       fileId: string,
       tagNames: string[] | undefined,
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<void>
+    /** Batch reconciles tags from metadata for multiple files. */
+    syncManyFromMetadata(
+      entries: { fileId: string; tagNames: string[] }[],
       opts?: { skipInvalidation?: boolean },
     ): Promise<void>
   }
@@ -141,23 +148,48 @@ export interface AppService {
     create(
       record: Omit<FileRecord, 'objects'>,
       localObject?: LocalObject,
-      opts?: { skipInvalidation?: boolean },
+      opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
     /** Creates multiple file records via bulk insert. Pass conflictClause
      * 'OR IGNORE' to silently skip duplicates (e.g. localId conflicts). */
     createMany(
       records: Omit<FileRecord, 'objects'>[],
-      opts?: { conflictClause?: 'OR IGNORE' },
+      opts?: { conflictClause?: 'OR IGNORE'; skipCurrentRecalc?: boolean },
+    ): Promise<void>
+    /** Bulk upsert file records. Creates new rows, updates existing rows' metadata
+     * fields (name, size, type, etc.) while preserving addedAt, localId, deletedAt. */
+    upsertMany(
+      records: Omit<FileRecord, 'objects'>[],
+      opts?: { skipCurrentRecalc?: boolean },
+    ): Promise<void>
+    /** Returns file record rows by IDs (no objects join). */
+    getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
+    /** Returns file record rows by object IDs and indexer URL (no objects join). */
+    getRowsByObjectIds(
+      objectIds: string[],
+      indexerURL: string,
+    ): Promise<Map<string, FileRecordRow>>
+    /** Batch tombstone: sets deletedAt and trashedAt on multiple files. */
+    tombstone(
+      fileIds: string[],
+      opts?: { skipInvalidation?: boolean },
     ): Promise<void>
     /** Partially updates a file record by ID. */
     update(
       update: Partial<FileRecordRow> & { id: string },
-      opts?: { includeUpdatedAt?: boolean; skipInvalidation?: boolean },
+      opts?: {
+        includeUpdatedAt?: boolean
+        skipInvalidation?: boolean
+        skipCurrentRecalc?: boolean
+      },
     ): Promise<void>
     /** Partially updates multiple file records in a single transaction. */
     updateMany(
       updates: (Partial<FileRecordRow> & { id: string })[],
-      opts?: { includeUpdatedAt?: boolean },
+      opts?: {
+        includeUpdatedAt?: boolean
+        skipCurrentRecalc?: boolean
+      },
     ): Promise<void>
     /** Updates a file record and upserts its local object in one operation. */
     updateWithLocalObject(
@@ -177,6 +209,12 @@ export interface AppService {
     deleteManyAndThumbnails(ids: string[]): Promise<void>
     /** Deletes files that have no remaining remote objects on the given indexer. */
     deleteLost(indexerURL: string): Promise<string[]>
+    /** Recalculates the current column for all version groups containing the given file IDs. */
+    recalculateCurrent(fileIds: string[]): Promise<void>
+    /** Recalculates the current column for the given version groups. */
+    recalculateCurrentForGroups(
+      groups: { name: string; directoryId: string | null }[],
+    ): Promise<void>
     /** Moves files to the trash. */
     trash(ids: string[]): Promise<void>
     /** Restores files from the trash. */
@@ -209,6 +247,22 @@ export interface AppService {
     getLostStats(
       indexerURL: string,
     ): Promise<{ count: number; totalBytes: number }>
+    /** Returns all versions of a file (same name + directory), ordered by updatedAt DESC. */
+    getVersionHistory(
+      name: string,
+      directoryId: string | null,
+    ): Promise<FileRecord[]>
+    /** Renames all versions of a file. Merges into target group if it exists. */
+    renameFile(id: string, newName: string): Promise<void>
+    /** Moves all versions of a file to a directory. Merges into target group if it exists. */
+    moveFile(id: string, dirId: string | null): Promise<void>
+    /** Trashes all versions of a file by looking up its version group from the file ID. */
+    trashFile(id: string): Promise<void>
+    /** Trashes all versions of a file (same name + directory). */
+    trashAllVersions(
+      name: string,
+      directoryId: string | null,
+    ): Promise<string[]>
   }
   /** Directory operations: create, rename, delete, and organize files into directories. */
   directories: {
@@ -238,8 +292,13 @@ export interface AppService {
     syncFromMetadata(
       fileId: string,
       dirName: string | undefined,
-      opts?: { skipInvalidation?: boolean },
+      opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
+    /** Batch reconciles directory assignments from metadata. Returns old version groups for recalculation. */
+    syncManyFromMetadata(
+      entries: { fileId: string; directoryName: string }[],
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<{ name: string; directoryId: string | null }[]>
   }
   /** Thumbnail queries and generation. */
   thumbnails: {
@@ -322,6 +381,14 @@ export interface AppService {
     ): Promise<void>
     /** Returns the number of local objects for a file. */
     countForFile(fileId: string): Promise<number>
+    /** Batch deletes local objects by their object IDs for a given indexer. */
+    deleteManyByObjectIds(
+      objectIds: string[],
+      indexerURL: string,
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<void>
+    /** Returns file IDs that have no remaining objects. */
+    queryFilesWithNoObjects(fileIds: string[]): Promise<string[]>
   }
   /** Local file system operations: metadata tracking, caching, and file I/O. */
   fs: {
@@ -398,6 +465,16 @@ export interface AppService {
       message: string
       data: string | null
     }): Promise<void>
+    /** Appends multiple log entries in a single transaction. */
+    appendMany(
+      entries: {
+        timestamp: string
+        level: string
+        scope: string
+        message: string
+        data: string | null
+      }[],
+    ): Promise<void>
     /** Reads log entries with optional level, scope, and limit filters. */
     read(opts?: {
       logLevel?: string

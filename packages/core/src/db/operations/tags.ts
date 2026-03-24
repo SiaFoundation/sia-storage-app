@@ -157,6 +157,51 @@ export async function syncTagsFromMetadata(
   })
 }
 
+export async function syncManyTagsFromMetadata(
+  db: DatabaseAdapter,
+  entries: { fileId: string; tagNames: string[] }[],
+): Promise<void> {
+  if (entries.length === 0) return
+  await ensureSystemTags(db)
+
+  const allTagNames = new Set<string>()
+  for (const entry of entries) {
+    for (const name of entry.tagNames) {
+      allTagNames.add(name)
+    }
+  }
+
+  const tagMap = new Map<string, string>()
+  for (const name of allTagNames) {
+    const tag = await getOrCreateTag(db, name)
+    tagMap.set(name, tag.id)
+  }
+
+  const fileIds = entries.map((e) => e.fileId)
+  const placeholders = fileIds.map(() => '?').join(',')
+  await db.runAsync(
+    `DELETE FROM file_tags WHERE fileId IN (${placeholders}) AND tagId NOT IN (
+      SELECT id FROM tags WHERE system = 1
+    )`,
+    ...fileIds,
+  )
+
+  const fileTagRows: { fileId: string; tagId: string }[] = []
+  for (const entry of entries) {
+    for (const name of entry.tagNames) {
+      const tagId = tagMap.get(name)
+      if (tagId) {
+        fileTagRows.push({ fileId: entry.fileId, tagId })
+      }
+    }
+  }
+  if (fileTagRows.length > 0) {
+    await sql.insertMany(db, 'file_tags', fileTagRows, {
+      conflictClause: 'OR IGNORE',
+    })
+  }
+}
+
 export async function insertFileTag(
   db: DatabaseAdapter,
   fileId: string,

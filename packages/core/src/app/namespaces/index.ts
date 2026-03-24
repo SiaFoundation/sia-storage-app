@@ -112,6 +112,7 @@ export function createAppService(
   )
 
   const service: AppService = {
+    optimize: () => adapters.db.execAsync('PRAGMA optimize'),
     ...buildDbNamespaces(adapters.db, caches, uploadsNamespace, adapters.fsIO, {
       crypto: adapters.crypto,
       thumbnail: adapters.thumbnail,

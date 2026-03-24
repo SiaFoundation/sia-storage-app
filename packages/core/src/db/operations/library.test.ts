@@ -504,14 +504,14 @@ describe('queryFilePositionInSortedList', () => {
       expect(positionA).toBe(2)
     })
 
-    test('breaks NAME ties using ID', async () => {
-      await createTestFile('file-c', { name: 'same.jpg', createdAt: base })
+    test('sorts by NAME alphabetically', async () => {
+      await createTestFile('file-c', { name: 'aaa.jpg', createdAt: base })
       await createTestFile('file-a', {
-        name: 'same.jpg',
+        name: 'aaa_copy.jpg',
         createdAt: base + 10,
       })
       await createTestFile('file-b', {
-        name: 'same.jpg',
+        name: 'aaa_copy2.jpg',
         createdAt: base + 20,
       })
 
@@ -528,9 +528,9 @@ describe('queryFilePositionInSortedList', () => {
         sortDir: 'ASC',
       })
 
-      expect(positionA).toBe(0)
-      expect(positionB).toBe(1)
-      expect(positionC).toBe(2)
+      expect(positionC).toBe(0)
+      expect(positionA).toBe(1)
+      expect(positionB).toBe(2)
     })
   })
 

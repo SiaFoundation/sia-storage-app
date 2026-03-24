@@ -55,6 +55,7 @@ export {
 const INDEXER_URL = 'https://test.indexer'
 const SYNC_INTERVAL = 200
 const THUMBNAIL_SCAN_INTERVAL = 1000
+const DB_OPTIMIZE_INTERVAL = 5000
 
 export interface TestAppOptions {
   fsIO?: Partial<FsIOAdapter>
@@ -255,6 +256,12 @@ export function createTestApp(
     interval: THUMBNAIL_SCAN_INTERVAL,
   })
 
+  const dbOptimize = scheduler.createInterval({
+    name: 'dbOptimize',
+    worker: () => appService.optimize(),
+    interval: DB_OPTIMIZE_INTERVAL,
+  })
+
   return {
     app: appService,
     internal,
@@ -265,10 +272,12 @@ export function createTestApp(
 
     async start() {
       await runMigrations(db, sortMigrations(coreMigrations))
+      await appService.optimize()
       internal.setSdk(testSdkAdapter)
       appService.connection.setState({ isConnected: true })
       await appService.settings.setIndexerURL(INDEXER_URL)
       internal.initUploader()
+      dbOptimize.init()
       syncDown.init()
       syncUp.init()
       thumbnailScanner.initialize(appService)

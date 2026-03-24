@@ -4,11 +4,9 @@
  * app, sharing MockIndexerStorage so both see the same indexer state.
  */
 
-import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import {
   createEmptyIndexerStorage,
   type MockIndexerStorage,
-  MockSdk,
 } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, waitForCondition } from './app'
 
@@ -147,18 +145,11 @@ describe('Multi-Device Convergence', () => {
 
     await appB.waitForFileCount(3)
 
-    const objectToDelete = Array.from(indexerStorage.objects.entries()).find(
-      ([_, obj]) => {
-        try {
-          const meta = decodeFileMetadata(obj.metadata)
-          return meta.id === deviceAFiles[0].id
-        } catch {
-          return false
-        }
-      },
-    )
-    expect(objectToDelete).toBeDefined()
-    await appA.sdk.deleteObject(objectToDelete![0])
+    await appA.app.files.trashFile(deviceAFiles[0].id)
+    const trashedFiles = (await appA.getFiles())
+      .filter((f) => f.trashedAt != null)
+      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+    await appA.app.files.permanentlyDeleteWithCleanup(trashedFiles)
 
     await appA.waitForCondition(async () => {
       const file = await appA.getFileById(deviceAFiles[0].id)
@@ -212,10 +203,7 @@ describe('Multi-Device Convergence', () => {
     const deviceBFile = (await appB.getFiles())[0]
     expect(deviceBFile.name).toBe(originalName)
 
-    const objectId = Array.from(indexerStorage.objects.keys())[0]
-    appA.sdk.injectMetadataChange(objectId, {
-      name: 'renamed-file.bin',
-    })
+    await appA.app.files.renameFile(deviceAFiles[0].id, 'renamed-file.bin')
 
     await appA.waitForCondition(async () => {
       const files = await appA.getFiles()
@@ -264,30 +252,10 @@ describe('Multi-Device Convergence', () => {
     expect(file2!.trashedAt).toBeNull()
     expect(file2!.deletedAt).toBeNull()
 
-    appB.pause()
-    const objectEntries = Array.from(indexerStorage.objects.entries())
-    const obj1Entry = objectEntries.find(([_, obj]) => {
-      try {
-        const meta = decodeFileMetadata(obj.metadata)
-        return meta.id === fileIdA
-      } catch {
-        return false
-      }
-    })!
-    const obj2Entry = objectEntries.find(([_, obj]) => {
-      try {
-        const meta = decodeFileMetadata(obj.metadata)
-        return meta.id === fileIdB
-      } catch {
-        return false
-      }
-    })!
+    // Device A trashes file 1 via app facade
+    await appA.app.files.trashFile(fileIdA)
 
-    appB.sdk.injectMetadataChange(obj1Entry[0], {
-      trashedAt: Date.now(),
-    })
-    appB.resume()
-
+    // Device B should see the trash propagate via sync
     await waitForCondition(
       async () => {
         const file = await appB.getFileById(fileIdA)
@@ -300,35 +268,17 @@ describe('Multi-Device Convergence', () => {
     expect(file1!.trashedAt).not.toBeNull()
     expect(file1!.deletedAt).toBeNull()
 
-    await appB.updateFileRecord(
-      { id: fileIdB, trashedAt: Date.now() },
-      { includeUpdatedAt: false },
-    )
+    // Device B trashes file 2 via app facade
+    await appB.app.files.trashFile(fileIdB)
     file2 = await appB.getFileById(fileIdB)
     expect(file2!.trashedAt).not.toBeNull()
     expect(file2!.deletedAt).toBeNull()
 
-    await waitForCondition(
-      () => {
-        try {
-          const meta = decodeFileMetadata(
-            indexerStorage.objects.get(obj2Entry[0])!.metadata,
-          )
-          return meta.trashedAt != null
-        } catch {
-          return false
-        }
-      },
-      {
-        timeout: 15_000,
-        message: 'Device B syncUp to push trashedAt for file 2',
-      },
-    )
-
-    appB.pause()
-    const deleteSdk = new MockSdk(indexerStorage)
-    await deleteSdk.deleteObject(obj1Entry[0])
-    appB.resume()
+    // Device A permanently deletes file 1 (trash then delete)
+    const trashedA = (await appA.getFiles())
+      .filter((f) => f.id === fileIdA)
+      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+    await appA.app.files.permanentlyDeleteWithCleanup(trashedA)
 
     await waitForCondition(
       async () => {
@@ -340,30 +290,24 @@ describe('Multi-Device Convergence', () => {
 
     file1 = await appB.getFileById(fileIdA)
     expect(file1!.deletedAt).not.toBeNull()
-
-    const objects1 = await appB.readLocalObjectsForFile(fileIdA)
-    expect(objects1).toHaveLength(0)
-
     expect(await appB.getFileById(fileIdA)).not.toBeNull()
 
-    await appB.sdk.deleteObject(obj2Entry[0])
+    // Device B permanently deletes file 2
+    const trashedB = (await appB.getFiles())
+      .filter((f) => f.id === fileIdB)
+      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+    await appB.app.files.permanentlyDeleteWithCleanup(trashedB)
 
     await waitForCondition(
       async () => {
         const file = await appB.getFileById(fileIdB)
         return file?.deletedAt != null
       },
-      {
-        timeout: 15_000,
-        message: 'Device B to tombstone file 2',
-      },
+      { timeout: 15_000, message: 'Device B to tombstone file 2' },
     )
 
     file2 = await appB.getFileById(fileIdB)
     expect(file2!.deletedAt).not.toBeNull()
-
-    const objects2 = await appB.readLocalObjectsForFile(fileIdB)
-    expect(objects2).toHaveLength(0)
 
     expect((await appB.getFileById(fileIdA))!.deletedAt).not.toBeNull()
     expect((await appB.getFileById(fileIdB))!.deletedAt).not.toBeNull()

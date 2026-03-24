@@ -12,6 +12,7 @@ import { resetSheets } from '../stores/sheets'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
+import { initDbOptimize } from './dbOptimize'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initImportScanner } from './importScanner'
@@ -53,6 +54,7 @@ export async function initApp(): Promise<void> {
           },
         })
         await initLogger()
+        await app().optimize()
       },
     },
   ]
@@ -87,6 +89,7 @@ export async function initApp(): Promise<void> {
       label: 'Starting background services',
       message: 'Launching background services...',
       runner: async () => {
+        initDbOptimize()
         initImportScanner()
         initSyncDownEvents()
         initSyncNewPhotos()

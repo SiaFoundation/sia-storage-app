@@ -8,7 +8,7 @@ import {
 } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
 import { sealPinnedObject } from '../lib/localObjects'
-import type { FileMetadata, FileRecord, FileRecordRow } from '../types/files'
+import type { FileMetadata, FileRecordRow } from '../types/files'
 
 const batchSize = 500
 
@@ -150,6 +150,8 @@ export async function syncDownEventsBatch(
     deleted: counts.deleted,
   })
 
+  await app.optimize()
+
   const willContinue = totalEventsFetched > 1 && !signal.aborted
   app.sync.setState({
     isSyncingDown: willContinue,
@@ -175,22 +177,137 @@ async function processBatch(
   app: AppService,
   internal: AppServiceInternal,
 ) {
-  // Phase 1: Prepare — read DB state without holding any locks. Each event
-  // is classified as create/update/delete based on whether a matching
-  // file record exists.
-  const prepared: PreparedEvent[] = []
   const indexerURL = await app.settings.getIndexerURL()
+  const appKey = internal.requireSdk().appKey()
+
+  // Phase 1: Prepare — decode metadata and classify events using batch reads.
+  // Events with malformed/incomplete metadata are skipped (the only legitimate skip).
+  const deleteObjectIds: string[] = []
+  const upsertEntries: {
+    objectId: string
+    object: PinnedObjectRef
+    metadata: FileMetadata
+    type: 'file' | 'thumbnail'
+  }[] = []
 
   for (const { object, deleted, id } of events) {
     if (signal.aborted) return
     if (deleted) {
-      const result = await prepareDelete(id, indexerURL, app)
-      if (result) prepared.push(result)
+      deleteObjectIds.push(id)
       continue
     }
     if (!object) continue
-    const result = await prepareUpsert(id, object, indexerURL, app, internal)
-    if (result) prepared.push(result)
+    try {
+      const metadata = decodeFileMetadata(object.metadata())
+      if (hasCompleteThumbnailMetadata(metadata)) {
+        upsertEntries.push({
+          objectId: id,
+          object,
+          metadata,
+          type: 'thumbnail',
+        })
+      } else if (hasCompleteFileMetadata(metadata)) {
+        upsertEntries.push({ objectId: id, object, metadata, type: 'file' })
+      } else {
+        logger.debug('syncDownEvents', 'skipped', {
+          reason: 'incomplete_metadata',
+        })
+      }
+    } catch (e) {
+      logger.error('syncDownEvents', 'decode_error', {
+        id,
+        error: e as Error,
+      })
+      throw e
+    }
+  }
+
+  // Batch reads: 2 queries instead of N individual lookups.
+  const metadataIds = [...new Set(upsertEntries.map((e) => e.metadata.id))]
+  const [deleteFileMap, upsertFileMap] = await Promise.all([
+    deleteObjectIds.length > 0
+      ? app.files.getRowsByObjectIds(deleteObjectIds, indexerURL)
+      : new Map<string, FileRecordRow>(),
+    metadataIds.length > 0
+      ? app.files.getRowsByIds(metadataIds)
+      : new Map<string, FileRecordRow>(),
+  ])
+
+  // Classify events using batch results.
+  const prepared: PreparedEvent[] = []
+
+  for (const objectId of deleteObjectIds) {
+    const existing = deleteFileMap.get(objectId)
+    if (!existing) {
+      logger.debug('syncDownEvents', 'skipped', {
+        reason: 'no_file_record',
+        objectId,
+      })
+      continue
+    }
+    logger.debug('syncDownEvents', 'file_delete', { fileId: existing.id })
+    prepared.push({
+      kind: 'delete',
+      objectId,
+      fileId: existing.id,
+      fileRecord: existing,
+      indexerURL,
+    })
+  }
+
+  for (const { object, metadata, type } of upsertEntries) {
+    const existing = upsertFileMap.get(metadata.id)
+    if (existing) {
+      if (type === 'file') {
+        logger.debug('syncDownEvents', 'file_update', { hash: existing.hash })
+      } else {
+        logger.debug('syncDownEvents', 'thumbnail_update', {
+          thumbForId: existing.thumbForId,
+        })
+      }
+      const localObject = sealPinnedObject(
+        existing.id,
+        indexerURL,
+        object,
+        appKey,
+      )
+      const isRemoteNewer = metadata.updatedAt >= existing.updatedAt
+      const mergedMetadata = isRemoteNewer ? toFileRecordFields(metadata) : {}
+      prepared.push({
+        kind: 'update',
+        fileRecord: { ...existing, ...mergedMetadata },
+        localObject,
+        fileId: existing.id,
+        tags: metadata.tags,
+        directory: metadata.directory,
+        isFile: type === 'file',
+        isRemoteNewer,
+      })
+    } else {
+      const fileId = metadata.id
+      if (type === 'file') {
+        logger.debug('syncDownEvents', 'file_create', { hash: metadata.hash })
+      } else {
+        logger.debug('syncDownEvents', 'thumbnail_create', {
+          thumbForId: metadata.thumbForId,
+        })
+      }
+      const localObject = sealPinnedObject(fileId, indexerURL, object, appKey)
+      prepared.push({
+        kind: 'create',
+        fileRecord: {
+          ...toFileRecordFields(metadata),
+          id: fileId,
+          localId: null,
+          addedAt: Date.now(),
+          deletedAt: null,
+        },
+        localObject,
+        tags: metadata.tags,
+        directory: metadata.directory,
+        isFile: type === 'file',
+      })
+    }
   }
 
   if (prepared.length === 0 || signal.aborted) return
@@ -207,91 +324,88 @@ async function processBatch(
       const e = event as unknown as PreparedUpdate
       e.kind = 'update'
       e.fileId = id
+      e.isRemoteNewer = true
     } else {
       seenFileIds.add(id)
     }
   }
 
   // Phase 2: Commit — apply all prepared events in a single DB transaction.
-  // Per-event error handling ensures one failure doesn't abort the batch.
-  const deletedFileIds = new Set<string>()
+  // Errors propagate to roll back the transaction and prevent cursor advancement,
+  // so the batch retries next cycle.
+  const creates = prepared.filter(
+    (e): e is PreparedCreate => e.kind === 'create',
+  )
+  const updates = prepared.filter(
+    (e): e is PreparedUpdate => e.kind === 'update',
+  )
+  const deletes = prepared.filter(
+    (e): e is PreparedDelete => e.kind === 'delete',
+  )
+
+  let deletedFileIds: string[] = []
   await internal.withTransaction(async () => {
-    for (const event of prepared) {
-      try {
-        switch (event.kind) {
-          case 'create':
-            await app.files.create(event.fileRecord, undefined, {
-              skipInvalidation: true,
-            })
-            await app.localObjects.upsert(event.localObject, {
-              skipInvalidation: true,
-            })
-            counts.added++
-            break
-          case 'update':
-            await app.files.update(event.fileRecord, {
-              includeUpdatedAt: true,
-              skipInvalidation: true,
-            })
-            await app.localObjects.upsert(event.localObject, {
-              skipInvalidation: true,
-            })
-            counts.existing++
-            break
-          case 'delete':
-            // Delete event: the remote object was deleted from this indexer.
-            //
-            // 1. Remove the local object row for this indexer.
-            // 2. Tombstone the file (set deletedAt) so it's hidden from the
-            //    UI and won't be resurrected by future sync events.
-            //
-            // File rows are NEVER removed from the database. In our
-            // event-log sync model, the tombstone is the permanent record
-            // that this file was deleted. Without it, a future sync event
-            // from another device or indexer would recreate the file.
-            // This is the same principle as CRDT tombstones.
-            //
-            // If the file has objects on other indexers, syncUp will
-            // eventually process the tombstone and call deleteObject for
-            // each remaining object. The object rows get cleaned up but
-            // the file row with its tombstone persists indefinitely.
-            await app.localObjects.delete(event.objectId, event.indexerURL, {
-              skipInvalidation: true,
-            })
-            if (!event.fileRecord.deletedAt) {
-              const now = Date.now()
-              await app.files.update(
-                {
-                  id: event.fileId,
-                  deletedAt: now,
-                  trashedAt: event.fileRecord.trashedAt ?? now,
-                },
-                { includeUpdatedAt: false, skipInvalidation: true },
-              )
-            }
-            if ((await app.localObjects.countForFile(event.fileId)) === 0) {
-              deletedFileIds.add(event.fileId)
-              counts.deleted++
-            }
-            break
-        }
-      } catch (e) {
-        logger.error('syncDownEvents', 'event_commit_error', {
-          kind: event.kind,
-          error: e as Error,
-        })
-      }
+    // 2A: Single UPSERT for all creates + isRemoteNewer updates.
+    // ON CONFLICT(id) DO UPDATE SET only touches metadata fields —
+    // addedAt, localId, deletedAt, lostReason are preserved from
+    // the existing row, so tombstones can't be cleared by sync.
+    const fileUpserts = [
+      ...creates.map((e) => e.fileRecord),
+      ...updates.filter((e) => e.isRemoteNewer).map((e) => e.fileRecord),
+    ]
+    if (fileUpserts.length > 0) {
+      await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true })
     }
+
+    // 2B: Batch upsert all local objects (creates + updates).
+    const allLocalObjects = [
+      ...creates.map((e) => e.localObject),
+      ...updates.map((e) => e.localObject),
+    ]
+    if (allLocalObjects.length > 0) {
+      await app.localObjects.upsertMany(allLocalObjects, {
+        skipInvalidation: true,
+      })
+    }
+
+    // 2C: Batch deletes.
+    if (deletes.length > 0) {
+      // Delete local objects for all delete events.
+      await app.localObjects.deleteManyByObjectIds(
+        deletes.map((e) => e.objectId),
+        indexerURL,
+        { skipInvalidation: true },
+      )
+
+      // Batch tombstone files that aren't already tombstoned.
+      const toTombstone = deletes
+        .filter((e) => !e.fileRecord.deletedAt)
+        .map((e) => e.fileId)
+      if (toTombstone.length > 0) {
+        await app.files.tombstone(toTombstone, { skipInvalidation: true })
+      }
+
+      // Find files with no remaining objects (fully deleted).
+      const deleteFileIdSet = [...new Set(deletes.map((e) => e.fileId))]
+      deletedFileIds =
+        await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
+    }
+
+    counts.added += creates.length
+    counts.existing += updates.length
+    counts.deleted += deletedFileIds.length
   })
 
   // Phase 3: Cleanup — delete local files for deleted records, clear
-  // upload state for updated records, sync tags/directories. Errors
-  // here are non-fatal. Cache invalidation is deferred to the end of
-  // the batch to avoid triggering React re-render depth limits when
-  // processing large batches (e.g. 500 files from archive sync).
+  // upload state for updated records, sync tags/directories. Cache
+  // invalidation is deferred to the end of the batch to avoid triggering
+  // React re-render depth limits when processing large batches.
+  const deletedFileIdSet = new Set(deletedFileIds)
   let needsLibraryInvalidation = false
-  for (const event of prepared) {
-    if (event.kind === 'delete' && deletedFileIds.has(event.fileId)) {
+
+  // 3A: FS cleanup (non-fatal).
+  for (const event of deletes) {
+    if (deletedFileIdSet.has(event.fileId)) {
       try {
         await app.fs.removeFile({
           id: event.fileRecord.id,
@@ -302,195 +416,76 @@ async function processBatch(
           error: e as Error,
         })
       }
-    } else if (event.kind === 'update') {
-      app.caches.fileById.invalidate(event.fileId)
-      needsLibraryInvalidation = true
-    }
-    if (event.kind !== 'delete' && event.isFile) {
-      const shouldSync =
-        event.kind === 'create' ||
-        (event.kind === 'update' && event.isRemoteNewer)
-      if (shouldSync) {
-        try {
-          await app.tags.syncFromMetadata(event.fileRecord.id, event.tags, {
-            skipInvalidation: true,
-          })
-        } catch (e) {
-          logger.error('syncDownEvents', 'tag_sync_error', {
-            fileId: event.fileRecord.id,
-            error: e as Error,
-          })
-        }
-        try {
-          await app.directories.syncFromMetadata(
-            event.fileRecord.id,
-            event.directory,
-            { skipInvalidation: true },
-          )
-        } catch (e) {
-          logger.error('syncDownEvents', 'directory_sync_error', {
-            fileId: event.fileRecord.id,
-            error: e as Error,
-          })
-        }
-        needsLibraryInvalidation = true
-      }
     }
   }
+
+  // Cache invalidation for updates.
+  for (const event of updates) {
+    app.caches.fileById.invalidate(event.fileId)
+    needsLibraryInvalidation = true
+  }
+
+  // 3B + 3C: Batch directory and tag sync.
+  const syncableEvents = prepared.filter(
+    (e): e is PreparedCreate | PreparedUpdate =>
+      e.kind !== 'delete' &&
+      e.isFile &&
+      (e.kind === 'create' || (e.kind === 'update' && e.isRemoteNewer)),
+  )
+
+  // 3B: Batch directory sync.
+  const dirEntries = syncableEvents
+    .filter((e) => e.directory !== undefined)
+    .map((e) => ({ fileId: e.fileRecord.id, directoryName: e.directory! }))
+  let oldDirGroups: { name: string; directoryId: string | null }[] = []
+  if (dirEntries.length > 0) {
+    oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
+      skipInvalidation: true,
+    })
+    needsLibraryInvalidation = true
+  }
+
+  // 3C: Batch tag sync.
+  const tagEntries = syncableEvents
+    .filter((e) => e.tags !== undefined && e.tags.length > 0)
+    .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
+  if (tagEntries.length > 0) {
+    await app.tags.syncManyFromMetadata(tagEntries, {
+      skipInvalidation: true,
+    })
+    needsLibraryInvalidation = true
+  }
+
+  if (creates.length > 0) {
+    needsLibraryInvalidation = true
+  }
+
+  // 3D: Cache invalidation.
   if (needsLibraryInvalidation) {
     app.caches.tags.invalidateAll()
     app.caches.directories.invalidateAll()
     app.caches.libraryVersion.invalidate()
   }
-}
 
-async function prepareDelete(
-  id: string,
-  indexerURL: string,
-  app: AppService,
-): Promise<PreparedDelete | null> {
-  try {
-    const existingFileRecord = await app.files.getByObjectId(id, indexerURL)
-    if (!existingFileRecord) {
-      logger.debug('syncDownEvents', 'skipped', {
-        reason: 'no_file_record',
-        objectId: id,
-      })
-      return null
-    }
-    logger.info('syncDownEvents', 'file_delete', {
-      fileId: existingFileRecord.id,
-    })
-    return {
-      kind: 'delete',
-      objectId: id,
-      fileId: existingFileRecord.id,
-      fileRecord: existingFileRecord,
-      indexerURL,
-    }
-  } catch (e) {
-    logger.error('syncDownEvents', 'delete_error', { id, error: e as Error })
-    throw e
-  }
-}
-
-async function prepareUpsert(
-  id: string,
-  object: PinnedObjectRef,
-  indexerURL: string,
-  app: AppService,
-  internal: AppServiceInternal,
-): Promise<PreparedCreate | PreparedUpdate | null> {
-  try {
-    const metadata = decodeFileMetadata(object.metadata())
-    if (hasCompleteThumbnailMetadata(metadata)) {
-      const existingThumbnail = await app.files.getById(metadata.id)
-      return prepareFileRecord(
-        'thumbnail',
-        existingThumbnail,
-        indexerURL,
-        object,
-        metadata,
-        app,
-        internal,
-      )
-    }
-    if (hasCompleteFileMetadata(metadata)) {
-      const existingFile = await app.files.getById(metadata.id)
-      return prepareFileRecord(
-        'file',
-        existingFile,
-        indexerURL,
-        object,
-        metadata,
-        app,
-        internal,
-      )
-    }
-    logger.debug('syncDownEvents', 'skipped', {
-      reason: 'incomplete_metadata',
-    })
-    return null
-  } catch (e) {
-    logger.error('syncDownEvents', 'update_error', { id, error: e as Error })
-    throw e
-  }
-}
-
-async function prepareFileRecord(
-  type: 'file' | 'thumbnail',
-  existingFile: FileRecord | null,
-  indexerURL: string,
-  object: PinnedObjectRef,
-  metadata: FileMetadata,
-  app: AppService,
-  internal: AppServiceInternal,
-): Promise<PreparedCreate | PreparedUpdate> {
-  const existing = existingFile
-  const appKey = internal.requireSdk().appKey()
-
-  if (existing) {
-    if (type === 'file') {
-      logger.debug('syncDownEvents', 'file_update', { hash: existing.hash })
-    } else {
-      logger.debug('syncDownEvents', 'thumbnail_update', {
-        thumbForId: existing.thumbForId,
-      })
-    }
-    const localObject = sealPinnedObject(
-      existing.id,
-      indexerURL,
-      object,
-      appKey,
-    )
-    let mergedMetadata: Partial<
-      Omit<FileRecordRow, 'id' | 'localId' | 'addedAt'>
-    >
-    if (metadata.updatedAt >= existing.updatedAt) {
-      mergedMetadata = toFileRecordFields(metadata)
-    } else {
-      // Remote metadata is older than local — skip merge. This can happen
-      // when events are replayed or arrive out of order.
-      mergedMetadata = {}
-    }
-    return {
-      kind: 'update',
-      fileRecord: {
-        ...existing,
-        ...mergedMetadata,
-      },
-      localObject,
-      fileId: existing.id,
-      tags: metadata.tags,
-      directory: metadata.directory,
-      isFile: type === 'file',
-      isRemoteNewer: metadata.updatedAt >= existing.updatedAt,
+  // Phase 4: Recalculate current column for all affected version groups
+  // in one pass, rather than per-file during the batch.
+  const affectedFileIds: string[] = []
+  for (const e of prepared) {
+    if (e.kind === 'delete') {
+      affectedFileIds.push(e.fileId)
+    } else if (e.isFile) {
+      affectedFileIds.push(e.fileRecord.id)
     }
   }
-
-  const fileId = metadata.id
-  if (type === 'file') {
-    logger.info('syncDownEvents', 'file_create', { hash: metadata.hash })
-  } else {
-    logger.info('syncDownEvents', 'thumbnail_create', {
-      thumbForId: metadata.thumbForId,
-    })
+  if (affectedFileIds.length > 0) {
+    await app.files.recalculateCurrent(affectedFileIds)
   }
-  const localObject = sealPinnedObject(fileId, indexerURL, object, appKey)
-  const fileRecord: FileRecordRow = {
-    ...toFileRecordFields(metadata),
-    id: fileId,
-    localId: null,
-    addedAt: Date.now(),
-    deletedAt: null,
-  }
-  return {
-    kind: 'create',
-    fileRecord,
-    localObject,
-    tags: metadata.tags,
-    directory: metadata.directory,
-    isFile: type === 'file',
+  // Recalculate old directory groups from Phase 3B. When a file moves from
+  // dir-A to dir-B, the file-ID-based recalculation above handles dir-B
+  // (the file's current directory). The old group (dir-A) needs separate
+  // recalculation to promote the next version as current.
+  if (oldDirGroups.length > 0) {
+    await app.files.recalculateCurrentForGroups(oldDirGroups)
   }
 }
 

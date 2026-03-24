@@ -4,7 +4,139 @@ import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import { localObjectFromStorageRow } from '../../encoding/localObject'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
+import { buildLatestVersionFilter } from './library'
 import { insertLocalObject, queryLocalObjectsForFile } from './localObjects'
+import { trashFiles } from './trash'
+
+export async function recalculateCurrentForGroup(
+  db: DatabaseAdapter,
+  name: string,
+  directoryId: string | null,
+): Promise<void> {
+  const dirCondition =
+    directoryId === null ? 'directoryId IS NULL' : 'directoryId = ?'
+  const dirParams = directoryId === null ? [name] : [name, directoryId]
+
+  await db.runAsync(
+    `UPDATE files SET current = 0
+     WHERE name = ? AND ${dirCondition} AND kind = 'file'
+       AND trashedAt IS NULL AND deletedAt IS NULL AND current = 1`,
+    ...dirParams,
+  )
+  await db.runAsync(
+    `UPDATE files SET current = 1 WHERE id = (
+       SELECT id FROM files
+       WHERE name = ? AND ${dirCondition} AND kind = 'file'
+         AND trashedAt IS NULL AND deletedAt IS NULL
+       ORDER BY updatedAt DESC, id DESC LIMIT 1
+     )`,
+    ...dirParams,
+  )
+}
+
+export async function recalculateCurrentForGroups(
+  db: DatabaseAdapter,
+  groups: { name: string; directoryId: string | null }[],
+): Promise<void> {
+  const seen = new Set<string>()
+  for (const { name, directoryId } of groups) {
+    const key = `${name}\0${directoryId ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    await recalculateCurrentForGroup(db, name, directoryId)
+  }
+}
+
+export async function recalculateCurrentForFileIds(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<void> {
+  if (fileIds.length === 0) return
+  const chunkSize = MAX_SQL_VARS
+  for (let i = 0; i < fileIds.length; i += chunkSize) {
+    const chunk = fileIds.slice(i, i + chunkSize)
+    const placeholders = chunk.map(() => '?').join(',')
+    const groupsCte = `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`
+    await db.runAsync(
+      `UPDATE files SET current = 0
+       WHERE current = 1 AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL
+         AND id IN (
+           SELECT f2.id FROM files f2
+           INNER JOIN (${groupsCte}) g
+             ON f2.name = g.name AND f2.directoryId IS g.directoryId
+           WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
+         )`,
+      ...chunk,
+    )
+    await db.runAsync(
+      `UPDATE files SET current = 1
+       WHERE id IN (
+         SELECT id FROM (
+           SELECT f2.id, ROW_NUMBER() OVER (
+             PARTITION BY f2.name, f2.directoryId
+             ORDER BY f2.updatedAt DESC, f2.id DESC
+           ) AS rn
+           FROM files f2
+           INNER JOIN (${groupsCte}) g
+             ON f2.name = g.name AND f2.directoryId IS g.directoryId
+           WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
+         ) sub WHERE sub.rn = 1
+       )`,
+      ...chunk,
+    )
+  }
+}
+
+const FILE_ROW_COLUMNS =
+  'id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason'
+
+const MAX_SQL_VARS = 999
+
+export async function queryFileRecordRowsByIds(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<Map<string, FileRecordRow>> {
+  const result = new Map<string, FileRecordRow>()
+  if (ids.length === 0) return result
+  for (let i = 0; i < ids.length; i += MAX_SQL_VARS) {
+    const chunk = ids.slice(i, i + MAX_SQL_VARS)
+    const placeholders = chunk.map(() => '?').join(',')
+    const rows = await db.getAllAsync<FileRecordRow>(
+      `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE id IN (${placeholders})`,
+      ...chunk,
+    )
+    for (const row of rows) {
+      result.set(row.id, row)
+    }
+  }
+  return result
+}
+
+export async function queryFileRecordRowsByObjectIds(
+  db: DatabaseAdapter,
+  objectIds: string[],
+  indexerURL: string,
+): Promise<Map<string, FileRecordRow>> {
+  const result = new Map<string, FileRecordRow>()
+  if (objectIds.length === 0) return result
+  const chunkSize = MAX_SQL_VARS - 1
+  for (let i = 0; i < objectIds.length; i += chunkSize) {
+    const chunk = objectIds.slice(i, i + chunkSize)
+    const placeholders = chunk.map(() => '?').join(',')
+    const rows = await db.getAllAsync<FileRecordRow & { objectId: string }>(
+      `SELECT o.id AS objectId, f.${FILE_ROW_COLUMNS.split(', ').join(', f.')}
+       FROM objects o
+       JOIN files f ON f.id = o.fileId
+       WHERE o.indexerURL = ? AND o.id IN (${placeholders})`,
+      indexerURL,
+      ...chunk,
+    )
+    for (const row of rows) {
+      result.set(row.objectId, row)
+    }
+  }
+  return result
+}
 
 export function transformRow(
   row: FileRecordRow,
@@ -37,6 +169,7 @@ export function transformRow(
 export async function insertFileRecord(
   db: DatabaseAdapter,
   fileRecord: Omit<FileRecord, 'objects'>,
+  options?: { skipCurrentRecalc?: boolean },
 ): Promise<void> {
   const {
     id,
@@ -72,6 +205,13 @@ export async function insertFileRecord(
     deletedAt,
     lostReason,
   })
+  if (kind === 'file' && !options?.skipCurrentRecalc) {
+    const row = await db.getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      id,
+    )
+    await recalculateCurrentForGroup(db, name, row?.directoryId ?? null)
+  }
 }
 
 type FileRecordCursorColumn = 'createdAt' | 'updatedAt' | 'addedAt'
@@ -332,7 +472,10 @@ export async function queryFileRecordById(
 export async function updateFileRecordFields(
   db: DatabaseAdapter,
   update: Partial<FileRecordRow> & { id: string },
-  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
+  options: {
+    includeUpdatedAt?: boolean
+    skipCurrentRecalc?: boolean
+  } = { includeUpdatedAt: false },
 ): Promise<void> {
   const { id } = update
   const assignments: Record<string, string | number | boolean | null> = {}
@@ -369,7 +512,29 @@ export async function updateFileRecordFields(
     return
   }
 
+  const needsRecalc =
+    !options.skipCurrentRecalc &&
+    (update.name !== undefined ||
+      update.trashedAt !== undefined ||
+      update.deletedAt !== undefined ||
+      update.updatedAt !== undefined)
+
+  let oldRow: { name: string; directoryId: string | null } | null = null
+  if (needsRecalc) {
+    oldRow = await db.getFirstAsync<{
+      name: string
+      directoryId: string | null
+    }>('SELECT name, directoryId FROM files WHERE id = ?', id)
+  }
+
   await sql.update(db, 'files', assignments, { id })
+
+  if (oldRow) {
+    await recalculateCurrentForGroup(db, oldRow.name, oldRow.directoryId)
+    if (update.name !== undefined && update.name !== oldRow.name) {
+      await recalculateCurrentForGroup(db, update.name, oldRow.directoryId)
+    }
+  }
 }
 
 export async function updateFileDirectory(
@@ -377,6 +542,10 @@ export async function updateFileDirectory(
   fileId: string,
   dirId: string,
 ): Promise<void> {
+  const row = await db.getFirstAsync<{
+    name: string
+    directoryId: string | null
+  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
   const now = Date.now()
   await sql.update(
     db,
@@ -384,6 +553,10 @@ export async function updateFileDirectory(
     { directoryId: dirId, updatedAt: now },
     { id: fileId },
   )
+  if (row) {
+    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+    await recalculateCurrentForGroup(db, row.name, dirId)
+  }
 }
 
 export async function deleteFileRecordById(
@@ -391,6 +564,27 @@ export async function deleteFileRecordById(
   id: string,
 ): Promise<void> {
   await sql.del(db, 'files', { id })
+}
+
+export async function tombstoneFileRecords(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  now: number,
+): Promise<void> {
+  if (fileIds.length === 0) return
+  const chunkSize = MAX_SQL_VARS - 3
+  for (let i = 0; i < fileIds.length; i += chunkSize) {
+    const chunk = fileIds.slice(i, i + chunkSize)
+    const placeholders = chunk.map(() => '?').join(',')
+    await db.runAsync(
+      `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ?
+       WHERE id IN (${placeholders}) AND deletedAt IS NULL`,
+      now,
+      now,
+      now,
+      ...chunk,
+    )
+  }
 }
 
 export async function deleteFileRecordsByThumbForId(
@@ -404,10 +598,18 @@ export async function deleteFileRecordAndThumbnails(
   db: DatabaseAdapter,
   id: string,
 ): Promise<void> {
+  const row = await db.getFirstAsync<{
+    name: string
+    directoryId: string | null
+    kind: string
+  }>('SELECT name, directoryId, kind FROM files WHERE id = ?', id)
   await db.withTransactionAsync(async () => {
     await sql.del(db, 'files', { thumbForId: id })
     await sql.del(db, 'files', { id })
   })
+  if (row?.kind === 'file') {
+    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+  }
 }
 
 export async function deleteFileRecordsAndThumbnails(
@@ -415,12 +617,21 @@ export async function deleteFileRecordsAndThumbnails(
   ids: string[],
 ): Promise<void> {
   if (ids.length === 0) return
+  const placeholders = ids.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{
+    name: string
+    directoryId: string | null
+  }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+    ...ids,
+  )
   await db.withTransactionAsync(async () => {
     for (const id of ids) {
       await sql.del(db, 'files', { thumbForId: id })
       await sql.del(db, 'files', { id })
     }
   })
+  await recalculateCurrentForGroups(db, rows)
 }
 
 export async function deleteAllFileRecords(db: DatabaseAdapter): Promise<void> {
@@ -636,7 +847,7 @@ export async function readFileRecordsByIds(
 export async function insertManyFileRecords(
   db: DatabaseAdapter,
   records: Omit<FileRecord, 'objects'>[],
-  options?: sql.InsertOptions,
+  options?: sql.InsertOptions & { skipCurrentRecalc?: boolean },
 ): Promise<void> {
   if (records.length === 0) return
   await sql.insertMany(
@@ -661,12 +872,87 @@ export async function insertManyFileRecords(
     })),
     options,
   )
+  if (options?.skipCurrentRecalc) return
+  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
+  if (fileIds.length > 0) {
+    const placeholders = fileIds.map(() => '?').join(',')
+    const groups = await db.getAllAsync<{
+      name: string
+      directoryId: string | null
+    }>(
+      `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+      ...fileIds,
+    )
+    await recalculateCurrentForGroups(db, groups)
+  }
+}
+
+const FILE_UPSERT_UPDATE_COLUMNS = [
+  'name',
+  'size',
+  'type',
+  'kind',
+  'hash',
+  'createdAt',
+  'updatedAt',
+  'thumbForId',
+  'thumbSize',
+  'trashedAt',
+]
+
+export async function upsertManyFileRecords(
+  db: DatabaseAdapter,
+  records: Omit<FileRecord, 'objects'>[],
+  options?: { skipCurrentRecalc?: boolean },
+): Promise<void> {
+  if (records.length === 0) return
+  await sql.upsertMany(
+    db,
+    'files',
+    records.map((r) => ({
+      id: r.id,
+      name: r.name,
+      size: r.size,
+      type: r.type,
+      kind: r.kind,
+      hash: r.hash,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      localId: r.localId,
+      addedAt: r.addedAt,
+      thumbForId: r.thumbForId,
+      thumbSize: r.thumbSize,
+      trashedAt: r.trashedAt,
+      deletedAt: r.deletedAt,
+      lostReason: r.lostReason,
+    })),
+    {
+      conflictColumn: 'id',
+      updateColumns: FILE_UPSERT_UPDATE_COLUMNS,
+    },
+  )
+  if (options?.skipCurrentRecalc) return
+  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
+  if (fileIds.length > 0) {
+    const placeholders = fileIds.map(() => '?').join(',')
+    const groups = await db.getAllAsync<{
+      name: string
+      directoryId: string | null
+    }>(
+      `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+      ...fileIds,
+    )
+    await recalculateCurrentForGroups(db, groups)
+  }
 }
 
 export async function updateManyFileRecordFields(
   db: DatabaseAdapter,
   updates: (Partial<FileRecordRow> & { id: string })[],
-  options: { includeUpdatedAt?: boolean } = { includeUpdatedAt: false },
+  options: {
+    includeUpdatedAt?: boolean
+    skipCurrentRecalc?: boolean
+  } = { includeUpdatedAt: false },
 ): Promise<void> {
   if (updates.length === 0) return
   await db.withTransactionAsync(async () => {
@@ -681,11 +967,20 @@ export async function deleteManyFileRecordsByIds(
   ids: string[],
 ): Promise<void> {
   if (ids.length === 0) return
+  const placeholders = ids.map(() => '?').join(',')
+  const groups = await db.getAllAsync<{
+    name: string
+    directoryId: string | null
+  }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+    ...ids,
+  )
   await db.withTransactionAsync(async () => {
     for (const id of ids) {
       await deleteFileRecordById(db, id)
     }
   })
+  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function queryFileRecordByName(
@@ -694,7 +989,9 @@ export async function queryFileRecordByName(
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
-     FROM files WHERE name = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+     FROM files f WHERE f.name = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}
+     ORDER BY f.updatedAt DESC, f.id DESC`,
     name,
   )
 }
@@ -781,4 +1078,104 @@ export async function deleteLostFiles(
   const ids = lost.map((f) => f.id)
   await deleteFileRecordsAndThumbnails(db, ids)
   return ids
+}
+
+export async function queryFileVersions(
+  db: DatabaseAdapter,
+  name: string,
+  directoryId: string | null,
+): Promise<FileRecordRow[]> {
+  if (directoryId === null) {
+    return db.getAllAsync<FileRecordRow>(
+      `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+       FROM files
+       WHERE name = ?
+         AND directoryId IS NULL
+         AND kind = 'file'
+         AND trashedAt IS NULL AND deletedAt IS NULL
+       ORDER BY updatedAt DESC, id DESC`,
+      name,
+    )
+  }
+  return db.getAllAsync<FileRecordRow>(
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+     FROM files
+     WHERE name = ?
+       AND directoryId = ?
+       AND kind = 'file'
+       AND trashedAt IS NULL AND deletedAt IS NULL
+     ORDER BY updatedAt DESC, id DESC`,
+    name,
+    directoryId,
+  )
+}
+
+/**
+ * Renames all versions of a file (all records sharing the same name and
+ * directory). Uses staggered updatedAt timestamps to preserve version
+ * ordering: the current version gets `now`, the next gets `now - 1ms`, etc.
+ * This bumps all timestamps (triggering sync-up) while keeping relative order.
+ */
+export async function renameAllFileVersions(
+  db: DatabaseAdapter,
+  currentName: string,
+  directoryId: string | null,
+  newName: string,
+): Promise<string[]> {
+  const versions = await queryFileVersions(db, currentName, directoryId)
+  if (versions.length === 0) return []
+  const now = Date.now()
+  await db.withTransactionAsync(async () => {
+    for (let i = 0; i < versions.length; i++) {
+      await db.runAsync(
+        'UPDATE files SET name = ?, updatedAt = ? WHERE id = ?',
+        newName,
+        now - i,
+        versions[i].id,
+      )
+    }
+  })
+  await recalculateCurrentForGroup(db, newName, directoryId)
+  return versions.map((v) => v.id)
+}
+
+/**
+ * Moves all versions of a file to a new directory. Uses staggered updatedAt
+ * timestamps to preserve version ordering (see renameAllFileVersions).
+ */
+export async function moveAllFileVersions(
+  db: DatabaseAdapter,
+  name: string,
+  fromDirectoryId: string | null,
+  toDirectoryId: string | null,
+): Promise<string[]> {
+  const versions = await queryFileVersions(db, name, fromDirectoryId)
+  if (versions.length === 0) return []
+  const now = Date.now()
+  await db.withTransactionAsync(async () => {
+    for (let i = 0; i < versions.length; i++) {
+      await db.runAsync(
+        'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
+        toDirectoryId,
+        now - i,
+        versions[i].id,
+      )
+    }
+  })
+  await recalculateCurrentForGroup(db, name, toDirectoryId)
+  return versions.map((v) => v.id)
+}
+
+export async function trashAllFileVersions(
+  db: DatabaseAdapter,
+  name: string,
+  directoryId: string | null,
+): Promise<string[]> {
+  const versions = await queryFileVersions(db, name, directoryId)
+  if (versions.length === 0) return []
+  await trashFiles(
+    db,
+    versions.map((v) => v.id),
+  )
+  return versions.map((v) => v.id)
 }

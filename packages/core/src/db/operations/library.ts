@@ -20,6 +20,15 @@ const MEDIA_PREFIXES: Record<MediaCategory, string> = {
 
 export const UNFILED_DIRECTORY_ID = '__unfiled__'
 
+/**
+ * Filters to only the latest version per (name, directoryId) group.
+ * Uses the materialized `current` column which is maintained transactionally
+ * on every write that affects version grouping.
+ */
+export function buildLatestVersionFilter(alias: string): string {
+  return `${alias}.current = 1`
+}
+
 export function buildLibraryQueryParts(
   opts: {
     sortBy?: SortBy
@@ -101,6 +110,7 @@ export function buildLibraryQueryParts(
     whereParts.push(`${tableAlias}.directoryId = ?`)
     params.push(directoryId)
   }
+  whereParts.push(buildLatestVersionFilter(tableAlias))
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
   let orderExpr: string
@@ -135,7 +145,7 @@ export async function queryLibraryFileCount(
   db: DatabaseAdapter,
 ): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}`,
   )
   return row?.count ?? 0
 }
@@ -144,10 +154,11 @@ export async function queryMediaFileCount(
   db: DatabaseAdapter,
 ): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files
-     WHERE kind = 'file'
-       AND trashedAt IS NULL AND deletedAt IS NULL
-       AND (type LIKE 'image/%' OR type LIKE 'video/%' OR type LIKE 'audio/%')`,
+    `SELECT COUNT(*) as count FROM files f
+     WHERE f.kind = 'file'
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')
+       AND ${buildLatestVersionFilter('f')}`,
   )
   return row?.count ?? 0
 }
@@ -159,7 +170,8 @@ export async function queryTagFileCount(
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      INNER JOIN file_tags ft ON ft.fileId = f.id
-     WHERE ft.tagId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
+     WHERE ft.tagId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}`,
     tagId,
   )
   return row?.count ?? 0
@@ -173,8 +185,9 @@ export async function queryDirectoryFileCount(
     return queryUnfiledFileCount(db)
   }
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files
-     WHERE directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+    `SELECT COUNT(*) as count FROM files f
+     WHERE f.directoryId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}`,
     directoryId,
   )
   return row?.count ?? 0
@@ -184,8 +197,9 @@ export async function queryUnfiledFileCount(
   db: DatabaseAdapter,
 ): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files
-     WHERE directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
+    `SELECT COUNT(*) as count FROM files f
+     WHERE f.directoryId IS NULL AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND ${buildLatestVersionFilter('f')}`,
   )
   return row?.count ?? 0
 }
