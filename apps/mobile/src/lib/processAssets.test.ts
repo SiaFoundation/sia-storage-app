@@ -594,17 +594,16 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
         timestamp: '2021-01-01',
       },
     ]
-    const { files } = await catalogAssets(assets)
-    expect(files).toHaveLength(1)
-    expect(files[0]).toMatchObject({
+    const { newCount, existingCount } = await catalogAssets(assets)
+    expect(newCount).toBe(1)
+    expect(existingCount).toBe(0)
+    const rows = await app().files.query({ order: 'ASC' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
       hash: '',
       size: 0,
       kind: 'file',
     })
-    const row = await app().files.getById(files[0].id)
-    expect(row).toBeTruthy()
-    expect(row!.hash).toBe('')
-    expect(row!.size).toBe(0)
   })
 
   it('silently skips localId duplicates via INSERT OR IGNORE', async () => {
@@ -632,8 +631,9 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
         timestamp: '2021-01-01',
       },
     ]
-    const { files } = await catalogAssets(assets)
-    expect(files).toHaveLength(1)
+    const { newCount, existingCount } = await catalogAssets(assets)
+    expect(newCount).toBe(0)
+    expect(existingCount).toBe(1)
 
     const rows = await app().files.query({ order: 'ASC' })
     expect(rows).toHaveLength(1)
@@ -681,13 +681,15 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
         timestamp: '2021-01-01',
       },
     ]
-    const { files } = await catalogAssets(assets, 'file', {
+    const { newCount } = await catalogAssets(assets, 'file', {
       addToImportDirectory: true,
     })
-    expect(files).toHaveLength(1)
+    expect(newCount).toBe(1)
+    const rows = await app().files.query({ order: 'ASC' })
+    expect(rows).toHaveLength(1)
     const row = await db().getFirstAsync<{ directoryId: string | null }>(
       'SELECT directoryId FROM files WHERE id = ?',
-      files[0].id,
+      rows[0].id,
     )
     expect(row?.directoryId).toBeTruthy()
     const dirs = await app().directories.getAll()

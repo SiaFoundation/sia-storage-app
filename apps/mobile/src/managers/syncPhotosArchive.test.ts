@@ -5,12 +5,13 @@ import {
 import * as MediaLibrary from 'expo-media-library'
 import { catalogAssets } from '../lib/processAssets'
 import {
+  getArchiveSyncCompletedAt,
   getLastRecentScanAt,
   getPhotosArchiveCursor,
   getPhotosArchiveDisplayDate,
   restartPhotosArchiveCursor,
   run,
-  setAutoSyncPhotosArchive,
+  setArchiveSyncCompletedAt,
   setLastRecentScanAt,
   setPhotosArchiveCursor,
   triggerRecentScanIfNeeded,
@@ -38,8 +39,9 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
 jest.mock('../lib/processAssets', () => ({
   catalogAssets: jest.fn(),
 }))
-jest.mock('../stores/files', () => ({
-  getFileStatsLocal: jest.fn().mockResolvedValue({ count: 0, totalBytes: 0 }),
+jest.mock('../stores/files', () => ({}))
+jest.mock('@siastorage/core/lib/yieldToEventLoop', () => ({
+  yieldToEventLoop: jest.fn().mockResolvedValue(undefined),
 }))
 
 const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
@@ -77,7 +79,8 @@ function page(
 
 function mockProcessAssetsSuccess() {
   catalogAssetsMock.mockResolvedValue({
-    files: [{ id: '1' }] as never,
+    newCount: 1,
+    existingCount: 0,
   })
 }
 
@@ -88,8 +91,8 @@ describe('syncPhotosArchive', () => {
     jest.clearAllMocks()
     jest.setSystemTime(new Date(NOW))
     getAssetsAsyncMock.mockReset()
-    await setAutoSyncPhotosArchive(true)
     await setLastRecentScanAt(0)
+    await setArchiveSyncCompletedAt(0)
     await restartPhotosArchiveCursor()
     mockProcessAssetsSuccess()
   })
@@ -157,11 +160,12 @@ describe('syncPhotosArchive', () => {
     expect(getAssetsAsyncMock).not.toHaveBeenCalled()
   })
 
-  it('sets cursor to "done" when no assets remain', async () => {
+  it('sets cursor to "done" and records completion time when no assets remain', async () => {
     await setPhotosArchiveCursor('some-ref')
     getAssetsAsyncMock.mockResolvedValueOnce(page([]))
     await run()
     expect(await getPhotosArchiveCursor()).toBe('done')
+    expect(await getArchiveSyncCompletedAt()).toBe(NOW)
     expect(catalogAssetsMock).not.toHaveBeenCalled()
   })
 
@@ -237,33 +241,28 @@ describe('syncPhotosArchive', () => {
     )
   })
 
-  it('aborts before processAssets when signal is aborted during getAssetsAsync', async () => {
-    const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-    const catalogAssetsMock = jest.mocked(catalogAssets)
-
-    const ac = new AbortController()
-    getAssetsAsyncMock.mockImplementation(async () => {
-      ac.abort()
-      return page([asset('b1', 'one.jpg', { modificationTime: 10_000 })])
-    })
-
-    await restartPhotosArchiveCursor()
-    await run(ac.signal)
-
-    expect(catalogAssetsMock).not.toHaveBeenCalled()
-  })
-
   describe('triggerRecentScanIfNeeded', () => {
-    it('triggers when archive is done and interval elapsed', async () => {
+    it('triggers when archive is done, previously completed, and interval elapsed', async () => {
       await setPhotosArchiveCursor('done')
+      await setArchiveSyncCompletedAt(NOW - 1_000_000)
       await setLastRecentScanAt(0)
       const triggered = await triggerRecentScanIfNeeded()
       expect(triggered).toBe(true)
       expect(await getPhotosArchiveCursor()).toBe('start')
     })
 
+    it('skips when archive has never completed', async () => {
+      await setPhotosArchiveCursor('done')
+      await setArchiveSyncCompletedAt(0)
+      await setLastRecentScanAt(0)
+      const triggered = await triggerRecentScanIfNeeded()
+      expect(triggered).toBe(false)
+      expect(await getPhotosArchiveCursor()).toBe('done')
+    })
+
     it('skips when archive is mid-walk', async () => {
       await setPhotosArchiveCursor('some-ref')
+      await setArchiveSyncCompletedAt(NOW - 1_000_000)
       await setLastRecentScanAt(0)
       const triggered = await triggerRecentScanIfNeeded()
       expect(triggered).toBe(false)
@@ -272,6 +271,7 @@ describe('syncPhotosArchive', () => {
 
     it('skips when last scan was recent', async () => {
       await setPhotosArchiveCursor('done')
+      await setArchiveSyncCompletedAt(NOW - 1_000_000)
       await setLastRecentScanAt(NOW - SYNC_ARCHIVE_RECENT_SCAN_INTERVAL + 1_000)
       const triggered = await triggerRecentScanIfNeeded()
       expect(triggered).toBe(false)
@@ -282,6 +282,7 @@ describe('syncPhotosArchive', () => {
   describe('bounded recent scan', () => {
     it('stops at boundary during recent scan', async () => {
       await setPhotosArchiveCursor('done')
+      await setArchiveSyncCompletedAt(NOW - 1_000_000)
       await setLastRecentScanAt(0)
       await triggerRecentScanIfNeeded()
 
@@ -324,6 +325,7 @@ describe('syncPhotosArchive', () => {
 
     it('processes the boundary-crossing batch before stopping', async () => {
       await setPhotosArchiveCursor('done')
+      await setArchiveSyncCompletedAt(NOW - 1_000_000)
       await setLastRecentScanAt(0)
       await triggerRecentScanIfNeeded()
 

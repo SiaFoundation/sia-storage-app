@@ -19,10 +19,7 @@ import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { initSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
-import {
-  initSyncPhotosArchive,
-  resetPhotosArchiveCursor,
-} from './syncPhotosArchive'
+import { resetPhotosArchiveCursor } from './syncPhotosArchive'
 import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
@@ -93,7 +90,6 @@ export async function initApp(): Promise<void> {
         initImportScanner()
         initSyncDownEvents()
         initSyncNewPhotos()
-        initSyncPhotosArchive()
         initBackgroundTasks()
         initSyncUpMetadata()
         initThumbnailScanner()

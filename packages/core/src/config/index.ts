@@ -36,8 +36,6 @@ export const PACKER_POLL_INTERVAL = secondsInMs(5) // 5 seconds
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
-// Sync archive photos interval.
-export const SYNC_PHOTOS_ARCHIVE_INTERVAL = secondsInMs(1) // 1 second
 // Resume fetching archive photos when pending local-only bytes drop below this threshold.
 export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
 // Minimum interval between bounded recent re-scans of the archive.
