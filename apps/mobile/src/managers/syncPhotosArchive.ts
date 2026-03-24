@@ -1,12 +1,12 @@
 /*
- * syncPhotosArchive — polls every 5s, fetches 1 page of 50 photos.
+ * syncPhotosArchive — one-shot walk of the photo library.
  *
  * Two modes of operation:
  *
  * 1. Initial walk: walks the entire photo library from newest to oldest
  *    by endCursor, stopping when all photos have been visited
- *    (cursor = 'done'). Pauses when pending local-only bytes exceed
- *    4 slabs to avoid overwhelming the upload pipeline.
+ *    (cursor = 'done'). Runs back-to-back with only a yieldToEventLoop()
+ *    between pages.
  *
  * 2. Bounded recent re-scan: after the initial walk completes, a
  *    periodic re-scan is triggered during background tasks (every ~3h)
@@ -32,45 +32,58 @@ import { useApp } from '@siastorage/core/app'
 import {
   SYNC_ARCHIVE_RECENT_SCAN_INTERVAL,
   SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
-  SYNC_ARCHIVE_RESUME_THRESHOLD,
-  SYNC_PHOTOS_ARCHIVE_INTERVAL,
 } from '@siastorage/core/config'
-import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
+import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import useSWR from 'swr'
-import {
-  ensureMediaLibraryPermission,
-  getMediaLibraryPermissions,
-  mediaLibraryPermissionsCache,
-} from '../lib/mediaLibraryPermissions'
+import { getMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { catalogAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
-import { getFileStatsLocal } from '../stores/files'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 500
 const CURSOR_DONE = 'done'
 const CURSOR_START = 'start'
 
 let recentScanBoundary = 0
+let activeWalk: Promise<void> | null = null
+let walkAbortController: AbortController | null = null
+let photosAddedCount = 0
+let photosExistingCount = 0
 
-export async function run(signal?: AbortSignal) {
-  if (!(await getAutoSyncPhotosArchive())) {
-    logger.debug('syncPhotosArchive', 'skipped', { reason: 'disabled' })
-    return
+export async function startArchiveSync(): Promise<void> {
+  if (activeWalk) return
+  photosAddedCount = 0
+  photosExistingCount = 0
+  await setPhotosAddedCount(0)
+  await setPhotosExistingCount(0)
+  await restartPhotosArchiveCursor()
+  walkAbortController = new AbortController()
+  activeWalk = runArchiveWalk(walkAbortController.signal)
+  activeWalk.finally(() => {
+    activeWalk = null
+    walkAbortController = null
+  })
+}
+
+export async function stopArchiveSync(): Promise<void> {
+  walkAbortController?.abort()
+  await setPhotosArchiveCursor(CURSOR_DONE)
+}
+
+async function runArchiveWalk(signal: AbortSignal): Promise<void> {
+  while (!signal.aborted) {
+    const cursor = await getPhotosArchiveCursor()
+    if (cursor === CURSOR_DONE) break
+    await run()
+    await yieldToEventLoop()
   }
+}
+
+export async function run() {
+  logger.debug('syncPhotosArchive', 'tick')
   if (!(await getMediaLibraryPermissions())) {
     logger.debug('syncPhotosArchive', 'skipped', { reason: 'no_permission' })
-    return
-  }
-  if (signal?.aborted) return
-  const { count, totalBytes } = await getFileStatsLocal({ localOnly: true })
-  if (totalBytes >= SYNC_ARCHIVE_RESUME_THRESHOLD) {
-    logger.info('syncPhotosArchive', 'skipped', {
-      reason: 'local_only_pending',
-      count,
-      totalBytes,
-    })
     return
   }
   const cursor = await getPhotosArchiveCursor()
@@ -90,7 +103,6 @@ export async function run(signal?: AbortSignal) {
       sortBy: [[MediaLibrary.SortBy.modificationTime, false]],
       mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
     })
-    if (signal?.aborted) return
     if (page.assets.length === 0) {
       if (cursor !== CURSOR_START) {
         logger.info('syncPhotosArchive', 'cursor_reached_end', {
@@ -99,6 +111,7 @@ export async function run(signal?: AbortSignal) {
       }
       logger.info('syncPhotosArchive', 'fully_synced')
       await setPhotosArchiveCursor(CURSOR_DONE)
+      await setArchiveSyncCompletedAt(Date.now())
       return
     }
     const assets = page.assets
@@ -114,8 +127,7 @@ export async function run(signal?: AbortSignal) {
       prevCursor: prevCursor === CURSOR_START ? 'start' : prevCursor,
       nextCursor: page.endCursor,
     })
-    if (signal?.aborted) return
-    const { files } = await catalogAssets(
+    const { newCount, existingCount } = await catalogAssets(
       assets.map((asset) => ({
         id: asset.id,
         sourceUri: asset.uri,
@@ -129,9 +141,14 @@ export async function run(signal?: AbortSignal) {
       'file',
       { addToImportDirectory: true },
     )
-    if (files.length > 0) {
+    photosAddedCount += assets.length
+    photosExistingCount += existingCount
+    await setPhotosAddedCount(photosAddedCount)
+    await setPhotosExistingCount(photosExistingCount)
+    if (newCount > 0) {
       logger.info('syncPhotosArchive', 'batch_processed', {
-        newFiles: files.length,
+        newCount,
+        existingCount,
         totalAssets: assets.length,
       })
       await app().caches.library.invalidateAll()
@@ -151,6 +168,7 @@ export async function run(signal?: AbortSignal) {
       await setPhotosArchiveCursor(CURSOR_DONE)
       await setPhotosArchiveDisplayDate(0)
       await setLastRecentScanAt(Date.now())
+      await setArchiveSyncCompletedAt(Date.now())
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -167,39 +185,6 @@ export async function run(signal?: AbortSignal) {
       cursor,
     })
   }
-}
-
-export const { init: initSyncPhotosArchive } = createServiceInterval({
-  name: 'syncPhotosArchive',
-  worker: run,
-  interval: SYNC_PHOTOS_ARCHIVE_INTERVAL,
-})
-
-export async function getAutoSyncPhotosArchive(): Promise<boolean> {
-  const raw = await app().storage.getItem('autoSyncPhotosArchive')
-  return raw === null ? false : raw === 'true'
-}
-
-export function useAutoSyncPhotosArchive() {
-  const app = useApp()
-  return useSWR(app.caches.settings.key('autoSyncPhotosArchive'), () =>
-    getAutoSyncPhotosArchive(),
-  )
-}
-
-export async function setAutoSyncPhotosArchive(value: boolean) {
-  await app().storage.setItem('autoSyncPhotosArchive', String(value))
-  app().caches.settings.invalidate('autoSyncPhotosArchive')
-  if (value) {
-    ensureMediaLibraryPermission()
-  }
-  mediaLibraryPermissionsCache.invalidate()
-}
-
-export async function toggleAutoSyncPhotosArchive() {
-  const current = await getAutoSyncPhotosArchive()
-  const next = !current
-  await setAutoSyncPhotosArchive(next)
 }
 
 export async function getPhotosArchiveCursor(): Promise<string> {
@@ -250,6 +235,24 @@ export async function setPhotosArchiveDisplayDate(value: number) {
   app().caches.settings.invalidate('photosArchiveDisplayDate')
 }
 
+export async function getArchiveSyncCompletedAt(): Promise<number> {
+  const raw = await app().storage.getItem('archiveSyncCompletedAt')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
+}
+
+export async function setArchiveSyncCompletedAt(value: number) {
+  await app().storage.setItem('archiveSyncCompletedAt', String(value))
+  app().caches.settings.invalidate('archiveSyncCompletedAt')
+}
+
+export function useArchiveSyncCompletedAt() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('archiveSyncCompletedAt'), () =>
+    getArchiveSyncCompletedAt(),
+  )
+}
+
 export async function getLastRecentScanAt(): Promise<number> {
   const raw = await app().storage.getItem('lastRecentScanAt')
   const n = raw ? Number(raw) : 0
@@ -261,9 +264,49 @@ export async function setLastRecentScanAt(value: number) {
   app().caches.settings.invalidate('lastRecentScanAt')
 }
 
+export async function getPhotosAddedCount(): Promise<number> {
+  const raw = await app().storage.getItem('photosAddedCount')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
+}
+
+export function usePhotosAddedCount() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('photosAddedCount'), () =>
+    getPhotosAddedCount(),
+  )
+}
+
+export async function setPhotosAddedCount(value: number) {
+  await app().storage.setItem('photosAddedCount', String(value))
+  app().caches.settings.invalidate('photosAddedCount')
+}
+
+export async function getPhotosExistingCount(): Promise<number> {
+  const raw = await app().storage.getItem('photosExistingCount')
+  const n = raw ? Number(raw) : 0
+  return Number.isFinite(n) ? n : 0
+}
+
+export function usePhotosExistingCount() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('photosExistingCount'), () =>
+    getPhotosExistingCount(),
+  )
+}
+
+export async function setPhotosExistingCount(value: number) {
+  await app().storage.setItem('photosExistingCount', String(value))
+  app().caches.settings.invalidate('photosExistingCount')
+}
+
 export async function triggerRecentScanIfNeeded(): Promise<boolean> {
   const cursor = await getPhotosArchiveCursor()
   if (cursor !== CURSOR_DONE) return false
+
+  // Only re-scan if the user has completed at least one full archive sync.
+  const completedAt = await getArchiveSyncCompletedAt()
+  if (completedAt === 0) return false
 
   const lastScan = await getLastRecentScanAt()
   if (Date.now() - lastScan < SYNC_ARCHIVE_RECENT_SCAN_INTERVAL) return false

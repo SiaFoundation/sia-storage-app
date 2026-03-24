@@ -1,10 +1,23 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
+import {
+  ClockArrowUpIcon,
+  ClockIcon,
+  CloudDownloadIcon,
+  FileIcon,
+} from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import { StyleSheet, Text, TouchableHighlight, View } from 'react-native'
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableHighlight,
+  View,
+} from 'react-native'
+import useSWR from 'swr'
 import { useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
+import { getMediaLibraryUri } from '../../lib/mediaLibrary'
 import { useDownload } from '../../managers/downloader'
 import { colors } from '../../styles/colors'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
@@ -38,9 +51,25 @@ export function FileViewer({
 }: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
-  const { fileUri, isDownloaded, isDownloading } = status.data ?? {}
+  const {
+    fileUri,
+    isDownloaded,
+    isDownloading,
+    isProcessing,
+    isDeferredImport,
+  } = status.data ?? {}
   const fileDownload = useDownload(file)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
+
+  const localId = file.hash === '' && file.localId ? file.localId : null
+  const mediaLibrarySwr = useSWR(
+    localId ? ['mediaLibraryUri', localId] : null,
+    () => getMediaLibraryUri(localId),
+  )
+  const mediaLibraryUri = mediaLibrarySwr.data
+  const mediaLibraryLoading = localId
+    ? !mediaLibrarySwr.data && !mediaLibrarySwr.error
+    : false
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset
@@ -98,13 +127,76 @@ export function FileViewer({
     file.size,
   ])
 
+  const ImportingPanel = useMemo(() => {
+    return (
+      <View
+        style={[
+          baseMediaStyle,
+          {
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 12,
+            paddingHorizontal: 32,
+          },
+        ]}
+      >
+        {isDeferredImport ? (
+          <ClockIcon color={colors.textSecondary} size={40} />
+        ) : (
+          <ClockArrowUpIcon color={colors.textSecondary} size={40} />
+        )}
+        <Text
+          style={{
+            color: colors.textPrimary,
+            fontSize: 17,
+            fontWeight: '600',
+            textAlign: 'center',
+          }}
+        >
+          {isDeferredImport ? 'Import queued' : 'Importing...'}
+        </Text>
+        {isDeferredImport ? (
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 14,
+              textAlign: 'center',
+              maxWidth: 280,
+            }}
+          >
+            Files imported from the Photos library are queued for import and
+            uploaded in order
+          </Text>
+        ) : null}
+      </View>
+    )
+  }, [isDeferredImport])
+
+  const displayUri = fileUri || mediaLibraryUri || null
+  const canDisplay = isDownloaded || !!mediaLibraryUri
+
+  const LoadingPanel = useMemo(() => {
+    return (
+      <View
+        style={[
+          baseMediaStyle,
+          { justifyContent: 'center', alignItems: 'center' },
+        ]}
+      >
+        <ActivityIndicator color={colors.textSecondary} />
+      </View>
+    )
+  }, [])
+
   const mediaContent = useMemo(() => {
-    if (!isDownloaded || !fileUri) return DownloadPanel
+    if (isProcessing && mediaLibraryLoading) return LoadingPanel
+    if (isProcessing && !mediaLibraryUri) return ImportingPanel
+    if (!canDisplay || !displayUri) return DownloadPanel
 
     if (type?.includes('image'))
       return (
         <ImageViewer
-          uri={fileUri}
+          uri={displayUri}
           style={baseMediaStyle}
           onZoomChange={onImageZoomChange}
         />
@@ -112,7 +204,7 @@ export function FileViewer({
     if (type?.includes('video'))
       return (
         <VideoPlayer
-          source={fileUri}
+          source={displayUri}
           style={baseMediaStyle}
           onViewerControlPress={onViewerControlPress}
         />
@@ -120,7 +212,7 @@ export function FileViewer({
     if (type?.includes('audio')) {
       return (
         <AudioPlayer
-          source={fileUri}
+          source={displayUri}
           filename={name}
           style={baseMediaStyle}
           onViewerControlPress={onViewerControlPress}
@@ -130,7 +222,7 @@ export function FileViewer({
     if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
       return (
         <PDFViewer
-          source={fileUri}
+          source={displayUri}
           style={baseMediaStyle}
           onSwipeLeft={onSwipeLeft}
           onSwipeRight={onSwipeRight}
@@ -144,7 +236,7 @@ export function FileViewer({
     ) {
       return (
         <JSONViewer
-          uri={fileUri}
+          uri={displayUri}
           fileSize={file.size}
           style={baseMediaStyle}
           topInset={textInsetValue}
@@ -158,7 +250,7 @@ export function FileViewer({
     ) {
       return (
         <MarkdownViewer
-          uri={fileUri}
+          uri={displayUri}
           style={textMediaStyle}
           onViewerControlPress={onViewerControlPress}
         />
@@ -167,7 +259,7 @@ export function FileViewer({
     if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt')) {
       return (
         <TextViewer
-          uri={fileUri}
+          uri={displayUri}
           fileSize={file.size}
           style={baseMediaStyle}
           topInset={textInsetValue}
@@ -187,9 +279,14 @@ export function FileViewer({
       </View>
     )
   }, [
+    LoadingPanel,
+    ImportingPanel,
+    isProcessing,
+    mediaLibraryLoading,
+    mediaLibraryUri,
     DownloadPanel,
-    fileUri,
-    isDownloaded,
+    displayUri,
+    canDisplay,
     lowerCasedFileName,
     name,
     textInsetValue,

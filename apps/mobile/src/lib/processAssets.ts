@@ -310,7 +310,8 @@ type CatalogAssetsOptions = {
 /**
  * Archive library walk (syncPhotosArchive). Creates placeholder records
  * with hash: '' and size: 0, using INSERT OR IGNORE to silently skip
- * localId duplicates without a pre-check query. No copy, no hash — the
+ * localId duplicates. Queries existing localIds first so callers get
+ * an accurate new-vs-existing breakdown. No copy, no hash — the
  * import scanner handles those with backpressure based on the upload backlog.
  */
 export async function catalogAssets(
@@ -318,7 +319,7 @@ export async function catalogAssets(
   defaultFileName: string = 'file',
   { addToImportDirectory = false }: CatalogAssetsOptions = {},
 ) {
-  const newFiles: FileRecord[] = await Promise.all(
+  const candidates: FileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
       const meta = await parseAssetMetadata(a, defaultFileName)
       return {
@@ -336,19 +337,31 @@ export async function catalogAssets(
     }),
   )
 
+  const localIds = candidates.filter((f) => f.localId).map((f) => f.localId!)
+  const existingFiles =
+    localIds.length > 0 ? await app().files.getByLocalIds(localIds) : []
+  const existingLocalIds = new Set(existingFiles.map((f) => f.localId))
+  const existingCount = existingLocalIds.size
+  const newCount = candidates.length - existingCount
+
   logger.debug('catalogAssets', 'result', {
-    count: newFiles.length,
+    count: candidates.length,
+    newCount,
+    existingCount,
   })
 
-  await app().files.createMany(newFiles, { conflictClause: 'OR IGNORE' })
+  await app().files.createMany(candidates, { conflictClause: 'OR IGNORE' })
 
   if (addToImportDirectory) {
+    const newFiles = candidates.filter(
+      (f) => !f.localId || !existingLocalIds.has(f.localId),
+    )
     await moveMediaToImportDirectory(newFiles)
   }
 
   triggerImportScanner()
 
-  return { files: newFiles }
+  return { newCount, existingCount }
 }
 
 /**
