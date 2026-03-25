@@ -505,6 +505,7 @@ export class UploadManager {
    * After adding, if slabsFilled >= PACKER_MAX_SLABS, flush immediately.
    */
   private async processEntry(entry: FileEntry): Promise<void> {
+    let needsRollback = false
     try {
       if (this.batch && this.shouldFlushBeforeAdding(entry.size)) {
         await this.flush('slab_threshold')
@@ -556,10 +557,17 @@ export class UploadManager {
         batchId: this.batch!.batchId,
       })
 
+      // Add to batch state BEFORE packer.add() so onProgress can
+      // distribute progress to this file while data streams to the network.
+      this.batch!.files.push(entry)
+      this.batch!.totalSize += entry.size
+      needsRollback = true
+
       const t0 = Date.now()
       const reader = this.adapters.createFileReader(entry.fileUri)
       const t1 = Date.now()
       await this.packer.add(reader)
+      needsRollback = false
       const t2 = Date.now()
       const addMs = t2 - t1
       const slabsBefore = this.batch!.slabsFilled
@@ -578,6 +586,13 @@ export class UploadManager {
         await this.flush('max_slabs')
       }
     } catch (e) {
+      if (needsRollback && this.batch) {
+        const idx = this.batch.files.indexOf(entry)
+        if (idx !== -1) {
+          this.batch.files.splice(idx, 1)
+          this.batch.totalSize -= entry.size
+        }
+      }
       const message = e instanceof Error ? e.message : String(e)
       logger.error('uploadManager', 'file_process_error', {
         fileId: entry.fileId,
@@ -644,6 +659,10 @@ export class UploadManager {
         size: entry.size,
         batchId: this.batch!.batchId,
       })
+      // Add to batch state before packer.add() so onProgress can
+      // distribute progress while data streams to the network.
+      this.batch!.files.push(entry)
+      this.batch!.totalSize += entry.size
       const t0 = Date.now()
       const reader = this.adapters.createFileReader(entry.fileUri)
       inflight.push({
@@ -680,6 +699,13 @@ export class UploadManager {
         }
       } catch (e) {
         if (!this.active) break
+        if (this.batch) {
+          const idx = this.batch.files.indexOf(entry)
+          if (idx !== -1) {
+            this.batch.files.splice(idx, 1)
+            this.batch.totalSize -= entry.size
+          }
+        }
         const message = e instanceof Error ? e.message : String(e)
         logger.error('uploadManager', 'file_process_error', {
           fileId: entry.fileId,
@@ -807,8 +833,6 @@ export class UploadManager {
   /** Update batch state after a successful packer.add(). */
   private recordAdd(entry: FileEntry, addMs: number): void {
     this.batch!.lastProcessedAt = Date.now()
-    this.batch!.files.push(entry)
-    this.batch!.totalSize += entry.size
     this._packedCount++
     this._packedBytes += entry.size
     this.app.uploads.setStatus(entry.fileId, 'packed')

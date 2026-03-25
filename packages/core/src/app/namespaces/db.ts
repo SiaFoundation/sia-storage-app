@@ -161,11 +161,13 @@ export function buildDbNamespaces(
         return tag
       },
       ensureSystemTags: () => ops.ensureSystemTags(db),
-      syncFromMetadata: async (fileId, tagNames) => {
+      syncFromMetadata: async (fileId, tagNames, opts) => {
         if (tagNames === undefined) return
         await ops.syncTagsFromMetadata(db, fileId, tagNames)
-        caches.tags.invalidateAll()
-        caches.libraryVersion.invalidate()
+        if (!opts?.skipInvalidation) {
+          caches.tags.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
       },
     },
     files: {
@@ -333,12 +335,14 @@ export function buildDbNamespaces(
       },
       countFilesWithDirectories: (fileIds) =>
         ops.queryCountFilesWithDirectories(db, fileIds),
-      syncFromMetadata: async (fileId, dirName) => {
+      syncFromMetadata: async (fileId, dirName, opts) => {
         if (dirName === undefined) return
         await ops.syncDirectoryFromMetadata(db, fileId, dirName)
-        caches.directories.invalidate('all')
-        caches.directories.invalidate(`file/${fileId}`)
-        caches.libraryVersion.invalidate()
+        if (!opts?.skipInvalidation) {
+          caches.directories.invalidate('all')
+          caches.directories.invalidate(`file/${fileId}`)
+          caches.libraryVersion.invalidate()
+        }
       },
     },
     thumbnails: {

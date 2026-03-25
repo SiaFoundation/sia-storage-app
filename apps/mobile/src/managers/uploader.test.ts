@@ -277,6 +277,32 @@ describe('UploadManager', () => {
       expect(upload?.status).toBe('error')
       expect(upload?.error).toBe('Add failed')
     })
+
+    it('rolls back batch state when add fails, subsequent files flush correctly', async () => {
+      const entry1 = await createTestFile('file1')
+      const entry2 = await createTestFile('file2')
+      manager.initialize(app(), internal(), defaultAdapters())
+
+      // First add fails
+      mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
+      // Second add succeeds (default mock)
+
+      await manager.__testProcessFiles([entry1, entry2])
+
+      // Flush should finalize with only file2
+      const obj2 = createMockPinnedObject()
+      mockPacker.finalize.mockResolvedValueOnce([obj2])
+      await manager.flush()
+
+      // file1 errored, file2 completed
+      const u1 = app().uploads.getEntry('file1')
+      expect(u1?.status).toBe('error')
+      const u2 = app().uploads.getEntry('file2')
+      expect(u2).toBeUndefined()
+
+      // Finalize was called with batch containing only file2
+      expect(mockPacker.finalize).toHaveBeenCalled()
+    })
   })
 
   describe('flush', () => {

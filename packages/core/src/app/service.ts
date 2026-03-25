@@ -103,6 +103,7 @@ export interface AppService {
     syncFromMetadata(
       fileId: string,
       tagNames: string[] | undefined,
+      opts?: { skipInvalidation?: boolean },
     ): Promise<void>
   }
   /** File record CRUD, queries, trash, and purge operations. */
@@ -224,7 +225,11 @@ export interface AppService {
     /** Returns how many of the given files belong to a directory. */
     countFilesWithDirectories(fileIds: string[]): Promise<number>
     /** Reconciles a file's directory assignment with metadata. */
-    syncFromMetadata(fileId: string, dirName: string | undefined): Promise<void>
+    syncFromMetadata(
+      fileId: string,
+      dirName: string | undefined,
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<void>
   }
   /** Thumbnail queries and generation. */
   thumbnails: {

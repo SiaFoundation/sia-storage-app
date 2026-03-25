@@ -285,7 +285,11 @@ async function processBatch(
   })
 
   // Phase 3: Cleanup — delete local files for deleted records, clear
-  // upload state for updated records, sync tags. Errors here are non-fatal.
+  // upload state for updated records, sync tags/directories. Errors
+  // here are non-fatal. Cache invalidation is deferred to the end of
+  // the batch to avoid triggering React re-render depth limits when
+  // processing large batches (e.g. 500 files from archive sync).
+  let needsLibraryInvalidation = false
   for (const event of prepared) {
     if (event.kind === 'delete' && deletedFileIds.has(event.fileId)) {
       try {
@@ -300,16 +304,17 @@ async function processBatch(
       }
     } else if (event.kind === 'update') {
       app.caches.fileById.invalidate(event.fileId)
-      app.caches.libraryVersion.invalidate()
+      needsLibraryInvalidation = true
     }
-    // Sync tags and directories from remote metadata for file records.
     if (event.kind !== 'delete' && event.isFile) {
       const shouldSync =
         event.kind === 'create' ||
         (event.kind === 'update' && event.isRemoteNewer)
       if (shouldSync) {
         try {
-          await app.tags.syncFromMetadata(event.fileRecord.id, event.tags)
+          await app.tags.syncFromMetadata(event.fileRecord.id, event.tags, {
+            skipInvalidation: true,
+          })
         } catch (e) {
           logger.error('syncDownEvents', 'tag_sync_error', {
             fileId: event.fileRecord.id,
@@ -320,6 +325,7 @@ async function processBatch(
           await app.directories.syncFromMetadata(
             event.fileRecord.id,
             event.directory,
+            { skipInvalidation: true },
           )
         } catch (e) {
           logger.error('syncDownEvents', 'directory_sync_error', {
@@ -327,8 +333,14 @@ async function processBatch(
             error: e as Error,
           })
         }
+        needsLibraryInvalidation = true
       }
     }
+  }
+  if (needsLibraryInvalidation) {
+    app.caches.tags.invalidateAll()
+    app.caches.directories.invalidateAll()
+    app.caches.libraryVersion.invalidate()
   }
 }
 
