@@ -3,7 +3,7 @@ import {
   SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
 } from '@siastorage/core/config'
 import * as MediaLibrary from 'expo-media-library'
-import { processAssets } from '../lib/processAssets'
+import { catalogAssets } from '../lib/processAssets'
 import {
   getLastRecentScanAt,
   getPhotosArchiveCursor,
@@ -36,14 +36,14 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
   },
 }))
 jest.mock('../lib/processAssets', () => ({
-  processAssets: jest.fn(),
+  catalogAssets: jest.fn(),
 }))
 jest.mock('../stores/files', () => ({
   getFileStatsLocal: jest.fn().mockResolvedValue({ count: 0, totalBytes: 0 }),
 }))
 
 const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-const processAssetsMock = jest.mocked(processAssets)
+const catalogAssetsMock = jest.mocked(catalogAssets)
 
 function asset(
   id: string,
@@ -76,10 +76,8 @@ function page(
 }
 
 function mockProcessAssetsSuccess() {
-  processAssetsMock.mockResolvedValue({
+  catalogAssetsMock.mockResolvedValue({
     files: [{ id: '1' }] as never,
-    updatedFiles: [],
-    warnings: [],
   })
 }
 
@@ -164,7 +162,7 @@ describe('syncPhotosArchive', () => {
     getAssetsAsyncMock.mockResolvedValueOnce(page([]))
     await run()
     expect(await getPhotosArchiveCursor()).toBe('done')
-    expect(processAssetsMock).not.toHaveBeenCalled()
+    expect(catalogAssetsMock).not.toHaveBeenCalled()
   })
 
   it('stores displayDate from oldest modificationTime in batch', async () => {
@@ -204,7 +202,7 @@ describe('syncPhotosArchive', () => {
       ),
     )
     await run()
-    expect(processAssetsMock).toHaveBeenCalledWith(
+    expect(catalogAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({
           timestamp: new Date(50_000).toISOString(),
@@ -228,7 +226,7 @@ describe('syncPhotosArchive', () => {
       ),
     )
     await run()
-    expect(processAssetsMock).toHaveBeenCalledWith(
+    expect(catalogAssetsMock).toHaveBeenCalledWith(
       [
         expect.objectContaining({ id: 'a1' }),
         expect.objectContaining({ id: 'a2' }),
@@ -241,7 +239,7 @@ describe('syncPhotosArchive', () => {
 
   it('aborts before processAssets when signal is aborted during getAssetsAsync', async () => {
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-    const processAssetsMock = jest.mocked(processAssets)
+    const catalogAssetsMock = jest.mocked(catalogAssets)
 
     const ac = new AbortController()
     getAssetsAsyncMock.mockImplementation(async () => {
@@ -252,7 +250,7 @@ describe('syncPhotosArchive', () => {
     await restartPhotosArchiveCursor()
     await run(ac.signal)
 
-    expect(processAssetsMock).not.toHaveBeenCalled()
+    expect(catalogAssetsMock).not.toHaveBeenCalled()
   })
 
   describe('triggerRecentScanIfNeeded', () => {
@@ -300,7 +298,7 @@ describe('syncPhotosArchive', () => {
       )
       await run()
 
-      expect(processAssetsMock).toHaveBeenCalledTimes(1)
+      expect(catalogAssetsMock).toHaveBeenCalledTimes(1)
       expect(await getPhotosArchiveCursor()).toBe('done')
       expect(await getPhotosArchiveDisplayDate()).toBe(0)
       expect(await getLastRecentScanAt()).toBe(NOW)
@@ -342,7 +340,7 @@ describe('syncPhotosArchive', () => {
       )
       await run()
 
-      expect(processAssetsMock).toHaveBeenCalledWith(
+      expect(catalogAssetsMock).toHaveBeenCalledWith(
         [
           expect.objectContaining({ id: 'a1' }),
           expect.objectContaining({ id: 'a2' }),

@@ -143,8 +143,12 @@ export interface AppService {
       localObject?: LocalObject,
       opts?: { skipInvalidation?: boolean },
     ): Promise<void>
-    /** Creates multiple file records in a single transaction. */
-    createMany(records: Omit<FileRecord, 'objects'>[]): Promise<void>
+    /** Creates multiple file records via bulk insert. Pass conflictClause
+     * 'OR IGNORE' to silently skip duplicates (e.g. localId conflicts). */
+    createMany(
+      records: Omit<FileRecord, 'objects'>[],
+      opts?: { conflictClause?: 'OR IGNORE' },
+    ): Promise<void>
     /** Partially updates a file record by ID. */
     update(
       update: Partial<FileRecordRow> & { id: string },
@@ -199,6 +203,12 @@ export interface AppService {
     ): Promise<void>
     /** Runs auto-purge and cleans up local files and uploads for purged files. */
     autoPurgeWithCleanup(): Promise<void>
+    /** Returns the count of lost files for the given indexer. */
+    getLostCount(indexerURL: string): Promise<number>
+    /** Returns count and total byte size of lost files for the given indexer. */
+    getLostStats(
+      indexerURL: string,
+    ): Promise<{ count: number; totalBytes: number }>
   }
   /** Directory operations: create, rename, delete, and organize files into directories. */
   directories: {

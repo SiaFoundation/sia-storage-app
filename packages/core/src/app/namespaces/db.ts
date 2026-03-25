@@ -194,8 +194,14 @@ export function buildDbNamespaces(
           invalidateLibrary()
         }
       },
-      createMany: async (records) => {
-        await ops.insertManyFileRecords(db, records)
+      createMany: async (records, opts) => {
+        await ops.insertManyFileRecords(
+          db,
+          records,
+          opts?.conflictClause
+            ? { conflictClause: opts.conflictClause }
+            : undefined,
+        )
         if (records.length > 0) {
           invalidateLibrary()
         }
@@ -210,6 +216,9 @@ export function buildDbNamespaces(
       updateMany: async (updates, opts) => {
         await ops.updateManyFileRecordFields(db, updates, opts)
         if (updates.length > 0) {
+          for (const u of updates) {
+            caches.fileById.invalidate(u.id)
+          }
           caches.libraryVersion.invalidate()
         }
       },
@@ -259,6 +268,8 @@ export function buildDbNamespaces(
         await ops.restoreFiles(db, ids)
         invalidateLibrary()
       },
+      getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
+      getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
       getUnuploadedCount: () => ops.queryUnuploadedFileCount(db),
       getUnuploaded: () => ops.queryUnuploadedFiles(db),
       getActiveSummaries: () => ops.queryActiveFileSummaries(db),

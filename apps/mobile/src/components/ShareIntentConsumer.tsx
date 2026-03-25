@@ -2,15 +2,13 @@ import { useHasOnboarded } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useShareIntentContext } from 'expo-share-intent'
 import { useEffect } from 'react'
-import { processAssets } from '../lib/processAssets'
+import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
-import { useUploader } from '../managers/uploader'
 
 export function ShareIntentConsumer() {
   const { data: hasOnboarded } = useHasOnboarded()
   const { hasShareIntent, shareIntent, resetShareIntent } =
     useShareIntentContext()
-  const uploader = useUploader()
   const toast = useToast()
 
   useEffect(() => {
@@ -29,7 +27,7 @@ export function ShareIntentConsumer() {
           return
         }
 
-        const { files: processedFiles, warnings } = await processAssets(
+        await importFiles(
           files.map((file) => ({
             id: undefined,
             name: file.fileName ?? 'Shared File',
@@ -39,14 +37,7 @@ export function ShareIntentConsumer() {
             sourceUri: file.path,
           })),
           'file',
-          { allowDuplicates: true },
         )
-
-        if (warnings.length > 0) {
-          warnings.forEach((warning) => toast.show(warning))
-        }
-
-        await uploader(processedFiles)
       } catch (error) {
         logger.error('shareIntent', 'process_failed', { error: error as Error })
         toast.show('Failed to import shared files.')
@@ -56,14 +47,7 @@ export function ShareIntentConsumer() {
     }
 
     void handleShareIntent()
-  }, [
-    hasOnboarded,
-    hasShareIntent,
-    shareIntent,
-    resetShareIntent,
-    toast,
-    uploader,
-  ])
+  }, [hasOnboarded, hasShareIntent, shareIntent, resetShareIntent, toast])
 
   return null
 }

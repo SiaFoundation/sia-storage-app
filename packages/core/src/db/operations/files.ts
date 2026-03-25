@@ -29,6 +29,7 @@ export function transformRow(
     thumbSize: row.thumbSize ?? undefined,
     trashedAt: row.trashedAt ?? null,
     deletedAt: row.deletedAt ?? null,
+    lostReason: row.lostReason ?? null,
     objects: objectsMap,
   }
 }
@@ -52,6 +53,7 @@ export async function insertFileRecord(
     thumbSize,
     trashedAt,
     deletedAt,
+    lostReason,
   } = fileRecord
   await sql.insert(db, 'files', {
     id,
@@ -68,10 +70,11 @@ export async function insertFileRecord(
     thumbSize,
     trashedAt,
     deletedAt,
+    lostReason,
   })
 }
 
-type FileRecordCursorColumn = 'createdAt' | 'updatedAt'
+type FileRecordCursorColumn = 'createdAt' | 'updatedAt' | 'addedAt'
 
 export type FileRecordsQueryOpts = {
   limit?: number
@@ -85,6 +88,8 @@ export type FileRecordsQueryOpts = {
   fileExistsLocally?: boolean
   excludeIds?: string[]
   activeOnly?: boolean
+  hashEmpty?: boolean
+  hashNotEmpty?: boolean
 }
 
 function buildFileRecordsQuery(
@@ -105,6 +110,8 @@ function buildFileRecordsQuery(
     fileExistsLocally,
     excludeIds,
     activeOnly,
+    hashEmpty,
+    hashNotEmpty,
   } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
@@ -115,6 +122,14 @@ function buildFileRecordsQuery(
   if (activeOnly) {
     whereClauses.push(`${tableAlias}.trashedAt IS NULL`)
     whereClauses.push(`${tableAlias}.deletedAt IS NULL`)
+  }
+
+  if (hashEmpty) {
+    whereClauses.push(`${tableAlias}.hash = ''`)
+  }
+
+  if (hashNotEmpty) {
+    whereClauses.push(`${tableAlias}.hash != ''`)
   }
 
   if (after) {
@@ -212,7 +227,7 @@ export async function queryFileRecords(
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt,
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
@@ -256,7 +271,7 @@ export async function queryFileRecordByObjectId(
   indexerURL: string,
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
     objectId,
     indexerURL,
   )
@@ -267,7 +282,7 @@ export async function queryFileRecordsByLocalIds(
   localIds: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND localId IN (${localIds
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND localId IN (${localIds
       .map((_) => `?`)
       .join(',')})`,
     ...localIds,
@@ -279,7 +294,7 @@ export async function queryFileRecordsByContentHashes(
   contentHashes: string[],
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash IN (${contentHashes
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash IN (${contentHashes
       .map((_) => `?`)
       .join(',')})`,
     ...contentHashes,
@@ -291,7 +306,7 @@ export async function queryFileRecordByContentHash(
   hash: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?',
     hash,
   )
   if (!row) {
@@ -305,7 +320,7 @@ export async function queryFileRecordById(
   id: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt FROM files WHERE id = ?',
+    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE id = ?',
     id,
   )
   if (!row) {
@@ -333,6 +348,7 @@ export async function updateFileRecordFields(
     'localId',
     'trashedAt',
     'deletedAt',
+    'lostReason',
   ]
   if (options.includeUpdatedAt) {
     updatableFields.push('updatedAt')
@@ -508,24 +524,36 @@ export async function queryLostFileCount(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<number> {
-  return queryFileRecordsCount(db, {
-    order: 'ASC',
-    pinned: { indexerURL, isPinned: false },
-    fileExistsLocally: false,
-    activeOnly: true,
-  })
+  const row = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM files f
+     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     AND (
+       (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
+        AND f.hash != '')
+       OR f.lostReason IS NOT NULL
+     )`,
+    indexerURL,
+  )
+  return row?.count ?? 0
 }
 
 export async function queryLostFileStats(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<{ count: number; totalBytes: number }> {
-  return queryFileRecordsStats(db, {
-    order: 'ASC',
-    pinned: { indexerURL, isPinned: false },
-    fileExistsLocally: false,
-    activeOnly: true,
-  })
+  const row = await db.getFirstAsync<{ count: number; totalBytes: number }>(
+    `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files f
+     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     AND (
+       (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
+        AND f.hash != '')
+       OR f.lostReason IS NOT NULL
+     )`,
+    indexerURL,
+  )
+  return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 }
 }
 
 export async function queryLocalFileCount(
@@ -568,7 +596,7 @@ export async function readFileRecordsByIds(
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt,
+    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
@@ -608,13 +636,31 @@ export async function readFileRecordsByIds(
 export async function insertManyFileRecords(
   db: DatabaseAdapter,
   records: Omit<FileRecord, 'objects'>[],
+  options?: sql.InsertOptions,
 ): Promise<void> {
   if (records.length === 0) return
-  await db.withTransactionAsync(async () => {
-    for (const record of records) {
-      await insertFileRecord(db, record)
-    }
-  })
+  await sql.insertMany(
+    db,
+    'files',
+    records.map((r) => ({
+      id: r.id,
+      name: r.name,
+      size: r.size,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      type: r.type,
+      kind: r.kind,
+      localId: r.localId,
+      hash: r.hash,
+      addedAt: r.addedAt,
+      thumbForId: r.thumbForId,
+      thumbSize: r.thumbSize,
+      trashedAt: r.trashedAt,
+      deletedAt: r.deletedAt,
+      lostReason: r.lostReason,
+    })),
+    options,
+  )
 }
 
 export async function updateManyFileRecordFields(
@@ -647,7 +693,7 @@ export async function queryFileRecordByName(
   name: string,
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
      FROM files WHERE name = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`,
     name,
   )
@@ -720,16 +766,19 @@ export async function deleteLostFiles(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<string[]> {
-  const lost = await queryFileRecords(db, {
-    order: 'ASC',
-    pinned: { indexerURL, isPinned: false },
-    fileExistsLocally: false,
-    activeOnly: true,
-  })
-  if (lost.length === 0) return []
-  await deleteFileRecordsAndThumbnails(
-    db,
-    lost.map((f) => f.id),
+  const lost = await db.getAllAsync<{ id: string }>(
+    `SELECT f.id FROM files f
+     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     AND (
+       (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
+        AND f.hash != '')
+       OR f.lostReason IS NOT NULL
+     )`,
+    indexerURL,
   )
-  return lost.map((f) => f.id)
+  if (lost.length === 0) return []
+  const ids = lost.map((f) => f.id)
+  await deleteFileRecordsAndThumbnails(db, ids)
+  return ids
 }

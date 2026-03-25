@@ -8,6 +8,13 @@ export {
   type FsIOAdapter,
   getFsFileUri,
 } from './fsFileUri'
+export {
+  type CalculateContentHash,
+  type GetMimeType,
+  ImportScanner,
+  type ImportScannerResult,
+  type ResolveLocalId,
+} from './importScanner'
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'
 export { syncDownEventsBatch } from './syncDownEvents'

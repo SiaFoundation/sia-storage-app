@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentPrimary,
     borderRadius: 10,
     paddingVertical: 12,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
   secondaryButton: {
@@ -66,12 +67,14 @@ const styles = StyleSheet.create({
     boxShadow: `0 0 0 1px ${whiteA.a02}`,
     borderRadius: 10,
     paddingVertical: 12,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
   dangerButton: {
     backgroundColor: palette.red[500],
     borderRadius: 10,
     paddingVertical: 12,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
   primaryButtonText: { color: palette.gray[50], fontWeight: '700' },

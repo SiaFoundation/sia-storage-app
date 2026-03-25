@@ -785,6 +785,7 @@ export class UploadManager {
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
+        if (!file.hash) continue
         const fileUri = await this.app.fs.getFileUri(file)
         if (!fileUri) continue
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
