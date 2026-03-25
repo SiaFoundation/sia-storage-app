@@ -88,6 +88,31 @@ describe('files store (core functions with appService)', () => {
     expect(verSpy).not.toHaveBeenCalled()
   })
 
+  test('updateMany invalidates fileById cache for each updated record', async () => {
+    await app().files.create(makeFileRecord('f1'))
+    await app().files.create(makeFileRecord('f2'))
+    await app().files.create(makeFileRecord('f3'))
+    const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
+    await app().files.updateMany([
+      { id: 'f1', name: 'a.jpg' },
+      { id: 'f2', name: 'b.jpg' },
+    ])
+    expect(fileSpy).toHaveBeenCalledWith('f1')
+    expect(fileSpy).toHaveBeenCalledWith('f2')
+    expect(fileSpy).not.toHaveBeenCalledWith('f3')
+    expect(fileSpy).toHaveBeenCalledTimes(2)
+    expect(verSpy).toHaveBeenCalled()
+  })
+
+  test('updateMany with empty array does not invalidate', async () => {
+    const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
+    const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
+    await app().files.updateMany([])
+    expect(fileSpy).not.toHaveBeenCalled()
+    expect(verSpy).not.toHaveBeenCalled()
+  })
+
   test('deleteFileRecord removes record', async () => {
     await app().files.create(makeFileRecord('f1'))
     const libSpy = jest.spyOn(app().caches.library, 'invalidateAll')

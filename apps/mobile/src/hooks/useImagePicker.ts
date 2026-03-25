@@ -2,12 +2,9 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
-import { processAssets } from '../lib/processAssets'
-import { useToast } from '../lib/toastContext'
-import { useUploader } from '../managers/uploader'
+import { importFiles } from '../lib/processAssets'
 
 export function useImagePicker() {
-  const toast = useToast()
   const isPickingRef = useRef<boolean>(false)
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isPickingRef.current) {
@@ -22,7 +19,9 @@ export function useImagePicker() {
         // 0 => unlimited on iOS; Android uses picker default multi-select UI if available.
         selectionLimit: 0,
         includeExtra: true,
-        // Docs: A mode that determines which representation to use if an asset contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android if set to 'current'.
+        // Docs: A mode that determines which representation to use if an asset
+        // contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android
+        // if set to 'current'.
         assetRepresentationMode: 'current',
         videoQuality: 'high',
         quality: 1,
@@ -40,7 +39,7 @@ export function useImagePicker() {
         return []
       }
 
-      const { files, warnings } = await processAssets(
+      return importFiles(
         result.assets?.map((a) => ({
           id: a.id,
           name: a.fileName,
@@ -50,28 +49,12 @@ export function useImagePicker() {
           sourceUri: a.uri,
         })),
         'file',
-        { allowDuplicates: true },
       )
-      if (warnings.length > 0) {
-        warnings.forEach((warning) => toast.show(warning))
-      }
-      return files
     } catch (e) {
       logger.error('imagePicker', 'error', { error: e as Error })
       return []
     } finally {
       isPickingRef.current = false
     }
-  }, [toast.show])
-}
-
-export function useImagePickerAndUpload() {
-  const pickAssets = useImagePicker()
-  const uploader = useUploader()
-  return useCallback(async () => {
-    const files = await pickAssets()
-    if (files.length > 0) {
-      await uploader(files)
-    }
-  }, [pickAssets, uploader])
+  }, [])
 }

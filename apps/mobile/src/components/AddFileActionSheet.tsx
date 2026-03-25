@@ -4,7 +4,6 @@ import { useCallback } from 'react'
 import { useCameraCapture } from '../hooks/useCameraCapture'
 import { useDocumentPicker } from '../hooks/useDocumentPicker'
 import { useImagePicker } from '../hooks/useImagePicker'
-import { useUploader } from '../managers/uploader'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { ActionSheet } from './ActionSheet'
 import { ActionSheetButton } from './ActionSheetButton'
@@ -22,38 +21,36 @@ export function AddFileActionSheet({
   const pickImages = useImagePicker()
   const capture = useCameraCapture()
   const pickDocuments = useDocumentPicker()
-  const uploader = useUploader()
 
-  const pickAndUpload = useCallback(
+  const pickAndClose = useCallback(
     async (picker: () => Promise<FileRecord[]>) => {
       await closeSheet()
       const files = await picker()
       if (files.length > 0) {
         onFilesAdded?.(files)
-        await uploader(files)
       }
     },
-    [onFilesAdded, uploader],
+    [onFilesAdded],
   )
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={closeSheet}>
       <ActionSheetButton
         icon={<CameraIcon size={18} />}
-        onPress={() => void pickAndUpload(capture)}
+        onPress={() => void pickAndClose(capture)}
       >
         Take Photo or Video
       </ActionSheetButton>
       <ActionSheetButton
         testID="action-choose-from-photos"
         icon={<ImageIcon size={18} />}
-        onPress={() => void pickAndUpload(pickImages)}
+        onPress={() => void pickAndClose(pickImages)}
       >
         Choose from Photos
       </ActionSheetButton>
       <ActionSheetButton
         icon={<FileIcon size={18} />}
-        onPress={() => void pickAndUpload(pickDocuments)}
+        onPress={() => void pickAndClose(pickDocuments)}
       >
         Import from Files
       </ActionSheetButton>

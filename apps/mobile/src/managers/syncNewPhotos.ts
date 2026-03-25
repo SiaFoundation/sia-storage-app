@@ -32,7 +32,7 @@ import {
   getMediaLibraryPermissions,
   mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
-import { processAssets } from '../lib/processAssets'
+import { syncAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
 
 const PAGE_SIZE = 50
@@ -67,7 +67,7 @@ export async function run(signal?: AbortSignal): Promise<void> {
       totalOnPage: page.assets.length,
     })
     if (signal?.aborted) return
-    const { files } = await processAssets(
+    const { files } = await syncAssets(
       assets.map((asset) => ({
         id: asset.id,
         sourceUri: asset.uri,

@@ -2,16 +2,8 @@ import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
 import { useOnLibraryListChange } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fileRecordEqual } from '../lib/file'
 import { app } from './appService'
-
-function fileRecordEqual(a: FileRecord, b: FileRecord): boolean {
-  return (
-    a.id === b.id &&
-    a.updatedAt === b.updatedAt &&
-    a.hash === b.hash &&
-    Object.keys(a.objects).length === Object.keys(b.objects).length
-  )
-}
 
 type VirtualListQueryParams = {
   sortBy: SortBy

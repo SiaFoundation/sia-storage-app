@@ -60,7 +60,6 @@ async function up(db: DatabaseAdapter): Promise<void> {
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_deletedAt ON files(deletedAt);`,
   )
-
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS objects (
     fileId TEXT NOT NULL,
