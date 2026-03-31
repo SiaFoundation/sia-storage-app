@@ -14,6 +14,7 @@ jest.mock('@siastorage/core/config', () => ({
   PACKER_MAX_SLABS: 10,
   SLAB_FILL_THRESHOLD: 0.9,
   PACKER_POLL_INTERVAL: 5000,
+  STORAGE_FULL_POLL_INTERVAL: 30000,
   SAVE_BATCH_CONCURRENCY: 50,
   SAVE_REMOVAL_DELAY_MS: 0,
 }))
@@ -23,6 +24,7 @@ import {
   SECTOR_SIZE,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
+  STORAGE_FULL_POLL_INTERVAL,
   UPLOAD_DATA_SHARDS,
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
@@ -144,6 +146,7 @@ function createMockSdk(
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
     appKey: jest.fn().mockReturnValue(mockAppKey),
+    account: jest.fn().mockResolvedValue({ remainingStorage: 1000000000n }),
   } as unknown as jest.Mocked<SdkInterface>
 }
 
@@ -1248,6 +1251,56 @@ describe('UploadManager', () => {
         0,
       )
       expect(totalFiles).toBe(300)
+    })
+  })
+
+  describe('storage full gate', () => {
+    function enablePolling() {
+      app().connection.setState({ isConnected: true })
+      void app().settings.setAutoScanUploads(true)
+    }
+
+    it('does not poll for files when remainingStorage is 0', async () => {
+      enablePolling()
+      mockSdk.account.mockResolvedValue({ remainingStorage: 0n } as any)
+
+      const querySpy = jest
+        .spyOn(app().files, 'query')
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(querySpy).not.toHaveBeenCalled()
+      querySpy.mockRestore()
+    })
+
+    it('resumes polling after storage becomes available', async () => {
+      enablePolling()
+      mockSdk.account
+        .mockResolvedValueOnce({ remainingStorage: 0n } as any)
+        .mockResolvedValueOnce({ remainingStorage: 0n } as any)
+        .mockResolvedValue({ remainingStorage: 1000000000n } as any)
+
+      const querySpy = jest
+        .spyOn(app().files, 'query')
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+
+      // First iteration: storage full, waits
+      await jest.advanceTimersByTimeAsync(0)
+      expect(querySpy).not.toHaveBeenCalled()
+
+      // Advance past one poll interval — still full
+      await jest.advanceTimersByTimeAsync(STORAGE_FULL_POLL_INTERVAL)
+      expect(querySpy).not.toHaveBeenCalled()
+
+      // Advance past another poll interval — now has space, resumes
+      await jest.advanceTimersByTimeAsync(STORAGE_FULL_POLL_INTERVAL)
+      expect(querySpy).toHaveBeenCalled()
+
+      querySpy.mockRestore()
     })
   })
 

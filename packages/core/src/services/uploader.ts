@@ -12,6 +12,7 @@ import {
   SECTOR_SIZE,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
+  STORAGE_FULL_POLL_INTERVAL,
   UPLOAD_DATA_SHARDS,
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
@@ -471,6 +472,11 @@ export class UploadManager {
         this.app.caches.libraryVersion.invalidate()
       }
 
+      if (await this.isStorageFull()) {
+        await this.waitForWorkOrTimeout(STORAGE_FULL_POLL_INTERVAL)
+        continue
+      }
+
       const newFiles = await this.pollDB()
       if (newFiles > 0) {
         continue
@@ -765,6 +771,20 @@ export class UploadManager {
    *
    * @returns Number of new files added to the polledFiles queue.
    */
+  private async isStorageFull(): Promise<boolean> {
+    if (!this.app.connection.getState().isConnected) return false
+    try {
+      const account = await this.app.account()
+      if (account.remainingStorage === 0n) {
+        logger.warn('uploadManager', 'storage_full')
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
   private async pollDB(): Promise<number> {
     if (!this.app.connection.getState().isConnected) return 0
 
