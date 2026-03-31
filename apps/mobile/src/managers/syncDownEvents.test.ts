@@ -40,6 +40,7 @@ function makeMockPinnedObject(
     metadata: () => encodedMetadata,
     slabs: () => [],
     size: () => BigInt(metadata.size),
+    encodedSize: () => BigInt(metadata.size),
     createdAt: () => createdAt,
     updatedAt: () => updatedAt,
     updateMetadata: (_newMetadata: ArrayBuffer) => {

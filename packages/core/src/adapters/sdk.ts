@@ -35,6 +35,7 @@ export interface PinnedObjectRef {
   metadata(): ArrayBuffer
   updateMetadata(metadata: ArrayBuffer): void
   size(): bigint
+  encodedSize(): bigint
   seal(appKey: AppKeyRef): SealedObjectRef
   slabs(): Array<{
     encryptionKey: ArrayBuffer
@@ -109,6 +110,7 @@ export interface AccountApp {
 export interface Account {
   accountKey: string
   maxPinnedData: bigint
+  remainingStorage: bigint
   pinnedData: bigint
   pinnedSize: bigint
   app: AccountApp

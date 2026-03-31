@@ -62,6 +62,7 @@ function createMockPinnedObject(stored: StoredObject): PinnedObjectRef {
     id: () => stored.id,
     metadata: () => currentMetadata,
     size: () => stored.size,
+    encodedSize: () => stored.size,
     slabs: () => [],
     createdAt: () => stored.createdAt,
     updatedAt: () => stored.updatedAt,
@@ -344,6 +345,7 @@ export class MockSdk implements SdkAdapter {
     return {
       accountKey: '0'.repeat(64),
       maxPinnedData: 1000000000n,
+      remainingStorage: 1000000000n,
       pinnedData: 0n,
       pinnedSize: 0n,
       app: {
