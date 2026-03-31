@@ -32,6 +32,8 @@ export const PACKER_MAX_SLABS = 10
 export const SLAB_FILL_THRESHOLD = 0.9
 // Packer DB poll interval.
 export const PACKER_POLL_INTERVAL = secondsInMs(5) // 5 seconds
+// How often to re-check account when storage is full.
+export const STORAGE_FULL_POLL_INTERVAL = secondsInMs(30)
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
