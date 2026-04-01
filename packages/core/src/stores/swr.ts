@@ -1,4 +1,5 @@
 import useSWR, { mutate } from 'swr'
+import { createDebouncedAction } from '../lib/debouncedAction'
 
 let nextId = 0
 
@@ -40,7 +41,9 @@ export function swrState<T>(initial: T) {
 /** Creates a prefix-scoped SWR cache supporting keyed and bulk invalidation. */
 export function swrCacheBy<T = unknown>() {
   const prefix = `swr/${nextId++}`
-  return {
+  const debouncers = new Map<string, ReturnType<typeof createDebouncedAction>>()
+
+  const cache = {
     key: (...parts: string[]) => [`${prefix}/${parts.join('/')}`],
     invalidate: (...parts: string[]) => mutate([`${prefix}/${parts.join('/')}`]),
     invalidateAll: () =>
@@ -52,5 +55,36 @@ export function swrCacheBy<T = unknown>() {
       mutate([`${prefix}/${parts.join('/')}`], data ?? undefined, {
         revalidate: false,
       }),
+    /**
+     * Returns debounced versions of invalidate/invalidateAll.
+     * Multiple calls within `ms` coalesce into a single invalidation.
+     * Call `flush` to force immediate invalidation (e.g. on register/remove).
+     */
+    debounced: (ms: number) => {
+      function getOrCreate(key: string, fn: () => void) {
+        let d = debouncers.get(key)
+        if (!d) {
+          d = createDebouncedAction(fn, ms)
+          debouncers.set(key, d)
+        }
+        return d
+      }
+      return {
+        invalidate: (...parts: string[]) =>
+          getOrCreate(parts.join('/'), () => cache.invalidate(...parts)).trigger(),
+        invalidateAll: () => getOrCreate('*', () => cache.invalidateAll()).trigger(),
+        flush: (...parts: string[]) => {
+          const key = parts.length ? parts.join('/') : '*'
+          const d = debouncers.get(key)
+          if (d) {
+            d.flush()
+            return
+          }
+          if (parts.length) cache.invalidate(...parts)
+          else cache.invalidateAll()
+        },
+      }
+    },
   }
+  return cache
 }

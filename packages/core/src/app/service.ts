@@ -34,6 +34,12 @@ export type SwrCacheBy<T = unknown> = {
   invalidateAll: () => Promise<any>
   /** Directly sets the cached data for the given key parts. */
   set: (data: T, ...parts: string[]) => Promise<any>
+  /** Returns debounced invalidate/invalidateAll that coalesce calls within `ms`. */
+  debounced: (ms: number) => {
+    invalidate: (...parts: string[]) => void
+    invalidateAll: () => void
+    flush: (...parts: string[]) => void
+  }
 }
 
 /** Cache that tracks library data version changes via a monotonic counter. */
