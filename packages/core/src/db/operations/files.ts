@@ -2,6 +2,7 @@ import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import { localObjectFromStorageRow } from '../../encoding/localObject'
+import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { buildLatestVersionFilter } from './library'
@@ -191,6 +192,7 @@ export async function insertFileRecord(
   await sql.insert(db, 'files', {
     id,
     name,
+    nameSortKey: naturalSortKey(name),
     size,
     createdAt,
     updatedAt,
@@ -502,6 +504,10 @@ export async function updateFileRecordFields(
       continue
     }
     assignments[field] = value
+  }
+
+  if (update.name !== undefined) {
+    assignments.nameSortKey = naturalSortKey(update.name)
   }
 
   if (!options.includeUpdatedAt) {
@@ -856,6 +862,7 @@ export async function insertManyFileRecords(
     records.map((r) => ({
       id: r.id,
       name: r.name,
+      nameSortKey: naturalSortKey(r.name),
       size: r.size,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -889,6 +896,7 @@ export async function insertManyFileRecords(
 
 const FILE_UPSERT_UPDATE_COLUMNS = [
   'name',
+  'nameSortKey',
   'size',
   'type',
   'kind',
@@ -912,6 +920,7 @@ export async function upsertManyFileRecords(
     records.map((r) => ({
       id: r.id,
       name: r.name,
+      nameSortKey: naturalSortKey(r.name),
       size: r.size,
       type: r.type,
       kind: r.kind,
@@ -1128,8 +1137,9 @@ export async function renameAllFileVersions(
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < versions.length; i++) {
       await db.runAsync(
-        'UPDATE files SET name = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE files SET name = ?, nameSortKey = ?, updatedAt = ? WHERE id = ?',
         newName,
+        naturalSortKey(newName),
         now - i,
         versions[i].id,
       )

@@ -16,6 +16,7 @@ import {
   queryFileCountWithFilters,
   queryLibraryFileCount,
   queryMediaFileCount,
+  querySortedFileIds,
   queryTagFileCount,
   queryUnfiledFileCount,
 } from './library'
@@ -69,10 +70,11 @@ async function createFile(
 
 async function createDirectory(id: string, name: string) {
   await db().runAsync(
-    'INSERT INTO directories (id, name, createdAt) VALUES (?, ?, ?)',
+    'INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
     id,
     name,
     base,
+    name.toLowerCase(),
   )
 }
 
@@ -757,5 +759,23 @@ describe('trash file trashes all versions', () => {
     await restoreFiles(db(), ids)
     expect(await queryLibraryFileCount(db())).toBe(1)
     expect((await queryFileRecordByName(db(), 'doc.txt'))?.id).toBe('v3')
+  })
+})
+
+describe('rename updates nameSortKey for natural sort', () => {
+  test('renamed files sort correctly by name', async () => {
+    await createFile('f1', { name: 'a1.txt', updatedAt: base })
+    await createFile('f2', { name: 'b2.txt', updatedAt: base + 100 })
+
+    await renameAllFileVersions(db(), 'a1.txt', null, 'b10.txt')
+
+    const ids = await querySortedFileIds(
+      db(),
+      { sortBy: 'NAME', sortDir: 'ASC' },
+      10,
+      0,
+    )
+    // b2 should come before b10 in natural sort
+    expect(ids).toEqual(['f2', 'f1'])
   })
 })

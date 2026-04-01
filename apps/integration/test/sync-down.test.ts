@@ -349,4 +349,27 @@ describe('Sync Down', () => {
     const objects = await app.readLocalObjectsForFile('obj-test-file')
     expect(objects).toHaveLength(2)
   })
+
+  it('synced files sort correctly by name (natural sort)', async () => {
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, { name: 'file10.jpg' }),
+    })
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(2, { name: 'file2.jpg' }),
+    })
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(3, { name: 'file1.jpg' }),
+    })
+
+    await app.waitForFileCount(3)
+
+    const ids = await app.app.library.sortedFileIds(
+      { sortBy: 'NAME', sortDir: 'ASC', tags: [] },
+      10,
+      0,
+    )
+    const files = await app.app.files.getByIds(ids)
+    const names = ids.map((id) => files.find((f) => f.id === id)?.name)
+    expect(names).toEqual(['file1.jpg', 'file2.jpg', 'file10.jpg'])
+  })
 })
