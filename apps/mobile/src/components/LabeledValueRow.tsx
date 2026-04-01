@@ -82,7 +82,7 @@ export function LabeledValueRow({
           <Text
             style={[
               styles.rowLabel,
-              { width: labelWidth || defaultLabelWidth },
+              { maxWidth: labelWidth || defaultLabelWidth, flexShrink: 1 },
               labelStyle,
             ]}
             numberOfLines={1}

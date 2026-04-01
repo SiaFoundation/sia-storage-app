@@ -48,7 +48,10 @@ export function InputArea({
       ]}
     >
       <Text
-        style={[styles.rowLabel, { width: labelWidth || defaultLabelWidth }]}
+        style={[
+          styles.rowLabel,
+          { maxWidth: labelWidth || defaultLabelWidth, flexShrink: 1 },
+        ]}
         ellipsizeMode="tail"
       >
         {label}
