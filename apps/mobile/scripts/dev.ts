@@ -42,6 +42,7 @@ import {
   needsRebuild,
   PROJECT_ROOT,
 } from './buildCache'
+import { confirmRebuild } from './lib/confirm'
 import {
   type Device,
   installAndroidApp,
@@ -115,8 +116,9 @@ console.log('')
 
 $.cwd(PROJECT_ROOT)
 
-// Full rebuild: wipe everything and start fresh
+// Full rebuild: confirm, then wipe everything and start fresh
 if (forceRebuild) {
+  confirmRebuild(platform)
   console.log('🔨 Full rebuild requested')
   console.log(`   Removing ${platform}/...`)
   rmSync(join(PROJECT_ROOT, platform), { recursive: true, force: true })

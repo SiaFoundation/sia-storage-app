@@ -34,6 +34,7 @@ import {
   needsRebuild,
   PROJECT_ROOT,
 } from './buildCache'
+import { confirmRebuild } from './lib/confirm'
 
 const E2E_DIR = join(PROJECT_ROOT, 'e2e')
 const FLOWS_DIR = join(E2E_DIR, 'flows')
@@ -500,6 +501,10 @@ async function main() {
     `   Flags: ${[forceRebuild && '--rebuild', skipInstall && '--skip-install', headless && '--headless'].filter(Boolean).join(' ') || 'none'}`,
   )
   console.log('')
+
+  if (forceRebuild) {
+    confirmRebuild(platform)
+  }
 
   try {
     // 1. Boot device and get device ID
