@@ -111,28 +111,22 @@ export async function closeDb(): Promise<void> {
   }
 }
 
-// Drop all tables and run migrations again.
-// Uses `database` directly — recovery doesn't apply during a destructive reset.
+// Delete the database and start fresh. Closes the existing connection,
+// removes the DB file, and reopens so migrations can run on next init.
 export async function resetDb() {
-  // Disable log appender before dropping tables to prevent "no such table: logs" errors
   dbInitialized = false
-  // Disable foreign keys to allow dropping tables in any order
-  await database.execAsync('PRAGMA foreign_keys = OFF')
-  await database.withTransactionAsync(async () => {
-    const rows = await database.getAllAsync<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
-    )
-    logger.debug('db', 'dropping_tables', {
-      tables: rows.map((r) => r.name),
-    })
-    for (let i = 0; i < rows.length; i++) {
-      const table = rows[i].name
-      await database.execAsync(`DROP TABLE IF EXISTS "${table}"`)
-    }
-  })
-  // Re-enable foreign keys
-  await database.execAsync('PRAGMA foreign_keys = ON')
+  if (database) {
+    try {
+      await database.closeAsync()
+    } catch {}
+  }
+  await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
+  database = await SQLite.openDatabaseAsync(dbName, undefined, dbDirectory)
+  await database.execAsync(
+    'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
+  )
   await runMigrations(database, migrations, { log: logger })
+  dbInitialized = true
 }
 
 const RECOVERY_METHODS = new Set([

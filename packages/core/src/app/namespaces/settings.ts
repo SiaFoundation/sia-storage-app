@@ -38,6 +38,8 @@ export function buildSettingsNamespace(
     setIndexerURL: (v) => setStr('indexerURL', v),
     getHasOnboarded: () => getBool('hasOnboarded', false),
     setHasOnboarded: (v) => setBool('hasOnboarded', v),
+    getCompletedResetVersion: () => getStr('completedResetVersion', ''),
+    setCompletedResetVersion: (v) => setStr('completedResetVersion', v),
     getShowAdvanced: () => getBool('showAdvanced', false),
     setShowAdvanced: (v) => setBool('showAdvanced', v),
     getAutoScanUploads: () => getBool('autoScanUploads', true),

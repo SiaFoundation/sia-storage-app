@@ -25,7 +25,20 @@ import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
 
+// Change this value to force a one-time app reset on next launch.
+// Set to null to disable. Stored via app service settings so each value only triggers once.
+const FORCED_RESET_VERSION: string | null = '40582'
+
 export async function initApp(): Promise<void> {
+  if (FORCED_RESET_VERSION) {
+    const completed = await app().settings.getCompletedResetVersion()
+    const hasOnboarded = await app().settings.getHasOnboarded()
+    if (completed !== FORCED_RESET_VERSION && hasOnboarded) {
+      await resetApp()
+      return
+    }
+  }
+
   startInitState()
 
   const hasOnboarded = await app().settings.getHasOnboarded()
@@ -179,7 +192,13 @@ export async function resetApp() {
     return
   }
 
-  // 9. Re-initialize the app from clean state.
+  // 9. Mark forced reset as completed so it doesn't re-trigger.
+  // Saved after success so failed resets retry on next launch.
+  if (FORCED_RESET_VERSION) {
+    await app().settings.setCompletedResetVersion(FORCED_RESET_VERSION)
+  }
+
+  // 10. Re-initialize the app from clean state.
   await initApp()
 }
 
