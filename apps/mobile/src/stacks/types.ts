@@ -8,7 +8,7 @@ export type MainStackParamList = {
 }
 
 export type SwitchIndexerStackParamList = {
-  SwitchIndexer: undefined
+  SwitchIndexerHome: undefined
   SwitchRecoveryPhrase: { indexerURL: string }
   SwitchFinished: { indexerURL: string }
 }

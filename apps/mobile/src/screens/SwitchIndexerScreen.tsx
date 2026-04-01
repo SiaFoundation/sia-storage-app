@@ -11,7 +11,7 @@ import { palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<
   SwitchIndexerStackParamList,
-  'SwitchIndexer'
+  'SwitchIndexerHome'
 >
 
 export function SwitchIndexerScreen({ navigation }: Props) {

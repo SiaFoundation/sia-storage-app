@@ -35,7 +35,7 @@ export function SwitchIndexerStack() {
       }}
     >
       <Stack.Screen
-        name="SwitchIndexer"
+        name="SwitchIndexerHome"
         component={SwitchIndexerScreen}
         options={{
           title: 'Switch Indexer',
