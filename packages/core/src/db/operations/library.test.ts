@@ -177,6 +177,23 @@ describe('buildLibraryQueryParts', () => {
       expect(rows.map((r) => r.id)).toEqual(['abc'])
     })
 
+    test('search is case-insensitive', async () => {
+      await createTestFile('PhotoAlbum')
+
+      const { where, params } = buildLibraryQueryParts({
+        tags: [],
+        query: 'photoalbum',
+        tableAlias: 'files',
+      })
+
+      const rows = await db().getAllAsync<{ id: string }>(
+        `SELECT id FROM files ${where}`,
+        ...params,
+      )
+
+      expect(rows.map((r) => r.id)).toEqual(['PhotoAlbum'])
+    })
+
     test('returns all files when no tags selected', async () => {
       await createTestFile('file-1')
       await createTestFile('file-2')

@@ -105,11 +105,12 @@ describe('insertDirectory', () => {
     )
   })
 
-  it('throws on duplicate name (case-insensitive)', async () => {
-    await insertDirectory(db(), 'Photos')
-    await expect(insertDirectory(db(), 'photos')).rejects.toThrow(
-      'already exists',
-    )
+  it('allows directories with different casing', async () => {
+    const dir1 = await insertDirectory(db(), 'Photos')
+    const dir2 = await insertDirectory(db(), 'photos')
+    expect(dir1.id).not.toBe(dir2.id)
+    expect(dir1.name).toBe('Photos')
+    expect(dir2.name).toBe('photos')
   })
 
   it('sanitizes slashes from the name', async () => {
@@ -119,11 +120,12 @@ describe('insertDirectory', () => {
 })
 
 describe('getOrCreateDirectory', () => {
-  it('returns existing directory (case-insensitive)', async () => {
+  it('creates separate directory for different casing', async () => {
     const dir1 = await getOrCreateDirectory(db(), 'Photos')
     const dir2 = await getOrCreateDirectory(db(), 'photos')
-    expect(dir2.id).toBe(dir1.id)
-    expect(dir2.name).toBe('Photos')
+    expect(dir1.id).not.toBe(dir2.id)
+    expect(dir1.name).toBe('Photos')
+    expect(dir2.name).toBe('photos')
   })
 
   it('creates a new directory if not found', async () => {
@@ -377,7 +379,7 @@ describe('syncDirectoryFromMetadata', () => {
     expect(name).toBe('Photos')
   })
 
-  it('reuses existing directory (case-insensitive)', async () => {
+  it('creates separate directories for different casing', async () => {
     await insertDirectory(db(), 'Photos')
     await createTestFile('f1')
     await createTestFile('f2')
@@ -386,8 +388,9 @@ describe('syncDirectoryFromMetadata', () => {
     await syncDirectoryFromMetadata(db(), 'f2', 'photos')
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    expect(dirs).toHaveLength(1)
-    expect(dirs[0].fileCount).toBe(2)
+    expect(dirs).toHaveLength(2)
+    expect(dirs[0].fileCount).toBe(1)
+    expect(dirs[1].fileCount).toBe(1)
   })
 })
 
