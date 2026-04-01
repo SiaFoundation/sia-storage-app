@@ -227,7 +227,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt) VALUES ('dir1', 'Folder', 1000)",
+      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryUnfiledFileCount(db())
@@ -238,7 +238,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt) VALUES ('dir1', 'Folder', 1000)",
+      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryDirectoryFileCount(db(), 'dir1')
@@ -249,7 +249,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt) VALUES ('dir1', 'Folder', 1000)",
+      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryDirectoryFileCount(db(), UNFILED_DIRECTORY_ID)
@@ -656,5 +656,37 @@ describe('querySortedFileIds', () => {
       0,
     )
     expect(ids).toEqual(['file-e', 'file-c', 'file-a', 'file-b', 'file-d'])
+  })
+
+  test('returns IDs in natural NAME sort order', async () => {
+    await createTestFile('f1', { name: 'file1.jpg', createdAt: base })
+    await createTestFile('f10', { name: 'file10.jpg', createdAt: base + 10 })
+    await createTestFile('f2', { name: 'file2.jpg', createdAt: base + 20 })
+    await createTestFile('f20', { name: 'file20.jpg', createdAt: base + 30 })
+    await createTestFile('f3', { name: 'file3.jpg', createdAt: base + 40 })
+
+    const ids = await querySortedFileIds(
+      db(),
+      { sortBy: 'NAME', sortDir: 'ASC' },
+      5,
+      0,
+    )
+    expect(ids).toEqual(['f1', 'f2', 'f3', 'f10', 'f20'])
+  })
+
+  test('returns IDs in natural NAME sort order (DESC)', async () => {
+    await createTestFile('f1', { name: 'file1.jpg', createdAt: base })
+    await createTestFile('f10', { name: 'file10.jpg', createdAt: base + 10 })
+    await createTestFile('f2', { name: 'file2.jpg', createdAt: base + 20 })
+    await createTestFile('f20', { name: 'file20.jpg', createdAt: base + 30 })
+    await createTestFile('f3', { name: 'file3.jpg', createdAt: base + 40 })
+
+    const ids = await querySortedFileIds(
+      db(),
+      { sortBy: 'NAME', sortDir: 'DESC' },
+      5,
+      0,
+    )
+    expect(ids).toEqual(['f20', 'f10', 'f3', 'f2', 'f1'])
   })
 })

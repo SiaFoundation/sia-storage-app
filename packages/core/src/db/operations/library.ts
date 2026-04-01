@@ -116,7 +116,7 @@ export function buildLibraryQueryParts(
   let orderExpr: string
   switch (sortBy) {
     case 'NAME':
-      orderExpr = `(${tableAlias}.name IS NULL) ASC, ${tableAlias}.name COLLATE NOCASE ${dir}, ${tableAlias}.id ${dir}`
+      orderExpr = `(${tableAlias}.nameSortKey IS NULL) ASC, ${tableAlias}.nameSortKey ${dir}, ${tableAlias}.id ${dir}`
       break
     case 'ADDED':
       orderExpr = `${tableAlias}.addedAt ${dir}, ${tableAlias}.id ${dir}`
@@ -233,12 +233,12 @@ export async function queryFilePositionInSortedList(
 
   const anchorRow = await db.getFirstAsync<{
     id: string
-    name: string | null
+    nameSortKey: string | null
     size: number
     createdAt: number
     addedAt: number
   }>(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.addedAt FROM files f ${
+    `SELECT f.id, f.nameSortKey, f.size, f.createdAt, f.addedAt FROM files f ${
       where ? `${where} AND f.id = ?` : 'WHERE f.id = ?'
     } LIMIT 1`,
     ...queryParams,
@@ -255,7 +255,7 @@ export async function queryFilePositionInSortedList(
     beforeCursor = buildNameBeforeCursor(
       opts.sortDir,
       'f',
-      anchorRow.name ?? null,
+      anchorRow.nameSortKey ?? null,
       anchorRow.id,
     )
   } else {
@@ -369,24 +369,23 @@ function buildDateBeforeCursor(
 function buildNameBeforeCursor(
   dir: SortDir,
   alias: string,
-  anchorName: string | null,
+  anchorSortKey: string | null,
   anchorId: string,
 ): { clause: string; params: (string | number)[] } {
-  const nullExpr = `${alias}.name IS NULL`
-  const nameExpr = `${alias}.name COLLATE NOCASE`
-  const anchorNull = anchorName === null ? 1 : 0
-  const nameOp = dir === 'ASC' ? '<' : '>'
-  const idOp = dir === 'ASC' ? '<' : '>'
+  const nullExpr = `${alias}.nameSortKey IS NULL`
+  const sortKeyExpr = `${alias}.nameSortKey`
+  const anchorNull = anchorSortKey === null ? 1 : 0
+  const op = dir === 'ASC' ? '<' : '>'
 
-  if (anchorName === null) {
+  if (anchorSortKey === null) {
     return {
-      clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND ${alias}.id ${idOp} ?)`,
+      clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND ${alias}.id ${op} ?)`,
       params: [anchorNull, anchorNull, anchorId],
     }
   }
 
   return {
-    clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND (${nameExpr} ${nameOp} ? OR (${nameExpr} = ? AND ${alias}.id ${idOp} ?)))`,
-    params: [anchorNull, anchorNull, anchorName, anchorName, anchorId],
+    clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND (${sortKeyExpr} ${op} ? OR (${sortKeyExpr} = ? AND ${alias}.id ${op} ?)))`,
+    params: [anchorNull, anchorNull, anchorSortKey, anchorSortKey, anchorId],
   }
 }

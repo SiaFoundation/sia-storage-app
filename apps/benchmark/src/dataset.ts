@@ -1,5 +1,6 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import * as sql from '@siastorage/core/db/sql'
+import { naturalSortKey } from '@siastorage/core/lib/naturalSortKey'
 import type { DatasetConfig, DatasetInfo } from './types'
 
 const TYPES = [
@@ -61,10 +62,11 @@ export async function generateDataset(
     const name = `folder-${String(i).padStart(4, '0')}`
     dirIds.push(id)
     await db.runAsync(
-      'INSERT INTO directories (id, name, createdAt) VALUES (?, ?, ?)',
+      'INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
       id,
       name,
       Date.now(),
+      naturalSortKey(name),
     )
   }
 
@@ -135,6 +137,7 @@ export async function generateDataset(
         batchBuffer.push({
           id,
           name: groupName,
+          nameSortKey: naturalSortKey(groupName),
           size,
           createdAt,
           updatedAt,

@@ -407,3 +407,23 @@ describe('queryDirectoryNameForFile', () => {
     expect(name).toBeUndefined()
   })
 })
+
+describe('natural sort order', () => {
+  it('sorts directories in natural numeric order', async () => {
+    await insertDirectory(db(), 'Folder 10')
+    await insertDirectory(db(), 'Folder 2')
+    await insertDirectory(db(), 'Folder 1')
+    await insertDirectory(db(), 'Folder 20')
+    await insertDirectory(db(), 'Folder 3')
+
+    const dirs = await queryAllDirectoriesWithCounts(db())
+    const names = dirs.map((d) => d.name)
+    expect(names).toEqual([
+      'Folder 1',
+      'Folder 2',
+      'Folder 3',
+      'Folder 10',
+      'Folder 20',
+    ])
+  })
+})

@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
@@ -55,7 +56,10 @@ export async function insertDirectory(
     createdAt: now,
   }
 
-  await sql.insert(db, 'directories', dir)
+  await sql.insert(db, 'directories', {
+    ...dir,
+    nameSortKey: naturalSortKey(trimmed),
+  })
   return dir
 }
 
@@ -71,10 +75,11 @@ export async function getOrCreateDirectory(
   const now = Date.now()
   const id = uniqueId()
   await db.runAsync(
-    `INSERT OR IGNORE INTO directories (id, name, createdAt) VALUES (?, ?, ?)`,
+    `INSERT OR IGNORE INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)`,
     id,
     trimmed,
     now,
+    naturalSortKey(trimmed),
   )
 
   const dir = await db.getFirstAsync<Directory>(
@@ -98,7 +103,7 @@ export async function queryAllDirectoriesWithCounts(
      LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND ${buildLatestVersionFilter('f')}
      GROUP BY d.id
-     ORDER BY d.name COLLATE NOCASE`,
+     ORDER BY d.nameSortKey`,
   )
 }
 
@@ -327,7 +332,7 @@ export async function queryFilesByDirectoryName(
      WHERE d.name = ? AND f.kind = 'file'
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND ${buildLatestVersionFilter('f')}
-     ORDER BY f.name`,
+     ORDER BY f.nameSortKey`,
     directoryName,
   )
 }
@@ -351,7 +356,12 @@ export async function renameDirectory(
     throw new Error(`Folder "${trimmed}" already exists`)
   }
 
-  await sql.update(db, 'directories', { name: trimmed }, { id: dirId })
+  await sql.update(
+    db,
+    'directories',
+    { name: trimmed, nameSortKey: naturalSortKey(trimmed) },
+    { id: dirId },
+  )
   const now = Date.now()
   await db.runAsync(
     'UPDATE files SET updatedAt = ? WHERE directoryId = ?',
