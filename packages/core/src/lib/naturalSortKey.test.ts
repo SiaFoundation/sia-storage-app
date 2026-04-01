@@ -15,8 +15,8 @@ describe('naturalSortKey', () => {
   })
 
   it('pads single numeric sequences', () => {
-    expect(naturalSortKey('file2')).toBe('file' + '2'.padStart(20, '0'))
-    expect(naturalSortKey('file10')).toBe('file' + '10'.padStart(20, '0'))
+    expect(naturalSortKey('file2')).toBe(`file${'2'.padStart(20, '0')}`)
+    expect(naturalSortKey('file10')).toBe(`file${'10'.padStart(20, '0')}`)
   })
 
   it('pads multiple numeric sequences independently', () => {
@@ -55,8 +55,8 @@ describe('naturalSortKey', () => {
 
   it('preserves numbers longer than 20 digits', () => {
     const longNum = '1'.repeat(25)
-    const key = naturalSortKey('file' + longNum)
-    expect(key).toBe('file' + longNum)
+    const key = naturalSortKey(`file${longNum}`)
+    expect(key).toBe(`file${longNum}`)
   })
 
   it('handles path-style names with slashes', () => {

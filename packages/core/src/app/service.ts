@@ -505,6 +505,10 @@ export interface AppService {
     getHasOnboarded(): Promise<boolean>
     /** Sets the onboarding completion flag. */
     setHasOnboarded(value: boolean): Promise<void>
+    /** Returns the last completed forced reset version, or empty string if none. */
+    getCompletedResetVersion(): Promise<string>
+    /** Records a completed forced reset version so it won't trigger again. */
+    setCompletedResetVersion(version: string): Promise<void>
     /** Returns whether advanced settings are visible. */
     getShowAdvanced(): Promise<boolean>
     /** Sets the advanced settings visibility flag. */

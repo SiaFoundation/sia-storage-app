@@ -296,6 +296,7 @@ export function buildDbNamespaces(
       },
       trash: async (ids) => {
         await ops.trashFiles(db, ids)
+        uploads.removeMany(ids)
         invalidateLibrary()
       },
       restore: async (ids) => {
@@ -370,7 +371,12 @@ export function buildDbNamespaces(
           directoryId: string | null
         }>('SELECT name, directoryId FROM files WHERE id = ?', id)
         if (!file) return
-        await ops.trashAllFileVersions(db, file.name, file.directoryId)
+        const ids = await ops.trashAllFileVersions(
+          db,
+          file.name,
+          file.directoryId,
+        )
+        uploads.removeMany(ids)
         invalidateLibrary()
       },
       trashAllVersions: async (name, directoryId) => {
