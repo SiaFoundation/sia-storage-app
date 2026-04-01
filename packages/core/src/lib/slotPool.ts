@@ -1,3 +1,11 @@
+import { AbortError } from './errors'
+
+type WaitEntry = {
+  priority: number
+  grant: () => void
+  evict?: () => void
+}
+
 /**
  * A counting semaphore-style pool that limits the number of concurrent operations.
  * Use `withSlot` to run an async task while reserving one slot. Defaults to 5 slots.
@@ -5,7 +13,7 @@
 export class SlotPool {
   private maxSlots: number
   private inUseCount: number
-  private waitQueue: Array<() => void>
+  private waitQueue: WaitEntry[]
 
   constructor(maxSlots: number) {
     this.maxSlots = Math.max(1, Math.floor(maxSlots))
@@ -35,38 +43,57 @@ export class SlotPool {
     this.drain()
   }
 
-  /** Acquire a slot. Resolves with a release function to free the slot. */
-  async acquire(): Promise<() => void> {
-    if (this.inUseCount < this.maxSlots) {
-      this.inUseCount += 1
-      let released = false
-      return () => {
-        if (released) return
-        released = true
-        this.inUseCount -= 1
-        this.drain()
-      }
+  /**
+   * Acquire a slot. Resolves with a release function to free the slot.
+   * If an AbortSignal is provided and fires before a slot is granted, the
+   * waiter is removed from the queue and the promise rejects with an
+   * AbortError. Once a slot has been granted the signal is ignored — the
+   * caller must release the slot normally.
+   */
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    if (signal?.aborted) {
+      throw new AbortError()
     }
 
-    return await new Promise<() => void>((resolve) => {
-      const grant = () => {
-        this.inUseCount += 1
-        let released = false
-        const release = () => {
-          if (released) return
-          released = true
-          this.inUseCount -= 1
-          this.drain()
-        }
-        resolve(release)
+    if (this.inUseCount < this.maxSlots) {
+      this.inUseCount += 1
+      return this.makeRelease()
+    }
+
+    return await new Promise<() => void>((resolve, reject) => {
+      let settled = false
+
+      const entry: WaitEntry = {
+        priority: 0,
+        grant: () => {
+          if (settled) return
+          settled = true
+          if (signal) signal.removeEventListener('abort', onAbort)
+          this.inUseCount += 1
+          resolve(this.makeRelease())
+        },
       }
-      this.waitQueue.push(grant)
+
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        const idx = this.waitQueue.indexOf(entry)
+        if (idx !== -1) this.waitQueue.splice(idx, 1)
+        reject(new AbortError())
+      }
+
+      this.waitQueue.push(entry)
+      signal?.addEventListener('abort', onAbort, { once: true })
     })
   }
 
-  /** Run an async function while holding one slot. Always releases. */
-  async withSlot<T>(task: () => Promise<T>): Promise<T> {
-    const release = await this.acquire()
+  /**
+   * Run an async function while holding one slot. Always releases.
+   * If an AbortSignal is provided, it aborts the slot wait only (not the
+   * task itself); the task receives no signal from this method.
+   */
+  async withSlot<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const release = await this.acquire(signal)
     try {
       return await task()
     } finally {
@@ -74,10 +101,20 @@ export class SlotPool {
     }
   }
 
+  private makeRelease(): () => void {
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.inUseCount -= 1
+      this.drain()
+    }
+  }
+
   private drain(): void {
     while (this.inUseCount < this.maxSlots && this.waitQueue.length > 0) {
       const next = this.waitQueue.shift()
-      if (next) next()
+      if (next) next.grant()
     }
   }
 }
