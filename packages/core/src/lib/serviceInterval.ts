@@ -76,6 +76,11 @@ export class ServiceScheduler {
         const current = this.schedulerStateMap.get(name)
         if (!current || current.token !== token) return
 
+        if (this.paused) {
+          scheduleNextRun(interval)
+          return
+        }
+
         running = true
         let nextInterval = interval
         try {
