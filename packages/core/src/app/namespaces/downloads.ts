@@ -68,24 +68,28 @@ export function buildDownloadsNamespace(
   }
 
   async function execute(fileId: string): Promise<void> {
-    const file = await ops.readFile(db, fileId)
-    if (!file) throw new Error('File record not found')
-
-    const { value: size } = await fsIO.size(fileId, file.type)
-    if (size !== null) return
-
-    const sdk = getSdk()
-    if (!sdk) throw new Error('SDK not initialized')
-    const objects = await ops.queryObjectsForFile(db, fileId)
-    if (!objects.length) throw new Error('No object available for download')
-
-    register(fileId)
-    const release = await slotPool.acquire()
+    // Caller (downloadFile) registers synchronously before awaiting, so the
+    // controller is guaranteed to exist here. Capturing it first means a
+    // cancel() arriving during any await below properly aborts this run.
+    const controller = controllers.get(fileId)!
+    let release: (() => void) | undefined
     try {
-      update(fileId, { status: 'downloading' })
+      const file = await ops.readFile(db, fileId)
+      if (!file) throw new Error('File record not found')
 
-      const controller = controllers.get(fileId)
-      if (!controller) throw new Error('No controller for download')
+      const { value: size } = await fsIO.size(fileId, file.type)
+      if (size !== null) {
+        remove(fileId)
+        return
+      }
+
+      const sdk = getSdk()
+      if (!sdk) throw new Error('SDK not initialized')
+      const objects = await ops.queryObjectsForFile(db, fileId)
+      if (!objects.length) throw new Error('No object available for download')
+
+      release = await slotPool.acquire(controller.signal)
+      update(fileId, { status: 'downloading' })
 
       await downloadObject.download({
         file: { id: fileId, type: file.type, size: file.size },
@@ -105,14 +109,16 @@ export function buildDownloadsNamespace(
       })
       update(fileId, { status: 'done', progress: 1 })
     } catch (e) {
-      const controller = controllers.get(fileId)
-      if (!controller?.signal.aborted) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        return
+      }
+      if (!controller.signal.aborted) {
         const message = e instanceof Error ? e.message : String(e)
         update(fileId, { status: 'error', error: message })
       }
       throw e
     } finally {
-      release()
+      release?.()
       inFlight.delete(fileId)
     }
   }
@@ -139,6 +145,7 @@ export function buildDownloadsNamespace(
     downloadFile: (fileId) => {
       const existing = inFlight.get(fileId)
       if (existing) return existing
+      register(fileId)
       const promise = execute(fileId).finally(() => {
         inFlight.delete(fileId)
       })
