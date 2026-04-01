@@ -4,28 +4,30 @@ import type { UploadsState } from '../stores'
 /** Builds the uploads namespace: register, update, and clear in-progress uploads. */
 export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] {
   let state: UploadsState = { uploads: {} }
+  const debounced = caches.uploads.debounced(1000)
 
   const namespace: AppService['uploads'] = {
     getState: () => ({ ...state }),
     getEntry: (id) => state.uploads[id],
     register: (entry) => {
       state = { uploads: { ...state.uploads, [entry.id]: entry } }
-      caches.uploads.invalidate('all')
-      caches.uploads.invalidate('counts')
+      debounced.flush('all')
+      debounced.flush('counts')
       caches.uploads.invalidate(entry.id)
     },
     update: (id, patch) => {
       const existing = state.uploads[id]
       if (!existing) return
       state = { uploads: { ...state.uploads, [id]: { ...existing, ...patch } } }
-      caches.uploads.invalidate('all')
+      debounced.invalidate('all')
+      debounced.invalidate('counts')
       caches.uploads.invalidate(id)
     },
     remove: (id) => {
       const { [id]: _, ...rest } = state.uploads
       state = { uploads: rest }
-      caches.uploads.invalidate('all')
-      caches.uploads.invalidate('counts')
+      debounced.flush('all')
+      debounced.flush('counts')
       caches.uploads.invalidate(id)
     },
     removeMany: (ids) => {
@@ -40,9 +42,12 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
       caches.uploads.invalidateAll()
     },
     registerMany: (entries) => {
+      const next = { ...state.uploads }
       for (const { id, size } of entries) {
-        namespace.register({ id, size, status: 'queued', progress: 0 })
+        next[id] = { id, size, status: 'queued', progress: 0 }
       }
+      state = { uploads: next }
+      caches.uploads.invalidateAll()
     },
     setStatus: (id, status) => {
       if (!state.uploads[id]) return
@@ -52,13 +57,19 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
       namespace.update(id, { status: 'error', error: message })
     },
     setBatchUploading: (ids, batchId) => {
+      const next = { ...state.uploads }
       for (const id of ids) {
-        namespace.update(id, {
+        const existing = next[id]
+        if (!existing) continue
+        next[id] = {
+          ...existing,
           status: 'uploading',
           batchId,
           batchFileCount: ids.length,
-        })
+        }
       }
+      state = { uploads: next }
+      caches.uploads.invalidateAll()
     },
     getActiveIds: () => {
       return Object.values(state.uploads)
