@@ -79,18 +79,24 @@ describe('insertTag', () => {
     )
   })
 
-  it('throws on duplicate name (case-insensitive)', async () => {
+  it('allows same name with different case', async () => {
     await insertTag(db(), 'Travel')
-    await expect(insertTag(db(), 'travel')).rejects.toThrow('already exists')
+    const tag = await insertTag(db(), 'travel')
+    expect(tag.name).toBe('travel')
+  })
+
+  it('throws on exact duplicate name', async () => {
+    await insertTag(db(), 'Travel')
+    await expect(insertTag(db(), 'Travel')).rejects.toThrow('already exists')
   })
 })
 
 describe('getOrCreateTag', () => {
-  it('returns existing tag (case-insensitive) with updated usedAt', async () => {
+  it('creates separate tag for different case', async () => {
     const original = await insertTag(db(), 'Travel')
     const result = await getOrCreateTag(db(), 'travel')
-    expect(result.id).toBe(original.id)
-    expect(result.usedAt).toBeGreaterThanOrEqual(original.usedAt)
+    expect(result.id).not.toBe(original.id)
+    expect(result.name).toBe('travel')
   })
 
   it('creates new tag if not found', async () => {
@@ -351,14 +357,16 @@ describe('addTagToFile', () => {
     expect(tags).toHaveLength(1)
   })
 
-  it('reuses existing tag case-insensitively across files', async () => {
+  it('treats different case as separate tags', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await addTagToFile(db(), 'f1', 'Work')
     await addTagToFile(db(), 'f2', 'work')
     const tags = await queryAllTagsWithCounts(db())
-    const work = tags.find((t) => t.name === 'Work')
-    expect(work!.fileCount).toBe(2)
+    const upper = tags.find((t) => t.name === 'Work')
+    const lower = tags.find((t) => t.name === 'work')
+    expect(upper!.fileCount).toBe(1)
+    expect(lower!.fileCount).toBe(1)
   })
 })
 

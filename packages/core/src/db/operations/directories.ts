@@ -42,7 +42,7 @@ export async function insertDirectory(
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ? COLLATE NOCASE',
+    'SELECT id FROM directories WHERE name = ?',
     trimmed,
   )
   if (existing) {
@@ -83,7 +83,7 @@ export async function getOrCreateDirectory(
   )
 
   const dir = await db.getFirstAsync<Directory>(
-    'SELECT id, name, createdAt FROM directories WHERE name = ? COLLATE NOCASE',
+    'SELECT id, name, createdAt FROM directories WHERE name = ?',
     trimmed,
   )
 
@@ -293,7 +293,7 @@ export async function queryDirectoryByName(
   name: string,
 ): Promise<Directory | null> {
   return db.getFirstAsync<Directory>(
-    'SELECT id, name, createdAt FROM directories WHERE name = ? COLLATE NOCASE LIMIT 1',
+    'SELECT id, name, createdAt FROM directories WHERE name = ? LIMIT 1',
     name,
   )
 }
@@ -348,7 +348,7 @@ export async function renameDirectory(
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ? COLLATE NOCASE AND id != ?',
+    'SELECT id FROM directories WHERE name = ? AND id != ?',
     trimmed,
     dirId,
   )

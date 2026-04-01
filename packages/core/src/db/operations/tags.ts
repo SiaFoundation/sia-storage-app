@@ -41,7 +41,7 @@ export async function insertTag(
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM tags WHERE name = ? COLLATE NOCASE',
+    'SELECT id FROM tags WHERE name = ?',
     trimmed,
   )
   if (existing) {
@@ -81,7 +81,7 @@ export async function getOrCreateTag(
   )
 
   const tag = await db.getFirstAsync<Tag>(
-    'SELECT id, name, createdAt, usedAt, system FROM tags WHERE name = ? COLLATE NOCASE',
+    'SELECT id, name, createdAt, usedAt, system FROM tags WHERE name = ?',
     trimmed,
   )
 
@@ -102,7 +102,7 @@ export async function queryTagsForFile(
      FROM tags t
      INNER JOIN file_tags ft ON ft.tagId = t.id
      WHERE ft.fileId = ?
-     ORDER BY t.name COLLATE NOCASE`,
+     ORDER BY t.name`,
     fileId,
   )
 }
@@ -124,7 +124,7 @@ export async function queryAllTagsWithCounts(
      LEFT JOIN file_tags ft ON ft.tagId = t.id
      LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
      GROUP BY t.id
-     ORDER BY t.system DESC, t.name COLLATE NOCASE`,
+     ORDER BY t.system DESC, t.name`,
   )
 }
 
@@ -295,7 +295,7 @@ export async function renameTag(
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM tags WHERE name = ? COLLATE NOCASE AND id != ?',
+    'SELECT id FROM tags WHERE name = ? AND id != ?',
     trimmed,
     tagId,
   )
