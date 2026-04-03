@@ -1,17 +1,20 @@
+/** Lifecycle stage of the sync gate overlay shown during initial catch-up. */
+export type SyncGateStatus = 'idle' | 'pending' | 'active' | 'dismissed'
+
 /** Current state of the bi-directional sync engine. */
 export type SyncState = {
   /** Whether this device is the active sync leader. */
   isLeader: boolean
   isSyncingDown: boolean
-  /** Number of existing remote objects processed during sync-down. */
-  syncDownExisting: number
-  /** Number of new objects added during sync-down. */
-  syncDownAdded: number
-  /** Number of objects deleted during sync-down. */
-  syncDownDeleted: number
+  /** Total number of objects processed during sync-down. */
+  syncDownCount: number
+  /** Estimated sync-down progress from 0 to 1, based on event timestamps. */
+  syncDownProgress: number
   isSyncingUp: boolean
   syncUpProcessed: number
   syncUpTotal: number
+  /** Gate overlay status for initial sync catch-up. Session-scoped. */
+  syncGateStatus: SyncGateStatus
 }
 
 /** Lifecycle stage of a single upload. */

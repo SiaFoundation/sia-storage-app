@@ -141,6 +141,7 @@ export default function OnboardingFinishedScreen() {
           testID="finished-upload-button"
           variant="primary"
           onPress={async () => {
+            app().init.setState({ isInitializing: true })
             await app().settings.setHasOnboarded(true)
             await initApp()
           }}

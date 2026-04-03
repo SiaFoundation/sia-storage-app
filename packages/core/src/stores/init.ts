@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import { useApp } from '../app/context'
+import { useSyncGateStatus } from './sync'
 
 /** Returns the full app initialization state including steps and errors. */
 export function useInitState() {
@@ -16,8 +17,14 @@ export function useIsInitializing() {
 /** Returns whether the splash screen should be shown during init or on error. */
 export function useShowSplash() {
   const { data } = useInitState()
+  const syncGateStatus = useSyncGateStatus()
   if (!data) return true
-  return data.isInitializing || !!data.initializationError
+  return (
+    data.isInitializing ||
+    !!data.initializationError ||
+    syncGateStatus === 'pending' ||
+    syncGateStatus === 'active'
+  )
 }
 
 /** Returns all initialization steps sorted by start time. */

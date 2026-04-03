@@ -74,6 +74,8 @@ export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
 export const DB_OPTIMIZE_INTERVAL = secondsInMs(60) // 60 seconds
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)
+// Minimum events to activate the sync gate overlay during initial catch-up.
+export const SYNC_GATE_THRESHOLD = 10
 // Max concurrent pinObject calls during save phase.
 export const SAVE_BATCH_CONCURRENCY = 20
 // Delay before removing upload state after save, so cache invalidation

@@ -76,12 +76,12 @@ export function createAppService(
   let syncState: SyncState = {
     isLeader: false,
     isSyncingDown: false,
-    syncDownExisting: 0,
-    syncDownAdded: 0,
-    syncDownDeleted: 0,
+    syncDownCount: 0,
+    syncDownProgress: 0,
     isSyncingUp: false,
     syncUpProcessed: 0,
     syncUpTotal: 0,
+    syncGateStatus: 'idle',
   }
 
   let connectionState: ConnectionState = {

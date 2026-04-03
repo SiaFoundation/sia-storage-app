@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import type { PinnedObjectRef } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
+import { SYNC_GATE_THRESHOLD } from '../config'
 import {
   decodeFileMetadata,
   hasCompleteFileMetadata,
@@ -10,12 +11,22 @@ import type { LocalObject } from '../encoding/localObject'
 import { sealPinnedObject } from '../lib/localObjects'
 import type { FileMetadata, FileRecordRow } from '../types/files'
 
+/**
+ * Activates the sync gate if auto-sync is enabled and connected.
+ * Call before starting the sync service on any platform.
+ */
+export async function activateSyncGate(app: AppService): Promise<void> {
+  const autoSync = await app.settings.getAutoSyncDownEvents()
+  const isConnected = app.connection.getState().isConnected
+  if (autoSync && isConnected) {
+    app.sync.setState({ syncGateStatus: 'pending' })
+  }
+}
+
 const batchSize = 500
 
 type Counts = {
-  existing: number
-  deleted: number
-  added: number
+  total: number
 }
 
 // A "create" means no existing file record matches this object.
@@ -69,13 +80,10 @@ export async function syncDownEventsBatch(
 
   const sdk = internal.requireSdk()
 
-  const counts: Counts = {
-    existing: 0,
-    added: 0,
-    deleted: 0,
-  }
-
+  const counts: Counts = { total: 0 }
   let totalEventsFetched = 0
+  let firstEventTime: number | undefined
+  const now = Date.now()
 
   while (true) {
     if (signal.aborted) break
@@ -92,10 +100,16 @@ export async function syncDownEventsBatch(
       if (totalEventsFetched > 1) {
         app.sync.setState({
           isSyncingDown: true,
-          syncDownExisting: counts.existing,
-          syncDownAdded: counts.added,
-          syncDownDeleted: counts.deleted,
+          syncDownCount: counts.total,
         })
+      }
+
+      const gateStatus = app.sync.getState().syncGateStatus
+      if (
+        gateStatus === 'pending' &&
+        totalEventsFetched >= SYNC_GATE_THRESHOLD
+      ) {
+        app.sync.setState({ syncGateStatus: 'active' })
       }
 
       // If the batch size is 1, we are probably synced and repeatedly polling the last event.
@@ -105,10 +119,14 @@ export async function syncDownEventsBatch(
         logger.info('syncDownEvents', 'batch', { size: events.length })
       }
 
-      const prevTotal = counts.added + counts.deleted + counts.existing
+      const prevTotal = counts.total
       await processBatch(events, counts, signal, app, internal)
-      const batchChanged =
-        counts.added + counts.deleted + counts.existing > prevTotal
+      const batchChanged = counts.total > prevTotal
+
+      // Track the first event's timestamp for progress estimation.
+      if (firstEventTime === undefined && events.length > 0) {
+        firstEventTime = events[0].updatedAt.getTime()
+      }
 
       // Update the cursor to the last event in the batch.
       const lastEvent = events[events.length - 1]
@@ -120,14 +138,21 @@ export async function syncDownEventsBatch(
         })
       }
 
+      // Estimate progress as how far through the event timeline we are.
+      const timeRange = firstEventTime !== undefined ? now - firstEventTime : 0
+      const elapsed =
+        lastEvent && firstEventTime !== undefined
+          ? lastEvent.updatedAt.getTime() - firstEventTime
+          : 0
+      const progress = timeRange > 0 ? Math.min(elapsed / timeRange, 1) : 0
+
       // Update progress after each batch. Only report isSyncing when there are
       // real events to process (>1), not on the periodic heartbeat check which
       // returns a single cursor-marker event.
       app.sync.setState({
         isSyncingDown: totalEventsFetched > 1,
-        syncDownExisting: counts.existing,
-        syncDownAdded: counts.added,
-        syncDownDeleted: counts.deleted,
+        syncDownCount: counts.total,
+        syncDownProgress: progress,
       })
       if (batchChanged) {
         app.caches.library.invalidateAll()
@@ -144,20 +169,18 @@ export async function syncDownEventsBatch(
     }
   }
 
-  logger.info('syncDownEvents', 'synced', {
-    existing: counts.existing,
-    added: counts.added,
-    deleted: counts.deleted,
-  })
+  logger.info('syncDownEvents', 'synced', { total: counts.total })
 
   await app.optimize()
 
   const willContinue = totalEventsFetched > 1 && !signal.aborted
+  const endGateStatus = app.sync.getState().syncGateStatus
+  const dismissGate =
+    endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
   app.sync.setState({
     isSyncingDown: willContinue,
-    syncDownExisting: counts.existing,
-    syncDownAdded: counts.added,
-    syncDownDeleted: counts.deleted,
+    syncDownCount: counts.total,
+    ...(dismissGate && { syncGateStatus: 'dismissed' }),
   })
 
   if (willContinue) {
@@ -391,9 +414,7 @@ async function processBatch(
         await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
     }
 
-    counts.added += creates.length
-    counts.existing += updates.length
-    counts.deleted += deletedFileIds.length
+    counts.total += creates.length + updates.length + deletedFileIds.length
   })
 
   // Phase 3: Cleanup — delete local files for deleted records, clear
