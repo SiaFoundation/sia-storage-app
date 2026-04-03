@@ -53,7 +53,7 @@ export {
   swrCacheBy,
   swrState,
 } from './swr'
-export { useSyncState } from './sync'
+export { useSyncGateGuard, useSyncGateStatus, useSyncState } from './sync'
 export {
   useAllTags,
   useIsFavorite,

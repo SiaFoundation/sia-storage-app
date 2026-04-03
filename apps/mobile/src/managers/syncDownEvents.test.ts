@@ -1275,6 +1275,124 @@ describe('syncDownEvents', () => {
     expect(remainingObjects[0].indexerURL).toBe('other-indexer')
   })
 
+  describe('syncGateStatus transitions', () => {
+    function makeEvents(count: number, startId = 0) {
+      return Array.from({ length: count }, (_, i) => {
+        const id = `obj-gate-${startId + i}`
+        const metadata: FileMetadata = {
+          id: `file-gate-${startId + i}`,
+          name: `gate-${startId + i}.jpg`,
+          type: 'image/jpeg',
+          kind: 'file',
+          size: 100,
+          hash: `hash-gate-${startId + i}`,
+          createdAt: NOW_BASE + startId + i,
+          updatedAt: NOW_BASE + startId + i,
+          thumbForId: undefined,
+          thumbSize: undefined,
+          trashedAt: null,
+        }
+        return makeObjectEvent({
+          id,
+          updatedAt: new Date(NOW_BASE + startId + i),
+          object: makeMockPinnedObject(metadata, id),
+        })
+      })
+    }
+
+    test('stays idle when never set to pending', async () => {
+      const events = makeEvents(20)
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('idle')
+    })
+
+    test('transitions pending → active on large batch', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const events = makeEvents(20)
+      const heartbeat = makeEvents(1, 20)
+      internal().setSdk({
+        objectEvents: jest
+          .fn()
+          .mockResolvedValueOnce(events)
+          .mockResolvedValueOnce(heartbeat),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('active')
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('transitions pending → dismissed on small batch', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const events = makeEvents(5)
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('transitions pending → dismissed on heartbeat', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const events = makeEvents(1)
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('transitions active → dismissed when caught up', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const largeBatch = makeEvents(500)
+      const heartbeat = makeEvents(1, 500)
+
+      internal().setSdk({
+        objectEvents: jest
+          .fn()
+          .mockResolvedValueOnce(largeBatch)
+          .mockResolvedValueOnce(heartbeat),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('active')
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('unchanged when not connected', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      app().connection.setState({ isConnected: false })
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('pending')
+    })
+
+    test('unchanged when auto sync disabled', async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      await app().settings.setAutoSyncDownEvents(false)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('pending')
+
+      await app().settings.setAutoSyncDownEvents(true)
+    })
+  })
+
   test('delete event on already-tombstoned file preserves tombstone when no objects remain', async () => {
     const file: Omit<FileRecord, 'objects'> = {
       id: 'file-1',

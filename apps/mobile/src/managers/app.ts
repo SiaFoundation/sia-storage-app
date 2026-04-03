@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
+import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
 import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
@@ -18,7 +19,7 @@ import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
-import { initSyncDownEvents } from './syncDownEvents'
+import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
 import { resetPhotosArchiveCursor } from './syncPhotosArchive'
 import { initSyncUpMetadata } from './syncUpMetadata'
@@ -103,8 +104,10 @@ export async function initApp(): Promise<void> {
       message: 'Launching background services...',
       runner: async () => {
         initDbOptimize()
+        await activateSyncGate(app())
         initImportScanner()
         initSyncDownEvents()
+        triggerSyncDownEvents()
         initSyncNewPhotos()
         initBackgroundTasks()
         initSyncUpMetadata()
@@ -211,12 +214,12 @@ function resetAllStores() {
   })
   app().sync.setState({
     isSyncingDown: false,
-    syncDownExisting: 0,
-    syncDownAdded: 0,
-    syncDownDeleted: 0,
+    syncDownCount: 0,
+    syncDownProgress: 0,
     isSyncingUp: false,
     syncUpProcessed: 0,
     syncUpTotal: 0,
+    syncGateStatus: 'idle',
   })
   app().uploads.clear()
   app().downloads.cancelAll()

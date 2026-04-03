@@ -1,6 +1,9 @@
 import {
   useCurrentInitStep,
   useInitializationError,
+  useSyncGateGuard,
+  useSyncGateStatus,
+  useSyncState,
 } from '@siastorage/core/stores'
 import { TriangleAlertIcon } from 'lucide-react-native'
 import { Alert, StyleSheet, Text, View } from 'react-native'
@@ -11,10 +14,21 @@ import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'
 import { Button } from './Button'
 
+function useSyncProgress() {
+  const { data } = useSyncState()
+  return {
+    count: data?.syncDownCount ?? 0,
+    progress: data?.syncDownProgress ?? 0,
+  }
+}
+
 export function AppSplash() {
   const currentStep = useCurrentInitStep()
   const initializationError = useInitializationError()
+  const syncGateStatus = useSyncGateStatus()
+  const { count, progress } = useSyncProgress()
   const { top, bottom } = useSafeAreaInsets()
+  useSyncGateGuard()
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -68,9 +82,33 @@ export function AppSplash() {
         ) : (
           <View style={styles.waitingWrap}>
             <BlocksLoader colorStart={1} size={20} />
-            <Text style={styles.waitingText}>
-              {currentStep?.message ?? 'Getting things ready...'}
-            </Text>
+            {syncGateStatus === 'active' ? (
+              <>
+                <View style={styles.syncHeader}>
+                  <Text style={styles.syncTitle}>Syncing your library</Text>
+                  <Text style={styles.syncSubtitle}>
+                    Syncing your files from the indexer.
+                  </Text>
+                </View>
+                {count > 0 && (
+                  <Text style={styles.syncCounts}>
+                    {count.toLocaleString()} files synced
+                  </Text>
+                )}
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${Math.round(progress * 100)}%` },
+                    ]}
+                  />
+                </View>
+              </>
+            ) : (
+              <Text style={styles.waitingText}>
+                {currentStep?.message ?? 'Getting things ready...'}
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -92,11 +130,42 @@ const styles = StyleSheet.create({
   waitingWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
     gap: 24,
   },
   waitingText: {
     color: 'white',
     fontSize: 14,
+  },
+  syncHeader: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  syncTitle: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  syncSubtitle: {
+    color: palette.gray[400],
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  syncCounts: {
+    color: palette.gray[500],
+    fontSize: 12,
+  },
+  progressTrack: {
+    width: '60%',
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: palette.gray[800],
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: palette.gray[400],
   },
   errorWrap: {
     alignItems: 'center',
