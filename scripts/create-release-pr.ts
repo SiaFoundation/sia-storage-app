@@ -65,10 +65,9 @@ writeFileSync(bodyFile, body)
 
 try {
   try {
-    execSync(
-      `gh pr create --base main --title "${title}" --body-file "${bodyFile}"`,
-      { stdio: 'inherit' },
-    )
+    execSync(`gh pr create --base main --title "${title}" --body-file "${bodyFile}"`, {
+      stdio: 'inherit',
+    })
   } catch {
     execSync(`gh pr edit --title "${title}" --body-file "${bodyFile}"`, {
       stdio: 'inherit',

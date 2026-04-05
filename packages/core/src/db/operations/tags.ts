@@ -31,10 +31,7 @@ export async function ensureSystemTags(db: DatabaseAdapter): Promise<void> {
   }
 }
 
-export async function insertTag(
-  db: DatabaseAdapter,
-  name: string,
-): Promise<Tag> {
+export async function insertTag(db: DatabaseAdapter, name: string): Promise<Tag> {
   const trimmed = name.trim()
   if (!trimmed) {
     throw new Error('Tag name cannot be empty')
@@ -61,10 +58,7 @@ export async function insertTag(
   return tag
 }
 
-export async function getOrCreateTag(
-  db: DatabaseAdapter,
-  name: string,
-): Promise<Tag> {
+export async function getOrCreateTag(db: DatabaseAdapter, name: string): Promise<Tag> {
   const trimmed = name.trim()
   if (!trimmed) {
     throw new Error('Tag name cannot be empty')
@@ -93,10 +87,7 @@ export async function getOrCreateTag(
   return { ...tag, usedAt: now }
 }
 
-export async function queryTagsForFile(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<Tag[]> {
+export async function queryTagsForFile(db: DatabaseAdapter, fileId: string): Promise<Tag[]> {
   return db.getAllAsync<Tag>(
     `SELECT t.id, t.name, t.createdAt, t.usedAt, t.system
      FROM tags t
@@ -115,9 +106,7 @@ export async function queryTagNamesForFile(
   return tags.length > 0 ? tags.map((t) => t.name) : undefined
 }
 
-export async function queryAllTagsWithCounts(
-  db: DatabaseAdapter,
-): Promise<TagWithCount[]> {
+export async function queryAllTagsWithCounts(db: DatabaseAdapter): Promise<TagWithCount[]> {
   return db.getAllAsync<TagWithCount>(
     `SELECT t.id, t.name, t.createdAt, t.usedAt, t.system, COUNT(f.id) as fileCount
      FROM tags t
@@ -147,12 +136,7 @@ export async function syncTagsFromMetadata(
 
     for (const name of tagNames) {
       const tag = await getOrCreateTag(db, name)
-      await sql.insert(
-        db,
-        'file_tags',
-        { fileId, tagId: tag.id },
-        { conflictClause: 'OR IGNORE' },
-      )
+      await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
   })
 }
@@ -207,12 +191,7 @@ export async function insertFileTag(
   fileId: string,
   tagId: string,
 ): Promise<void> {
-  await sql.insert(
-    db,
-    'file_tags',
-    { fileId, tagId },
-    { conflictClause: 'OR IGNORE' },
-  )
+  await sql.insert(db, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
 }
 
 export async function queryTagsByPrefix(
@@ -239,10 +218,7 @@ export async function queryTagsByPrefix(
   )
 }
 
-export async function toggleFavorite(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<void> {
+export async function toggleFavorite(db: DatabaseAdapter, fileId: string): Promise<void> {
   const tagId = SYSTEM_TAGS.favorites.id
   const existing = await db.getFirstAsync<{ tagId: string }>(
     'SELECT tagId FROM file_tags WHERE fileId = ? AND tagId = ?',
@@ -253,20 +229,12 @@ export async function toggleFavorite(
   if (existing) {
     await sql.del(db, 'file_tags', { fileId, tagId })
   } else {
-    await sql.insert(
-      db,
-      'file_tags',
-      { fileId, tagId },
-      { conflictClause: 'OR IGNORE' },
-    )
+    await sql.insert(db, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
   }
   await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
 }
 
-export async function queryIsFavorite(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<boolean> {
+export async function queryIsFavorite(db: DatabaseAdapter, fileId: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ tagId: string }>(
     'SELECT tagId FROM file_tags WHERE fileId = ? AND tagId = ?',
     fileId,
@@ -275,11 +243,7 @@ export async function queryIsFavorite(
   return !!row
 }
 
-export async function renameTag(
-  db: DatabaseAdapter,
-  tagId: string,
-  name: string,
-): Promise<void> {
+export async function renameTag(db: DatabaseAdapter, tagId: string, name: string): Promise<void> {
   const trimmed = name.trim()
   if (!trimmed) {
     throw new Error('Tag name cannot be empty')
@@ -312,10 +276,7 @@ export async function renameTag(
   )
 }
 
-export async function deleteTag(
-  db: DatabaseAdapter,
-  tagId: string,
-): Promise<void> {
+export async function deleteTag(db: DatabaseAdapter, tagId: string): Promise<void> {
   const tag = await db.getFirstAsync<Tag>(
     'SELECT id, name, createdAt, usedAt, system FROM tags WHERE id = ?',
     tagId,
@@ -337,12 +298,7 @@ export async function addTagToFile(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     const tag = await getOrCreateTag(db, tagName)
-    await sql.insert(
-      db,
-      'file_tags',
-      { fileId, tagId: tag.id },
-      { conflictClause: 'OR IGNORE' },
-    )
+    await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
   })
 }
@@ -356,12 +312,7 @@ export async function addTagToFiles(
   await db.withTransactionAsync(async () => {
     const tag = await getOrCreateTag(db, tagName)
     for (const fileId of fileIds) {
-      await sql.insert(
-        db,
-        'file_tags',
-        { fileId, tagId: tag.id },
-        { conflictClause: 'OR IGNORE' },
-      )
+      await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
     const now = Date.now()
     const placeholders = fileIds.map(() => '?').join(',')

@@ -27,9 +27,7 @@ export function getTempDirectory(): string {
 /**
  * Get image dimensions using sharp
  */
-export async function getImageSize(
-  uri: string,
-): Promise<{ width: number; height: number } | null> {
+export async function getImageSize(uri: string): Promise<{ width: number; height: number } | null> {
   try {
     const filePath = uriToPath(uri)
     const metadata = await sharp(filePath).metadata()

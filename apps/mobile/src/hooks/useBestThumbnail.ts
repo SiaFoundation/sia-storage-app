@@ -18,16 +18,11 @@ import { useIsConnected } from '../stores/sdk'
  * - If a best thumbnail exists on the network but is not cached locally,
  *   this hook will auto-download it.
  */
-export function useBestThumbnailUri(
-  file?: FileRecord,
-  thumbSize: ThumbSize = 512,
-) {
+export function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512) {
   // Skip thumbnail lookup for files still being imported (no hash yet).
   const isImported = !!file && file.hash !== ''
   const thumbRecord = useSWR(
-    isImported
-      ? app().caches.thumbnails.best.key(file.id, String(thumbSize))
-      : null,
+    isImported ? app().caches.thumbnails.best.key(file.id, String(thumbSize)) : null,
     () => (file ? app().thumbnails.getBest(file.id, thumbSize) : null),
   )
 

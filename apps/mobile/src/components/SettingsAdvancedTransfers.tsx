@@ -59,16 +59,8 @@ export function SettingsAdvancedTransfers() {
             keyboardType="number-pad"
             {...maxDownloadsInputProps}
           />
-          <LabeledValueRow
-            label="Queued"
-            value={String(totalDownloadsQueued)}
-            canCopy={false}
-          />
-          <LabeledValueRow
-            label="Active"
-            value={String(totalDownloadsActive)}
-            canCopy={false}
-          />
+          <LabeledValueRow label="Queued" value={String(totalDownloadsQueued)} canCopy={false} />
+          <LabeledValueRow label="Active" value={String(totalDownloadsActive)} canCopy={false} />
         </InfoCard>
         <Button
           style={{ marginTop: 10 }}

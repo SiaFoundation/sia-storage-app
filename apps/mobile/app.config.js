@@ -14,9 +14,7 @@ export default {
     scheme: 'sia',
     version,
     orientation: 'default',
-    icon: RELEASE
-      ? './assets/app-icon-ios.png'
-      : './assets/app-icon-ios-dev.png',
+    icon: RELEASE ? './assets/app-icon-ios.png' : './assets/app-icon-ios-dev.png',
     userInterfaceStyle: 'dark',
     newArchEnabled: true,
     splash: {

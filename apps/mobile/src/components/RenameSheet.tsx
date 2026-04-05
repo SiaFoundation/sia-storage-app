@@ -1,13 +1,6 @@
 import { PencilIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -21,13 +14,7 @@ type Props = {
   onRename: (newName: string) => Promise<void>
 }
 
-export function RenameSheet({
-  sheetName,
-  title,
-  placeholder,
-  initialValue,
-  onRename,
-}: Props) {
+export function RenameSheet({ sheetName, title, placeholder, initialValue, onRename }: Props) {
   const isOpen = useSheetOpen(sheetName)
   const [name, setName] = useState(initialValue)
   const [error, setError] = useState('')
@@ -104,10 +91,7 @@ export function RenameSheet({
           accessibilityRole="button"
           onPress={handleRename}
           disabled={!canSubmit}
-          style={[
-            styles.renameButton,
-            !canSubmit && styles.renameButtonDisabled,
-          ]}
+          style={[styles.renameButton, !canSubmit && styles.renameButtonDisabled]}
         >
           <PencilIcon size={18} color={palette.gray[50]} />
           <Text style={styles.renameButtonText}>Rename</Text>

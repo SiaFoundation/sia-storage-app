@@ -6,13 +6,7 @@ import { colors } from '../../styles/colors'
 import { FileViewer } from '../FileViewer'
 import { FileMetaImport } from './FileMetaImport'
 
-export function FileDetailsImport({
-  file,
-  shareUrl,
-}: {
-  file: FileRecord
-  shareUrl: string
-}) {
+export function FileDetailsImport({ file, shareUrl }: { file: FileRecord; shareUrl: string }) {
   const status = useFileStatus(file, true)
   const handleDownload = useDownloadFromShareURL()
 
@@ -35,9 +29,7 @@ export function FileDetailsImport({
             }}
           />
         </View>
-        {status.data ? (
-          <FileMetaImport file={file} status={status.data} />
-        ) : null}
+        {status.data ? <FileMetaImport file={file} status={status.data} /> : null}
       </ScrollView>
     </View>
   )

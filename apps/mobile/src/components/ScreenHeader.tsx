@@ -11,12 +11,7 @@ type Props = {
   paddingHorizontal?: number
 }
 
-export function ScreenHeader({
-  children,
-  style,
-  position = 'absolute',
-  zIndex = 10,
-}: Props) {
+export function ScreenHeader({ children, style, position = 'absolute', zIndex = 10 }: Props) {
   const insets = useSafeAreaInsets()
   const topOffset = Platform.OS === 'ios' && Platform.isPad ? 8 : 0
   const paddingHorizontal = Platform.OS === 'ios' && Platform.isPad ? 18 : 16

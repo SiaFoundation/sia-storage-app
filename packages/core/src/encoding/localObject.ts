@@ -37,9 +37,7 @@ const localObjectStorageCodec = z.codec(
       indexerURL: stored.indexerURL,
       slabs: slabsStorageCodec.decode(stored.slabs),
       encryptedDataKey: hexArrayBufferCodec.decode(stored.encryptedDataKey),
-      encryptedMetadataKey: hexArrayBufferCodec.decode(
-        stored.encryptedMetadataKey,
-      ),
+      encryptedMetadataKey: hexArrayBufferCodec.decode(stored.encryptedMetadataKey),
       encryptedMetadata: hexArrayBufferCodec.decode(stored.encryptedMetadata),
       dataSignature: hexArrayBufferCodec.decode(stored.dataSignature),
       metadataSignature: hexArrayBufferCodec.decode(stored.metadataSignature),

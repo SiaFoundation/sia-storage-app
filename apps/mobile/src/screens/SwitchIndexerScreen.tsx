@@ -9,14 +9,10 @@ import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import type { SwitchIndexerStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 
-type Props = NativeStackScreenProps<
-  SwitchIndexerStackParamList,
-  'SwitchIndexerHome'
->
+type Props = NativeStackScreenProps<SwitchIndexerStackParamList, 'SwitchIndexerHome'>
 
 export function SwitchIndexerScreen({ navigation }: Props) {
-  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } =
-    useChangeIndexer()
+  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } = useChangeIndexer()
 
   const trimmedValue = newIndexerInputProps.value.trim()
   const isInputEmpty = trimmedValue.length === 0
@@ -46,8 +42,8 @@ export function SwitchIndexerScreen({ navigation }: Props) {
     <SettingsScrollLayout style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.subtitle}>
-          Select an indexer to connect to. You will need to enter your recovery
-          phrase to complete the switch.
+          Select an indexer to connect to. You will need to enter your recovery phrase to complete
+          the switch.
         </Text>
 
         <IndexerSelector

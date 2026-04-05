@@ -4,6 +4,7 @@ import type {
   SQLRunResult,
   ThumbnailAdapter,
 } from '@siastorage/core/adapters'
+// oxlint-disable-next-line no-restricted-imports -- test harness needs internal API access
 import type { AppService, AppServiceInternal } from '@siastorage/core/app'
 import { createAppService } from '@siastorage/core/app'
 import { runMigrations } from '@siastorage/core/db'
@@ -26,11 +27,7 @@ import type { UploadManager } from '@siastorage/core/services/uploader'
 import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
 import { createInMemoryStorage } from '@siastorage/node-adapters/storage'
-import {
-  createEmptyIndexerStorage,
-  type MockIndexerStorage,
-  MockSdk,
-} from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage, type MockIndexerStorage, MockSdk } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -149,16 +146,9 @@ export interface TestApp {
   triggerThumbnailScan(): void
 
   waitForFileCount(count: number, timeout?: number): Promise<void>
-  waitForCondition(
-    fn: () => boolean | Promise<boolean>,
-    timeout?: number,
-  ): Promise<void>
+  waitForCondition(fn: () => boolean | Promise<boolean>, timeout?: number): Promise<void>
   waitForNoActiveUploads(timeout?: number): Promise<void>
-  waitForUploadStatus(
-    fileId: string,
-    status: string | 'removed',
-    timeout?: number,
-  ): Promise<void>
+  waitForUploadStatus(fileId: string, status: string | 'removed', timeout?: number): Promise<void>
   waitForUploadCount(count: number, timeout?: number): Promise<void>
   waitForThumbnails(fileIds: string[], timeout?: number): Promise<void>
 
@@ -218,9 +208,7 @@ export function createTestApp(
   options?: TestAppOptions,
 ): TestApp {
   const hasMockAdapters = options?.fsIO || options?.thumbnail
-  const tempDir = hasMockAdapters
-    ? ''
-    : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
+  const tempDir = hasMockAdapters ? '' : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
   const dbDir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-db-'))
   const dbPath = path.join(dbDir, 'test.db')
 
@@ -246,9 +234,7 @@ export function createTestApp(
     },
   }
 
-  const fsIO = options?.fsIO
-    ? createMockFsIO(options.fsIO)
-    : createFsAdapter({ tempDir }).fsIO
+  const fsIO = options?.fsIO ? createMockFsIO(options.fsIO) : createFsAdapter({ tempDir }).fsIO
   const testSdkAdapter = buildTestSdkAdapter(sdk, appKey)
 
   const thumbnailAdapter = options?.thumbnail
@@ -457,9 +443,7 @@ export function createTestApp(
         await new Promise((r) => setTimeout(r, 50))
       }
       const final = await appService.files.query({ order: 'ASC' })
-      throw new Error(
-        `Expected ${count} files but got ${final.length} within ${timeout}ms`,
-      )
+      throw new Error(`Expected ${count} files but got ${final.length} within ${timeout}ms`)
     },
 
     async waitForCondition(fn, timeout = 15_000) {
@@ -553,13 +537,11 @@ export function createTestApp(
     },
     getActiveUploadCount: () => {
       const { uploads } = appService.uploads.getState()
-      return Object.values(uploads).filter(
-        (u) => u.status !== 'error' && u.status !== 'done',
-      ).length
+      return Object.values(uploads).filter((u) => u.status !== 'error' && u.status !== 'done')
+        .length
     },
 
-    readThumbnailsByFileId: (fileId) =>
-      appService.thumbnails.getForFile(fileId),
+    readThumbnailsByFileId: (fileId) => appService.thumbnails.getForFile(fileId),
 
     async createFileRecord(record) {
       const now = Date.now()
@@ -623,14 +605,12 @@ export function createTestApp(
       await appService.directories.rename(dirId, newName)
     },
 
-    readDirectoryPathForFile: (fileId) =>
-      appService.directories.getPathForFile(fileId),
+    readDirectoryPathForFile: (fileId) => appService.directories.getPathForFile(fileId),
     readAllDirectoriesWithCounts: () => appService.directories.getAll(),
 
     updateFileRecord: (update, opts) => appService.files.update(update, opts),
 
-    readLocalObjectsForFile: (fileId) =>
-      appService.localObjects.getForFile(fileId),
+    readLocalObjectsForFile: (fileId) => appService.localObjects.getForFile(fileId),
 
     async removeFsFile(fileId, type) {
       await appService.fs.removeFile({ id: fileId, type })

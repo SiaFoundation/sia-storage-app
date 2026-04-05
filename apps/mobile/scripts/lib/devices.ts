@@ -169,9 +169,7 @@ export function parseSimctlOutput(stdout: string): Device[] {
  * List all booted iOS simulators.
  */
 async function listIosSimulators(): Promise<Device[]> {
-  const result = await $`xcrun simctl list devices booted --json`
-    .quiet()
-    .nothrow()
+  const result = await $`xcrun simctl list devices booted --json`.quiet().nothrow()
   if (result.exitCode !== 0) {
     return []
   }
@@ -235,10 +233,7 @@ async function listAndroidDevices(): Promise<Device[]> {
 /**
  * List all devices for a platform.
  */
-export async function listDevices(
-  platform: Platform,
-  type?: DeviceType,
-): Promise<Device[]> {
+export async function listDevices(platform: Platform, type?: DeviceType): Promise<Device[]> {
   let devices: Device[]
 
   if (platform === 'ios') {
@@ -267,10 +262,7 @@ export async function listDevices(
  * Select a device - auto-selects if only one, otherwise returns first available.
  * In the future, this could prompt the user to choose.
  */
-export async function selectDevice(
-  platform: Platform,
-  type: DeviceType,
-): Promise<Device | null> {
+export async function selectDevice(platform: Platform, type: DeviceType): Promise<Device | null> {
   const devices = await listDevices(platform, type)
 
   if (devices.length === 0) {
@@ -307,10 +299,7 @@ export interface InstallResult {
 /**
  * Install an app on an iOS device using devicectl.
  */
-export async function installIosApp(
-  device: Device,
-  appPath: string,
-): Promise<InstallResult> {
+export async function installIosApp(device: Device, appPath: string): Promise<InstallResult> {
   const result = await runSimpleCommand([
     'xcrun',
     'devicectl',
@@ -347,10 +336,7 @@ export async function installIosApp(
 /**
  * Launch an app on an iOS device using devicectl.
  */
-export async function launchIosApp(
-  device: Device,
-  bundleId: string,
-): Promise<InstallResult> {
+export async function launchIosApp(device: Device, bundleId: string): Promise<InstallResult> {
   const result = await runSimpleCommand([
     'xcrun',
     'devicectl',
@@ -382,13 +368,8 @@ export async function launchIosApp(
 /**
  * Install an APK on an Android device using adb.
  */
-export async function installAndroidApp(
-  device: Device,
-  apkPath: string,
-): Promise<InstallResult> {
-  const result = await $`adb -s ${device.id} install -r ${apkPath}`
-    .quiet()
-    .nothrow()
+export async function installAndroidApp(device: Device, apkPath: string): Promise<InstallResult> {
+  const result = await $`adb -s ${device.id} install -r ${apkPath}`.quiet().nothrow()
 
   if (result.exitCode === 0) {
     return { success: true }

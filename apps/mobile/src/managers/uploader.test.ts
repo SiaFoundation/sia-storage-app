@@ -29,15 +29,8 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
-import {
-  type UploaderAdapters,
-  UploadManager,
-} from '@siastorage/core/services/uploader'
-import type {
-  PackedUploadInterface,
-  PinnedObjectInterface,
-  SdkInterface,
-} from 'react-native-sia'
+import { type UploaderAdapters, UploadManager } from '@siastorage/core/services/uploader'
+import type { PackedUploadInterface, PinnedObjectInterface, SdkInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
 import { getActiveUploads } from '../stores/uploads'
@@ -139,9 +132,7 @@ function createMockPacker(
 
 const mockAppKey = { export_: () => new Uint8Array(32) }
 
-function createMockSdk(
-  packer: jest.Mocked<PackedUploadInterface>,
-): jest.Mocked<SdkInterface> {
+function createMockSdk(packer: jest.Mocked<PackedUploadInterface>): jest.Mocked<SdkInterface> {
   return {
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
@@ -164,10 +155,7 @@ describe('UploadManager', () => {
   let mockSdk: jest.Mocked<SdkInterface>
   let manager: UploadManager
 
-  const realConfig = jest.requireActual('@siastorage/core/config') as Record<
-    string,
-    any
-  >
+  const realConfig = jest.requireActual('@siastorage/core/config') as Record<string, any>
   const savedConfig: Record<string, any> = {}
   const configPatches: Record<string, any> = {
     UPLOAD_MAX_INFLIGHT: 15,
@@ -202,9 +190,7 @@ describe('UploadManager', () => {
     jest.useFakeTimers()
     mockObjectCounter = 0
 
-    jest
-      .spyOn(app().fs, 'getFileUri')
-      .mockImplementation(async (file: any) => `file://${file.id}`)
+    jest.spyOn(app().fs, 'getFileUri').mockImplementation(async (file: any) => `file://${file.id}`)
 
     resetManager()
     resetUploadsStore()
@@ -232,10 +218,7 @@ describe('UploadManager', () => {
     it('adds files to packer and sets status to packed', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
-      await manager.__testProcessFiles([
-        createFileEntry('file1'),
-        createFileEntry('file2'),
-      ])
+      await manager.__testProcessFiles([createFileEntry('file1'), createFileEntry('file2')])
 
       const upload1 = app().uploads.getEntry('file1')
       const upload2 = app().uploads.getEntry('file2')
@@ -324,10 +307,7 @@ describe('UploadManager', () => {
       const entry2 = await createTestFile('file2')
 
       manager.initialize(app(), internal(), defaultAdapters())
-      mockPacker.finalize.mockResolvedValueOnce([
-        mockPinnedObject,
-        mockPinnedObject,
-      ])
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject, mockPinnedObject])
 
       await manager.__testProcessFiles([entry1, entry2])
 
@@ -389,10 +369,7 @@ describe('UploadManager', () => {
       const entry2 = await createTestFile('file2')
 
       manager.initialize(app(), internal(), defaultAdapters())
-      mockPacker.finalize.mockResolvedValueOnce([
-        mockPinnedObject,
-        mockPinnedObject,
-      ])
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject, mockPinnedObject])
       // pinObject succeeds for file1, fails for file2 (all 3 retry attempts)
       mockSdk.pinObject
         .mockResolvedValueOnce(undefined)
@@ -420,10 +397,7 @@ describe('UploadManager', () => {
       const entry2 = createFileEntry('file2-no-db-record')
 
       manager.initialize(app(), internal(), defaultAdapters())
-      mockPacker.finalize.mockResolvedValueOnce([
-        mockPinnedObject,
-        mockPinnedObject,
-      ])
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject, mockPinnedObject])
 
       await manager.__testProcessFiles([entry1, entry2])
       await manager.flush()
@@ -468,10 +442,7 @@ describe('UploadManager', () => {
       const entry2 = await createTestFile('pin-fail')
 
       manager.initialize(app(), internal(), defaultAdapters())
-      mockPacker.finalize.mockResolvedValueOnce([
-        mockPinnedObject,
-        mockPinnedObject,
-      ])
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject, mockPinnedObject])
       // First call succeeds, second fails (all 3 retry attempts)
       mockSdk.pinObject
         .mockResolvedValueOnce(undefined)
@@ -641,10 +612,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
       // Fill exactly to threshold (90%)
-      const file1 = createFileEntry(
-        'file1',
-        Math.floor(SLAB_SIZE * SLAB_FILL_THRESHOLD),
-      )
+      const file1 = createFileEntry('file1', Math.floor(SLAB_SIZE * SLAB_FILL_THRESHOLD))
       await manager.__testProcessFiles([file1])
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
@@ -661,10 +629,7 @@ describe('UploadManager', () => {
     it('removes all files from upload store', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
-      await manager.__testProcessFiles([
-        createFileEntry('file1'),
-        createFileEntry('file2'),
-      ])
+      await manager.__testProcessFiles([createFileEntry('file1'), createFileEntry('file2')])
 
       // Before cancel, files should be in store
       expect(getActiveUploads()).toHaveLength(2)
@@ -725,9 +690,7 @@ describe('UploadManager', () => {
       })
 
       manager.initialize(app(), internal(), defaultAdapters())
-      const files = Array.from({ length: 15 }, (_, i) =>
-        createFileEntry(`s-file${i}`),
-      )
+      const files = Array.from({ length: 15 }, (_, i) => createFileEntry(`s-file${i}`))
       manager.enqueue(files)
 
       // Flush #1: loop starts, pollDB returns 0, enters PACKER_POLL_INTERVAL wait.
@@ -754,8 +717,7 @@ describe('UploadManager', () => {
         progressScheduler: (cb) => cb(),
       })
 
-      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null =
-        null
+      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null = null
       mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
         progressCallback = opts.progressCallback.progress
         return mockPacker
@@ -786,21 +748,17 @@ describe('UploadManager', () => {
         progressScheduler: (cb) => cb(),
       })
 
-      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null =
-        null
+      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null = null
       mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
         progressCallback = opts.progressCallback.progress
         return mockPacker
       })
 
-      await manager.__testProcessFiles([
-        createFileEntry('multi-slab', fileSize),
-      ])
+      await manager.__testProcessFiles([createFileEntry('multi-slab', fileSize)])
       expect(progressCallback).not.toBeNull()
 
       // Our stable denominator: ceil(1.5 slabs) = 2 slabs worth of encoded sectors
-      const expectedEncoded =
-        2 * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
+      const expectedEncoded = 2 * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
 
       // Simulate SDK sawtooth: first slab uploads with total = 1 slab of sectors,
       // then second slab starts and total jumps to 2 slabs of sectors.
@@ -950,9 +908,7 @@ describe('UploadManager', () => {
       // Enqueue 10 more files at once. The loop drains them all into
       // processEntries -> processWindow (pipelined path). Duration is checked
       // after the window completes, so all 10 files are packed before flush.
-      const files = Array.from({ length: 10 }, (_, i) =>
-        createFileEntry(`window-dur-${i}`, 1000),
-      )
+      const files = Array.from({ length: 10 }, (_, i) => createFileEntry(`window-dur-${i}`, 1000))
       manager.enqueue(files)
       // Multiple flushes needed: the loop wakes, drains queue into
       // processEntries, which pipelines adds. Each awaited add and the
@@ -1036,9 +992,7 @@ describe('UploadManager', () => {
     }
 
     beforeEach(() => {
-      queryFilesSpy = jest
-        .spyOn(app().files, 'query')
-        .mockResolvedValue([] as any)
+      queryFilesSpy = jest.spyOn(app().files, 'query').mockResolvedValue([] as any)
     })
 
     afterEach(() => {
@@ -1047,10 +1001,7 @@ describe('UploadManager', () => {
       void app().settings.setAutoScanUploads(false)
     })
 
-    function createDBFiles(
-      count: number,
-      opts: { prefix?: string; size?: number } = {},
-    ) {
+    function createDBFiles(count: number, opts: { prefix?: string; size?: number } = {}) {
       const { prefix = 'db', size = 400 } = opts
       return Array.from({ length: count }, (_, i) => ({
         id: `${prefix}-${i}`,
@@ -1068,9 +1019,7 @@ describe('UploadManager', () => {
 
     it('drains all polled files into one batch before idle flush', async () => {
       enablePolling()
-      queryFilesSpy
-        .mockResolvedValueOnce(createDBFiles(20))
-        .mockResolvedValue([] as any)
+      queryFilesSpy.mockResolvedValueOnce(createDBFiles(20)).mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       // Flush microtasks: loop starts -> pollDB finds 20 files ->
@@ -1113,9 +1062,7 @@ describe('UploadManager', () => {
       enablePolling()
       const wave1 = createDBFiles(3, { prefix: 'w1' })
       const wave2 = createDBFiles(3, { prefix: 'w2' })
-      queryFilesSpy
-        .mockResolvedValueOnce(wave1)
-        .mockResolvedValueOnce([] as any)
+      queryFilesSpy.mockResolvedValueOnce(wave1).mockResolvedValueOnce([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
@@ -1137,9 +1084,7 @@ describe('UploadManager', () => {
 
     it('processes explicit and polled files together', async () => {
       enablePolling()
-      queryFilesSpy
-        .mockResolvedValueOnce(createDBFiles(3))
-        .mockResolvedValue([] as any)
+      queryFilesSpy.mockResolvedValueOnce(createDBFiles(3)).mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       manager.enqueue([createFileEntry('explicit-1')])
@@ -1211,9 +1156,7 @@ describe('UploadManager', () => {
           objects: {},
         },
       ]
-      queryFilesSpy
-        .mockResolvedValueOnce(filesWithEmptyHash)
-        .mockResolvedValue([] as any)
+      queryFilesSpy.mockResolvedValueOnce(filesWithEmptyHash).mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
@@ -1246,10 +1189,7 @@ describe('UploadManager', () => {
       expect(mockPacker.add).toHaveBeenCalledTimes(300)
 
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
-      const totalFiles = manager.flushHistory.reduce(
-        (sum, h) => sum + h.fileCount,
-        0,
-      )
+      const totalFiles = manager.flushHistory.reduce((sum, h) => sum + h.fileCount, 0)
       expect(totalFiles).toBe(300)
     })
   })
@@ -1264,9 +1204,7 @@ describe('UploadManager', () => {
       enablePolling()
       mockSdk.account.mockResolvedValue({ remainingStorage: 0n } as any)
 
-      const querySpy = jest
-        .spyOn(app().files, 'query')
-        .mockResolvedValue([] as any)
+      const querySpy = jest.spyOn(app().files, 'query').mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
@@ -1282,9 +1220,7 @@ describe('UploadManager', () => {
         .mockResolvedValueOnce({ remainingStorage: 0n } as any)
         .mockResolvedValue({ remainingStorage: 1000000000n } as any)
 
-      const querySpy = jest
-        .spyOn(app().files, 'query')
-        .mockResolvedValue([] as any)
+      const querySpy = jest.spyOn(app().files, 'query').mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
 
@@ -1324,9 +1260,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      manager.enqueue(
-        Array.from({ length: 5 }, (_, i) => createFileEntry(`ab-${i}`)),
-      )
+      manager.enqueue(Array.from({ length: 5 }, (_, i) => createFileEntry(`ab-${i}`)))
       await jest.advanceTimersByTimeAsync(5000)
       await jest.advanceTimersByTimeAsync(0)
       expect(deferreds).toHaveLength(4)

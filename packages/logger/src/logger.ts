@@ -1,10 +1,5 @@
 import { appendLog } from './logAppender'
-import {
-  ANSI_BOLD,
-  ANSI_RESET,
-  getLevelColorAnsi,
-  getScopeColorAnsi,
-} from './logColors'
+import { ANSI_BOLD, ANSI_RESET, getLevelColorAnsi, getScopeColorAnsi } from './logColors'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -17,12 +12,7 @@ function getEnvVar(name: string): string | undefined {
 
 function getLogLevelFromEnv(): LogLevel {
   const level = getEnvVar('EXPO_PUBLIC_LOG_LEVEL')?.toLowerCase()
-  if (
-    level === 'debug' ||
-    level === 'info' ||
-    level === 'warn' ||
-    level === 'error'
-  ) {
+  if (level === 'debug' || level === 'info' || level === 'warn' || level === 'error') {
     return level
   }
   return 'debug'
@@ -74,10 +64,7 @@ function serializeDataValue(value: unknown): unknown {
       message: value.message,
     }
     if (value.stack) {
-      obj.stack =
-        value.stack.length > 500
-          ? `${value.stack.slice(0, 500)}...`
-          : value.stack
+      obj.stack = value.stack.length > 500 ? `${value.stack.slice(0, 500)}...` : value.stack
     }
     for (const key of Object.keys(value)) {
       if (!['name', 'message', 'stack'].includes(key)) {

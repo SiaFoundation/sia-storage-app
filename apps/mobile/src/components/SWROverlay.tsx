@@ -17,9 +17,7 @@ export function SWROverlay<T>({
     <View style={styles.screen}>
       {response.error ? (
         <View style={styles.statusBar}>
-          <Text style={styles.errorText}>
-            {errorMessage ?? 'Failed to load data.'}
-          </Text>
+          <Text style={styles.errorText}>{errorMessage ?? 'Failed to load data.'}</Text>
         </View>
       ) : null}
       {!response.isLoading && !response.data ? (

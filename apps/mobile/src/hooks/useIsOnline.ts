@@ -3,9 +3,7 @@ import { logger } from '@siastorage/logger'
 import { useEffect } from 'react'
 import useSWR from 'swr'
 
-export async function getIsOnline(
-  customState?: NetInfoState,
-): Promise<boolean> {
+export async function getIsOnline(customState?: NetInfoState): Promise<boolean> {
   const state = customState || (await NetInfo.fetch())
   const reachable = state.isInternetReachable
   if (reachable !== null) return Boolean(reachable)
@@ -22,6 +20,7 @@ export function useIsOnline() {
       isOnline.mutate()
     })
     return () => unsubscribe()
+    // oxlint-disable-next-line react/exhaustive-deps -- isOnline.mutate is stable per SWR, full object would cause re-subscriptions
   }, [isOnline.mutate])
 
   useEffect(() => {

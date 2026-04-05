@@ -300,9 +300,7 @@ describe('parseDevicectlOutput', () => {
   })
 
   test('parses device with connected tunnel state (USB connection)', () => {
-    const devices = parseDevicectlOutput(
-      DEVICECTL_LIST_DEVICES_CONNECTED_OUTPUT,
-    )
+    const devices = parseDevicectlOutput(DEVICECTL_LIST_DEVICES_CONNECTED_OUTPUT)
 
     expect(devices).toHaveLength(1)
     expect(devices[0]).toEqual({
@@ -348,9 +346,7 @@ describe('parseSimctlOutput', () => {
   })
 
   test('parses multiple booted simulators across runtimes', () => {
-    const devices = parseSimctlOutput(
-      SIMCTL_LIST_DEVICES_MULTIPLE_BOOTED_OUTPUT,
-    )
+    const devices = parseSimctlOutput(SIMCTL_LIST_DEVICES_MULTIPLE_BOOTED_OUTPUT)
 
     expect(devices).toHaveLength(3)
     expect(devices.map((d) => d.name)).toEqual([
@@ -531,9 +527,7 @@ describe('selectAndroidDevice', () => {
 
 describe('parseAdbInstallError', () => {
   test('detects device offline error', () => {
-    const result = parseAdbInstallError(
-      'error: device offline\nadb: failed to install app.apk',
-    )
+    const result = parseAdbInstallError('error: device offline\nadb: failed to install app.apk')
 
     expect(result.success).toBe(false)
     expect(result.error).toBe('not_found')
@@ -561,9 +555,7 @@ describe('parseAdbInstallError', () => {
   })
 
   test('returns unknown error for other failures', () => {
-    const result = parseAdbInstallError(
-      'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]',
-    )
+    const result = parseAdbInstallError('Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]')
 
     expect(result.success).toBe(false)
     expect(result.error).toBe('unknown')

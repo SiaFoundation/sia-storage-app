@@ -43,10 +43,7 @@ export function LibraryHeader({
           onPress={onNavigateMenu}
           style={styles.shardButton}
         >
-          <Image
-            source={require('../assets/icon.png')}
-            style={styles.shardIcon}
-          />
+          <Image source={require('../assets/icon.png')} style={styles.shardIcon} />
         </Pressable>
         <View>
           <Text style={styles.titleLarge} pointerEvents="none">
@@ -74,10 +71,7 @@ export function LibraryHeader({
                 disabled={!selectedCount}
                 style={[styles.headerPill, !selectedCount && styles.disabled]}
               >
-                <EllipsisIcon
-                  color={selectedCount ? palette.gray[50] : whiteA.a50}
-                  size={20}
-                />
+                <EllipsisIcon color={selectedCount ? palette.gray[50] : whiteA.a50} size={20} />
               </Pressable>
               <Pressable
                 accessibilityRole="button"

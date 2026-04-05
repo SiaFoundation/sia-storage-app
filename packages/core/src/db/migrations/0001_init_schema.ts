@@ -38,36 +38,18 @@ async function up(db: DatabaseAdapter): Promise<void> {
       current INTEGER NOT NULL DEFAULT 1
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_createdAt_id ON files(createdAt, id);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_fileType ON files(type);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_updatedAt_id ON files(updatedAt, id);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_kind ON files(kind);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_createdAt_id ON files(createdAt, id);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_fileType ON files(type);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_updatedAt_id ON files(updatedAt, id);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_kind ON files(kind);`)
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_thumbForId_thumbSize ON files(thumbForId, thumbSize);`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_directoryId ON files(directoryId);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_trashedAt ON files(trashedAt);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_deletedAt ON files(deletedAt);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_files_addedAt_id ON files(addedAt, id);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_directoryId ON files(directoryId);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_trashedAt ON files(trashedAt);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_deletedAt ON files(deletedAt);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_files_addedAt_id ON files(addedAt, id);`)
   await db.execAsync(
     `CREATE INDEX IF NOT EXISTS idx_files_nameSortKey_id ON files(nameSortKey, id);`,
   )
@@ -130,12 +112,8 @@ async function up(db: DatabaseAdapter): Promise<void> {
       FOREIGN KEY (fileId) REFERENCES files(id) ON DELETE CASCADE
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_objects_id ON objects(id);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_objects_fileId ON objects(fileId);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_objects_id ON objects(id);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_objects_fileId ON objects(fileId);`)
 
   // Local filesystem cache
   // No FK on fileId — fs is a cache managed by fsOrphanScanner/fsEvictionScanner
@@ -147,9 +125,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
       usedAt INTEGER NOT NULL
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_fs_addedAt ON fs(addedAt);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_fs_addedAt ON fs(addedAt);`)
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_fs_usedAt ON fs(usedAt);`)
 
   // Logs
@@ -164,12 +140,8 @@ async function up(db: DatabaseAdapter): Promise<void> {
       data TEXT
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_logs_level_scope ON logs(level, scope);`,
-  )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_logs_createdAt ON logs(createdAt);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_logs_level_scope ON logs(level, scope);`)
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_logs_createdAt ON logs(createdAt);`)
 
   // Tags
   await db.execAsync(
@@ -181,9 +153,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
       system INTEGER NOT NULL DEFAULT 0
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_tags_usedAt ON tags(usedAt);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_tags_usedAt ON tags(usedAt);`)
 
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS file_tags (
@@ -194,9 +164,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
       FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
     );`,
   )
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_file_tags_tagId ON file_tags(tagId);`,
-  )
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_file_tags_tagId ON file_tags(tagId);`)
 
   // Default system tag
   const now = Date.now()

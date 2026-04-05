@@ -3,11 +3,7 @@ import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
-import {
-  PinnedObject,
-  type PinnedObjectInterface,
-  type SealedObject,
-} from 'react-native-sia'
+import { PinnedObject, type PinnedObjectInterface, type SealedObject } from 'react-native-sia'
 import { getAppKeyForIndexer } from '../stores/appKey'
 import { app } from '../stores/appService'
 import { useFsFileUri } from '../stores/fs'
@@ -34,10 +30,7 @@ export function fileRecordEqual(a: FileRecord, b: FileRecord): boolean {
   )
 }
 
-export function fileItemPropsAreEqual(
-  prev: FileItemProps,
-  next: FileItemProps,
-): boolean {
+export function fileItemPropsAreEqual(prev: FileItemProps, next: FileItemProps): boolean {
   return (
     fileRecordEqual(prev.file, next.file) &&
     prev.onPressItem === next.onPressItem &&
@@ -86,13 +79,10 @@ export function computeFileStatus({
   const isDeferredImport = isProcessing && !fileUri && !!file?.localId
   const isImportFailed = !!file?.lostReason
   const uploadStatus = uploadState?.status
-  const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(
-    uploadStatus ?? '',
-  )
+  const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(uploadStatus ?? '')
   const isPacking = uploadStatus === 'packing' || uploadStatus === 'packed'
   const isDownloading =
-    downloadState?.status === 'downloading' ||
-    downloadState?.status === 'queued'
+    downloadState?.status === 'downloading' || downloadState?.status === 'queued'
   const hasSealedObject = fileHasASealedObject(file)
   const isDownloaded = !!fileUri
   return {
@@ -107,20 +97,13 @@ export function computeFileStatus({
     batchFileCount: uploadState?.batchFileCount ?? 0,
     isUploaded: hasSealedObject || !!isShared,
     isDownloaded,
-    isErrored:
-      isImportFailed ||
-      uploadStatus === 'error' ||
-      downloadState?.status === 'error',
+    isErrored: isImportFailed || uploadStatus === 'error' || downloadState?.status === 'error',
     uploadProgress: uploadState?.progress ?? 0,
     downloadProgress: downloadState?.progress ?? 0,
     fileUri,
     fileIsGone:
       !!file?.lostReason ||
-      (!isProcessing &&
-        !isUploading &&
-        !isDownloading &&
-        !hasSealedObject &&
-        !fileUri),
+      (!isProcessing && !isUploading && !isDownloading && !hasSealedObject && !fileUri),
     errorText: isImportFailed ? 'Import failed' : errorText,
   }
 }
@@ -130,10 +113,7 @@ export type FileStatusResponse = {
   isLoading: boolean
 }
 
-export function useFileStatus(
-  file?: FileRecord,
-  isShared?: boolean,
-): FileStatusResponse {
+export function useFileStatus(file?: FileRecord, isShared?: boolean): FileStatusResponse {
   const uploadState = useUploadState(file?.id || '')
   const { data: downloadState } = useDownloadEntry(file?.id || '')
   const fileUri = useFsFileUri(file)
@@ -148,14 +128,7 @@ export function useFileStatus(
       fileUri: fileUri.data ?? null,
       errorText: uploadState?.error || downloadState?.error || null,
     })
-  }, [
-    file,
-    isShared,
-    uploadState,
-    downloadState,
-    fileUri.data,
-    fileUri.isLoading,
-  ])
+  }, [file, isShared, uploadState, downloadState, fileUri.data, fileUri.isLoading])
 
   return { data, isLoading: fileUri.isLoading }
 }

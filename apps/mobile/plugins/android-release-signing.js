@@ -1,7 +1,4 @@
-const {
-  withAppBuildGradle,
-  withGradleProperties,
-} = require('@expo/config-plugins')
+const { withAppBuildGradle, withGradleProperties } = require('@expo/config-plugins')
 
 const DEFAULTS = {
   storeFile: 'android-release.keystore',
@@ -41,9 +38,7 @@ function ensureProperty(modResults, key, value) {
     return
   }
 
-  const existing = modResults.find(
-    (item) => item.type === 'property' && item.key === key,
-  )
+  const existing = modResults.find((item) => item.type === 'property' && item.key === key)
 
   if (existing) {
     existing.value = value
@@ -178,18 +173,14 @@ function ensureBlockSigningConfig(contents, blockName, targetConfig) {
   const signingRegex = /signingConfig\s+signingConfigs\.\w+/
   let nextInside
   if (signingRegex.test(inside)) {
-    nextInside = inside.replace(
-      signingRegex,
-      `signingConfig signingConfigs.${targetConfig}`,
-    )
+    nextInside = inside.replace(signingRegex, `signingConfig signingConfigs.${targetConfig}`)
   } else {
     const lineStart = contents.lastIndexOf('\n', blockStart) + 1
     const indentMatch = contents.slice(lineStart, blockStart).match(/^\s*/)
     const baseIndent = indentMatch ? indentMatch[0] : ''
     const innerIndent = `${baseIndent}    `
     nextInside =
-      inside +
-      `\n${innerIndent}signingConfig signingConfigs.${targetConfig}\n${baseIndent}`
+      inside + `\n${innerIndent}signingConfig signingConfigs.${targetConfig}\n${baseIndent}`
   }
 
   return before + nextInside + after
@@ -234,10 +225,7 @@ function stripSigningConfigAssignments(contents) {
   const inside = contents.slice(braceStart + 1, blockEnd)
   const after = contents.slice(blockEnd)
 
-  const cleanedInside = inside.replace(
-    /\s*signingConfig\s+signingConfigs\.\w+\s*/g,
-    '',
-  )
+  const cleanedInside = inside.replace(/\s*signingConfig\s+signingConfigs\.\w+\s*/g, '')
 
   return before + cleanedInside + after
 }
@@ -257,18 +245,10 @@ function withAndroidReleaseSigning(config, rawOptions = {}) {
     ensureProperty(modResults, options.storeFileProperty, options.storeFile)
     ensureProperty(modResults, options.keyAliasProperty, options.keyAlias)
     if (options.storePassword !== undefined) {
-      ensureProperty(
-        modResults,
-        options.storePasswordProperty,
-        options.storePassword,
-      )
+      ensureProperty(modResults, options.storePasswordProperty, options.storePassword)
     }
     if (options.keyPassword !== undefined) {
-      ensureProperty(
-        modResults,
-        options.keyPasswordProperty,
-        options.keyPassword,
-      )
+      ensureProperty(modResults, options.keyPasswordProperty, options.keyPassword)
     }
     return innerConfig
   })

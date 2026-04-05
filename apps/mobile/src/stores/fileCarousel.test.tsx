@@ -21,11 +21,7 @@ describe('fetchFilesByIDs', () => {
     jest.clearAllMocks()
   })
 
-  async function createRecord(params: {
-    id: string
-    name: string
-    createdAt: number
-  }) {
+  async function createRecord(params: { id: string; name: string; createdAt: number }) {
     await app().files.create({
       id: params.id,
       name: params.name,
@@ -78,11 +74,7 @@ describe('useFileCarousel hook', () => {
     jest.clearAllMocks()
   })
 
-  async function createRecord(params: {
-    id: string
-    name: string
-    createdAt: number
-  }) {
+  async function createRecord(params: { id: string; name: string; createdAt: number }) {
     await app().files.create({
       id: params.id,
       name: params.name,
@@ -244,9 +236,7 @@ describe('useFileCarousel hook', () => {
       const nullRenders = postInitRenders.filter((r) => r.currentFile === null)
       expect(nullRenders).toEqual([])
 
-      const wrongFileRenders = postInitRenders.filter(
-        (r) => r.currentFile?.id !== 'file-2',
-      )
+      const wrongFileRenders = postInitRenders.filter((r) => r.currentFile?.id !== 'file-2')
       expect(wrongFileRenders).toEqual([])
 
       // Position and count stay frozen at init values

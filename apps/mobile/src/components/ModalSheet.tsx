@@ -1,12 +1,5 @@
 import type { ReactNode } from 'react'
-import {
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, palette } from '../styles/colors'
 
@@ -45,8 +38,7 @@ export function ModalSheet({
           style={[
             styles.header,
             {
-              paddingTop:
-                Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
+              paddingTop: Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
             },
           ]}
         >

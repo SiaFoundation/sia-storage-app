@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+
 ## 1.9.4 (2026-04-09)
 
 ### Fixes

@@ -31,12 +31,7 @@ export function BottomControlBar({
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <View
-        style={[
-          styles.keyboardAwareContainer,
-          { paddingBottom: 30 + keyboardOffset },
-        ]}
-      >
+      <View style={[styles.keyboardAwareContainer, { paddingBottom: 30 + keyboardOffset }]}>
         <Gradient
           fadeTo="bottom"
           overlayTopColor={overlay.gradientLight}
@@ -53,14 +48,8 @@ export function BottomControlBar({
           style={[styles.contents, style]}
           pointerEvents={variant === 'floating' ? 'box-none' : 'auto'}
         >
-          {controlsTop ? (
-            <View style={styles.controlsTop}>{controlsTop}</View>
-          ) : null}
-          {variant === 'pill' ? (
-            <View style={styles.bar}>{children}</View>
-          ) : (
-            children
-          )}
+          {controlsTop ? <View style={styles.controlsTop}>{controlsTop}</View> : null}
+          {variant === 'pill' ? <View style={styles.bar}>{children}</View> : children}
         </View>
       </View>
     </View>
@@ -169,10 +158,8 @@ function useKeyboardOffset(enabled: boolean) {
       return
     }
 
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
 
     const handleShow = (event: KeyboardEvent) => {
       setOffset(event.endCoordinates?.height ?? 0)

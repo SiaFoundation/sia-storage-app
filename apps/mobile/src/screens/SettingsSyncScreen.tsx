@@ -25,12 +25,7 @@ export function SettingsSyncScreen(_props: Props) {
           description="Prevents the screen from turning off while the app is open."
           labelWidth={250}
           canCopy={false}
-          value={
-            <Switch
-              value={keepAwake.data ?? false}
-              onValueChange={toggleKeepAwake}
-            />
-          }
+          value={<Switch value={keepAwake.data ?? false} onValueChange={toggleKeepAwake} />}
         />
       </InfoCard>
       {showAdvanced.data ? (

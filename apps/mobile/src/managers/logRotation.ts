@@ -1,8 +1,5 @@
 import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
-import {
-  LOG_ROTATION_INTERVAL,
-  runLogRotation,
-} from '@siastorage/core/services'
+import { LOG_ROTATION_INTERVAL, runLogRotation } from '@siastorage/core/services'
 import { app } from '../stores/appService'
 
 export async function initLogRotation(): Promise<void> {

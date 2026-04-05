@@ -12,9 +12,7 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
   }, [manualPhrase])
 
   const [isManualPhraseValid, setIsManualPhraseValid] = useState(false)
-  const [manualValidationError, setManualValidationError] = useState<
-    string | null
-  >(null)
+  const [manualValidationError, setManualValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!normalizedManualPhrase) {
@@ -36,11 +34,7 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
           })
 
         const message =
-          e instanceof Error
-            ? e.message
-            : typeof e === 'string'
-              ? e
-              : 'Invalid recovery phrase.'
+          e instanceof Error ? e.message : typeof e === 'string' ? e : 'Invalid recovery phrase.'
 
         setIsManualPhraseValid(false)
         setManualValidationError(message)

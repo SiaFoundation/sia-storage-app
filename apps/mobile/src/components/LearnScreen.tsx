@@ -27,10 +27,7 @@ export function LearnScreen({ children }: LearnScreenProps) {
       </View>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: bottom + 24 },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottom + 24 }]}
       >
         {children}
       </ScrollView>

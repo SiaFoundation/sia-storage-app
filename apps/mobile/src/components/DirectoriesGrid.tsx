@@ -1,35 +1,18 @@
 import type { DirectoryWithCount } from '@siastorage/core/db/operations'
 import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
-import {
-  useDirectoryChildren,
-  useUnfiledFileCount,
-} from '@siastorage/core/stores'
+import { useDirectoryChildren, useUnfiledFileCount } from '@siastorage/core/stores'
 import { FolderIcon, InboxIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
 
 type Props = {
-  onSelectDirectory: (
-    directoryId: string,
-    directoryName: string,
-    directoryPath: string,
-  ) => void
+  onSelectDirectory: (directoryId: string, directoryName: string, directoryPath: string) => void
   onCreateDirectory: () => void
 }
 
-export function DirectoriesGrid({
-  onSelectDirectory,
-  onCreateDirectory,
-}: Props) {
+export function DirectoriesGrid({ onSelectDirectory, onCreateDirectory }: Props) {
   const rootDirs = useDirectoryChildren(null)
   const unfiledCount = useUnfiledFileCount()
   const dirs = rootDirs.data ?? []
@@ -47,6 +30,7 @@ export function DirectoriesGrid({
       })
     }
     return items
+    // oxlint-disable-next-line react/exhaustive-deps -- dirs is derived from SWR data, new ref each render is expected
   }, [dirs, unfiledCount.data])
 
   if (!rootDirs.data) {
@@ -110,10 +94,9 @@ function DirectoryCard({
           {dir.name}
         </Text>
         <Text style={styles.dirCount}>
-          {dir.fileCount.toLocaleString()}{' '}
-          {dir.fileCount === 1 ? 'file' : 'files'}
+          {dir.fileCount.toLocaleString()} {dir.fileCount === 1 ? 'file' : 'files'}
           {dir.subdirectoryCount > 0
-            ? `, ${dir.subdirectoryCount} ${dir.subdirectoryCount === 1 ? 'folder' : 'folders'}`
+            ? `, ${dir.subdirectoryCount.toLocaleString()} ${dir.subdirectoryCount === 1 ? 'folder' : 'folders'}`
             : ''}
         </Text>
       </View>

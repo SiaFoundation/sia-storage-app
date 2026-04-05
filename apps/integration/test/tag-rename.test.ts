@@ -1,11 +1,6 @@
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, type TestApp, waitForCondition } from './app'
 
 describe('Tag Rename', () => {
   let app: TestApp
@@ -76,10 +71,7 @@ describe('Tag Rename', () => {
     const objectId = localObjects[0].id
 
     await app.addTagToFile(file.id, 'vacation')
-    await app.updateFileRecord(
-      { id: file.id, updatedAt: Date.now() },
-      { includeUpdatedAt: true },
-    )
+    await app.updateFileRecord({ id: file.id, updatedAt: Date.now() }, { includeUpdatedAt: true })
 
     await waitForCondition(
       async () => {
@@ -99,8 +91,7 @@ describe('Tag Rename', () => {
         const remote = await app.sdk.getPinnedObject(objectId)
         const remoteMeta = decodeFileMetadata(remote.metadata())
         return (
-          remoteMeta.tags?.includes('holiday') === true &&
-          !remoteMeta.tags?.includes('vacation')
+          remoteMeta.tags?.includes('holiday') === true && !remoteMeta.tags?.includes('vacation')
         )
       },
       { timeout: 10_000, message: 'Remote metadata to have renamed tag' },

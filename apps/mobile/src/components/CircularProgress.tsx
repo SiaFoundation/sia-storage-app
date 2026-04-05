@@ -23,12 +23,7 @@ export function CircularProgress({
   const offset = circumference * (1 - clamped)
 
   return (
-    <View
-      style={[
-        styles.container,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
+    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
       <Svg width={size} height={size}>
         <Circle
           cx={size / 2}

@@ -103,9 +103,7 @@ export async function getAutoSyncNewPhotos(): Promise<boolean> {
 
 export function useAutoSyncNewPhotos() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('autoSyncNewPhotos'), () =>
-    getAutoSyncNewPhotos(),
-  )
+  return useSWR(app.caches.settings.key('autoSyncNewPhotos'), () => getAutoSyncNewPhotos())
 }
 
 export async function setAutoSyncNewPhotos(value: boolean) {

@@ -79,10 +79,7 @@ export function useCameraCapture() {
 /* Build a date-based file name from a timestamp and mime type.
  * eg: Camera Capture 2025-11-03 2.36.59 PM.jpg
  */
-function buildDateFileName(
-  timestamp: string | undefined,
-  mime: string | undefined,
-): string {
+function buildDateFileName(timestamp: string | undefined, mime: string | undefined): string {
   const d = timestamp ? new Date(timestamp) : new Date()
 
   const date = Number.isNaN(d.getTime()) ? new Date() : d

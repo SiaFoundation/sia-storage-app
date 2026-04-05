@@ -42,10 +42,7 @@ export function HostListScreen({ navigation }: Props) {
               pressed && styles.togglePressed,
             ]}
           >
-            <MapIcon
-              size={16}
-              color={viewMode === 'map' ? palette.gray[50] : palette.gray[700]}
-            />
+            <MapIcon size={16} color={viewMode === 'map' ? palette.gray[50] : palette.gray[700]} />
           </Pressable>
         </View>
       ),

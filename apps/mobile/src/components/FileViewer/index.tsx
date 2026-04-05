@@ -1,19 +1,8 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import {
-  ClockArrowUpIcon,
-  ClockIcon,
-  CloudDownloadIcon,
-  FileIcon,
-} from 'lucide-react-native'
+import { ClockArrowUpIcon, ClockIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableHighlight,
-  View,
-} from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import useSWR from 'swr'
 import { useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
@@ -51,32 +40,22 @@ export function FileViewer({
 }: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, isShared)
-  const {
-    fileUri,
-    isDownloaded,
-    isDownloading,
-    isProcessing,
-    isDeferredImport,
-  } = status.data ?? {}
+  const { fileUri, isDownloaded, isDownloading, isProcessing, isDeferredImport } = status.data ?? {}
   const fileDownload = useDownload(file)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
   const localId = file.hash === '' && file.localId ? file.localId : null
-  const mediaLibrarySwr = useSWR(
-    localId ? ['mediaLibraryUri', localId] : null,
-    () => getMediaLibraryUri(localId),
+  const mediaLibrarySwr = useSWR(localId ? ['mediaLibraryUri', localId] : null, () =>
+    getMediaLibraryUri(localId),
   )
   const mediaLibraryUri = mediaLibrarySwr.data
-  const mediaLibraryLoading = localId
-    ? !mediaLibrarySwr.data && !mediaLibrarySwr.error
-    : false
+  const mediaLibraryLoading = localId ? !mediaLibrarySwr.data && !mediaLibrarySwr.error : false
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset
     ? StyleSheet.flatten([baseMediaStyle, { paddingTop: textTopInset }])
     : baseMediaStyle
-  const textInsetValue =
-    textTopInset && textTopInset > 0 ? textTopInset : undefined
+  const textInsetValue = textTopInset && textTopInset > 0 ? textTopInset : undefined
 
   const onDownloadPress = useCallback(() => {
     if (onViewerControlPress) onViewerControlPress()
@@ -91,12 +70,7 @@ export function FileViewer({
 
   const DownloadPanel = useMemo(() => {
     return (
-      <View
-        style={[
-          baseMediaStyle,
-          { justifyContent: 'center', alignItems: 'center', gap: 20 },
-        ]}
-      >
+      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
         <TouchableHighlight onPress={onDownloadPress} disabled={isQueued}>
           <CloudDownloadIcon color={colors.textPrimary} size={40} />
         </TouchableHighlight>
@@ -107,25 +81,17 @@ export function FileViewer({
           </Text>
         ) : null}
 
-        {isQueued ? (
-          <Text style={{ color: colors.textPrimary }}>Download queued</Text>
-        ) : null}
+        {isQueued ? <Text style={{ color: colors.textPrimary }}>Download queued</Text> : null}
 
         {isDownloading && !isQueued ? (
           <Text style={{ color: colors.textPrimary }}>
-            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(0)}
-            %
+            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(0)}%
           </Text>
         ) : null}
       </View>
     )
-  }, [
-    isDownloading,
-    isQueued,
-    onDownloadPress,
-    fileDownloadState?.progress,
-    file.size,
-  ])
+    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
+  }, [isDownloading, isQueued, onDownloadPress, fileDownloadState?.progress, file.size])
 
   const ImportingPanel = useMemo(() => {
     return (
@@ -164,12 +130,12 @@ export function FileViewer({
               maxWidth: 280,
             }}
           >
-            Files imported from the Photos library are queued for import and
-            uploaded in order
+            Files imported from the Photos library are queued for import and uploaded in order
           </Text>
         ) : null}
       </View>
     )
+    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [isDeferredImport])
 
   const displayUri = fileUri || mediaLibraryUri || null
@@ -177,15 +143,11 @@ export function FileViewer({
 
   const LoadingPanel = useMemo(() => {
     return (
-      <View
-        style={[
-          baseMediaStyle,
-          { justifyContent: 'center', alignItems: 'center' },
-        ]}
-      >
+      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={colors.textSecondary} />
       </View>
     )
+    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [])
 
   const mediaContent = useMemo(() => {
@@ -195,11 +157,7 @@ export function FileViewer({
 
     if (type?.includes('image'))
       return (
-        <ImageViewer
-          uri={displayUri}
-          style={baseMediaStyle}
-          onZoomChange={onImageZoomChange}
-        />
+        <ImageViewer uri={displayUri} style={baseMediaStyle} onZoomChange={onImageZoomChange} />
       )
     if (type?.includes('video'))
       return (
@@ -230,10 +188,7 @@ export function FileViewer({
       )
     }
 
-    if (
-      type?.includes('application/json') ||
-      lowerCasedFileName.endsWith('.json')
-    ) {
+    if (type?.includes('application/json') || lowerCasedFileName.endsWith('.json')) {
       return (
         <JSONViewer
           uri={displayUri}
@@ -268,16 +223,12 @@ export function FileViewer({
     }
 
     return (
-      <View
-        style={[
-          baseMediaStyle,
-          { justifyContent: 'center', alignItems: 'center', gap: 20 },
-        ]}
-      >
+      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
         <FileIcon color={colors.textPrimary} size={40} />
         <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
       </View>
     )
+    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [
     LoadingPanel,
     ImportingPanel,

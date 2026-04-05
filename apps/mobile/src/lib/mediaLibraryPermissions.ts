@@ -20,13 +20,12 @@ export async function getMediaLibraryPermissions(): Promise<boolean> {
 export const mediaLibraryPermissionsCache = swrCache()
 
 export function useMediaLibraryPermissions() {
-  const perms = useSWR(mediaLibraryPermissionsCache.key(), () =>
-    MediaLibrary.getPermissionsAsync(),
-  )
+  const perms = useSWR(mediaLibraryPermissionsCache.key(), () => MediaLibrary.getPermissionsAsync())
 
   useFocusEffect(
     useCallback(() => {
       void perms.mutate()
+      // oxlint-disable-next-line react/exhaustive-deps -- perms.mutate is stable per SWR, full perms object is not
     }, [perms.mutate]),
   )
 

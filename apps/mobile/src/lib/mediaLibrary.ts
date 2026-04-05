@@ -5,9 +5,7 @@ import * as MediaLibrary from 'expo-media-library'
  * local URI from the MediaLibrary. The media may need to be downloaded from
  * the network if it is not already cached.
  */
-export async function getMediaLibraryUri(
-  localId: string | null,
-): Promise<string | null> {
+export async function getMediaLibraryUri(localId: string | null): Promise<string | null> {
   if (!localId) return null
   try {
     const asset = await MediaLibrary.getAssetInfoAsync(localId, {

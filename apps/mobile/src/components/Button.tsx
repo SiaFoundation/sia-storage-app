@@ -1,10 +1,4 @@
-import {
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  Text,
-  type ViewStyle,
-} from 'react-native'
+import { Pressable, type StyleProp, StyleSheet, Text, type ViewStyle } from 'react-native'
 import { colors, palette, whiteA } from '../styles/colors'
 
 export function Button({

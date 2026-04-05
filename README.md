@@ -4,18 +4,18 @@ Private, encrypted cloud storage powered by the [Sia](https://sia.tech) decentra
 
 ## Apps
 
-| App | Stack | Description |
-|-----|-------|-------------|
-| [`apps/mobile`](apps/mobile) | React Native + Expo | iOS & Android |
-| [`apps/desktop`](apps/desktop) | Electron + Vite | macOS, Linux, Windows |
-| [`apps/cli`](apps/cli) | Bun + Commander | macOS, Linux, Windows |
+| App                            | Stack               | Description           |
+| ------------------------------ | ------------------- | --------------------- |
+| [`apps/mobile`](apps/mobile)   | React Native + Expo | iOS & Android         |
+| [`apps/desktop`](apps/desktop) | Electron + Vite     | macOS, Linux, Windows |
+| [`apps/cli`](apps/cli)         | Bun + Commander     | macOS, Linux, Windows |
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| [`packages/core`](packages/core) | Database, services, adapters, config |
-| [`packages/logger`](packages/logger) | Structured logging |
+| Package                              | Description                          |
+| ------------------------------------ | ------------------------------------ |
+| [`packages/core`](packages/core)     | Database, services, adapters, config |
+| [`packages/logger`](packages/logger) | Structured logging                   |
 
 ## Development
 

@@ -1,20 +1,6 @@
 import type React from 'react'
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
-import {
-  Animated,
-  Easing,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native'
 import { colors, whiteA } from '../styles/colors'
 
 type ToastContextValue = {

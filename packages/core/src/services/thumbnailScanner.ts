@@ -74,10 +74,7 @@ export function computeTargetDimensions(
     if (landscape) {
       return {
         targetWidth: size,
-        targetHeight: Math.max(
-          1,
-          Math.round((sourceHeight * size) / sourceWidth),
-        ),
+        targetHeight: Math.max(1, Math.round((sourceHeight * size) / sourceWidth)),
       }
     }
     return {
@@ -132,10 +129,7 @@ export class ThumbnailScanner {
   }
 
   async generateThumbnailsForFile(fileRecord: FileRecord): Promise<void> {
-    if (
-      !fileRecord.type?.startsWith('image/') &&
-      !fileRecord.type?.startsWith('video/')
-    ) {
+    if (!fileRecord.type?.startsWith('image/') && !fileRecord.type?.startsWith('video/')) {
       return
     }
 
@@ -193,9 +187,7 @@ export class ThumbnailScanner {
     }
   }
 
-  async ensureThumbnailForSize(
-    params: EnsureThumbnailParams,
-  ): Promise<EnsureResult> {
+  async ensureThumbnailForSize(params: EnsureThumbnailParams): Promise<EnsureResult> {
     const app = this.getApp()
     const { fileId, fileHash, fileType, size, sourceUri } = params
 
@@ -216,10 +208,7 @@ export class ThumbnailScanner {
       })
     }
 
-    if (
-      !actualType?.startsWith('image/') &&
-      !actualType?.startsWith('video/')
-    ) {
+    if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
       logger.error('thumbnailer', 'unsupported_format', {
         fileId,
         fileHash,
@@ -329,10 +318,7 @@ export class ThumbnailScanner {
     const detectedType = await app.fs.detectMimeType(sourceUri)
     const actualType = detectedType ?? fileType
 
-    if (
-      !actualType?.startsWith('image/') &&
-      !actualType?.startsWith('video/')
-    ) {
+    if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
       this.markFileErrored(fileId)
       return
     }
@@ -486,9 +472,7 @@ export class ThumbnailScanner {
           summary.processedCandidates += 1
           // Determine missing sizes for this original so we don't attempt existing ones.
           const existingSizes = await app.thumbnails.getSizesForFile(c.id)
-          const missingSizes = ThumbSizes.filter(
-            (s) => !existingSizes.includes(s),
-          )
+          const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
           if (missingSizes.length === 0) {
             summary.skippedFullyCovered.push({ fileId: c.id, hash: c.hash })
             continue
@@ -561,8 +545,7 @@ export class ThumbnailScanner {
         skippedFullyCovered: summary.skippedFullyCovered.length,
         skippedErrorCooldown: summary.skippedErrorCooldown.length,
         errors: summary.errors.length,
-        total:
-          summary.processedCandidates + summary.skippedErrorCooldown.length,
+        total: summary.processedCandidates + summary.skippedErrorCooldown.length,
       })
       await this.logOverallProgress()
     } catch (e) {

@@ -100,12 +100,7 @@ async function main() {
 
   // Phase 1: Before ANALYZE
   console.log('\n--- Before ANALYZE ---\n')
-  const specsBeforeAnalyze = buildQuerySpecs(
-    app,
-    sampleDirId,
-    sampleTagId,
-    sampleFileId,
-  )
+  const specsBeforeAnalyze = buildQuerySpecs(app, sampleDirId, sampleTagId, sampleFileId)
   const resultsBeforeAnalyze = await runBenchmark(specsBeforeAnalyze)
   const reportBeforeAnalyze = buildReport(
     `${approach}_before_analyze`,
@@ -119,18 +114,11 @@ async function main() {
   const analyzeStart = performance.now()
   await db.execAsync('ANALYZE')
   await db.execAsync('PRAGMA optimize')
-  console.log(
-    `ANALYZE completed in ${((performance.now() - analyzeStart) / 1000).toFixed(1)}s`,
-  )
+  console.log(`ANALYZE completed in ${((performance.now() - analyzeStart) / 1000).toFixed(1)}s`)
 
   // Phase 3: After ANALYZE
   console.log('\n--- After ANALYZE ---\n')
-  const specsAfterAnalyze = buildQuerySpecs(
-    app,
-    sampleDirId,
-    sampleTagId,
-    sampleFileId,
-  )
+  const specsAfterAnalyze = buildQuerySpecs(app, sampleDirId, sampleTagId, sampleFileId)
   const resultsAfterAnalyze = await runBenchmark(specsAfterAnalyze)
   const reportAfterAnalyze = buildReport(
     `${approach}_after_analyze`,
@@ -143,11 +131,7 @@ async function main() {
   console.log('\n--- Write Benchmarks ---\n')
   const writeSpecs = buildWriteQuerySpecs(db, sampleDirId)
   const writeResults = await runBenchmark(writeSpecs)
-  const writeReportData = buildReport(
-    `${approach}_writes`,
-    datasetInfo,
-    writeResults,
-  )
+  const writeReportData = buildReport(`${approach}_writes`, datasetInfo, writeResults)
   writeReport(writeReportData, outputDir)
 
   db.close()

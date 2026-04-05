@@ -1,11 +1,7 @@
 import { CircleCheckIcon, CircleIcon } from 'lucide-react-native'
 import { memo } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
-import {
-  type FileItemProps,
-  fileItemPropsAreEqual,
-  useFileStatus,
-} from '../lib/file'
+import { type FileItemProps, fileItemPropsAreEqual, useFileStatus } from '../lib/file'
 import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
 import { colors, palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
@@ -13,11 +9,7 @@ import { UploadStatusIcon } from './UploadStatusIcon'
 
 type Props = FileItemProps
 
-function FileGalleryItemComponent({
-  file,
-  onPressItem,
-  onLongPressItem,
-}: Props) {
+function FileGalleryItemComponent({ file, onPressItem, onLongPressItem }: Props) {
   const isSelectionMode = useIsSelectionMode()
   const isSelected = useIsFileSelected(file.id)
 
@@ -37,11 +29,7 @@ function FileGalleryItemComponent({
             <View style={styles.checkboxContainer}>
               {isSelected ? (
                 <View style={styles.checkboxSelected}>
-                  <CircleCheckIcon
-                    size={18}
-                    color={palette.blue[500]}
-                    fill={palette.gray[50]}
-                  />
+                  <CircleCheckIcon size={18} color={palette.blue[500]} fill={palette.gray[50]} />
                 </View>
               ) : (
                 <View style={styles.checkboxUnselected}>
@@ -60,10 +48,7 @@ function FileGalleryItemComponent({
   )
 }
 
-export const FileGalleryItem = memo(
-  FileGalleryItemComponent,
-  fileItemPropsAreEqual,
-)
+export const FileGalleryItem = memo(FileGalleryItemComponent, fileItemPropsAreEqual)
 
 const styles = StyleSheet.create({
   thumbCell: {

@@ -1,9 +1,4 @@
-import {
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Pdf from 'react-native-pdf'
 import Animated, { runOnJS } from 'react-native-reanimated'
@@ -60,11 +55,7 @@ export function PDFViewer({ source, style, onSwipeLeft, onSwipeRight }: Props) {
       {/* Right edge swipe zone */}
       <GestureDetector gesture={rightEdgeGesture}>
         <Animated.View
-          style={[
-            styles.edgeZone,
-            styles.rightEdge,
-            { left: screenWidth - EDGE_ZONE_WIDTH },
-          ]}
+          style={[styles.edgeZone, styles.rightEdge, { left: screenWidth - EDGE_ZONE_WIDTH }]}
         />
       </GestureDetector>
     </View>

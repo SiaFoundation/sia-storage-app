@@ -1,16 +1,12 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
-import {
-  DarkTheme,
-  NavigationContainer,
-  useNavigationContainerRef,
-} from '@react-navigation/native'
+import { DarkTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
 import { AppProvider } from '@siastorage/core/app'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
-import { useEffect } from 'react'
-import { Platform, StatusBar, StyleSheet } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { AppState, type AppStateStatus, Platform, StatusBar, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AppSplash } from './components/AppSplash'
@@ -19,6 +15,7 @@ import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { ToastProvider } from './lib/toastContext'
+import { logger } from '@siastorage/logger'
 import { initApp, shutdownApp } from './managers/app'
 import { RootTabs } from './stacks/RootTabs'
 import { app } from './stores/appService'
@@ -35,6 +32,8 @@ const darkNavigationTheme = {
 }
 
 export function Root() {
+  const appStateRef = useRef(AppState.currentState)
+
   useEffect(() => {
     initApp()
     return () => {
@@ -42,10 +41,23 @@ export function Root() {
     }
   }, [])
 
+  // Log AppState changes.
   useEffect(() => {
-    ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.PORTRAIT_UP,
-    ).catch(() => {
+    logger.info('appState', 'initial_state', { state: appStateRef.current })
+
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      logger.info('appState', 'state_changed', {
+        from: appStateRef.current,
+        to: nextAppState,
+      })
+      appStateRef.current = nextAppState
+    })
+
+    return () => subscription.remove()
+  }, [])
+
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {
       // Ignore failures caused by platform limitations or missing permissions.
     })
   }, [])
@@ -104,10 +116,7 @@ function RootContent() {
         ) : (
           <>
             <ShareIntentConsumer />
-            <NavigationContainer
-              ref={navigationRef}
-              theme={darkNavigationTheme}
-            >
+            <NavigationContainer ref={navigationRef} theme={darkNavigationTheme}>
               <RootTabs />
             </NavigationContainer>
           </>

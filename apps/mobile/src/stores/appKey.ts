@@ -5,9 +5,7 @@ import { app } from './appService'
  * Get the AppKey for a specific indexer URL.
  * Wraps facade's Uint8Array in react-native-sia's AppKey type.
  */
-export async function getAppKeyForIndexer(
-  indexerURL: string,
-): Promise<AppKey | undefined> {
+export async function getAppKeyForIndexer(indexerURL: string): Promise<AppKey | undefined> {
   const bytes = await app().auth.getAppKey(indexerURL)
   return bytes ? new AppKey(bytes.buffer as ArrayBuffer) : undefined
 }

@@ -2,13 +2,7 @@ import { StyleSheet, View } from 'react-native'
 import type { FileStatus } from '../lib/file'
 import { CircularProgress } from './CircularProgress'
 
-export function CenteredProgress({
-  status,
-  size = 44,
-}: {
-  status: FileStatus
-  size?: number
-}) {
+export function CenteredProgress({ status, size = 44 }: { status: FileStatus; size?: number }) {
   return (
     <View style={styles.container}>
       <CircularProgress progress={status.downloadProgress ?? 0} size={size} />

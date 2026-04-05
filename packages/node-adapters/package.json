@@ -11,7 +11,7 @@
     "./crypto": "./src/crypto.ts"
   },
   "scripts": {
-    "lint": "biome check .",
+    "lint": "oxlint . && oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "test": "echo 'No tests yet'"
   },

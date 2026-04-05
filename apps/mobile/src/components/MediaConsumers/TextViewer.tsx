@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { readFileAsText } from '../../lib/readFileAsText'
 import BlocksLoader from '../BlocksLoader'
@@ -89,11 +82,7 @@ export function TextViewer({ uri, style, fileSize, topInset }: Props) {
   }
 
   return (
-    <ScrollView
-      style={style}
-      contentContainerStyle={styles.content}
-      {...(insetProps ?? {})}
-    >
+    <ScrollView style={style} contentContainerStyle={styles.content} {...(insetProps ?? {})}>
       <Text selectable style={styles.mono}>
         {text}
       </Text>

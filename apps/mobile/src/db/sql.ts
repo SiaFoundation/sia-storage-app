@@ -9,10 +9,7 @@ export async function insert<
   return sql.insert(db(), table, row, options)
 }
 
-export async function run(
-  query: string,
-  params: SqlValue[] = [],
-): Promise<SQLRunResult> {
+export async function run(query: string, params: SqlValue[] = []): Promise<SQLRunResult> {
   return sql.run(db(), query, params)
 }
 

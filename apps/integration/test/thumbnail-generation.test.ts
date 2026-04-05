@@ -13,12 +13,7 @@ import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
-import {
-  createTestApp,
-  type TestApp,
-  type TestFileFactory,
-  waitForCondition,
-} from './app'
+import { createTestApp, type TestApp, type TestFileFactory, waitForCondition } from './app'
 
 let app: TestApp
 let validJpegBuffer: Buffer
@@ -45,10 +40,7 @@ afterEach(async () => {
   await app.shutdown()
 })
 
-function createImageFileFactory(
-  name: string,
-  content?: Buffer,
-): TestFileFactory {
+function createImageFileFactory(name: string, content?: Buffer): TestFileFactory {
   return (tempDir: string) => {
     const fileId = `test-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const ext = path.extname(name)
@@ -82,9 +74,7 @@ describe('Thumbnail Generation', () => {
 
     const thumbnails = await app.readThumbnailsByFileId(files[0].id)
     expect(thumbnails).toHaveLength(ThumbSizes.length)
-    const sizes = thumbnails
-      .map((t) => t.thumbSize)
-      .sort((a, b) => (a ?? 0) - (b ?? 0))
+    const sizes = thumbnails.map((t) => t.thumbSize).sort((a, b) => (a ?? 0) - (b ?? 0))
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
   })
 
@@ -132,9 +122,7 @@ describe('Thumbnail Generation', () => {
     for (const file of files) {
       const thumbnails = await app.readThumbnailsByFileId(file.id)
       expect(thumbnails).toHaveLength(ThumbSizes.length)
-      const sizes = thumbnails
-        .map((t) => t.thumbSize)
-        .sort((a, b) => (a ?? 0) - (b ?? 0))
+      const sizes = thumbnails.map((t) => t.thumbSize).sort((a, b) => (a ?? 0) - (b ?? 0))
       expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
     }
   })
@@ -149,9 +137,7 @@ describe('Thumbnail Generation', () => {
     const fileRecord = await app.getFileById(fileId)
     expect(fileRecord).not.toBeNull()
 
-    const manualPromise = app.thumbnailScanner.generateThumbnailsForFile(
-      fileRecord!,
-    )
+    const manualPromise = app.thumbnailScanner.generateThumbnailsForFile(fileRecord!)
 
     await new Promise((r) => setTimeout(r, 500))
     await manualPromise

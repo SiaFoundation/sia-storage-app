@@ -139,9 +139,7 @@ describe('ThumbnailScanner', () => {
     const customApp = createTestApp(undefined, {
       fsIO: {
         size: async (fileId) =>
-          noSourceIds.has(fileId)
-            ? { value: null, error: 'not_found' as const }
-            : { value: 1000 },
+          noSourceIds.has(fileId) ? { value: null, error: 'not_found' as const } : { value: 1000 },
       },
       thumbnail: {},
       crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
@@ -216,11 +214,9 @@ describe('ThumbnailScanner', () => {
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedForEligible).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    expect(
-      result.skippedNoSource
-        .map((s) => s.fileId)
-        .sort((a, b) => a.localeCompare(b)),
-    ).toEqual([...noSourceIds].sort((a, b) => a.localeCompare(b)))
+    expect(result.skippedNoSource.map((s) => s.fileId).sort((a, b) => a.localeCompare(b))).toEqual(
+      [...noSourceIds].sort((a, b) => a.localeCompare(b)),
+    )
     await customApp.shutdown()
   })
 
@@ -289,9 +285,7 @@ describe('ThumbnailScanner', () => {
 
     const result = await videoApp.thumbnailScanner.runScan()
 
-    expect(videoAdapter.generateVideoThumbnail).toHaveBeenCalledTimes(
-      ThumbSizes.length,
-    )
+    expect(videoAdapter.generateVideoThumbnail).toHaveBeenCalledTimes(ThumbSizes.length)
     const producedForVideo = result.produced
       .filter((p) => p.originalId === 'video1')
       .map((p) => p.size)

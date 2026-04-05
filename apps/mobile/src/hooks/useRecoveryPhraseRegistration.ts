@@ -8,10 +8,7 @@ export function useRecoveryPhraseRegistration() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const register = useCallback(
-    async (
-      phrase: string,
-      indexerURL: string,
-    ): Promise<{ success: boolean }> => {
+    async (phrase: string, indexerURL: string): Promise<{ success: boolean }> => {
       if (!phrase) {
         logger.warn('recoveryPhraseRegistration', 'no_phrase_available')
         return { success: false }

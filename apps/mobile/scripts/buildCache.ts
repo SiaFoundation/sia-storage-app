@@ -11,13 +11,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Glob } from 'bun'
 
@@ -56,9 +50,7 @@ export function computeBuildHash(): string {
 
   // Find all plugin files (custom native code)
   const pluginGlob = new Glob('plugins/*.js')
-  const pluginFiles = Array.from(
-    pluginGlob.scanSync({ cwd: PROJECT_ROOT }),
-  ).sort()
+  const pluginFiles = Array.from(pluginGlob.scanSync({ cwd: PROJECT_ROOT })).sort()
 
   const allFiles = [...coreFiles, ...pluginFiles]
   const content = allFiles
@@ -113,10 +105,7 @@ export function needsRebuild(
   } else {
     // Android: check for APK in standard location
     const apkVariant = target === 'android-release' ? 'release' : 'debug'
-    const apkDir = join(
-      PROJECT_ROOT,
-      `android/app/build/outputs/apk/${apkVariant}`,
-    )
+    const apkDir = join(PROJECT_ROOT, `android/app/build/outputs/apk/${apkVariant}`)
     if (!existsSync(apkDir)) {
       return [true, 'no Android APK found']
     }
@@ -151,11 +140,7 @@ export function ensureCacheDir(target: BuildTarget): void {
 /**
  * Write to build log file (instead of flooding stdout).
  */
-export function writeBuildLog(
-  target: BuildTarget,
-  content: string,
-  append = false,
-): void {
+export function writeBuildLog(target: BuildTarget, content: string, append = false): void {
   const paths = getTargetPaths(target)
   mkdirSync(paths.dir, { recursive: true })
   if (append && existsSync(paths.buildLog)) {
@@ -186,10 +171,7 @@ export function getBuildLogTail(target: BuildTarget, lines = 50): string {
 /**
  * Save build duration after a successful build.
  */
-export function saveBuildDuration(
-  target: BuildTarget,
-  durationMs: number,
-): void {
+export function saveBuildDuration(target: BuildTarget, durationMs: number): void {
   const paths = getTargetPaths(target)
   const durationFile = join(paths.dir, 'build-duration')
   mkdirSync(paths.dir, { recursive: true })

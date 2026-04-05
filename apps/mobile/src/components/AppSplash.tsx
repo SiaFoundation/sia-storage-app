@@ -41,12 +41,7 @@ export function AppSplash() {
         inset={{ top, bottom }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View
-        style={[
-          styles.centerWrap,
-          { paddingTop: top + 12, paddingBottom: bottom + 12 },
-        ]}
-      >
+      <View style={[styles.centerWrap, { paddingTop: top + 12, paddingBottom: bottom + 12 }]}>
         {initializationError && currentStep ? (
           <View style={styles.errorWrap}>
             <View style={styles.errorIconWrap}>
@@ -55,8 +50,7 @@ export function AppSplash() {
             <Text style={styles.errorTitle}>{currentStep.label}</Text>
             <Text style={styles.errorMessage}>{currentStep.message}</Text>
             <Text style={styles.errorHint}>
-              Please report this issue to the team or restart the app to try
-              again.
+              Please report this issue to the team or restart the app to try again.
             </Text>
             <Button
               variant="danger"
@@ -86,21 +80,14 @@ export function AppSplash() {
               <>
                 <View style={styles.syncHeader}>
                   <Text style={styles.syncTitle}>Syncing your library</Text>
-                  <Text style={styles.syncSubtitle}>
-                    Syncing your files from the indexer.
-                  </Text>
+                  <Text style={styles.syncSubtitle}>Syncing your files from the indexer.</Text>
                 </View>
                 {count > 0 && (
-                  <Text style={styles.syncCounts}>
-                    {count.toLocaleString()} files synced
-                  </Text>
+                  <Text style={styles.syncCounts}>{count.toLocaleString()} files synced</Text>
                 )}
                 <View style={styles.progressTrack}>
                   <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${Math.round(progress * 100)}%` },
-                    ]}
+                    style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]}
                   />
                 </View>
               </>

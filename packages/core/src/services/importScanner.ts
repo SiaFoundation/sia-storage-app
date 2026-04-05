@@ -13,10 +13,7 @@ export type ImportScannerResult = {
 
 export type ResolveLocalId = (localId: string) => Promise<string | null>
 export type CalculateContentHash = (uri: string) => Promise<string | null>
-export type GetMimeType = (opts: {
-  name?: string
-  uri?: string
-}) => Promise<string>
+export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<string>
 
 export class ImportScanner {
   private app: AppService | null = null
@@ -192,10 +189,7 @@ export class ImportScanner {
             try {
               // Exit early on suspension before starting file copy + hash.
               if (signal?.aborted) break
-              const uri = await app.fs.copyFile(
-                { id: file.id, type: file.type },
-                resolvedUri,
-              )
+              const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolvedUri)
               if (signal?.aborted) break
               const outcome = await this.hashExistingFile(file, uri)
               if (outcome.action === 'finalized') {

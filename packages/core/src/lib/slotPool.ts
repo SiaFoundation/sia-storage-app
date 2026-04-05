@@ -30,10 +30,7 @@ export class SlotPool {
 
   /** Updates the maximum number of slots. Minimum is 1. */
   setMaxSlots(nextMax: number): void {
-    const newMax = Math.max(
-      1,
-      Math.floor(Number.isFinite(nextMax) ? nextMax : 1),
-    )
+    const newMax = Math.max(1, Math.floor(Number.isFinite(nextMax) ? nextMax : 1))
     this.maxSlots = newMax
     this.drain()
   }

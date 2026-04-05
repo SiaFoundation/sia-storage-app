@@ -25,10 +25,7 @@ describe('createBackgroundDelay', () => {
     const { delay } = createBackgroundDelay()
 
     expect(await delay(1000)).toBe('completed')
-    expect(mockTimer.setTimeout).toHaveBeenCalledWith(
-      expect.any(Function),
-      1000,
-    )
+    expect(mockTimer.setTimeout).toHaveBeenCalledWith(expect.any(Function), 1000)
   })
 
   it('resolves "aborted" when abort() called', async () => {

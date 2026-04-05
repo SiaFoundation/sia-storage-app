@@ -2,13 +2,7 @@ import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  type FlatListProps,
-  Platform,
-  StyleSheet,
-} from 'react-native'
+import { ActivityIndicator, FlatList, type FlatListProps, Platform, StyleSheet } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import { FileGalleryItem } from './FileGalleryItem'
 
@@ -31,13 +25,7 @@ export function FileGallery({
   contentPaddingTop,
   ListHeaderComponent,
 }: Props) {
-  const {
-    data: files,
-    size,
-    setSize,
-    isValidating,
-    hasMore,
-  } = useFileList(filters)
+  const { data: files, size, setSize, isValidating, hasMore } = useFileList(filters)
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
     size,
@@ -49,11 +37,7 @@ export function FileGallery({
   const renderItem = useCallback(
     ({ item }: { item: FileRecord }) => {
       return (
-        <FileGalleryItem
-          file={item}
-          onPressItem={onPressItem}
-          onLongPressItem={onLongPressItem}
-        />
+        <FileGalleryItem file={item} onPressItem={onPressItem} onLongPressItem={onLongPressItem} />
       )
     },
     [onPressItem, onLongPressItem],

@@ -15,18 +15,9 @@ export function ImportFileScreen({ route }: Props) {
 
   return (
     <View style={styles.container}>
-      <FileCarouselHeader
-        title="Import File"
-        navigation={navigation}
-        icon="close"
-      />
+      <FileCarouselHeader title="Import File" navigation={navigation} icon="close" />
       {id && shareUrl && (
-        <FileImport
-          key={`${id}-${shareUrl}`}
-          id={id}
-          shareUrl={shareUrl}
-          navigation={navigation}
-        />
+        <FileImport key={`${id}-${shareUrl}`} id={id} shareUrl={shareUrl} navigation={navigation} />
       )}
     </View>
   )

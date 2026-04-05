@@ -256,9 +256,7 @@ describe('syncDownEvents', () => {
 
     await run(new AbortController().signal)
 
-    expect(removeFileSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-1' }),
-    )
+    expect(removeFileSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'file-1' }))
 
     const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
     expect(deletedFile).toBeNull()
@@ -746,10 +744,7 @@ describe('syncDownEvents', () => {
     ]
 
     internal().setSdk({
-      objectEvents: jest
-        .fn()
-        .mockResolvedValueOnce(events1)
-        .mockResolvedValueOnce(events2),
+      objectEvents: jest.fn().mockResolvedValueOnce(events1).mockResolvedValueOnce(events2),
       appKey: () => mockAppKey,
     } as any)
 
@@ -1316,10 +1311,7 @@ describe('syncDownEvents', () => {
       const events = makeEvents(20)
       const heartbeat = makeEvents(1, 20)
       internal().setSdk({
-        objectEvents: jest
-          .fn()
-          .mockResolvedValueOnce(events)
-          .mockResolvedValueOnce(heartbeat),
+        objectEvents: jest.fn().mockResolvedValueOnce(events).mockResolvedValueOnce(heartbeat),
         appKey: () => mockAppKey,
       } as any)
 
@@ -1360,10 +1352,7 @@ describe('syncDownEvents', () => {
       const heartbeat = makeEvents(1, 500)
 
       internal().setSdk({
-        objectEvents: jest
-          .fn()
-          .mockResolvedValueOnce(largeBatch)
-          .mockResolvedValueOnce(heartbeat),
+        objectEvents: jest.fn().mockResolvedValueOnce(largeBatch).mockResolvedValueOnce(heartbeat),
         appKey: () => mockAppKey,
       } as any)
 

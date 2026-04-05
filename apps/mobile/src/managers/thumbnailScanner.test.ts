@@ -15,20 +15,12 @@ beforeEach(async () => {
   await initializeDB()
   jest.clearAllMocks()
 
-  getFsFileUriMock = jest
-    .spyOn(app().fs, 'getFileUri')
-    .mockResolvedValue('file://source.jpg')
-  const { rnfsStat } = (
-    global as unknown as { __rnfs: { rnfsStat: jest.Mock } }
-  ).__rnfs
+  getFsFileUriMock = jest.spyOn(app().fs, 'getFileUri').mockResolvedValue('file://source.jpg')
+  const { rnfsStat } = (global as unknown as { __rnfs: { rnfsStat: jest.Mock } }).__rnfs
   rnfsStat.mockResolvedValue({ size: 100 })
 
-  generateMock = jest
-    .spyOn(app().thumbnails, 'generate')
-    .mockResolvedValue(thumbResult)
-  generateVideoMock = jest
-    .spyOn(app().thumbnails, 'generateVideo')
-    .mockResolvedValue(thumbResult)
+  generateMock = jest.spyOn(app().thumbnails, 'generate').mockResolvedValue(thumbResult)
+  generateVideoMock = jest.spyOn(app().thumbnails, 'generateVideo').mockResolvedValue(thumbResult)
 })
 
 afterEach(async () => {
@@ -239,11 +231,9 @@ describe('thumbnailScanner', () => {
       .map((p) => p.size)
       .sort((a, b) => a - b)
     expect(producedForEligible).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    expect(
-      result.skippedNoSource
-        .map((s) => s.fileId)
-        .sort((a, b) => a.localeCompare(b)),
-    ).toEqual([...noSourceIds].sort((a, b) => a.localeCompare(b)))
+    expect(result.skippedNoSource.map((s) => s.fileId).sort((a, b) => a.localeCompare(b))).toEqual(
+      [...noSourceIds].sort((a, b) => a.localeCompare(b)),
+    )
   })
 
   it('skips generation for an exact existing size', async () => {

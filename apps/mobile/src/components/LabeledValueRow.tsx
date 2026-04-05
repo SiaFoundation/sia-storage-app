@@ -1,13 +1,6 @@
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useCallback } from 'react'
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  type TextStyle,
-  View,
-} from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, type TextStyle, View } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { colors, palette } from '../styles/colors'
 
@@ -54,11 +47,7 @@ export function LabeledValueRow({
   const valueContent =
     typeof value === 'string' ? (
       <Text
-        style={[
-          styles.rowValue,
-          isMonospace && styles.rowValueMono,
-          { textAlign: align },
-        ]}
+        style={[styles.rowValue, isMonospace && styles.rowValueMono, { textAlign: align }]}
         numberOfLines={numberOfLines}
         ellipsizeMode={ellipsizeMode}
       >
@@ -74,9 +63,7 @@ export function LabeledValueRow({
         <View
           style={[
             styles.rowInner,
-            numberOfLines > 1
-              ? { alignItems: 'flex-start' }
-              : { alignItems: 'center' },
+            numberOfLines > 1 ? { alignItems: 'flex-start' } : { alignItems: 'center' },
           ]}
         >
           <Text
@@ -92,9 +79,7 @@ export function LabeledValueRow({
           </Text>
           {valueContent}
         </View>
-        {description ? (
-          <Text style={styles.rowDescription}>{description}</Text>
-        ) : null}
+        {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
       </View>
     </View>
   )

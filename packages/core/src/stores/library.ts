@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { useApp } from '../app/context'
@@ -56,9 +50,7 @@ export function useFileList(params: FileListParams) {
   } = params
   const sortingDir = sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const categoriesKey = categories.length
-    ? categories.slice().sort().join(',')
-    : ''
+  const categoriesKey = categories.length ? categories.slice().sort().join(',') : ''
 
   const tagsKey = tags.length ? tags.slice().sort().join(',') : ''
 
@@ -84,8 +76,7 @@ export function useFileList(params: FileListParams) {
 
   const swr = useSWRInfinite<FileRecord[]>(
     (pageIndex, prevPage) => {
-      if (pageIndex > 0 && (!prevPage || prevPage.length < PAGE_SIZE))
-        return null
+      if (pageIndex > 0 && (!prevPage || prevPage.length < PAGE_SIZE)) return null
       return `${base}|page=${pageIndex}`
     },
     fetcher,
@@ -137,25 +128,19 @@ export function useLoadMore(pagination: {
 /** Returns the total number of non-thumbnail files in the library. */
 export function useLibraryCount() {
   const app = useApp()
-  return useSWR(app.caches.library.key('countNoThumbs'), () =>
-    app.library.fileCount(),
-  )
+  return useSWR(app.caches.library.key('countNoThumbs'), () => app.library.fileCount())
 }
 
 /** Returns the total number of media (photo/video) files in the library. */
 export function useMediaCount() {
   const app = useApp()
-  return useSWR(app.caches.library.key('mediaCount'), () =>
-    app.library.mediaCount(),
-  )
+  return useSWR(app.caches.library.key('mediaCount'), () => app.library.mediaCount())
 }
 
 /** Returns the number of files associated with a given tag. */
 export function useTagFileCount(tagId: string) {
   const app = useApp()
-  return useSWR(app.caches.library.key(`tagCount:${tagId}`), () =>
-    app.library.tagFileCount(tagId),
-  )
+  return useSWR(app.caches.library.key(`tagCount:${tagId}`), () => app.library.tagFileCount(tagId))
 }
 
 /** Returns the number of files in a given directory. */
@@ -169,7 +154,5 @@ export function useDirectoryFileCount(directoryId: string) {
 /** Returns the number of files not assigned to any directory. */
 export function useUnfiledFileCount() {
   const app = useApp()
-  return useSWR(app.caches.library.key('unfiledCount'), () =>
-    app.library.unfiledFileCount(),
-  )
+  return useSWR(app.caches.library.key('unfiledCount'), () => app.library.unfiledFileCount())
 }

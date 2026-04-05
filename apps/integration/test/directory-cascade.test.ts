@@ -28,9 +28,7 @@ describe('Directory Cascade', () => {
     const active = allFiles.filter((f) => f.trashedAt === null)
 
     expect(trashed).toHaveLength(2)
-    expect(trashed.map((f) => f.id).sort()).toEqual(
-      [files[0].id, files[1].id].sort(),
-    )
+    expect(trashed.map((f) => f.id).sort()).toEqual([files[0].id, files[1].id].sort())
     expect(active).toHaveLength(1)
     expect(active[0].id).toBe(files[2].id)
 

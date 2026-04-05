@@ -13,10 +13,7 @@ async function getGroupsForFileIds(
   )
 }
 
-export async function trashFiles(
-  db: DatabaseAdapter,
-  fileIds: string[],
-): Promise<void> {
+export async function trashFiles(db: DatabaseAdapter, fileIds: string[]): Promise<void> {
   if (fileIds.length === 0) return
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
@@ -38,10 +35,7 @@ export async function trashFiles(
   await recalculateCurrentForGroups(db, groups)
 }
 
-export async function restoreFiles(
-  db: DatabaseAdapter,
-  fileIds: string[],
-): Promise<void> {
+export async function restoreFiles(db: DatabaseAdapter, fileIds: string[]): Promise<void> {
   if (fileIds.length === 0) return
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
@@ -88,9 +82,7 @@ export async function permanentlyDeleteFiles(
   await recalculateCurrentForGroups(db, groups)
 }
 
-export async function autoPurgeOldTrashedFiles(
-  db: DatabaseAdapter,
-): Promise<string[]> {
+export async function autoPurgeOldTrashedFiles(db: DatabaseAdapter): Promise<string[]> {
   const cutoff = Date.now() - TRASH_AUTO_PURGE_AGE
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT id FROM files WHERE trashedAt IS NOT NULL AND trashedAt < ? AND deletedAt IS NULL AND kind = 'file'`,

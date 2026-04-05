@@ -3,10 +3,7 @@ import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import {
-  recalculateCurrentForGroup,
-  recalculateCurrentForGroups,
-} from './files'
+import { recalculateCurrentForGroup, recalculateCurrentForGroups } from './files'
 import { buildLatestVersionFilter } from './library'
 import { trashFiles } from './trash'
 
@@ -32,9 +29,7 @@ export function directoryParentPath(path: string): string | null {
   return i === -1 ? null : path.slice(0, i)
 }
 
-export function directoryBreadcrumbs(
-  path: string,
-): { segment: string; path: string }[] {
+export function directoryBreadcrumbs(path: string): { segment: string; path: string }[] {
   const segments = path.split('/')
   const result: { segment: string; path: string }[] = []
   for (let i = 0; i < segments.length; i++) {
@@ -71,11 +66,7 @@ export function sanitizeDirectoryPath(path: string): string {
   return path.split('/').map(sanitizeDirectorySegment).filter(Boolean).join('/')
 }
 
-function toDirectory(row: {
-  id: string
-  path: string
-  createdAt: number
-}): Directory {
+function toDirectory(row: { id: string; path: string; createdAt: number }): Directory {
   return {
     id: row.id,
     path: row.path,
@@ -326,11 +317,7 @@ export async function syncManyDirectoriesFromMetadata(
   }
   for (const [dirId, ids] of byDirId) {
     const ph = ids.map(() => '?').join(',')
-    await db.runAsync(
-      `UPDATE files SET directoryId = ? WHERE id IN (${ph})`,
-      dirId,
-      ...ids,
-    )
+    await db.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${ph})`, dirId, ...ids)
   }
 
   return oldGroups
@@ -345,12 +332,7 @@ export async function moveFileToDirectory(
     name: string
     directoryId: string | null
   }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-  await sql.update(
-    db,
-    'files',
-    { directoryId: dirId, updatedAt: Date.now() },
-    { id: fileId },
-  )
+  await sql.update(db, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
   if (row) {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
     await recalculateCurrentForGroup(db, row.name, dirId)
@@ -379,10 +361,7 @@ export async function moveFilesToDirectory(
     ...fileIds,
   )
   await recalculateCurrentForGroups(db, groups)
-  const newGroups = new Map<
-    string,
-    { name: string; directoryId: string | null }
-  >()
+  const newGroups = new Map<string, { name: string; directoryId: string | null }>()
   for (const g of groups) {
     const key = `${g.name}|${dirId ?? ''}`
     newGroups.set(key, { name: g.name, directoryId: dirId })
@@ -392,10 +371,7 @@ export async function moveFilesToDirectory(
   }
 }
 
-export async function deleteDirectory(
-  db: DatabaseAdapter,
-  id: string,
-): Promise<void> {
+export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<void> {
   const dir = await queryDirectoryById(db, id)
   if (!dir) return
 
@@ -414,10 +390,7 @@ export async function deleteDirectory(
     ...dirIds,
   )
 
-  await db.runAsync(
-    `UPDATE files SET directoryId = NULL WHERE directoryId IN (${ph})`,
-    ...dirIds,
-  )
+  await db.runAsync(`UPDATE files SET directoryId = NULL WHERE directoryId IN (${ph})`, ...dirIds)
 
   await db.runAsync(
     `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
@@ -560,8 +533,7 @@ export async function moveDirectory(
   }
 
   const leafName = directoryDisplayName(dir.path)
-  const newPath =
-    newParentPath !== null ? `${newParentPath}/${leafName}` : leafName
+  const newPath = newParentPath !== null ? `${newParentPath}/${leafName}` : leafName
 
   if (
     newParentPath !== null &&

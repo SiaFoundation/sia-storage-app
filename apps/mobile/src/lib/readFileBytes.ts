@@ -1,5 +1,5 @@
 import { logger } from '@siastorage/logger'
-// biome-ignore lint/style/noRestrictedImports: File constructor + .readableStream() (async)
+// oxlint-disable-next-line no-restricted-imports -- File constructor + .readableStream() (async)
 import { File } from 'expo-file-system'
 
 function isFileUri(uri: string): boolean {
@@ -12,10 +12,7 @@ function isFileUri(uri: string): boolean {
  * Read the first N bytes from a file.
  * Handles variable chunk sizes by reading multiple chunks if needed.
  */
-export async function readFileBytes(
-  uri: string,
-  byteCount: number,
-): Promise<Uint8Array | null> {
+export async function readFileBytes(uri: string, byteCount: number): Promise<Uint8Array | null> {
   if (!isFileUri(uri)) {
     return null
   }

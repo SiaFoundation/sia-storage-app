@@ -11,11 +11,7 @@ type Props = {
 
 export const SpinnerIcon = memo(SpinnerIconInner)
 
-function SpinnerIconInner({
-  size = 14,
-  color = palette.gray[300],
-  arcLength = 0.5,
-}: Props) {
+function SpinnerIconInner({ size = 14, color = palette.gray[300], arcLength = 0.5 }: Props) {
   const clampedArc = Math.max(0.1, Math.min(0.95, arcLength))
   const rotation = useRef(new Animated.Value(0)).current
 

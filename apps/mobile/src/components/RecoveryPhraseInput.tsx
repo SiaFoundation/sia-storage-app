@@ -56,9 +56,7 @@ export function RecoveryPhraseInput({
             isValid ? styles.validationTextValid : styles.validationTextInvalid,
           ]}
         >
-          {isValid
-            ? 'Recovery phrase is valid.'
-            : (validationError ?? 'Invalid recovery phrase.')}
+          {isValid ? 'Recovery phrase is valid.' : (validationError ?? 'Invalid recovery phrase.')}
         </Text>
       ) : null}
     </>

@@ -9,10 +9,7 @@ import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidatio
 import type { SwitchIndexerStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 
-type Props = NativeStackScreenProps<
-  SwitchIndexerStackParamList,
-  'SwitchRecoveryPhrase'
->
+type Props = NativeStackScreenProps<SwitchIndexerStackParamList, 'SwitchRecoveryPhrase'>
 
 export function SwitchRecoveryPhraseScreen({ navigation, route }: Props) {
   const { indexerURL } = route.params
@@ -34,8 +31,8 @@ export function SwitchRecoveryPhraseScreen({ navigation, route }: Props) {
     <SettingsScrollLayout style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.subtitle}>
-          Enter your recovery phrase to connect to the new indexer. This must be
-          the same phrase you used when you first set up the app.
+          Enter your recovery phrase to connect to the new indexer. This must be the same phrase you
+          used when you first set up the app.
         </Text>
 
         <RecoveryPhraseInput
@@ -47,10 +44,7 @@ export function SwitchRecoveryPhraseScreen({ navigation, route }: Props) {
           editable={!isSubmitting}
         />
 
-        <Button
-          onPress={handleContinue}
-          disabled={!isManualPhraseValid || isSubmitting}
-        >
+        <Button onPress={handleContinue} disabled={!isManualPhraseValid || isSubmitting}>
           {isSubmitting ? 'Connecting...' : 'Continue'}
         </Button>
       </View>

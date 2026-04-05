@@ -40,9 +40,8 @@ export function FileMap({ file }: { file: FileRecord }) {
               coordinate={{ latitude: h.latitude, longitude: h.longitude }}
               title={
                 hosts.data
-                  ? (h.addresses.find(
-                      (a) => a.protocol === AddressProtocol.SiaMux,
-                    )?.address ?? h.publicKey)
+                  ? (h.addresses.find((a) => a.protocol === AddressProtocol.SiaMux)?.address ??
+                    h.publicKey)
                   : h.publicKey
               }
             />

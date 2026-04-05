@@ -7,9 +7,7 @@ export type HashResult = `sha256:${string}`
  * Calculate a content hash for a file.
  * - Raw byte SHA-256 for exact file identity.
  */
-export async function calculateContentHash(
-  uri: string,
-): Promise<HashResult | null> {
+export async function calculateContentHash(uri: string): Promise<HashResult | null> {
   if (!uri || uri === '') {
     return null
   }

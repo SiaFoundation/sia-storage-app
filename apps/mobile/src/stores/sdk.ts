@@ -57,9 +57,7 @@ getMobileSdkAuth().setOnConnected(async () => {
  * Shuts down existing uploader when SDK changes, initializes with new SDK.
  * Exported for use by test harness.
  */
-export async function setSdkWithUploader(
-  sdk: SdkInterface | null,
-): Promise<void> {
+export async function setSdkWithUploader(sdk: SdkInterface | null): Promise<void> {
   const currentSdk = internal().getSdk()
   if (currentSdk && sdk) {
     try {
@@ -166,14 +164,9 @@ export async function reconnectIndexer(): Promise<boolean> {
 
 type AuthError = { type: 'cancelled' } | { type: 'error'; message: string }
 
-export type AuthenticateError =
-  | { type: 'cancelled' }
-  | { type: 'error'; message: string }
+export type AuthenticateError = { type: 'cancelled' } | { type: 'error'; message: string }
 
-export type AuthenticateResult = Result<
-  { alreadyConnected: boolean },
-  AuthenticateError
->
+export type AuthenticateResult = Result<{ alreadyConnected: boolean }, AuthenticateError>
 
 export type RegisterError =
   | { type: 'cancelled' }
@@ -188,9 +181,7 @@ export type RegisterResult = Result<void, RegisterError>
  * If already registered (AppKey exists): connects and returns `alreadyConnected: true`.
  * If new user: runs browser auth, saves pendingApproval, and returns `alreadyConnected: false`.
  */
-export async function authenticateIndexer(
-  indexerURL: string,
-): Promise<AuthenticateResult> {
+export async function authenticateIndexer(indexerURL: string): Promise<AuthenticateResult> {
   logger.info('sdk', 'authenticating', { indexerURL })
 
   const keyBytes = await app().auth.getAppKey(indexerURL)
@@ -290,10 +281,7 @@ export async function registerWithIndexer(
 
   try {
     logger.info('sdk', 'registering')
-    const keyHex = await withTimeout(
-      app().auth.builder.register(mnemonic),
-      REGISTER_TIMEOUT_MS,
-    )
+    const keyHex = await withTimeout(app().auth.builder.register(mnemonic), REGISTER_TIMEOUT_MS)
 
     await app().auth.setMnemonicHash(mnemonic)
     await app().auth.onConnected(keyHex, indexerURL)
@@ -355,9 +343,7 @@ function createAppStateDismissal() {
  * The adapter manages its own AbortController internally.
  * cancelAuth() / grace period timeout calls app().auth.builder.cancel() to abort.
  */
-async function waitForUserApproval(
-  responseUrl: string,
-): Promise<Result<void, AuthError>> {
+async function waitForUserApproval(responseUrl: string): Promise<Result<void, AuthError>> {
   type ApprovalOutcome = { ok: true } | { ok: false; error: Error }
 
   const isAndroid = Platform.OS === 'android'
@@ -368,9 +354,7 @@ async function waitForUserApproval(
       .then((): ApprovalOutcome => ({ ok: true }))
       .catch((e): ApprovalOutcome => ({ ok: false, error: e as Error }))
 
-  let approvalPromise: Promise<ApprovalOutcome> | null = isAndroid
-    ? null
-    : startApprovalPoll()
+  let approvalPromise: Promise<ApprovalOutcome> | null = isAndroid ? null : startApprovalPoll()
 
   const browserPromise = openAuthURL(responseUrl)
 
@@ -398,8 +382,7 @@ async function waitForUserApproval(
     }
     const winner = await Promise.race(raceCandidates)
 
-    if (browserResult.error)
-      return err({ type: 'error', message: browserResult.error.message })
+    if (browserResult.error) return err({ type: 'error', message: browserResult.error.message })
 
     if (winner === 'approval') {
       closeAuthBrowser()
@@ -415,9 +398,7 @@ async function waitForUserApproval(
 
     const grace = await Promise.race([
       approvalPromise.then(() => 'approved' as const),
-      new Promise<'timeout'>((r) =>
-        setTimeout(() => r('timeout'), BROWSER_CLOSE_GRACE_MS),
-      ),
+      new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), BROWSER_CLOSE_GRACE_MS)),
     ])
 
     if (grace === 'approved') {
@@ -438,9 +419,7 @@ async function waitForUserApproval(
  * Runs the browser auth flow: create builder → request connection → open browser → wait for approval.
  * Returns void after approval, or an error if cancelled/failed.
  */
-async function runBrowserAuthFlow(
-  indexerURL: string,
-): Promise<Result<void, AuthError>> {
+async function runBrowserAuthFlow(indexerURL: string): Promise<Result<void, AuthError>> {
   try {
     await app().auth.builder.create(indexerURL, APP_META_JSON)
     logger.debug('sdk', 'connection_request')

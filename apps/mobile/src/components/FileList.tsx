@@ -2,12 +2,7 @@ import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  type FlatListProps,
-  Platform,
-} from 'react-native'
+import { ActivityIndicator, FlatList, type FlatListProps, Platform } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
 import { FileListItem } from './FileListItem'
 
@@ -28,13 +23,7 @@ export function FileList({
   ListHeaderComponent,
   contentPaddingTop,
 }: Props) {
-  const {
-    data: files,
-    size,
-    setSize,
-    isValidating,
-    hasMore,
-  } = useFileList(filters)
+  const { data: files, size, setSize, isValidating, hasMore } = useFileList(filters)
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
     size,
@@ -46,11 +35,7 @@ export function FileList({
   const renderItem = useCallback(
     ({ item }: { item: FileRecord }) => {
       return (
-        <FileListItem
-          file={item}
-          onPressItem={onPressItem}
-          onLongPressItem={onLongPressItem}
-        />
+        <FileListItem file={item} onPressItem={onPressItem} onLongPressItem={onLongPressItem} />
       )
     },
     [onPressItem, onLongPressItem],
@@ -66,8 +51,7 @@ export function FileList({
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
-        paddingTop:
-          contentPaddingTop ?? (Platform.OS === 'android' ? 150 : 130),
+        paddingTop: contentPaddingTop ?? (Platform.OS === 'android' ? 150 : 130),
         paddingBottom: 130,
       }}
       ListHeaderComponent={ListHeaderComponent}

@@ -64,14 +64,8 @@ describe('insertLocalObject', () => {
 describe('queryLocalObjectsForFile', () => {
   it('returns objects for a file', async () => {
     await createTestFile('f1')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://b.com', 'obj2'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
     const results = await queryLocalObjectsForFile(db(), 'f1')
     expect(results).toHaveLength(2)
@@ -87,14 +81,8 @@ describe('queryLocalObjectsForFiles', () => {
   it('returns map keyed by fileId', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f2', 'https://a.com', 'obj2'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
 
     const map = await queryLocalObjectsForFiles(db(), ['f1', 'f2'])
     expect(map.f1).toHaveLength(1)
@@ -112,14 +100,8 @@ describe('queryLocalObjectsForFiles', () => {
 describe('countLocalObjectsForFile', () => {
   it('counts correctly', async () => {
     await createTestFile('f1')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://b.com', 'obj2'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
     const count = await countLocalObjectsForFile(db(), 'f1')
     expect(count).toBe(2)
@@ -135,14 +117,8 @@ describe('countLocalObjectsForFile', () => {
 describe('deleteLocalObjectById', () => {
   it('deletes specific object', async () => {
     await createTestFile('f1')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://b.com', 'obj2'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
     await deleteLocalObjectById(db(), 'obj1', 'https://a.com')
 
@@ -155,14 +131,8 @@ describe('deleteLocalObjectById', () => {
 describe('deleteLocalObjectsByFileId', () => {
   it('deletes all objects for a file', async () => {
     await createTestFile('f1')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://b.com', 'obj2'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
     await deleteLocalObjectsByFileId(db(), 'f1')
 
@@ -176,18 +146,9 @@ describe('deleteManyLocalObjectsByFileIds', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await createTestFile('f3')
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f1', 'https://a.com', 'obj1'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f2', 'https://a.com', 'obj2'),
-    )
-    await insertLocalObject(
-      db(),
-      makeLocalObject('f3', 'https://a.com', 'obj3'),
-    )
+    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertLocalObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
+    await insertLocalObject(db(), makeLocalObject('f3', 'https://a.com', 'obj3'))
 
     await deleteManyLocalObjectsByFileIds(db(), ['f1', 'f2'])
 

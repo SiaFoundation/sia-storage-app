@@ -145,11 +145,7 @@ export async function syncUpMetadataBatch(
         // row — we'd lose the reference to the remote object and could
         // never retry. The batch stalls and retries on the next tick.
         if (f.deletedAt) {
-          const result = await tryWithLog(
-            () => sdk.deleteObject(obj.id),
-            'deleteObject',
-            ctx,
-          )
+          const result = await tryWithLog(() => sdk.deleteObject(obj.id), 'deleteObject', ctx)
           if (result === null) {
             hasErrors = true
             return
@@ -158,11 +154,7 @@ export async function syncUpMetadataBatch(
           return
         }
 
-        const remote = await tryWithLog(
-          () => sdk.getPinnedObject(obj.id),
-          'getPinnedObject',
-          ctx,
-        )
+        const remote = await tryWithLog(() => sdk.getPinnedObject(obj.id), 'getPinnedObject', ctx)
         if (!remote) {
           hasErrors = true
           return

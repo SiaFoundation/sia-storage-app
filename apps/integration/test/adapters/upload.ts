@@ -3,10 +3,7 @@ import type { UploaderAdapters } from '@siastorage/core/services/uploader'
 import type { MockSdk } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 
-export function buildTestSdkAdapter(
-  sdk: MockSdk,
-  appKey: AppKeyRef,
-): SdkAdapter {
+export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter {
   return {
     objectEvents: (cursor, limit) => sdk.objectEvents(cursor, limit),
     updateObjectMetadata: (po) => sdk.updateObjectMetadata(po),
@@ -20,8 +17,7 @@ export function buildTestSdkAdapter(
     appKey: () => appKey,
     downloadByObjectId: (id) => sdk.downloadByObjectId(id),
     hosts: async () => [],
-    account: async () =>
-      ({ publicKey: '', storage: BigInt(0), app: null }) as any,
+    account: async () => ({ publicKey: '', storage: BigInt(0), app: null }) as any,
   }
 }
 
@@ -32,10 +28,7 @@ export function createTestUploaderAdapters(): UploaderAdapters {
       return {
         async read() {
           const data = nodeFs.readFileSync(filePath)
-          return data.buffer.slice(
-            data.byteOffset,
-            data.byteOffset + data.byteLength,
-          )
+          return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
         },
       }
     },

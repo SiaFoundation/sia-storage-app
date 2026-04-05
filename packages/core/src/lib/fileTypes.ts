@@ -88,9 +88,7 @@ const extensionToMimeMap: Record<string, MimeType> = {
   pdf: 'application/pdf',
 }
 
-export function getMimeTypeFromExtension(
-  path: string | undefined,
-): MimeType | null {
+export function getMimeTypeFromExtension(path: string | undefined): MimeType | null {
   if (!path) return null
   const ext = path.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
   if (!ext) return null
@@ -103,11 +101,7 @@ export function extFromMime(mime?: string | null): Ext {
   if (mime === 'video/mp4') return '.mp4'
   if (mime === 'video/x-m4v') return '.m4v'
   // image
-  if (
-    mime === 'image/dng' ||
-    mime === 'image/x-adobe-dng' ||
-    mime === 'image/x-apple-proraw'
-  )
+  if (mime === 'image/dng' || mime === 'image/x-adobe-dng' || mime === 'image/x-apple-proraw')
     return '.dng'
   if (mime === 'image/heic') return '.heic'
   if (mime === 'image/heif') return '.heif'

@@ -3,14 +3,7 @@ import { SYSTEM_TAGS } from '@siastorage/core/db/operations'
 import { useAllTags } from '@siastorage/core/stores'
 import { HeartIcon, TagIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
 
@@ -27,6 +20,7 @@ export function TagsGrid({ onSelectTag, onCreateTag }: Props) {
 
   const paddedTags: TagOrSpacer[] = useMemo(
     () => (tags.length % 2 === 1 ? [...tags, { id: '__spacer' }] : tags),
+    // oxlint-disable-next-line react/exhaustive-deps -- tags is derived from SWR data fallback, new ref each render is expected
     [tags],
   )
 
@@ -88,8 +82,7 @@ function TagCard({ tag, onPress }: { tag: TagWithCount; onPress: () => void }) {
           {tag.name}
         </Text>
         <Text style={styles.tagCount}>
-          {tag.fileCount.toLocaleString()}{' '}
-          {tag.fileCount === 1 ? 'file' : 'files'}
+          {tag.fileCount.toLocaleString()} {tag.fileCount === 1 ? 'file' : 'files'}
         </Text>
       </View>
     </Pressable>

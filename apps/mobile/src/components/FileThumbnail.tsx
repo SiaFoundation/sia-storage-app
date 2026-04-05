@@ -81,10 +81,7 @@ export function FileThumbnail({
       </View>
     )
   }
-  if (
-    file.type?.includes('application/json') ||
-    file.name?.toLowerCase().includes('.json')
-  ) {
+  if (file.type?.includes('application/json') || file.name?.toLowerCase().includes('.json')) {
     return (
       <View style={styles.thumbnailImage}>
         <FileJsonIcon size={iconSize} color={iconColor} />

@@ -74,19 +74,14 @@ export class ProgressIndicator {
 
     let timeInfo = elapsed
     if (this.estimatedDurationMs !== null) {
-      const percent = Math.min(
-        99,
-        Math.round((elapsedMs / this.estimatedDurationMs) * 100),
-      )
+      const percent = Math.min(99, Math.round((elapsedMs / this.estimatedDurationMs) * 100))
       const remaining = Math.max(0, this.estimatedDurationMs - elapsedMs)
       const remainingStr = formatElapsed(remaining)
       timeInfo = `${elapsed} / ~${formatElapsed(this.estimatedDurationMs)} (${percent}%, ~${remainingStr} left)`
     }
 
     // \x1b[K clears from cursor to end of line (prevents leftover characters)
-    process.stdout.write(
-      `\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${timeInfo}`,
-    )
+    process.stdout.write(`\r\x1b[K${spinner} ${this.label} [${this.currentPhase}] ${timeInfo}`)
   }
 
   stop(success: boolean): void {

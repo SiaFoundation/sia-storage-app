@@ -113,11 +113,7 @@ describe('fsEvictionScanner', () => {
   })
 })
 
-async function createRemoteFile(params: {
-  id: string
-  size: number
-  usedAt: number
-}) {
+async function createRemoteFile(params: { id: string; size: number; usedAt: number }) {
   const record = makeFileRecord(params.id, params.size)
   const localObject = makeLocalObject({
     fileId: params.id,
@@ -135,11 +131,7 @@ async function createRemoteFile(params: {
   })
 }
 
-async function createLocalOnlyFile(params: {
-  id: string
-  size: number
-  usedAt: number
-}) {
+async function createLocalOnlyFile(params: { id: string; size: number; usedAt: number }) {
   await app().files.create(makeFileRecord(params.id, params.size))
   await app().fs.upsertMeta({
     fileId: params.id,

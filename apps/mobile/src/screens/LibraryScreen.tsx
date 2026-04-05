@@ -11,13 +11,7 @@ import {
 } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  Animated,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
 import { CreateTagSheet } from '../components/CreateTagSheet'
@@ -60,9 +54,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   const isSyncing = syncState?.isSyncingDown ?? false
   const mediaAllowed: Category[] = useMemo(() => ['Video', 'Image'], [])
   const filters: FileListParams = useMemo(() => {
-    const filtered = vs.selectedCategories.filter((c) =>
-      mediaAllowed.includes(c),
-    )
+    const filtered = vs.selectedCategories.filter((c) => mediaAllowed.includes(c))
     return {
       scope: 'library',
       sortBy: vs.sortBy,
@@ -266,9 +258,7 @@ export function LibraryScreen({ route, navigation }: Props) {
         allowedCategories={mediaAllowed}
         isSelectionMode={activeTab === 'media' ? isSelectionMode : undefined}
         selectedCount={selectedCount}
-        onEnterSelection={
-          activeTab === 'media' ? enterSelectionMode : undefined
-        }
+        onEnterSelection={activeTab === 'media' ? enterSelectionMode : undefined}
         onExitSelection={exitSelectionMode}
         onOpenSelectionActions={handleOpenSelectionActions}
         onNavigateMenu={() => navigation.navigate('MenuTab' as never)}
@@ -303,11 +293,7 @@ export function LibraryScreen({ route, navigation }: Props) {
           <EmptyState
             image={require('../../assets/image-stack.png')}
             title="No files found"
-            message={
-              files.error
-                ? files.error.message
-                : 'No files matching the selected filters.'
-            }
+            message={files.error ? files.error.message : 'No files matching the selected filters.'}
           >
             {files.error ? <LibraryLocalResetButton /> : null}
           </EmptyState>
@@ -391,10 +377,7 @@ export function LibraryScreen({ route, navigation }: Props) {
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
-            <ManageTagsSheet
-              fileId={actionSheetFileIds[0]}
-              sheetName="manageFileTags"
-            />
+            <ManageTagsSheet fileId={actionSheetFileIds[0]} sheetName="manageFileTags" />
           ) : null}
         </>
       ) : null}

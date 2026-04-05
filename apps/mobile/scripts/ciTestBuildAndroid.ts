@@ -26,8 +26,7 @@ await $`bunx expo prebuild --platform android`
 
 // Step 2: Build debug APK (no signing required)
 console.log('Step 2/2: Building debug APK...')
-const jvmArgs =
-  '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError'
+const jvmArgs = '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError'
 
 await $`cd android && ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs=${jvmArgs}`
 

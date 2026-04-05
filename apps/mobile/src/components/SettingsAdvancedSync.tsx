@@ -1,13 +1,7 @@
-import {
-  useAutoScanUploads,
-  useAutoSyncDownEvents,
-} from '@siastorage/core/stores'
+import { useAutoScanUploads, useAutoSyncDownEvents } from '@siastorage/core/stores'
 import { Alert, Switch } from 'react-native'
 import { app } from '../stores/appService'
-import {
-  toggleAutoScanUploads,
-  toggleAutoSyncDownEvents,
-} from '../stores/settings'
+import { toggleAutoScanUploads, toggleAutoSyncDownEvents } from '../stores/settings'
 import { Button } from './Button'
 import { RowGroup } from './Group'
 import { InfoCard } from './InfoCard'
@@ -23,22 +17,12 @@ export function SettingsAdvancedSync() {
         <LabeledValueRow
           label="Upload files to network"
           labelWidth={250}
-          value={
-            <Switch
-              value={autoScan.data ?? false}
-              onValueChange={toggleAutoScanUploads}
-            />
-          }
+          value={<Switch value={autoScan.data ?? false} onValueChange={toggleAutoScanUploads} />}
         />
         <LabeledValueRow
           label="Sync with other devices"
           labelWidth={250}
-          value={
-            <Switch
-              value={autoSync.data ?? false}
-              onValueChange={toggleAutoSyncDownEvents}
-            />
-          }
+          value={<Switch value={autoSync.data ?? false} onValueChange={toggleAutoSyncDownEvents} />}
         />
         <LabeledValueRow
           label="Reset sync down cursor"

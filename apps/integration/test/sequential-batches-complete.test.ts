@@ -1,10 +1,5 @@
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, type TestApp, waitForCondition } from './app'
 
 describe('Sequential Batches', () => {
   let app: TestApp

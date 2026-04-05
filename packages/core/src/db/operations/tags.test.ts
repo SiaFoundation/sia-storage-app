@@ -74,9 +74,7 @@ describe('insertTag', () => {
   })
 
   it('throws on empty name', async () => {
-    await expect(insertTag(db(), '   ')).rejects.toThrow(
-      'Tag name cannot be empty',
-    )
+    await expect(insertTag(db(), '   ')).rejects.toThrow('Tag name cannot be empty')
   })
 
   it('allows same name with different case', async () => {
@@ -106,9 +104,7 @@ describe('getOrCreateTag', () => {
   })
 
   it('throws on empty name', async () => {
-    await expect(getOrCreateTag(db(), '  ')).rejects.toThrow(
-      'Tag name cannot be empty',
-    )
+    await expect(getOrCreateTag(db(), '  ')).rejects.toThrow('Tag name cannot be empty')
   })
 })
 
@@ -296,30 +292,24 @@ describe('renameTag', () => {
 
   it('throws on empty name', async () => {
     const tag = await insertTag(db(), 'Tag1')
-    await expect(renameTag(db(), tag.id, '  ')).rejects.toThrow(
-      'Tag name cannot be empty',
-    )
+    await expect(renameTag(db(), tag.id, '  ')).rejects.toThrow('Tag name cannot be empty')
   })
 
   it('throws on system tag', async () => {
     await ensureSystemTags(db())
-    await expect(
-      renameTag(db(), SYSTEM_TAGS.favorites.id, 'NewFav'),
-    ).rejects.toThrow('System tags cannot be renamed')
+    await expect(renameTag(db(), SYSTEM_TAGS.favorites.id, 'NewFav')).rejects.toThrow(
+      'System tags cannot be renamed',
+    )
   })
 
   it('throws on duplicate name', async () => {
     const tag = await insertTag(db(), 'Tag1')
     await insertTag(db(), 'Tag2')
-    await expect(renameTag(db(), tag.id, 'Tag2')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(renameTag(db(), tag.id, 'Tag2')).rejects.toThrow('already exists')
   })
 
   it('no-ops if tag not found', async () => {
-    await expect(
-      renameTag(db(), 'nonexistent', 'Name'),
-    ).resolves.toBeUndefined()
+    await expect(renameTag(db(), 'nonexistent', 'Name')).resolves.toBeUndefined()
   })
 })
 

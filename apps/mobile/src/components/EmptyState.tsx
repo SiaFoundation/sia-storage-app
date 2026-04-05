@@ -1,12 +1,5 @@
 import type { ReactNode } from 'react'
-import {
-  Image,
-  type ImageSourcePropType,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native'
 import { palette, whiteA } from '../styles/colors'
 
 type Props = {
@@ -27,11 +20,7 @@ export function EmptyState({ image, title, message, action, children }: Props) {
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       {action ? (
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          onPress={action.onPress}
-        >
+        <Pressable accessibilityRole="button" style={styles.button} onPress={action.onPress}>
           <Text style={styles.buttonText}>{action.label}</Text>
         </Pressable>
       ) : null}

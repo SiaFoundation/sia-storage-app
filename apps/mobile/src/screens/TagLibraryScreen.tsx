@@ -1,10 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { SYSTEM_TAGS } from '@siastorage/core/db/operations'
-import {
-  type FileListParams,
-  useFileList,
-  useTagFileCount,
-} from '@siastorage/core/stores'
+import { type FileListParams, useFileList, useTagFileCount } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import {
   ArrowLeftIcon,
@@ -18,15 +14,7 @@ import {
   XIcon,
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ActionSheet } from '../components/ActionSheet'
 import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
@@ -226,10 +214,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
       />
       <ScreenHeader>
         <View style={styles.headerLeft}>
-          <IconButton
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Back"
-          >
+          <IconButton onPress={() => navigation.goBack()} accessibilityLabel="Back">
             <ArrowLeftIcon color={palette.gray[50]} size={22} />
           </IconButton>
           <ScreenHeaderTitle
@@ -237,11 +222,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             subtitle={subtitle}
             icon={
               isFavoritesTag ? (
-                <HeartIcon
-                  color={palette.red[500]}
-                  fill={palette.red[500]}
-                  size={22}
-                />
+                <HeartIcon color={palette.red[500]} fill={palette.red[500]} size={22} />
               ) : (
                 <TagIcon color={palette.blue[400]} size={22} />
               )
@@ -300,10 +281,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         />
       )}
 
-      <AddFileActionSheet
-        sheetName="tagLibraryAddFile"
-        onFilesAdded={handleFilesAdded}
-      />
+      <AddFileActionSheet sheetName="tagLibraryAddFile" onFilesAdded={handleFilesAdded} />
       {isSelectionMode ? (
         <SelectionBar
           onComplete={handleBulkActionComplete}
@@ -318,10 +296,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             >
               <FilePlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
-            <IconButton
-              onPress={() => openSheet('tagActions')}
-              accessibilityLabel="More options"
-            >
+            <IconButton onPress={() => openSheet('tagActions')} accessibilityLabel="More options">
               <MoreVerticalIcon color={palette.gray[50]} size={22} />
             </IconButton>
           </FloatingPill>
@@ -368,10 +343,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
 
-      <ActionSheet
-        visible={tagActionsOpen}
-        onRequestClose={() => closeSheet('tagActions')}
-      >
+      <ActionSheet visible={tagActionsOpen} onRequestClose={() => closeSheet('tagActions')}>
         {!isSystemTag ? (
           <ActionSheetButton
             icon={<PencilIcon size={18} />}
@@ -409,10 +381,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
-            <ManageTagsSheet
-              fileId={actionSheetFileIds[0]}
-              sheetName="tagLibraryManageTags"
-            />
+            <ManageTagsSheet fileId={actionSheetFileIds[0]} sheetName="tagLibraryManageTags" />
           ) : null}
         </>
       ) : null}

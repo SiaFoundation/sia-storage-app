@@ -15,11 +15,7 @@ import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
-import {
-  fetchBulkCounts,
-  fileHasASealedObject,
-  useFileStatus,
-} from '../lib/file'
+import { fetchBulkCounts, fileHasASealedObject, useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
@@ -35,10 +31,7 @@ type Props = {
   manageTagsSheet?: string
   moveToDirectorySheet?: string
   fileIds: string[]
-  navigation?: NativeStackScreenProps<
-    MainStackParamList,
-    'LibraryHome'
-  >['navigation']
+  navigation?: NativeStackScreenProps<MainStackParamList, 'LibraryHome'>['navigation']
   onComplete?: () => void
 }
 
@@ -125,6 +118,7 @@ function SingleFileActionsSheet({
       logger.error('FileActionsSheet', 'reupload_failed', { error: e as Error })
       toast.show('Failed to reupload file')
     }
+    // oxlint-disable-next-line react/exhaustive-deps -- file.id is covered by file; both listed for clarity
   }, [file?.id, toast, onComplete, file, reupload])
 
   const handleDelete = useCallback(async () => {
@@ -162,28 +156,24 @@ function SingleFileActionsSheet({
       >
         Export file
       </ActionSheetButton>
-      {!status.data?.isDownloaded &&
-        !status.data?.isDownloading &&
-        !status.data?.fileIsGone && (
-          <ActionSheetButton
-            variant="primary"
-            icon={<ArrowDownToLineIcon size={18} />}
-            onPress={handlePressAndClose(handleDownload)}
-          >
-            Download to device
-          </ActionSheetButton>
-        )}
-      {!status.data?.isUploaded &&
-        !status.data?.isUploading &&
-        !status.data?.fileIsGone && (
-          <ActionSheetButton
-            variant="primary"
-            icon={<CloudUploadIcon size={18} />}
-            onPress={handlePressAndClose(handleReupload)}
-          >
-            Upload to network
-          </ActionSheetButton>
-        )}
+      {!status.data?.isDownloaded && !status.data?.isDownloading && !status.data?.fileIsGone && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<ArrowDownToLineIcon size={18} />}
+          onPress={handlePressAndClose(handleDownload)}
+        >
+          Download to device
+        </ActionSheetButton>
+      )}
+      {!status.data?.isUploaded && !status.data?.isUploading && !status.data?.fileIsGone && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<CloudUploadIcon size={18} />}
+          onPress={handlePressAndClose(handleReupload)}
+        >
+          Upload to network
+        </ActionSheetButton>
+      )}
       <ActionSheetButton
         variant="primary"
         icon={
@@ -244,9 +234,8 @@ function BulkFileActionsSheet({
   const toast = useToast()
   const isOpen = useSheetOpen(sheetName)
 
-  const { data: counts } = useSWR(
-    isOpen ? ['bulkCounts', ...fileIds] : null,
-    () => fetchBulkCounts(fileIds),
+  const { data: counts } = useSWR(isOpen ? ['bulkCounts', ...fileIds] : null, () =>
+    fetchBulkCounts(fileIds),
   )
 
   const handlePressAndClose = useCallback(
@@ -304,7 +293,7 @@ function BulkFileActionsSheet({
       for (const f of counts.files) {
         await app().files.trashFile(f.id)
       }
-      toast.show(`Moved ${counts.total} files to trash`)
+      toast.show(`Moved ${counts.total.toLocaleString()} files to trash`)
       onComplete?.()
     } catch (e) {
       logger.error('FileActionsSheet', 'delete_files_failed', {
@@ -318,14 +307,14 @@ function BulkFileActionsSheet({
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
-      <Text style={styles.bulkHeader}>{total} files selected</Text>
+      <Text style={styles.bulkHeader}>{total.toLocaleString()} files selected</Text>
       <ActionSheetButton
         variant="primary"
         icon={<ArrowDownToLineIcon size={18} />}
         onPress={handlePressAndClose(handleDownloadToDevice)}
         disabled={!counts || counts.downloadable === 0}
       >
-        Download to device{counts ? ` (${counts.downloadable})` : ''}
+        Download to device{counts ? ` (${counts.downloadable.toLocaleString()})` : ''}
       </ActionSheetButton>
       <ActionSheetButton
         variant="primary"
@@ -333,7 +322,7 @@ function BulkFileActionsSheet({
         onPress={handlePressAndClose(handleUploadToNetwork)}
         disabled={!counts || counts.uploadable === 0}
       >
-        Upload to network{counts ? ` (${counts.uploadable})` : ''}
+        Upload to network{counts ? ` (${counts.uploadable.toLocaleString()})` : ''}
       </ActionSheetButton>
       <ActionSheetButton
         variant="primary"
@@ -351,7 +340,7 @@ function BulkFileActionsSheet({
         onPress={handlePressAndClose(handleDeleteAll)}
         disabled={!counts}
       >
-        Move {total} files to trash
+        Move {total.toLocaleString()} files to trash
       </ActionSheetButton>
     </ActionSheet>
   )

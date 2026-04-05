@@ -57,10 +57,7 @@ describe('FS Orphan Scanner', () => {
     expect(uriBefore).not.toBeNull()
 
     // Soft-delete the file record
-    await app.updateFileRecord(
-      { id: file.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false },
-    )
+    await app.updateFileRecord({ id: file.id, deletedAt: Date.now() }, { includeUpdatedAt: false })
 
     const result = await runOrphanScanner(app.app)
 
@@ -70,18 +67,14 @@ describe('FS Orphan Scanner', () => {
 
   it('handles mix of tracked, orphaned, and deleted files', async () => {
     // 1. Tracked file (should be kept)
-    const [trackedFile] = await app.addFiles(
-      generateTestFiles(1, { startId: 1, sizeBytes: 100 }),
-    )
+    const [trackedFile] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
 
     // 2. Orphan file (not in DB at all)
     const orphanPath = path.join(app.tempDir, 'stale-orphan.bin')
     nodeFs.writeFileSync(orphanPath, Buffer.alloc(50))
 
     // 3. Soft-deleted file
-    const [deletedFile] = await app.addFiles(
-      generateTestFiles(1, { startId: 2, sizeBytes: 100 }),
-    )
+    const [deletedFile] = await app.addFiles(generateTestFiles(1, { startId: 2, sizeBytes: 100 }))
     await app.updateFileRecord(
       { id: deletedFile.id, deletedAt: Date.now() },
       { includeUpdatedAt: false },
@@ -105,9 +98,7 @@ describe('FS Orphan Scanner', () => {
   })
 
   it('cleans up fs metadata for orphaned entries', async () => {
-    const [file] = await app.addFiles(
-      generateTestFiles(1, { startId: 1, sizeBytes: 100 }),
-    )
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
 
     // Verify metadata exists
     const metaBefore = await app.app.fs.readMeta(file.id)

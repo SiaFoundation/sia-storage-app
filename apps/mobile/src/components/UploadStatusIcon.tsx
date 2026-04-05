@@ -24,8 +24,7 @@ export function UploadStatusIcon({
   variant?: 'badge' | 'icon'
   color?: string
 }) {
-  const pillColor =
-    status.isErrored || status.fileIsGone ? palette.red[500] : overlay.pill
+  const pillColor = status.isErrored || status.fileIsGone ? palette.red[500] : overlay.pill
   const iconColor = color ?? palette.gray[50]
 
   const label = useMemo(() => {
@@ -37,8 +36,7 @@ export function UploadStatusIcon({
     if (status.isDownloadQueued) return 'Download queued'
     if (status.isUploading || status.isPacking) return 'Uploading'
     if (status.isDownloading) return 'Downloading'
-    if (status.isUploaded && status.isDownloaded)
-      return 'File on network and device'
+    if (status.isUploaded && status.isDownloaded) return 'File on network and device'
     if (status.isUploaded && !status.isDownloaded) return 'File only on network'
     if (!status.isUploaded && status.isDownloaded) return 'File only on device'
     if (status.fileIsGone) return 'File unavailable'

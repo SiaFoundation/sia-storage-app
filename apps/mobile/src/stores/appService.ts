@@ -1,5 +1,6 @@
 import {
   type AppService,
+  // oxlint-disable-next-line no-restricted-imports -- mobile bootstrap needs internal access to wire SDK and uploader
   type AppServiceInternal,
   type AppServiceResult,
   createAppService,

@@ -6,28 +6,16 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { PlusIcon } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import RNFS from 'react-native-fs'
 import useSWR from 'swr'
 import { calculateContentHash } from '../../lib/contentHash'
-import {
-  detectMimeTypeFromBytes,
-  MAGIC_BYTES_LENGTH,
-} from '../../lib/detectMimeType'
+import { detectMimeTypeFromBytes, MAGIC_BYTES_LENGTH } from '../../lib/detectMimeType'
 import { useFileStatus } from '../../lib/file'
 import { getMimeType } from '../../lib/fileTypes'
 import { pinnedObjectToLocalObject } from '../../lib/localObjects'
 import { useToast } from '../../lib/toastContext'
-import {
-  downloadFirstBytesFromShared,
-  useDownloadFromShareURL,
-} from '../../managers/downloader'
+import { downloadFirstBytesFromShared, useDownloadFromShareURL } from '../../managers/downloader'
 import type { RootTabParamList } from '../../stacks/types'
 import { app, internal } from '../../stores/appService'
 import { copyFileToFs } from '../../stores/fs'
@@ -52,11 +40,7 @@ async function detectFileType(
       throw new Error('Missing required data for type detection')
     }
 
-    const bytes = await downloadFirstBytesFromShared(
-      sdk,
-      sharedObject,
-      MAGIC_BYTES_LENGTH,
-    )
+    const bytes = await downloadFirstBytesFromShared(sdk, sharedObject, MAGIC_BYTES_LENGTH)
 
     if (bytes.length === 0) {
       logger.warn('FileImport', 'no_bytes_for_detection')
@@ -157,32 +141,25 @@ export function FileImport({
   const toast = useToast()
   const { data: isConnected } = useSdk()
   const downloadFromShareURL = useDownloadFromShareURL()
-  const [hasConfirmedLargeDownload, setHasConfirmedLargeDownload] =
-    useState(false)
+  const [hasConfirmedLargeDownload, setHasConfirmedLargeDownload] = useState(false)
 
-  const sharedObject = useSWR(
-    isConnected ? ['sharedObject', shareUrl, id] : null,
-    async () => {
-      try {
-        const sdk = internal().getSdk()
-        if (!sdk || !shareUrl) return null
-        return sdk.sharedObject(shareUrl)
-      } catch (e) {
-        logger.error('FileImport', 'shared_object_error', { error: e as Error })
-        return null
-      }
-    },
-  )
+  const sharedObject = useSWR(isConnected ? ['sharedObject', shareUrl, id] : null, async () => {
+    try {
+      const sdk = internal().getSdk()
+      if (!sdk || !shareUrl) return null
+      return sdk.sharedObject(shareUrl)
+    } catch (e) {
+      logger.error('FileImport', 'shared_object_error', { error: e as Error })
+      return null
+    }
+  })
 
   const fileSize = sharedObject.data ? Number(sharedObject.data.size()) : null
-  const shouldAutoDownload =
-    fileSize !== null && fileSize <= SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD
+  const shouldAutoDownload = fileSize !== null && fileSize <= SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD
   const requiresConfirmation = !hasConfirmedLargeDownload && !shouldAutoDownload
 
   const detectedType = useSWR(
-    sharedObject.data && shareUrl && isConnected
-      ? ['detectedType', id, shareUrl]
-      : null,
+    sharedObject.data && shareUrl && isConnected ? ['detectedType', id, shareUrl] : null,
     async () => {
       const sdk = internal().getSdk()
       if (!sdk || !sharedObject.data) {
@@ -194,16 +171,8 @@ export function FileImport({
 
   // Download and build file metadata. Auto-download if file is small, otherwise require confirmation.
   const sharedFile = useSWR(
-    sharedObject.data &&
-      shareUrl &&
-      (hasConfirmedLargeDownload || shouldAutoDownload)
-      ? [
-          'sharedFile',
-          id,
-          shareUrl,
-          hasConfirmedLargeDownload,
-          shouldAutoDownload,
-        ]
+    sharedObject.data && shareUrl && (hasConfirmedLargeDownload || shouldAutoDownload)
+      ? ['sharedFile', id, shareUrl, hasConfirmedLargeDownload, shouldAutoDownload]
       : null,
     () => downloadAndProcessFile(id, shareUrl, downloadFromShareURL),
   )
@@ -239,8 +208,7 @@ export function FileImport({
   const displayFile = sharedFile.data || previewFile
   const { data: downloadState } = useDownloadEntry(id)
   const isDownloading =
-    downloadState?.status === 'downloading' ||
-    downloadState?.status === 'queued'
+    downloadState?.status === 'downloading' || downloadState?.status === 'queued'
 
   const hasMissingMetadata =
     !displayFile ||
@@ -258,9 +226,7 @@ export function FileImport({
     }
 
     if (sharedFile.data.hash) {
-      const existingFile = await app().files.getByContentHash(
-        sharedFile.data.hash,
-      )
+      const existingFile = await app().files.getByContentHash(sharedFile.data.hash)
       if (existingFile) {
         toast.show('File already exists in library')
         return
@@ -296,10 +262,7 @@ export function FileImport({
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {sharedObject.isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.accentPrimary} />
@@ -346,9 +309,7 @@ export function FileImport({
       </ScrollView>
       <BottomActionButton
         label={isAddingToDatabase ? 'Adding to library...' : 'Add to library'}
-        disabled={
-          isAddingToDatabase || !isMetadataComplete || requiresConfirmation
-        }
+        disabled={isAddingToDatabase || !isMetadataComplete || requiresConfirmation}
         icon={<PlusIcon color="white" size={22} />}
         onPress={handleAddToDatabase}
       />

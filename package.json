@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "postinstall": "npm rebuild better-sqlite3",
-    "lint": "biome check .",
+    "lint": "oxlint . && oxfmt --check .",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun --cwd packages/core test && bun --cwd apps/mobile test && bun --cwd apps/integration test",
     "mobile:fresh": "bun --cwd apps/mobile fresh",

@@ -71,7 +71,18 @@ jest.mock('react-native-fs', () => ({
     unlink: rnfsUnlink,
   },
 }))
-global.__rnfs = { rnfsExists, rnfsStat, rnfsRead, rnfsReadDir, rnfsReadFile, rnfsHash, rnfsMkdir, rnfsWriteFile, rnfsCopyFile, rnfsUnlink }
+global.__rnfs = {
+  rnfsExists,
+  rnfsStat,
+  rnfsRead,
+  rnfsReadDir,
+  rnfsReadFile,
+  rnfsHash,
+  rnfsMkdir,
+  rnfsWriteFile,
+  rnfsCopyFile,
+  rnfsUnlink,
+}
 
 const { setExpoFileSystemMock } = require('./mocks/expo-file-system')
 

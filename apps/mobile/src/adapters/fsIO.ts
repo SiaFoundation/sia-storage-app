@@ -47,11 +47,7 @@ export function createFsIOAdapter(): FsIOAdapter {
       if (!(await RNFS.exists(fsStorageDirectoryUri))) {
         await RNFS.mkdir(fsStorageDirectoryUri)
       }
-      await RNFS.writeFile(
-        targetUri,
-        Buffer.from(data).toString('base64'),
-        'base64',
-      )
+      await RNFS.writeFile(targetUri, Buffer.from(data).toString('base64'), 'base64')
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },

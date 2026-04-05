@@ -1,13 +1,6 @@
 import { getMimeTypeFromExtension, isMimeType } from './fileTypes'
 
-const FTYP_BRANDS_HEIC = new Set([
-  'heic',
-  'heix',
-  'hevc',
-  'hevx',
-  'heim',
-  'heis',
-])
+const FTYP_BRANDS_HEIC = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'])
 const FTYP_BRANDS_VIDEO = new Set(['isom', 'iso2', 'mp41', 'mp42', 'M4V '])
 const FTYP_BRANDS_AUDIO = new Set(['M4A ', 'M4B '])
 
@@ -21,12 +14,7 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
   if (!bytes || bytes.length === 0) return null
 
   // JPEG: FF D8 FF
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff
-  )
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
     return 'image/jpeg'
 
   // PNG: 89 50 4E 47 0D 0A 1A 0A
@@ -68,8 +56,7 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
     return 'image/webp'
 
   // BMP: 42 4D
-  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d)
-    return 'image/bmp'
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp'
 
   // TIFF (little-endian): 49 49 2A 00
   if (
@@ -124,12 +111,8 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
 
   // MP3: ID3 tag or MPEG frame sync
   if (bytes.length >= 3) {
-    if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)
-      return 'audio/mpeg'
-    if (
-      bytes[0] === 0xff &&
-      (bytes[1] === 0xfb || bytes[1] === 0xf3 || bytes[1] === 0xf2)
-    )
+    if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return 'audio/mpeg'
+    if (bytes[0] === 0xff && (bytes[1] === 0xfb || bytes[1] === 0xf3 || bytes[1] === 0xf2))
       return 'audio/mpeg'
   }
 

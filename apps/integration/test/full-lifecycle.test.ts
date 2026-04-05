@@ -1,11 +1,6 @@
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, type TestApp, waitForCondition } from './app'
 
 describe('Full File Lifecycle', () => {
   let app: TestApp
@@ -48,8 +43,7 @@ describe('Full File Lifecycle', () => {
       () => {
         const remote = app.sdk.getStoredObjects().find((o) => o.id === objectId)
         return (
-          remote !== undefined &&
-          decodeFileMetadata(remote.metadata).name === 'beach-sunset.bin'
+          remote !== undefined && decodeFileMetadata(remote.metadata).name === 'beach-sunset.bin'
         )
       },
       { timeout: 10_000, message: 'Remote to have updated name' },
@@ -75,19 +69,17 @@ describe('Full File Lifecycle', () => {
     expect(dbFile!.deletedAt).not.toBeNull()
     objects = await app.readLocalObjectsForFile(file.id)
     expect(objects).toHaveLength(0)
-    const deletedRemote = app.sdk
-      .getStoredObjects()
-      .find((o) => o.id === objectId)
+    const deletedRemote = app.sdk.getStoredObjects().find((o) => o.id === objectId)
     expect(deletedRemote).toBeUndefined()
   }, 60_000)
 
   it('handles selective remote edits across multiple files', async () => {
     const testFiles = await app.addFiles(generateTestFiles(3, { startId: 1 }))
 
-    await waitForCondition(
-      () => testFiles.every((f) => app.getUploadState(f.id) !== undefined),
-      { timeout: 10_000, message: 'Files to be detected by scanner' },
-    )
+    await waitForCondition(() => testFiles.every((f) => app.getUploadState(f.id) !== undefined), {
+      timeout: 10_000,
+      message: 'Files to be detected by scanner',
+    })
 
     await app.waitForNoActiveUploads()
 

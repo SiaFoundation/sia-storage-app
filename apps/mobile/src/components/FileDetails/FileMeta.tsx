@@ -3,14 +3,7 @@ import { useShowAdvanced, useTagsForFile } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { PlusIcon } from 'lucide-react-native'
 import { Fragment, useMemo } from 'react'
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import useSWR from 'swr'
 import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
@@ -27,13 +20,7 @@ import { LabeledValueRow } from '../LabeledValueRow'
 import { TagPill } from '../TagPill'
 import { FileMap } from './FileMap'
 
-export function FileMeta({
-  file,
-  status,
-}: {
-  file: FileRecord
-  status: FileStatus
-}) {
+export function FileMeta({ file, status }: { file: FileRecord; status: FileStatus }) {
   const showAdvanced = useShowAdvanced()
   const fileSize = useMemo(() => {
     if (file.size === 0) return null
@@ -67,18 +54,9 @@ export function FileMeta({
     <View style={styles.container}>
       <RowGroup title="Details">
         <InfoCard>
-          <InputRow
-            label="Name"
-            placeholder="Untitled file"
-            {...fileNameInputProps}
-          />
+          <InputRow label="Name" placeholder="Untitled file" {...fileNameInputProps} />
           {showAdvanced.data && (
-            <LabeledValueRow
-              label="ID"
-              value={file.id}
-              isMonospace
-              showDividerTop
-            />
+            <LabeledValueRow label="ID" value={file.id} isMonospace showDividerTop />
           )}
           {showAdvanced.data && (
             <LabeledValueRow
@@ -110,11 +88,7 @@ export function FileMeta({
               showDividerTop
             />
           )}
-          <LabeledValueRow
-            label="Size"
-            value={fileSize ?? '—'}
-            showDividerTop
-          />
+          <LabeledValueRow label="Size" value={fileSize ?? '—'} showDividerTop />
           <LabeledValueRow
             label="Created"
             value={new Date(file.createdAt).toLocaleString()}
@@ -125,11 +99,7 @@ export function FileMeta({
             value={new Date(file.updatedAt).toLocaleString()}
             showDividerTop
           />
-          <LabeledValueRow
-            label="Type"
-            value={file.type ?? '—'}
-            showDividerTop
-          />
+          <LabeledValueRow label="Type" value={file.type ?? '—'} showDividerTop />
         </InfoCard>
       </RowGroup>
       <RowGroup title="Tags">
@@ -148,10 +118,7 @@ export function FileMeta({
             ) : (
               <Text style={styles.noTagsText}>No tags</Text>
             )}
-            <Pressable
-              style={styles.addTagButton}
-              onPress={() => openSheet(tagSheetName)}
-            >
+            <Pressable style={styles.addTagButton} onPress={() => openSheet(tagSheetName)}>
               <PlusIcon size={14} color={palette.blue[400]} />
               <Text style={styles.addTagText}>Add Tag</Text>
             </Pressable>
@@ -172,9 +139,7 @@ export function FileMeta({
             <RowGroup title="Thumbnails">
               <InfoCard>
                 {thumbnails.data.map(({ record, uri }, index) => {
-                  const thumbSizeLabel = record.thumbSize
-                    ? `${record.thumbSize}px`
-                    : 'Unknown'
+                  const thumbSizeLabel = record.thumbSize ? `${record.thumbSize}px` : 'Unknown'
                   const label = `Thumbnail ${thumbSizeLabel} URI`
                   const value = uri ?? 'Not cached'
                   return (
@@ -204,11 +169,7 @@ export function FileMeta({
             <Fragment key={indexerURL}>
               <RowGroup title="Pinned Object">
                 <InfoCard>
-                  <LabeledValueRow
-                    label="Indexer URL"
-                    value={indexerURL}
-                    isMonospace
-                  />
+                  <LabeledValueRow label="Indexer URL" value={indexerURL} isMonospace />
                   <LabeledValueRow
                     label="Created"
                     value={new Date(pinnedObject.createdAt()).toLocaleString()}
@@ -233,11 +194,7 @@ export function FileMeta({
                   />
                   <LabeledValueRow
                     label="Metadata"
-                    value={JSON.stringify(
-                      decodeFileMetadata(pinnedObject.metadata()),
-                      null,
-                      2,
-                    )}
+                    value={JSON.stringify(decodeFileMetadata(pinnedObject.metadata()), null, 2)}
                     numberOfLines={10}
                     isMonospace
                     align="left"

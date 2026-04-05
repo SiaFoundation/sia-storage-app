@@ -74,10 +74,7 @@ export async function getFileCountLocal(params: { localOnly: boolean }) {
   })
 }
 
-export function useFileCountLocal(
-  params: { localOnly: boolean },
-  config?: SWRConfiguration,
-) {
+export function useFileCountLocal(params: { localOnly: boolean }, config?: SWRConfiguration) {
   const key = app().caches.library.key('localCount')
   return useSWR([...key, params], () => getFileCountLocal(params), config)
 }
@@ -95,10 +92,7 @@ export async function getFileStatsLocal(params: { localOnly: boolean }) {
   })
 }
 
-export function useFileStatsLocal(
-  params: { localOnly: boolean },
-  config?: SWRConfiguration,
-) {
+export function useFileStatsLocal(params: { localOnly: boolean }, config?: SWRConfiguration) {
   const key = app().caches.library.key('localStats')
   return useSWR([...key, params], () => getFileStatsLocal(params), config)
 }

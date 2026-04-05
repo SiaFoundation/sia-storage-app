@@ -3,10 +3,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ArrowLeftIcon } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import {
-  KeyboardAwareScrollView,
-  KeyboardProvider,
-} from 'react-native-keyboard-controller'
+import { KeyboardAwareScrollView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksLoader from '../components/BlocksLoader'
@@ -19,11 +16,9 @@ import { cancelAuth } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingIndexerScreen() {
-  const nav =
-    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
+  const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
-  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } =
-    useChangeIndexer()
+  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } = useChangeIndexer()
   const [isNavigating, setIsNavigating] = useState(false)
 
   // Reset after navigating back from a later screen (e.g. RecoveryPhrase).
@@ -110,10 +105,9 @@ export default function OnboardingIndexerScreen() {
                 </Text>
               </View>
               <Text style={styles.subtitle}>
-                An indexer backs up your encrypted file metadata and syncs it
-                across devices. It cannot access your files. Files are stored on
-                and retrieved directly from the Sia network. Use ours or connect
-                your own.
+                An indexer backs up your encrypted file metadata and syncs it across devices. It
+                cannot access your files. Files are stored on and retrieved directly from the Sia
+                network. Use ours or connect your own.
               </Text>
 
               <IndexerSelector

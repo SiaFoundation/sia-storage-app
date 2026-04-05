@@ -15,8 +15,7 @@ module.exports = function withIosTarget16(config) {
 
       // Insert near the end of post_install while preserving indentation,
       // and ensure the inner 'end' keeps its original indent level.
-      const postInstallBlock =
-        /(\n?)(^[ \t]*)post_install do \|installer\|([\s\S]*?)^[ \t]*end\n/m
+      const postInstallBlock = /(\n?)(^[ \t]*)post_install do \|installer\|([\s\S]*?)^[ \t]*end\n/m
       const m = contents.match(postInstallBlock)
       if (m) {
         const leadingNewline = m[1] || ''

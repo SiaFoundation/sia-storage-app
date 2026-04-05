@@ -1,8 +1,4 @@
-import type {
-  DatabaseAdapter,
-  SQLParam,
-  SQLRunResult,
-} from '@siastorage/core/adapters'
+import type { DatabaseAdapter, SQLParam, SQLRunResult } from '@siastorage/core/adapters'
 import { logger } from '@siastorage/logger'
 import sqlite3 from 'better-sqlite3'
 
@@ -34,10 +30,7 @@ export function createBetterSqlite3Database(
       return result
     },
 
-    async getFirstAsync<T>(
-      sql: string,
-      ...params: SQLParam[]
-    ): Promise<T | null> {
+    async getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
       const start = performance.now()
       const result = (db.prepare(sql).get(...params) as T) ?? null
       logSlowQuery('getFirstAsync', sql, start)

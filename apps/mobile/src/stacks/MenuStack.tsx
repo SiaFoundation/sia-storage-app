@@ -26,36 +26,16 @@ export function MenuStack() {
         headerTintColor: palette.gray[50],
       }}
     >
-      <Stack.Screen
-        name="MenuHome"
-        component={MenuScreen}
-        options={{ title: '' }}
-      />
-      <Stack.Screen
-        name="HostDetail"
-        component={HostDetailScreen}
-        options={{ title: 'Host' }}
-      />
+      <Stack.Screen name="MenuHome" component={MenuScreen} options={{ title: '' }} />
+      <Stack.Screen name="HostDetail" component={HostDetailScreen} options={{ title: 'Host' }} />
       <Stack.Screen
         name="Indexer"
         component={SettingsIndexerScreen}
         options={{ title: 'Indexer' }}
       />
-      <Stack.Screen
-        name="Sync"
-        component={SettingsSyncScreen}
-        options={{ title: 'Sync' }}
-      />
-      <Stack.Screen
-        name="Logs"
-        component={SettingsLogsScreen}
-        options={{ title: 'Logs' }}
-      />
-      <Stack.Screen
-        name="Hosts"
-        component={HostListScreen}
-        options={{ title: 'Hosts' }}
-      />
+      <Stack.Screen name="Sync" component={SettingsSyncScreen} options={{ title: 'Sync' }} />
+      <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
+      <Stack.Screen name="Hosts" component={HostListScreen} options={{ title: 'Hosts' }} />
       <Stack.Screen
         name="Advanced"
         component={SettingsAdvancedScreen}

@@ -40,10 +40,7 @@ export function OverflowActions({ actions, sheetName }: Props) {
       return { visibleActions: [], overflowActions: [] }
     }
 
-    const maxSlots = Math.max(
-      1,
-      Math.floor((containerWidth + GAP) / SLOT_WIDTH),
-    )
+    const maxSlots = Math.max(1, Math.floor((containerWidth + GAP) / SLOT_WIDTH))
 
     if (actions.length <= maxSlots) {
       return { visibleActions: actions, overflowActions: [] }
@@ -69,11 +66,7 @@ export function OverflowActions({ actions, sheetName }: Props) {
     <>
       <View style={styles.container} onLayout={handleLayout}>
         {visibleActions.map((action) => (
-          <IconButton
-            key={action.key}
-            onPress={action.onPress}
-            disabled={action.disabled}
-          >
+          <IconButton key={action.key} onPress={action.onPress} disabled={action.disabled}>
             {action.icon}
           </IconButton>
         ))}

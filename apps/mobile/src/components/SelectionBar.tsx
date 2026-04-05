@@ -26,10 +26,7 @@ type Props = {
   onComplete?: () => void
 }
 
-export function SelectionBar({
-  moveToDirectorySheet = 'moveToDirectory',
-  onComplete,
-}: Props) {
+export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onComplete }: Props) {
   const selectedCount = useSelectedCount()
   const selectedFileIds = useSelectedFileIds()
   const toast = useToast()
@@ -37,9 +34,8 @@ export function SelectionBar({
   const disabled = selectedCount === 0
   const ids = selectedFileIds
 
-  const { data: counts } = useSWR(
-    ids.length > 0 ? ['selectionCounts', ...ids] : null,
-    () => fetchBulkCounts(ids),
+  const { data: counts } = useSWR(ids.length > 0 ? ['selectionCounts', ...ids] : null, () =>
+    fetchBulkCounts(ids),
   )
 
   const handleTag = useCallback(() => {
@@ -61,7 +57,7 @@ export function SelectionBar({
         }
       }
       if (counts.downloadable > 0) {
-        toast.show(`Downloading ${counts.downloadable} files`)
+        toast.show(`Downloading ${counts.downloadable.toLocaleString()} files`)
       }
       onComplete?.()
     } catch (e) {
@@ -81,7 +77,7 @@ export function SelectionBar({
         }
       }
       if (counts.uploadable > 0) {
-        toast.show(`Queued ${counts.uploadable} uploads`)
+        toast.show(`Queued ${counts.uploadable.toLocaleString()} uploads`)
       }
       onComplete?.()
     } catch (e) {
@@ -96,7 +92,7 @@ export function SelectionBar({
       for (const f of counts.files) {
         await app().files.trashFile(f.id)
       }
-      toast.show(`Moved ${counts.total} files to trash`)
+      toast.show(`Moved ${counts.total.toLocaleString()} files to trash`)
       onComplete?.()
     } catch (e) {
       logger.error('SelectionBar', 'trash_failed', { error: e as Error })
@@ -148,22 +144,14 @@ export function SelectionBar({
       disabled,
     })
     return list
-  }, [
-    disabled,
-    counts,
-    handleTag,
-    handleMoveToFolder,
-    handleDownload,
-    handleUpload,
-    handleTrash,
-  ])
+  }, [disabled, counts, handleTag, handleMoveToFolder, handleDownload, handleUpload, handleTrash])
 
   return (
     <>
       <BottomControlBar style={styles.bar}>
         <View style={styles.container}>
           <Text style={styles.count}>
-            {selectedCount > 0 ? `${selectedCount} selected` : 'Select items'}
+            {selectedCount > 0 ? `${selectedCount.toLocaleString()} selected` : 'Select items'}
           </Text>
           <OverflowActions actions={actions} sheetName="selectionOverflow" />
         </View>

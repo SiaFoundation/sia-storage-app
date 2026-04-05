@@ -35,9 +35,7 @@ async function killExistingBuilds(platform: 'ios' | 'android'): Promise<void> {
     await $`pkill -f "xcodebuild.*SiaStorageDev" 2>/dev/null`.quiet().nothrow()
   } else {
     // Kill gradle processes for this project
-    await $`pkill -f "gradlew.*assemble(Debug|Release)" 2>/dev/null`
-      .quiet()
-      .nothrow()
+    await $`pkill -f "gradlew.*assemble(Debug|Release)" 2>/dev/null`.quiet().nothrow()
   }
 }
 
@@ -63,9 +61,7 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`
-      .quiet()
-      .nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -76,9 +72,7 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
   } else {
     // ios/ exists - run pod install to ensure native deps are synced
     console.log('   Running pod install...')
-    const podResult = await $`cd ${iosDir} && pod install 2>&1`
-      .quiet()
-      .nothrow()
+    const podResult = await $`cd ${iosDir} && pod install 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== POD INSTALL ===\n${podResult.stdout}\n`)
 
     if (podResult.exitCode !== 0) {
@@ -147,9 +141,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`
-      .quiet()
-      .nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform ios 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -160,9 +152,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   } else {
     // ios/ exists - run pod install to ensure native deps are synced
     console.log('   Running pod install...')
-    const podResult = await $`cd ${iosDir} && pod install 2>&1`
-      .quiet()
-      .nothrow()
+    const podResult = await $`cd ${iosDir} && pod install 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== POD INSTALL ===\n${podResult.stdout}\n`)
 
     if (podResult.exitCode !== 0) {
@@ -175,9 +165,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   // Get the team ID from environment
   const teamId = process.env.APPLE_TEAM_ID
   if (!teamId) {
-    throw new Error(
-      'APPLE_TEAM_ID environment variable is required for device builds',
-    )
+    throw new Error('APPLE_TEAM_ID environment variable is required for device builds')
   }
 
   // Build for device using xcodebuild directly (no fastlane)
@@ -239,9 +227,7 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
     }
 
     console.log('   Prebuilding...')
-    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`
-      .quiet()
-      .nothrow()
+    const prebuildResult = await $`bunx expo prebuild --platform android 2>&1`.quiet().nothrow()
     writeBuildLog(target, `=== PREBUILD ===\n${prebuildResult.stdout}\n`)
 
     if (prebuildResult.exitCode !== 0) {
@@ -261,9 +247,7 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
     ]
     const missing = requiredVars.filter((v) => !process.env[v])
     if (missing.length > 0) {
-      throw new Error(
-        `Android release build requires signing env vars: ${missing.join(', ')}`,
-      )
+      throw new Error(`Android release build requires signing env vars: ${missing.join(', ')}`)
     }
   }
 

@@ -1,12 +1,7 @@
 import { PERF_MONITOR_INTERVAL } from '@siastorage/core/config'
 import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { logger } from '@siastorage/logger'
-import {
-  getCpuUsage,
-  getJsFps,
-  getMemoryUsage,
-  getUiFps,
-} from 'react-native-performance-toolkit'
+import { getCpuUsage, getJsFps, getMemoryUsage, getUiFps } from 'react-native-performance-toolkit'
 
 function run(): void {
   const cpu = getCpuUsage()

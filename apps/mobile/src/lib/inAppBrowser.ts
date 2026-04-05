@@ -20,15 +20,12 @@ export async function openInAppBrowser<T = boolean>(
     const { onResponseURL } = options || {}
     let result: T | null = null
 
-    const subscription = Linking.addEventListener(
-      'url',
-      ({ url: received }) => {
-        if (onResponseURL) {
-          result = onResponseURL(received)
-          InAppBrowser.close()
-        }
-      },
-    )
+    const subscription = Linking.addEventListener('url', ({ url: received }) => {
+      if (onResponseURL) {
+        result = onResponseURL(received)
+        InAppBrowser.close()
+      }
+    })
 
     try {
       await InAppBrowser.open(url, {

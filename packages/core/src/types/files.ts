@@ -26,9 +26,7 @@ export type FileMetadata = {
 
 // tags and directory are synced via object metadata but stored in separate
 // tables locally, not in the files table.
-export const fileMetadataKeys = keysOf<
-  Omit<FileMetadata, 'tags' | 'directory'>
->()([
+export const fileMetadataKeys = keysOf<Omit<FileMetadata, 'tags' | 'directory'>>()([
   'id',
   'name',
   'type',
@@ -57,8 +55,7 @@ export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
   'lostReason',
 ])
 
-export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> &
-  FileLocalMetadata
+export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> & FileLocalMetadata
 
 export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
   ...fileMetadataKeys,

@@ -2,9 +2,7 @@ import type { AppCaches, AppService } from '../service'
 import type { UploadsState } from '../stores'
 
 /** Builds the uploads namespace: register, update, and clear in-progress uploads. */
-export function buildUploadsNamespace(
-  caches: AppCaches,
-): AppService['uploads'] {
+export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] {
   let state: UploadsState = { uploads: {} }
 
   const namespace: AppService['uploads'] = {
@@ -33,9 +31,7 @@ export function buildUploadsNamespace(
     removeMany: (ids) => {
       const set = new Set(ids)
       state = {
-        uploads: Object.fromEntries(
-          Object.entries(state.uploads).filter(([k]) => !set.has(k)),
-        ),
+        uploads: Object.fromEntries(Object.entries(state.uploads).filter(([k]) => !set.has(k))),
       }
       caches.uploads.invalidateAll()
     },

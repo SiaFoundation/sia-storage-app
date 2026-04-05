@@ -13,10 +13,7 @@ type Props = {
   onFilesAdded?: (files: FileRecord[]) => void
 }
 
-export function AddFileActionSheet({
-  sheetName = 'addFile',
-  onFilesAdded,
-}: Props) {
+export function AddFileActionSheet({ sheetName = 'addFile', onFilesAdded }: Props) {
   const isOpen = useSheetOpen(sheetName)
   const pickImages = useImagePicker()
   const capture = useCameraCapture()
@@ -35,10 +32,7 @@ export function AddFileActionSheet({
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={closeSheet}>
-      <ActionSheetButton
-        icon={<CameraIcon size={18} />}
-        onPress={() => void pickAndClose(capture)}
-      >
+      <ActionSheetButton icon={<CameraIcon size={18} />} onPress={() => void pickAndClose(capture)}>
         Take Photo or Video
       </ActionSheetButton>
       <ActionSheetButton

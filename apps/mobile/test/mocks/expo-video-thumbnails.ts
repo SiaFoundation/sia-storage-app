@@ -21,7 +21,5 @@ export async function getThumbnailAsync(
   _sourceUri: string,
   _options?: VideoThumbnailsOptions,
 ): Promise<VideoThumbnailsResult> {
-  throw new Error(
-    'Video thumbnails not supported in tests. Use image files instead.',
-  )
+  throw new Error('Video thumbnails not supported in tests. Use image files instead.')
 }

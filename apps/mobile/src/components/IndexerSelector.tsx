@@ -9,11 +9,7 @@ type IndexerSelectorProps = {
   hasErrored?: boolean
 }
 
-export function IndexerSelector({
-  value,
-  onChangeText,
-  hasErrored = false,
-}: IndexerSelectorProps) {
+export function IndexerSelector({ value, onChangeText, hasErrored = false }: IndexerSelectorProps) {
   const trimmedValue = value.trim()
   const isUsingCustomProvider = trimmedValue !== DEFAULT_INDEXER_URL
 
@@ -30,17 +26,10 @@ export function IndexerSelector({
   return (
     <>
       {hasErrored ? (
-        <Text style={styles.errorText}>
-          Could not connect. Check the URL and try again.
-        </Text>
+        <Text style={styles.errorText}>Could not connect. Check the URL and try again.</Text>
       ) : null}
 
-      <InfoCard
-        style={[
-          styles.optionCard,
-          !isUsingCustomProvider && styles.optionCardActive,
-        ]}
-      >
+      <InfoCard style={[styles.optionCard, !isUsingCustomProvider && styles.optionCardActive]}>
         <Pressable
           testID="indexer-option-default"
           accessibilityRole="radio"
@@ -57,12 +46,7 @@ export function IndexerSelector({
         </Pressable>
       </InfoCard>
 
-      <InfoCard
-        style={[
-          styles.optionCard,
-          isUsingCustomProvider && styles.optionCardActive,
-        ]}
-      >
+      <InfoCard style={[styles.optionCard, isUsingCustomProvider && styles.optionCardActive]}>
         <Pressable
           testID="indexer-option-custom"
           accessibilityRole="radio"

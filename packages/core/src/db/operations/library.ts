@@ -4,12 +4,7 @@ import type { FileRecordRow } from '../../types/files'
 export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
 export type Category = 'Video' | 'Image' | 'Audio' | 'Files'
-export const ALL_CATEGORIES: readonly Category[] = [
-  'Video',
-  'Image',
-  'Audio',
-  'Files',
-]
+export const ALL_CATEGORIES: readonly Category[] = ['Video', 'Image', 'Audio', 'Files']
 
 type MediaCategory = 'Video' | 'Image' | 'Audio'
 const MEDIA_PREFIXES: Record<MediaCategory, string> = {
@@ -55,9 +50,7 @@ export function buildLibraryQueryParts(
   } = opts
   const dir: SortDir = sortDir ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
-  const mediaCategories = categories.filter(
-    (c): c is MediaCategory => c in MEDIA_PREFIXES,
-  )
+  const mediaCategories = categories.filter((c): c is MediaCategory => c in MEDIA_PREFIXES)
   const includesFiles = categories.includes('Files')
   const hasQuery = typeof query === 'string' && query.trim().length > 0
 
@@ -141,18 +134,14 @@ export type LibraryQueryParams = {
   directoryId?: string
 }
 
-export async function queryLibraryFileCount(
-  db: DatabaseAdapter,
-): Promise<number> {
+export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}`,
   )
   return row?.count ?? 0
 }
 
-export async function queryMediaFileCount(
-  db: DatabaseAdapter,
-): Promise<number> {
+export async function queryMediaFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      WHERE f.kind = 'file'
@@ -163,10 +152,7 @@ export async function queryMediaFileCount(
   return row?.count ?? 0
 }
 
-export async function queryTagFileCount(
-  db: DatabaseAdapter,
-  tagId: string,
-): Promise<number> {
+export async function queryTagFileCount(db: DatabaseAdapter, tagId: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      INNER JOIN file_tags ft ON ft.fileId = f.id
@@ -193,9 +179,7 @@ export async function queryDirectoryFileCount(
   return row?.count ?? 0
 }
 
-export async function queryUnfiledFileCount(
-  db: DatabaseAdapter,
-): Promise<number> {
+export async function queryUnfiledFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      WHERE f.directoryId IS NULL AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
@@ -265,20 +249,12 @@ export async function queryFilePositionInSortedList(
       DATE: { column: 'createdAt', value: anchorRow.createdAt },
     } as const
     const { column, value } = columnMap[opts.sortBy] ?? columnMap.DATE
-    beforeCursor = buildDateBeforeCursor(
-      opts.sortDir,
-      'f',
-      value,
-      anchorRow.id,
-      column,
-    )
+    beforeCursor = buildDateBeforeCursor(opts.sortDir, 'f', value, anchorRow.id, column)
   }
 
   const result = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f ${
-      where
-        ? `${where} AND (${beforeCursor.clause})`
-        : `WHERE ${beforeCursor.clause}`
+      where ? `${where} AND (${beforeCursor.clause})` : `WHERE ${beforeCursor.clause}`
     }`,
     ...queryParams,
     ...beforeCursor.params,
@@ -341,10 +317,7 @@ export async function queryLibraryFiles(
   )
 }
 
-export async function queryFileExists(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<boolean> {
+export async function queryFileExists(db: DatabaseAdapter, fileId: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ id: string }>(
     'SELECT id FROM files WHERE id = ? LIMIT 1',
     fileId,

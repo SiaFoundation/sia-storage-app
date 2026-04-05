@@ -5,13 +5,7 @@
  * these verify the building blocks, not the mobile orchestration.
  */
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  sleep,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, sleep, type TestApp, waitForCondition } from './app'
 
 describe('Suspension', () => {
   let app: TestApp
@@ -54,9 +48,7 @@ describe('Suspension', () => {
     await waitForCondition(
       () => {
         const uploads = app.app.uploads.getState().uploads
-        return Object.values(uploads).some(
-          (u) => u.status === 'packing' || u.status === 'packed',
-        )
+        return Object.values(uploads).some((u) => u.status === 'packing' || u.status === 'packed')
       },
       { timeout: 10_000, message: 'At least one file packing' },
     )
@@ -114,9 +106,7 @@ describe('Suspension', () => {
     await waitForCondition(
       () => {
         const uploads = app.app.uploads.getState().uploads
-        return Object.values(uploads).some(
-          (u) => u.status === 'packing' || u.status === 'packed',
-        )
+        return Object.values(uploads).some((u) => u.status === 'packing' || u.status === 'packed')
       },
       { timeout: 10_000, message: 'At least one file packing' },
     )
@@ -131,9 +121,7 @@ describe('Suspension', () => {
   }, 60_000)
 
   it('suspend preserves packer batch state', async () => {
-    const files1 = await app.addFiles(
-      generateTestFiles(1, { startId: 1, sizeBytes: 100 }),
-    )
+    const files1 = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
 
     await app.waitForCondition(() => {
       const entry = app.app.uploads.getEntry(files1[0].id)
@@ -146,9 +134,7 @@ describe('Suspension', () => {
     await app.suspend()
     await app.resumeFromSuspension()
 
-    const files2 = await app.addFiles(
-      generateTestFiles(1, { startId: 2, sizeBytes: 100 }),
-    )
+    const files2 = await app.addFiles(generateTestFiles(1, { startId: 2, sizeBytes: 100 }))
 
     await app.waitForCondition(() => {
       const entry = app.app.uploads.getEntry(files2[0].id)
@@ -283,9 +269,7 @@ describe('Suspension', () => {
     await waitForCondition(
       () => {
         const uploads = app.app.uploads.getState().uploads
-        return Object.values(uploads).some(
-          (u) => u.status === 'packing' || u.status === 'packed',
-        )
+        return Object.values(uploads).some((u) => u.status === 'packing' || u.status === 'packed')
       },
       { timeout: 10_000, message: 'At least one file packing' },
     )

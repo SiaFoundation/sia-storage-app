@@ -1,19 +1,7 @@
-import {
-  type StyleProp,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { type StyleProp, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import { palette } from '../styles/colors'
 
-export function GroupTitle({
-  title,
-  indicator,
-}: {
-  title: string
-  indicator?: React.ReactNode
-}) {
+export function GroupTitle({ title, indicator }: { title: string; indicator?: React.ReactNode }) {
   return (
     <View style={styles.titleContainer}>
       <Text style={styles.title}>{title}</Text>

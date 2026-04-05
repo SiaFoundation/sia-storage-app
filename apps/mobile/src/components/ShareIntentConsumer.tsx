@@ -7,8 +7,7 @@ import { useToast } from '../lib/toastContext'
 
 export function ShareIntentConsumer() {
   const { data: hasOnboarded } = useHasOnboarded()
-  const { hasShareIntent, shareIntent, resetShareIntent } =
-    useShareIntentContext()
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext()
   const toast = useToast()
 
   useEffect(() => {

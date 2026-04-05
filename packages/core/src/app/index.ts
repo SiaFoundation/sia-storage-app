@@ -1,11 +1,7 @@
 export { AppProvider, useApp } from './context'
 export { createRemoteAppService, registerAppServiceIpc } from './ipcProxy'
 export type { UploaderAdapters } from './namespaces'
-export {
-  type AppServiceAdapters,
-  type AppServiceResult,
-  createAppService,
-} from './namespaces'
+export { type AppServiceAdapters, type AppServiceResult, createAppService } from './namespaces'
 export type { DownloadObjectAdapter } from './namespaces/downloads'
 export type {
   AppCaches,

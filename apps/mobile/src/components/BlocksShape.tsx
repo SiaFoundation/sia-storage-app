@@ -4,22 +4,9 @@ import { StyleSheet, View, type ViewStyle } from 'react-native'
 export type Pt = { x: number; y: number }
 export type GlyphShape = Pt[]
 
-export const BLOCK_COLORS = [
-  '#C3E500',
-  '#76E6EB',
-  '#36D955',
-  '#E50AAE',
-  '#FF7919',
-] as const
+export const BLOCK_COLORS = ['#C3E500', '#76E6EB', '#36D955', '#E50AAE', '#FF7919'] as const
 
-export type ShapeId =
-  | 'block1'
-  | 'line2'
-  | 'line3'
-  | 'corner3'
-  | 'j4'
-  | 'square4'
-  | 't4'
+export type ShapeId = 'block1' | 'line2' | 'line3' | 'corner3' | 'j4' | 'square4' | 't4'
 
 export const SHAPES: Record<ShapeId, GlyphShape> = {
   block1: [{ x: 0, y: 0 }],
@@ -57,8 +44,7 @@ export const SHAPES: Record<ShapeId, GlyphShape> = {
   ],
 }
 
-export const rotate90 = (s: GlyphShape): GlyphShape =>
-  s.map(({ x, y }) => ({ x: -y, y: x }))
+export const rotate90 = (s: GlyphShape): GlyphShape => s.map(({ x, y }) => ({ x: -y, y: x }))
 const rotateTimes = (s: GlyphShape, deg: 0 | 90 | 180 | 270): GlyphShape => {
   const times = deg === 0 ? 0 : deg === 90 ? 1 : deg === 180 ? 2 : 3
   let out = s
@@ -81,9 +67,7 @@ export function getTransformedShapePoints(
 ): GlyphShape {
   const { rotation = 0, mirror = false } = options
   const base = SHAPES[shape]
-  const transformed = normalize(
-    rotateTimes(mirror ? mirrorX(base) : base, rotation),
-  )
+  const transformed = normalize(rotateTimes(mirror ? mirrorX(base) : base, rotation))
   return transformed
 }
 

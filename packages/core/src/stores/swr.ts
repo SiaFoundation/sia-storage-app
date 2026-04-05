@@ -42,14 +42,11 @@ export function swrCacheBy<T = unknown>() {
   const prefix = `swr/${nextId++}`
   return {
     key: (...parts: string[]) => [`${prefix}/${parts.join('/')}`],
-    invalidate: (...parts: string[]) =>
-      mutate([`${prefix}/${parts.join('/')}`]),
+    invalidate: (...parts: string[]) => mutate([`${prefix}/${parts.join('/')}`]),
     invalidateAll: () =>
       mutate(
         (key: unknown) =>
-          Array.isArray(key) &&
-          typeof key[0] === 'string' &&
-          key[0].startsWith(`${prefix}/`),
+          Array.isArray(key) && typeof key[0] === 'string' && key[0].startsWith(`${prefix}/`),
       ),
     set: (data: T, ...parts: string[]) =>
       mutate([`${prefix}/${parts.join('/')}`], data ?? undefined, {

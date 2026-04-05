@@ -6,11 +6,7 @@
  */
 
 import type { BuildTarget } from '../buildCache'
-import {
-  appendBuildLog,
-  loadBuildDuration,
-  saveBuildDuration,
-} from '../buildCache'
+import { appendBuildLog, loadBuildDuration, saveBuildDuration } from '../buildCache'
 import { ProgressIndicator } from '../progress'
 
 export interface RunProcessOptions {
@@ -41,9 +37,7 @@ export interface ProcessResult {
  * 2. Used to update the progress indicator phase
  * 3. Accumulated for error detection
  */
-export async function runProcess(
-  options: RunProcessOptions,
-): Promise<ProcessResult> {
+export async function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
   const { command, cwd, target, label, onChunk } = options
 
   // Load previous build duration for time estimate
@@ -66,10 +60,7 @@ export async function runProcess(
   const stderrReader = proc.stderr.getReader()
 
   // Read both streams concurrently
-  const readStream = async (
-    reader: ReadableStreamDefaultReader<Uint8Array>,
-    _isStderr = false,
-  ) => {
+  const readStream = async (reader: ReadableStreamDefaultReader<Uint8Array>, _isStderr = false) => {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break

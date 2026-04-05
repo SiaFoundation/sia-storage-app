@@ -18,13 +18,9 @@ export class MobileSdkAuthAdapter implements SdkAuthAdapters {
   private builder: Builder | null = null
   private abortController: AbortController | null = null
   private lastSdk: SdkInterface | null = null
-  private _onConnected:
-    | ((appKeyHex: string, indexerUrl: string) => Promise<void>)
-    | null = null
+  private _onConnected: ((appKeyHex: string, indexerUrl: string) => Promise<void>) | null = null
 
-  setOnConnected(
-    handler: (appKeyHex: string, indexerUrl: string) => Promise<void>,
-  ): void {
+  setOnConnected(handler: (appKeyHex: string, indexerUrl: string) => Promise<void>): void {
     this._onConnected = handler
   }
 

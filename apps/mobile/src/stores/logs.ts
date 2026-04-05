@@ -40,9 +40,7 @@ export function resumeLogger(): void {
 }
 
 export function useAvailableScopes() {
-  return useSWR(cache.key('availableScopes'), () =>
-    app().logs.availableScopes(),
-  )
+  return useSWR(cache.key('availableScopes'), () => app().logs.availableScopes())
 }
 
 export function useLogLevel(): LogLevel {
@@ -65,12 +63,7 @@ export function getLogScopesSync(): string[] {
 
 export async function getLogLevel(): Promise<LogLevel> {
   const stored = await app().settings.getLogLevel()
-  if (
-    stored === 'debug' ||
-    stored === 'info' ||
-    stored === 'warn' ||
-    stored === 'error'
-  ) {
+  if (stored === 'debug' || stored === 'info' || stored === 'warn' || stored === 'error') {
     return stored
   }
   return 'debug'
@@ -125,10 +118,7 @@ export async function readLogs(
   }
 }
 
-export async function countLogs(
-  logLevel?: LogLevel,
-  logScopes?: string[],
-): Promise<number> {
+export async function countLogs(logLevel?: LogLevel, logScopes?: string[]): Promise<number> {
   try {
     return await app().logs.count({ logLevel, logScopes })
   } catch (error) {

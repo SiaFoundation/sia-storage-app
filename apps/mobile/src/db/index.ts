@@ -52,8 +52,7 @@ function isNativeHandleError(error: unknown): boolean {
   return (
     error instanceof Error &&
     error.message.includes('has been rejected') &&
-    (error.message.includes('NullPointerException') ||
-      error.message.includes('closed resource'))
+    (error.message.includes('NullPointerException') || error.message.includes('closed resource'))
   )
 }
 
@@ -75,11 +74,7 @@ async function reopenDb(): Promise<boolean> {
         await database.closeAsync()
       } catch {}
       // useNewConnection bypasses expo-sqlite's per-name connection cache.
-      database = await SQLite.openDatabaseAsync(
-        dbName,
-        { useNewConnection: true },
-        dbDirectory,
-      )
+      database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
       await database.execAsync(
         'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
       )
@@ -152,11 +147,7 @@ export async function resetDb() {
         throw e
       }
     }
-    database = await SQLite.openDatabaseAsync(
-      dbName,
-      { useNewConnection: true },
-      dbDirectory,
-    )
+    database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
     await database.execAsync(
       'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
     )

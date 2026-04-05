@@ -30,18 +30,8 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { $ } from 'bun'
-import {
-  buildAndroid,
-  buildIosDevice,
-  buildIosSim,
-  findIosDeviceApp,
-} from './build'
-import {
-  type BuildTarget,
-  getTargetPaths,
-  needsRebuild,
-  PROJECT_ROOT,
-} from './buildCache'
+import { buildAndroid, buildIosDevice, buildIosSim, findIosDeviceApp } from './build'
+import { type BuildTarget, getTargetPaths, needsRebuild, PROJECT_ROOT } from './buildCache'
 import { confirmRebuild } from './lib/confirm'
 import {
   type Device,
@@ -86,13 +76,9 @@ function getTarget(): BuildTarget {
       console.error('  android:device   Build & run on real Android device')
       console.error('')
       console.error('Flags:')
-      console.error(
-        '  --rebuild    Full clean build (delete platform dir, prebuild, build)',
-      )
+      console.error('  --rebuild    Full clean build (delete platform dir, prebuild, build)')
       console.error("  --no-run     Build only, don't launch the app")
-      console.error(
-        '  --release    Build with Release config (standalone, no dev server)',
-      )
+      console.error('  --release    Build with Release config (standalone, no dev server)')
       process.exit(1)
   }
 }
@@ -100,9 +86,7 @@ function getTarget(): BuildTarget {
 const target = getTarget()
 const platform = target.includes('ios') ? 'ios' : 'android'
 const isDevice =
-  target === 'ios-device' ||
-  target === 'ios-device-release' ||
-  targetArg === 'android:device'
+  target === 'ios-device' || target === 'ios-device-release' || targetArg === 'android:device'
 const paths = getTargetPaths(target)
 
 // Print header
@@ -137,9 +121,7 @@ if (target === 'ios-device' || target === 'ios-device-release') {
     console.error('')
     console.error('   No iOS device connected')
     console.error('')
-    console.error(
-      '   Please connect your iPhone with a USB cable and unlock it.',
-    )
+    console.error('   Please connect your iPhone with a USB cable and unlock it.')
     console.error('   Run `xcrun devicectl list devices` to verify.')
     process.exit(1)
   }
@@ -262,9 +244,7 @@ async function runIosSimulator(): Promise<void> {
   }
 
   // Boot simulator if needed
-  const bootedResult = await $`xcrun simctl list devices booted`
-    .quiet()
-    .nothrow()
+  const bootedResult = await $`xcrun simctl list devices booted`.quiet().nothrow()
   if (!bootedResult.stdout.toString().includes('iPhone')) {
     console.log('   Booting simulator...')
     const devices = await $`xcrun simctl list devices available`.text()
@@ -295,18 +275,9 @@ async function runAndroid(): Promise<void> {
 // Find Android APK
 async function findAndroidApk(): Promise<string> {
   const apkVariant = release ? 'release' : 'debug'
-  const apkDir = join(
-    PROJECT_ROOT,
-    `android/app/build/outputs/apk/${apkVariant}`,
-  )
-  const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`
-    .quiet()
-    .nothrow()
-  const apkPath = apkResult.stdout
-    .toString()
-    .trim()
-    .split('\n')
-    .filter(Boolean)[0]
+  const apkDir = join(PROJECT_ROOT, `android/app/build/outputs/apk/${apkVariant}`)
+  const apkResult = await $`find ${apkDir} -name "*.apk" 2>/dev/null`.quiet().nothrow()
+  const apkPath = apkResult.stdout.toString().trim().split('\n').filter(Boolean)[0]
 
   if (!apkPath) {
     console.error('   Could not find APK')
@@ -376,9 +347,7 @@ async function runAndroidDevice(): Promise<void> {
     }
 
     if (installResult.error === 'not_found' && attempt < 3) {
-      console.log(
-        `   Device disconnected, reconnecting... (attempt ${attempt + 1}/3)`,
-      )
+      console.log(`   Device disconnected, reconnecting... (attempt ${attempt + 1}/3)`)
       await $`adb kill-server`.quiet().nothrow()
       await $`adb start-server`.quiet().nothrow()
       await new Promise((r) => setTimeout(r, 2000))

@@ -1,13 +1,6 @@
 import type React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Animated,
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Animated, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { overlay, palette } from '../styles/colors'
 
 type Props = {
@@ -18,13 +11,7 @@ type Props = {
   contentStyle?: StyleProp<ViewStyle>
 }
 
-export function Menu({
-  isOpen,
-  onClose,
-  anchorRef,
-  children,
-  contentStyle,
-}: Props) {
+export function Menu({ isOpen, onClose, anchorRef, children, contentStyle }: Props) {
   const [mounted, setMounted] = useState<boolean>(isOpen)
   const [position, setPosition] = useState<{ top: number; right: number }>({
     top: 56,
@@ -33,14 +20,8 @@ export function Menu({
   const opacity = useRef(new Animated.Value(0)).current
   const scale = useRef(new Animated.Value(0.98)).current
 
-  const openTiming = useMemo(
-    () => ({ toValue: 1, duration: 140, useNativeDriver: true }),
-    [],
-  )
-  const closeTiming = useMemo(
-    () => ({ toValue: 0, duration: 120, useNativeDriver: true }),
-    [],
-  )
+  const openTiming = useMemo(() => ({ toValue: 1, duration: 140, useNativeDriver: true }), [])
+  const closeTiming = useMemo(() => ({ toValue: 0, duration: 120, useNativeDriver: true }), [])
 
   useEffect(() => {
     if (isOpen) {
@@ -86,11 +67,7 @@ export function Menu({
           },
         ]}
       >
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          accessibilityRole="button"
-          onPress={onClose}
-        />
+        <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" onPress={onClose} />
       </Animated.View>
       <Animated.View
         style={[

@@ -43,11 +43,7 @@ async function createTestFile(
     deletedAt: null,
   })
   if (overrides?.directoryId) {
-    await db().runAsync(
-      'UPDATE files SET directoryId = ? WHERE id = ?',
-      overrides.directoryId,
-      id,
-    )
+    await db().runAsync('UPDATE files SET directoryId = ? WHERE id = ?', overrides.directoryId, id)
   }
 }
 
@@ -65,12 +61,8 @@ describe('buildLibraryQueryParts', () => {
       await createFileWithTags('file-2', ['a', 'c'])
       await createFileWithTags('file-3', ['a', 'b', 'c'])
 
-      const tagA = await db().getFirstAsync<{ id: string }>(
-        "SELECT id FROM tags WHERE name = 'a'",
-      )
-      const tagB = await db().getFirstAsync<{ id: string }>(
-        "SELECT id FROM tags WHERE name = 'b'",
-      )
+      const tagA = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'a'")
+      const tagB = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'b'")
 
       const { where, params } = buildLibraryQueryParts({
         tags: [tagA!.id, tagB!.id],
@@ -89,12 +81,8 @@ describe('buildLibraryQueryParts', () => {
       await createFileWithTags('file-1', ['a'])
       await createFileWithTags('file-2', ['b'])
 
-      const tagA = await db().getFirstAsync<{ id: string }>(
-        "SELECT id FROM tags WHERE name = 'a'",
-      )
-      const tagB = await db().getFirstAsync<{ id: string }>(
-        "SELECT id FROM tags WHERE name = 'b'",
-      )
+      const tagA = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'a'")
+      const tagB = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'b'")
 
       const { where, params } = buildLibraryQueryParts({
         tags: [tagA!.id, tagB!.id],
@@ -114,9 +102,7 @@ describe('buildLibraryQueryParts', () => {
       await createFileWithTags('file-2', ['b'])
       await createFileWithTags('file-3', ['a', 'b'])
 
-      const tagA = await db().getFirstAsync<{ id: string }>(
-        "SELECT id FROM tags WHERE name = 'a'",
-      )
+      const tagA = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'a'")
 
       const { where, params } = buildLibraryQueryParts({
         tags: [tagA!.id],
@@ -233,9 +219,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await addTagToFile(db(), 'f1', 'mytag')
-    const tag = await db().getFirstAsync<{ id: string }>(
-      "SELECT id FROM tags WHERE name = 'mytag'",
-    )
+    const tag = await db().getFirstAsync<{ id: string }>("SELECT id FROM tags WHERE name = 'mytag'")
     const count = await queryTagFileCount(db(), tag!.id)
     expect(count).toBe(1)
   })
@@ -379,11 +363,10 @@ describe('queryFilePositionInSortedList', () => {
 
     test('returns 0 for nonexistent file', async () => {
       await seedDateRecords()
-      const position = await queryFilePositionInSortedList(
-        db(),
-        'nonexistent',
-        { sortBy: 'DATE', sortDir: 'DESC' },
-      )
+      const position = await queryFilePositionInSortedList(db(), 'nonexistent', {
+        sortBy: 'DATE',
+        sortDir: 'DESC',
+      })
       expect(position).toBe(0)
     })
   })
@@ -599,12 +582,7 @@ describe('querySortedFileIds', () => {
     await createTestFile('file-d', { createdAt: base + 30 })
     await createTestFile('file-e', { createdAt: base + 40 })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'DATE', sortDir: 'DESC' },
-      5,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'DATE', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['file-e', 'file-d', 'file-c', 'file-b', 'file-a'])
   })
 
@@ -615,22 +593,12 @@ describe('querySortedFileIds', () => {
     await createTestFile('file-d', { createdAt: base + 30 })
     await createTestFile('file-e', { createdAt: base + 40 })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'DATE', sortDir: 'DESC' },
-      2,
-      1,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'DATE', sortDir: 'DESC' }, 2, 1)
     expect(ids).toEqual(['file-d', 'file-c'])
   })
 
   test('returns empty array for empty database', async () => {
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'DATE', sortDir: 'DESC' },
-      10,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'DATE', sortDir: 'DESC' }, 10, 0)
     expect(ids).toEqual([])
   })
 
@@ -650,12 +618,7 @@ describe('querySortedFileIds', () => {
       addedAt: base + 10,
     })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'ADDED', sortDir: 'DESC' },
-      5,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'ADDED', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['file-a', 'file-c', 'file-b', 'file-e', 'file-d'])
   })
 
@@ -666,12 +629,7 @@ describe('querySortedFileIds', () => {
     await createTestFile('file-d', { createdAt: base + 30, size: 100 })
     await createTestFile('file-e', { createdAt: base + 40, size: 1000 })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'SIZE', sortDir: 'DESC' },
-      5,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'SIZE', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['file-e', 'file-c', 'file-a', 'file-b', 'file-d'])
   })
 
@@ -682,12 +640,7 @@ describe('querySortedFileIds', () => {
     await createTestFile('f20', { name: 'file20.jpg', createdAt: base + 30 })
     await createTestFile('f3', { name: 'file3.jpg', createdAt: base + 40 })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'NAME', sortDir: 'ASC' },
-      5,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'NAME', sortDir: 'ASC' }, 5, 0)
     expect(ids).toEqual(['f1', 'f2', 'f3', 'f10', 'f20'])
   })
 
@@ -698,12 +651,7 @@ describe('querySortedFileIds', () => {
     await createTestFile('f20', { name: 'file20.jpg', createdAt: base + 30 })
     await createTestFile('f3', { name: 'file3.jpg', createdAt: base + 40 })
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'NAME', sortDir: 'DESC' },
-      5,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'NAME', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['f20', 'f10', 'f3', 'f2', 'f1'])
   })
 })

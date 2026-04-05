@@ -57,9 +57,7 @@ export const slabsStorageCodec = z.codec(z.string(), z.array(slabSchema), {
     }
   },
   encode: (domain: Slab[]): string => {
-    const storageSlabs: SlabStorage[] = (domain ?? []).map((slab) =>
-      slabCodec.encode(slab),
-    )
+    const storageSlabs: SlabStorage[] = (domain ?? []).map((slab) => slabCodec.encode(slab))
     return JSON.stringify(storageSlabs)
   },
 })

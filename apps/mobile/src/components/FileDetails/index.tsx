@@ -9,21 +9,12 @@ import { useFileStatus } from '../../lib/file'
 import { colors, palette } from '../../styles/colors'
 import { FileMeta } from './FileMeta'
 
-export function FileDetails({
-  file,
-  header,
-}: {
-  file: FileRecord
-  header?: React.ReactNode
-}) {
+export function FileDetails({ file, header }: { file: FileRecord; header?: React.ReactNode }) {
   const status = useFileStatus(file)
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {header}
         <View style={styles.metaContainer}>
           {status.data ? <FileMeta file={file} status={status.data} /> : null}

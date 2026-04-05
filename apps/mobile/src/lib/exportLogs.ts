@@ -39,10 +39,7 @@ export async function exportLogs(): Promise<string | null> {
     const fileName = `logs-${timestamp}.jsonl`
 
     // Copy temp file to FS storage.
-    const fsFileUri = await copyFileToFs(
-      { id: fileId, type: 'application/x-ndjson' },
-      tempFilePath,
-    )
+    const fsFileUri = await copyFileToFs({ id: fileId, type: 'application/x-ndjson' }, tempFilePath)
 
     // Clean up temp file.
     await RNFS.unlink(tempFilePath)

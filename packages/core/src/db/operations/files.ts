@@ -14,8 +14,7 @@ export async function recalculateCurrentForGroup(
   name: string,
   directoryId: string | null,
 ): Promise<void> {
-  const dirCondition =
-    directoryId === null ? 'directoryId IS NULL' : 'directoryId = ?'
+  const dirCondition = directoryId === null ? 'directoryId IS NULL' : 'directoryId = ?'
   const dirParams = directoryId === null ? [name] : [name, directoryId]
 
   await db.runAsync(
@@ -139,10 +138,7 @@ export async function queryFileRecordRowsByObjectIds(
   return result
 }
 
-export function transformRow(
-  row: FileRecordRow,
-  objects?: LocalObject[],
-): FileRecord {
+export function transformRow(row: FileRecordRow, objects?: LocalObject[]): FileRecord {
   const objectsMap: Record<string, LocalObject> = {}
   for (const o of objects || []) {
     objectsMap[o.indexerURL] = o
@@ -297,9 +293,7 @@ function buildFileRecordsQuery(
 
   if (fileExistsLocally !== undefined) {
     if (fileExistsLocally) {
-      whereClauses.push(
-        `EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
-      )
+      whereClauses.push(`EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`)
     } else {
       whereClauses.push(
         `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
@@ -313,12 +307,10 @@ function buildFileRecordsQuery(
     params.push(...excludeIds)
   }
 
-  const where =
-    whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
+  const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
 
   const orderExpr = `${tableAlias}.${sortColumn} ${order}, ${tableAlias}.id ${order}`
-  const limitExpr =
-    limit !== undefined && Number.isFinite(limit) ? ` LIMIT ${limit | 0}` : ''
+  const limitExpr = limit !== undefined && Number.isFinite(limit) ? ` LIMIT ${limit | 0}` : ''
 
   return {
     where,
@@ -356,10 +348,7 @@ export async function queryFileRecords(
   db: DatabaseAdapter,
   opts: FileRecordsQueryOpts,
 ): Promise<FileRecord[]> {
-  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(
-    opts,
-    'f',
-  )
+  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts, 'f')
 
   const joined = await db.getAllAsync<
     FileRecordRow &
@@ -553,22 +542,14 @@ export async function updateFileDirectory(
     directoryId: string | null
   }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
   const now = Date.now()
-  await sql.update(
-    db,
-    'files',
-    { directoryId: dirId, updatedAt: now },
-    { id: fileId },
-  )
+  await sql.update(db, 'files', { directoryId: dirId, updatedAt: now }, { id: fileId })
   if (row) {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
     await recalculateCurrentForGroup(db, row.name, dirId)
   }
 }
 
-export async function deleteFileRecordById(
-  db: DatabaseAdapter,
-  id: string,
-): Promise<void> {
+export async function deleteFileRecordById(db: DatabaseAdapter, id: string): Promise<void> {
   await sql.del(db, 'files', { id })
 }
 
@@ -644,10 +625,7 @@ export async function deleteAllFileRecords(db: DatabaseAdapter): Promise<void> {
   await sql.del(db, 'files')
 }
 
-export async function readFileRecord(
-  db: DatabaseAdapter,
-  id: string,
-): Promise<FileRecord | null> {
+export async function readFileRecord(db: DatabaseAdapter, id: string): Promise<FileRecord | null> {
   const row = await queryFileRecordById(db, id)
   if (!row) return null
   const objects = await queryLocalObjectsForFile(db, id)
@@ -737,10 +715,7 @@ export async function updateFileRecordWithLocalObject(
   })
 }
 
-export async function queryLostFileCount(
-  db: DatabaseAdapter,
-  indexerURL: string,
-): Promise<number> {
+export async function queryLostFileCount(db: DatabaseAdapter, indexerURL: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
@@ -1015,9 +990,7 @@ export async function readFileRecordByName(
   return transformRow(row, objects)
 }
 
-export async function queryUnuploadedFileCount(
-  db: DatabaseAdapter,
-): Promise<number> {
+export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      WHERE f.kind = 'file'
@@ -1052,9 +1025,7 @@ export async function queryActiveFileSummaries(
     kind: string
     type: string
     size: number
-  }>(
-    'SELECT id, kind, type, size FROM files WHERE trashedAt IS NULL AND deletedAt IS NULL',
-  )
+  }>('SELECT id, kind, type, size FROM files WHERE trashedAt IS NULL AND deletedAt IS NULL')
 }
 
 export async function queryUploadedFileIds(
@@ -1068,10 +1039,7 @@ export async function queryUploadedFileIds(
   return rows.map((r) => r.fileId)
 }
 
-export async function deleteLostFiles(
-  db: DatabaseAdapter,
-  indexerURL: string,
-): Promise<string[]> {
+export async function deleteLostFiles(db: DatabaseAdapter, indexerURL: string): Promise<string[]> {
   const lost = await db.getAllAsync<{ id: string }>(
     `SELECT f.id FROM files f
      WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL

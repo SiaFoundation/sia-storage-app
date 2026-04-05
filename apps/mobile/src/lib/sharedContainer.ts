@@ -1,5 +1,5 @@
 import Constants from 'expo-constants'
-// biome-ignore lint/style/noRestrictedImports: Paths.appleSharedContainers and Paths.document.uri constants only
+// oxlint-disable-next-line no-restricted-imports -- Paths.appleSharedContainers and Paths.document.uri constants only
 import { Paths } from 'expo-file-system'
 import { Platform } from 'react-native'
 
@@ -19,8 +19,7 @@ export function getStorageDirectoryUri(): string {
     const containers = Paths.appleSharedContainers
     if (!containers) throw new Error('appleSharedContainers not available')
     const container = containers[appGroup]
-    if (!container)
-      throw new Error(`App group container not found: ${appGroup}`)
+    if (!container) throw new Error(`App group container not found: ${appGroup}`)
     return container.uri
   }
   return Paths.document.uri

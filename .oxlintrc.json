@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "warn"
+  },
+  "plugins": ["react", "typescript"],
+  "jsPlugins": ["./scripts/oxlint-plugins/no-unformatted-display-number.ts"],
+  "rules": {
+    "custom/no-unformatted-display-number": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "none",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "expo-file-system",
+            "message": "expo-file-system has sync JSI methods (.info(), .delete(), .create(), .list()) that block the JS thread. Use react-native-fs (RNFS) instead. If you need expo-file-system streaming APIs, add an oxlint-disable-next-line comment."
+          },
+          {
+            "name": "@siastorage/core/app",
+            "importNames": ["AppServiceInternal"],
+            "message": "AppServiceInternal should only be used in packages/core/. App code should use the public AppService interface via app() instead."
+          }
+        ]
+      }
+    ],
+    "no-console": "off",
+    "no-template-curly-in-string": "off",
+    "no-shadow-restricted-names": "off",
+    "react/exhaustive-deps": "error",
+    "react/no-array-index-key": "off",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "prefer": "type-imports"
+      }
+    ],
+    "typescript/no-non-null-assertion": "off",
+    "typescript/no-explicit-any": "off"
+  },
+  "ignorePatterns": ["**/wasm"]
+}

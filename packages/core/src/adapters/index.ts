@@ -1,14 +1,7 @@
 export type { SdkAuthAdapters } from './auth'
 export type { CryptoAdapter } from './crypto'
-export type {
-  DatabaseAdapter,
-  SQLParam,
-  SQLRunResult,
-} from './db'
-export type {
-  Reader,
-  Writer,
-} from './fs'
+export type { DatabaseAdapter, SQLParam, SQLRunResult } from './db'
+export type { Reader, Writer } from './fs'
 export type {
   Account,
   AccountApp,

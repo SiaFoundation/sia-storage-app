@@ -118,10 +118,7 @@ export interface Account {
 }
 
 export interface SdkAdapter {
-  objectEvents(
-    cursor: ObjectsCursor | undefined,
-    limit: number,
-  ): Promise<ObjectEvent[]>
+  objectEvents(cursor: ObjectsCursor | undefined, limit: number): Promise<ObjectEvent[]>
   updateObjectMetadata(pinnedObject: PinnedObjectRef): Promise<void>
   download(
     writer: Writer,

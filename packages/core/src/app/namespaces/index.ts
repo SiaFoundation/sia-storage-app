@@ -13,10 +13,7 @@ import type { AppCaches, AppService, AppServiceInternal } from '../service'
 import type { ConnectionState, InitState, SyncState } from '../stores'
 import { buildAuthNamespace } from './auth'
 import { buildDbNamespaces } from './db'
-import {
-  buildDownloadsNamespace,
-  type DownloadObjectAdapter,
-} from './downloads'
+import { buildDownloadsNamespace, type DownloadObjectAdapter } from './downloads'
 import { buildSettingsNamespace } from './settings'
 import { buildUploaderNamespace, initUploader } from './uploader'
 import { buildUploadsNamespace } from './uploads'
@@ -48,9 +45,7 @@ export interface AppServiceResult {
  * Creates the AppService facade with all namespaces wired together.
  * Called once per platform (mobile, desktop main, CLI, web).
  */
-export function createAppService(
-  adapters: AppServiceAdapters,
-): AppServiceResult {
+export function createAppService(adapters: AppServiceAdapters): AppServiceResult {
   const caches: AppCaches = {
     tags: swrCacheBy(),
     directories: swrCacheBy(),
@@ -99,8 +94,10 @@ export function createAppService(
 
   const uploadsNamespace = buildUploadsNamespace(caches)
 
-  const { namespace: uploaderNamespace, manager: uploadManager } =
-    buildUploaderNamespace(adapters.db, adapters.fsIO)
+  const { namespace: uploaderNamespace, manager: uploadManager } = buildUploaderNamespace(
+    adapters.db,
+    adapters.fsIO,
+  )
 
   const downloadsNamespace = buildDownloadsNamespace(
     adapters.db,
@@ -129,11 +126,7 @@ export function createAppService(
       setItem: (k, v) => adapters.secrets.setItem(k, v),
       deleteItem: (k) => adapters.secrets.deleteItem(k),
     },
-    auth: buildAuthNamespace(
-      adapters.secrets,
-      adapters.crypto,
-      adapters.sdkAuth,
-    ),
+    auth: buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth),
     sync: {
       getState: () => ({ ...syncState }),
       setState: (patch) => {
@@ -222,8 +215,7 @@ export function createAppService(
       if (!sdkRef) throw new Error('SDK not initialized')
       return sdkRef
     },
-    initUploader: () =>
-      initUploader(uploadManager, service, internal, adapters.uploader),
+    initUploader: () => initUploader(uploadManager, service, internal, adapters.uploader),
     withTransaction: (fn) => adapters.db.withTransactionAsync(fn),
   }
 

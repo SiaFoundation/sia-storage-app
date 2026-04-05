@@ -1,16 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import {
-  type FileListParams,
-  useAllTags,
-  useFileList,
-} from '@siastorage/core/stores'
+import { type FileListParams, useAllTags, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import {
-  ArrowLeftIcon,
-  ListFilterIcon,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react-native'
+import { ArrowLeftIcon, ListFilterIcon, SearchIcon, XIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
@@ -98,19 +89,15 @@ export function SearchScreen({ navigation }: Props) {
   }, [])
 
   useEffect(() => {
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
 
     const handleShow = (e: KeyboardEvent) => {
       const height = e.endCoordinates?.height ?? 0
       // On Android with edge-to-edge, the reported keyboard height may
       // not include the IME toolbar (clipboard, voice, etc.) above the
       // keyboard. Add the bottom inset to compensate.
-      setKeyboardOffset(
-        Platform.OS === 'android' ? height + insets.bottom : height,
-      )
+      setKeyboardOffset(Platform.OS === 'android' ? height + insets.bottom : height)
     }
     const handleHide = () => {
       setKeyboardOffset(0)
@@ -183,8 +170,7 @@ export function SearchScreen({ navigation }: Props) {
     text.trim().length > 0
       ? tags.filter(
           (t) =>
-            !selectedTags.has(t.id) &&
-            t.name.toLowerCase().includes(text.trim().toLowerCase()),
+            !selectedTags.has(t.id) && t.name.toLowerCase().includes(text.trim().toLowerCase()),
         )
       : []
 
@@ -259,10 +245,7 @@ export function SearchScreen({ navigation }: Props) {
       </ScreenHeader>
 
       {noResults ? (
-        <Pressable
-          style={styles.emptyPressable}
-          onPress={() => Keyboard.dismiss()}
-        >
+        <Pressable style={styles.emptyPressable} onPress={() => Keyboard.dismiss()}>
           <EmptyState
             image={require('../../assets/image-stack.png')}
             title="No results found"
@@ -319,12 +302,7 @@ export function SearchScreen({ navigation }: Props) {
           <View style={styles.searchBar}>
             <SearchIcon color={whiteA.a70} size={18} />
             {selectedTagObjects.map((tag) => (
-              <TagPill
-                key={tag.id}
-                tag={tag}
-                selected
-                onRemove={() => toggleTag(tag.id)}
-              />
+              <TagPill key={tag.id} tag={tag} selected onRemove={() => toggleTag(tag.id)} />
             ))}
             <TextInput
               ref={inputRef}
@@ -337,22 +315,14 @@ export function SearchScreen({ navigation }: Props) {
               returnKeyType="search"
               onSubmitEditing={() => Keyboard.dismiss()}
               onKeyPress={(e) => {
-                if (
-                  e.nativeEvent.key === 'Backspace' &&
-                  text === '' &&
-                  selectedTags.size > 0
-                ) {
+                if (e.nativeEvent.key === 'Backspace' && text === '' && selectedTags.size > 0) {
                   const lastTag = Array.from(selectedTags).pop()
                   if (lastTag) toggleTag(lastTag)
                 }
               }}
               autoFocus
             />
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleExit}
-              hitSlop={8}
-            >
+            <Pressable accessibilityRole="button" onPress={handleExit} hitSlop={8}>
               <XIcon size={18} color={whiteA.a70} />
             </Pressable>
           </View>
@@ -410,10 +380,7 @@ export function SearchScreen({ navigation }: Props) {
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
-            <ManageTagsSheet
-              fileId={actionSheetFileIds[0]}
-              sheetName="searchManageTags"
-            />
+            <ManageTagsSheet fileId={actionSheetFileIds[0]} sheetName="searchManageTags" />
           ) : null}
         </>
       ) : null}

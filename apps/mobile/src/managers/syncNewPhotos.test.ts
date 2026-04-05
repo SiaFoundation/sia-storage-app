@@ -84,9 +84,7 @@ describe('syncNewPhotos', () => {
   })
 
   it('sorts by creationTime DESC', async () => {
-    getAssetsAsyncMock.mockResolvedValueOnce(
-      page([asset('a1', '1.jpg', { creationTime: 5_000 })]),
-    )
+    getAssetsAsyncMock.mockResolvedValueOnce(page([asset('a1', '1.jpg', { creationTime: 5_000 })]))
     await run()
     expect(getAssetsAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -96,9 +94,7 @@ describe('syncNewPhotos', () => {
   })
 
   it('does not pass createdBefore or createdAfter', async () => {
-    getAssetsAsyncMock.mockResolvedValueOnce(
-      page([asset('a1', '1.jpg', { creationTime: 5_000 })]),
-    )
+    getAssetsAsyncMock.mockResolvedValueOnce(page([asset('a1', '1.jpg', { creationTime: 5_000 })]))
     await run()
     const opts = getAssetsAsyncMock.mock.calls[0][0]
     expect(opts).not.toHaveProperty('createdAfter')
@@ -173,9 +169,7 @@ describe('syncNewPhotos', () => {
   it('setAutoSyncNewPhotos saves enablement timestamp', async () => {
     jest.setSystemTime(new Date(1_700_000_000_000))
     await setAutoSyncNewPhotos(true)
-    const enabledAt = Number(
-      await app().storage.getItem('syncNewPhotosEnabledAt'),
-    )
+    const enabledAt = Number(await app().storage.getItem('syncNewPhotosEnabledAt'))
     expect(enabledAt).toBe(1_700_000_000_000)
   })
 

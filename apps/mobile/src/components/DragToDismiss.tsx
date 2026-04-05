@@ -1,10 +1,6 @@
 import { createContext, type ReactNode, useContext } from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
-import {
-  Gesture,
-  GestureDetector,
-  type GestureType,
-} from 'react-native-gesture-handler'
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
   interpolate,
   runOnJS,
@@ -111,18 +107,8 @@ export function DragToDismiss({
   }))
 
   const contentStyle = useAnimatedStyle(() => {
-    const scale = interpolate(
-      translateY.value,
-      [0, dismissThreshold],
-      [1, 0.75],
-      'clamp',
-    )
-    const borderRadius = interpolate(
-      translateY.value,
-      [0, 50],
-      [0, 24],
-      'clamp',
-    )
+    const scale = interpolate(translateY.value, [0, dismissThreshold], [1, 0.75], 'clamp')
+    const borderRadius = interpolate(translateY.value, [0, 50], [0, 24], 'clamp')
     return {
       transform: [{ translateY: translateY.value }, { scale }],
       borderRadius,
@@ -134,9 +120,7 @@ export function DragToDismiss({
   // receive touches alongside the pan gesture. Not needed on iOS.
   const androidNativeGesture = Gesture.Native()
   const dismissGesture =
-    Platform.OS === 'android'
-      ? Gesture.Simultaneous(panGesture, androidNativeGesture)
-      : panGesture
+    Platform.OS === 'android' ? Gesture.Simultaneous(panGesture, androidNativeGesture) : panGesture
 
   // GestureDetector must always stay mounted to keep the React tree stable.
   // Conditionally removing it causes children to unmount/remount, resetting
@@ -148,9 +132,7 @@ export function DragToDismiss({
       <View style={styles.container}>
         <Animated.View style={[styles.backdrop, backdropStyle]} />
         <GestureDetector gesture={dismissGesture}>
-          <Animated.View style={[styles.content, contentStyle]}>
-            {children}
-          </Animated.View>
+          <Animated.View style={[styles.content, contentStyle]}>{children}</Animated.View>
         </GestureDetector>
       </View>
     </DragToDismissGestureContext.Provider>

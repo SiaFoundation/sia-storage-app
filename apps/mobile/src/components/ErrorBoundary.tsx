@@ -38,32 +38,20 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state
     if (!error) return this.props.children
 
-    const detail = `${error.message}\n\n${error.stack ?? ''}`.slice(
-      0,
-      MAX_DETAIL_LENGTH,
-    )
+    const detail = `${error.message}\n\n${error.stack ?? ''}`.slice(0, MAX_DETAIL_LENGTH)
 
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
           <View style={styles.content}>
             <Text style={styles.title}>Something went wrong</Text>
-            <Text style={styles.subtitle}>
-              The app encountered an unexpected error.
-            </Text>
-            <ScrollView
-              style={styles.detailScroll}
-              contentContainerStyle={styles.detailContent}
-            >
+            <Text style={styles.subtitle}>The app encountered an unexpected error.</Text>
+            <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailContent}>
               <Text style={styles.detailText} selectable>
                 {detail}
               </Text>
             </ScrollView>
-            <Pressable
-              style={styles.button}
-              onPress={this.handleRetry}
-              accessibilityRole="button"
-            >
+            <Pressable style={styles.button} onPress={this.handleRetry} accessibilityRole="button">
               <Text style={styles.buttonText}>Try again</Text>
             </Pressable>
           </View>

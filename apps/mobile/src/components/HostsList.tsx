@@ -4,11 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { colors, palette } from '../styles/colors'
 import { SWRList } from './SWRList'
 
-export function HostsList({
-  onSelectHost,
-}: {
-  onSelectHost: (host: string) => void
-}) {
+export function HostsList({ onSelectHost }: { onSelectHost: (host: string) => void }) {
   const response = useHosts()
 
   return (

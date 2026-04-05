@@ -19,9 +19,7 @@ function ensureInitialized(): void {
   scanner.initialize(app())
 }
 
-export async function runThumbnailScanner(
-  signal?: AbortSignal,
-): Promise<ThumbnailScannerResult> {
+export async function runThumbnailScanner(signal?: AbortSignal): Promise<ThumbnailScannerResult> {
   ensureInitialized()
   const result = await scanner.runScan(signal)
   if (result.produced.length > 0) {

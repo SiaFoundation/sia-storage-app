@@ -37,9 +37,7 @@ export async function queryThumbnailSizesForFileId(
   )
   return rows
     .map((r) => (typeof r.thumbSize === 'number' ? r.thumbSize : null))
-    .filter(
-      (n): n is ThumbSize => n !== null && ThumbSizes.includes(n as ThumbSize),
-    )
+    .filter((n): n is ThumbSize => n !== null && ThumbSizes.includes(n as ThumbSize))
     .sort((a, b) => a - b)
 }
 
@@ -111,9 +109,7 @@ export async function queryThumbnailCandidatePage(
   cursor?: { createdAt: number; id: string },
 ): Promise<ThumbnailCandidateRow[]> {
   const params: (string | number)[] = []
-  const cursorClause = cursor
-    ? 'AND (f.createdAt < ? OR (f.createdAt = ? AND f.id < ?))'
-    : ''
+  const cursorClause = cursor ? 'AND (f.createdAt < ? OR (f.createdAt = ? AND f.id < ?))' : ''
   if (cursor) {
     params.push(cursor.createdAt, cursor.createdAt, cursor.id)
   }
