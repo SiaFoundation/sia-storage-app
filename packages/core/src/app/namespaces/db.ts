@@ -389,14 +389,14 @@ export function buildDbNamespaces(
     },
     directories: {
       getAll: () => ops.queryAllDirectoriesWithCounts(db),
-      getByName: (name) => ops.queryDirectoryByName(db, name),
-      getNameForFile: (fileId) => ops.queryDirectoryNameForFile(db, fileId),
-      create: async (name) => {
-        const dir = await ops.insertDirectory(db, name)
+      getByPath: (path) => ops.queryDirectoryByPath(db, path),
+      getPathForFile: (fileId) => ops.queryDirectoryPathForFile(db, fileId),
+      create: async (path) => {
+        const dir = await ops.insertDirectory(db, path)
         caches.directories.invalidate('all')
         return dir
       },
-      getOrCreate: (name) => ops.getOrCreateDirectory(db, name),
+      getOrCreate: (path) => ops.getOrCreateDirectory(db, path),
       delete: async (id) => {
         await ops.deleteDirectory(db, id)
         caches.directories.invalidateAll()
@@ -409,8 +409,8 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
         return fileIds
       },
-      rename: async (id, name) => {
-        await ops.renameDirectory(db, id, name)
+      rename: async (id, path) => {
+        await ops.renameDirectory(db, id, path)
         caches.directories.invalidate('all')
         caches.libraryVersion.invalidate()
       },
@@ -430,9 +430,9 @@ export function buildDbNamespaces(
       },
       countFilesWithDirectories: (fileIds) =>
         ops.queryCountFilesWithDirectories(db, fileIds),
-      syncFromMetadata: async (fileId, dirName, opts) => {
-        if (dirName === undefined) return
-        await ops.syncDirectoryFromMetadata(db, fileId, dirName, {
+      syncFromMetadata: async (fileId, dirPath, opts) => {
+        if (dirPath === undefined) return
+        await ops.syncDirectoryFromMetadata(db, fileId, dirPath, {
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (!opts?.skipInvalidation) {

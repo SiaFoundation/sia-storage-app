@@ -37,13 +37,13 @@ export function SelectDirectorySheet({
   const dirs = allDirs.data ?? []
   const filtered = query.trim()
     ? dirs.filter((d) =>
-        d.name.toLowerCase().includes(query.trim().toLowerCase()),
+        d.path.toLowerCase().includes(query.trim().toLowerCase()),
       )
     : dirs
 
   const exactMatch =
     query.trim().length > 0 &&
-    dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
+    dirs.some((d) => d.path.toLowerCase() === query.trim().toLowerCase())
 
   const handleShow = useFocusOnShow(inputRef)
 
@@ -74,13 +74,13 @@ export function SelectDirectorySheet({
       if (!trimmed) return
       try {
         const dir = await app().directories.create(trimmed)
-        handleSelect(dir.name)
+        handleSelect(dir.path)
       } catch {
         const existing = dirs.find(
-          (d) => d.name.toLowerCase() === trimmed.toLowerCase(),
+          (d) => d.path.toLowerCase() === trimmed.toLowerCase(),
         )
         if (existing) {
-          handleSelect(existing.name)
+          handleSelect(existing.path)
         }
       }
     },
@@ -159,14 +159,14 @@ export function SelectDirectorySheet({
         renderItem={({ item }) => (
           <Pressable
             style={styles.dirRow}
-            onPress={() => handleSelect(item.name)}
+            onPress={() => handleSelect(item.path)}
           >
             <View style={styles.dirRowLeft}>
               <FolderIcon size={18} color={palette.blue[400]} />
-              <Text style={styles.dirName}>{item.name}</Text>
+              <Text style={styles.dirName}>{item.path}</Text>
               <Text style={styles.dirCount}>{item.fileCount}</Text>
             </View>
-            {item.name.toLowerCase() === currentValue.toLowerCase() && (
+            {item.path.toLowerCase() === currentValue.toLowerCase() && (
               <CheckIcon size={18} color={palette.blue[400]} />
             )}
           </Pressable>

@@ -62,7 +62,7 @@ export async function generateDataset(
     const name = `folder-${String(i).padStart(4, '0')}`
     dirIds.push(id)
     await db.runAsync(
-      'INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
+      'INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
       id,
       name,
       Date.now(),

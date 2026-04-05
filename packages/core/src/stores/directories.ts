@@ -14,6 +14,6 @@ export function useDirectoryForFile(fileId: string | null) {
   const app = useApp()
   return useSWR(
     fileId ? app.caches.directories.key(`file/${fileId}`) : null,
-    () => (fileId ? app.directories.getNameForFile(fileId) : undefined),
+    () => (fileId ? app.directories.getPathForFile(fileId) : undefined),
   )
 }

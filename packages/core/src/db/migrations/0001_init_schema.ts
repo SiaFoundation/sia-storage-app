@@ -6,7 +6,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
   await db.execAsync(
     `CREATE TABLE IF NOT EXISTS directories (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
+      path TEXT NOT NULL UNIQUE,
       createdAt INTEGER NOT NULL,
       nameSortKey TEXT
     );`,

@@ -43,7 +43,7 @@ describe('Directory Cascade', () => {
 
     const dirsBefore = await app.readAllDirectoriesWithCounts()
     expect(dirsBefore).toHaveLength(1)
-    expect(dirsBefore[0].name).toBe('Empty')
+    expect(dirsBefore[0].path).toBe('Empty')
 
     await app.app.directories.delete(dirsBefore[0].id)
 
@@ -58,12 +58,12 @@ describe('Directory Cascade', () => {
 
     await app.moveFileToDirectory(files[0].id, src.id)
 
-    const nameAfterSrc = await app.readDirectoryNameForFile(files[0].id)
-    expect(nameAfterSrc).toBe('Src')
+    const pathAfterSrc = await app.readDirectoryPathForFile(files[0].id)
+    expect(pathAfterSrc).toBe('Src')
 
     await app.moveFileToDirectory(files[0].id, dst.id)
 
-    const nameAfterDst = await app.readDirectoryNameForFile(files[0].id)
-    expect(nameAfterDst).toBe('Dst')
+    const pathAfterDst = await app.readDirectoryPathForFile(files[0].id)
+    expect(pathAfterDst).toBe('Dst')
   })
 })

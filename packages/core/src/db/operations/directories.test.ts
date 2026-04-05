@@ -7,9 +7,9 @@ import {
   moveFileToDirectory,
   queryAllDirectoriesWithCounts,
   queryCountFilesWithDirectories,
-  queryDirectoryNameForFile,
+  queryDirectoryPathForFile,
   renameDirectory,
-  sanitizeDirectoryName,
+  sanitizeDirectoryPath,
   syncDirectoryFromMetadata,
 } from './directories'
 import { insertFileRecord, queryFileRecordById } from './files'
@@ -35,54 +35,54 @@ async function createTestFile(id: string) {
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
 
-describe('sanitizeDirectoryName', () => {
+describe('sanitizeDirectoryPath', () => {
   it('strips forward slashes', () => {
-    expect(sanitizeDirectoryName('a/b/c')).toBe('abc')
+    expect(sanitizeDirectoryPath('a/b/c')).toBe('abc')
   })
 
   it('strips backslashes', () => {
-    expect(sanitizeDirectoryName('a\\b')).toBe('ab')
+    expect(sanitizeDirectoryPath('a\\b')).toBe('ab')
   })
 
   it('strips control characters', () => {
-    expect(sanitizeDirectoryName('hello\x00world\x1f')).toBe('helloworld')
+    expect(sanitizeDirectoryPath('hello\x00world\x1f')).toBe('helloworld')
   })
 
   it('strips DEL character', () => {
-    expect(sanitizeDirectoryName('hello\x7fworld')).toBe('helloworld')
+    expect(sanitizeDirectoryPath('hello\x7fworld')).toBe('helloworld')
   })
 
   it('rejects . as empty', () => {
-    expect(sanitizeDirectoryName('.')).toBe('')
+    expect(sanitizeDirectoryPath('.')).toBe('')
   })
 
   it('rejects .. as empty', () => {
-    expect(sanitizeDirectoryName('..')).toBe('')
+    expect(sanitizeDirectoryPath('..')).toBe('')
   })
 
   it('rejects ... as empty', () => {
-    expect(sanitizeDirectoryName('...')).toBe('')
+    expect(sanitizeDirectoryPath('...')).toBe('')
   })
 
   it('trims whitespace', () => {
-    expect(sanitizeDirectoryName('  hello  ')).toBe('hello')
+    expect(sanitizeDirectoryPath('  hello  ')).toBe('hello')
   })
 
   it('truncates to 255 characters', () => {
     const long = 'a'.repeat(300)
-    expect(sanitizeDirectoryName(long)).toBe('a'.repeat(255))
+    expect(sanitizeDirectoryPath(long)).toBe('a'.repeat(255))
   })
 
   it('rejects ... as empty', () => {
-    expect(sanitizeDirectoryName('...')).toBe('')
+    expect(sanitizeDirectoryPath('...')).toBe('')
   })
 
   it('preserves valid names', () => {
-    expect(sanitizeDirectoryName('Photos 2024')).toBe('Photos 2024')
+    expect(sanitizeDirectoryPath('Photos 2024')).toBe('Photos 2024')
   })
 
   it('returns empty for whitespace-only input', () => {
-    expect(sanitizeDirectoryName('   ')).toBe('')
+    expect(sanitizeDirectoryPath('   ')).toBe('')
   })
 })
 
@@ -90,13 +90,13 @@ describe('insertDirectory', () => {
   it('creates a directory with correct fields', async () => {
     const dir = await insertDirectory(db(), 'Photos')
     expect(dir.id).toBeDefined()
-    expect(dir.name).toBe('Photos')
+    expect(dir.path).toBe('Photos')
     expect(dir.createdAt).toBeGreaterThan(0)
   })
 
   it('trims the name', async () => {
     const dir = await insertDirectory(db(), '  Photos  ')
-    expect(dir.name).toBe('Photos')
+    expect(dir.path).toBe('Photos')
   })
 
   it('throws on empty name', async () => {
@@ -109,13 +109,13 @@ describe('insertDirectory', () => {
     const dir1 = await insertDirectory(db(), 'Photos')
     const dir2 = await insertDirectory(db(), 'photos')
     expect(dir1.id).not.toBe(dir2.id)
-    expect(dir1.name).toBe('Photos')
-    expect(dir2.name).toBe('photos')
+    expect(dir1.path).toBe('Photos')
+    expect(dir2.path).toBe('photos')
   })
 
   it('sanitizes slashes from the name', async () => {
     const dir = await insertDirectory(db(), 'my/folder\\name')
-    expect(dir.name).toBe('myfoldername')
+    expect(dir.path).toBe('myfoldername')
   })
 })
 
@@ -124,14 +124,14 @@ describe('getOrCreateDirectory', () => {
     const dir1 = await getOrCreateDirectory(db(), 'Photos')
     const dir2 = await getOrCreateDirectory(db(), 'photos')
     expect(dir1.id).not.toBe(dir2.id)
-    expect(dir1.name).toBe('Photos')
-    expect(dir2.name).toBe('photos')
+    expect(dir1.path).toBe('Photos')
+    expect(dir2.path).toBe('photos')
   })
 
   it('creates a new directory if not found', async () => {
     const dir = await getOrCreateDirectory(db(), 'Videos')
     expect(dir.id).toBeDefined()
-    expect(dir.name).toBe('Videos')
+    expect(dir.path).toBe('Videos')
   })
 })
 
@@ -145,7 +145,7 @@ describe('queryAllDirectoriesWithCounts', () => {
 
     const dirs = await queryAllDirectoriesWithCounts(db())
     expect(dirs).toHaveLength(1)
-    expect(dirs[0].name).toBe('Photos')
+    expect(dirs[0].path).toBe('Photos')
     expect(dirs[0].fileCount).toBe(2)
   })
 
@@ -268,7 +268,7 @@ describe('renameDirectory', () => {
     await renameDirectory(db(), dir.id, 'Pictures')
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    expect(dirs[0].name).toBe('Pictures')
+    expect(dirs[0].path).toBe('Pictures')
   })
 
   it('throws on empty name', async () => {
@@ -291,7 +291,7 @@ describe('renameDirectory', () => {
     await renameDirectory(db(), dir.id, '  New/Name  ')
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    expect(dirs[0].name).toBe('NewName')
+    expect(dirs[0].path).toBe('NewName')
   })
 
   it('bumps updatedAt on files in the directory', async () => {
@@ -315,7 +315,7 @@ describe('moveFileToDirectory', () => {
     await createTestFile('f1')
     await moveFileToDirectory(db(), 'f1', dir.id)
 
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBe('Photos')
   })
 
@@ -325,7 +325,7 @@ describe('moveFileToDirectory', () => {
     await moveFileToDirectory(db(), 'f1', dir.id)
     await moveFileToDirectory(db(), 'f1', null)
 
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBeUndefined()
   })
 
@@ -348,8 +348,8 @@ describe('moveFilesToDirectory', () => {
     await createTestFile('f2')
     await moveFilesToDirectory(db(), ['f1', 'f2'], dir.id)
 
-    const name1 = await queryDirectoryNameForFile(db(), 'f1')
-    const name2 = await queryDirectoryNameForFile(db(), 'f2')
+    const name1 = await queryDirectoryPathForFile(db(), 'f1')
+    const name2 = await queryDirectoryPathForFile(db(), 'f2')
     expect(name1).toBe('Photos')
     expect(name2).toBe('Photos')
   })
@@ -364,7 +364,7 @@ describe('syncDirectoryFromMetadata', () => {
     await createTestFile('f1')
     await syncDirectoryFromMetadata(db(), 'f1', 'Photos')
 
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBe('Photos')
   })
 
@@ -375,7 +375,7 @@ describe('syncDirectoryFromMetadata', () => {
 
     await syncDirectoryFromMetadata(db(), 'f1', undefined)
 
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBe('Photos')
   })
 
@@ -394,19 +394,19 @@ describe('syncDirectoryFromMetadata', () => {
   })
 })
 
-describe('queryDirectoryNameForFile', () => {
+describe('queryDirectoryPathForFile', () => {
   it('returns the directory name', async () => {
     const dir = await insertDirectory(db(), 'Photos')
     await createTestFile('f1')
     await moveFileToDirectory(db(), 'f1', dir.id)
 
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBe('Photos')
   })
 
   it('returns undefined when file has no directory', async () => {
     await createTestFile('f1')
-    const name = await queryDirectoryNameForFile(db(), 'f1')
+    const name = await queryDirectoryPathForFile(db(), 'f1')
     expect(name).toBeUndefined()
   })
 })
@@ -420,7 +420,7 @@ describe('natural sort order', () => {
     await insertDirectory(db(), 'Folder 3')
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    const names = dirs.map((d) => d.name)
+    const names = dirs.map((d) => d.path)
     expect(names).toEqual([
       'Folder 1',
       'Folder 2',

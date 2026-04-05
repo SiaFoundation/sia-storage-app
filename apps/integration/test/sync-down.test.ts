@@ -218,12 +218,12 @@ describe('Sync Down', () => {
       { timeout: 10_000, message: 'File with directory to sync' },
     )
 
-    const dirName = await app.readDirectoryNameForFile(fileId!)
-    expect(dirName).toBe('Vacation')
+    const dirPath = await app.readDirectoryPathForFile(fileId!)
+    expect(dirPath).toBe('Vacation')
 
     const dirs = await app.readAllDirectoriesWithCounts()
     expect(dirs).toHaveLength(1)
-    expect(dirs[0].name).toBe('Vacation')
+    expect(dirs[0].path).toBe('Vacation')
     expect(dirs[0].fileCount).toBe(1)
   })
 
@@ -241,7 +241,7 @@ describe('Sync Down', () => {
         const files = await app.getFiles()
         if (files.length === 1) {
           fileId = files[0].id
-          const dir = await app.readDirectoryNameForFile(files[0].id)
+          const dir = await app.readDirectoryPathForFile(files[0].id)
           return dir === 'Trip'
         }
         return false
@@ -253,14 +253,14 @@ describe('Sync Down', () => {
 
     await waitForCondition(
       async () => {
-        const dir = await app.readDirectoryNameForFile(fileId!)
+        const dir = await app.readDirectoryPathForFile(fileId!)
         return dir === 'Vacation'
       },
       { timeout: 10_000, message: 'Updated directory to sync' },
     )
 
     const dirs = await app.readAllDirectoriesWithCounts()
-    const vacationDir = dirs.find((d) => d.name === 'Vacation')
+    const vacationDir = dirs.find((d) => d.path === 'Vacation')
     expect(vacationDir).toBeDefined()
     expect(vacationDir!.fileCount).toBe(1)
   })
