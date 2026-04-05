@@ -221,8 +221,8 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
     expect(tagsA.map((t) => t.name).sort()).toEqual(['summer', 'vacation'])
     expect(tagsB.map((t) => t.name).sort()).toEqual(['summer', 'vacation'])
 
-    const dirA = await appA.app.directories.getNameForFile('tagged-file')
-    const dirB = await appB.app.directories.getNameForFile('tagged-file')
+    const dirA = await appA.app.directories.getPathForFile('tagged-file')
+    const dirB = await appB.app.directories.getPathForFile('tagged-file')
     expect(dirA).toBe('Photos')
     expect(dirB).toBe('Photos')
   })

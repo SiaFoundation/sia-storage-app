@@ -68,7 +68,7 @@ describe('directories store', () => {
     const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
     await app().directories.rename(dir.id, 'Images')
     const dirs = await app().directories.getAll()
-    expect(dirs.find((d: { id: string }) => d.id === dir.id)?.name).toBe(
+    expect(dirs.find((d: { id: string }) => d.id === dir.id)?.path).toBe(
       'Images',
     )
     expect(dirSpy).toHaveBeenCalledWith('all')
@@ -84,7 +84,7 @@ describe('directories store', () => {
     await app().directories.syncFromMetadata('f1', undefined)
     const dirsAfter = await app().directories.getAll()
 
-    expect(dirsAfter.some((d: { name: string }) => d.name === 'Photos')).toBe(
+    expect(dirsAfter.some((d: { path: string }) => d.path === 'Photos')).toBe(
       true,
     )
     expect(dirSpy).not.toHaveBeenCalled()
@@ -98,7 +98,7 @@ describe('directories store', () => {
     await app().directories.syncFromMetadata('f1', 'Photos')
 
     const dirs = await app().directories.getAll()
-    expect(dirs.some((d: { name: string }) => d.name === 'Photos')).toBe(true)
+    expect(dirs.some((d: { path: string }) => d.path === 'Photos')).toBe(true)
     expect(dirSpy).toHaveBeenCalledWith('all')
     expect(verSpy).toHaveBeenCalled()
   })

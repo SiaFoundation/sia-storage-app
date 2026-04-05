@@ -268,20 +268,20 @@ export interface AppService {
   directories: {
     /** Returns all directories with their file counts. */
     getAll(): Promise<DirectoryWithCount[]>
-    /** Returns a directory by exact name match. */
-    getByName(name: string): Promise<Directory | null>
-    /** Returns the directory name for a file, or undefined if unfiled. */
-    getNameForFile(fileId: string): Promise<string | undefined>
+    /** Returns a directory by exact path match. */
+    getByPath(path: string): Promise<Directory | null>
+    /** Returns the directory path for a file, or undefined if unfiled. */
+    getPathForFile(fileId: string): Promise<string | undefined>
     /** Creates a new directory. */
-    create(name: string): Promise<Directory>
-    /** Returns an existing directory by name, or creates one if it does not exist. */
-    getOrCreate(name: string): Promise<Directory>
+    create(path: string): Promise<Directory>
+    /** Returns an existing directory by path, or creates one if it does not exist. */
+    getOrCreate(path: string): Promise<Directory>
     /** Deletes a directory without affecting its files. */
     delete(id: string): Promise<void>
     /** Deletes a directory and trashes all its files. */
     deleteAndTrashFiles(id: string): Promise<string[]>
     /** Renames a directory. */
-    rename(id: string, name: string): Promise<void>
+    rename(id: string, path: string): Promise<void>
     /** Moves a file into a directory, or removes it from all directories if null. */
     moveFile(fileId: string, dirId: string | null): Promise<void>
     /** Moves multiple files into a directory. */
@@ -291,12 +291,12 @@ export interface AppService {
     /** Reconciles a file's directory assignment with metadata. */
     syncFromMetadata(
       fileId: string,
-      dirName: string | undefined,
+      dirPath: string | undefined,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
     /** Batch reconciles directory assignments from metadata. Returns old version groups for recalculation. */
     syncManyFromMetadata(
-      entries: { fileId: string; directoryName: string }[],
+      entries: { fileId: string; directoryPath: string }[],
       opts?: { skipInvalidation?: boolean },
     ): Promise<{ name: string; directoryId: string | null }[]>
   }

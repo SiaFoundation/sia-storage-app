@@ -50,8 +50,8 @@ export function CreateDirectorySheet({ onCreated }: Props) {
       setName('')
       setError('')
       closeSheet()
-      toast.show(`Created "${dir.name}"`)
-      onCreated?.(dir.id, dir.name)
+      toast.show(`Created "${dir.path}"`)
+      onCreated?.(dir.id, dir.path)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create folder')
     }

@@ -27,7 +27,7 @@ import { getUploadManager } from './uploader'
 
 // Change this value to force a one-time app reset on next launch.
 // Set to null to disable. Stored via app service settings so each value only triggers once.
-const FORCED_RESET_VERSION: string | null = '40582'
+const FORCED_RESET_VERSION: string | null = '71936'
 
 export async function initApp(): Promise<void> {
   if (FORCED_RESET_VERSION) {

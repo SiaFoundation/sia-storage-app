@@ -41,7 +41,7 @@ describe('Bulk Operations', () => {
     }
 
     const dirs = await app.readAllDirectoriesWithCounts()
-    const photosDir = dirs.find((d) => d.name === 'Photos')
+    const photosDir = dirs.find((d) => d.path === 'Photos')
     expect(photosDir).toBeDefined()
     expect(photosDir!.fileCount).toBe(3)
   })

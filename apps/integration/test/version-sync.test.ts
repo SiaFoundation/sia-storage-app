@@ -282,7 +282,7 @@ describe('Version Sync', () => {
 
     // Both files are now in FolderY — they're versions of each other
     const dirs = await appB.app.directories.getAll()
-    const folderY = dirs.find((d) => d.name === 'FolderY')
+    const folderY = dirs.find((d) => d.path === 'FolderY')
     expect(folderY).toBeDefined()
     expect(folderY!.fileCount).toBe(1)
 

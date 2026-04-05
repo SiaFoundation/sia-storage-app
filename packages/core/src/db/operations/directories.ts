@@ -11,7 +11,7 @@ import { buildLatestVersionFilter } from './library'
 import { trashFiles } from './trash'
 export type Directory = {
   id: string
-  name: string
+  path: string
   createdAt: number
 }
 
@@ -19,9 +19,9 @@ export type DirectoryWithCount = Directory & {
   fileCount: number
 }
 
-export function sanitizeDirectoryName(name: string): string {
+export function sanitizeDirectoryPath(path: string): string {
   let result = ''
-  for (const ch of name) {
+  for (const ch of path) {
     const code = ch.codePointAt(0)!
     if (ch === '/' || ch === '\\') continue
     if (code < 0x20 || code === 0x7f) continue
@@ -34,15 +34,15 @@ export function sanitizeDirectoryName(name: string): string {
 
 export async function insertDirectory(
   db: DatabaseAdapter,
-  name: string,
+  path: string,
 ): Promise<Directory> {
-  const trimmed = sanitizeDirectoryName(name)
+  const trimmed = sanitizeDirectoryPath(path)
   if (!trimmed) {
     throw new Error('Folder name cannot be empty')
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ?',
+    'SELECT id FROM directories WHERE path = ?',
     trimmed,
   )
   if (existing) {
@@ -52,7 +52,7 @@ export async function insertDirectory(
   const now = Date.now()
   const dir: Directory = {
     id: uniqueId(),
-    name: trimmed,
+    path: trimmed,
     createdAt: now,
   }
 
@@ -65,9 +65,9 @@ export async function insertDirectory(
 
 export async function getOrCreateDirectory(
   db: DatabaseAdapter,
-  name: string,
+  path: string,
 ): Promise<Directory> {
-  const trimmed = sanitizeDirectoryName(name)
+  const trimmed = sanitizeDirectoryPath(path)
   if (!trimmed) {
     throw new Error('Folder name cannot be empty')
   }
@@ -75,7 +75,7 @@ export async function getOrCreateDirectory(
   const now = Date.now()
   const id = uniqueId()
   await db.runAsync(
-    `INSERT OR IGNORE INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO directories (id, path, createdAt, nameSortKey) VALUES (?, ?, ?, ?)`,
     id,
     trimmed,
     now,
@@ -83,7 +83,7 @@ export async function getOrCreateDirectory(
   )
 
   const dir = await db.getFirstAsync<Directory>(
-    'SELECT id, name, createdAt FROM directories WHERE name = ?',
+    'SELECT id, path, createdAt FROM directories WHERE path = ?',
     trimmed,
   )
 
@@ -98,7 +98,7 @@ export async function queryAllDirectoriesWithCounts(
   db: DatabaseAdapter,
 ): Promise<DirectoryWithCount[]> {
   return db.getAllAsync<DirectoryWithCount>(
-    `SELECT d.id, d.name, d.createdAt, COUNT(f.id) as fileCount
+    `SELECT d.id, d.path, d.createdAt, COUNT(f.id) as fileCount
      FROM directories d
      LEFT JOIN files f ON f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND ${buildLatestVersionFilter('f')}
@@ -107,27 +107,27 @@ export async function queryAllDirectoriesWithCounts(
   )
 }
 
-export async function queryDirectoryNameForFile(
+export async function queryDirectoryPathForFile(
   db: DatabaseAdapter,
   fileId: string,
 ): Promise<string | undefined> {
-  const row = await db.getFirstAsync<{ name: string }>(
-    `SELECT d.name FROM directories d
+  const row = await db.getFirstAsync<{ path: string }>(
+    `SELECT d.path FROM directories d
      INNER JOIN files f ON f.directoryId = d.id
      WHERE f.id = ?`,
     fileId,
   )
-  return row?.name
+  return row?.path
 }
 
 export async function syncDirectoryFromMetadata(
   db: DatabaseAdapter,
   fileId: string,
-  directoryName: string | undefined,
+  directoryPath: string | undefined,
   options?: { skipCurrentRecalc?: boolean },
 ): Promise<void> {
-  if (directoryName === undefined) return
-  const dir = await getOrCreateDirectory(db, directoryName)
+  if (directoryPath === undefined) return
+  const dir = await getOrCreateDirectory(db, directoryPath)
   if (options?.skipCurrentRecalc) {
     await sql.update(db, 'files', { directoryId: dir.id }, { id: fileId })
     return
@@ -145,15 +145,15 @@ export async function syncDirectoryFromMetadata(
 
 export async function syncManyDirectoriesFromMetadata(
   db: DatabaseAdapter,
-  entries: { fileId: string; directoryName: string }[],
+  entries: { fileId: string; directoryPath: string }[],
 ): Promise<{ name: string; directoryId: string | null }[]> {
   if (entries.length === 0) return []
 
-  const dirNames = [...new Set(entries.map((e) => e.directoryName))]
+  const dirPaths = [...new Set(entries.map((e) => e.directoryPath))]
   const dirMap = new Map<string, string>()
-  for (const name of dirNames) {
-    const dir = await getOrCreateDirectory(db, name)
-    dirMap.set(name, dir.id)
+  for (const path of dirPaths) {
+    const dir = await getOrCreateDirectory(db, path)
+    dirMap.set(path, dir.id)
   }
 
   const fileIds = entries.map((e) => e.fileId)
@@ -168,7 +168,7 @@ export async function syncManyDirectoriesFromMetadata(
 
   const byDirId = new Map<string, string[]>()
   for (const entry of entries) {
-    const dirId = dirMap.get(entry.directoryName)!
+    const dirId = dirMap.get(entry.directoryPath)!
     const list = byDirId.get(dirId) || []
     list.push(entry.fileId)
     byDirId.set(dirId, list)
@@ -288,20 +288,20 @@ export async function queryCountFilesWithDirectories(
   return row?.count ?? 0
 }
 
-export async function queryDirectoryByName(
+export async function queryDirectoryByPath(
   db: DatabaseAdapter,
-  name: string,
+  path: string,
 ): Promise<Directory | null> {
   return db.getFirstAsync<Directory>(
-    'SELECT id, name, createdAt FROM directories WHERE name = ? LIMIT 1',
-    name,
+    'SELECT id, path, createdAt FROM directories WHERE path = ? LIMIT 1',
+    path,
   )
 }
 
 export async function queryFileByNameInDirectory(
   db: DatabaseAdapter,
   fileName: string,
-  directoryName: string,
+  directoryPath: string,
 ): Promise<FileRecordRow | null> {
   if (!fileName) return null
   return db.getFirstAsync<FileRecordRow>(
@@ -311,44 +311,44 @@ export async function queryFileByNameInDirectory(
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE f.name = ? AND f.kind = 'file'
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND d.name = ?
+       AND d.path = ?
        AND ${buildLatestVersionFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC
      LIMIT 1`,
     fileName,
-    directoryName,
+    directoryPath,
   )
 }
 
-export async function queryFilesByDirectoryName(
+export async function queryFilesByDirectoryPath(
   db: DatabaseAdapter,
-  directoryName: string,
+  directoryPath: string,
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
     `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind,
             f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
      FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
-     WHERE d.name = ? AND f.kind = 'file'
+     WHERE d.path = ? AND f.kind = 'file'
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND ${buildLatestVersionFilter('f')}
      ORDER BY f.nameSortKey`,
-    directoryName,
+    directoryPath,
   )
 }
 
 export async function renameDirectory(
   db: DatabaseAdapter,
   dirId: string,
-  name: string,
+  path: string,
 ): Promise<void> {
-  const trimmed = sanitizeDirectoryName(name)
+  const trimmed = sanitizeDirectoryPath(path)
   if (!trimmed) {
     throw new Error('Folder name cannot be empty')
   }
 
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE name = ? AND id != ?',
+    'SELECT id FROM directories WHERE path = ? AND id != ?',
     trimmed,
     dirId,
   )
@@ -359,7 +359,7 @@ export async function renameDirectory(
   await sql.update(
     db,
     'directories',
-    { name: trimmed, nameSortKey: naturalSortKey(trimmed) },
+    { path: trimmed, nameSortKey: naturalSortKey(trimmed) },
     { id: dirId },
   )
   const now = Date.now()

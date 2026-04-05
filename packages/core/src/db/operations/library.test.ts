@@ -244,7 +244,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
+      "INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryUnfiledFileCount(db())
@@ -255,7 +255,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
+      "INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryDirectoryFileCount(db(), 'dir1')
@@ -266,7 +266,7 @@ describe('library count queries', () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await db().runAsync(
-      "INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
+      "INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
     )
     await db().runAsync("UPDATE files SET directoryId = 'dir1' WHERE id = 'f1'")
     const count = await queryDirectoryFileCount(db(), UNFILED_DIRECTORY_ID)

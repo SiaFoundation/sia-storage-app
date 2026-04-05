@@ -42,13 +42,13 @@ export function MoveToDirectorySheet({
   const dirs = allDirs.data ?? []
   const filtered = query.trim()
     ? dirs.filter((d) =>
-        d.name.toLowerCase().includes(query.trim().toLowerCase()),
+        d.path.toLowerCase().includes(query.trim().toLowerCase()),
       )
     : dirs
 
   const exactMatch =
     query.trim().length > 0 &&
-    dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
+    dirs.some((d) => d.path.toLowerCase() === query.trim().toLowerCase())
 
   const handleShow = useFocusOnShow(inputRef)
 
@@ -56,7 +56,7 @@ export function MoveToDirectorySheet({
     if (isOpen) {
       if (isSingleFile) {
         app()
-          .directories.getNameForFile(fileIds[0])
+          .directories.getPathForFile(fileIds[0])
           .then((name) => setCurrentDirName(name ?? null))
       } else {
         app()
@@ -82,7 +82,7 @@ export function MoveToDirectorySheet({
         closeSheet()
         toast.show(
           targetDir
-            ? `Moved to "${targetDir.name}"`
+            ? `Moved to "${targetDir.path}"`
             : `Moved ${fileIds.length === 1 ? 'file' : 'files'} to folder`,
         )
         onComplete?.()
@@ -117,7 +117,7 @@ export function MoveToDirectorySheet({
           await handleMoveToDirectory(dir.id)
         } catch {
           const existing = dirs.find(
-            (d) => d.name.toLowerCase() === name.trim().toLowerCase(),
+            (d) => d.path.toLowerCase() === name.trim().toLowerCase(),
           )
           if (existing) {
             await handleMoveToDirectory(existing.id)
@@ -242,7 +242,7 @@ export function MoveToDirectorySheet({
               ) : (
                 <FolderIcon size={18} color={palette.blue[400]} />
               )}
-              <Text style={styles.dirName}>{item.name}</Text>
+              <Text style={styles.dirName}>{item.path}</Text>
               <Text style={styles.dirCount}>{item.fileCount}</Text>
             </View>
           </Pressable>

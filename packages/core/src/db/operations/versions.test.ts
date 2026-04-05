@@ -70,7 +70,7 @@ async function createFile(
 
 async function createDirectory(id: string, name: string) {
   await db().runAsync(
-    'INSERT INTO directories (id, name, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
+    'INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES (?, ?, ?, ?)',
     id,
     name,
     base,
@@ -193,7 +193,7 @@ describe('version filtering', () => {
     })
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    const photos = dirs.find((d) => d.name === 'Photos')
+    const photos = dirs.find((d) => d.path === 'Photos')
     expect(photos?.fileCount).toBe(1)
   })
 
@@ -352,14 +352,14 @@ describe('move-all with staggered timestamps', () => {
     })
 
     const dirsBefore = await queryAllDirectoriesWithCounts(db())
-    expect(dirsBefore.find((d) => d.name === 'Source')!.fileCount).toBe(1)
-    expect(dirsBefore.find((d) => d.name === 'Dest')!.fileCount).toBe(0)
+    expect(dirsBefore.find((d) => d.path === 'Source')!.fileCount).toBe(1)
+    expect(dirsBefore.find((d) => d.path === 'Dest')!.fileCount).toBe(0)
 
     await moveAllFileVersions(db(), 'photo.jpg', 'dir-a', 'dir-b')
 
     const dirsAfter = await queryAllDirectoriesWithCounts(db())
-    expect(dirsAfter.find((d) => d.name === 'Source')!.fileCount).toBe(0)
-    expect(dirsAfter.find((d) => d.name === 'Dest')!.fileCount).toBe(1)
+    expect(dirsAfter.find((d) => d.path === 'Source')!.fileCount).toBe(0)
+    expect(dirsAfter.find((d) => d.path === 'Dest')!.fileCount).toBe(1)
 
     const totalCount = await queryLibraryFileCount(db())
     expect(totalCount).toBe(1)
@@ -527,7 +527,7 @@ describe('local version creation inherits metadata', () => {
     })
 
     const dirs = await queryAllDirectoriesWithCounts(db())
-    const photos = dirs.find((d) => d.name === 'Photos')
+    const photos = dirs.find((d) => d.path === 'Photos')
     expect(photos?.fileCount).toBe(1)
   })
 

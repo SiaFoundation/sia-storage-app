@@ -132,7 +132,7 @@ export interface TestApp {
   createDirectory(name: string): Promise<Directory>
   moveFileToDirectory(fileId: string, dirId: string): Promise<void>
   renameDirectory(dirId: string, newName: string): Promise<void>
-  readDirectoryNameForFile(fileId: string): Promise<string | undefined>
+  readDirectoryPathForFile(fileId: string): Promise<string | undefined>
   readAllDirectoriesWithCounts(): Promise<DirectoryWithCount[]>
 
   updateFileRecord(
@@ -501,8 +501,8 @@ export function createTestApp(
       await appService.directories.rename(dirId, newName)
     },
 
-    readDirectoryNameForFile: (fileId) =>
-      appService.directories.getNameForFile(fileId),
+    readDirectoryPathForFile: (fileId) =>
+      appService.directories.getPathForFile(fileId),
     readAllDirectoriesWithCounts: () => appService.directories.getAll(),
 
     updateFileRecord: (update, opts) => appService.files.update(update, opts),

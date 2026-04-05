@@ -32,7 +32,7 @@ export function DirectoriesGrid({
     if ((unfiledCount.data ?? 0) > 0) {
       items.push({
         id: UNFILED_DIRECTORY_ID,
-        name: 'No folder',
+        path: 'No folder',
         createdAt: 0,
         fileCount: unfiledCount.data ?? 0,
       })
@@ -68,7 +68,7 @@ export function DirectoriesGrid({
       renderItem={({ item }) => (
         <DirectoryCard
           dir={item}
-          onPress={() => onSelectDirectory(item.id, item.name)}
+          onPress={() => onSelectDirectory(item.id, item.path)}
           isUnfiled={item.id === UNFILED_DIRECTORY_ID}
         />
       )}
@@ -98,7 +98,7 @@ function DirectoryCard({
       )}
       <View style={styles.cardText}>
         <Text style={styles.dirName} numberOfLines={1}>
-          {dir.name}
+          {dir.path}
         </Text>
         <Text style={styles.dirCount}>
           {dir.fileCount.toLocaleString()}{' '}

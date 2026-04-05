@@ -436,7 +436,7 @@ async function processBatch(
   // 3B: Batch directory sync.
   const dirEntries = syncableEvents
     .filter((e) => e.directory !== undefined)
-    .map((e) => ({ fileId: e.fileRecord.id, directoryName: e.directory! }))
+    .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
   let oldDirGroups: { name: string; directoryId: string | null }[] = []
   if (dirEntries.length > 0) {
     oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {

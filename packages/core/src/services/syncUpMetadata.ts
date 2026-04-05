@@ -215,7 +215,7 @@ export async function syncUpMetadataBatch(
             if (tags) {
               fileToEncode = { ...fileToEncode, tags }
             }
-            const directory = await app.directories.getNameForFile(f.id)
+            const directory = await app.directories.getPathForFile(f.id)
             if (directory) {
               fileToEncode = { ...fileToEncode, directory }
             }
