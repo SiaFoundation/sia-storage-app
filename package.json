@@ -31,9 +31,13 @@
     "mobile:ios": "bun --cwd apps/mobile ios",
     "changeset": "knope document-change",
     "release": "knope release",
-    "migration:create": "bun scripts/create-migration.ts"
+    "migration:create": "bun scripts/create-migration.ts",
+    "knip": "knip --include files,unlisted"
   },
   "dependencies": {},
+  "devDependencies": {
+    "knip": "6.3.0"
+  },
   "patchedDependencies": {
     "react-native-fs@2.20.0": "patches/react-native-fs@2.20.0.patch"
   }
