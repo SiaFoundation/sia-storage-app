@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@siastorage/core": "workspace:*",
+    "@siastorage/logger": "workspace:*",
     "better-sqlite3": "12.6.2"
   },
   "devDependencies": {

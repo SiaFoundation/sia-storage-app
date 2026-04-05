@@ -1,0 +1,42 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "ignoreDependencies": ["expo-system-ui"],
+  "ignore": ["scripts/**"],
+  "workspaces": {
+    "packages/core": {
+      "entry": ["src/**/index.ts", "src/**/*.ts", "!src/**/*.test.ts"],
+      "ignore": ["**/*.test.ts"]
+    },
+    "packages/logger": {
+      "entry": ["src/index.ts"]
+    },
+    "packages/node-adapters": {
+      "entry": ["src/index.ts", "src/database.ts", "src/storage.ts", "src/crypto.ts"]
+    },
+    "packages/sdk-mock": {
+      "entry": ["src/index.ts"]
+    },
+    "apps/mobile": {
+      "entry": ["index.ts", "app.config.js"],
+      "project": ["src/**/*.{ts,tsx}", "mocks/**/*.ts", "scripts/**/*.ts"],
+      "ignore": [
+        "plugins/**",
+        "test/**",
+        "e2e/**",
+        "scripts/syncAppVersion.ts",
+        "scripts/ciTestBuildAndroid.ts",
+        "scripts/ciTestBuildIos.ts"
+      ]
+    },
+    "apps/integration": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["test/**/*.ts"]
+    },
+    "apps/benchmark": {
+      "entry": ["src/**/*.ts"]
+    },
+    "apps/cli": { "ignore": ["**"] },
+    "apps/desktop": { "ignore": ["**"] },
+    "apps/web": { "ignore": ["**"] }
+  }
+}
