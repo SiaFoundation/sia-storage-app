@@ -5,14 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { logger } from '@siastorage/logger'
 import { ArrowLeftIcon } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
@@ -27,10 +20,8 @@ import { cancelAuth, setPendingApproval } from '../stores/sdk'
 import { palette } from '../styles/colors'
 
 export default function OnboardingRecoveryPhraseScreen() {
-  const nav =
-    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
-  const route =
-    useRoute<RouteProp<OnboardingStackParamList, 'RecoveryPhrase'>>()
+  const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
+  const route = useRoute<RouteProp<OnboardingStackParamList, 'RecoveryPhrase'>>()
   const { indexerURL } = route.params
   const { top, bottom } = useSafeAreaInsets()
   const toast = useToast()
@@ -61,8 +52,7 @@ export default function OnboardingRecoveryPhraseScreen() {
 
   const handleContinue = async () => {
     try {
-      const phrase =
-        mode === 'generated' ? recoveryPhrase : normalizedManualPhrase
+      const phrase = mode === 'generated' ? recoveryPhrase : normalizedManualPhrase
       const { success } = await register(phrase, indexerURL)
       if (success) {
         nav.navigate('FinishedOnboarding', { indexerURL })
@@ -81,9 +71,7 @@ export default function OnboardingRecoveryPhraseScreen() {
   }
 
   const canContinue =
-    mode === 'generated'
-      ? Boolean(recoveryPhrase) && ackSaved
-      : isManualPhraseValid && ackSaved
+    mode === 'generated' ? Boolean(recoveryPhrase) && ackSaved : isManualPhraseValid && ackSaved
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -105,9 +93,7 @@ export default function OnboardingRecoveryPhraseScreen() {
       >
         <ArrowLeftIcon color={palette.gray[50]} size={22} />
       </Pressable>
-      <View
-        style={[styles.centerWrap, { paddingTop: top, paddingBottom: bottom }]}
-      >
+      <View style={[styles.centerWrap, { paddingTop: top, paddingBottom: bottom }]}>
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <View style={{ width: 16, height: 16, marginRight: 8 }}>
@@ -126,9 +112,8 @@ export default function OnboardingRecoveryPhraseScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            Your recovery phrase is the only way to access your data. Write it
-            down and store it somewhere safe. If you lose it, your files cannot
-            be recovered.
+            Your recovery phrase is the only way to access your data. Write it down and store it
+            somewhere safe. If you lose it, your files cannot be recovered.
           </Text>
 
           {mode === 'generated' ? (
@@ -140,15 +125,10 @@ export default function OnboardingRecoveryPhraseScreen() {
                 >
                   <Text
                     testID="recovery-phrase-text"
-                    style={
-                      recoveryPhrase
-                        ? styles.phraseText
-                        : styles.phrasePlaceholder
-                    }
+                    style={recoveryPhrase ? styles.phraseText : styles.phrasePlaceholder}
                     selectable={!!recoveryPhrase}
                   >
-                    {recoveryPhrase ||
-                      "Tap 'Generate new key' to create your recovery phrase"}
+                    {recoveryPhrase || "Tap 'Generate new key' to create your recovery phrase"}
                   </Text>
                 </ScrollView>
               </View>
@@ -175,13 +155,8 @@ export default function OnboardingRecoveryPhraseScreen() {
                 </Button>
               </View>
 
-              <Pressable
-                testID="recovery-toggle-manual"
-                onPress={() => setMode('manual')}
-              >
-                <Text style={styles.toggleText}>
-                  Already have a recovery phrase?
-                </Text>
+              <Pressable testID="recovery-toggle-manual" onPress={() => setMode('manual')}>
+                <Text style={styles.toggleText}>Already have a recovery phrase?</Text>
               </Pressable>
             </>
           ) : (
@@ -195,13 +170,8 @@ export default function OnboardingRecoveryPhraseScreen() {
                 editable={!isSubmitting}
               />
 
-              <Pressable
-                testID="recovery-toggle-generated"
-                onPress={() => setMode('generated')}
-              >
-                <Text style={styles.toggleText}>
-                  Generate a new recovery phrase instead.
-                </Text>
+              <Pressable testID="recovery-toggle-generated" onPress={() => setMode('generated')}>
+                <Text style={styles.toggleText}>Generate a new recovery phrase instead.</Text>
               </Pressable>
             </>
           )}
@@ -216,9 +186,7 @@ export default function OnboardingRecoveryPhraseScreen() {
           accessibilityRole="checkbox"
           accessibilityState={{ checked: ackSaved }}
         >
-          <View
-            style={[styles.checkboxBox, ackSaved && styles.checkboxBoxChecked]}
-          >
+          <View style={[styles.checkboxBox, ackSaved && styles.checkboxBoxChecked]}>
             {ackSaved ? <Text style={styles.checkMark}>✓</Text> : null}
           </View>
           <Text style={styles.checkboxLabel}>

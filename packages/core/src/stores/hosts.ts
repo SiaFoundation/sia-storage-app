@@ -6,11 +6,10 @@ import { useIsConnected } from './connection'
 export function useHosts() {
   const app = useApp()
   const isConnected = useIsConnected()
-  return useSWR(
-    isConnected ? app.caches.hosts.key() : null,
-    () => app.hosts(),
-    { revalidateOnFocus: false, refreshInterval: 20_000 },
-  )
+  return useSWR(isConnected ? app.caches.hosts.key() : null, () => app.hosts(), {
+    revalidateOnFocus: false,
+    refreshInterval: 20_000,
+  })
 }
 
 /** Returns a single host by its public key from the cached hosts list. */

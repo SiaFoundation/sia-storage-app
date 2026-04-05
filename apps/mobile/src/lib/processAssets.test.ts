@@ -260,9 +260,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
         deletedAt: null,
       })
 
-      jest
-        .mocked(calculateContentHash)
-        .mockImplementation(async () => 'sha256:existing-hash')
+      jest.mocked(calculateContentHash).mockImplementation(async () => 'sha256:existing-hash')
       const assets = [
         {
           id: 'same-hash',
@@ -283,9 +281,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
       jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
         return null
       })
-      jest
-        .mocked(calculateContentHash)
-        .mockImplementation(async () => 'sha256:same-for-all')
+      jest.mocked(calculateContentHash).mockImplementation(async () => 'sha256:same-for-all')
       const assets = [
         {
           id: undefined,
@@ -429,9 +425,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
     })
 
     it('captures file size from the copied file', async () => {
-      const { rnfsStat } = (
-        global as unknown as { __rnfs: { rnfsStat: jest.Mock } }
-      ).__rnfs
+      const { rnfsStat } = (global as unknown as { __rnfs: { rnfsStat: jest.Mock } }).__rnfs
       rnfsStat.mockResolvedValue({ size: 333 })
       const assets = [
         {

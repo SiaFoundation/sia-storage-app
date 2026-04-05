@@ -1,17 +1,8 @@
 import { useIsFavorite } from '@siastorage/core/stores'
-import {
-  CircleCheckIcon,
-  CircleIcon,
-  DotIcon,
-  HeartIcon,
-} from 'lucide-react-native'
+import { CircleCheckIcon, CircleIcon, DotIcon, HeartIcon } from 'lucide-react-native'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import {
-  type FileItemProps,
-  fileItemPropsAreEqual,
-  useFileStatus,
-} from '../lib/file'
+import { type FileItemProps, fileItemPropsAreEqual, useFileStatus } from '../lib/file'
 import { humanSize } from '../lib/humanSize'
 import { useIsFileSelected, useIsSelectionMode } from '../stores/fileSelection'
 import { palette, whiteA } from '../styles/colors'
@@ -44,12 +35,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
           <View style={styles.fileMetaData}>
             {status.data ? (
               <>
-                <UploadStatusIcon
-                  size={12}
-                  status={status.data}
-                  color="gray"
-                  variant="icon"
-                />
+                <UploadStatusIcon size={12} status={status.data} color="gray" variant="icon" />
                 <DotIcon size={16} color="grey" />
               </>
             ) : null}
@@ -63,11 +49,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
             {isFavorite.data ? (
               <>
                 <DotIcon size={16} color="grey" />
-                <HeartIcon
-                  size={10}
-                  color={palette.red[500]}
-                  fill={palette.red[500]}
-                />
+                <HeartIcon size={10} color={palette.red[500]} fill={palette.red[500]} />
               </>
             ) : null}
           </View>
@@ -77,11 +59,7 @@ function FileListItemComponent({ file, onPressItem, onLongPressItem }: Props) {
         {isSelectionMode ? (
           isSelected ? (
             <View style={styles.checkboxSelected}>
-              <CircleCheckIcon
-                size={18}
-                color={palette.blue[500]}
-                fill={palette.gray[50]}
-              />
+              <CircleCheckIcon size={18} color={palette.blue[500]} fill={palette.gray[50]} />
             </View>
           ) : (
             <View style={styles.checkboxUnselected}>

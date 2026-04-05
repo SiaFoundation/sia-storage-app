@@ -1,15 +1,7 @@
 import { useAllDirectories } from '@siastorage/core/stores'
 import { CheckIcon, FolderIcon, PlusIcon, XIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  FlatList,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
@@ -36,14 +28,11 @@ export function SelectDirectorySheet({
 
   const dirs = allDirs.data ?? []
   const filtered = query.trim()
-    ? dirs.filter((d) =>
-        d.path.toLowerCase().includes(query.trim().toLowerCase()),
-      )
+    ? dirs.filter((d) => d.path.toLowerCase().includes(query.trim().toLowerCase()))
     : dirs
 
   const exactMatch =
-    query.trim().length > 0 &&
-    dirs.some((d) => d.path.toLowerCase() === query.trim().toLowerCase())
+    query.trim().length > 0 && dirs.some((d) => d.path.toLowerCase() === query.trim().toLowerCase())
 
   const handleShow = useFocusOnShow(inputRef)
 
@@ -76,14 +65,13 @@ export function SelectDirectorySheet({
         const dir = await app().directories.create(trimmed)
         handleSelect(dir.path)
       } catch {
-        const existing = dirs.find(
-          (d) => d.path.toLowerCase() === trimmed.toLowerCase(),
-        )
+        const existing = dirs.find((d) => d.path.toLowerCase() === trimmed.toLowerCase())
         if (existing) {
           handleSelect(existing.path)
         }
       }
     },
+    // oxlint-disable-next-line react/exhaustive-deps -- dirs is derived from SWR data, new ref each render is expected
     [dirs, handleSelect],
   )
 
@@ -139,15 +127,10 @@ export function SelectDirectorySheet({
                 <XIcon size={18} color={palette.gray[400]} />
                 <Text style={styles.removeText}>No folder</Text>
               </View>
-              {currentValue === '' && (
-                <CheckIcon size={18} color={palette.blue[400]} />
-              )}
+              {currentValue === '' && <CheckIcon size={18} color={palette.blue[400]} />}
             </Pressable>
             {query.trim().length > 0 && !exactMatch ? (
-              <Pressable
-                style={styles.dirRow}
-                onPress={() => handleCreateAndSelect(query.trim())}
-              >
+              <Pressable style={styles.dirRow} onPress={() => handleCreateAndSelect(query.trim())}>
                 <View style={styles.dirRowLeft}>
                   <PlusIcon size={16} color={palette.blue[400]} />
                   <Text style={styles.createText}>Create "{query.trim()}"</Text>
@@ -157,14 +140,11 @@ export function SelectDirectorySheet({
           </>
         }
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.dirRow}
-            onPress={() => handleSelect(item.path)}
-          >
+          <Pressable style={styles.dirRow} onPress={() => handleSelect(item.path)}>
             <View style={styles.dirRowLeft}>
               <FolderIcon size={18} color={palette.blue[400]} />
               <Text style={styles.dirName}>{item.path}</Text>
-              <Text style={styles.dirCount}>{item.fileCount}</Text>
+              <Text style={styles.dirCount}>{item.fileCount.toLocaleString()}</Text>
             </View>
             {item.path.toLowerCase() === currentValue.toLowerCase() && (
               <CheckIcon size={18} color={palette.blue[400]} />
@@ -173,9 +153,7 @@ export function SelectDirectorySheet({
         )}
         ListEmptyComponent={
           query.trim().length === 0 ? (
-            <Text style={styles.emptyText}>
-              No folders yet. Type to create one.
-            </Text>
+            <Text style={styles.emptyText}>No folders yet. Type to create one.</Text>
           ) : null
         }
       />

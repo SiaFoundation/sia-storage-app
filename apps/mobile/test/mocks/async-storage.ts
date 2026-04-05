@@ -35,15 +35,11 @@ const AsyncStorage = {
     return Array.from(store.keys())
   },
 
-  multiGet: async (
-    keys: readonly string[],
-  ): Promise<readonly [string, string | null][]> => {
+  multiGet: async (keys: readonly string[]): Promise<readonly [string, string | null][]> => {
     return keys.map((key) => [key, store.get(key) ?? null])
   },
 
-  multiSet: async (
-    keyValuePairs: readonly [string, string][],
-  ): Promise<void> => {
+  multiSet: async (keyValuePairs: readonly [string, string][]): Promise<void> => {
     for (const [key, value] of keyValuePairs) {
       store.set(key, value)
     }
@@ -55,9 +51,7 @@ const AsyncStorage = {
     }
   },
 
-  multiMerge: async (
-    keyValuePairs: readonly [string, string][],
-  ): Promise<void> => {
+  multiMerge: async (keyValuePairs: readonly [string, string][]): Promise<void> => {
     for (const [key, value] of keyValuePairs) {
       await AsyncStorage.mergeItem(key, value)
     }

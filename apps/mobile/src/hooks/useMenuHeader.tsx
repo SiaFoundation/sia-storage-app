@@ -7,8 +7,7 @@ import type { MenuStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 
 export function useMenuHeader() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<MenuStackParamList, 'MenuHome'>>()
+  const navigation = useNavigation<NativeStackNavigationProp<MenuStackParamList, 'MenuHome'>>()
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (

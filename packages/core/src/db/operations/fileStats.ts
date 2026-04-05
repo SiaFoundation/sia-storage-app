@@ -30,9 +30,7 @@ async function queryStatsForWhere(
   const totalRow = await db.getFirstAsync<{
     count: number
     totalBytes: number
-  }>(
-    `SELECT COUNT(*) as count, COALESCE(SUM(f.size), 0) as totalBytes FROM files f WHERE ${where}`,
-  )
+  }>(`SELECT COUNT(*) as count, COALESCE(SUM(f.size), 0) as totalBytes FROM files f WHERE ${where}`)
   const remainingRow = await db.getFirstAsync<{
     count: number
     totalBytes: number
@@ -95,15 +93,9 @@ export async function queryUploadStats(
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
   const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([
-    q(
-      `f.kind = 'file' AND ${active} AND f.type LIKE 'image/%' AND ${latestVersion}`,
-    ),
-    q(
-      `f.kind = 'file' AND ${active} AND f.type LIKE 'video/%' AND ${latestVersion}`,
-    ),
-    q(
-      `f.kind = 'file' AND ${active} AND f.type LIKE 'audio/%' AND ${latestVersion}`,
-    ),
+    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'image/%' AND ${latestVersion}`),
+    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'video/%' AND ${latestVersion}`),
+    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'audio/%' AND ${latestVersion}`),
     q(
       `f.kind = 'file' AND ${active} AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%') AND ${latestVersion}`,
     ),

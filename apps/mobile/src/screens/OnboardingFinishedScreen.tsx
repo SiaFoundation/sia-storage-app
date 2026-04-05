@@ -27,10 +27,7 @@ export default function OnboardingFinishedScreen() {
   useEffect(() => {
     let sub: { remove: () => void } | undefined
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
-    sub = AccessibilityInfo.addEventListener?.(
-      'reduceMotionChanged',
-      setReduceMotion,
-    )
+    sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduceMotion)
     return () => {
       sub?.remove?.()
     }
@@ -83,10 +80,7 @@ export default function OnboardingFinishedScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={StyleSheet.absoluteFill}>
         <Animated.View
-          style={[
-            StyleSheet.absoluteFillObject,
-            { transform: [{ translateY }] },
-          ]}
+          style={[StyleSheet.absoluteFillObject, { transform: [{ translateY }] }]}
           pointerEvents="none"
         >
           <BlocksGrid
@@ -101,12 +95,7 @@ export default function OnboardingFinishedScreen() {
         </Animated.View>
       </View>
 
-      <View
-        style={[
-          styles.content,
-          { paddingTop: top + 24, paddingBottom: bottom + 24 },
-        ]}
-      >
+      <View style={[styles.content, { paddingTop: top + 24, paddingBottom: bottom + 24 }]}>
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <View style={styles.titleIcon}>
@@ -118,20 +107,15 @@ export default function OnboardingFinishedScreen() {
                 rotation={90}
               />
             </View>
-            <Animated.Text
-              testID="finished-title"
-              style={[styles.title, { opacity: fadeInValue }]}
-            >
+            <Animated.Text testID="finished-title" style={[styles.title, { opacity: fadeInValue }]}>
               All set!
             </Animated.Text>
           </View>
 
+          <Text style={styles.subtitle}>You are connected and ready to use Sia Storage.</Text>
           <Text style={styles.subtitle}>
-            You are connected and ready to use Sia Storage.
-          </Text>
-          <Text style={styles.subtitle}>
-            Manage your recovery phrase and indexer anytime in Settings via the
-            shard icon on the top left of the home screen.
+            Manage your recovery phrase and indexer anytime in Settings via the shard icon on the
+            top left of the home screen.
           </Text>
         </View>
       </View>

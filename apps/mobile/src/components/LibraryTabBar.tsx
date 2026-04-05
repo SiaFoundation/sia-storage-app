@@ -8,13 +8,7 @@ import {
   TagIcon,
 } from 'lucide-react-native'
 import { useEffect, useRef, useState } from 'react'
-import {
-  Animated,
-  type LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native'
+import { Animated, type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native'
 import type { ActiveLibraryTab } from '../stores/settings'
 import { openSheet } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -106,10 +100,7 @@ export function LibraryTabBar({
       <FloatingPill style={styles.actions}>
         {activeTab === 'files' ? (
           <>
-            <IconButton
-              onPress={onCreateDirectory}
-              accessibilityLabel="Create folder"
-            >
+            <IconButton onPress={onCreateDirectory} accessibilityLabel="Create folder">
               <FolderPlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
             <IconButton onPress={onSearch} accessibilityLabel="Search">
@@ -127,10 +118,7 @@ export function LibraryTabBar({
           </>
         ) : (
           <>
-            <IconButton
-              onPress={() => openSheet('addFile')}
-              accessibilityLabel="Add files"
-            >
+            <IconButton onPress={() => openSheet('addFile')} accessibilityLabel="Add files">
               <FilePlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
             <IconButton onPress={onSearch} accessibilityLabel="Search">

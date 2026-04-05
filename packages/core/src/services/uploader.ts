@@ -130,9 +130,7 @@ export class UploadManager {
   private app!: AppService
   private internal!: AppServiceInternal
   private adapters!: UploaderAdapters
-  private progressThrottle:
-    | ((fileId: string, progress: number) => void)
-    | null = null
+  private progressThrottle: ((fileId: string, progress: number) => void) | null = null
   /** Native packed upload handle; null when no batch is open. */
   private packer: PackedUploadRef | null = null
   /** The batch currently being packed (accumulating files). */
@@ -169,11 +167,7 @@ export class UploadManager {
   private _uploadedBytes = 0
 
   /** Connect dependencies and start the async processing loop. */
-  initialize(
-    app: AppService,
-    internal: AppServiceInternal,
-    adapters: UploaderAdapters,
-  ): void {
+  initialize(app: AppService, internal: AppServiceInternal, adapters: UploaderAdapters): void {
     this.app = app
     this.internal = internal
     this.adapters = adapters
@@ -201,9 +195,7 @@ export class UploadManager {
 
   /** Add files to the explicit queue and wake the loop. */
   enqueue(files: FileEntry[]): void {
-    this.app.uploads.registerMany(
-      files.map((f) => ({ id: f.fileId, size: f.size })),
-    )
+    this.app.uploads.registerMany(files.map((f) => ({ id: f.fileId, size: f.size })))
     this.explicitQueue.push(...files)
     this.wake()
   }
@@ -221,12 +213,7 @@ export class UploadManager {
    * slab space (each partial slab is paid for in full on the Sia network).
    */
   async flush(
-    reason:
-      | 'idle_timeout'
-      | 'max_duration'
-      | 'max_slabs'
-      | 'slab_threshold'
-      | 'manual' = 'manual',
+    reason: 'idle_timeout' | 'max_duration' | 'max_slabs' | 'slab_threshold' | 'manual' = 'manual',
   ): Promise<void> {
     if (!this.packer || !this.batch) {
       logger.debug('uploadManager', 'no_packer_to_flush')
@@ -282,10 +269,7 @@ export class UploadManager {
       })
 
       const saveStart = Date.now()
-      const successfulFileIds = await this.saveBatchObjects(
-        batch,
-        pinnedObjects,
-      )
+      const successfulFileIds = await this.saveBatchObjects(batch, pinnedObjects)
       if (successfulFileIds.length > 0) {
         this._needsInvalidation = true
       }
@@ -352,8 +336,7 @@ export class UploadManager {
       for (const entry of this.batch.files) idsToRemove.push(entry.fileId)
     }
     if (this.uploadingBatch) {
-      for (const entry of this.uploadingBatch.files)
-        idsToRemove.push(entry.fileId)
+      for (const entry of this.uploadingBatch.files) idsToRemove.push(entry.fileId)
     }
     for (const entry of this.explicitQueue) idsToRemove.push(entry.fileId)
 
@@ -452,9 +435,7 @@ export class UploadManager {
    * async loop. Allows deterministic control over file order and timing.
    */
   async __testProcessFiles(files: FileEntry[]): Promise<void> {
-    this.app.uploads.registerMany(
-      files.map((f) => ({ id: f.fileId, size: f.size })),
-    )
+    this.app.uploads.registerMany(files.map((f) => ({ id: f.fileId, size: f.size })))
     for (const file of files) {
       await this.processEntry(file)
     }
@@ -468,10 +449,7 @@ export class UploadManager {
   adjustBatchForSuspension(): void {
     if (!this.batch) return
     const now = Date.now()
-    const ref =
-      this.batch.lastProcessedAt > 0
-        ? this.batch.lastProcessedAt
-        : this.batch.startedAt
+    const ref = this.batch.lastProcessedAt > 0 ? this.batch.lastProcessedAt : this.batch.startedAt
     const gap = now - ref
     this.batch.suspendedMs += gap
     this.batch.lastProcessedAt = now
@@ -480,8 +458,7 @@ export class UploadManager {
   private drainQueues(first: FileEntry): FileEntry[] {
     const entries = [first]
     for (;;) {
-      const next =
-        this.explicitQueue.shift() ?? this.polledFiles.shift() ?? undefined
+      const next = this.explicitQueue.shift() ?? this.polledFiles.shift() ?? undefined
       if (!next) break
       entries.push(next)
     }
@@ -520,8 +497,7 @@ export class UploadManager {
         continue
       }
 
-      const next =
-        this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
+      const next = this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
 
       if (next) {
         await this.processEntries(this.drainQueues(next))
@@ -583,9 +559,7 @@ export class UploadManager {
       // this large file would exceed max slabs, flush the existing batch first.
       // Only triggers for files > SLAB_SIZE to avoid splitting normal accumulation.
       if (this.batch && this.batch.files.length > 0 && entry.size > SLAB_SIZE) {
-        const projectedSlabs = Math.floor(
-          (this.batch.totalSize + entry.size) / SLAB_SIZE,
-        )
+        const projectedSlabs = Math.floor((this.batch.totalSize + entry.size) / SLAB_SIZE)
         if (projectedSlabs >= PACKER_MAX_SLABS) {
           await this.flush('max_slabs')
         }
@@ -612,8 +586,7 @@ export class UploadManager {
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
           progressCallback: {
-            progress: (uploaded, total) =>
-              this.onProgress(batch, uploaded, total),
+            progress: (uploaded, total) => this.onProgress(batch, uploaded, total),
           },
         })
       }
@@ -689,8 +662,7 @@ export class UploadManager {
       // computeWindowEnd needs a packer+batch — when neither exists or
       // when the next file would trigger a pre-flush, fall back to
       // processEntry which handles packer creation and pre-flush checks.
-      const windowEnd =
-        this.packer && this.batch ? this.computeWindowEnd(entries, i) : i
+      const windowEnd = this.packer && this.batch ? this.computeWindowEnd(entries, i) : i
 
       if (windowEnd === i) {
         await this.processEntry(entries[i])
@@ -716,11 +688,7 @@ export class UploadManager {
    * Fire packer.add() for entries[from..end) concurrently, then await
    * each in order updating batch state after each completes.
    */
-  private async processWindow(
-    entries: FileEntry[],
-    from: number,
-    end: number,
-  ): Promise<void> {
+  private async processWindow(entries: FileEntry[], from: number, end: number): Promise<void> {
     const packer = this.packer!
 
     const inflight = []
@@ -825,8 +793,7 @@ export class UploadManager {
       simulatedSize += size
 
       // Hit max_slabs — include this file but stop the window
-      if (Math.floor(simulatedSize / SLAB_SIZE) >= PACKER_MAX_SLABS)
-        return j + 1
+      if (Math.floor(simulatedSize / SLAB_SIZE) >= PACKER_MAX_SLABS) return j + 1
     }
 
     return cap
@@ -882,9 +849,7 @@ export class UploadManager {
       }
 
       if (newEntries.length > 0) {
-        this.app.uploads.registerMany(
-          newEntries.map((e) => ({ id: e.fileId, size: e.size })),
-        )
+        this.app.uploads.registerMany(newEntries.map((e) => ({ id: e.fileId, size: e.size })))
         this.polledFiles.push(...newEntries)
       }
 
@@ -969,16 +934,10 @@ export class UploadManager {
   }
 
   /** Distribute batch upload progress across individual files by size weight. */
-  private onProgress(
-    batch: BatchState,
-    uploaded: bigint,
-    _encodedTotal: bigint,
-  ): void {
+  private onProgress(batch: BatchState, uploaded: bigint, _encodedTotal: bigint): void {
     const slabs = Math.ceil(batch.totalSize / SLAB_SIZE)
-    const expectedEncoded =
-      slabs * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
-    const batchProgress =
-      expectedEncoded > 0 ? Number(uploaded) / expectedEncoded : 0
+    const expectedEncoded = slabs * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
+    const batchProgress = expectedEncoded > 0 ? Number(uploaded) / expectedEncoded : 0
 
     const batchInfo: BatchInfo = {
       files: batch.files.map((f) => ({
@@ -989,11 +948,7 @@ export class UploadManager {
     }
 
     for (const entry of batch.files) {
-      const fileProgress = calculateFileProgress(
-        batchInfo,
-        batchProgress,
-        entry.fileId,
-      )
+      const fileProgress = calculateFileProgress(batchInfo, batchProgress, entry.fileId)
       if (this.progressThrottle) {
         this.progressThrottle(entry.fileId, fileProgress)
       } else {
@@ -1063,12 +1018,7 @@ export class UploadManager {
             await retry('pinObject', () => sdk.pinObject(pinnedObject), 3, 1000)
 
             const appKey = sdk.appKey()
-            const localObject = sealPinnedObject(
-              entry.fileId,
-              indexerURL,
-              pinnedObject,
-              appKey,
-            )
+            const localObject = sealPinnedObject(entry.fileId, indexerURL, pinnedObject, appKey)
             logger.debug('uploadManager', 'object_saved', {
               fileId: entry.fileId,
             })
@@ -1093,10 +1043,7 @@ export class UploadManager {
 
     // Phase 2: Batch DB write
     const localObjects = results
-      .filter(
-        (r): r is Extract<PinResult, { type: 'success' }> =>
-          r.type === 'success',
-      )
+      .filter((r): r is Extract<PinResult, { type: 'success' }> => r.type === 'success')
       .map((r) => r.localObject)
     await this.app.localObjects.upsertMany(localObjects, {
       skipInvalidation: true,
@@ -1132,9 +1079,7 @@ export class UploadManager {
       this.app.caches.libraryVersion.invalidate()
       this._needsInvalidation = false
       if (SAVE_REMOVAL_DELAY_MS > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, SAVE_REMOVAL_DELAY_MS),
-        )
+        await new Promise((resolve) => setTimeout(resolve, SAVE_REMOVAL_DELAY_MS))
       }
       this.app.uploads.removeMany(successfulFileIds)
     }

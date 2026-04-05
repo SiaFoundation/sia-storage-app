@@ -16,10 +16,7 @@ export async function removeFsFile(file: FsFileInfo): Promise<void> {
   await fsFileUriCache.set(null, file.id)
 }
 
-export async function copyFileToFs(
-  file: FsFileInfo,
-  sourceUri: string,
-): Promise<string> {
+export async function copyFileToFs(file: FsFileInfo, sourceUri: string): Promise<string> {
   logger.debug('fs', 'copy_file', { fileId: file.id, sourceUri })
   const uri = await app().fs.copyFile(file, sourceUri)
   await fsFileUriCache.set(uri, file.id)

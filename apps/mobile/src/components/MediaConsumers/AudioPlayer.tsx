@@ -1,10 +1,5 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import {
-  AudioLinesIcon,
-  PauseIcon,
-  PlayIcon,
-  Undo2Icon,
-} from 'lucide-react-native'
+import { AudioLinesIcon, PauseIcon, PlayIcon, Undo2Icon } from 'lucide-react-native'
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 function formatPlayTime(totalSeconds: number) {
@@ -75,9 +70,7 @@ export function AudioPlayer({
           </Text>
         </View>
         <View style={styles.statusPlaceholder}>
-          {statusLabel ? (
-            <Text style={{ color: 'white' }}>{statusLabel}</Text>
-          ) : null}
+          {statusLabel ? <Text style={{ color: 'white' }}>{statusLabel}</Text> : null}
         </View>
       </View>
     </View>

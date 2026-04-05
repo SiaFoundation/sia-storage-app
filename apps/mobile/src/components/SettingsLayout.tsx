@@ -1,10 +1,4 @@
-import {
-  ScrollView,
-  type StyleProp,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { colors } from '../styles/colors'
 
 type Props = {
@@ -21,11 +15,7 @@ export function SettingsScrollLayout({ children, style }: Props) {
 }
 
 export function SettingsFullLayout({ children, style }: Props) {
-  return (
-    <View style={[styles.container, { height: '100%' }, style]}>
-      {children}
-    </View>
-  )
+  return <View style={[styles.container, { height: '100%' }, style]}>{children}</View>
 }
 
 const styles = StyleSheet.create({

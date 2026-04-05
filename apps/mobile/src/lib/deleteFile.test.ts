@@ -8,9 +8,7 @@ let removeFileSpy: jest.SpyInstance
 describe('deleteFile', () => {
   beforeEach(async () => {
     await initializeDB()
-    removeFileSpy = jest
-      .spyOn(app().fs, 'removeFile')
-      .mockResolvedValue(undefined)
+    removeFileSpy = jest.spyOn(app().fs, 'removeFile').mockResolvedValue(undefined)
   })
 
   afterEach(async () => {
@@ -247,12 +245,8 @@ describe('deleteFile', () => {
     expect(thumb?.trashedAt).not.toBeNull()
 
     expect(removeFileSpy).toHaveBeenCalledTimes(3)
-    expect(removeFileSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-1' }),
-    )
-    expect(removeFileSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'file-2' }),
-    )
+    expect(removeFileSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'file-1' }))
+    expect(removeFileSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'file-2' }))
     expect(removeFileSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thumb-1', type: 'image/jpeg' }),
     )

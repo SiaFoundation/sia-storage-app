@@ -46,28 +46,19 @@ export function ExpandableBadge({
   testID,
 }: ExpandableBadgeProps) {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded)
-  const textOpacity = useRef(
-    new Animated.Value(initialExpanded ? 1 : 0),
-  ).current
+  const textOpacity = useRef(new Animated.Value(initialExpanded ? 1 : 0)).current
 
   const effectiveBg = backgroundColor ?? 'rgba(36,41,47,1)'
   const effectiveBorder = borderColor ?? palette.gray[975]
   const effectiveText = textColor ?? palette.gray[50]
   const textStyles = useMemo(() => {
-    return [
-      styles.pillText,
-      { fontSize: size * 0.75, color: effectiveText },
-      textStyle,
-    ]
+    return [styles.pillText, { fontSize: size * 0.75, color: effectiveText }, textStyle]
   }, [size, effectiveText, textStyle])
 
   const textEl = useMemo(() => {
     if (!expanded || !label) return null
     return (
-      <Animated.Text
-        style={[textStyles, { opacity: textOpacity }]}
-        numberOfLines={1}
-      >
+      <Animated.Text style={[textStyles, { opacity: textOpacity }]} numberOfLines={1}>
         {label}
       </Animated.Text>
     )
@@ -102,11 +93,7 @@ export function ExpandableBadge({
           // Snap open; text fades in during second half.
           textOpacity.setValue(0)
           LayoutAnimation.configureNext(
-            LayoutAnimation.create(
-              EXPAND_MS,
-              'easeInEaseOut',
-              'opacity',
-            ) as any,
+            LayoutAnimation.create(EXPAND_MS, 'easeInEaseOut', 'opacity') as any,
           )
           setExpanded(true)
           Animated.timing(textOpacity, {
@@ -123,11 +110,7 @@ export function ExpandableBadge({
             useNativeDriver: true,
           }).start(() => {
             LayoutAnimation.configureNext(
-              LayoutAnimation.create(
-                COLLAPSE_MS,
-                'easeInEaseOut',
-                'opacity',
-              ) as any,
+              LayoutAnimation.create(COLLAPSE_MS, 'easeInEaseOut', 'opacity') as any,
             )
             setExpanded(false)
           })

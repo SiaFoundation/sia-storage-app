@@ -114,9 +114,9 @@ describe('Downloads', () => {
   })
 
   it('throws if file record not found', async () => {
-    await expect(
-      app.app.downloads.downloadFile('nonexistent-id'),
-    ).rejects.toThrow('File record not found')
+    await expect(app.app.downloads.downloadFile('nonexistent-id')).rejects.toThrow(
+      'File record not found',
+    )
   })
 
   it('throws if no local objects available', async () => {
@@ -132,9 +132,7 @@ describe('Downloads', () => {
     const { file } = await setupDownloadableFile(app)
     app.internal.setSdk(null)
 
-    await expect(app.app.downloads.downloadFile(file.id)).rejects.toThrow(
-      'SDK not initialized',
-    )
+    await expect(app.app.downloads.downloadFile(file.id)).rejects.toThrow('SDK not initialized')
   })
 
   it('cancel removes a download entry', () => {

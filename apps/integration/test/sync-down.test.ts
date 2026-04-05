@@ -1,7 +1,4 @@
-import {
-  createEmptyIndexerStorage,
-  generateMockFileMetadata,
-} from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage, generateMockFileMetadata } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp, waitForCondition } from './app'
 
 describe('Sync Down', () => {
@@ -139,17 +136,13 @@ describe('Sync Down', () => {
     )
 
     await app.addTagToFile(fileId!, 'myTag')
-    const tagsAfterAdd = (await app.readTagsForFile(fileId!)).filter(
-      (t) => !t.system,
-    )
+    const tagsAfterAdd = (await app.readTagsForFile(fileId!)).filter((t) => !t.system)
     expect(tagsAfterAdd).toHaveLength(1)
     expect(tagsAfterAdd[0].name).toBe('myTag')
 
     await new Promise((r) => setTimeout(r, 3000))
 
-    const tagsAfterSync = (await app.readTagsForFile(fileId!)).filter(
-      (t) => !t.system,
-    )
+    const tagsAfterSync = (await app.readTagsForFile(fileId!)).filter((t) => !t.system)
     expect(tagsAfterSync).toHaveLength(1)
     expect(tagsAfterSync[0].name).toBe('myTag')
   })
@@ -168,9 +161,7 @@ describe('Sync Down', () => {
         const files = await app.getFiles()
         if (files.length === 1) {
           fileId = files[0].id
-          const tags = (await app.readTagsForFile(files[0].id)).filter(
-            (t) => !t.system,
-          )
+          const tags = (await app.readTagsForFile(files[0].id)).filter((t) => !t.system)
           return tags.length === 1 && tags[0].name === 'original'
         }
         return false
@@ -182,9 +173,7 @@ describe('Sync Down', () => {
 
     await waitForCondition(
       async () => {
-        const tags = (await app.readTagsForFile(fileId!)).filter(
-          (t) => !t.system,
-        )
+        const tags = (await app.readTagsForFile(fileId!)).filter((t) => !t.system)
         return (
           tags.length === 2 &&
           tags

@@ -15,9 +15,7 @@ function p95(values: number[]): number {
   return sorted[Math.min(idx, sorted.length - 1)]
 }
 
-export async function runBenchmark(
-  specs: QuerySpec[],
-): Promise<BenchmarkResult[]> {
+export async function runBenchmark(specs: QuerySpec[]): Promise<BenchmarkResult[]> {
   const results: BenchmarkResult[] = []
 
   for (const spec of specs) {

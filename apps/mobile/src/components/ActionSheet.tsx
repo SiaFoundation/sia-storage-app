@@ -104,13 +104,9 @@ export function ActionSheet({
 
   // Calculate the snap points and the initial snap index.
   const { snapHeights, resolvedInitialIndex } = useMemo(() => {
-    const configuredHeights = calculateConfiguredHeights(
-      snapPoints,
-      availableHeight,
-    )
+    const configuredHeights = calculateConfiguredHeights(snapPoints, availableHeight)
 
-    const totalContentHeight =
-      contentHeight !== null ? contentHeight + HANDLE_EXTRA_HEIGHT : null
+    const totalContentHeight = contentHeight !== null ? contentHeight + HANDLE_EXTRA_HEIGHT : null
 
     const finalSnapHeights = buildFinalSnapHeights(
       configuredHeights,
@@ -158,10 +154,7 @@ export function ActionSheet({
 
     const totalContentHeight = contentHeight + HANDLE_EXTRA_HEIGHT
     const clampedIndex = clampIndex(currentIndex, snapHeights.length - 1)
-    const atFullScreen = isAtFullScreenHeight(
-      snapHeights[clampedIndex],
-      availableHeight,
-    )
+    const atFullScreen = isAtFullScreenHeight(snapHeights[clampedIndex], availableHeight)
 
     return atFullScreen && totalContentHeight > availableHeight
   }, [availableHeight, contentHeight, currentIndex, snapHeights])
@@ -225,10 +218,7 @@ export function ActionSheet({
           <View onLayout={handleContentLayout}>{children}</View>
         </BottomSheetScrollView>
       ) : (
-        <BottomSheetView
-          onLayout={handleContentLayout}
-          style={contentContainerStyle}
-        >
+        <BottomSheetView onLayout={handleContentLayout} style={contentContainerStyle}>
           {children}
         </BottomSheetView>
       )}
@@ -239,10 +229,7 @@ export function ActionSheet({
 /**
  * Convert a snap point from percentages or pixels to pixels.
  */
-function convertSnapPointToPixels(
-  point: number | string,
-  availableHeight: number,
-): number | null {
+function convertSnapPointToPixels(point: number | string, availableHeight: number): number | null {
   if (typeof point === 'number' && Number.isFinite(point)) {
     return Math.min(point, availableHeight)
   }
@@ -262,8 +249,7 @@ function calculateConfiguredHeights(
   snapPoints: Array<number | string> | undefined,
   availableHeight: number,
 ): number[] {
-  const rawPoints =
-    snapPoints && snapPoints.length > 0 ? snapPoints : DEFAULT_SNAP_POINTS
+  const rawPoints = snapPoints && snapPoints.length > 0 ? snapPoints : DEFAULT_SNAP_POINTS
   return rawPoints
     .map((point) => convertSnapPointToPixels(point, availableHeight))
     .filter((h): h is number => h !== null && h > 0)
@@ -283,20 +269,14 @@ function buildFinalSnapHeights(
   availableHeight: number,
 ): number[] {
   if (totalContentHeight === null) {
-    return configuredHeights.length > 0
-      ? configuredHeights
-      : [availableHeight * 0.5]
+    return configuredHeights.length > 0 ? configuredHeights : [availableHeight * 0.5]
   }
 
   const maxHeight = Math.min(totalContentHeight, availableHeight)
-  const allowedHeights = configuredHeights.filter(
-    (h) => h <= maxHeight + SNAP_POINT_TOLERANCE,
-  )
+  const allowedHeights = configuredHeights.filter((h) => h <= maxHeight + SNAP_POINT_TOLERANCE)
 
   const snapSet = new Set(allowedHeights)
-  const isDuplicate = allowedHeights.some(
-    (h) => Math.abs(h - maxHeight) <= SNAP_POINT_TOLERANCE,
-  )
+  const isDuplicate = allowedHeights.some((h) => Math.abs(h - maxHeight) <= SNAP_POINT_TOLERANCE)
   if (!isDuplicate || allowedHeights.length === 0) {
     snapSet.add(maxHeight)
   }
@@ -340,9 +320,6 @@ function clampIndex(index: number, maxIndex: number): number {
   return Math.max(0, Math.min(index, maxIndex))
 }
 
-function isAtFullScreenHeight(
-  snapHeight: number,
-  availableHeight: number,
-): boolean {
+function isAtFullScreenHeight(snapHeight: number, availableHeight: number): boolean {
   return Math.abs(snapHeight - availableHeight) <= SNAP_POINT_TOLERANCE
 }

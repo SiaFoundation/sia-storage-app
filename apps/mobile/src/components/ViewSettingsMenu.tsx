@@ -1,8 +1,4 @@
-import {
-  ALL_CATEGORIES,
-  type Category,
-  type SortBy,
-} from '@siastorage/core/db/operations'
+import { ALL_CATEGORIES, type Category, type SortBy } from '@siastorage/core/db/operations'
 import type React from 'react'
 import { useMemo } from 'react'
 import {
@@ -27,11 +23,7 @@ type Props = {
   allowedCategories?: readonly Category[]
 }
 
-export function ViewSettingsMenu({
-  children,
-  scope = 'library',
-  allowedCategories,
-}: Props) {
+export function ViewSettingsMenu({ children, scope = 'library', allowedCategories }: Props) {
   const vs = useViewSettings(scope)
   const visibleCategories = allowedCategories ?? ALL_CATEGORIES
 
@@ -100,14 +92,7 @@ export function ViewSettingsMenu({
         onPress: () => setViewMode(scope, 'list'),
       },
     ]
-  }, [
-    scope,
-    vs.sortBy,
-    vs.sortDir,
-    vs.viewMode,
-    vs.selectedCategories,
-    visibleCategories,
-  ])
+  }, [scope, vs.sortBy, vs.sortDir, vs.viewMode, vs.selectedCategories, visibleCategories])
 
   return <DropdownMenu trigger={children} items={items} />
 }

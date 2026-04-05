@@ -10,10 +10,7 @@ type LogInsert = {
   createdAt: number
 }
 
-export async function insertLog(
-  db: DatabaseAdapter,
-  entry: LogInsert,
-): Promise<void> {
+export async function insertLog(db: DatabaseAdapter, entry: LogInsert): Promise<void> {
   await db.runAsync(
     'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
     entry.timestamp,
@@ -25,10 +22,7 @@ export async function insertLog(
   )
 }
 
-export async function insertManyLogs(
-  db: DatabaseAdapter,
-  entries: LogInsert[],
-): Promise<void> {
+export async function insertManyLogs(db: DatabaseAdapter, entries: LogInsert[]): Promise<void> {
   if (entries.length === 0) return
   await db.withTransactionAsync(async () => {
     for (const entry of entries) {
@@ -45,9 +39,7 @@ export async function insertManyLogs(
   })
 }
 
-export async function queryAvailableLogScopes(
-  db: DatabaseAdapter,
-): Promise<string[]> {
+export async function queryAvailableLogScopes(db: DatabaseAdapter): Promise<string[]> {
   const rows = await db.getAllAsync<{ scope: string }>(
     'SELECT DISTINCT scope FROM logs ORDER BY scope',
   )
@@ -80,8 +72,7 @@ function buildLogFilterQuery(
     params.push(...logScopes)
   }
 
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
   return { whereClause, params }
 }
@@ -98,14 +89,9 @@ export async function queryLogs(
   db: DatabaseAdapter,
   opts?: { logLevel?: LogLevel; logScopes?: string[]; limit?: number },
 ): Promise<LogRow[]> {
-  const { whereClause, params } = buildLogFilterQuery(
-    opts?.logLevel,
-    opts?.logScopes,
-  )
+  const { whereClause, params } = buildLogFilterQuery(opts?.logLevel, opts?.logScopes)
   const limitClause =
-    opts?.limit !== undefined && Number.isFinite(opts.limit)
-      ? ` LIMIT ${opts.limit | 0}`
-      : ''
+    opts?.limit !== undefined && Number.isFinite(opts.limit) ? ` LIMIT ${opts.limit | 0}` : ''
   const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC${limitClause}`
   return db.getAllAsync<LogRow>(query, ...params)
 }
@@ -114,10 +100,7 @@ export async function queryLogCount(
   db: DatabaseAdapter,
   opts?: { logLevel?: LogLevel; logScopes?: string[] },
 ): Promise<number> {
-  const { whereClause, params } = buildLogFilterQuery(
-    opts?.logLevel,
-    opts?.logScopes,
-  )
+  const { whereClause, params } = buildLogFilterQuery(opts?.logLevel, opts?.logScopes)
   const query = `SELECT COUNT(*) as count FROM logs ${whereClause}`
   const result = await db.getFirstAsync<{ count: number }>(query, ...params)
   return result?.count ?? 0
@@ -127,10 +110,7 @@ export async function deleteAllLogs(db: DatabaseAdapter): Promise<void> {
   await db.runAsync('DELETE FROM logs')
 }
 
-export async function rotateLogs(
-  db: DatabaseAdapter,
-  maxLogs: number,
-): Promise<number> {
+export async function rotateLogs(db: DatabaseAdapter, maxLogs: number): Promise<number> {
   const countResult = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM logs',
   )

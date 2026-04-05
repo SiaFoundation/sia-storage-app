@@ -6,13 +6,13 @@
     "bench": "node --import tsx src/main.ts",
     "bench:10m": "node --import tsx src/main.ts --scale 10"
   },
+  "dependencies": {
+    "tsx": "4.21.0"
+  },
   "devDependencies": {
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
     "@siastorage/node-adapters": "workspace:*",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "tsx": "4.21.0"
   }
 }

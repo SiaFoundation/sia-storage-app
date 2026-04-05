@@ -1,15 +1,7 @@
 import { useAllTags } from '@siastorage/core/stores'
 import { CheckIcon, PlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  FlatList,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
@@ -44,9 +36,7 @@ export function BulkManageTagsSheet({
   const allTagList = (allTags.data ?? []).filter((t) => !t.system)
 
   const filtered = query.trim()
-    ? allTagList.filter((t) =>
-        t.name.toLowerCase().includes(query.trim().toLowerCase()),
-      )
+    ? allTagList.filter((t) => t.name.toLowerCase().includes(query.trim().toLowerCase()))
     : allTagList
 
   const exactMatch =
@@ -72,7 +62,7 @@ export function BulkManageTagsSheet({
       try {
         await app().tags.addToFiles(fileIds, trimmed)
         toast.show(
-          `Added "${trimmed}" to ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`,
+          `Added "${trimmed}" to ${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`,
         )
         const tag = allTagList.find((t) => t.name.toLowerCase() === key)
         if (tag) {
@@ -103,7 +93,7 @@ export function BulkManageTagsSheet({
       visible={isOpen}
       onRequestClose={handleClose}
       onShow={handleShow}
-      title={`Add ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to tag`}
+      title={`Add ${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'} to tag`}
     >
       <View style={styles.inputRow}>
         <TextInput
@@ -130,9 +120,7 @@ export function BulkManageTagsSheet({
         ListHeaderComponent={
           query.trim().length > 0 && !exactMatch
             ? (() => {
-                const isCreating = loadingTagNames.has(
-                  query.trim().toLowerCase(),
-                )
+                const isCreating = loadingTagNames.has(query.trim().toLowerCase())
                 return (
                   <Pressable
                     style={styles.tagRow}
@@ -145,9 +133,7 @@ export function BulkManageTagsSheet({
                       ) : (
                         <PlusIcon size={16} color={palette.blue[400]} />
                       )}
-                      <Text style={styles.createText}>
-                        Create "{query.trim()}"
-                      </Text>
+                      <Text style={styles.createText}>Create "{query.trim()}"</Text>
                     </View>
                   </Pressable>
                 )
@@ -176,9 +162,7 @@ export function BulkManageTagsSheet({
         }}
         ListEmptyComponent={
           query.trim().length === 0 ? (
-            <Text style={styles.emptyText}>
-              No tags yet. Type to create one.
-            </Text>
+            <Text style={styles.emptyText}>No tags yet. Type to create one.</Text>
           ) : null
         }
       />

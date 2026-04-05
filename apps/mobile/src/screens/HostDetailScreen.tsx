@@ -17,10 +17,7 @@ type Props = NativeStackScreenProps<MenuStackParamList, 'HostDetail'>
 export function HostDetailScreen({ route }: Props) {
   const { publicKey } = route.params
   const host = useHost(publicKey)
-  const region = useMemo(
-    () => determineBestRegion(host.data ? [host.data] : []),
-    [host.data],
-  )
+  const region = useMemo(() => determineBestRegion(host.data ? [host.data] : []), [host.data])
   if (!host.data) {
     if (host.isValidating) {
       return (

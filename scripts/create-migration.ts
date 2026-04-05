@@ -30,17 +30,13 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!description) {
-  console.error(
-    'Usage: bun scripts/create-migration.ts <description> [--app mobile]',
-  )
+  console.error('Usage: bun scripts/create-migration.ts <description> [--app mobile]')
   process.exit(1)
 }
 
 // Validate description: lowercase, underscores, digits only
 if (!/^[a-z][a-z0-9_]*$/.test(description)) {
-  console.error(
-    'Description must be lowercase snake_case (letters, digits, underscores)',
-  )
+  console.error('Description must be lowercase snake_case (letters, digits, underscores)')
   process.exit(1)
 }
 

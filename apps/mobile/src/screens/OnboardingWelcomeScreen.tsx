@@ -12,16 +12,14 @@ import { palette } from '../styles/colors'
 const typeFadeDurationMs = 500
 const typeFadeStaggerMs = 250
 const shapeTypeCount = Object.keys(SHAPES).length
-const totalTypeFadeMs =
-  typeFadeDurationMs + (shapeTypeCount - 1) * typeFadeStaggerMs
+const totalTypeFadeMs = typeFadeDurationMs + (shapeTypeCount - 1) * typeFadeStaggerMs
 
 const gridDimTarget = 0.12
 const gridDimDurationMs = 700
 const contentFadeDurationMs = 600
 
 export default function OnboardingWelcomeScreen() {
-  const nav =
-    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
+  const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
 
   const gridOpacity = useRef(new Animated.Value(1)).current
@@ -68,28 +66,20 @@ export default function OnboardingWelcomeScreen() {
       </Animated.View>
 
       <Animated.View
-        style={[
-          styles.contentWrap,
-          { opacity: contentOpacity, paddingTop: top + 12 },
-        ]}
+        style={[styles.contentWrap, { opacity: contentOpacity, paddingTop: top + 12 }]}
       >
         <View style={styles.card}>
           <View style={styles.center}>
             <Text testID="welcome-title" style={styles.title}>
               Sia Storage
             </Text>
-            <Text style={styles.subtitle}>
-              The world's safest cloud storage, by design.
-            </Text>
+            <Text style={styles.subtitle}>The world's safest cloud storage, by design.</Text>
           </View>
         </View>
       </Animated.View>
 
       <Animated.View
-        style={[
-          styles.footer,
-          { opacity: contentOpacity, paddingBottom: bottom + 12 },
-        ]}
+        style={[styles.footer, { opacity: contentOpacity, paddingBottom: bottom + 12 }]}
       >
         <Button
           testID="welcome-get-started-button"

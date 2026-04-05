@@ -8,13 +8,7 @@ import { RowGroup } from '../Group'
 import { InfoCard } from '../InfoCard'
 import { LabeledValueRow } from '../LabeledValueRow'
 
-export function FileMetaImport({
-  file,
-  status,
-}: {
-  file: FileRecord
-  status: FileStatus
-}) {
+export function FileMetaImport({ file, status }: { file: FileRecord; status: FileStatus }) {
   const humanSize = useMemo(() => {
     if (file.size == null) return null
     const units = ['B', 'KB', 'MB', 'GB']
@@ -80,11 +74,7 @@ export function FileMetaImport({
             showDividerTop
           />
           {showAdvanced.data && status.fileUri && (
-            <LabeledValueRow
-              label="File URI"
-              value={status.fileUri}
-              showDividerTop
-            />
+            <LabeledValueRow label="File URI" value={status.fileUri} showDividerTop />
           )}
         </InfoCard>
       </RowGroup>

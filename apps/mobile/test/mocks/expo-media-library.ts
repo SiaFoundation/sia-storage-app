@@ -82,9 +82,7 @@ export function getAssetCount(): number {
   return state.assets.length
 }
 
-export async function getAssetsAsync(
-  options: GetAssetsOptions = {},
-): Promise<PagedInfo<Asset>> {
+export async function getAssetsAsync(options: GetAssetsOptions = {}): Promise<PagedInfo<Asset>> {
   const { first = 20, after, createdAfter, mediaType } = options
 
   let filtered = [...state.assets]
@@ -119,9 +117,7 @@ export async function getAssetsAsync(
   }
 }
 
-export async function getAssetInfoAsync(
-  asset: Asset | string,
-): Promise<Asset | undefined> {
+export async function getAssetInfoAsync(asset: Asset | string): Promise<Asset | undefined> {
   const id = typeof asset === 'string' ? asset : asset.id
   return state.assets.find((a) => a.id === id)
 }
@@ -187,10 +183,7 @@ export function generateMockVideo(id: number): Asset {
   }
 }
 
-export function generateMockPhotos(
-  count: number,
-  options: { startId?: number } = {},
-): Asset[] {
+export function generateMockPhotos(count: number, options: { startId?: number } = {}): Asset[] {
   const { startId = 1 } = options
   return Array.from({ length: count }, (_, i) => generateMockPhoto(startId + i))
 }

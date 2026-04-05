@@ -1,9 +1,6 @@
-import type {
-  ThumbnailAdapter,
-  ThumbnailResult,
-} from '@siastorage/core/adapters'
+import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
 import type { ThumbSize } from '@siastorage/core/types'
-// biome-ignore lint/style/noRestrictedImports: File constructor + .bytes() (async)
+// oxlint-disable-next-line no-restricted-imports -- File constructor + .bytes() (async)
 import { File } from 'expo-file-system'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
@@ -78,10 +75,7 @@ async function resizeToWebP(
   const data = await file.bytes()
   return {
     result: {
-      data: data.buffer.slice(
-        data.byteOffset,
-        data.byteOffset + data.byteLength,
-      ),
+      data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
       mimeType: 'image/webp',
     },
     savedUri: saved.uri,
@@ -90,10 +84,7 @@ async function resizeToWebP(
 
 export function createMobileThumbnailAdapter(): ThumbnailAdapter {
   return {
-    async generateImageThumbnail(
-      sourcePath: string,
-      targetSize: number,
-    ): Promise<ThumbnailResult> {
+    async generateImageThumbnail(sourcePath: string, targetSize: number): Promise<ThumbnailResult> {
       const { result } = await resizeToWebP(sourcePath, targetSize as ThumbSize)
       return result
     },
@@ -108,11 +99,7 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
       let inputUri = sourcePath
       let skipDetection = false
       for (const size of sorted) {
-        const { result, savedUri } = await resizeToWebP(
-          inputUri,
-          size,
-          skipDetection,
-        )
+        const { result, savedUri } = await resizeToWebP(inputUri, size, skipDetection)
         results.set(size, result)
         // Subsequent smaller sizes resize from the larger result.
         // That file is already correctly oriented and much smaller,
@@ -124,10 +111,7 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
       return results
     },
 
-    async generateVideoThumbnail(
-      sourcePath: string,
-      targetSize: number,
-    ): Promise<ThumbnailResult> {
+    async generateVideoThumbnail(sourcePath: string, targetSize: number): Promise<ThumbnailResult> {
       const thumb = await VideoThumbnails.getThumbnailAsync(sourcePath, {
         time: 1000,
         quality: 0.8,

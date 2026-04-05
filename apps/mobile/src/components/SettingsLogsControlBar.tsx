@@ -8,14 +8,7 @@ import {
   Trash2Icon,
 } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import RNFS from 'react-native-fs'
 import Share from 'react-native-share'
 import { logsCache } from '../hooks/useLogs'
@@ -96,7 +89,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
       : [...logScopes, scope]
     toast.show(
       newScopes.length > 0
-        ? `Showing ${newScopes.length} scope(s)`
+        ? `Showing ${newScopes.length.toLocaleString()} scope(s)`
         : 'Showing all scopes',
     )
   }
@@ -160,8 +153,7 @@ export function SettingsLogsControlBar({ navigation }: Props) {
           filename: fileName,
         })
       } catch (e: unknown) {
-        if (e instanceof Error && e.message?.includes('User did not share'))
-          return
+        if (e instanceof Error && e.message?.includes('User did not share')) return
         throw e
       } finally {
         await RNFS.unlink(tempFilePath)
@@ -214,22 +206,14 @@ export function SettingsLogsControlBar({ navigation }: Props) {
             justifyContent: 'space-between',
           }}
         >
-          <Pressable
-            onPress={() => openSheet('logLevel')}
-            style={styles.filterButton}
-          >
-            <Text style={styles.filterButtonText}>
-              {logLevel.toUpperCase()}
-            </Text>
+          <Pressable onPress={() => openSheet('logLevel')} style={styles.filterButton}>
+            <Text style={styles.filterButtonText}>{logLevel.toUpperCase()}</Text>
             <ChevronDownIcon size={16} color={iconColors.white} />
           </Pressable>
-          <Pressable
-            onPress={() => openSheet('logScopes')}
-            style={styles.filterButton}
-          >
+          <Pressable onPress={() => openSheet('logScopes')} style={styles.filterButton}>
             <FilterIcon size={16} color={iconColors.white} />
             <Text style={styles.filterButtonText}>
-              {logScopes.length > 0 ? `${logScopes.length}` : 'All'}
+              {logScopes.length > 0 ? `${logScopes.length.toLocaleString()}` : 'All'}
             </Text>
             <ChevronDownIcon size={16} color={iconColors.white} />
           </Pressable>
@@ -240,17 +224,8 @@ export function SettingsLogsControlBar({ navigation }: Props) {
       <ActionSheet visible={levelSheetOpen} onRequestClose={closeSheet}>
         <Text style={styles.sheetTitle}>Log Level</Text>
         {LOG_LEVELS.map((level) => (
-          <Pressable
-            key={level}
-            style={styles.sheetRow}
-            onPress={() => handleLevelSelect(level)}
-          >
-            <Text
-              style={[
-                styles.sheetRowText,
-                logLevel === level && styles.sheetRowTextSelected,
-              ]}
-            >
+          <Pressable key={level} style={styles.sheetRow} onPress={() => handleLevelSelect(level)}>
+            <Text style={[styles.sheetRowText, logLevel === level && styles.sheetRowTextSelected]}>
               {level.toUpperCase()}
             </Text>
             {logLevel === level && <Text style={styles.sheetRowCheck}>✓</Text>}
@@ -286,16 +261,8 @@ export function SettingsLogsControlBar({ navigation }: Props) {
             renderItem={({ item: scope }) => {
               const isSelected = logScopes.includes(scope)
               return (
-                <Pressable
-                  style={styles.scopeRow}
-                  onPress={() => handleScopeToggle(scope)}
-                >
-                  <Text
-                    style={[
-                      styles.scopeRowText,
-                      isSelected && styles.scopeRowTextSelected,
-                    ]}
-                  >
+                <Pressable style={styles.scopeRow} onPress={() => handleScopeToggle(scope)}>
+                  <Text style={[styles.scopeRowText, isSelected && styles.scopeRowTextSelected]}>
                     {scope}
                   </Text>
                   {isSelected && <Text style={styles.scopeRowCheck}>✓</Text>}

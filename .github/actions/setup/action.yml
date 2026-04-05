@@ -11,6 +11,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
       with:

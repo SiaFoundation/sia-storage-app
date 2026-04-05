@@ -1,4 +1,4 @@
-// biome-ignore lint/style/noRestrictedImports: constructors for URI refs only, all ops use RNFS
+// oxlint-disable-next-line no-restricted-imports -- constructors for URI refs only, all ops use RNFS
 import { Directory, File, Paths } from 'expo-file-system'
 import RNFS from 'react-native-fs'
 
@@ -25,9 +25,7 @@ function getTempDownloadFileForId(file: TempFsFileInfo): File {
   return new File(tempFsStorageDirectory, `${file.id}.download.tmp`)
 }
 
-export async function getOrCreateTempDownloadFile(
-  file: TempFsFileInfo,
-): Promise<File> {
+export async function getOrCreateTempDownloadFile(file: TempFsFileInfo): Promise<File> {
   const f = getTempDownloadFileForId(file)
   const exists = await RNFS.exists(f.uri)
   if (!exists) {
@@ -37,9 +35,7 @@ export async function getOrCreateTempDownloadFile(
   return f
 }
 
-export async function removeTempDownloadFile(
-  file: TempFsFileInfo,
-): Promise<void> {
+export async function removeTempDownloadFile(file: TempFsFileInfo): Promise<void> {
   const f = getTempDownloadFileForId(file)
   try {
     await RNFS.unlink(f.uri)

@@ -18,10 +18,7 @@ export function RootTabs() {
       <Tab.Screen name="MainTab" options={{ tabBarStyle: { display: 'none' } }}>
         {() => <MainStack />}
       </Tab.Screen>
-      <Tab.Screen
-        name="ImportTab"
-        options={{ tabBarStyle: { display: 'none' } }}
-      >
+      <Tab.Screen name="ImportTab" options={{ tabBarStyle: { display: 'none' } }}>
         {() => <ImportStack />}
       </Tab.Screen>
       <Tab.Screen name="MenuTab" options={{ tabBarStyle: { display: 'none' } }}>

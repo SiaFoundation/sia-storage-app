@@ -13,9 +13,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native'
-import Carousel, {
-  type ICarouselInstance,
-} from 'react-native-reanimated-carousel'
+import Carousel, { type ICarouselInstance } from 'react-native-reanimated-carousel'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Share from 'react-native-share'
 import { useFileStatus } from '../../lib/file'
@@ -90,25 +88,20 @@ export function FileCarousel({
     onClose()
   }, [onClose, toast])
 
-  const {
-    totalCount,
-    currentIndex,
-    currentFile,
-    getFileAtIndex,
-    setCurrentIndex,
-  } = useFileCarousel({
-    initialId,
-    initialFile,
-    sortBy,
-    sortDir,
-    categories,
-    directoryId,
-    tags,
-    query,
-    prefetchRadius: 3,
-    maxCacheSize: 50,
-    onDeleted: handleFileDeleted,
-  })
+  const { totalCount, currentIndex, currentFile, getFileAtIndex, setCurrentIndex } =
+    useFileCarousel({
+      initialId,
+      initialFile,
+      sortBy,
+      sortDir,
+      categories,
+      directoryId,
+      tags,
+      query,
+      prefetchRadius: 3,
+      maxCacheSize: 50,
+      onDeleted: handleFileDeleted,
+    })
 
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 })
 
@@ -151,22 +144,15 @@ export function FileCarousel({
 
   // Unlock screen orientation.
   useEffect(() => {
-    ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.DEFAULT,
-    ).catch(() => {})
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT).catch(() => {})
     return () => {
-      ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.PORTRAIT_UP,
-      ).catch(() => {})
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
     }
   }, [])
 
   useEffect(() => {
     AccessibilityInfo.isScreenReaderEnabled().then(setIsScreenReaderEnabled)
-    const sub = AccessibilityInfo.addEventListener(
-      'screenReaderChanged',
-      setIsScreenReaderEnabled,
-    )
+    const sub = AccessibilityInfo.addEventListener('screenReaderChanged', setIsScreenReaderEnabled)
     return () => {
       sub.remove()
     }
@@ -182,8 +168,7 @@ export function FileCarousel({
         subject: `Sia Storage - ${currentFile.type}`,
       })
     } catch (e) {
-      const msg =
-        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      const msg = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
       if (!msg.includes('User did not share')) {
         logger.error('FileCarousel', 'share_failed', { error: e as Error })
       }
@@ -311,10 +296,7 @@ export function FileCarousel({
             </View>
             {showCarousel && (
               <View
-                style={[
-                  styles.absoluteFill,
-                  !carouselReady && styles.transparent,
-                ]}
+                style={[styles.absoluteFill, !carouselReady && styles.transparent]}
                 pointerEvents={carouselReady ? 'auto' : 'none'}
               >
                 <Carousel
@@ -368,10 +350,7 @@ export function FileCarousel({
       )}
       {currentFile && (showChrome || isDetailView) && !isDismissing ? (
         <View
-          style={[
-            styles.controlBarOverlay,
-            { paddingBottom: insets.bottom + 12 },
-          ]}
+          style={[styles.controlBarOverlay, { paddingBottom: insets.bottom + 12 }]}
           pointerEvents="box-none"
         >
           <FileCarouselControlBar

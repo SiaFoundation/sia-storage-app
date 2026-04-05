@@ -1,8 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import {
-  type DirectoryWithCount,
-  UNFILED_DIRECTORY_ID,
-} from '@siastorage/core/db/operations'
+import { type DirectoryWithCount, UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
 import {
   type FileListParams,
   useDirectoryChildren,
@@ -23,15 +20,7 @@ import {
   XIcon,
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ActionSheet } from '../components/ActionSheet'
 import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
@@ -197,12 +186,10 @@ export function DirectoryScreen({ route, navigation }: Props) {
   const fileCount = dirCount.data ?? 0
   const subDirCount = isUnfiled ? 0 : (subdirectories.data?.length ?? 0)
   const subtitleParts: string[] = []
-  subtitleParts.push(
-    `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`,
-  )
+  subtitleParts.push(`${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`)
   if (subDirCount > 0) {
     subtitleParts.push(
-      `${subDirCount} ${subDirCount === 1 ? 'folder' : 'folders'}`,
+      `${subDirCount.toLocaleString()} ${subDirCount === 1 ? 'folder' : 'folders'}`,
     )
   }
   const subtitle = subtitleParts.join(', ')
@@ -241,11 +228,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
     return (
       <View>
         {subdirectories.data.map((sub) => (
-          <DirectoryListItem
-            key={sub.id}
-            dir={sub}
-            onPress={() => handleSelectSubdirectory(sub)}
-          />
+          <DirectoryListItem key={sub.id} dir={sub} onPress={() => handleSelectSubdirectory(sub)} />
         ))}
       </View>
     )
@@ -283,10 +266,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
       />
       <ScreenHeader>
         <View style={styles.headerLeft}>
-          <IconButton
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Back"
-          >
+          <IconButton onPress={() => navigation.goBack()} accessibilityLabel="Back">
             <ArrowLeftIcon color={palette.gray[50]} size={22} />
           </IconButton>
           <ScreenHeaderTitle
@@ -349,10 +329,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
         />
       )}
 
-      <AddFileActionSheet
-        sheetName="directoryAddFile"
-        onFilesAdded={handleFilesAdded}
-      />
+      <AddFileActionSheet sheetName="directoryAddFile" onFilesAdded={handleFilesAdded} />
       {isSelectionMode ? (
         <SelectionBar
           onComplete={handleBulkActionComplete}
@@ -367,10 +344,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
             >
               <FilePlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
-            <IconButton
-              onPress={() => navigation.navigate('Search')}
-              accessibilityLabel="Search"
-            >
+            <IconButton onPress={() => navigation.navigate('Search')} accessibilityLabel="Search">
               <SearchIcon color={palette.gray[50]} size={22} />
             </IconButton>
             {!isUnfiled ? (
@@ -425,14 +399,8 @@ export function DirectoryScreen({ route, navigation }: Props) {
         </Animated.View>
       ) : null}
 
-      <ActionSheet
-        visible={dirActionsOpen}
-        onRequestClose={() => closeSheet('directoryActions')}
-      >
-        <ActionSheetButton
-          icon={<FolderPlusIcon size={18} />}
-          onPress={handleCreateSubfolder}
-        >
+      <ActionSheet visible={dirActionsOpen} onRequestClose={() => closeSheet('directoryActions')}>
+        <ActionSheetButton icon={<FolderPlusIcon size={18} />} onPress={handleCreateSubfolder}>
           New folder
         </ActionSheetButton>
         <ActionSheetButton
@@ -469,10 +437,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
             onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
           />
           {actionSheetFileIds.length === 1 ? (
-            <ManageTagsSheet
-              fileId={actionSheetFileIds[0]}
-              sheetName="directoryManageTags"
-            />
+            <ManageTagsSheet fileId={actionSheetFileIds[0]} sheetName="directoryManageTags" />
           ) : null}
         </>
       ) : null}

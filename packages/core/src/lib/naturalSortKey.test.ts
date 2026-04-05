@@ -22,28 +22,19 @@ describe('naturalSortKey', () => {
   it('pads multiple numeric sequences independently', () => {
     const key = naturalSortKey('v1.2.10')
     expect(key).toBe(
-      'v' +
-        '1'.padStart(20, '0') +
-        '.' +
-        '2'.padStart(20, '0') +
-        '.' +
-        '10'.padStart(20, '0'),
+      'v' + '1'.padStart(20, '0') + '.' + '2'.padStart(20, '0') + '.' + '10'.padStart(20, '0'),
     )
   })
 
   it('produces correct natural sort order', () => {
     const names = ['file10', 'file2', 'file1', 'file20', 'file3']
-    const sorted = [...names].sort((a, b) =>
-      naturalSortKey(a)!.localeCompare(naturalSortKey(b)!),
-    )
+    const sorted = [...names].sort((a, b) => naturalSortKey(a)!.localeCompare(naturalSortKey(b)!))
     expect(sorted).toEqual(['file1', 'file2', 'file3', 'file10', 'file20'])
   })
 
   it('handles case-insensitive natural sorting', () => {
     const names = ['File10', 'FILE2', 'file1']
-    const sorted = [...names].sort((a, b) =>
-      naturalSortKey(a)!.localeCompare(naturalSortKey(b)!),
-    )
+    const sorted = [...names].sort((a, b) => naturalSortKey(a)!.localeCompare(naturalSortKey(b)!))
     expect(sorted).toEqual(['file1', 'FILE2', 'File10'])
   })
 
@@ -61,9 +52,7 @@ describe('naturalSortKey', () => {
 
   it('handles path-style names with slashes', () => {
     const names = ['photos/2', 'photos/10', 'photos/1']
-    const sorted = [...names].sort((a, b) =>
-      naturalSortKey(a)!.localeCompare(naturalSortKey(b)!),
-    )
+    const sorted = [...names].sort((a, b) => naturalSortKey(a)!.localeCompare(naturalSortKey(b)!))
     expect(sorted).toEqual(['photos/1', 'photos/2', 'photos/10'])
   })
 

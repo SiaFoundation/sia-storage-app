@@ -1,7 +1,4 @@
-import {
-  detectMimeTypeFromBytes,
-  MAGIC_BYTES_LENGTH,
-} from '@siastorage/core/lib/detectMimeType'
+import { detectMimeTypeFromBytes, MAGIC_BYTES_LENGTH } from '@siastorage/core/lib/detectMimeType'
 import { logger } from '@siastorage/logger'
 import type { MimeType } from './fileTypes'
 import { readFileBytes } from './readFileBytes'
@@ -12,9 +9,7 @@ export { detectMimeTypeFromBytes, MAGIC_BYTES_LENGTH }
  * Sniff file type from magic numbers.
  * Reads first 32 bytes from a file URI and checks against known signatures.
  */
-export async function detectMimeType(
-  uri: string | undefined,
-): Promise<MimeType | null> {
+export async function detectMimeType(uri: string | undefined): Promise<MimeType | null> {
   if (!uri) return null
 
   try {

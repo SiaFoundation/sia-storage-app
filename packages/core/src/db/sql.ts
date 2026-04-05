@@ -19,12 +19,7 @@ export type InsertOptions = {
 
 export async function insert<
   T extends Record<string, string | number | boolean | null | undefined>,
->(
-  db: DatabaseAdapter,
-  table: string,
-  row: T,
-  options?: InsertOptions,
-): Promise<SQLRunResult> {
+>(db: DatabaseAdapter, table: string, row: T, options?: InsertOptions): Promise<SQLRunResult> {
   const columns = Object.keys(row)
   const valuesSql: string[] = []
   const params: SqlBindable[] = []
@@ -39,13 +34,9 @@ export async function insert<
     params.push(value)
   }
 
-  const verb = options?.conflictClause
-    ? `INSERT ${options.conflictClause}`
-    : 'INSERT'
+  const verb = options?.conflictClause ? `INSERT ${options.conflictClause}` : 'INSERT'
 
-  const sql = `${verb} INTO ${table} (${columns.join(
-    ', ',
-  )}) VALUES (${valuesSql.join(', ')})`
+  const sql = `${verb} INTO ${table} (${columns.join(', ')}) VALUES (${valuesSql.join(', ')})`
   return await run(db, sql, params)
 }
 
@@ -57,18 +48,11 @@ const MAX_VARIABLES = 999
 
 export async function insertMany<
   T extends Record<string, string | number | boolean | null | undefined>,
->(
-  db: DatabaseAdapter,
-  table: string,
-  rows: T[],
-  options?: InsertOptions,
-): Promise<void> {
+>(db: DatabaseAdapter, table: string, rows: T[], options?: InsertOptions): Promise<void> {
   if (rows.length === 0) return
   const columns = Object.keys(rows[0])
   const chunkSize = Math.max(1, Math.floor(MAX_VARIABLES / columns.length))
-  const verb = options?.conflictClause
-    ? `INSERT ${options.conflictClause}`
-    : 'INSERT'
+  const verb = options?.conflictClause ? `INSERT ${options.conflictClause}` : 'INSERT'
 
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize)
@@ -101,18 +85,11 @@ export type UpsertOptions = {
 
 export async function upsertMany<
   T extends Record<string, string | number | boolean | null | undefined>,
->(
-  db: DatabaseAdapter,
-  table: string,
-  rows: T[],
-  options: UpsertOptions,
-): Promise<void> {
+>(db: DatabaseAdapter, table: string, rows: T[], options: UpsertOptions): Promise<void> {
   if (rows.length === 0) return
   const columns = Object.keys(rows[0])
   const chunkSize = Math.max(1, Math.floor(MAX_VARIABLES / columns.length))
-  const updateClause = options.updateColumns
-    .map((col) => `${col} = excluded.${col}`)
-    .join(', ')
+  const updateClause = options.updateColumns.map((col) => `${col} = excluded.${col}`).join(', ')
 
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize)
@@ -190,9 +167,7 @@ function buildSqlAssignments(fields: Record<string, SqlValue>): SqlFragment {
   }
 }
 
-function buildSqlWhereClause(
-  conditions?: Record<string, SqlValue>,
-): SqlFragment {
+function buildSqlWhereClause(conditions?: Record<string, SqlValue>): SqlFragment {
   if (!conditions) {
     return { clause: '', params: [] }
   }

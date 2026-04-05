@@ -30,10 +30,7 @@ export function createSharpThumbnailAdapter(): ThumbnailAdapter | undefined {
           .webp({ quality: 80 })
           .toBuffer()
         results.set(size, {
-          data: buf.buffer.slice(
-            buf.byteOffset,
-            buf.byteOffset + buf.byteLength,
-          ),
+          data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
           mimeType: 'image/webp',
         })
       }

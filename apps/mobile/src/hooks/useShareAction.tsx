@@ -21,10 +21,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
 
     const result = getOneSealedObject(file)
     if (!result) return
-    const pinnedObject = await getPinnedObject(
-      result.indexerURL,
-      result.sealedObject,
-    )
+    const pinnedObject = await getPinnedObject(result.indexerURL, result.sealedObject)
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
     return sdk.shareObject(pinnedObject, expiresAt)
@@ -52,8 +49,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
         subject: `Sia Storage - ${file.type}`,
       })
     } catch (e) {
-      const msg =
-        typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      const msg = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
       if (!msg.includes('User did not share')) {
         logger.error('shareAction', 'share_failed', { error: e as Error })
       }

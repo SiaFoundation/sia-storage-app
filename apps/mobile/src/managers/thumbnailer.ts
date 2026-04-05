@@ -14,9 +14,7 @@ export function isFileInErrorCooldown(fileId: string): boolean {
   return getThumbnailScanner().isFileInErrorCooldown(fileId)
 }
 
-export async function generateThumbnailsForFile(
-  fileRecord: FileRecord,
-): Promise<void> {
+export async function generateThumbnailsForFile(fileRecord: FileRecord): Promise<void> {
   return getThumbnailScanner().generateThumbnailsForFile(fileRecord)
 }
 

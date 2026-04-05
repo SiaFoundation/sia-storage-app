@@ -18,10 +18,7 @@ export async function readFsFileMetadata(
   )
 }
 
-export async function upsertFsFileMetadata(
-  db: DatabaseAdapter,
-  row: FsMetaRow,
-): Promise<void> {
+export async function upsertFsFileMetadata(db: DatabaseAdapter, row: FsMetaRow): Promise<void> {
   await sql.insert(
     db,
     'fs',
@@ -43,10 +40,7 @@ export async function updateFsFileMetadataUsedAt(
   await sql.update(db, 'fs', { usedAt }, { fileId })
 }
 
-export async function deleteFsFileMetadata(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<void> {
+export async function deleteFsFileMetadata(db: DatabaseAdapter, fileId: string): Promise<void> {
   await sql.del(db, 'fs', { fileId })
 }
 
@@ -56,10 +50,7 @@ export async function deleteFsFileMetadataBatch(
 ): Promise<void> {
   if (fileIds.length === 0) return
   const placeholders = fileIds.map(() => '?').join(',')
-  await db.runAsync(
-    `DELETE FROM fs WHERE fileId IN (${placeholders})`,
-    ...fileIds,
-  )
+  await db.runAsync(`DELETE FROM fs WHERE fileId IN (${placeholders})`, ...fileIds)
 }
 
 export async function queryFsCacheEvictionCandidates(
@@ -98,9 +89,7 @@ export async function queryOrphanedFileIds(
   return new Set(rows.map((r) => r.fileId))
 }
 
-export async function calcFsFilesMetadataTotalSize(
-  db: DatabaseAdapter,
-): Promise<number> {
+export async function calcFsFilesMetadataTotalSize(db: DatabaseAdapter): Promise<number> {
   const result = await db.getFirstAsync<{ total: number }>(
     'SELECT COALESCE(SUM(size), 0) AS total FROM fs',
   )

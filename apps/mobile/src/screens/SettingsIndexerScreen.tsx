@@ -41,9 +41,7 @@ export function SettingsIndexerScreen({ navigation }: Props) {
         indicator={
           <View style={styles.statusContainer}>
             <View style={styles.statusDot}>
-              <DotIcon
-                color={isConnected ? palette.green[500] : palette.red[500]}
-              />
+              <DotIcon color={isConnected ? palette.green[500] : palette.red[500]} />
             </View>
             <Text
               style={[
@@ -101,11 +99,7 @@ export function SettingsIndexerScreen({ navigation }: Props) {
       </RowGroup>
 
       <View style={{ gap: 12 }}>
-        <Button
-          variant="secondary"
-          onPress={handleReconnect}
-          disabled={isReconnecting}
-        >
+        <Button variant="secondary" onPress={handleReconnect} disabled={isReconnecting}>
           {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
         </Button>
 

@@ -199,8 +199,7 @@ export function buildDbNamespaces(
       getByLocalIds: (localIds) => ops.readFileRecordsByLocalIds(db, localIds),
       getByName: (name) => ops.readFileRecordByName(db, name),
       getByContentHash: (hash) => ops.readFileRecordByContentHash(db, hash),
-      getByContentHashes: (hashes) =>
-        ops.readFileRecordsByContentHashes(db, hashes),
+      getByContentHashes: (hashes) => ops.readFileRecordsByContentHashes(db, hashes),
       query: (opts) => ops.queryFileRecords(db, opts),
       queryCount: (opts) => ops.queryFileRecordsCount(db, opts),
       queryStats: (opts) => ops.queryFileRecordsStats(db, opts),
@@ -296,10 +295,8 @@ export function buildDbNamespaces(
         await ops.deleteFileRecordsAndThumbnails(db, ids)
         invalidateLibrary()
       },
-      recalculateCurrent: (fileIds) =>
-        ops.recalculateCurrentForFileIds(db, fileIds),
-      recalculateCurrentForGroups: (groups) =>
-        ops.recalculateCurrentForGroups(db, groups),
+      recalculateCurrent: (fileIds) => ops.recalculateCurrentForFileIds(db, fileIds),
+      recalculateCurrentForGroups: (groups) => ops.recalculateCurrentForGroups(db, groups),
       deleteLost: async (indexerURL) => {
         const lostIds = await ops.deleteLostFiles(db, indexerURL)
         if (lostIds.length > 0) {
@@ -333,9 +330,7 @@ export function buildDbNamespaces(
         uploads.removeMany(ids)
         await ops.permanentlyDeleteFiles(db, ids)
         const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, ids)
-        await Promise.all(
-          [...files, ...thumbs].map((f) => fsNamespace.removeFile(f)),
-        )
+        await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
         invalidateLibrary()
       },
       autoPurgeWithCleanup: async () => {
@@ -345,9 +340,7 @@ export function buildDbNamespaces(
         if (files.length === 0) return
         uploads.removeMany(purgedIds)
         const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, purgedIds)
-        await Promise.all(
-          [...files, ...thumbs].map((f) => fsNamespace.removeFile(f)),
-        )
+        await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
         invalidateLibrary()
       },
       getVersionHistory: async (name, directoryId) => {
@@ -360,12 +353,7 @@ export function buildDbNamespaces(
           directoryId: string | null
         }>('SELECT name, directoryId FROM files WHERE id = ?', id)
         if (!file) return
-        await ops.renameAllFileVersions(
-          db,
-          file.name,
-          file.directoryId,
-          newName,
-        )
+        await ops.renameAllFileVersions(db, file.name, file.directoryId, newName)
         invalidateLibrary()
       },
       moveFile: async (id, dirId) => {
@@ -384,11 +372,7 @@ export function buildDbNamespaces(
           directoryId: string | null
         }>('SELECT name, directoryId FROM files WHERE id = ?', id)
         if (!file) return
-        const ids = await ops.trashAllFileVersions(
-          db,
-          file.name,
-          file.directoryId,
-        )
+        const ids = await ops.trashAllFileVersions(db, file.name, file.directoryId)
         uploads.removeMany(ids)
         invalidateLibrary()
       },
@@ -411,8 +395,7 @@ export function buildDbNamespaces(
         caches.directories.invalidateAll()
         return dir
       },
-      getOrCreate: (name, parentPath) =>
-        ops.getOrCreateDirectory(db, name, parentPath),
+      getOrCreate: (name, parentPath) => ops.getOrCreateDirectory(db, name, parentPath),
       getOrCreateAtPath: (path) => ops.getOrCreateDirectoryAtPath(db, path),
       delete: async (id) => {
         await ops.deleteDirectory(db, id)
@@ -451,8 +434,7 @@ export function buildDbNamespaces(
         }
         caches.libraryVersion.invalidate()
       },
-      countFilesWithDirectories: (fileIds) =>
-        ops.queryCountFilesWithDirectories(db, fileIds),
+      countFilesWithDirectories: (fileIds) => ops.queryCountFilesWithDirectories(db, fileIds),
       syncFromMetadata: async (fileId, dirPath, opts) => {
         if (dirPath === undefined) return
         await ops.syncDirectoryFromMetadata(db, fileId, dirPath, {
@@ -475,12 +457,10 @@ export function buildDbNamespaces(
     },
     thumbnails: {
       getForFile: (fileId) => ops.queryThumbnailsByFileId(db, fileId),
-      getBest: (fileId, requiredSize) =>
-        ops.queryBestThumbnailByFileId(db, fileId, requiredSize),
+      getBest: (fileId, requiredSize) => ops.queryBestThumbnailByFileId(db, fileId, requiredSize),
       getByFileIdAndSize: (fileId, size) =>
         ops.queryThumbnailRecordByFileIdAndSize(db, fileId, size),
-      getInfoForFiles: (fileIds) =>
-        ops.queryThumbnailFileInfoByFileIds(db, fileIds),
+      getInfoForFiles: (fileIds) => ops.queryThumbnailFileInfoByFileIds(db, fileIds),
       getSizesForFile: (fileId) => ops.queryThumbnailSizesForFileId(db, fileId),
       existsForFileAndSize: (fileId, size) =>
         ops.queryThumbnailExistsForFileIdAndSize(db, fileId, size),
@@ -488,18 +468,15 @@ export function buildDbNamespaces(
         ops.queryThumbnailCandidatePage(db, pageSize, cursor),
       queryProgress: () => ops.queryThumbnailScanProgress(db),
       generate: (sourcePath, targetSize) => {
-        if (!adapters?.thumbnail)
-          throw new Error('Thumbnail adapter not configured')
+        if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
         return adapters.thumbnail.generateImageThumbnail(sourcePath, targetSize)
       },
       generateBatch: (sourcePath, sizes) => {
-        if (!adapters?.thumbnail)
-          throw new Error('Thumbnail adapter not configured')
+        if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
         return adapters.thumbnail.generateImageThumbnails(sourcePath, sizes)
       },
       generateVideo: (sourcePath, targetSize) => {
-        if (!adapters?.thumbnail)
-          throw new Error('Thumbnail adapter not configured')
+        if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
         return adapters.thumbnail.generateVideoThumbnail(sourcePath, targetSize)
       },
     },
@@ -548,16 +525,14 @@ export function buildDbNamespaces(
           caches.libraryVersion.invalidate()
         }
       },
-      queryFilesWithNoObjects: (fileIds) =>
-        ops.queryFilesWithNoObjects(db, fileIds),
+      queryFilesWithNoObjects: (fileIds) => ops.queryFilesWithNoObjects(db, fileIds),
     },
     fs: fsNamespace,
     library: {
       fileCount: () => ops.queryLibraryFileCount(db),
       mediaCount: () => ops.queryMediaFileCount(db),
       tagFileCount: (tagId) => ops.queryTagFileCount(db, tagId),
-      directoryFileCount: (directoryId) =>
-        ops.queryDirectoryFileCount(db, directoryId),
+      directoryFileCount: (directoryId) => ops.queryDirectoryFileCount(db, directoryId),
       unfiledFileCount: () => ops.queryUnfiledFileCount(db),
       countWithFilters: (opts) => ops.queryFileCountWithFilters(db, opts),
       filePosition: (fileId, params) =>
@@ -566,8 +541,7 @@ export function buildDbNamespaces(
           sortBy: params.sortBy ?? 'DATE',
           sortDir: params.sortDir ?? 'DESC',
         }),
-      sortedFileIds: (params, limit, offset) =>
-        ops.querySortedFileIds(db, params, limit, offset),
+      sortedFileIds: (params, limit, offset) => ops.querySortedFileIds(db, params, limit, offset),
     },
     logs: {
       append: (entry) => ops.insertLog(db, { ...entry, createdAt: Date.now() }),
@@ -576,15 +550,8 @@ export function buildDbNamespaces(
           db,
           entries.map((e) => ({ ...e, createdAt: Date.now() })),
         ),
-      read: async (opts?: {
-        logLevel?: string
-        logScopes?: string[]
-        limit?: number
-      }) => {
-        const rows = await ops.queryLogs(
-          db,
-          opts as Parameters<typeof ops.queryLogs>[1],
-        )
+      read: async (opts?: { logLevel?: string; logScopes?: string[]; limit?: number }) => {
+        const rows = await ops.queryLogs(db, opts as Parameters<typeof ops.queryLogs>[1])
         return rows.map(parseLogRow)
       },
       count: (opts?: { logLevel?: string; logScopes?: string[] }) =>

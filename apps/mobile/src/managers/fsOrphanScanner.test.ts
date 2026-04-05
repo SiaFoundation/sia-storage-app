@@ -12,9 +12,7 @@ describe('fsOrphanScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     listFilesSpy = jest.spyOn(app().fs, 'listFiles').mockResolvedValue([])
-    removeFileSpy = jest
-      .spyOn(app().fs, 'removeFile')
-      .mockResolvedValue(undefined)
+    removeFileSpy = jest.spyOn(app().fs, 'removeFile').mockResolvedValue(undefined)
     await initializeDB()
     await app().storage.setItem('fsOrphanLastRun', '0')
   })
@@ -27,10 +25,7 @@ describe('fsOrphanScanner', () => {
   })
 
   it('skips run when last run was recent', async () => {
-    await app().storage.setItem(
-      'fsOrphanLastRun',
-      String(now - FS_ORPHAN_FREQUENCY / 2),
-    )
+    await app().storage.setItem('fsOrphanLastRun', String(now - FS_ORPHAN_FREQUENCY / 2))
 
     const result = await runFsOrphanScanner()
 
@@ -157,11 +152,7 @@ describe('fsOrphanScanner', () => {
       usedAt: now,
     })
 
-    const orphaned = await app().fs.findOrphanedFileIds([
-      'keep-1',
-      'orphan-1',
-      'orphan-2',
-    ])
+    const orphaned = await app().fs.findOrphanedFileIds(['keep-1', 'orphan-1', 'orphan-2'])
 
     expect(orphaned.has('keep-1')).toBe(false)
     expect(orphaned.has('orphan-1')).toBe(true)

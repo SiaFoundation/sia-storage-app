@@ -1,8 +1,4 @@
-import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from 'lucide-react-native'
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react-native'
 import { useCallback, useRef, useState } from 'react'
 import {
   Animated,
@@ -114,18 +110,13 @@ export function DropdownMenu({ trigger, items }: Props) {
   const submenuItem = activeSubmenu
     ? items.find((i) => i.type === 'submenu' && i.key === activeSubmenu)
     : null
-  const submenuItems =
-    submenuItem && submenuItem.type === 'submenu' ? submenuItem.items : []
+  const submenuItems = submenuItem && submenuItem.type === 'submenu' ? submenuItem.items : []
 
   const screen = Dimensions.get('window')
   const MENU_WIDTH = 240
-  const statusBarOffset =
-    Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0
+  const statusBarOffset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0
   const menuRight = triggerLayout.x + triggerLayout.width
-  const menuLeft = Math.max(
-    8,
-    Math.min(menuRight - MENU_WIDTH, screen.width - MENU_WIDTH - 8),
-  )
+  const menuLeft = Math.max(8, Math.min(menuRight - MENU_WIDTH, screen.width - MENU_WIDTH - 8))
   const menuTop = triggerLayout.y + triggerLayout.height + 6 + statusBarOffset
 
   const opacity = progress.interpolate({
@@ -199,9 +190,7 @@ export function DropdownMenu({ trigger, items }: Props) {
                 <Pressable style={styles.submenuBack} onPress={closeSubmenu}>
                   <ChevronLeftIcon size={16} color={palette.blue[400]} />
                   <Text style={styles.submenuBackText}>
-                    {submenuItem && submenuItem.type === 'submenu'
-                      ? submenuItem.label
-                      : ''}
+                    {submenuItem && submenuItem.type === 'submenu' ? submenuItem.label : ''}
                   </Text>
                 </Pressable>
                 <View style={styles.separator} />
@@ -228,10 +217,7 @@ function renderItems(
       return (
         <Pressable
           key={item.key}
-          style={({ pressed }) => [
-            styles.menuItem,
-            pressed && styles.menuItemPressed,
-          ]}
+          style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
           onPress={() => onOpenSubmenu(item.key)}
         >
           <Text style={styles.menuItemText}>{item.label}</Text>
@@ -242,23 +228,13 @@ function renderItems(
     return (
       <Pressable
         key={item.key}
-        style={({ pressed }) => [
-          styles.menuItem,
-          pressed && styles.menuItemPressed,
-        ]}
+        style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
         onPress={() => onPress(item)}
       >
         <View style={styles.checkArea}>
-          {item.checked ? (
-            <CheckIcon size={15} color={palette.gray[50]} />
-          ) : null}
+          {item.checked ? <CheckIcon size={15} color={palette.gray[50]} /> : null}
         </View>
-        <Text
-          style={[
-            styles.menuItemText,
-            item.checked && styles.menuItemTextChecked,
-          ]}
-        >
+        <Text style={[styles.menuItemText, item.checked && styles.menuItemTextChecked]}>
           {item.label}
         </Text>
       </Pressable>

@@ -8,10 +8,7 @@ import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { logger } from '@siastorage/logger'
 import { app, internal } from '../stores/appService'
 
-export async function runSyncUpMetadata(
-  batchSize: number,
-  signal?: AbortSignal,
-): Promise<void> {
+export async function runSyncUpMetadata(batchSize: number, signal?: AbortSignal): Promise<void> {
   const effectiveSignal = signal ?? new AbortController().signal
   return syncUpMetadataBatch(
     batchSize,

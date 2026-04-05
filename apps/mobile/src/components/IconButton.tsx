@@ -1,10 +1,5 @@
 import type React from 'react'
-import {
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  type ViewStyle,
-} from 'react-native'
+import { Pressable, type StyleProp, StyleSheet, type ViewStyle } from 'react-native'
 import { palette, whiteA } from '../styles/colors'
 
 type Props = {

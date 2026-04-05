@@ -27,11 +27,7 @@ export {
   syncDirectoryFromMetadata,
   syncManyDirectoriesFromMetadata,
 } from './directories'
-export {
-  queryUploadStats,
-  type UploadCategoryStats,
-  type UploadStats,
-} from './fileStats'
+export { queryUploadStats, type UploadCategoryStats, type UploadStats } from './fileStats'
 export {
   createFileRecordWithLocalObject,
   deleteAllFileRecords,
@@ -173,9 +169,4 @@ export {
   queryThumbnailsByFileId,
   type ThumbnailCandidateRow,
 } from './thumbnails'
-export {
-  autoPurgeOldTrashedFiles,
-  permanentlyDeleteFiles,
-  restoreFiles,
-  trashFiles,
-} from './trash'
+export { autoPurgeOldTrashedFiles, permanentlyDeleteFiles, restoreFiles, trashFiles } from './trash'

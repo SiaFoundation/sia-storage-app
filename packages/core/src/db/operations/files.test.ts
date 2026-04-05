@@ -114,17 +114,9 @@ describe('readFileRecordsByIds', () => {
 
 describe('insertManyFileRecords', () => {
   it('batch inserts in transaction and all are readable', async () => {
-    const records = [
-      makeFileRecord('file-1'),
-      makeFileRecord('file-2'),
-      makeFileRecord('file-3'),
-    ]
+    const records = [makeFileRecord('file-1'), makeFileRecord('file-2'), makeFileRecord('file-3')]
     await insertManyFileRecords(db(), records)
-    const results = await readFileRecordsByIds(db(), [
-      'file-1',
-      'file-2',
-      'file-3',
-    ])
+    const results = await readFileRecordsByIds(db(), ['file-1', 'file-2', 'file-3'])
     expect(results).toHaveLength(3)
   })
 
@@ -328,14 +320,8 @@ describe('queryFileRecords', () => {
   })
 
   it('orders by updatedAt', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { createdAt: 1000, updatedAt: 3000 }),
-    )
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f2', { createdAt: 2000, updatedAt: 1000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { createdAt: 1000, updatedAt: 3000 }))
+    await insertFileRecord(db(), makeFileRecord('f2', { createdAt: 2000, updatedAt: 1000 }))
     const results = await queryFileRecords(db(), {
       order: 'ASC',
       orderBy: 'updatedAt',
@@ -377,18 +363,9 @@ describe('queryFileRecords', () => {
   })
 
   it('paginates by updatedAt cursor', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { createdAt: 1000, updatedAt: 1000 }),
-    )
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f2', { createdAt: 2000, updatedAt: 2000 }),
-    )
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f3', { createdAt: 3000, updatedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { createdAt: 1000, updatedAt: 1000 }))
+    await insertFileRecord(db(), makeFileRecord('f2', { createdAt: 2000, updatedAt: 2000 }))
+    await insertFileRecord(db(), makeFileRecord('f3', { createdAt: 3000, updatedAt: 2000 }))
     const results = await queryFileRecords(db(), {
       order: 'ASC',
       orderBy: 'updatedAt',
@@ -400,10 +377,7 @@ describe('queryFileRecords', () => {
   it('activeOnly excludes trashed separately from deleted', async () => {
     await insertFileRecord(db(), makeFileRecord('active'))
     await insertFileRecord(db(), makeFileRecord('trashed', { trashedAt: 2000 }))
-    await insertFileRecord(
-      db(),
-      makeFileRecord('deleted', { deletedAt: 3000, trashedAt: 3000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('deleted', { deletedAt: 3000, trashedAt: 3000 }))
     const active = await queryFileRecords(db(), {
       order: 'ASC',
       activeOnly: true,
@@ -425,10 +399,7 @@ describe('updateFileRecordFields edge cases', () => {
 
 describe('readFileRecordsByIds edge cases', () => {
   it('returns tombstoned files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { deletedAt: 2000, trashedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { deletedAt: 2000, trashedAt: 2000 }))
     const results = await readFileRecordsByIds(db(), ['f1'])
     expect(results).toHaveLength(1)
     expect(results[0].deletedAt).toBe(2000)
@@ -489,19 +460,13 @@ describe('queryFileRecordByContentHash', () => {
   })
 
   it('excludes trashed files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { hash: 'abc123', trashedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'abc123', trashedAt: 2000 }))
     const row = await queryFileRecordByContentHash(db(), 'abc123')
     expect(row).toBeNull()
   })
 
   it('excludes deleted files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { hash: 'abc123', deletedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'abc123', deletedAt: 2000 }))
     const row = await queryFileRecordByContentHash(db(), 'abc123')
     expect(row).toBeNull()
   })
@@ -517,19 +482,13 @@ describe('queryFileRecordsByLocalIds', () => {
   })
 
   it('excludes trashed files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { localId: 'local-1', trashedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { localId: 'local-1', trashedAt: 2000 }))
     const rows = await queryFileRecordsByLocalIds(db(), ['local-1'])
     expect(rows).toEqual([])
   })
 
   it('excludes deleted files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { localId: 'local-1', deletedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { localId: 'local-1', deletedAt: 2000 }))
     const rows = await queryFileRecordsByLocalIds(db(), ['local-1'])
     expect(rows).toEqual([])
   })
@@ -540,27 +499,18 @@ describe('queryFileRecordsByContentHashes', () => {
     await insertFileRecord(db(), makeFileRecord('f1', { hash: 'hash-a' }))
     await insertFileRecord(db(), makeFileRecord('f2', { hash: 'hash-b' }))
     await insertFileRecord(db(), makeFileRecord('f3', { hash: 'hash-c' }))
-    const rows = await queryFileRecordsByContentHashes(db(), [
-      'hash-a',
-      'hash-c',
-    ])
+    const rows = await queryFileRecordsByContentHashes(db(), ['hash-a', 'hash-c'])
     expect(rows.map((r) => r.id).sort()).toEqual(['f1', 'f3'])
   })
 
   it('excludes trashed files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { hash: 'hash-a', trashedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'hash-a', trashedAt: 2000 }))
     const rows = await queryFileRecordsByContentHashes(db(), ['hash-a'])
     expect(rows).toEqual([])
   })
 
   it('excludes deleted files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { hash: 'hash-a', deletedAt: 2000 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { hash: 'hash-a', deletedAt: 2000 }))
     const rows = await queryFileRecordsByContentHashes(db(), ['hash-a'])
     expect(rows).toEqual([])
   })
@@ -570,21 +520,13 @@ describe('queryFileRecordByObjectId', () => {
   it('finds file by object reference', async () => {
     await insertFileRecord(db(), makeFileRecord('f1'))
     await insertLocalObject(db(), makeLocalObject('f1'))
-    const row = await queryFileRecordByObjectId(
-      db(),
-      'obj-f1',
-      'https://indexer.example.com',
-    )
+    const row = await queryFileRecordByObjectId(db(), 'obj-f1', 'https://indexer.example.com')
     expect(row).not.toBeNull()
     expect(row!.id).toBe('f1')
   })
 
   it('returns null when object not found', async () => {
-    const row = await queryFileRecordByObjectId(
-      db(),
-      'nonexistent',
-      'https://indexer.example.com',
-    )
+    const row = await queryFileRecordByObjectId(db(), 'nonexistent', 'https://indexer.example.com')
     expect(row).toBeNull()
   })
 })

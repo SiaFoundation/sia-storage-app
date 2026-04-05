@@ -39,11 +39,7 @@ export function SettingsAdvancedInfo({ navigation }: Props) {
                 filename: 'app.db',
               })
             } catch (e: unknown) {
-              if (
-                e instanceof Error &&
-                e.message?.includes('User did not share')
-              )
-                return
+              if (e instanceof Error && e.message?.includes('User did not share')) return
               Alert.alert('Error', String(e))
             }
           }}

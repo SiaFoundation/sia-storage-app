@@ -129,10 +129,7 @@ export function buildQuerySpecs(
  * their own transactions use SAVEPOINT for rollback. Operations that use
  * withTransactionAsync (trash, move) undo their mutations after measurement.
  */
-export function buildWriteQuerySpecs(
-  db: DatabaseAdapter,
-  sampleDirId: string,
-): QuerySpec[] {
+export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): QuerySpec[] {
   function withRollback(fn: () => Promise<unknown>): () => Promise<unknown> {
     return async () => {
       await db.execAsync('SAVEPOINT bench_write')
@@ -162,9 +159,7 @@ export function buildWriteQuerySpecs(
     {
       name: 'recalculateCurrentForGroup:single',
       category: 'write',
-      run: withRollback(() =>
-        ops.recalculateCurrentForGroup(db, 'vgroup-100v-0.pdf', sampleDirId),
-      ),
+      run: withRollback(() => ops.recalculateCurrentForGroup(db, 'vgroup-100v-0.pdf', sampleDirId)),
     },
     {
       name: 'recalculateCurrentForFileIds:500',

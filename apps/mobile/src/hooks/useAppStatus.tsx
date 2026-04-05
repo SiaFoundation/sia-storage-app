@@ -1,8 +1,4 @@
-import {
-  useHasOnboarded,
-  useIsInitializing,
-  useSyncState,
-} from '@siastorage/core/stores'
+import { useHasOnboarded, useIsInitializing, useSyncState } from '@siastorage/core/stores'
 import { CircleCheckIcon, TriangleAlertIcon } from 'lucide-react-native'
 import type React from 'react'
 import { SpinnerIcon } from '../components/SpinnerIcon'

@@ -40,18 +40,9 @@ export function InputArea({
   ...textInputProps
 }: Props) {
   return (
-    <View
-      style={[
-        styles.container,
-        showDividerTop && styles.rowDivider,
-        { height },
-      ]}
-    >
+    <View style={[styles.container, showDividerTop && styles.rowDivider, { height }]}>
       <Text
-        style={[
-          styles.rowLabel,
-          { maxWidth: labelWidth || defaultLabelWidth, flexShrink: 1 },
-        ]}
+        style={[styles.rowLabel, { maxWidth: labelWidth || defaultLabelWidth, flexShrink: 1 }]}
         ellipsizeMode="tail"
       >
         {label}

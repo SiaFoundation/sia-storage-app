@@ -1,12 +1,5 @@
 import { cloneElement, isValidElement, type ReactElement } from 'react'
-import {
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  Text,
-  type TextStyle,
-  View,
-} from 'react-native'
+import { Pressable, type StyleProp, StyleSheet, Text, type TextStyle, View } from 'react-native'
 import { palette } from '../styles/colors'
 
 export function ActionSheetButton({

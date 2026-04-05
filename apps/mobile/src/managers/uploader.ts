@@ -14,24 +14,21 @@ export async function initializeUploader(): Promise<void> {
 }
 
 export function useUploader() {
-  return useCallback(
-    async (files: Array<{ id: string; type: string; size: number }>) => {
-      const entries: Array<{
-        fileId: string
-        fileUri: string
-        size: number
-      }> = []
-      for (const file of files) {
-        const fileUri = await app().fs.getFileUri(file)
-        if (!fileUri) continue
-        entries.push({ fileId: file.id, fileUri, size: file.size })
-      }
-      if (entries.length > 0) {
-        await app().uploader.enqueueWithUri(entries)
-      }
-    },
-    [],
-  )
+  return useCallback(async (files: Array<{ id: string; type: string; size: number }>) => {
+    const entries: Array<{
+      fileId: string
+      fileUri: string
+      size: number
+    }> = []
+    for (const file of files) {
+      const fileUri = await app().fs.getFileUri(file)
+      if (!fileUri) continue
+      entries.push({ fileId: file.id, fileUri, size: file.size })
+    }
+    if (entries.length > 0) {
+      await app().uploader.enqueueWithUri(entries)
+    }
+  }, [])
 }
 
 export function useReuploadFile() {

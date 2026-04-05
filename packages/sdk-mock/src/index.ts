@@ -13,10 +13,7 @@ import type {
   UploadOptions,
   Writer,
 } from '@siastorage/core/adapters'
-import {
-  decodeFileMetadata,
-  encodeFileMetadata,
-} from '@siastorage/core/encoding/fileMetadata'
+import { decodeFileMetadata, encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { FileMetadata } from '@siastorage/core/types'
 
 export type StoredObject = {
@@ -257,16 +254,10 @@ export class MockSdk implements SdkAdapter {
     if (!this.connected) throw new Error('Network unavailable')
     const data = this.storage.fileData.get(objectId)
     if (!data) throw new Error(`No data for object: ${objectId}`)
-    return data.buffer.slice(
-      data.byteOffset,
-      data.byteOffset + data.byteLength,
-    ) as ArrayBuffer
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
   }
 
-  async objectEvents(
-    cursor: ObjectsCursor | undefined,
-    limit: number,
-  ): Promise<ObjectEvent[]> {
+  async objectEvents(cursor: ObjectsCursor | undefined, limit: number): Promise<ObjectEvent[]> {
     if (!this.connected) throw new Error('Network unavailable')
 
     const sorted = [...this.storage.events].sort((a, b) => {
@@ -280,8 +271,7 @@ export class MockSdk implements SdkAdapter {
       const after = cursor.after.getTime()
       filtered = sorted.filter(
         (e) =>
-          e.updatedAt.getTime() > after ||
-          (e.updatedAt.getTime() === after && e.id > cursor.id),
+          e.updatedAt.getTime() > after || (e.updatedAt.getTime() === after && e.id > cursor.id),
       )
     }
 
@@ -379,11 +369,7 @@ export class MockSdk implements SdkAdapter {
     })
   }
 
-  injectObject(object: {
-    id?: string
-    metadata: FileMetadata
-    data?: Uint8Array
-  }): StoredObject {
+  injectObject(object: { id?: string; metadata: FileMetadata; data?: Uint8Array }): StoredObject {
     const objectId = object.id ?? generateObjectId()
     const now = new Date()
     const metadata = object.metadata

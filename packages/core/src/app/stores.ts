@@ -18,13 +18,7 @@ export type SyncState = {
 }
 
 /** Lifecycle stage of a single upload. */
-export type UploadStatus =
-  | 'queued'
-  | 'packing'
-  | 'packed'
-  | 'uploading'
-  | 'done'
-  | 'error'
+export type UploadStatus = 'queued' | 'packing' | 'packed' | 'uploading' | 'done' | 'error'
 
 /** Tracks the state of a single upload. */
 export type UploadEntry = {

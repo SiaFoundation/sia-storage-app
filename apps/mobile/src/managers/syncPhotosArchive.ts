@@ -134,9 +134,7 @@ export async function run() {
         name: asset.filename,
         type: undefined,
         size: undefined,
-        timestamp: new Date(
-          asset.creationTime || asset.modificationTime,
-        ).toISOString(),
+        timestamp: new Date(asset.creationTime || asset.modificationTime).toISOString(),
       })),
       'file',
       { addToImportDirectory: true },
@@ -194,9 +192,7 @@ export async function getPhotosArchiveCursor(): Promise<string> {
 
 export function usePhotosArchiveCursor() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('archiveSyncCursor'), () =>
-    getPhotosArchiveCursor(),
-  )
+  return useSWR(app.caches.settings.key('archiveSyncCursor'), () => getPhotosArchiveCursor())
 }
 
 export async function setPhotosArchiveCursor(value: string) {
@@ -272,9 +268,7 @@ export async function getPhotosAddedCount(): Promise<number> {
 
 export function usePhotosAddedCount() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('photosAddedCount'), () =>
-    getPhotosAddedCount(),
-  )
+  return useSWR(app.caches.settings.key('photosAddedCount'), () => getPhotosAddedCount())
 }
 
 export async function setPhotosAddedCount(value: number) {
@@ -290,9 +284,7 @@ export async function getPhotosExistingCount(): Promise<number> {
 
 export function usePhotosExistingCount() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('photosExistingCount'), () =>
-    getPhotosExistingCount(),
-  )
+  return useSWR(app.caches.settings.key('photosExistingCount'), () => getPhotosExistingCount())
 }
 
 export async function setPhotosExistingCount(value: number) {

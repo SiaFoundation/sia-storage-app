@@ -31,14 +31,7 @@ const typeFadeDurationMS = 500
 const typeFadeStaggerMS = 250
 const swapIntervalMS = 900
 
-const ORDER_BASE: readonly ShapeId[] = [
-  'j4',
-  'square4',
-  'line3',
-  'corner3',
-  't4',
-  'line2',
-] as const
+const ORDER_BASE: readonly ShapeId[] = ['j4', 'square4', 'line3', 'corner3', 't4', 'line2'] as const
 
 const getCentroid = (points: GlyphShape) => {
   const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length
@@ -53,17 +46,13 @@ type CellConfig = {
   ringStart: number
 }
 
-const rotationOptions: readonly (0 | 90 | 180 | 270)[] = [
-  0, 90, 180, 270,
-] as const
+const rotationOptions: readonly (0 | 90 | 180 | 270)[] = [0, 90, 180, 270] as const
 
 const makeRandomCell = (colorsCount: number): CellConfig => {
   const shape = ORDER_BASE[Math.floor(Math.random() * ORDER_BASE.length)]
-  const rotation =
-    rotationOptions[Math.floor(Math.random() * rotationOptions.length)]
+  const rotation = rotationOptions[Math.floor(Math.random() * rotationOptions.length)]
   const mirror = Math.random() > 0.5
-  const ringStart =
-    colorsCount > 0 ? Math.floor(Math.random() * colorsCount) : 0
+  const ringStart = colorsCount > 0 ? Math.floor(Math.random() * colorsCount) : 0
 
   return { shape, rotation, mirror, ringStart }
 }
@@ -106,10 +95,7 @@ export default function BlocksGrid({
 
   const typeDrivers = useMemo(() => {
     const d: Record<ShapeId, Animated.Value> = Object.fromEntries(
-      ORDER_BASE.map((s) => [
-        s,
-        new Animated.Value(animation === 'typeFade' ? 0 : 1),
-      ]),
+      ORDER_BASE.map((s) => [s, new Animated.Value(animation === 'typeFade' ? 0 : 1)]),
     ) as Record<ShapeId, Animated.Value>
     return d
   }, [animation])
@@ -190,11 +176,7 @@ export default function BlocksGrid({
   const padY = Math.floor(cellH * 0.12)
 
   return (
-    <View
-      onLayout={onLayout}
-      style={[styles.container, { opacity }, style]}
-      pointerEvents="none"
-    >
+    <View onLayout={onLayout} style={[styles.container, { opacity }, style]} pointerEvents="none">
       {gridMap.map((row, r) =>
         row.map((cell, c) => {
           const { shape, rotation, mirror, ringStart } = cell
@@ -221,8 +203,7 @@ export default function BlocksGrid({
           const originX = cellCenterX - (cx + 0.5) * tileSize
           const originY = cellCenterY - (cy + 0.5) * tileSize
 
-          const opacityDriver =
-            animation === 'typeFade' ? typeDrivers[shape] : 1
+          const opacityDriver = animation === 'typeFade' ? typeDrivers[shape] : 1
 
           return (
             <Animated.View

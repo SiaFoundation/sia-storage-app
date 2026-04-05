@@ -27,23 +27,13 @@ function formatMarkdown(report: BenchmarkReport): string {
   lines.push('')
   lines.push(`| Metric | Value |`)
   lines.push(`|---|---|`)
-  lines.push(
-    `| Total records | ${report.dataset.totalRecords.toLocaleString()} |`,
-  )
-  lines.push(
-    `| Current files | ${report.dataset.currentFiles.toLocaleString()} |`,
-  )
+  lines.push(`| Total records | ${report.dataset.totalRecords.toLocaleString()} |`)
+  lines.push(`| Current files | ${report.dataset.currentFiles.toLocaleString()} |`)
   lines.push(`| Directories | ${report.dataset.directories} |`)
   lines.push(`| Tags | ${report.dataset.tags} |`)
-  lines.push(
-    `| Objects populated | ${report.dataset.objectsPopulated.toLocaleString()} |`,
-  )
-  lines.push(
-    `| fs populated | ${report.dataset.fsPopulated.toLocaleString()} |`,
-  )
-  lines.push(
-    `| Generation time | ${(report.dataset.generationTimeMs / 1000).toFixed(1)}s |`,
-  )
+  lines.push(`| Objects populated | ${report.dataset.objectsPopulated.toLocaleString()} |`)
+  lines.push(`| fs populated | ${report.dataset.fsPopulated.toLocaleString()} |`)
+  lines.push(`| Generation time | ${(report.dataset.generationTimeMs / 1000).toFixed(1)}s |`)
   lines.push('')
   lines.push('## Results')
   lines.push('')
@@ -53,14 +43,10 @@ function formatMarkdown(report: BenchmarkReport): string {
   for (const category of categories) {
     lines.push(`### ${category}`)
     lines.push('')
-    lines.push(
-      '| Query | Avg (ms) | Min (ms) | Max (ms) | Median (ms) | P95 (ms) | Result |',
-    )
+    lines.push('| Query | Avg (ms) | Min (ms) | Max (ms) | Median (ms) | P95 (ms) | Result |')
     lines.push('|---|---|---|---|---|---|---|')
 
-    const categoryResults = report.results.filter(
-      (r) => r.category === category,
-    )
+    const categoryResults = report.results.filter((r) => r.category === category)
     for (const r of categoryResults) {
       lines.push(
         `| ${r.query} | ${r.avgMs} | ${r.minMs} | ${r.maxMs} | ${r.medianMs} | ${r.p95Ms} | ${r.resultPreview} |`,

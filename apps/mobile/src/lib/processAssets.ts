@@ -130,12 +130,7 @@ type CandidateFileRecord = {
   size: number | null
   sourceUri: string | null
   status: 'existing' | 'new' | 'incomplete'
-  statusDetails:
-    | 'foundByLocalId'
-    | 'foundByContentHash'
-    | 'noUri'
-    | 'processingFailed'
-    | null
+  statusDetails: 'foundByLocalId' | 'foundByContentHash' | 'noUri' | 'processingFailed' | null
 }
 
 type SyncAssetsOptions = {
@@ -158,10 +153,7 @@ type SyncAssetsOptions = {
 export async function syncAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
-  {
-    addToImportDirectory = false,
-    skipExistingUpdates = false,
-  }: SyncAssetsOptions = {},
+  { addToImportDirectory = false, skipExistingUpdates = false }: SyncAssetsOptions = {},
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
@@ -221,9 +213,7 @@ export async function syncAssets(
   )
 
   const existingContentHashes = await app().files.getByContentHashes(
-    candidateFiles
-      .filter((f) => f.status === 'new' && f.hash !== null)
-      .map((f) => f.hash!),
+    candidateFiles.filter((f) => f.status === 'new' && f.hash !== null).map((f) => f.hash!),
   )
   const contentHashDuplicateCount = existingContentHashes.length
 
@@ -254,9 +244,7 @@ export async function syncAssets(
       objects: {},
     }))
 
-  const incompleteFiles = candidateFiles.filter(
-    (f) => f.status === 'incomplete',
-  )
+  const incompleteFiles = candidateFiles.filter((f) => f.status === 'incomplete')
   const existingFiles = candidateFiles.filter((f) => f.status === 'existing')
 
   const warnings: string[] = []
@@ -339,8 +327,7 @@ export async function catalogAssets(
   )
 
   const localIds = candidates.filter((f) => f.localId).map((f) => f.localId!)
-  const existingFiles =
-    localIds.length > 0 ? await app().files.getByLocalIds(localIds) : []
+  const existingFiles = localIds.length > 0 ? await app().files.getByLocalIds(localIds) : []
   const existingLocalIds = new Set(existingFiles.map((f) => f.localId))
   const existingCount = existingLocalIds.size
   const newCount = candidates.length - existingCount
@@ -355,9 +342,7 @@ export async function catalogAssets(
   await app().optimize()
 
   if (addToImportDirectory) {
-    const newFiles = candidates.filter(
-      (f) => !f.localId || !existingLocalIds.has(f.localId),
-    )
+    const newFiles = candidates.filter((f) => !f.localId || !existingLocalIds.has(f.localId))
     await moveMediaToImportDirectory(newFiles)
   }
 

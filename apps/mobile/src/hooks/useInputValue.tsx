@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export function useInputValue({
-  value,
-  save,
-}: {
-  value: string
-  save?: (value: string) => void
-}) {
+export function useInputValue({ value, save }: { value: string; save?: (value: string) => void }) {
   const [input, setInput] = useState(value ?? '')
 
   // Synchronize input state with changes to value

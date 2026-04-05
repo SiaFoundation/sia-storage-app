@@ -55,16 +55,8 @@ async function createFile(
     deletedAt: null,
   })
   if (overrides?.directoryId) {
-    await db().runAsync(
-      'UPDATE files SET directoryId = ? WHERE id = ?',
-      overrides.directoryId,
-      id,
-    )
-    await recalculateCurrentForGroup(
-      db(),
-      overrides?.name ?? `${id}.jpg`,
-      overrides.directoryId,
-    )
+    await db().runAsync('UPDATE files SET directoryId = ? WHERE id = ?', overrides.directoryId, id)
+    await recalculateCurrentForGroup(db(), overrides?.name ?? `${id}.jpg`, overrides.directoryId)
   }
 }
 
@@ -385,11 +377,7 @@ describe('move-all with staggered timestamps', () => {
     expect(await queryDirectoryFileCount(db(), 'dir-a')).toBe(1)
 
     // A sync event moves only v1 to dir-b (unusual, but should resolve)
-    await db().runAsync(
-      'UPDATE files SET directoryId = ? WHERE id = ?',
-      'dir-b',
-      'v1',
-    )
+    await db().runAsync('UPDATE files SET directoryId = ? WHERE id = ?', 'dir-b', 'v1')
     await recalculateCurrentForGroup(db(), 'doc.txt', 'dir-a')
     await recalculateCurrentForGroup(db(), 'doc.txt', 'dir-b')
 
@@ -499,11 +487,7 @@ describe('local version creation inherits metadata', () => {
 
     await createFile('v2', { name: 'doc.txt', updatedAt: base + 100 })
     for (const tag of v1Tags) {
-      await db().runAsync(
-        'INSERT INTO file_tags (fileId, tagId) VALUES (?, ?)',
-        'v2',
-        tag.id,
-      )
+      await db().runAsync('INSERT INTO file_tags (fileId, tagId) VALUES (?, ?)', 'v2', tag.id)
     }
 
     const v2Tags = await queryTagsForFile(db(), 'v2')
@@ -769,12 +753,7 @@ describe('rename updates nameSortKey for natural sort', () => {
 
     await renameAllFileVersions(db(), 'a1.txt', null, 'b10.txt')
 
-    const ids = await querySortedFileIds(
-      db(),
-      { sortBy: 'NAME', sortDir: 'ASC' },
-      10,
-      0,
-    )
+    const ids = await querySortedFileIds(db(), { sortBy: 'NAME', sortDir: 'ASC' }, 10, 0)
     // b2 should come before b10 in natural sort
     expect(ids).toEqual(['f2', 'f1'])
   })

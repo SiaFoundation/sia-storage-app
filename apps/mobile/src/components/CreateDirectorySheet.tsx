@@ -1,13 +1,6 @@
 import { FolderPlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
@@ -104,10 +97,7 @@ export function CreateDirectorySheet({
           accessibilityRole="button"
           onPress={handleCreate}
           disabled={!name.trim()}
-          style={[
-            styles.createButton,
-            !name.trim() && styles.createButtonDisabled,
-          ]}
+          style={[styles.createButton, !name.trim() && styles.createButtonDisabled]}
         >
           <FolderPlusIcon size={18} color={palette.gray[50]} />
           <Text style={styles.createButtonText}>Create</Text>

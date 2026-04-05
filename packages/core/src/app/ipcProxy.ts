@@ -10,27 +10,14 @@ type IpcMessage = {
 }
 
 function isSwrCache(obj: unknown): boolean {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'key' in obj &&
-    'invalidate' in obj
-  )
+  return typeof obj === 'object' && obj !== null && 'key' in obj && 'invalidate' in obj
 }
 
 function isLibraryVersionCache(obj: unknown): boolean {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'subscribe' in obj &&
-    'getVersion' in obj
-  )
+  return typeof obj === 'object' && obj !== null && 'subscribe' in obj && 'getVersion' in obj
 }
 
-function installCacheBroadcasting(
-  caches: AppCaches,
-  broadcast: (msg: IpcMessage) => void,
-): void {
+function installCacheBroadcasting(caches: AppCaches, broadcast: (msg: IpcMessage) => void): void {
   function walk(obj: Record<string, any>, path: string[]) {
     if (isSwrCache(obj)) {
       const origInvalidate = obj.invalidate

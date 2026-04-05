@@ -1,9 +1,6 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
-import {
-  localObjectFromStorageRow,
-  localObjectToStorageRow,
-} from '../../encoding/localObject'
+import { localObjectFromStorageRow, localObjectToStorageRow } from '../../encoding/localObject'
 import * as sql from '../sql'
 
 export async function queryLocalObjectsForFile(
@@ -18,10 +15,7 @@ export async function queryLocalObjectsForFile(
   return rows.map(localObjectFromStorageRow)
 }
 
-export async function insertLocalObject(
-  db: DatabaseAdapter,
-  object: LocalObject,
-): Promise<void> {
+export async function insertLocalObject(db: DatabaseAdapter, object: LocalObject): Promise<void> {
   const e = localObjectToStorageRow(object)
   await sql.insert(
     db,

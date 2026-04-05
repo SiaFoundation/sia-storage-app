@@ -1,7 +1,6 @@
 import { database, db, initializeDB, resetDb, withRecovery } from '.'
 
-const NPE_MESSAGE =
-  'Call to function has been rejected. java.lang.NullPointerException'
+const NPE_MESSAGE = 'Call to function has been rejected. java.lang.NullPointerException'
 
 beforeEach(async () => {
   await initializeDB({ databaseName: ':memory:' })
@@ -46,9 +45,7 @@ describe('withRecovery', () => {
 describe('db() proxy recovery', () => {
   it('recovers from NPE on a query method', async () => {
     // Make the current database throw NPE on first call.
-    jest
-      .spyOn(database, 'getAllAsync')
-      .mockRejectedValueOnce(new Error(NPE_MESSAGE))
+    jest.spyOn(database, 'getAllAsync').mockRejectedValueOnce(new Error(NPE_MESSAGE))
 
     // The proxy should detect NPE, reopen the connection, and retry.
     // After reopening, the new database handles the query.
@@ -57,9 +54,7 @@ describe('db() proxy recovery', () => {
   })
 
   it('does not recover from non-NPE errors', async () => {
-    jest
-      .spyOn(database, 'getAllAsync')
-      .mockRejectedValueOnce(new Error('disk I/O error'))
+    jest.spyOn(database, 'getAllAsync').mockRejectedValueOnce(new Error('disk I/O error'))
 
     await expect(db().getAllAsync('SELECT 1')).rejects.toThrow('disk I/O error')
   })

@@ -19,15 +19,8 @@ jest.mock('@siastorage/core/config', () => ({
 }))
 
 import { PACKER_IDLE_TIMEOUT, SLAB_SIZE } from '@siastorage/core/config'
-import {
-  type UploaderAdapters,
-  UploadManager,
-} from '@siastorage/core/services/uploader'
-import type {
-  PackedUploadInterface,
-  PinnedObjectInterface,
-  SdkInterface,
-} from 'react-native-sia'
+import { type UploaderAdapters, UploadManager } from '@siastorage/core/services/uploader'
+import type { PackedUploadInterface, PinnedObjectInterface, SdkInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
 import type { FileEntry, FlushRecord } from './uploader'
@@ -84,9 +77,7 @@ function createMockPacker(
 
 const mockAppKey = { export_: () => new Uint8Array(32) }
 
-function createMockSdk(
-  packer: jest.Mocked<PackedUploadInterface>,
-): jest.Mocked<SdkInterface> {
+function createMockSdk(packer: jest.Mocked<PackedUploadInterface>): jest.Mocked<SdkInterface> {
   return {
     uploadPacked: jest.fn().mockResolvedValue(packer),
     pinObject: jest.fn().mockResolvedValue(undefined),
@@ -102,10 +93,7 @@ function defaultAdapters(): UploaderAdapters {
   }
 }
 
-function createDBFiles(
-  count: number,
-  opts: { prefix?: string; size?: number } = {},
-) {
+function createDBFiles(count: number, opts: { prefix?: string; size?: number } = {}) {
   const { prefix = 'eff-db', size = 400 } = opts
   return Array.from({ length: count }, (_, i) => ({
     id: `${prefix}-${i}`,
@@ -194,10 +182,7 @@ describe('UploadManager packing efficiency', () => {
   let manager: UploadManager
   let queryFilesSpy: jest.SpyInstance
 
-  const realConfig = jest.requireActual('@siastorage/core/config') as Record<
-    string,
-    any
-  >
+  const realConfig = jest.requireActual('@siastorage/core/config') as Record<string, any>
   const savedConfig: Record<string, any> = {}
   const configPatches: Record<string, any> = {
     UPLOAD_MAX_INFLIGHT: 15,
@@ -228,9 +213,7 @@ describe('UploadManager packing efficiency', () => {
     jest.clearAllMocks()
     jest.useFakeTimers()
 
-    jest
-      .spyOn(app().fs, 'getFileUri')
-      .mockImplementation(async (file: any) => `file://${file.id}`)
+    jest.spyOn(app().fs, 'getFileUri').mockImplementation(async (file: any) => `file://${file.id}`)
 
     app().connection.setState({ isConnected: true })
     await app().settings.setIndexerURL(TEST_INDEXER_URL)
@@ -243,9 +226,7 @@ describe('UploadManager packing efficiency', () => {
 
     internal().setSdk(mockSdk as any)
 
-    queryFilesSpy = jest
-      .spyOn(app().files, 'query')
-      .mockResolvedValue([] as any)
+    queryFilesSpy = jest.spyOn(app().files, 'query').mockResolvedValue([] as any)
   })
 
   afterEach(async () => {
@@ -271,9 +252,7 @@ describe('UploadManager packing efficiency', () => {
       // fillPercent is low because files are tiny relative to slab capacity
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 100 }, (_, i) =>
-        createFileEntry(`small-${i}`, 50 * KB),
-      )
+      const files = Array.from({ length: 100 }, (_, i) => createFileEntry(`small-${i}`, 50 * KB))
       await manager.__testProcessFiles(files)
       await manager.flush()
 
@@ -311,9 +290,7 @@ describe('UploadManager packing efficiency', () => {
       // 19 x 2MiB = 38MiB = exactly 95% of one slab
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 19 }, (_, i) =>
-        createFileEntry(`med-${i}`, 2 * MB),
-      )
+      const files = Array.from({ length: 19 }, (_, i) => createFileEntry(`med-${i}`, 2 * MB))
       await manager.__testProcessFiles(files)
       await manager.flush()
 
@@ -331,9 +308,7 @@ describe('UploadManager packing efficiency', () => {
       // Fill at each boundary stays at 0.375/0.75/0.125/0.5/0.875 -- never >=0.9
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 15 }, (_, i) =>
-        createFileEntry(`med-cross-${i}`, 15 * MB),
-      )
+      const files = Array.from({ length: 15 }, (_, i) => createFileEntry(`med-cross-${i}`, 15 * MB))
       await manager.__testProcessFiles(files)
 
       expect(mockPacker.finalize).not.toHaveBeenCalled()
@@ -405,9 +380,7 @@ describe('UploadManager packing efficiency', () => {
       // Flush 2: the 500MiB file alone
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const smallFiles = Array.from({ length: 5 }, (_, i) =>
-        createFileEntry(`pre-${i}`, 2 * MB),
-      )
+      const smallFiles = Array.from({ length: 5 }, (_, i) => createFileEntry(`pre-${i}`, 2 * MB))
       await manager.__testProcessFiles(smallFiles)
       expect(history()).toHaveLength(0)
 
@@ -437,9 +410,7 @@ describe('UploadManager packing efficiency', () => {
 
       const files = [
         createFileEntry('large-gap', 30 * MB),
-        ...Array.from({ length: 40 }, (_, i) =>
-          createFileEntry(`fill-${i}`, 250 * KB),
-        ),
+        ...Array.from({ length: 40 }, (_, i) => createFileEntry(`fill-${i}`, 250 * KB)),
       ]
       await manager.__testProcessFiles(files)
       await manager.flush()
@@ -460,9 +431,7 @@ describe('UploadManager packing efficiency', () => {
 
       const files = [
         createFileEntry('over-gap', 50 * MB),
-        ...Array.from({ length: 80 }, (_, i) =>
-          createFileEntry(`gap-fill-${i}`, 350 * KB),
-        ),
+        ...Array.from({ length: 80 }, (_, i) => createFileEntry(`gap-fill-${i}`, 350 * KB)),
       ]
       await manager.__testProcessFiles(files)
       await manager.flush()
@@ -519,9 +488,7 @@ describe('UploadManager packing efficiency', () => {
       await manager.__testProcessFiles([
         createFileEntry('pre-thresh', Math.floor(SLAB_SIZE * 0.92)),
       ])
-      await manager.__testProcessFiles([
-        createFileEntry('overflow', Math.floor(SLAB_SIZE * 0.15)),
-      ])
+      await manager.__testProcessFiles([createFileEntry('overflow', Math.floor(SLAB_SIZE * 0.15))])
       expect(history()).toHaveLength(1)
       expect(history()[0]).toMatchObject({
         reason: 'slab_threshold',
@@ -531,9 +498,7 @@ describe('UploadManager packing efficiency', () => {
 
       const files = [
         createFileEntry('big-after-thresh', 130 * MB),
-        ...Array.from({ length: 10 }, (_, i) =>
-          createFileEntry(`small-after-${i}`, 200 * KB),
-        ),
+        ...Array.from({ length: 10 }, (_, i) => createFileEntry(`small-after-${i}`, 200 * KB)),
       ]
       await manager.__testProcessFiles(files)
       await manager.flush()
@@ -554,9 +519,7 @@ describe('UploadManager packing efficiency', () => {
       // Fill at each boundary: 0.875/0.75/0.625/0.5 -- never >=0.9
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 4 }, (_, i) =>
-        createFileEntry(`multi-slab-${i}`, 35 * MB),
-      )
+      const files = Array.from({ length: 4 }, (_, i) => createFileEntry(`multi-slab-${i}`, 35 * MB))
       await manager.__testProcessFiles(files)
 
       expect(mockPacker.finalize).not.toHaveBeenCalled()
@@ -580,9 +543,7 @@ describe('UploadManager packing efficiency', () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
       for (let i = 0; i < 10; i++) {
-        await manager.__testProcessFiles([
-          createFileEntry(`max-slab-${i}`, MOCK_SLAB_SIZE),
-        ])
+        await manager.__testProcessFiles([createFileEntry(`max-slab-${i}`, MOCK_SLAB_SIZE)])
       }
 
       expect(history()).toHaveLength(1)
@@ -594,9 +555,7 @@ describe('UploadManager packing efficiency', () => {
       })
 
       for (let i = 0; i < 5; i++) {
-        await manager.__testProcessFiles([
-          createFileEntry(`max-slab-extra-${i}`, MOCK_SLAB_SIZE),
-        ])
+        await manager.__testProcessFiles([createFileEntry(`max-slab-extra-${i}`, MOCK_SLAB_SIZE)])
       }
       await manager.flush()
 
@@ -615,15 +574,11 @@ describe('UploadManager packing efficiency', () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
       for (let i = 0; i < 19; i++) {
-        await manager.__testProcessFiles([
-          createFileEntry(`partial-max-${i}`, 20 * MB),
-        ])
+        await manager.__testProcessFiles([createFileEntry(`partial-max-${i}`, 20 * MB)])
       }
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
-      await manager.__testProcessFiles([
-        createFileEntry('partial-max-final', 20 * MB),
-      ])
+      await manager.__testProcessFiles([createFileEntry('partial-max-final', 20 * MB)])
 
       expect(history()).toHaveLength(1)
       expect(history()[0]).toMatchObject({
@@ -646,12 +601,8 @@ describe('UploadManager packing efficiency', () => {
       const photos = Array.from({ length: 20 }, (_, i) =>
         createFileEntry(`photo-${i}`, Math.floor(1.5 * MB)),
       )
-      const videos = Array.from({ length: 2 }, (_, i) =>
-        createFileEntry(`video-${i}`, 15 * MB),
-      )
-      const thumbnails = Array.from({ length: 50 }, (_, i) =>
-        createFileEntry(`thumb-${i}`, 4 * KB),
-      )
+      const videos = Array.from({ length: 2 }, (_, i) => createFileEntry(`video-${i}`, 15 * MB))
+      const thumbnails = Array.from({ length: 50 }, (_, i) => createFileEntry(`thumb-${i}`, 4 * KB))
       await manager.__testProcessFiles([...photos, ...videos, ...thumbnails])
       await manager.flush()
 
@@ -791,9 +742,7 @@ describe('UploadManager packing efficiency', () => {
       // Photos pack first filling the slab, thumbnails fill remaining gaps
       enablePolling()
       queryFilesSpy
-        .mockResolvedValueOnce(
-          createDBPhotosWithThumbs(13, { photoSize: 3 * MB }),
-        )
+        .mockResolvedValueOnce(createDBPhotosWithThumbs(13, { photoSize: 3 * MB }))
         .mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
@@ -815,9 +764,7 @@ describe('UploadManager packing efficiency', () => {
       // 3 threshold flushes of 13 photos, then 11 photos + 100 thumbs idle
       enablePolling()
       queryFilesSpy
-        .mockResolvedValueOnce(
-          createDBPhotosWithThumbs(50, { photoSize: 3 * MB }),
-        )
+        .mockResolvedValueOnce(createDBPhotosWithThumbs(50, { photoSize: 3 * MB }))
         .mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
@@ -913,9 +860,7 @@ describe('UploadManager packing efficiency', () => {
       // The first 2MiB batch includes the overflow file so it's 17 files
       manager.initialize(app(), internal(), defaultAdapters())
 
-      await manager.__testProcessFiles([
-        createFileEntry('p1-big', Math.floor(SLAB_SIZE * 0.92)),
-      ])
+      await manager.__testProcessFiles([createFileEntry('p1-big', Math.floor(SLAB_SIZE * 0.92))])
       expect(history()).toHaveLength(0)
 
       await manager.__testProcessFiles([
@@ -991,39 +936,27 @@ describe('UploadManager packing efficiency', () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
       await manager.__testProcessFiles(
-        Array.from({ length: 20 }, (_, i) =>
-          createFileEntry(`r1-small-${i}`, MB),
-        ),
+        Array.from({ length: 20 }, (_, i) => createFileEntry(`r1-small-${i}`, MB)),
       )
 
       await manager.__testProcessFiles([createFileEntry('r2-big', 25 * MB)])
 
       await manager.__testProcessFiles(
-        Array.from({ length: 50 }, (_, i) =>
-          createFileEntry(`r3-small-${i}`, 500 * KB),
-        ),
+        Array.from({ length: 50 }, (_, i) => createFileEntry(`r3-small-${i}`, 500 * KB)),
       )
 
       for (let i = 0; i < 3; i++) {
-        await manager.__testProcessFiles([
-          createFileEntry(`r4-big-${i}`, MOCK_SLAB_SIZE),
-        ])
+        await manager.__testProcessFiles([createFileEntry(`r4-big-${i}`, MOCK_SLAB_SIZE)])
       }
 
       await manager.__testProcessFiles(
-        Array.from({ length: 100 }, (_, i) =>
-          createFileEntry(`r5-med-${i}`, 2 * MB),
-        ),
+        Array.from({ length: 100 }, (_, i) => createFileEntry(`r5-med-${i}`, 2 * MB)),
       )
 
-      await manager.__testProcessFiles([
-        createFileEntry('r6-trigger', MOCK_SLAB_SIZE),
-      ])
+      await manager.__testProcessFiles([createFileEntry('r6-trigger', MOCK_SLAB_SIZE)])
 
       await manager.__testProcessFiles(
-        Array.from({ length: 30 }, (_, i) =>
-          createFileEntry(`r7-small-${i}`, 300 * KB),
-        ),
+        Array.from({ length: 30 }, (_, i) => createFileEntry(`r7-small-${i}`, 300 * KB)),
       )
 
       await manager.flush()
@@ -1097,9 +1030,7 @@ describe('UploadManager packing efficiency', () => {
       // Common multi-select from share sheet. 15 MiB is well under one slab.
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 3 }, (_, i) =>
-        createFileEntry(`photo-${i}`, 5 * MB),
-      )
+      const files = Array.from({ length: 3 }, (_, i) => createFileEntry(`photo-${i}`, 5 * MB))
       await manager.__testProcessFiles(files)
       await manager.flush()
 
@@ -1119,9 +1050,7 @@ describe('UploadManager packing efficiency', () => {
       // this is the last file in the batch.
       manager.initialize(app(), internal(), defaultAdapters())
 
-      await manager.__testProcessFiles([
-        createFileEntry('border-file', 41 * MB),
-      ])
+      await manager.__testProcessFiles([createFileEntry('border-file', 41 * MB)])
       await manager.flush()
 
       expect(history()).toHaveLength(1)
@@ -1158,9 +1087,7 @@ describe('UploadManager packing efficiency', () => {
       // for smaller batch sizes.
       manager.initialize(app(), internal(), defaultAdapters())
 
-      const files = Array.from({ length: 20 }, (_, i) =>
-        createFileEntry(`eff-${i}`, 2 * MB),
-      )
+      const files = Array.from({ length: 20 }, (_, i) => createFileEntry(`eff-${i}`, 2 * MB))
       await manager.__testProcessFiles(files)
       await manager.flush()
 

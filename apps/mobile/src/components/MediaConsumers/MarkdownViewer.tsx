@@ -1,13 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import { WebView } from 'react-native-webview'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 import { readFileAsText } from '../../lib/readFileAsText'
@@ -72,17 +65,14 @@ export function MarkdownViewer({
     return buildPreviewShell(rendered)
   }, [md, mode, mdParser])
 
-  const handleShouldStart = useCallback(
-    (req: ShouldStartLoadRequest): boolean => {
-      const url = req?.url ?? ''
-      if (url.startsWith('about:')) return true
-      if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
-        Linking.openURL(url).catch(() => {})
-      }
-      return false
-    },
-    [],
-  )
+  const handleShouldStart = useCallback((req: ShouldStartLoadRequest): boolean => {
+    const url = req?.url ?? ''
+    if (url.startsWith('about:')) return true
+    if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+      Linking.openURL(url).catch(() => {})
+    }
+    return false
+  }, [])
 
   const setModeWithBlock = useCallback(
     (nextMode: Mode) => {
@@ -100,11 +90,7 @@ export function MarkdownViewer({
           active={mode === 'preview'}
           onPress={() => setModeWithBlock('preview')}
         />
-        <Segment
-          label="Raw"
-          active={mode === 'raw'}
-          onPress={() => setModeWithBlock('raw')}
-        />
+        <Segment label="Raw" active={mode === 'raw'} onPress={() => setModeWithBlock('raw')} />
       </View>
 
       <WebView
@@ -119,9 +105,7 @@ export function MarkdownViewer({
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <BlocksLoader size={20} />
-          <Text style={styles.loadingText}>
-            {fileLoading ? 'Reading file...' : 'Rendering...'}
-          </Text>
+          <Text style={styles.loadingText}>{fileLoading ? 'Reading file...' : 'Rendering...'}</Text>
         </View>
       )}
     </View>
@@ -138,10 +122,7 @@ function Segment({
   onPress: () => void
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.segment, active && styles.segmentActive]}
-    >
+    <Pressable onPress={onPress} style={[styles.segment, active && styles.segmentActive]}>
       <Text style={styles.segmentText}>{label}</Text>
     </Pressable>
   )

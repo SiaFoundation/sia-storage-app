@@ -20,10 +20,7 @@ export class MobileSdkAdapter implements SdkAdapter {
     this.sdk = sdk
   }
 
-  async objectEvents(
-    cursor: ObjectsCursor | undefined,
-    limit: number,
-  ): Promise<ObjectEvent[]> {
+  async objectEvents(cursor: ObjectsCursor | undefined, limit: number): Promise<ObjectEvent[]> {
     return this.sdk.objectEvents(cursor, limit) as Promise<ObjectEvent[]>
   }
 

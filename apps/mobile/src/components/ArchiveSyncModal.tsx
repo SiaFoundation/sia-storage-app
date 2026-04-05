@@ -1,9 +1,5 @@
 import * as MediaLibrary from 'expo-media-library'
-import {
-  CheckCircle2Icon,
-  ImageIcon,
-  LoaderCircleIcon,
-} from 'lucide-react-native'
+import { CheckCircle2Icon, ImageIcon, LoaderCircleIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useReducer } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
@@ -26,10 +22,7 @@ type LibraryStats = {
 
 async function fetchLibraryStats(): Promise<LibraryStats | null> {
   try {
-    const mediaTypes = [
-      MediaLibrary.MediaType.photo,
-      MediaLibrary.MediaType.video,
-    ]
+    const mediaTypes = [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video]
     const oldest = await MediaLibrary.getAssetsAsync({
       first: 1,
       sortBy: [[MediaLibrary.SortBy.modificationTime, true]],
@@ -104,9 +97,7 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
   useEffect(() => {
     if (visible) {
       dispatch({ type: 'open' })
-      fetchLibraryStats().then((s) =>
-        dispatch({ type: 'stats_loaded', stats: s }),
-      )
+      fetchLibraryStats().then((s) => dispatch({ type: 'stats_loaded', stats: s }))
     } else {
       dispatch({ type: 'close' })
     }
@@ -180,23 +171,11 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
         <View style={styles.slots}>
           <View style={styles.iconRow}>
             {phase === 'running' ? (
-              <LoaderCircleIcon
-                color={palette.blue[400]}
-                size={48}
-                strokeWidth={1.5}
-              />
+              <LoaderCircleIcon color={palette.blue[400]} size={48} strokeWidth={1.5} />
             ) : phase === 'complete' ? (
-              <CheckCircle2Icon
-                color={palette.green[500]}
-                size={48}
-                strokeWidth={1.5}
-              />
+              <CheckCircle2Icon color={palette.green[500]} size={48} strokeWidth={1.5} />
             ) : (
-              <ImageIcon
-                color={palette.gray[400]}
-                size={48}
-                strokeWidth={1.5}
-              />
+              <ImageIcon color={palette.gray[400]} size={48} strokeWidth={1.5} />
             )}
           </View>
           <View style={styles.titleRow}>
@@ -209,12 +188,7 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
             <Text style={styles.lineText}>{showContent ? line2Text : ''}</Text>
           </View>
           <View style={styles.progressRow}>
-            <View
-              style={[
-                styles.progressTrack,
-                phase !== 'running' && styles.invisible,
-              ]}
-            >
+            <View style={[styles.progressTrack, phase !== 'running' && styles.invisible]}>
               <View
                 style={[
                   styles.progressFill,
@@ -229,27 +203,18 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
             <Text
               style={[
                 styles.descriptionText,
-                (phase === 'running' || phase === 'loading') &&
-                  styles.invisible,
+                (phase === 'running' || phase === 'loading') && styles.invisible,
               ]}
             >
-              Your system photo library will be imported into Sia Storage. The
-              import process immediately adds files to your library's processing
-              queue. Photos in the processing queue are then gradually copied
-              and uploaded in the background. Sia Storage will lose access to
-              files that are deleted from your system library during this
-              window.
+              Your system photo library will be imported into Sia Storage. The import process
+              immediately adds files to your library's processing queue. Photos in the processing
+              queue are then gradually copied and uploaded in the background. Sia Storage will lose
+              access to files that are deleted from your system library during this window.
             </Text>
           </View>
         </View>
         <View style={styles.actionRow}>
-          <View
-            style={
-              phase !== 'preview' && phase !== 'running'
-                ? styles.invisible
-                : undefined
-            }
-          >
+          <View style={phase !== 'preview' && phase !== 'running' ? styles.invisible : undefined}>
             <Button
               variant={phase === 'running' ? 'secondary' : 'primary'}
               onPress={
@@ -259,9 +224,7 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
                     }
                   : handleStart
               }
-              disabled={
-                phase === 'preview' && (!stats || stats.totalCount === 0)
-              }
+              disabled={phase === 'preview' && (!stats || stats.totalCount === 0)}
             >
               {phase === 'running' ? 'Stop import' : 'Start import'}
             </Button>

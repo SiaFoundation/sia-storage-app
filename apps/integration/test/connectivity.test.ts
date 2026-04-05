@@ -1,14 +1,5 @@
-import {
-  createEmptyIndexerStorage,
-  generateMockFileMetadata,
-} from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  sleep,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createEmptyIndexerStorage, generateMockFileMetadata } from '@siastorage/sdk-mock'
+import { createTestApp, generateTestFiles, sleep, type TestApp, waitForCondition } from './app'
 
 describe('Connectivity Integration', () => {
   let app: TestApp

@@ -3,9 +3,7 @@
 // @UIApplicationMain to @main with ExpoReactNativeFactoryDelegate.
 // This plugin patches the new format for iOS and reuses the built-in Android plugin.
 const { withAppDelegate, withPlugins } = require('@expo/config-plugins')
-const {
-  mergeContents,
-} = require('@expo/config-plugins/build/utils/generateCode')
+const { mergeContents } = require('@expo/config-plugins/build/utils/generateCode')
 const androidPlugin =
   require('react-native-background-fetch/expo/plugin/build/androidPlugin').default
 

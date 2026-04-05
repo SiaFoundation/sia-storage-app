@@ -67,10 +67,7 @@ export function FileCarouselControlBar({
           <IconButton onPress={onAddTag} accessibilityLabel="Add tag">
             <TagIcon color={iconColors.white} />
           </IconButton>
-          <IconButton
-            onPress={onMoveToDirectory}
-            accessibilityLabel="Move to folder"
-          >
+          <IconButton onPress={onMoveToDirectory} accessibilityLabel="Move to folder">
             <FolderIcon color={iconColors.white} />
           </IconButton>
         </View>

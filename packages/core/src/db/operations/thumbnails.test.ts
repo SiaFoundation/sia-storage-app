@@ -26,11 +26,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
   })
 }
 
-async function createThumbnail(
-  id: string,
-  parentId: string,
-  thumbSize: 64 | 512,
-) {
+async function createThumbnail(id: string, parentId: string, thumbSize: 64 | 512) {
   await insertFileRecord(db(), {
     id,
     name: `${id}.jpg`,

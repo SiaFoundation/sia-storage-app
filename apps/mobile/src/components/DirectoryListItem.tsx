@@ -10,13 +10,9 @@ type Props = {
 
 export function DirectoryListItem({ dir, onPress }: Props) {
   const metaParts: string[] = []
-  metaParts.push(
-    `${dir.fileCount.toLocaleString()} ${dir.fileCount === 1 ? 'file' : 'files'}`,
-  )
+  metaParts.push(`${dir.fileCount.toLocaleString()} ${dir.fileCount === 1 ? 'file' : 'files'}`)
   if (dir.subdirectoryCount > 0) {
-    metaParts.push(
-      `${dir.subdirectoryCount} ${dir.subdirectoryCount === 1 ? 'folder' : 'folders'}`,
-    )
+    metaParts.push(`${dir.subdirectoryCount} ${dir.subdirectoryCount === 1 ? 'folder' : 'folders'}`)
   }
 
   return (

@@ -1,4 +1,4 @@
-// biome-ignore lint/style/noRestrictedImports: File constructor + .stream() (async)
+// oxlint-disable-next-line no-restricted-imports -- File constructor + .stream() (async)
 import { File } from 'expo-file-system'
 import type { Reader } from 'react-native-sia'
 
@@ -19,10 +19,7 @@ export function createFileReader(fileUri: string): Reader {
         return new ArrayBuffer(0)
       }
       // Convert Uint8Array to ArrayBuffer
-      return value.buffer.slice(
-        value.byteOffset,
-        value.byteOffset + value.byteLength,
-      )
+      return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
     },
   }
 }

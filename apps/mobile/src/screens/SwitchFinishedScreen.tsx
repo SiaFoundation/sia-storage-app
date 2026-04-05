@@ -7,10 +7,7 @@ import { useToast } from '../lib/toastContext'
 import type { SwitchIndexerStackParamList } from '../stacks/types'
 import { palette } from '../styles/colors'
 
-type Props = NativeStackScreenProps<
-  SwitchIndexerStackParamList,
-  'SwitchFinished'
->
+type Props = NativeStackScreenProps<SwitchIndexerStackParamList, 'SwitchFinished'>
 
 export function SwitchFinishedScreen({ navigation, route }: Props) {
   const { indexerURL } = route.params
@@ -27,8 +24,7 @@ export function SwitchFinishedScreen({ navigation, route }: Props) {
       <View style={styles.content}>
         <Text style={styles.title}>All set!</Text>
         <Text style={styles.subtitle}>
-          You are now connected to the new indexer and ready to continue using
-          Sia Storage.
+          You are now connected to the new indexer and ready to continue using Sia Storage.
         </Text>
         <Text style={styles.urlLabel}>Connected to:</Text>
         <Text style={styles.url}>{indexerURL}</Text>

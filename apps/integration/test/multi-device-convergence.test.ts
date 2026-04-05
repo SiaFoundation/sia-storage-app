@@ -4,10 +4,7 @@
  * app, sharing MockIndexerStorage so both see the same indexer state.
  */
 
-import {
-  createEmptyIndexerStorage,
-  type MockIndexerStorage,
-} from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage, type MockIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, waitForCondition } from './app'
 
 async function waitForAllObjectsV1(
@@ -117,9 +114,7 @@ describe('Multi-Device Convergence', () => {
     expect(deviceBThumb.thumbForId).toBe(parentFileId)
 
     // Thumbnail discoverable via parent file ID
-    const thumbs = deviceBFiles.filter(
-      (f) => f.kind === 'thumb' && f.thumbForId === parentFileId,
-    )
+    const thumbs = deviceBFiles.filter((f) => f.kind === 'thumb' && f.thumbForId === parentFileId)
     expect(thumbs).toHaveLength(1)
     expect(thumbs[0].id).toBe(deviceAThumb.id)
 

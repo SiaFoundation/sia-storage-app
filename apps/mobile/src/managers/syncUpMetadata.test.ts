@@ -32,8 +32,7 @@ function makeLocalObject(params: {
 }
 
 describe('syncUpMetadata', () => {
-  const meta =
-    require('@siastorage/core/encoding/fileMetadata') as jest.Mocked<any>
+  const meta = require('@siastorage/core/encoding/fileMetadata') as jest.Mocked<any>
   const INDEXER_URL = 'indexer-url'
   const NOW_BASE = 400
   const mockUpdateObjectMetadata = jest.fn()
@@ -141,18 +140,14 @@ describe('syncUpMetadata', () => {
       thumbForId: undefined,
       thumbSize: undefined,
     }
-    meta.decodeFileMetadata
-      .mockReturnValueOnce(remoteA)
-      .mockReturnValueOnce(remoteB)
+    meta.decodeFileMetadata.mockReturnValueOnce(remoteA).mockReturnValueOnce(remoteB)
 
     await runSyncUpMetadata(5)
 
     // Only file A should be updated, file B should be skipped.
     expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
     expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
-    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
-      expect.objectContaining(localA),
-    )
+    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(expect.objectContaining(localA))
   })
 
   test('early exit when disconnected', async () => {

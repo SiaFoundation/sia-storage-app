@@ -29,15 +29,14 @@ export function SWRList<T>({
     setRefreshing(true)
     await response.mutate()
     setRefreshing(false)
+    // oxlint-disable-next-line react/exhaustive-deps -- response.mutate is stable per SWR, full response object is not
   }, [response.mutate])
 
   return (
     <View style={styles.screen}>
       {response.error ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {errorMessage ?? 'Failed to load data.'}
-          </Text>
+          <Text style={styles.errorText}>{errorMessage ?? 'Failed to load data.'}</Text>
         </View>
       ) : null}
       {response.isLoading && !response.data ? (
@@ -55,12 +54,8 @@ export function SWRList<T>({
           }
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyTitle}>
-                {noDataMessage ?? 'No data yet'}
-              </Text>
-              <Text style={styles.emptyText}>
-                Pull to refresh to try again.
-              </Text>
+              <Text style={styles.emptyTitle}>{noDataMessage ?? 'No data yet'}</Text>
+              <Text style={styles.emptyText}>Pull to refresh to try again.</Text>
             </View>
           }
           refreshControl={

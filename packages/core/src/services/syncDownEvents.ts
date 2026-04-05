@@ -105,10 +105,7 @@ export async function syncDownEventsBatch(
       }
 
       const gateStatus = app.sync.getState().syncGateStatus
-      if (
-        gateStatus === 'pending' &&
-        totalEventsFetched >= SYNC_GATE_THRESHOLD
-      ) {
+      if (gateStatus === 'pending' && totalEventsFetched >= SYNC_GATE_THRESHOLD) {
         app.sync.setState({ syncGateStatus: 'active' })
       }
 
@@ -175,8 +172,7 @@ export async function syncDownEventsBatch(
 
   const willContinue = totalEventsFetched > 1 && !signal.aborted
   const endGateStatus = app.sync.getState().syncGateStatus
-  const dismissGate =
-    endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
+  const dismissGate = endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
   app.sync.setState({
     isSyncingDown: willContinue,
     syncDownCount: counts.total,
@@ -251,9 +247,7 @@ async function processBatch(
     deleteObjectIds.length > 0
       ? app.files.getRowsByObjectIds(deleteObjectIds, indexerURL)
       : new Map<string, FileRecordRow>(),
-    metadataIds.length > 0
-      ? app.files.getRowsByIds(metadataIds)
-      : new Map<string, FileRecordRow>(),
+    metadataIds.length > 0 ? app.files.getRowsByIds(metadataIds) : new Map<string, FileRecordRow>(),
   ])
 
   // Classify events using batch results.
@@ -288,12 +282,7 @@ async function processBatch(
           thumbForId: existing.thumbForId,
         })
       }
-      const localObject = sealPinnedObject(
-        existing.id,
-        indexerURL,
-        object,
-        appKey,
-      )
+      const localObject = sealPinnedObject(existing.id, indexerURL, object, appKey)
       const isRemoteNewer = metadata.updatedAt >= existing.updatedAt
       const mergedMetadata = isRemoteNewer ? toFileRecordFields(metadata) : {}
       prepared.push({
@@ -356,15 +345,9 @@ async function processBatch(
   // Phase 2: Commit — apply all prepared events in a single DB transaction.
   // Errors propagate to roll back the transaction and prevent cursor advancement,
   // so the batch retries next cycle.
-  const creates = prepared.filter(
-    (e): e is PreparedCreate => e.kind === 'create',
-  )
-  const updates = prepared.filter(
-    (e): e is PreparedUpdate => e.kind === 'update',
-  )
-  const deletes = prepared.filter(
-    (e): e is PreparedDelete => e.kind === 'delete',
-  )
+  const creates = prepared.filter((e): e is PreparedCreate => e.kind === 'create')
+  const updates = prepared.filter((e): e is PreparedUpdate => e.kind === 'update')
+  const deletes = prepared.filter((e): e is PreparedDelete => e.kind === 'delete')
 
   let deletedFileIds: string[] = []
   await internal.withTransaction(async () => {
@@ -401,17 +384,14 @@ async function processBatch(
       )
 
       // Batch tombstone files that aren't already tombstoned.
-      const toTombstone = deletes
-        .filter((e) => !e.fileRecord.deletedAt)
-        .map((e) => e.fileId)
+      const toTombstone = deletes.filter((e) => !e.fileRecord.deletedAt).map((e) => e.fileId)
       if (toTombstone.length > 0) {
         await app.files.tombstone(toTombstone, { skipInvalidation: true })
       }
 
       // Find files with no remaining objects (fully deleted).
       const deleteFileIdSet = [...new Set(deletes.map((e) => e.fileId))]
-      deletedFileIds =
-        await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
+      deletedFileIds = await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
     }
 
     counts.total += creates.length + updates.length + deletedFileIds.length

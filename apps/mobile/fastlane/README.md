@@ -1,5 +1,4 @@
-fastlane documentation
-----
+## fastlane documentation
 
 # Installation
 
@@ -39,8 +38,7 @@ Upload iOS app to App Store Connect
 
 Upload iOS app to TestFlight
 
-----
-
+---
 
 ## Android
 
@@ -60,7 +58,7 @@ Upload Android app to Google Play Store
 
 Upload Android app to internal testing track
 
-----
+---
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
 

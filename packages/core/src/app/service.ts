@@ -11,12 +11,7 @@ import type {
 } from '../db/operations'
 import type { LocalObject } from '../encoding/localObject'
 import type { SyncUpCursor } from '../services/syncUpMetadata'
-import type {
-  FileMetadata,
-  FileRecord,
-  FileRecordRow,
-  ThumbSize,
-} from '../types/files'
+import type { FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
   ConnectionState,
   DownloadEntry,
@@ -125,10 +120,7 @@ export interface AppService {
     /** Returns file records for the given IDs. */
     getByIds(ids: string[]): Promise<FileRecord[]>
     /** Returns a file record matching a remote object ID and indexer URL. */
-    getByObjectId(
-      objectId: string,
-      indexerURL: string,
-    ): Promise<FileRecord | null>
+    getByObjectId(objectId: string, indexerURL: string): Promise<FileRecord | null>
     /** Returns file records matching the given local IDs. */
     getByLocalIds(localIds: string[]): Promise<FileRecord[]>
     /** Returns a file record by exact name match. */
@@ -142,9 +134,7 @@ export interface AppService {
     /** Returns the count of file records matching the query. */
     queryCount(opts: FileRecordsQueryOpts): Promise<number>
     /** Returns count and total byte size for file records matching the query. */
-    queryStats(
-      opts: FileRecordsQueryOpts,
-    ): Promise<{ count: number; totalBytes: number }>
+    queryStats(opts: FileRecordsQueryOpts): Promise<{ count: number; totalBytes: number }>
     /** Queries raw file record rows for library display with pagination. */
     queryLibrary(
       opts: LibraryQueryParams & { limit?: number; offset?: number },
@@ -172,15 +162,9 @@ export interface AppService {
     /** Returns file record rows by IDs (no objects join). */
     getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
     /** Returns file record rows by object IDs and indexer URL (no objects join). */
-    getRowsByObjectIds(
-      objectIds: string[],
-      indexerURL: string,
-    ): Promise<Map<string, FileRecordRow>>
+    getRowsByObjectIds(objectIds: string[], indexerURL: string): Promise<Map<string, FileRecordRow>>
     /** Batch tombstone: sets deletedAt and trashedAt on multiple files. */
-    tombstone(
-      fileIds: string[],
-      opts?: { skipInvalidation?: boolean },
-    ): Promise<void>
+    tombstone(fileIds: string[], opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Partially updates a file record by ID. */
     update(
       update: Partial<FileRecordRow> & { id: string },
@@ -229,13 +213,9 @@ export interface AppService {
     /** Returns the count of files that have not yet been uploaded. */
     getUnuploadedCount(): Promise<number>
     /** Returns summary info for files that have not yet been uploaded. */
-    getUnuploaded(): Promise<
-      { id: string; name: string; type: string; size: number }[]
-    >
+    getUnuploaded(): Promise<{ id: string; name: string; type: string; size: number }[]>
     /** Returns summary info for all active (non-trashed, non-deleted) files. */
-    getActiveSummaries(): Promise<
-      { id: string; kind: string; type: string; size: number }[]
-    >
+    getActiveSummaries(): Promise<{ id: string; kind: string; type: string; size: number }[]>
     /** Returns IDs of files that have been uploaded to the given indexer. */
     getUploadedIds(indexerUrl: string): Promise<string[]>
     /** Permanently deletes files past the trash retention period. */
@@ -251,14 +231,9 @@ export interface AppService {
     /** Returns the count of lost files for the given indexer. */
     getLostCount(indexerURL: string): Promise<number>
     /** Returns count and total byte size of lost files for the given indexer. */
-    getLostStats(
-      indexerURL: string,
-    ): Promise<{ count: number; totalBytes: number }>
+    getLostStats(indexerURL: string): Promise<{ count: number; totalBytes: number }>
     /** Returns all versions of a file (same name + directory), ordered by updatedAt DESC. */
-    getVersionHistory(
-      name: string,
-      directoryId: string | null,
-    ): Promise<FileRecord[]>
+    getVersionHistory(name: string, directoryId: string | null): Promise<FileRecord[]>
     /** Renames all versions of a file. Merges into target group if it exists. */
     renameFile(id: string, newName: string): Promise<void>
     /** Moves all versions of a file to a directory. Merges into target group if it exists. */
@@ -266,10 +241,7 @@ export interface AppService {
     /** Trashes all versions of a file by looking up its version group from the file ID. */
     trashFile(id: string): Promise<void>
     /** Trashes all versions of a file (same name + directory). */
-    trashAllVersions(
-      name: string,
-      directoryId: string | null,
-    ): Promise<string[]>
+    trashAllVersions(name: string, directoryId: string | null): Promise<string[]>
   }
   /** Directory operations: create, rename, delete, move, and organize files into directories. */
   directories: {
@@ -296,10 +268,7 @@ export interface AppService {
     /** Renames a directory and updates all descendant paths. Returns the updated directory. */
     rename(id: string, name: string): Promise<Directory>
     /** Moves a directory under a new parent (null for root). */
-    moveDirectory(
-      directoryId: string,
-      newParentPath: string | null,
-    ): Promise<void>
+    moveDirectory(directoryId: string, newParentPath: string | null): Promise<void>
     /** Moves a file into a directory, or removes it from all directories if null. */
     moveFile(fileId: string, dirId: string | null): Promise<void>
     /** Moves multiple files into a directory. */
@@ -325,10 +294,7 @@ export interface AppService {
     /** Returns the best available thumbnail at or above the required size. */
     getBest(fileId: string, requiredSize: ThumbSize): Promise<FileRecord | null>
     /** Returns a thumbnail for a specific file and size combination. */
-    getByFileIdAndSize(
-      fileId: string,
-      size: ThumbSize,
-    ): Promise<FileRecord | null>
+    getByFileIdAndSize(fileId: string, size: ThumbSize): Promise<FileRecord | null>
     /** Returns thumbnail info (id, type, localId) for multiple files. */
     getInfoForFiles(
       fileIds: string[],
@@ -375,10 +341,7 @@ export interface AppService {
     /** Returns local objects for multiple files, keyed by file ID. */
     getForFiles(fileIds: string[]): Promise<Record<string, LocalObject[]>>
     /** Creates or updates a local object reference. */
-    upsert(
-      object: LocalObject,
-      opts?: { skipInvalidation?: boolean },
-    ): Promise<void>
+    upsert(object: LocalObject, opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Deletes a specific local object by its object ID and indexer URL. */
     delete(
       objectId: string,
@@ -386,17 +349,11 @@ export interface AppService {
       opts?: { skipInvalidation?: boolean },
     ): Promise<void>
     /** Deletes all local objects for a file. */
-    deleteForFile(
-      fileId: string,
-      opts?: { skipInvalidation?: boolean },
-    ): Promise<void>
+    deleteForFile(fileId: string, opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Deletes all local objects for multiple files. */
     deleteManyForFiles(fileIds: string[]): Promise<void>
     /** Creates or updates multiple local objects in a single transaction. */
-    upsertMany(
-      objects: LocalObject[],
-      opts?: { skipInvalidation?: boolean },
-    ): Promise<void>
+    upsertMany(objects: LocalObject[], opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Returns the number of local objects for a file. */
     countForFile(fileId: string): Promise<number>
     /** Batch deletes local objects by their object IDs for a given indexer. */
@@ -434,10 +391,7 @@ export interface AppService {
     /** Removes a local file from disk. */
     removeFile(file: { id: string; type: string }): Promise<void>
     /** Copies a file from the source URI into managed storage; returns the new URI. */
-    copyFile(
-      file: { id: string; type: string },
-      sourceUri: string,
-    ): Promise<string>
+    copyFile(file: { id: string; type: string }, sourceUri: string): Promise<string>
     /** Writes file data to managed storage, computes hash, and upserts metadata. */
     writeFileData(
       file: { id: string; type: string },
@@ -467,11 +421,7 @@ export interface AppService {
     /** Returns the 0-based position of a file in the sorted library. */
     filePosition(fileId: string, params: LibraryQueryParams): Promise<number>
     /** Returns a page of file IDs sorted according to the given params. */
-    sortedFileIds(
-      params: LibraryQueryParams,
-      limit: number,
-      offset: number,
-    ): Promise<string[]>
+    sortedFileIds(params: LibraryQueryParams, limit: number, offset: number): Promise<string[]>
   }
   /** Structured log storage: append, query, rotate, and clear logs. */
   logs: {
@@ -494,11 +444,7 @@ export interface AppService {
       }[],
     ): Promise<void>
     /** Reads log entries with optional level, scope, and limit filters. */
-    read(opts?: {
-      logLevel?: string
-      logScopes?: string[]
-      limit?: number
-    }): Promise<any[]>
+    read(opts?: { logLevel?: string; logScopes?: string[]; limit?: number }): Promise<any[]>
     /** Returns the count of log entries matching the filters. */
     count(opts?: { logLevel?: string; logScopes?: string[] }): Promise<number>
     /** Deletes all log entries. */
@@ -726,9 +672,7 @@ export interface AppService {
   /** Upload queue: enqueue files for background uploading. */
   uploader: {
     /** Enqueues files by ID for upload; returns counts of queued and skipped files. */
-    enqueueByIds(
-      fileIds: string[],
-    ): Promise<{ queued: number; skipped: number }>
+    enqueueByIds(fileIds: string[]): Promise<{ queued: number; skipped: number }>
     /** Enqueues files with explicit URIs for upload. */
     enqueueWithUri(
       entries: Array<{

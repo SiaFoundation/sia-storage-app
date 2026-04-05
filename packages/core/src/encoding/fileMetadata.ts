@@ -44,10 +44,7 @@ const ThumbV1Schema = z.object({
   thumbSize: ThumbSizeSchema,
 })
 
-const MetadataV1Schema = z.discriminatedUnion('kind', [
-  FileV1Schema,
-  ThumbV1Schema,
-])
+const MetadataV1Schema = z.discriminatedUnion('kind', [FileV1Schema, ThumbV1Schema])
 
 // Forward-compatibility: when a newer app version writes metadata with a
 // version above MAX_SUPPORTED_VERSION, older clients use this lenient schema
@@ -158,11 +155,7 @@ export function hasCompleteFileMetadata(metadata: FileMetadata): boolean {
 }
 
 export function hasCompleteThumbnailMetadata(metadata: FileMetadata): boolean {
-  return (
-    hasCompleteFileMetadata(metadata) &&
-    !!metadata.thumbForId &&
-    !!metadata.thumbSize
-  )
+  return hasCompleteFileMetadata(metadata) && !!metadata.thumbForId && !!metadata.thumbSize
 }
 
 function toFileMetadata(

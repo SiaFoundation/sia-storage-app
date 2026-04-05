@@ -1,28 +1,13 @@
-import type {
-  UploadCategoryStats,
-  UploadStats,
-} from '@siastorage/core/db/operations'
+import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
 import { useSyncState } from '@siastorage/core/stores'
 import { useCallback } from 'react'
-import {
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
 import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
 import { app } from '../stores/appService'
-import {
-  deleteLostFiles,
-  useFileStatsLocal,
-  useFileStatsLost,
-} from '../stores/files'
+import { deleteLostFiles, useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
 import { useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
@@ -56,10 +41,7 @@ function devicePercent(
   return data.totalBytes / overall.totalBytes
 }
 
-function formatCategoryValue(
-  cat: UploadCategoryStats | undefined,
-  mode: 'count' | 'size',
-): string {
+function formatCategoryValue(cat: UploadCategoryStats | undefined, mode: 'count' | 'size'): string {
   if (!cat) return mode === 'count' ? '0 / 0' : '0 B / 0 B'
   if (mode === 'size') {
     return `${humanSize(cat.uploadedBytes) ?? '0 B'} / ${humanSize(cat.totalBytes) ?? '0 B'}`
@@ -98,10 +80,7 @@ export function LibraryStatusSheet() {
     { refreshInterval },
   )
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
-  const pendingBackup = useFileStatsLocal(
-    { localOnly: true },
-    { refreshInterval },
-  )
+  const pendingBackup = useFileStatsLocal({ localOnly: true }, { refreshInterval })
   const lost = useFileStatsLost({ refreshInterval })
   const batch = useSWR(
     ['active-batch', isOpen ?? null],
@@ -110,9 +89,7 @@ export function LibraryStatusSheet() {
       const count = uploads.length
       const totalBytes = uploads.reduce((s, u) => s + u.size, 0)
       const uploadedBytes = uploads.reduce((s, u) => s + u.progress * u.size, 0)
-      const percent = totalBytes
-        ? `${((uploadedBytes / totalBytes) * 100).toFixed(1)}%`
-        : ''
+      const percent = totalBytes ? `${((uploadedBytes / totalBytes) * 100).toFixed(1)}%` : ''
       return { count, totalBytes, percent }
     },
     { refreshInterval },
@@ -127,18 +104,10 @@ export function LibraryStatusSheet() {
       {(['count', 'size'] as const).map((mode) => (
         <Pressable
           key={mode}
-          style={[
-            styles.toggleSegment,
-            displayMode === mode && styles.toggleSegmentSelected,
-          ]}
+          style={[styles.toggleSegment, displayMode === mode && styles.toggleSegmentSelected]}
           onPress={() => app().settings.setStatusDisplayMode(mode)}
         >
-          <Text
-            style={[
-              styles.toggleLabel,
-              displayMode === mode && styles.toggleLabelSelected,
-            ]}
-          >
+          <Text style={[styles.toggleLabel, displayMode === mode && styles.toggleLabelSelected]}>
             {mode === 'count' ? 'Count' : 'Size'}
           </Text>
         </Pressable>
@@ -164,9 +133,7 @@ export function LibraryStatusSheet() {
                         : 'Offline'
                       : '—'}
                   </Text>
-                  <View
-                    style={isOnline.data ? styles.dotOnline : styles.dotOffline}
-                  />
+                  <View style={isOnline.data ? styles.dotOnline : styles.dotOffline} />
                 </View>
               }
               canCopy={false}
@@ -176,12 +143,8 @@ export function LibraryStatusSheet() {
               value={
                 <View style={styles.valueRight}>
                   <View style={{ flex: 1 }} />
-                  <Text style={styles.valueText}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
-                  </Text>
-                  <View
-                    style={isConnected ? styles.dotOnline : styles.dotOffline}
-                  />
+                  <Text style={styles.valueText}>{isConnected ? 'Connected' : 'Disconnected'}</Text>
+                  <View style={isConnected ? styles.dotOnline : styles.dotOffline} />
                 </View>
               }
               showDividerTop
@@ -198,12 +161,8 @@ export function LibraryStatusSheet() {
               value={
                 <View style={styles.valueRight}>
                   <View style={{ flex: 1 }} />
-                  <Text style={styles.valueText}>
-                    {isSyncingDown ? 'Syncing...' : 'Synced'}
-                  </Text>
-                  <View
-                    style={isSyncingDown ? styles.dotSyncing : styles.dotOnline}
-                  />
+                  <Text style={styles.valueText}>{isSyncingDown ? 'Syncing...' : 'Synced'}</Text>
+                  <View style={isSyncingDown ? styles.dotSyncing : styles.dotOnline} />
                 </View>
               }
               align="right"
@@ -220,11 +179,7 @@ export function LibraryStatusSheet() {
                       ? `${syncUpProcessed.toLocaleString()} / ${syncUpTotal.toLocaleString()}`
                       : 'Synced'}
                   </Text>
-                  <View
-                    style={
-                      isSyncingUpMetadata ? styles.dotSyncing : styles.dotOnline
-                    }
-                  />
+                  <View style={isSyncingUpMetadata ? styles.dotSyncing : styles.dotOnline} />
                 </View>
               }
               align="right"
@@ -237,8 +192,8 @@ export function LibraryStatusSheet() {
         <RowGroup title="Files" indicator={toggle} style={styles.groupSpacing}>
           <RowSubGroup title="Library" style={styles.subGroupSpacing}>
             <Text style={styles.sectionDesc}>
-              All files tracked in the library. Pending imports are waiting to
-              be copied from your device's photo library.
+              All files tracked in the library. Pending imports are waiting to be copied from your
+              device's photo library.
             </Text>
             <InfoCard>
               <LabeledValueRow
@@ -289,8 +244,7 @@ export function LibraryStatusSheet() {
           </RowSubGroup>
           <RowSubGroup title="Sync" style={styles.subGroupSpacing}>
             <Text style={styles.sectionDesc}>
-              Upload progress across all files ready to be synced to the
-              network.
+              Upload progress across all files ready to be synced to the network.
             </Text>
             {(batch.data?.count ?? 0) > 0 && (
               <InfoCard>
@@ -304,9 +258,7 @@ export function LibraryStatusSheet() {
                           ? (humanSize(batch.data?.totalBytes ?? 0) ?? '0 B')
                           : `${(batch.data?.count ?? 0).toLocaleString()} files`}
                       </Text>
-                      <Text style={styles.valuePercent}>
-                        {batch.data?.percent}
-                      </Text>
+                      <Text style={styles.valuePercent}>{batch.data?.percent}</Text>
                       <View style={styles.dotSyncing} />
                     </View>
                   }
@@ -315,9 +267,7 @@ export function LibraryStatusSheet() {
                 />
               </InfoCard>
             )}
-            {(batch.data?.count ?? 0) > 0 && (
-              <View style={styles.networkGroupGap} />
-            )}
+            {(batch.data?.count ?? 0) > 0 && <View style={styles.networkGroupGap} />}
             <InfoCard>
               <LabeledValueRow
                 label="Files"
@@ -486,16 +436,10 @@ export function LibraryStatusSheet() {
                 value={
                   <View style={styles.valueRight}>
                     <Text style={styles.valueText}>
-                      {formatDeviceValue(
-                        onDevice.data,
-                        stats.data?.files,
-                        displayMode,
-                      )}
+                      {formatDeviceValue(onDevice.data, stats.data?.files, displayMode)}
                     </Text>
                     <Text style={styles.valuePercent}>
-                      {humanUploadPercent(
-                        devicePercent(onDevice.data, stats.data?.files),
-                      )}
+                      {humanUploadPercent(devicePercent(onDevice.data, stats.data?.files))}
                     </Text>
                   </View>
                 }
@@ -508,16 +452,10 @@ export function LibraryStatusSheet() {
                 value={
                   <View style={styles.valueRight}>
                     <Text style={styles.valueText}>
-                      {formatDeviceValue(
-                        pendingBackup.data,
-                        stats.data?.files,
-                        displayMode,
-                      )}
+                      {formatDeviceValue(pendingBackup.data, stats.data?.files, displayMode)}
                     </Text>
                     <Text style={styles.valuePercent}>
-                      {humanUploadPercent(
-                        devicePercent(pendingBackup.data, stats.data?.files),
-                      )}
+                      {humanUploadPercent(devicePercent(pendingBackup.data, stats.data?.files))}
                     </Text>
                   </View>
                 }
@@ -531,16 +469,10 @@ export function LibraryStatusSheet() {
                 value={
                   <View style={styles.valueRight}>
                     <Text style={styles.valueText}>
-                      {formatDeviceValue(
-                        lost.data,
-                        stats.data?.files,
-                        displayMode,
-                      )}
+                      {formatDeviceValue(lost.data, stats.data?.files, displayMode)}
                     </Text>
                     <Text style={styles.valuePercent}>
-                      {humanUploadPercent(
-                        devicePercent(lost.data, stats.data?.files),
-                      )}
+                      {humanUploadPercent(devicePercent(lost.data, stats.data?.files))}
                     </Text>
                   </View>
                 }
@@ -557,7 +489,7 @@ export function LibraryStatusSheet() {
                   onPress={() => {
                     Alert.alert(
                       'Delete Lost Files',
-                      `This will delete ${lost.data?.count ?? 0} file records that are not on the network or this device. This cannot be undone.`,
+                      `This will delete ${(lost.data?.count ?? 0).toLocaleString()} file records that are not on the network or this device. This cannot be undone.`,
                       [
                         { text: 'Cancel', style: 'cancel' },
                         {

@@ -42,10 +42,7 @@ export async function runCacheEviction(
   while (currentSize > maxBytes) {
     const thresholdUsedAt = Date.now() - minAge
 
-    const candidates = await app.fs.evictionCandidates(
-      thresholdUsedAt,
-      batchSize,
-    )
+    const candidates = await app.fs.evictionCandidates(thresholdUsedAt, batchSize)
 
     for (const { fileId, size, type } of candidates) {
       if (currentSize <= maxBytes) break

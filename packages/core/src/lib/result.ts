@@ -42,9 +42,7 @@ export function unwrapOr<T, E>(result: Result<T, E>, defaultValue: T): T {
 }
 
 /** Wrap an async function in try-catch and return a Result. */
-export async function tryCatch<T>(
-  fn: () => Promise<T>,
-): Promise<Result<T, Error>> {
+export async function tryCatch<T>(fn: () => Promise<T>): Promise<Result<T, Error>> {
   try {
     return ok(await fn())
   } catch (e) {

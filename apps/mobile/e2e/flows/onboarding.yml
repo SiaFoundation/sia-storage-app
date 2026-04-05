@@ -1,6 +1,6 @@
 appId: sia.storage.dev
 env:
-  E2E_CONNECT_KEY: "${E2E_CONNECT_KEY}"
+  E2E_CONNECT_KEY: '${E2E_CONNECT_KEY}'
 ---
 # Onboarding E2E Test (iOS & Android)
 
@@ -21,59 +21,59 @@ env:
     commands:
       - extendedWaitUntil:
           visible:
-            text: "http://localhost:8081"
+            text: 'http://localhost:8081'
           timeout: 10000
       - tapOn:
-          text: "http://localhost:8081"
+          text: 'http://localhost:8081'
 - runFlow:
     when:
       platform: Android
     commands:
       - extendedWaitUntil:
           visible:
-            text: "http://10.0.2.2:8081"
+            text: 'http://10.0.2.2:8081'
           timeout: 10000
       - tapOn:
-          text: "http://10.0.2.2:8081"
+          text: 'http://10.0.2.2:8081'
 
 # Wait for bundling, dismiss dev menu popups
 - extendedWaitUntil:
     visible:
-      text: "Continue"
+      text: 'Continue'
     timeout: 60000
 - tapOn:
-    text: "Continue"
+    text: 'Continue'
 - extendedWaitUntil:
     visible:
-      text: "Go home"
+      text: 'Go home'
     timeout: 5000
 - tapOn:
-    point: "93%,40%"
+    point: '93%,40%'
 
 # Welcome screen
 - extendedWaitUntil:
     visible:
-      id: "welcome-title"
+      id: 'welcome-title'
     timeout: 15000
 - assertVisible:
-    text: "Sia Storage"
+    text: 'Sia Storage'
 - tapOn:
-    id: "welcome-get-started-button"
+    id: 'welcome-get-started-button'
 
 # Indexer selection
 - extendedWaitUntil:
     visible:
-      id: "indexer-title"
+      id: 'indexer-title'
     timeout: 10000
 - assertVisible:
-    text: "Connect to a provider"
+    text: 'Connect to a provider'
 - tapOn:
-    id: "indexer-authorize-button"
+    id: 'indexer-authorize-button'
 
 # Auth WebView
 - extendedWaitUntil:
     visible:
-      text: "App password"
+      text: 'App password'
     timeout: 20000
 # iOS: Can tap on placeholder text directly
 - runFlow:
@@ -81,60 +81,60 @@ env:
       platform: iOS
     commands:
       - tapOn:
-          text: "Enter your app password"
+          text: 'Enter your app password'
 # Android: WebView doesn't expose placeholder text, use id selector
 - runFlow:
     when:
       platform: Android
     commands:
       - tapOn:
-          id: "appPassword"
-- inputText: "${E2E_CONNECT_KEY}"
+          id: 'appPassword'
+- inputText: '${E2E_CONNECT_KEY}'
 - extendedWaitUntil:
     visible:
-      text: "Accept"
+      text: 'Accept'
     timeout: 5000
 - tapOn:
-    point: "50%,20%"
+    point: '50%,20%'
 - tapOn:
-    text: "Accept"
+    text: 'Accept'
 - extendedWaitUntil:
     visible:
-      text: "Connection approved"
+      text: 'Connection approved'
     timeout: 30000
 - tapOn:
-    text: "Return to app"
+    text: 'Return to app'
 
 # Recovery phrase
 - extendedWaitUntil:
     visible:
-      id: "recovery-title"
+      id: 'recovery-title'
     timeout: 15000
 - assertVisible:
-    text: "Recovery Phrase"
+    text: 'Recovery Phrase'
 - tapOn:
-    id: "recovery-generate-button"
+    id: 'recovery-generate-button'
 - extendedWaitUntil:
     visible:
-      id: "recovery-phrase-text"
+      id: 'recovery-phrase-text'
     timeout: 5000
 - tapOn:
-    id: "recovery-checkbox"
+    id: 'recovery-checkbox'
 - tapOn:
-    id: "recovery-continue-button"
+    id: 'recovery-continue-button'
 
 # Finished
 - extendedWaitUntil:
     visible:
-      id: "finished-title"
+      id: 'finished-title'
     timeout: 15000
 - assertVisible:
-    text: "All set!"
+    text: 'All set!'
 - tapOn:
-    id: "finished-upload-button"
+    id: 'finished-upload-button'
 
 # Verify Library screen
 - extendedWaitUntil:
     visible:
-      text: "Library"
+      text: 'Library'
     timeout: 10000

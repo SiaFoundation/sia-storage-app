@@ -6,22 +6,14 @@ import { MapMarker } from './Map/MapMarker'
 import { determineBestRegion } from './Map/mapHelpers'
 import { SWROverlay } from './SWROverlay'
 
-export default function HostsMap({
-  onSelectHost,
-}: {
-  onSelectHost: (host: string) => void
-}) {
+export default function HostsMap({ onSelectHost }: { onSelectHost: (host: string) => void }) {
   const hosts = useHosts()
   const region: Region | undefined = useMemo(() => {
     return determineBestRegion(hosts.data ?? [])
   }, [hosts])
 
   return (
-    <SWROverlay
-      response={hosts}
-      errorMessage="Failed to load hosts"
-      noDataMessage="No hosts yet"
-    >
+    <SWROverlay response={hosts} errorMessage="Failed to load hosts" noDataMessage="No hosts yet">
       <Map region={region}>
         {hosts.data?.map((h) => {
           return (

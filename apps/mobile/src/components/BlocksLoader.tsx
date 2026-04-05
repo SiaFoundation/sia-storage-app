@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import {
-  Animated,
-  Easing,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Animated, Easing, StyleSheet, View, type ViewStyle } from 'react-native'
 import BlocksShape, { BLOCK_COLORS } from './BlocksShape'
 
 type Props = {
@@ -38,10 +32,7 @@ export default function BlocksLoader({
   }, [t])
 
   const colors = useMemo(
-    () =>
-      [0, 1, 2].map(
-        (i) => BLOCK_COLORS[(colorStart + i) % BLOCK_COLORS.length],
-      ),
+    () => [0, 1, 2].map((i) => BLOCK_COLORS[(colorStart + i) % BLOCK_COLORS.length]),
     [colorStart],
   )
 

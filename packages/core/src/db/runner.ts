@@ -25,9 +25,7 @@ export async function runMigrations(
     );`,
   )
 
-  const appliedRows = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM migrations',
-  )
+  const appliedRows = await db.getAllAsync<{ id: string }>('SELECT id FROM migrations')
   const applied = new Set(appliedRows.map((r) => r.id))
 
   const needToApply = migrations.length - applied.size
@@ -47,11 +45,7 @@ export async function runMigrations(
     })
     await db.withTransactionAsync(async () => {
       await m.up(db, onProgress)
-      await db.runAsync(
-        'INSERT INTO migrations (id, appliedAt) VALUES (?, ?)',
-        m.id,
-        Date.now(),
-      )
+      await db.runAsync('INSERT INTO migrations (id, appliedAt) VALUES (?, ?)', m.id, Date.now())
     })
   }
   log?.info('db', 'migrations_complete')

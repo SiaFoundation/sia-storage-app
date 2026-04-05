@@ -12,12 +12,10 @@ jest.mock('react-native', () => ({
     return mockPlatform
   },
   AppState: {
-    addEventListener: jest.fn(
-      (_event: string, handler: (state: string) => void) => {
-        mockAppStateListeners.push(handler)
-        return mockAppStateSubscription
-      },
-    ),
+    addEventListener: jest.fn((_event: string, handler: (state: string) => void) => {
+      mockAppStateListeners.push(handler)
+      return mockAppStateSubscription
+    }),
   },
 }))
 
@@ -112,41 +110,23 @@ describe('sdk store', () => {
       objectEvents: jest.fn().mockResolvedValue([]),
     }
 
-    mockValidateMnemonic = jest
-      .spyOn(app().auth, 'validateMnemonic')
-      .mockResolvedValue('none')
-    mockSetMnemonicHash = jest
-      .spyOn(app().auth, 'setMnemonicHash')
-      .mockResolvedValue(undefined)
+    mockValidateMnemonic = jest.spyOn(app().auth, 'validateMnemonic').mockResolvedValue('none')
+    mockSetMnemonicHash = jest.spyOn(app().auth, 'setMnemonicHash').mockResolvedValue(undefined)
     _mockGetIndexerURL = jest
       .spyOn(app().settings, 'getIndexerURL')
       .mockResolvedValue('https://indexer.example.com')
-    mockSetIndexerURL = jest
-      .spyOn(app().settings, 'setIndexerURL')
-      .mockResolvedValue(undefined)
+    mockSetIndexerURL = jest.spyOn(app().settings, 'setIndexerURL').mockResolvedValue(undefined)
     mockGetAppKey = jest.spyOn(app().auth, 'getAppKey')
-    mockOnConnected = jest
-      .spyOn(app().auth, 'onConnected')
-      .mockResolvedValue(undefined)
+    mockOnConnected = jest.spyOn(app().auth, 'onConnected').mockResolvedValue(undefined)
 
-    _mockBuilderCreate = jest
-      .spyOn(app().auth.builder, 'create')
-      .mockResolvedValue(undefined)
+    _mockBuilderCreate = jest.spyOn(app().auth.builder, 'create').mockResolvedValue(undefined)
     mockBuilderConnectWithKey = jest.spyOn(app().auth.builder, 'connectWithKey')
-    mockBuilderRequestConnection = jest.spyOn(
-      app().auth.builder,
-      'requestConnection',
-    )
+    mockBuilderRequestConnection = jest.spyOn(app().auth.builder, 'requestConnection')
     mockBuilderRegister = jest.spyOn(app().auth.builder, 'register')
-    mockBuilderWaitForApproval = jest.spyOn(
-      app().auth.builder,
-      'waitForApproval',
-    )
+    mockBuilderWaitForApproval = jest.spyOn(app().auth.builder, 'waitForApproval')
     mockBuilderCancel = jest.spyOn(app().auth.builder, 'cancel')
 
-    _mockGetLastSdk = jest
-      .spyOn(getMobileSdkAuth(), 'getLastSdk')
-      .mockReturnValue(mockSdk)
+    _mockGetLastSdk = jest.spyOn(getMobileSdkAuth(), 'getLastSdk').mockReturnValue(mockSdk)
   })
 
   afterEach(() => {
@@ -186,9 +166,7 @@ describe('sdk store', () => {
 
     it('returns null when connectWithKey throws', async () => {
       mockGetAppKey.mockResolvedValue(mockKeyBytes)
-      mockBuilderConnectWithKey.mockRejectedValue(
-        new Error('Connection failed'),
-      )
+      mockBuilderConnectWithKey.mockRejectedValue(new Error('Connection failed'))
 
       const sdk = await sdkStore.connectSdk()
 
@@ -201,9 +179,7 @@ describe('sdk store', () => {
 
       try {
         mockGetAppKey.mockResolvedValue(mockKeyBytes)
-        mockBuilderConnectWithKey.mockImplementation(
-          () => new Promise(() => {}),
-        )
+        mockBuilderConnectWithKey.mockImplementation(() => new Promise(() => {}))
 
         const initPromise = sdkStore.connectSdk()
         await jest.advanceTimersByTimeAsync(20_000)
@@ -231,17 +207,13 @@ describe('sdk store', () => {
 
     it('returns false if connectSdk fails', async () => {
       mockGetAppKey.mockResolvedValue(mockKeyBytes)
-      mockBuilderConnectWithKey.mockRejectedValue(
-        new Error('Connection failed'),
-      )
+      mockBuilderConnectWithKey.mockRejectedValue(new Error('Connection failed'))
 
       const result = await sdkStore.reconnectIndexer()
 
       expect(result).toBe(false)
       expect(app().connection.getState().isConnected).toBe(false)
-      expect(app().connection.getState().connectionError).toBe(
-        'Failed to connect to indexer.',
-      )
+      expect(app().connection.getState().connectionError).toBe('Failed to connect to indexer.')
       expect(app().connection.getState().isReconnecting).toBe(false)
     })
 
@@ -252,9 +224,7 @@ describe('sdk store', () => {
 
       expect(result).toBe(false)
       expect(app().connection.getState().isConnected).toBe(false)
-      expect(app().connection.getState().connectionError).toBe(
-        'Failed to connect to indexer.',
-      )
+      expect(app().connection.getState().connectionError).toBe('Failed to connect to indexer.')
     })
 
     it('returns false if auth in progress', async () => {
@@ -270,8 +240,7 @@ describe('sdk store', () => {
 
     it('returns false immediately if already reconnecting', async () => {
       mockGetAppKey.mockImplementation(
-        () =>
-          new Promise((resolve) => setTimeout(() => resolve(mockKeyBytes), 50)),
+        () => new Promise((resolve) => setTimeout(() => resolve(mockKeyBytes), 50)),
       )
       mockBuilderConnectWithKey.mockResolvedValue(true)
 
@@ -287,9 +256,7 @@ describe('sdk store', () => {
 
       try {
         mockGetAppKey.mockResolvedValue(mockKeyBytes)
-        mockBuilderConnectWithKey.mockImplementation(
-          () => new Promise(() => {}),
-        )
+        mockBuilderConnectWithKey.mockImplementation(() => new Promise(() => {}))
 
         const reconnectPromise = sdkStore.reconnectIndexer()
         await jest.advanceTimersByTimeAsync(20_000)
@@ -307,9 +274,7 @@ describe('sdk store', () => {
     const indexerUrl = 'https://indexer.example.com'
 
     beforeEach(() => {
-      mockBuilderRequestConnection.mockResolvedValue(
-        'https://indexer.example.com/auth',
-      )
+      mockBuilderRequestConnection.mockResolvedValue('https://indexer.example.com/auth')
       const mock = createCancellableMock(0)
       mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
       mockBuilderCancel.mockImplementation(mock.cancelImpl)
@@ -338,9 +303,7 @@ describe('sdk store', () => {
       })
 
       it('returns error when connectWithKey throws', async () => {
-        mockBuilderConnectWithKey.mockRejectedValue(
-          new Error('Connection failed'),
-        )
+        mockBuilderConnectWithKey.mockRejectedValue(new Error('Connection failed'))
 
         const [, error] = await sdkStore.authenticateIndexer(indexerUrl)
 
@@ -355,9 +318,7 @@ describe('sdk store', () => {
       it('returns error when connectWithKey times out', async () => {
         jest.useFakeTimers()
         try {
-          mockBuilderConnectWithKey.mockImplementation(
-            () => new Promise(() => {}),
-          )
+          mockBuilderConnectWithKey.mockImplementation(() => new Promise(() => {}))
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
           await jest.advanceTimersByTimeAsync(20_000)
@@ -419,8 +380,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(true), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(true), 3_000)),
           )
           const mock = createCancellableMock(5_000)
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -442,8 +402,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(true), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(true), 3_000)),
           )
           const mock = createCancellableMock(20_000)
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -464,8 +423,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
           )
           const mock = createCancellableMock(5_000)
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -487,8 +445,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
           )
           const mock = createCancellableMock()
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -531,8 +488,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(true), 1_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(true), 1_000)),
           )
           const mock = createCancellableMock()
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -557,8 +513,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(false), 1_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(false), 1_000)),
           )
           const mock = createCancellableMock()
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -583,9 +538,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(() => new Promise(() => {}))
-          mockBuilderWaitForApproval.mockRejectedValue(
-            new Error('network failure'),
-          )
+          mockBuilderWaitForApproval.mockRejectedValue(new Error('network failure'))
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
           await jest.advanceTimersByTimeAsync(0)
@@ -603,9 +556,7 @@ describe('sdk store', () => {
       })
 
       it('requestConnection fails → error returned, no browser opened', async () => {
-        mockBuilderRequestConnection.mockRejectedValue(
-          new Error('Request failed'),
-        )
+        mockBuilderRequestConnection.mockRejectedValue(new Error('Request failed'))
 
         const [, error] = await sdkStore.authenticateIndexer(indexerUrl)
 
@@ -652,8 +603,7 @@ describe('sdk store', () => {
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
           mockBuilderCancel.mockImplementation(mock.cancelImpl)
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(true), 5_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(true), 5_000)),
           )
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
@@ -683,8 +633,7 @@ describe('sdk store', () => {
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
           mockBuilderCancel.mockImplementation(mock.cancelImpl)
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
           )
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
@@ -714,8 +663,7 @@ describe('sdk store', () => {
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
           mockBuilderCancel.mockImplementation(mock.cancelImpl)
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(false), 3_000)),
           )
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
@@ -827,9 +775,7 @@ describe('sdk store', () => {
     const testIndexerURL = 'https://indexer.example.com'
 
     beforeEach(() => {
-      mockBuilderRequestConnection.mockResolvedValue(
-        'https://indexer.example.com/auth',
-      )
+      mockBuilderRequestConnection.mockResolvedValue('https://indexer.example.com/auth')
       const mock = createCancellableMock(0)
       mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
       mockBuilderCancel.mockImplementation(mock.cancelImpl)
@@ -845,20 +791,14 @@ describe('sdk store', () => {
       })
 
       it('uses pending approval, skips browser auth, registers', async () => {
-        const [, error] = await sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const [, error] = await sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
 
         expect(error).toBeNull()
         expect(mockBuilderRequestConnection).not.toHaveBeenCalled()
         expect(mockOpenAuthURL).not.toHaveBeenCalled()
         expect(mockBuilderRegister).toHaveBeenCalledWith(mnemonic)
         expect(mockSetMnemonicHash).toHaveBeenCalledWith(mnemonic)
-        expect(mockOnConnected).toHaveBeenCalledWith(
-          mockAppKeyHex,
-          testIndexerURL,
-        )
+        expect(mockOnConnected).toHaveBeenCalledWith(mockAppKeyHex, testIndexerURL)
         expect(mockSetIndexerURL).toHaveBeenCalledWith(testIndexerURL)
         expect(app().connection.getState().isConnected).toBe(true)
         expect(sdkStore.getPendingApproval()).toBeNull()
@@ -868,10 +808,7 @@ describe('sdk store', () => {
       it('keeps pending approval on mnemonic mismatch so user can retry', async () => {
         mockValidateMnemonic.mockResolvedValue('invalid')
 
-        const [, error] = await sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const [, error] = await sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
 
         expect(error?.type).toBe('mnemonicMismatch')
         expect(mockBuilderRegister).not.toHaveBeenCalled()
@@ -882,10 +819,7 @@ describe('sdk store', () => {
 
     describe('without pending approval (fallback browser auth)', () => {
       it('runs browser auth when no pending approval', async () => {
-        const [, error] = await sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const [, error] = await sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
 
         expect(error).toBeNull()
         expect(mockBuilderRequestConnection).toHaveBeenCalled()
@@ -900,10 +834,7 @@ describe('sdk store', () => {
           indexerURL: 'https://different-indexer.com',
         })
 
-        const [, error] = await sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const [, error] = await sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
 
         expect(error).toBeNull()
         expect(mockBuilderRequestConnection).toHaveBeenCalled()
@@ -935,8 +866,7 @@ describe('sdk store', () => {
         jest.useFakeTimers()
         try {
           mockOpenAuthURL.mockImplementation(
-            () =>
-              new Promise((resolve) => setTimeout(() => resolve(true), 1_000)),
+            () => new Promise((resolve) => setTimeout(() => resolve(true), 1_000)),
           )
           const mock = createCancellableMock(3_000)
           mockBuilderWaitForApproval.mockImplementation(mock.waitImpl)
@@ -982,10 +912,7 @@ describe('sdk store', () => {
       sdkStore.setPendingApproval({ indexerURL: testIndexerURL })
       mockBuilderRegister.mockRejectedValue(new Error('Registration failed'))
 
-      const [, error] = await sdkStore.registerWithIndexer(
-        mnemonic,
-        testIndexerURL,
-      )
+      const [, error] = await sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
 
       expect(error?.type).toBe('error')
       if (error?.type === 'error') {
@@ -999,14 +926,9 @@ describe('sdk store', () => {
       jest.useFakeTimers()
 
       try {
-        mockBuilderRequestConnection.mockImplementation(
-          () => new Promise(() => {}),
-        )
+        mockBuilderRequestConnection.mockImplementation(() => new Promise(() => {}))
 
-        const registerPromise = sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const registerPromise = sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
         await jest.advanceTimersByTimeAsync(20_000)
         const [, error] = await registerPromise
 
@@ -1028,10 +950,7 @@ describe('sdk store', () => {
         sdkStore.setPendingApproval({ indexerURL: testIndexerURL })
         mockBuilderRegister.mockImplementation(() => new Promise(() => {}))
 
-        const registerPromise = sdkStore.registerWithIndexer(
-          mnemonic,
-          testIndexerURL,
-        )
+        const registerPromise = sdkStore.registerWithIndexer(mnemonic, testIndexerURL)
         await jest.advanceTimersByTimeAsync(60_000)
         const [, error] = await registerPromise
 

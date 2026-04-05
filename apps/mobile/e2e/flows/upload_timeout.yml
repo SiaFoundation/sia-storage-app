@@ -1,6 +1,6 @@
 appId: sia.storage.dev
 env:
-  E2E_CONNECT_KEY: "${E2E_CONNECT_KEY}"
+  E2E_CONNECT_KEY: '${E2E_CONNECT_KEY}'
 ---
 # Sia Storage - Upload Timeout Auto-Flush E2E Test
 # Tests that uploads are flushed after the idle timeout
@@ -23,137 +23,137 @@ env:
     commands:
       - extendedWaitUntil:
           visible:
-            text: "http://localhost:8081"
+            text: 'http://localhost:8081'
           timeout: 10000
       - tapOn:
-          text: "http://localhost:8081"
+          text: 'http://localhost:8081'
 - runFlow:
     when:
       platform: Android
     commands:
       - extendedWaitUntil:
           visible:
-            text: "http://10.0.2.2:8081"
+            text: 'http://10.0.2.2:8081'
           timeout: 30000
       - tapOn:
-          text: "http://10.0.2.2:8081"
+          text: 'http://10.0.2.2:8081'
 
 # Wait for bundling, dismiss dev menu popups
 - extendedWaitUntil:
     visible:
-      text: "Continue"
+      text: 'Continue'
     timeout: 60000
 - tapOn:
-    text: "Continue"
+    text: 'Continue'
 - extendedWaitUntil:
     visible:
-      text: "Go home"
+      text: 'Go home'
     timeout: 5000
 - tapOn:
-    point: "93%,40%"
+    point: '93%,40%'
 
 # Welcome screen
 - extendedWaitUntil:
     visible:
-      id: "welcome-title"
+      id: 'welcome-title'
     timeout: 15000
 - tapOn:
-    id: "welcome-get-started-button"
+    id: 'welcome-get-started-button'
 
 # Indexer selection
 - extendedWaitUntil:
     visible:
-      id: "indexer-title"
+      id: 'indexer-title'
     timeout: 10000
 - tapOn:
-    id: "indexer-authorize-button"
+    id: 'indexer-authorize-button'
 
 # Auth WebView
 - extendedWaitUntil:
     visible:
-      text: "App password"
+      text: 'App password'
     timeout: 20000
 - runFlow:
     when:
       platform: iOS
     commands:
       - tapOn:
-          text: "Enter your app password"
+          text: 'Enter your app password'
 - runFlow:
     when:
       platform: Android
     commands:
       - tapOn:
-          id: "appPassword"
-- inputText: "${E2E_CONNECT_KEY}"
+          id: 'appPassword'
+- inputText: '${E2E_CONNECT_KEY}'
 - extendedWaitUntil:
     visible:
-      text: "Accept"
+      text: 'Accept'
     timeout: 5000
 - tapOn:
-    point: "50%,20%"
+    point: '50%,20%'
 - tapOn:
-    text: "Accept"
+    text: 'Accept'
 - extendedWaitUntil:
     visible:
-      text: "Connection approved"
+      text: 'Connection approved'
     timeout: 30000
 - tapOn:
-    text: "Return to app"
+    text: 'Return to app'
 
 # Recovery phrase - create new account
 - extendedWaitUntil:
     visible:
-      id: "recovery-title"
+      id: 'recovery-title'
     timeout: 15000
 - tapOn:
-    id: "recovery-generate-button"
+    id: 'recovery-generate-button'
 - extendedWaitUntil:
     visible:
-      id: "recovery-phrase-text"
+      id: 'recovery-phrase-text'
     timeout: 5000
 - tapOn:
-    id: "recovery-checkbox"
+    id: 'recovery-checkbox'
 - tapOn:
-    id: "recovery-continue-button"
+    id: 'recovery-continue-button'
 
 # Finished screen
 - extendedWaitUntil:
     visible:
-      id: "finished-title"
+      id: 'finished-title'
     timeout: 15000
 - tapOn:
-    id: "finished-upload-button"
+    id: 'finished-upload-button'
 
 # Wait for Library screen
 - extendedWaitUntil:
     visible:
-      text: "Library"
+      text: 'Library'
     timeout: 10000
 
 # Verify clean state (0 items after fresh onboarding)
 - assertVisible:
-    text: "0 items"
+    text: '0 items'
 
 # Add a test image to simulator's photo library
 - addMedia:
-  - ../assets/test-image-1.png
+    - ../assets/test-image-1.png
 
 # Tap the add button to open the action sheet
 - tapOn:
-    id: "library-add-button"
+    id: 'library-add-button'
 
 # Wait for action sheet to fully appear
 - waitForAnimationToEnd
 
 # Select "Choose from Photos"
 - tapOn:
-    id: "action-choose-from-photos"
+    id: 'action-choose-from-photos'
 
 # Wait for photo library to appear (may take time to load on fresh simulator)
 - extendedWaitUntil:
     visible:
-      text: "Photos"
+      text: 'Photos'
     timeout: 30000
 
 # Wait for photo grid to load
@@ -163,10 +163,10 @@ env:
 - runFlow:
     when:
       visible:
-        text: "Dismiss"
+        text: 'Dismiss'
     commands:
       - tapOn:
-          text: "Dismiss"
+          text: 'Dismiss'
       - waitForAnimationToEnd
 
 # Select one photo
@@ -176,13 +176,13 @@ env:
       platform: iOS
     commands:
       - tapOn:
-          point: "17%,30%"
+          point: '17%,30%'
 - runFlow:
     when:
       platform: Android
     commands:
       - tapOn:
-          point: "17%,45%"
+          point: '17%,45%'
 
 # Wait for selection UI to update
 - waitForAnimationToEnd
@@ -191,35 +191,35 @@ env:
 - runFlow:
     when:
       visible:
-        text: "Add"
+        text: 'Add'
     commands:
       - tapOn:
-          text: "Add"
+          text: 'Add'
 - runFlow:
     when:
       visible:
-        text: "Done"
+        text: 'Done'
     commands:
       - tapOn:
-          text: "Done"
+          text: 'Done'
 
 # Wait to return to Library screen
 - extendedWaitUntil:
     visible:
-      text: "Library"
+      text: 'Library'
     timeout: 15000
 
 # Verify file was added
 - assertVisible:
-    text: "1 item"
+    text: '1 item'
 
 # Wait for upload to complete (5 minute timeout)
 # The file goes through queued -> packing -> uploading -> uploaded states
 - extendedWaitUntil:
     visible:
-      id: "upload-status-uploaded"
+      id: 'upload-status-uploaded'
     timeout: 300000
 
 # Verify no upload errors
 - assertNotVisible:
-    id: "upload-status-error"
+    id: 'upload-status-error'

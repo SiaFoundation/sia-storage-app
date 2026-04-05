@@ -1,19 +1,13 @@
 import { minutesInMs, secondsInMs } from '@siastorage/core'
 import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
-import BackgroundFetch, {
-  type BackgroundFetchConfig,
-} from 'react-native-background-fetch'
+import BackgroundFetch, { type BackgroundFetchConfig } from 'react-native-background-fetch'
 import { createBackgroundDelay } from '../lib/backgroundDelay'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
-import {
-  getIsSuspended,
-  resumeFromSuspension,
-  suspendForBackground,
-} from './suspension'
+import { getIsSuspended, resumeFromSuspension, suspendForBackground } from './suspension'
 import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -101,9 +95,7 @@ export function getIsBackgroundTaskRunning(): boolean {
 }
 
 function hasOtherRunningTasks(excludeId: TaskId): boolean {
-  return Object.entries(taskStates).some(
-    ([id, s]) => id !== excludeId && s.status === 'running',
-  )
+  return Object.entries(taskStates).some(([id, s]) => id !== excludeId && s.status === 'running')
 }
 
 function createFreshTaskState(): TaskState {
@@ -166,10 +158,7 @@ export async function initBackgroundTasks() {
       // Only re-suspend if the app is still in background.
       // If the user opened the app during the task, skip — the
       // AppState listener will handle suspension on next background.
-      if (
-        !hasOtherRunningTasks(config.id) &&
-        AppState.currentState !== 'active'
-      ) {
+      if (!hasOtherRunningTasks(config.id) && AppState.currentState !== 'active') {
         await suspendForBackground()
       }
       BackgroundFetch.finish(config.id)
@@ -333,14 +322,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const finalStats = await getFileStatsLocal({ localOnly: true })
       log(
         'finished',
-        buildSummaryData(
-          'timed out',
-          initialStats,
-          finalStats,
-          initialSnapshot,
-          manager,
-          state,
-        ),
+        buildSummaryData('timed out', initialStats, finalStats, initialSnapshot, manager, state),
       )
       return
     }
@@ -369,14 +351,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       const finalStats = await getFileStatsLocal({ localOnly: true })
       log(
         'finished',
-        buildSummaryData(
-          'aborted',
-          initialStats,
-          finalStats,
-          initialSnapshot,
-          manager,
-          state,
-        ),
+        buildSummaryData('aborted', initialStats, finalStats, initialSnapshot, manager, state),
       )
       return
     }
@@ -432,10 +407,7 @@ function logTask(config: TaskConfig, state: TaskState) {
   }
 }
 
-function transitionTaskState(
-  state: TaskState,
-  newStatus: 'running' | 'finished',
-) {
+function transitionTaskState(state: TaskState, newStatus: 'running' | 'finished') {
   if (newStatus === 'running') {
     state.startTime = Date.now()
     state.invocationId = Math.random().toString(36).substring(2, 8)

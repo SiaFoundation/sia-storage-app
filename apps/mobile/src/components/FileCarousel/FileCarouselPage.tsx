@@ -1,10 +1,7 @@
 import type { FileRecord } from '@siastorage/core/types'
 import { memo } from 'react'
 import { Pressable, StyleSheet } from 'react-native'
-import {
-  detailsShouldAutoDownload,
-  useAutoDownload,
-} from '../../hooks/useAutoDownload'
+import { detailsShouldAutoDownload, useAutoDownload } from '../../hooks/useAutoDownload'
 import { FileViewer } from '../FileViewer'
 
 type Props = {

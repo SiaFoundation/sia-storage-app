@@ -24,11 +24,7 @@ type LogViewProps = {
   onScrollAwayFromBottom?: () => void
 }
 
-export function LogView({
-  isFollowing,
-  onTotalCountChange,
-  onScrollAwayFromBottom,
-}: LogViewProps) {
+export function LogView({ isFollowing, onTotalCountChange, onScrollAwayFromBottom }: LogViewProps) {
   const { data, isLoading, error } = useLogs()
   const logs = data?.entries ?? []
   const totalCount = data?.totalCount ?? 0
@@ -55,33 +51,21 @@ export function LogView({
     [onScrollAwayFromBottom],
   )
 
-  const renderLogItem = useCallback(
-    ({ item, index }: { item: LogEntry; index: number }) => {
-      const scopeColor = getScopeColorHex(item.scope)
-      const levelColor = getLevelColorHex(item.level) ?? palette.gray[50]
-      const dataPart = formatDataPairs(item.data)
+  const renderLogItem = useCallback(({ item, index }: { item: LogEntry; index: number }) => {
+    const scopeColor = getScopeColorHex(item.scope)
+    const levelColor = getLevelColorHex(item.level) ?? palette.gray[50]
+    const dataPart = formatDataPairs(item.data)
 
-      return (
-        <Text
-          key={`${index}-${item.timestamp}-${item.scope}`}
-          style={styles.line}
-        >
-          <Text style={[styles.timestamp, { color: palette.gray[400] }]}>
-            {item.timestamp}{' '}
-          </Text>
-          <Text style={[styles.level, { color: levelColor }]}>
-            {item.level.toUpperCase()}{' '}
-          </Text>
-          <Text style={[styles.scope, { color: scopeColor }]}>
-            [{item.scope}]{' '}
-          </Text>
-          <Text style={styles.message}>{item.message}</Text>
-          {dataPart ? <Text style={styles.data}>{` ${dataPart}`}</Text> : null}
-        </Text>
-      )
-    },
-    [],
-  )
+    return (
+      <Text key={`${index}-${item.timestamp}-${item.scope}`} style={styles.line}>
+        <Text style={[styles.timestamp, { color: palette.gray[400] }]}>{item.timestamp} </Text>
+        <Text style={[styles.level, { color: levelColor }]}>{item.level.toUpperCase()} </Text>
+        <Text style={[styles.scope, { color: scopeColor }]}>[{item.scope}] </Text>
+        <Text style={styles.message}>{item.message}</Text>
+        {dataPart ? <Text style={styles.data}>{` ${dataPart}`}</Text> : null}
+      </Text>
+    )
+  }, [])
 
   if (isLoading) {
     return (
@@ -114,9 +98,7 @@ export function LogView({
         ref={flatListRef}
         data={logs}
         renderItem={renderLogItem}
-        keyExtractor={(item, index) =>
-          `${index}-${item.timestamp}-${item.scope}-${item.level}`
-        }
+        keyExtractor={(item, index) => `${index}-${item.timestamp}-${item.scope}-${item.level}`}
         inverted
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator

@@ -23,8 +23,7 @@ export function createStorageAdapter(): StorageAdapter {
 export function createSecretsAdapter(): StorageAdapter {
   return {
     getItem: (key) => SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS),
-    setItem: (key, value) =>
-      SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS),
+    setItem: (key, value) => SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS),
     deleteItem: (key) => SecureStore.deleteItemAsync(key, SECURE_STORE_OPTIONS),
   }
 }

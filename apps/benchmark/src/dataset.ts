@@ -119,10 +119,7 @@ export async function generateDataset(
 
   for (const { groups, versions } of dist) {
     for (let g = 0; g < groups; g++) {
-      const groupName =
-        versions === 1
-          ? `file-${fileIndex}.jpg`
-          : `vgroup-${versions}v-${g}.pdf`
+      const groupName = versions === 1 ? `file-${fileIndex}.jpg` : `vgroup-${versions}v-${g}.pdf`
       const dirSlot = g % 55
       const dirId = dirSlot < dirIds.length ? dirIds[dirSlot] : null
 

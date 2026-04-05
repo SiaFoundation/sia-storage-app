@@ -22,17 +22,10 @@ export async function retry<T>(
       return await operation()
     } catch (error) {
       // Log the retry attempt.
-      const exponentialDelay = Math.min(
-        delayMs * 2 ** (attempt - 1),
-        MAX_BACKOFF_MS,
-      )
+      const exponentialDelay = Math.min(delayMs * 2 ** (attempt - 1), MAX_BACKOFF_MS)
       // Jitter spreads out retries occurring at the same time a little bit.
-      const jitterOffset =
-        exponentialDelay * JITTER_RATIO * (Math.random() * 2 - 1)
-      const delayWithJitter = Math.max(
-        0,
-        Math.round(exponentialDelay + jitterOffset),
-      )
+      const jitterOffset = exponentialDelay * JITTER_RATIO * (Math.random() * 2 - 1)
+      const delayWithJitter = Math.max(0, Math.round(exponentialDelay + jitterOffset))
       logger.warn('retry', 'attempt_failed', {
         name,
         attempt,

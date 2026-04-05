@@ -8,9 +8,7 @@ type SchedulerState = {
 
 type ServiceIntervalOptions = {
   name: string
-  worker: (
-    signal: AbortSignal,
-  ) => void | undefined | number | Promise<void | undefined | number>
+  worker: (signal: AbortSignal) => void | undefined | number | Promise<void | undefined | number>
   interval: number
 }
 

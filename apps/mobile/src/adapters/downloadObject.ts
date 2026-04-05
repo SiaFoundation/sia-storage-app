@@ -9,8 +9,7 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
   return {
     async download({ file, object, sdk, onProgress, signal }) {
       const appKey = await getAppKeyForIndexer(object.indexerURL)
-      if (!appKey)
-        throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
+      if (!appKey) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
       const pinnedObject = PinnedObject.open(appKey, object)
 

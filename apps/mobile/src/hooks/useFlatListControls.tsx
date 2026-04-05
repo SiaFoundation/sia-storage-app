@@ -8,13 +8,7 @@ type Params<T> = {
   hasMore: boolean
 }
 
-export function useFlatListControls<T>({
-  data,
-  size,
-  setSize,
-  isValidating,
-  hasMore,
-}: Params<T>) {
+export function useFlatListControls<T>({ data, size, setSize, isValidating, hasMore }: Params<T>) {
   const isLoadingMore = !!data && isValidating && hasMore
 
   const handleEndReached = React.useCallback(() => {

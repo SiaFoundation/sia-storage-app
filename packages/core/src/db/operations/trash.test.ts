@@ -1,11 +1,6 @@
 import { insertFileRecord } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
-import {
-  autoPurgeOldTrashedFiles,
-  permanentlyDeleteFiles,
-  restoreFiles,
-  trashFiles,
-} from './trash'
+import { autoPurgeOldTrashedFiles, permanentlyDeleteFiles, restoreFiles, trashFiles } from './trash'
 
 function makeFileRecord(id: string, overrides?: Record<string, any>) {
   return {
@@ -148,10 +143,7 @@ describe('permanentlyDeleteFiles', () => {
 describe('autoPurgeOldTrashedFiles', () => {
   it('purges files trashed longer than the cutoff', async () => {
     const oldTrashedAt = 1
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { trashedAt: oldTrashedAt }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: oldTrashedAt }))
 
     const purgedIds = await autoPurgeOldTrashedFiles(db())
 
@@ -161,10 +153,7 @@ describe('autoPurgeOldTrashedFiles', () => {
   })
 
   it('does not purge recently trashed files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { trashedAt: Date.now() }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: Date.now() }))
 
     const purgedIds = await autoPurgeOldTrashedFiles(db())
 
@@ -172,10 +161,7 @@ describe('autoPurgeOldTrashedFiles', () => {
   })
 
   it('does not purge already-deleted files', async () => {
-    await insertFileRecord(
-      db(),
-      makeFileRecord('f1', { trashedAt: 1, deletedAt: 2 }),
-    )
+    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: 1, deletedAt: 2 }))
 
     const purgedIds = await autoPurgeOldTrashedFiles(db())
 

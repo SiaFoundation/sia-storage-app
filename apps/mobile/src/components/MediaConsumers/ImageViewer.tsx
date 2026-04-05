@@ -1,7 +1,4 @@
-import {
-  ImageZoom,
-  type ImageZoomRef,
-} from '@likashefqet/react-native-image-zoom'
+import { ImageZoom, type ImageZoomRef } from '@likashefqet/react-native-image-zoom'
 import { useCallback, useRef } from 'react'
 import { StyleSheet, type ViewStyle } from 'react-native'
 

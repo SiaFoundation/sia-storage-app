@@ -343,10 +343,7 @@ describe('syncPhotosArchive', () => {
       await run()
 
       expect(catalogAssetsMock).toHaveBeenCalledWith(
-        [
-          expect.objectContaining({ id: 'a1' }),
-          expect.objectContaining({ id: 'a2' }),
-        ],
+        [expect.objectContaining({ id: 'a1' }), expect.objectContaining({ id: 'a2' })],
         'file',
         { addToImportDirectory: true },
       )

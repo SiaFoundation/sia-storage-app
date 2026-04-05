@@ -33,9 +33,7 @@ const appKeysCodec = {
 }
 
 async function getAppKeysMap(): Promise<AppKeysMap> {
-  return (
-    (await getSecureStoreJSON(APP_KEYS_SECURE_STORE_KEY, appKeysCodec)) ?? {}
-  )
+  return (await getSecureStoreJSON(APP_KEYS_SECURE_STORE_KEY, appKeysCodec)) ?? {}
 }
 
 async function setAppKeysMap(map: AppKeysMap): Promise<void> {

@@ -45,9 +45,7 @@ export function buildAuthNamespace(
       const storedHash = await secrets.getItem(MNEMONIC_HASH_KEY)
       if (!storedHash) return 'none' as const
       const inputHash = await hashMnemonic(mnemonic)
-      return inputHash === storedHash
-        ? ('valid' as const)
-        : ('invalid' as const)
+      return inputHash === storedHash ? ('valid' as const) : ('invalid' as const)
     },
     async clearMnemonicHash() {
       await secrets.deleteItem(MNEMONIC_HASH_KEY)

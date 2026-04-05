@@ -4,12 +4,7 @@ import {
   type MockIndexerStorage,
   resetObjectIdCounter,
 } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  generateTestFiles,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, type TestApp, waitForCondition } from './app'
 
 beforeEach(() => {
   resetObjectIdCounter()
@@ -55,9 +50,7 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
 
     const filesA = await appA.getFiles()
     const filesB = await appB.getFiles()
-    expect(filesA.map((f) => f.id).sort()).toEqual(
-      filesB.map((f) => f.id).sort(),
-    )
+    expect(filesA.map((f) => f.id).sort()).toEqual(filesB.map((f) => f.id).sort())
   })
 
   it("both devices see each other's injected files", async () => {

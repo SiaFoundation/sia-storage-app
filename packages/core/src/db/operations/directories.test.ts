@@ -74,9 +74,7 @@ describe('directoryParentPath', () => {
 
 describe('directoryBreadcrumbs', () => {
   it('returns single entry for root', () => {
-    expect(directoryBreadcrumbs('Photos')).toEqual([
-      { segment: 'Photos', path: 'Photos' },
-    ])
+    expect(directoryBreadcrumbs('Photos')).toEqual([{ segment: 'Photos', path: 'Photos' }])
   })
 
   it('returns entries with cumulative paths', () => {
@@ -147,9 +145,7 @@ describe('sanitizeDirectorySegment', () => {
 
 describe('sanitizeDirectoryPath', () => {
   it('sanitizes each segment and joins with /', () => {
-    expect(sanitizeDirectoryPath('Photos/Vacation/2025')).toBe(
-      'Photos/Vacation/2025',
-    )
+    expect(sanitizeDirectoryPath('Photos/Vacation/2025')).toBe('Photos/Vacation/2025')
   })
 
   it('removes empty segments', () => {
@@ -157,9 +153,7 @@ describe('sanitizeDirectoryPath', () => {
   })
 
   it('strips bad characters from each segment', () => {
-    expect(sanitizeDirectoryPath('Pho\x00tos/Va\\ca\x7ftion')).toBe(
-      'Photos/Vacation',
-    )
+    expect(sanitizeDirectoryPath('Pho\x00tos/Va\\ca\x7ftion')).toBe('Photos/Vacation')
   })
 
   it('returns single segment for flat name', () => {
@@ -200,16 +194,12 @@ describe('insertDirectory', () => {
   })
 
   it('throws on empty name', async () => {
-    await expect(insertDirectory(db(), '')).rejects.toThrow(
-      'Folder name cannot be empty',
-    )
+    await expect(insertDirectory(db(), '')).rejects.toThrow('Folder name cannot be empty')
   })
 
   it('throws on duplicate path', async () => {
     await insertDirectory(db(), 'Photos')
-    await expect(insertDirectory(db(), 'Photos')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(insertDirectory(db(), 'Photos')).rejects.toThrow('already exists')
   })
 
   it('allows directories with different casing', async () => {
@@ -398,11 +388,7 @@ describe('queryAllDirectoriesWithCounts', () => {
     await moveFileToDirectory(db(), 'f1', dir.id)
     await moveFileToDirectory(db(), 'f2', dir.id)
 
-    await db().runAsync(
-      'UPDATE files SET trashedAt = ? WHERE id = ?',
-      Date.now(),
-      'f2',
-    )
+    await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', Date.now(), 'f2')
 
     const dirs = await queryAllDirectoriesWithCounts(db())
     expect(dirs[0].fileCount).toBe(1)
@@ -448,17 +434,13 @@ describe('renameDirectory', () => {
 
   it('throws on empty name', async () => {
     const dir = await insertDirectory(db(), 'Photos')
-    await expect(renameDirectory(db(), dir.id, '')).rejects.toThrow(
-      'Folder name cannot be empty',
-    )
+    await expect(renameDirectory(db(), dir.id, '')).rejects.toThrow('Folder name cannot be empty')
   })
 
   it('throws on duplicate name', async () => {
     const dir1 = await insertDirectory(db(), 'Photos')
     await insertDirectory(db(), 'Videos')
-    await expect(renameDirectory(db(), dir1.id, 'Videos')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(renameDirectory(db(), dir1.id, 'Videos')).rejects.toThrow('already exists')
   })
 
   it('applies sanitization', async () => {
@@ -579,11 +561,7 @@ describe('deleteDirectoryAndTrashFiles', () => {
     await moveFileToDirectory(db(), 'f1', dir.id)
     await moveFileToDirectory(db(), 'f2', dir.id)
 
-    await db().runAsync(
-      'UPDATE files SET trashedAt = ? WHERE id = ?',
-      Date.now(),
-      'f2',
-    )
+    await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', Date.now(), 'f2')
 
     const trashedIds = await deleteDirectoryAndTrashFiles(db(), dir.id)
     expect(trashedIds).toEqual(['f1'])
@@ -661,9 +639,9 @@ describe('moveDirectory', () => {
     const photos = await insertDirectory(db(), 'Photos')
     await insertDirectory(db(), 'Vacation', 'Photos')
 
-    await expect(
-      moveDirectory(db(), photos.id, 'Photos/Vacation'),
-    ).rejects.toThrow('Cannot move a folder into itself')
+    await expect(moveDirectory(db(), photos.id, 'Photos/Vacation')).rejects.toThrow(
+      'Cannot move a folder into itself',
+    )
   })
 
   it('rejects move when sibling name conflicts', async () => {
@@ -887,12 +865,6 @@ describe('natural sort order', () => {
 
     const dirs = await queryAllDirectoriesWithCounts(db())
     const names = dirs.map((d) => d.path)
-    expect(names).toEqual([
-      'Folder 1',
-      'Folder 2',
-      'Folder 3',
-      'Folder 10',
-      'Folder 20',
-    ])
+    expect(names).toEqual(['Folder 1', 'Folder 2', 'Folder 3', 'Folder 10', 'Folder 20'])
   })
 })

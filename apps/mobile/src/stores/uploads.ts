@@ -33,9 +33,7 @@ export function getUploadCounts(): UploadCounts {
 }
 
 export function useUploadCounts(): UploadCounts {
-  const { data } = useSWR(app().caches.uploads.key('counts'), () =>
-    getUploadCounts(),
-  )
+  const { data } = useSWR(app().caches.uploads.key('counts'), () => getUploadCounts())
   return data ?? { total: 0, totalActive: 0, totalQueued: 0 }
 }
 
@@ -60,9 +58,7 @@ export function getActiveUploads(): UploadState[] {
 }
 
 export function useActiveUploads(): UploadState[] {
-  const { data } = useSWR(app().caches.uploads.key('active'), () =>
-    getActiveUploads(),
-  )
+  const { data } = useSWR(app().caches.uploads.key('active'), () => getActiveUploads())
   return data ?? []
 }
 

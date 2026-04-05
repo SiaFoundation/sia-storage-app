@@ -65,10 +65,7 @@ export async function getSecureStoreNumber(key: string, initialValue = 0) {
   return initialValue
 }
 
-export async function setSecureStoreString<T extends string>(
-  key: string,
-  value: T,
-) {
+export async function setSecureStoreString<T extends string>(key: string, value: T) {
   validateKey(key)
   return setItem(key, value)
 }

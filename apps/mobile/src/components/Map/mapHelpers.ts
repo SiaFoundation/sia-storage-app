@@ -15,8 +15,7 @@ const isValid = (p?: Partial<Pt>): p is Pt =>
 
 function minimalLonSpan(longitudes: number[]) {
   const norm = longitudes.map((lon) => (lon + 360) % 360).sort((a, b) => a - b)
-  if (norm.length === 1)
-    return { center: ((norm[0] + 540) % 360) - 180, span: 0 }
+  if (norm.length === 1) return { center: ((norm[0] + 540) % 360) - 180, span: 0 }
 
   let maxGap = -1,
     idx = 0

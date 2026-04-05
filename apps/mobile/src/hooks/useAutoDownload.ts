@@ -61,14 +61,5 @@ export function useAutoDownloadFromShareURL(
     if (status.data.isDownloading) return
     if (!shouldDownload(file)) return
     download(file.id, shareUrl)
-  }, [
-    file.id,
-    shareUrl,
-    isInitializing,
-    isConnected,
-    status.data,
-    download,
-    file,
-    shouldDownload,
-  ])
+  }, [file.id, shareUrl, isInitializing, isConnected, status.data, download, file, shouldDownload])
 }

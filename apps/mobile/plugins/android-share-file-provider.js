@@ -10,10 +10,7 @@ function withShareFileProvider(config) {
   return withDangerousMod(config, [
     'android',
     async (config) => {
-      const xmlDir = path.join(
-        config.modRequest.platformProjectRoot,
-        'app/src/main/res/xml',
-      )
+      const xmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml')
       await fs.mkdir(xmlDir, { recursive: true })
 
       const xmlContent = `<?xml version="1.0" encoding="utf-8"?>
@@ -23,11 +20,7 @@ function withShareFileProvider(config) {
     <files-path name="internal_files" path="." />
 </paths>
 `
-      await fs.writeFile(
-        path.join(xmlDir, 'share_download_paths.xml'),
-        xmlContent,
-        'utf-8',
-      )
+      await fs.writeFile(path.join(xmlDir, 'share_download_paths.xml'), xmlContent, 'utf-8')
 
       return config
     },

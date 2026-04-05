@@ -14,10 +14,7 @@ type VirtualListQueryParams = {
   query?: string
 }
 
-async function fetchFilePosition(
-  fileId: string,
-  params: VirtualListQueryParams,
-): Promise<number> {
+async function fetchFilePosition(fileId: string, params: VirtualListQueryParams): Promise<number> {
   return app().library.filePosition(fileId, params)
 }
 
@@ -29,9 +26,7 @@ async function fetchSortedFileIds(
   return app().library.sortedFileIds(params, limit, offset)
 }
 
-export async function fetchFilesByIDs(
-  ids: string[],
-): Promise<Map<string, FileRecord>> {
+export async function fetchFilesByIDs(ids: string[]): Promise<Map<string, FileRecord>> {
   const result = new Map<string, FileRecord>()
   if (ids.length === 0) return result
 
@@ -65,17 +60,9 @@ type UseFileCarouselReturn = {
   isLoading: boolean
 }
 
-function windowIndices(
-  center: number,
-  count: number,
-  radius: number,
-): number[] {
+function windowIndices(center: number, count: number, radius: number): number[] {
   const indices: number[] = []
-  for (
-    let i = Math.max(0, center - radius);
-    i <= Math.min(count - 1, center + radius);
-    i++
-  ) {
+  for (let i = Math.max(0, center - radius); i <= Math.min(count - 1, center + radius); i++) {
     indices.push(i)
   }
   return indices
@@ -107,8 +94,7 @@ export function useFileCarousel({
   onDeleted,
 }: UseFileCarouselParams): UseFileCarouselReturn {
   const sortBy = sortByParam
-  const sortingDir: SortDir =
-    sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
+  const sortingDir: SortDir = sortDirParam ?? (sortBy === 'NAME' ? 'ASC' : 'DESC')
 
   const [currentIndex, _setCurrentIndex] = useState(0)
   const [totalCount, setTotalCount] = useState(initialFile ? 1 : 0)
@@ -128,15 +114,9 @@ export function useFileCarousel({
   const currentFileIdRef = useRef(initialId)
   const initialFileRef = useRef(initialFile)
 
-  const categoriesKey = useMemo(
-    () => categoriesParam.slice().sort().join(','),
-    [categoriesParam],
-  )
+  const categoriesKey = useMemo(() => categoriesParam.slice().sort().join(','), [categoriesParam])
 
-  const tagsKey = useMemo(
-    () => (tags ? tags.slice().sort().join(',') : ''),
-    [tags],
-  )
+  const tagsKey = useMemo(() => (tags ? tags.slice().sort().join(',') : ''), [tags])
 
   const queryParams = useMemo<VirtualListQueryParams>(
     () => ({
@@ -150,32 +130,25 @@ export function useFileCarousel({
     [sortBy, sortingDir, categoriesKey, directoryId, tagsKey, query],
   )
 
-  const populateCaches = useCallback(
-    (indexToFile: Map<number, FileRecord>): boolean => {
-      let changed = false
-      indexToFile.forEach((file, index) => {
-        positionMapRef.current.set(index, file.id)
-        const existing = fileCacheRef.current.get(file.id)
-        if (existing && fileRecordEqual(existing, file)) return
-        fileCacheRef.current.set(file.id, file)
-        changed = true
-      })
-      return changed
-    },
-    [],
-  )
+  const populateCaches = useCallback((indexToFile: Map<number, FileRecord>): boolean => {
+    let changed = false
+    indexToFile.forEach((file, index) => {
+      positionMapRef.current.set(index, file.id)
+      const existing = fileCacheRef.current.get(file.id)
+      if (existing && fileRecordEqual(existing, file)) return
+      fileCacheRef.current.set(file.id, file)
+      changed = true
+    })
+    return changed
+  }, [])
 
   const evictDistant = useCallback(
     (centerIndex: number) => {
       if (fileCacheRef.current.size <= maxCacheSize) return
 
       const posEntries = Array.from(positionMapRef.current.entries())
-      posEntries.sort(
-        (a, b) => Math.abs(a[0] - centerIndex) - Math.abs(b[0] - centerIndex),
-      )
-      const keepIds = new Set(
-        posEntries.slice(0, maxCacheSize).map(([, id]) => id),
-      )
+      posEntries.sort((a, b) => Math.abs(a[0] - centerIndex) - Math.abs(b[0] - centerIndex))
+      const keepIds = new Set(posEntries.slice(0, maxCacheSize).map(([, id]) => id))
       keepIds.add(currentFileIdRef.current)
       for (const id of [...fileCacheRef.current.keys()]) {
         if (!keepIds.has(id)) {
@@ -200,11 +173,7 @@ export function useFileCarousel({
         if (cancelled) return
 
         const windowOffset = Math.max(0, position - ID_WINDOW_HALF)
-        const ids = await fetchSortedFileIds(
-          queryParams,
-          ID_WINDOW_SIZE,
-          windowOffset,
-        )
+        const ids = await fetchSortedFileIds(queryParams, ID_WINDOW_SIZE, windowOffset)
 
         if (cancelled) return
 
@@ -217,11 +186,7 @@ export function useFileCarousel({
         // When initialFile is provided, skip fetching visible files here.
         // The prefetch effect runs immediately after and handles it.
         if (!initialFileRef.current) {
-          const visibleIndices = windowIndices(
-            relativePosition,
-            ids.length,
-            prefetchRadius,
-          )
+          const visibleIndices = windowIndices(relativePosition, ids.length, prefetchRadius)
           const visibleIds = visibleIndices
             .map((i) => positionMapRef.current.get(i))
             .filter((id): id is string => !!id && !fileCacheRef.current.has(id))
@@ -298,14 +263,7 @@ export function useFileCarousel({
     return () => {
       cancelled = true
     }
-  }, [
-    currentIndex,
-    totalCount,
-    isLoading,
-    prefetchRadius,
-    evictDistant,
-    populateCaches,
-  ])
+  }, [currentIndex, totalCount, isLoading, prefetchRadius, evictDistant, populateCaches])
 
   // The prefetch loop only queries files near the current index — it won't
   // re-fetch a file already in cache. This listener handles the case where
@@ -332,13 +290,13 @@ export function useFileCarousel({
       .catch(() => {})
   })
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion forces new function reference when caches update
   const getFileAtIndex = useCallback(
     (index: number): FileRecord | null => {
       const fileId = positionMapRef.current.get(index)
       if (!fileId) return null
       return fileCacheRef.current.get(fileId) ?? null
     },
+    // oxlint-disable-next-line react/exhaustive-deps -- cacheVersion forces re-creation when ref caches update
     [cacheVersion],
   )
 

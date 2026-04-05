@@ -2,10 +2,7 @@ import { usePhotoImportDirectory } from '@siastorage/core/stores'
 import { useCallback, useState } from 'react'
 import { Linking, Pressable, StyleSheet, Switch, Text } from 'react-native'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
-import {
-  toggleAutoSyncNewPhotos,
-  useAutoSyncNewPhotos,
-} from '../managers/syncNewPhotos'
+import { toggleAutoSyncNewPhotos, useAutoSyncNewPhotos } from '../managers/syncNewPhotos'
 import { useArchiveSyncCompletedAt } from '../managers/syncPhotosArchive'
 import { app } from '../stores/appService'
 import { openSheet } from '../stores/sheets'
@@ -74,10 +71,7 @@ export function SettingsSyncPhotos() {
           label="Import new photos"
           labelWidth={250}
           value={
-            <Switch
-              value={autoSyncNew.data ?? false}
-              onValueChange={toggleAutoSyncNewPhotos}
-            />
+            <Switch value={autoSyncNew.data ?? false} onValueChange={toggleAutoSyncNewPhotos} />
           }
         />
       </InfoCard>
@@ -91,10 +85,7 @@ export function SettingsSyncPhotos() {
       {completedDateLabel ? (
         <Text style={styles.info}>Last completed: {completedDateLabel}</Text>
       ) : null}
-      <ArchiveSyncModal
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      />
+      <ArchiveSyncModal visible={modalVisible} onRequestClose={() => setModalVisible(false)} />
     </RowGroup>
   )
 }

@@ -38,10 +38,7 @@ async function ensureLoaded(): Promise<void> {
   if (loaded) return
   if (loadPromise) return loadPromise
   loadPromise = (async () => {
-    const stored = (await app().settings.getViewSettings()) as Record<
-      string,
-      ViewSettings
-    >
+    const stored = (await app().settings.getViewSettings()) as Record<string, ViewSettings>
     settings = stored ?? {}
     loaded = true
     cache.invalidate()

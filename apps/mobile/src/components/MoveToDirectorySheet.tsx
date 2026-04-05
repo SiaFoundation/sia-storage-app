@@ -9,15 +9,7 @@ import {
   XIcon,
 } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  FlatList,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
@@ -49,23 +41,18 @@ export function MoveToDirectorySheet({
   const children = useDirectoryChildren(currentDirPath)
   const dirs = children.data ?? []
   const filtered = query.trim()
-    ? dirs.filter((d) =>
-        d.name.toLowerCase().includes(query.trim().toLowerCase()),
-      )
+    ? dirs.filter((d) => d.name.toLowerCase().includes(query.trim().toLowerCase()))
     : dirs
 
   const exactMatch =
-    query.trim().length > 0 &&
-    dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
+    query.trim().length > 0 && dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
   const handleShow = useFocusOnShow(inputRef)
 
   useEffect(() => {
     if (isOpen) {
       if (!isSingleFile) {
-        app()
-          .directories.countFilesWithDirectories(fileIds)
-          .then(setFilesInDirCount)
+        app().directories.countFilesWithDirectories(fileIds).then(setFilesInDirCount)
       }
     } else {
       setQuery('')
@@ -92,6 +79,7 @@ export function MoveToDirectorySheet({
         setLoadingDirId(null)
       }
     },
+    // oxlint-disable-next-line react/exhaustive-deps -- dirs is derived from SWR data, new ref each render is expected
     [fileIds, dirs, toast, onComplete],
   )
 
@@ -113,15 +101,10 @@ export function MoveToDirectorySheet({
       setLoadingDirId('create')
       try {
         try {
-          const dir = await app().directories.create(
-            name.trim(),
-            currentDirPath ?? undefined,
-          )
+          const dir = await app().directories.create(name.trim(), currentDirPath ?? undefined)
           await handleMoveToDirectory(dir.id)
         } catch {
-          const existing = dirs.find(
-            (d) => d.name.toLowerCase() === name.trim().toLowerCase(),
-          )
+          const existing = dirs.find((d) => d.name.toLowerCase() === name.trim().toLowerCase())
           if (existing) {
             await handleMoveToDirectory(existing.id)
           }
@@ -130,6 +113,7 @@ export function MoveToDirectorySheet({
         setLoadingDirId(null)
       }
     },
+    // oxlint-disable-next-line react/exhaustive-deps -- dirs is derived from SWR data, new ref each render is expected
     [dirs, currentDirPath, handleMoveToDirectory],
   )
 
@@ -147,7 +131,7 @@ export function MoveToDirectorySheet({
       visible={isOpen}
       onRequestClose={handleClose}
       onShow={handleShow}
-      title={`Move ${fileCount} ${fileCount === 1 ? 'file' : 'files'} to folder`}
+      title={`Move ${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'} to folder`}
       headerRight={
         <Pressable
           accessibilityRole="button"
@@ -163,9 +147,7 @@ export function MoveToDirectorySheet({
         <View style={styles.infoBanner}>
           <FolderIcon size={16} color={whiteA.a50} />
           <Text style={styles.infoText}>
-            {currentDirPath !== null
-              ? `Browsing: ${currentDirPath}`
-              : 'Root folders'}
+            {currentDirPath !== null ? `Browsing: ${currentDirPath}` : 'Root folders'}
           </Text>
         </View>
       ) : filesInDirCount > 0 ? (
@@ -174,7 +156,7 @@ export function MoveToDirectorySheet({
           <Text style={styles.infoText}>
             {filesInDirCount === fileIds.length
               ? 'All files are already in folders'
-              : `${filesInDirCount} ${filesInDirCount === 1 ? 'file is' : 'files are'} already in a folder`}
+              : `${filesInDirCount.toLocaleString()} ${filesInDirCount === 1 ? 'file is' : 'files are'} already in a folder`}
           </Text>
         </View>
       ) : null}
@@ -264,7 +246,7 @@ export function MoveToDirectorySheet({
                 <FolderIcon size={18} color={palette.blue[400]} />
               )}
               <Text style={styles.dirName}>{item.name}</Text>
-              <Text style={styles.dirCount}>{item.fileCount}</Text>
+              <Text style={styles.dirCount}>{item.fileCount.toLocaleString()}</Text>
             </Pressable>
             {item.subdirectoryCount > 0 ? (
               <Pressable
@@ -281,9 +263,7 @@ export function MoveToDirectorySheet({
         )}
         ListEmptyComponent={
           query.trim().length === 0 ? (
-            <Text style={styles.emptyText}>
-              No directories yet. Type to create one.
-            </Text>
+            <Text style={styles.emptyText}>No directories yet. Type to create one.</Text>
           ) : null
         }
       />

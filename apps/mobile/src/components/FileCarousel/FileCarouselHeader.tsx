@@ -14,21 +14,11 @@ type Props = {
   icon?: 'back' | 'close'
 }
 
-export function FileCarouselHeader({
-  file,
-  title,
-  navigation,
-  icon = 'back',
-}: Props) {
+export function FileCarouselHeader({ file, title, navigation, icon = 'back' }: Props) {
   const status = useFileStatus(file)
   const insets = useSafeAreaInsets()
   return (
-    <View
-      style={[
-        styles.headerContainer,
-        { paddingTop: insets.top + 2, paddingHorizontal: 12 },
-      ]}
-    >
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 2, paddingHorizontal: 12 }]}>
       <View style={styles.headerRow}>
         <IconButton onPress={() => navigation.goBack()}>
           {icon === 'back' ? (
@@ -40,9 +30,7 @@ export function FileCarouselHeader({
         <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {title}
         </Text>
-        {status.data ? (
-          <UploadStatusIcon status={status.data} size={16} />
-        ) : null}
+        {status.data ? <UploadStatusIcon status={status.data} size={16} /> : null}
       </View>
     </View>
   )

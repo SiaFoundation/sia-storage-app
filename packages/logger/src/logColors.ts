@@ -68,15 +68,11 @@ export function getScopeColorHex(scope: string): string {
 }
 
 /** Get ANSI color code for a log level. */
-export function getLevelColorAnsi(
-  level: 'debug' | 'info' | 'warn' | 'error',
-): string {
+export function getLevelColorAnsi(level: 'debug' | 'info' | 'warn' | 'error'): string {
   return LEVEL_COLORS[level]?.ansi ?? ANSI_CYAN
 }
 
 /** Get hex color for a log level. */
-export function getLevelColorHex(
-  level: 'debug' | 'info' | 'warn' | 'error',
-): string {
+export function getLevelColorHex(level: 'debug' | 'info' | 'warn' | 'error'): string {
   return LEVEL_COLORS[level]?.hex ?? HEX_CYAN
 }

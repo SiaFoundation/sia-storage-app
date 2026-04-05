@@ -4,20 +4,13 @@
  */
 
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
-import {
-  createEmptyIndexerStorage,
-  generateMockFileMetadata,
-} from '@siastorage/sdk-mock'
+import { createEmptyIndexerStorage, generateMockFileMetadata } from '@siastorage/sdk-mock'
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import { createTestApp, type TestApp, waitForCondition } from './app'
 
-async function addVersionFile(
-  app: TestApp,
-  id: string,
-  name: string,
-): Promise<void> {
+async function addVersionFile(app: TestApp, id: string, name: string): Promise<void> {
   const type = 'application/octet-stream'
   const ext = extFromMime(type)
   const content = crypto.randomBytes(1024)
@@ -431,10 +424,10 @@ describe('Version Sync', () => {
 
     // Step 4: B comes online — syncs v3, which is a new record unaffected by B's local trash
     appB.resume()
-    await waitForCondition(
-      async () => (await appB.getFileById('lc-v3')) != null,
-      { timeout: 15_000, message: 'B sees v3' },
-    )
+    await waitForCondition(async () => (await appB.getFileById('lc-v3')) != null, {
+      timeout: 15_000,
+      message: 'B sees v3',
+    })
     const v3 = await appB.getFileById('lc-v3')
     expect(v3!.trashedAt).toBeNull()
     expect(await appB.app.library.fileCount()).toBe(1)
@@ -448,10 +441,10 @@ describe('Version Sync', () => {
     await appA.app.files.permanentlyDeleteWithCleanup(toDelete)
 
     // Wait for A's sync-up to delete the objects and B to see the tombstone
-    await waitForCondition(
-      async () => (await appB.getFileById('lc-v3'))?.deletedAt != null,
-      { timeout: 15_000, message: 'B tombstones v3' },
-    )
+    await waitForCondition(async () => (await appB.getFileById('lc-v3'))?.deletedAt != null, {
+      timeout: 15_000,
+      message: 'B tombstones v3',
+    })
     expect(await appB.app.library.fileCount()).toBe(0)
 
     await appA.shutdown()
@@ -495,10 +488,10 @@ describe('Version Sync', () => {
 
     // Device B comes back online — syncs v3+v4 from indexer
     appB.resume()
-    await waitForCondition(
-      async () => (await appB.getFileById('conc-v4')) != null,
-      { timeout: 15_000, message: 'B sees v4' },
-    )
+    await waitForCondition(async () => (await appB.getFileById('conc-v4')) != null, {
+      timeout: 15_000,
+      message: 'B sees v4',
+    })
 
     // v1+v2 trashed locally, v3+v4 arrived from A — alive
     const v1 = await appB.getFileById('conc-v1')
@@ -559,10 +552,10 @@ describe('Version Sync', () => {
       .filter((f) => f.trashedAt != null)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
     await appA.app.files.permanentlyDeleteWithCleanup(toDelete)
-    await waitForCondition(
-      async () => (await appA.getFileById('tri-v1'))?.deletedAt != null,
-      { timeout: 15_000, message: 'A tombstones v1+v2' },
-    )
+    await waitForCondition(async () => (await appA.getFileById('tri-v1'))?.deletedAt != null, {
+      timeout: 15_000,
+      message: 'A tombstones v1+v2',
+    })
 
     // Device C creates v3 while offline via app flow
     await addVersionFile(appC, 'tri-v3', 'notes.txt')
@@ -573,10 +566,10 @@ describe('Version Sync', () => {
 
     // Wait for all to converge: v3 exists on all devices
     for (const device of [appA, appB, appC]) {
-      await waitForCondition(
-        async () => (await device.getFileById('tri-v3')) != null,
-        { timeout: 15_000, message: 'Device sees v3' },
-      )
+      await waitForCondition(async () => (await device.getFileById('tri-v3')) != null, {
+        timeout: 15_000,
+        message: 'Device sees v3',
+      })
     }
 
     // All three devices: v1+v2 tombstoned/trashed, v3 alive, library = 1

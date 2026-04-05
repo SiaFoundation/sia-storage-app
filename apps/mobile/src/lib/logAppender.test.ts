@@ -144,11 +144,6 @@ describe('logAppender', () => {
       received.push(...entries)
     })
 
-    expect(received.map((e) => e.message)).toEqual([
-      'cycle1',
-      'between',
-      'cycle2',
-      'between2',
-    ])
+    expect(received.map((e) => e.message)).toEqual(['cycle1', 'between', 'cycle2', 'between2'])
   })
 })

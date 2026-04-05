@@ -49,10 +49,7 @@ export function buildDownloadsNamespace(
     caches.downloads.invalidate(id)
   }
 
-  function update(
-    id: string,
-    patch: Partial<DownloadsState['downloads'][string]>,
-  ) {
+  function update(id: string, patch: Partial<DownloadsState['downloads'][string]>) {
     const existing = state.downloads[id]
     if (!existing) return
     state = {
@@ -94,8 +91,7 @@ export function buildDownloadsNamespace(
         file: { id: fileId, type: file.type, size: file.size },
         object: objects[0],
         sdk,
-        onProgress: (progress) =>
-          update(fileId, { progress: Math.min(1, progress) }),
+        onProgress: (progress) => update(fileId, { progress: Math.min(1, progress) }),
         signal: controller.signal,
       })
 

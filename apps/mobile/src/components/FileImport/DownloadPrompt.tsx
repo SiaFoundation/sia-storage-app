@@ -1,12 +1,6 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import { CloudDownloadIcon } from 'lucide-react-native'
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { colors, palette } from '../../styles/colors'
 
 type DownloadPromptProps = {

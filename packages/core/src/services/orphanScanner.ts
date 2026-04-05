@@ -36,15 +36,12 @@ export async function runOrphanScanner(
       .map((name) => ({ name, fileId: extractFileIdFromName(name) }))
       .filter((e): e is { name: string; fileId: string } => e.fileId !== null)
 
-    const orphanedIds = await app.fs.findOrphanedFileIds(
-      entries.map((e) => e.fileId),
-    )
+    const orphanedIds = await app.fs.findOrphanedFileIds(entries.map((e) => e.fileId))
 
     for (const entry of entries) {
       if (!orphanedIds.has(entry.fileId)) continue
       try {
-        const type =
-          getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
+        const type = getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
         await app.fs.removeFile({ id: entry.fileId, type })
         removed++
       } catch (error) {
