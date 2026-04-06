@@ -11,7 +11,12 @@ import type {
 } from '../db/operations'
 import type { LocalObject } from '../encoding/localObject'
 import type { SyncUpCursor } from '../services/syncUpMetadata'
-import type { FileRecord, FileRecordRow, ThumbSize } from '../types/files'
+import type {
+  FileMetadata,
+  FileRecord,
+  FileRecordRow,
+  ThumbSize,
+} from '../types/files'
 import type {
   ConnectionState,
   DownloadEntry,
@@ -162,6 +167,8 @@ export interface AppService {
       records: Omit<FileRecord, 'objects'>[],
       opts?: { skipCurrentRecalc?: boolean },
     ): Promise<void>
+    /** Returns the full encodable metadata for a file, including tags and directory. */
+    getMetadata(id: string): Promise<FileMetadata | null>
     /** Returns file record rows by IDs (no objects join). */
     getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
     /** Returns file record rows by object IDs and indexer URL (no objects join). */

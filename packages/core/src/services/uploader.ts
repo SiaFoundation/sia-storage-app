@@ -982,15 +982,14 @@ export class UploadManager {
           }
 
           try {
-            const fileRecord = await this.app.files.getById(entry.fileId)
-            if (!fileRecord) {
+            const metadata = await this.app.files.getMetadata(entry.fileId)
+            if (!metadata) {
               logger.warn('uploadManager', 'file_deleted_during_upload', {
                 fileId: entry.fileId,
               })
               return { type: 'deleted', fileId: entry.fileId }
             }
-
-            pinnedObject.updateMetadata(encodeFileMetadata(entry.file))
+            pinnedObject.updateMetadata(encodeFileMetadata(metadata))
             await retry('pinObject', () => sdk.pinObject(pinnedObject), 3, 1000)
 
             const appKey = sdk.appKey()

@@ -257,4 +257,36 @@ describe('Sync Up Metadata', () => {
       { timeout: 10_000, message: 'Remote metadata to have renamed directory' },
     )
   }, 30_000)
+
+  it('upload includes tags and directory in initial metadata', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1 }))
+
+    // Assign tag and directory before the upload scanner picks up the file.
+    await app.addTagToFile(file.id, 'vacation')
+    const dir = await app.createDirectory('Photos')
+    await app.moveFileToDirectory(file.id, dir.id)
+
+    // Pause the scheduler so sync-up-metadata cannot run and "fix" the
+    // metadata after the upload. The upload manager runs on its own loop
+    // independent of the scheduler, so uploads still proceed.
+    app.pause()
+
+    await waitForCondition(() => app.getUploadState(file.id) !== undefined, {
+      timeout: 10_000,
+      message: 'File to be detected by scanner',
+    })
+    await app.waitForNoActiveUploads()
+
+    const localObjects = await app.readLocalObjectsForFile(file.id)
+    expect(localObjects.length).toBeGreaterThan(0)
+    const objectId = localObjects[0].id
+
+    const remote = await app.sdk.getPinnedObject(objectId)
+    const remoteMeta = decodeFileMetadata(remote.metadata())
+
+    // The uploader should include tags and directory in the initial upload
+    // so other devices see the full metadata immediately after sync-down.
+    expect(remoteMeta.tags).toEqual(['vacation'])
+    expect(remoteMeta.directory).toBe('Photos')
+  }, 30_000)
 })

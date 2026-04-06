@@ -7,7 +7,6 @@ import {
   MAX_SUPPORTED_VERSION,
 } from '../encoding/fileMetadata'
 import { SlotPool } from '../lib/slotPool'
-import type { FileMetadata } from '../types/files'
 import { fileMetadataKeys } from '../types/files'
 
 type DiffEntry = { local: unknown; remote: unknown }
@@ -209,17 +208,8 @@ export async function syncUpMetadataBatch(
         })
 
         if (isLocalNewer) {
-          let fileToEncode: FileMetadata = f
-          if (f.kind === 'file') {
-            const tags = await app.tags.getNamesForFile(f.id)
-            if (tags) {
-              fileToEncode = { ...fileToEncode, tags }
-            }
-            const directory = await app.directories.getPathForFile(f.id)
-            if (directory) {
-              fileToEncode = { ...fileToEncode, directory }
-            }
-          }
+          const fileToEncode = await app.files.getMetadata(f.id)
+          if (!fileToEncode) return
           logger.info('syncUpMetadata', 'pushing_v1', {
             fileId: fileToEncode.id,
             objectId: obj.id,
