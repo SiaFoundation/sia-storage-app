@@ -1,5 +1,13 @@
-import { useAllDirectories } from '@siastorage/core/stores'
-import { FolderIcon, FoldersIcon, PlusIcon, XIcon } from 'lucide-react-native'
+import { directoryParentPath } from '@siastorage/core/db/operations'
+import { useDirectoryChildren } from '@siastorage/core/stores'
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  FolderIcon,
+  FoldersIcon,
+  PlusIcon,
+  XIcon,
+} from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   FlatList,
@@ -31,24 +39,24 @@ export function MoveToDirectorySheet({
 }: Props) {
   const toast = useToast()
   const isOpen = useSheetOpen(sheetName)
-  const allDirs = useAllDirectories()
   const [query, setQuery] = useState('')
   const inputRef = useRef<TextInput | null>(null)
-  const [currentDirName, setCurrentDirName] = useState<string | null>(null)
+  const [currentDirPath, setCurrentDirPath] = useState<string | null>(null)
   const [filesInDirCount, setFilesInDirCount] = useState(0)
   const [loadingDirId, setLoadingDirId] = useState<string | null>(null)
 
   const isSingleFile = fileIds.length === 1
-  const dirs = allDirs.data ?? []
+  const children = useDirectoryChildren(currentDirPath)
+  const dirs = children.data ?? []
   const filtered = query.trim()
     ? dirs.filter((d) =>
-        d.path.toLowerCase().includes(query.trim().toLowerCase()),
+        d.name.toLowerCase().includes(query.trim().toLowerCase()),
       )
     : dirs
 
   const exactMatch =
     query.trim().length > 0 &&
-    dirs.some((d) => d.path.toLowerCase() === query.trim().toLowerCase())
+    dirs.some((d) => d.name.toLowerCase() === query.trim().toLowerCase())
 
   const handleShow = useFocusOnShow(inputRef)
 
@@ -57,7 +65,7 @@ export function MoveToDirectorySheet({
       if (isSingleFile) {
         app()
           .directories.getPathForFile(fileIds[0])
-          .then((name) => setCurrentDirName(name ?? null))
+          .then(() => setCurrentDirPath(null))
       } else {
         app()
           .directories.countFilesWithDirectories(fileIds)
@@ -65,7 +73,7 @@ export function MoveToDirectorySheet({
       }
     } else {
       setQuery('')
-      setCurrentDirName(null)
+      setCurrentDirPath(null)
       setFilesInDirCount(0)
       setLoadingDirId(null)
     }
@@ -76,13 +84,11 @@ export function MoveToDirectorySheet({
       setLoadingDirId(directoryId)
       try {
         const targetDir = dirs.find((d) => d.id === directoryId)
-        for (const id of fileIds) {
-          await app().files.moveFile(id, directoryId)
-        }
+        await app().directories.moveFiles(fileIds, directoryId)
         closeSheet()
         toast.show(
           targetDir
-            ? `Moved to "${targetDir.path}"`
+            ? `Moved to "${targetDir.name}"`
             : `Moved ${fileIds.length === 1 ? 'file' : 'files'} to folder`,
         )
         onComplete?.()
@@ -96,9 +102,7 @@ export function MoveToDirectorySheet({
   const handleRemoveFromDirectory = useCallback(async () => {
     setLoadingDirId('none')
     try {
-      for (const id of fileIds) {
-        await app().files.moveFile(id, null)
-      }
+      await app().directories.moveFiles(fileIds, null)
       closeSheet()
       toast.show('Removed from folder')
       onComplete?.()
@@ -113,11 +117,14 @@ export function MoveToDirectorySheet({
       setLoadingDirId('create')
       try {
         try {
-          const dir = await app().directories.create(name.trim())
+          const dir = await app().directories.create(
+            name.trim(),
+            currentDirPath ?? undefined,
+          )
           await handleMoveToDirectory(dir.id)
         } catch {
           const existing = dirs.find(
-            (d) => d.path.toLowerCase() === name.trim().toLowerCase(),
+            (d) => d.name.toLowerCase() === name.trim().toLowerCase(),
           )
           if (existing) {
             await handleMoveToDirectory(existing.id)
@@ -127,11 +134,12 @@ export function MoveToDirectorySheet({
         setLoadingDirId(null)
       }
     },
-    [dirs, handleMoveToDirectory],
+    [dirs, currentDirPath, handleMoveToDirectory],
   )
 
   const handleClose = useCallback(() => {
     setQuery('')
+    setCurrentDirPath(null)
     Keyboard.dismiss()
     closeSheet()
   }, [])
@@ -159,9 +167,9 @@ export function MoveToDirectorySheet({
         <View style={styles.infoBanner}>
           <FolderIcon size={16} color={whiteA.a50} />
           <Text style={styles.infoText}>
-            {currentDirName
-              ? `Currently in ${currentDirName}`
-              : 'Not in a folder'}
+            {currentDirPath !== null
+              ? `Browsing: ${currentDirPath}`
+              : 'Root folders'}
           </Text>
         </View>
       ) : filesInDirCount > 0 ? (
@@ -198,20 +206,37 @@ export function MoveToDirectorySheet({
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
-            <Pressable
-              style={styles.dirRow}
-              onPress={handleRemoveFromDirectory}
-              disabled={loadingDirId !== null}
-            >
-              <View style={styles.dirRowLeft}>
-                {loadingDirId === 'none' ? (
-                  <SpinnerIcon size={18} color={palette.gray[400]} />
-                ) : (
-                  <XIcon size={18} color={palette.gray[400]} />
-                )}
-                <Text style={styles.removeText}>No folder</Text>
-              </View>
-            </Pressable>
+            {currentDirPath !== null ? (
+              <Pressable
+                style={styles.dirRow}
+                onPress={() => {
+                  setCurrentDirPath(directoryParentPath(currentDirPath))
+                  setQuery('')
+                }}
+                disabled={loadingDirId !== null}
+              >
+                <View style={styles.dirRowLeft}>
+                  <ArrowLeftIcon size={18} color={palette.gray[400]} />
+                  <Text style={styles.backText}>Back</Text>
+                </View>
+              </Pressable>
+            ) : null}
+            {currentDirPath === null ? (
+              <Pressable
+                style={styles.dirRow}
+                onPress={handleRemoveFromDirectory}
+                disabled={loadingDirId !== null}
+              >
+                <View style={styles.dirRowLeft}>
+                  {loadingDirId === 'none' ? (
+                    <SpinnerIcon size={18} color={palette.gray[400]} />
+                  ) : (
+                    <XIcon size={18} color={palette.gray[400]} />
+                  )}
+                  <Text style={styles.removeText}>No folder</Text>
+                </View>
+              </Pressable>
+            ) : null}
             {query.trim().length > 0 && !exactMatch ? (
               <Pressable
                 style={styles.dirRow}
@@ -231,21 +256,32 @@ export function MoveToDirectorySheet({
           </>
         }
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.dirRow}
-            onPress={() => handleMoveToDirectory(item.id)}
-            disabled={loadingDirId !== null}
-          >
-            <View style={styles.dirRowLeft}>
+          <View style={styles.dirRow}>
+            <Pressable
+              style={styles.dirRowLeft}
+              onPress={() => handleMoveToDirectory(item.id)}
+              disabled={loadingDirId !== null}
+            >
               {loadingDirId === item.id ? (
                 <SpinnerIcon size={18} color={palette.blue[400]} />
               ) : (
                 <FolderIcon size={18} color={palette.blue[400]} />
               )}
-              <Text style={styles.dirName}>{item.path}</Text>
+              <Text style={styles.dirName}>{item.name}</Text>
               <Text style={styles.dirCount}>{item.fileCount}</Text>
-            </View>
-          </Pressable>
+            </Pressable>
+            {item.subdirectoryCount > 0 ? (
+              <Pressable
+                style={styles.chevronTarget}
+                onPress={() => {
+                  setCurrentDirPath(item.path)
+                  setQuery('')
+                }}
+              >
+                <ChevronRightIcon size={18} color={whiteA.a50} />
+              </Pressable>
+            ) : null}
+          </View>
         )}
         ListEmptyComponent={
           query.trim().length === 0 ? (
@@ -312,7 +348,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
+  },
+  chevronTarget: {
+    paddingLeft: 16,
+    paddingVertical: 8,
+    paddingRight: 4,
   },
   dirName: {
     color: palette.gray[50],
@@ -323,6 +363,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   removeText: {
+    color: palette.gray[400],
+    fontSize: 16,
+  },
+  backText: {
     color: palette.gray[400],
     fontSize: 16,
   },

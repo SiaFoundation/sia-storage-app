@@ -264,24 +264,35 @@ export interface AppService {
       directoryId: string | null,
     ): Promise<string[]>
   }
-  /** Directory operations: create, rename, delete, and organize files into directories. */
+  /** Directory operations: create, rename, delete, move, and organize files into directories. */
   directories: {
-    /** Returns all directories with their file counts. */
+    /** Returns all directories with their file and subdirectory counts. */
     getAll(): Promise<DirectoryWithCount[]>
+    /** Returns a directory by ID. */
+    getById(id: string): Promise<Directory | null>
     /** Returns a directory by exact path match. */
     getByPath(path: string): Promise<Directory | null>
     /** Returns the directory path for a file, or undefined if unfiled. */
     getPathForFile(fileId: string): Promise<string | undefined>
-    /** Creates a new directory. */
-    create(path: string): Promise<Directory>
-    /** Returns an existing directory by path, or creates one if it does not exist. */
-    getOrCreate(path: string): Promise<Directory>
-    /** Deletes a directory without affecting its files. */
+    /** Returns direct children of a directory (null for root). */
+    getChildren(parentPath: string | null): Promise<DirectoryWithCount[]>
+    /** Creates a new directory, optionally under a parent path. */
+    create(name: string, parentPath?: string): Promise<Directory>
+    /** Returns an existing directory by name, or creates one if it does not exist. */
+    getOrCreate(name: string, parentPath?: string): Promise<Directory>
+    /** Creates all intermediate directories for a path and returns the leaf. */
+    getOrCreateAtPath(path: string): Promise<Directory>
+    /** Deletes a directory and all descendants without affecting files. */
     delete(id: string): Promise<void>
-    /** Deletes a directory and trashes all its files. */
+    /** Deletes a directory, all descendants, and trashes their files. */
     deleteAndTrashFiles(id: string): Promise<string[]>
-    /** Renames a directory. */
-    rename(id: string, path: string): Promise<void>
+    /** Renames a directory and updates all descendant paths. Returns the updated directory. */
+    rename(id: string, name: string): Promise<Directory>
+    /** Moves a directory under a new parent (null for root). */
+    moveDirectory(
+      directoryId: string,
+      newParentPath: string | null,
+    ): Promise<void>
     /** Moves a file into a directory, or removes it from all directories if null. */
     moveFile(fileId: string, dirId: string | null): Promise<void>
     /** Moves multiple files into a directory. */

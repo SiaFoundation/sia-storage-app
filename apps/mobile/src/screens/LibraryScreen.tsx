@@ -131,8 +131,12 @@ export function LibraryScreen({ route, navigation }: Props) {
   }, [])
 
   const handleSelectDirectory = useCallback(
-    (directoryId: string, directoryName: string) => {
-      navigation.navigate('DirectoryScreen', { directoryId, directoryName })
+    (directoryId: string, directoryName: string, directoryPath: string) => {
+      navigation.navigate('DirectoryScreen', {
+        directoryId,
+        directoryName,
+        directoryPath,
+      })
     },
     [navigation],
   )
@@ -143,7 +147,11 @@ export function LibraryScreen({ route, navigation }: Props) {
 
   const handleDirectoryCreated = useCallback(
     (directoryId: string, directoryName: string) => {
-      navigation.navigate('DirectoryScreen', { directoryId, directoryName })
+      navigation.navigate('DirectoryScreen', {
+        directoryId,
+        directoryName,
+        directoryPath: directoryName,
+      })
     },
     [navigation],
   )
