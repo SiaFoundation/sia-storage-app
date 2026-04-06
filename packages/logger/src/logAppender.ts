@@ -1,6 +1,6 @@
 import type { LogEntry } from './logger'
 
-type LogAppender = (entries: LogEntry[]) => void
+type LogAppender = (entries: LogEntry[]) => Promise<void> | void
 
 let appender: LogAppender | null = null
 const buffer: LogEntry[] = []
@@ -33,11 +33,19 @@ export function flushLogs(): void {
   flush()
 }
 
-/** Stop the flush interval and flush remaining entries. */
-export function stopLogAppender(): void {
+/**
+ * Gracefully stop the log appender: stop the flush interval, flush remaining
+ * entries to the appender, then clear the appender. After this call no more
+ * entries will be written.
+ */
+export async function stopLogAppender(): Promise<void> {
   if (flushTimer) {
     clearInterval(flushTimer)
     flushTimer = null
   }
-  flush()
+  if (buffer.length > 0 && appender) {
+    const entries = buffer.splice(0)
+    await appender(entries)
+  }
+  appender = null
 }

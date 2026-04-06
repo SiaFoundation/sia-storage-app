@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
+import { stopLogAppender } from '@siastorage/logger'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
 import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
@@ -171,7 +172,10 @@ export async function resetApp() {
         // 4. Cancel uploads and downloads (side-effect cleanup).
         await cancelAllTransfers()
 
-        // 5. Drop and recreate all database tables.
+        // 5. Flush remaining logs and stop the appender before touching the DB.
+        await stopLogAppender()
+
+        // 6. Drop and recreate all database tables.
         await resetDb()
 
         // 5. Wipe all persisted state.
