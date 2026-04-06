@@ -18,7 +18,7 @@ import { ModalSheet } from './ModalSheet'
 type Props = {
   parentPath?: string
   sheetName?: string
-  onCreated?: (directoryId: string, directoryName: string) => void
+  onCreated?: (directoryId: string, name: string, path: string) => void
 }
 
 export function CreateDirectorySheet({
@@ -57,7 +57,7 @@ export function CreateDirectorySheet({
       setError('')
       closeSheet()
       toast.show(`Created "${dir.path}"`)
-      onCreated?.(dir.id, trimmed)
+      onCreated?.(dir.id, dir.name, dir.path)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create folder')
     }

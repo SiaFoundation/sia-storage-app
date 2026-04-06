@@ -485,11 +485,11 @@ export function DirectoryScreen({ route, navigation }: Props) {
         <CreateDirectorySheet
           sheetName="createSubdirectory"
           parentPath={directoryPath}
-          onCreated={(subId, subName) => {
+          onCreated={(subId, subName, subPath) => {
             navigation.push('DirectoryScreen', {
               directoryId: subId,
               directoryName: subName,
-              directoryPath: `${directoryPath}/${subName}`,
+              directoryPath: subPath,
             })
           }}
         />

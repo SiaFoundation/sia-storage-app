@@ -62,11 +62,7 @@ export function MoveToDirectorySheet({
 
   useEffect(() => {
     if (isOpen) {
-      if (isSingleFile) {
-        app()
-          .directories.getPathForFile(fileIds[0])
-          .then(() => setCurrentDirPath(null))
-      } else {
+      if (!isSingleFile) {
         app()
           .directories.countFilesWithDirectories(fileIds)
           .then(setFilesInDirCount)
