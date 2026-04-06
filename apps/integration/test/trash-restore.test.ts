@@ -52,9 +52,8 @@ describe('Trash and Restore', () => {
       await app.app.files.update({ id: file.id, trashedAt: 1 })
     }
 
-    const purged = await app.app.files.autoPurge()
-    expect(purged).toHaveLength(2)
-    expect(purged.sort()).toEqual([files[0].id, files[1].id].sort())
+    const purgedCount = await app.app.files.autoPurge()
+    expect(purgedCount).toBe(2)
 
     const remaining = await getActiveFiles()
     expect(remaining).toHaveLength(1)

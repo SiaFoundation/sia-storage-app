@@ -540,8 +540,8 @@ describe('deleteDirectoryAndTrashFiles', () => {
     await moveFileToDirectory(db(), 'f2', vacation.id)
     await moveFileToDirectory(db(), 'f3', deep.id)
 
-    const trashedIds = await deleteDirectoryAndTrashFiles(db(), dir.id)
-    expect(trashedIds.sort()).toEqual(['f1', 'f2', 'f3'].sort())
+    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    expect(trashedCount).toBe(3)
 
     const dirs = await queryAllDirectoriesWithCounts(db())
     expect(dirs).toHaveLength(0)
@@ -563,8 +563,8 @@ describe('deleteDirectoryAndTrashFiles', () => {
 
     await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', Date.now(), 'f2')
 
-    const trashedIds = await deleteDirectoryAndTrashFiles(db(), dir.id)
-    expect(trashedIds).toEqual(['f1'])
+    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    expect(trashedCount).toBe(1)
   })
 
   it('does not affect sibling directories or their files', async () => {
@@ -589,10 +589,10 @@ describe('deleteDirectoryAndTrashFiles', () => {
     expect(path2).toBe('Videos/Work')
   })
 
-  it('returns empty array for empty directory', async () => {
+  it('returns 0 for empty directory', async () => {
     const dir = await insertDirectory(db(), 'Empty')
-    const trashedIds = await deleteDirectoryAndTrashFiles(db(), dir.id)
-    expect(trashedIds).toEqual([])
+    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    expect(trashedCount).toBe(0)
   })
 })
 

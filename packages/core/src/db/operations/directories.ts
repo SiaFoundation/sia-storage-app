@@ -299,12 +299,9 @@ export async function syncManyDirectoriesFromMetadata(
   }
 
   const fileIds = entries.map((e) => e.fileId)
-  const placeholders = fileIds.map(() => '?').join(',')
-  const oldGroups = await db.getAllAsync<{
-    name: string
-    directoryId: string | null
-  }>(
-    `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${placeholders}) AND f.kind = 'file'`,
+  const ph = fileIds.map(() => '?').join(',')
+  const oldGroups = await db.getAllAsync<{ name: string; directoryId: string | null }>(
+    `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${ph}) AND f.kind = 'file'`,
     ...fileIds,
   )
 
@@ -316,8 +313,8 @@ export async function syncManyDirectoriesFromMetadata(
     byDirId.set(dirId, list)
   }
   for (const [dirId, ids] of byDirId) {
-    const ph = ids.map(() => '?').join(',')
-    await db.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${ph})`, dirId, ...ids)
+    const idsPh = ids.map(() => '?').join(',')
+    await db.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${idsPh})`, dirId, ...ids)
   }
 
   return oldGroups
@@ -345,17 +342,14 @@ export async function moveFilesToDirectory(
   dirId: string | null,
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const placeholders = fileIds.map(() => '?').join(',')
-  const groups = await db.getAllAsync<{
-    name: string
-    directoryId: string | null
-  }>(
-    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
+  const ph = fileIds.map(() => '?').join(',')
+  const groups = await db.getAllAsync<{ name: string; directoryId: string | null }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
     ...fileIds,
   )
   const now = Date.now()
   await db.runAsync(
-    `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${placeholders})`,
+    `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${ph})`,
     dirId,
     now,
     ...fileIds,
@@ -384,13 +378,16 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
   )
   const dirIds = subtreeDirIds.map((d) => d.id)
 
-  const ph = dirIds.map(() => '?').join(',')
+  const dirPh = dirIds.map(() => '?').join(',')
   const groups = await db.getAllAsync<{ name: string }>(
-    `SELECT DISTINCT name FROM files WHERE directoryId IN (${ph}) AND kind = 'file'`,
+    `SELECT DISTINCT name FROM files WHERE directoryId IN (${dirPh}) AND kind = 'file'`,
     ...dirIds,
   )
 
-  await db.runAsync(`UPDATE files SET directoryId = NULL WHERE directoryId IN (${ph})`, ...dirIds)
+  await db.runAsync(
+    `UPDATE files SET directoryId = NULL WHERE directoryId IN (${dirPh})`,
+    ...dirIds,
+  )
 
   await db.runAsync(
     `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
@@ -406,25 +403,27 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
 export async function deleteDirectoryAndTrashFiles(
   db: DatabaseAdapter,
   id: string,
-): Promise<string[]> {
+): Promise<number> {
   const dir = await queryDirectoryById(db, id)
-  if (!dir) return []
+  if (!dir) return 0
 
   const escaped = escapeLikePattern(dir.path)
 
-  const files = await db.getAllAsync<{ id: string }>(
+  const totalTrashed = await sql.processInBatches<{ id: string }>(
+    db,
     `SELECT f.id FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
        AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
-    dir.path,
-    escaped,
+    [dir.path, escaped],
+    500,
+    async (rows) => {
+      await trashFiles(
+        db,
+        rows.map((r) => r.id),
+      )
+    },
   )
-
-  const fileIds = files.map((f) => f.id)
-  if (fileIds.length > 0) {
-    await trashFiles(db, fileIds)
-  }
 
   await db.runAsync(
     `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
@@ -432,7 +431,7 @@ export async function deleteDirectoryAndTrashFiles(
     escaped,
   )
 
-  return fileIds
+  return totalTrashed
 }
 
 export async function queryCountFilesWithDirectories(
@@ -440,9 +439,9 @@ export async function queryCountFilesWithDirectories(
   fileIds: string[],
 ): Promise<number> {
   if (fileIds.length === 0) return 0
-  const placeholders = fileIds.map(() => '?').join(',')
+  const ph = fileIds.map(() => '?').join(',')
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE id IN (${placeholders}) AND directoryId IS NOT NULL`,
+    `SELECT COUNT(*) as count FROM files WHERE id IN (${ph}) AND directoryId IS NOT NULL`,
     ...fileIds,
   )
   return row?.count ?? 0

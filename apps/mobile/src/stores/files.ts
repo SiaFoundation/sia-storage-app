@@ -3,8 +3,7 @@ import { app } from './appService'
 
 export async function deleteLostFiles(): Promise<number> {
   const currentIndexerURL = await app().settings.getIndexerURL()
-  const lostIds = await app().files.deleteLost(currentIndexerURL)
-  return lostIds.length
+  return app().files.deleteLost(currentIndexerURL)
 }
 
 type FileRecordCursorColumn = 'createdAt' | 'updatedAt'

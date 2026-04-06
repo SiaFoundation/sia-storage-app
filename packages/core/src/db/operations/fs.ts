@@ -49,8 +49,8 @@ export async function deleteFsFileMetadataBatch(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const placeholders = fileIds.map(() => '?').join(',')
-  await db.runAsync(`DELETE FROM fs WHERE fileId IN (${placeholders})`, ...fileIds)
+  const ph = fileIds.map(() => '?').join(',')
+  await db.runAsync(`DELETE FROM fs WHERE fileId IN (${ph})`, ...fileIds)
 }
 
 export async function queryFsCacheEvictionCandidates(

@@ -20,8 +20,8 @@ describe('Directory Cascade', () => {
     await app.moveFileToDirectory(files[0].id, dir.id)
     await app.moveFileToDirectory(files[1].id, dir.id)
 
-    const trashedIds = await app.app.directories.deleteAndTrashFiles(dir.id)
-    expect(trashedIds.sort()).toEqual([files[0].id, files[1].id].sort())
+    const trashedCount = await app.app.directories.deleteAndTrashFiles(dir.id)
+    expect(trashedCount).toBe(2)
 
     const allFiles = await app.getFiles()
     const trashed = allFiles.filter((f) => f.trashedAt !== null)

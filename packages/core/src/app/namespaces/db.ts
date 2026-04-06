@@ -298,11 +298,11 @@ export function buildDbNamespaces(
       recalculateCurrent: (fileIds) => ops.recalculateCurrentForFileIds(db, fileIds),
       recalculateCurrentForGroups: (groups) => ops.recalculateCurrentForGroups(db, groups),
       deleteLost: async (indexerURL) => {
-        const lostIds = await ops.deleteLostFiles(db, indexerURL)
-        if (lostIds.length > 0) {
+        const count = await ops.deleteLostFiles(db, indexerURL)
+        if (count > 0) {
           invalidateLibrary()
         }
-        return lostIds
+        return count
       },
       trash: async (ids) => {
         await ops.trashFiles(db, ids)
@@ -334,14 +334,14 @@ export function buildDbNamespaces(
         invalidateLibrary()
       },
       autoPurgeWithCleanup: async () => {
-        const purgedIds = await ops.autoPurgeOldTrashedFiles(db)
-        if (purgedIds.length === 0) return
-        const files = await ops.readFileRecordsByIds(db, purgedIds)
-        if (files.length === 0) return
-        uploads.removeMany(purgedIds)
-        const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, purgedIds)
-        await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
-        invalidateLibrary()
+        const total = await ops.autoPurgeOldTrashedFiles(db, async (batchIds) => {
+          const files = await ops.readFileRecordsByIds(db, batchIds)
+          if (files.length === 0) return
+          uploads.removeMany(batchIds)
+          const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, batchIds)
+          await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
+        })
+        if (total > 0) invalidateLibrary()
       },
       getVersionHistory: async (name, directoryId) => {
         const rows = await ops.queryFileVersions(db, name, directoryId)
@@ -403,11 +403,11 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
       },
       deleteAndTrashFiles: async (id) => {
-        const fileIds = await ops.deleteDirectoryAndTrashFiles(db, id)
+        const count = await ops.deleteDirectoryAndTrashFiles(db, id)
         caches.directories.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
-        return fileIds
+        return count
       },
       rename: async (id, name) => {
         const dir = await ops.renameDirectory(db, id, name)

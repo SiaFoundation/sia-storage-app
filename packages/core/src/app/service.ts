@@ -199,7 +199,7 @@ export interface AppService {
     /** Soft-deletes multiple files and all their associated thumbnails. */
     deleteManyAndThumbnails(ids: string[]): Promise<void>
     /** Deletes files that have no remaining remote objects on the given indexer. */
-    deleteLost(indexerURL: string): Promise<string[]>
+    deleteLost(indexerURL: string): Promise<number>
     /** Recalculates the current column for all version groups containing the given file IDs. */
     recalculateCurrent(fileIds: string[]): Promise<void>
     /** Recalculates the current column for the given version groups. */
@@ -219,7 +219,7 @@ export interface AppService {
     /** Returns IDs of files that have been uploaded to the given indexer. */
     getUploadedIds(indexerUrl: string): Promise<string[]>
     /** Permanently deletes files past the trash retention period. */
-    autoPurge(): Promise<string[]>
+    autoPurge(): Promise<number>
     /** Permanently deletes file records by ID (hard delete). */
     permanentlyDelete(ids: string[]): Promise<void>
     /** Permanently deletes files and cleans up local files and uploads. */
@@ -264,7 +264,7 @@ export interface AppService {
     /** Deletes a directory and all descendants without affecting files. */
     delete(id: string): Promise<void>
     /** Deletes a directory, all descendants, and trashes their files. */
-    deleteAndTrashFiles(id: string): Promise<string[]>
+    deleteAndTrashFiles(id: string): Promise<number>
     /** Renames a directory and updates all descendant paths. Returns the updated directory. */
     rename(id: string, name: string): Promise<Directory>
     /** Moves a directory under a new parent (null for root). */

@@ -80,11 +80,12 @@ export async function queryThumbnailFileInfoByFileIds(
   fileIds: string[],
 ): Promise<{ id: string; type: string; localId: string | null }[]> {
   if (fileIds.length === 0) return []
-  const placeholders = fileIds.map(() => '?').join(',')
-  return db.getAllAsync<{ id: string; type: string; localId: string | null }>(
-    `SELECT id, type, localId FROM files WHERE thumbForId IN (${placeholders})`,
-    ...fileIds,
-  )
+  const ph = fileIds.map(() => '?').join(',')
+  return db.getAllAsync<{
+    id: string
+    type: string
+    localId: string | null
+  }>(`SELECT id, type, localId FROM files WHERE thumbForId IN (${ph})`, ...fileIds)
 }
 
 export async function queryThumbnailRecordByFileIdAndSize(

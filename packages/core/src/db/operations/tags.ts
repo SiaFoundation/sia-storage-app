@@ -162,9 +162,9 @@ export async function syncManyTagsFromMetadata(
   }
 
   const fileIds = entries.map((e) => e.fileId)
-  const placeholders = fileIds.map(() => '?').join(',')
+  const ph = fileIds.map(() => '?').join(',')
   await db.runAsync(
-    `DELETE FROM file_tags WHERE fileId IN (${placeholders}) AND tagId NOT IN (
+    `DELETE FROM file_tags WHERE fileId IN (${ph}) AND tagId NOT IN (
       SELECT id FROM tags WHERE system = 1
     )`,
     ...fileIds,
@@ -315,12 +315,8 @@ export async function addTagToFiles(
       await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
     const now = Date.now()
-    const placeholders = fileIds.map(() => '?').join(',')
-    await db.runAsync(
-      `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
-      now,
-      ...fileIds,
-    )
+    const ph = fileIds.map(() => '?').join(',')
+    await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
   })
 }
 
@@ -342,17 +338,13 @@ export async function removeTagFromFiles(
 ): Promise<void> {
   if (fileIds.length === 0) return
   await db.withTransactionAsync(async () => {
-    const placeholders = fileIds.map(() => '?').join(',')
+    const now = Date.now()
+    const ph = fileIds.map(() => '?').join(',')
     await db.runAsync(
-      `DELETE FROM file_tags WHERE tagId = ? AND fileId IN (${placeholders})`,
+      `DELETE FROM file_tags WHERE tagId = ? AND fileId IN (${ph})`,
       tagId,
       ...fileIds,
     )
-    const now = Date.now()
-    await db.runAsync(
-      `UPDATE files SET updatedAt = ? WHERE id IN (${placeholders})`,
-      now,
-      ...fileIds,
-    )
+    await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
   })
 }
