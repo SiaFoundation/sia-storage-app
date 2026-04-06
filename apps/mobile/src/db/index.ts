@@ -115,18 +115,28 @@ export async function closeDb(): Promise<void> {
 // removes the DB file, and reopens so migrations can run on next init.
 export async function resetDb() {
   dbInitialized = false
-  if (database) {
-    try {
-      await database.closeAsync()
-    } catch {}
+  const release = await txMutex.acquire()
+  try {
+    _dbProxy = null
+    if (database) {
+      try {
+        await database.closeAsync()
+      } catch {}
+    }
+    await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
+    database = await SQLite.openDatabaseAsync(
+      dbName,
+      { useNewConnection: true },
+      dbDirectory,
+    )
+    await database.execAsync(
+      'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
+    )
+    await runMigrations(database, migrations, { log: logger })
+    dbInitialized = true
+  } finally {
+    release()
   }
-  await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
-  database = await SQLite.openDatabaseAsync(dbName, undefined, dbDirectory)
-  await database.execAsync(
-    'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
-  )
-  await runMigrations(database, migrations, { log: logger })
-  dbInitialized = true
 }
 
 const RECOVERY_METHODS = new Set([
