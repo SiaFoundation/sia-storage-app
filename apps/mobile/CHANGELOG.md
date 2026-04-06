@@ -1,6 +1,56 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.9.0 (2026-04-06)
+
+### Features
+
+- One-shot archive sync walks the photo library as a tight async loop with a modal showing scan progress. Import status icons distinguish queued vs active imports, and the library status sheet shows totals and sync progress.
+- Add file versioning support. Files with the same name and directory are treated as versions with the latest shown in the library. Moving or trashing a file operates on all versions.
+- File and folder lists now sort names naturally, so "file2" comes before "file10".
+- Add nested folder browsing with breadcrumbs, subdirectory rows, subfolder creation, and tree navigation in the move-to-folder sheet.
+- Files now appear in the library immediately when importing, with a "Processing" indicator while copying and hashing completes in the background.
+- Show a full-screen sync progress overlay when catching up with remote changes from other devices.
+
+### Fixes
+
+- Added library size, usage, and storage details with descriptions to the indexer settings screen.
+- Added TIFF file type support and excluded TIFF files from thumbnailing.
+- Buffer log entries in memory and flush to the database every 2 seconds in a single transaction.
+- Batch sync-down processing replaces per-event DB lookups with bulk reads and writes, significantly improving initial sync speed.
+- Deferred cache invalidation during sync-down batch processing to avoid React re-render depth limits with large batches.
+- Skip thumbnail scanning during sync-down since we don't yet know which thumbnails already exist.
+- Directory names, tag names, and file versioning are now case-sensitive. Search remains case-insensitive.
+- File viewer shows photos and videos from the media library for archive placeholders that haven't been imported yet.
+- Fixed action sheet icons appearing vertically off-center relative to their text labels.
+- Fixed batch upload progress not updating until after file data finished streaming to the network.
+- Fixed duplicate SwitchIndexer screen name warning in navigation.
+- Fixed manage tags and move to folder sheets not opening from file actions in some screens.
+- Reduced native bridge calls when resolving file URIs.
+- Fixed iOS out-of-memory crashes when hashing large files by patching react-native-fs to stream in 64KB chunks instead of loading the entire file into memory.
+- Fixed label width clipping on narrow Android devices by using maxWidth instead of fixed width.
+- Fixed exported logs missing structured data fields like taskType, invocationId, and filesRemaining.
+- Fixed old photos appearing in recent sync after iOS background processing.
+- Added forced version reset mechanism to auto-wipe local data on version upgrades.
+- Pause uploads when account storage is full and automatically resume when space becomes available.
+- Removed the unused QuickCrypto fallback path and the debug hash comparison screen.
+- Duplicate detection during import now ignores trashed and deleted files.
+- Import status icons distinguish queued, active, and failed imports. Library status sheet shows pending import count and active upload progress.
+- Moved iOS database, file cache, and keychain items to app group shared container for extension support.
+- Enabled WAL journal mode for the database.
+- Run PRAGMA optimize on startup, after sync, after bulk imports, and on a 60-second interval to keep SQLite query planner statistics fresh.
+- Surface errors from orphan and eviction scanners instead of swallowing them, and don't mark scans as successful when they fail.
+- Display remaining app storage and show 'No app limit' when the storage limit is set to the max int64 value.
+- Fixed concurrent orphan and eviction scans when multiple background tasks resume simultaneously.
+- Skip heavy one-shot scanners in background tasks when the app is in the foreground.
+- Eliminated a redundant file copy when importing via the document picker, halving import time for large files.
+- Log a warning when database queries take longer than 500ms.
+- Standardized skip conditions with debug logging across all periodic services.
+- Removed synchronous file system calls used for log export.
+- Raised cache eviction threshold from 1 GB to 4 GB and reduced minimum file age from 7 days to 1 day.
+- Upgraded react-native-sia to 0.13.15, adding Account.remainingStorage and PinnedObject.encodedSize() APIs.
+- Upgraded react-native-sia to 0.13.18.
+
 ## 1.8.2 (2026-03-18)
 
 ### Fixes
