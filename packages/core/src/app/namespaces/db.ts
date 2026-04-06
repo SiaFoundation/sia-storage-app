@@ -4,6 +4,7 @@ import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import * as ops from '../../db/operations'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
+import type { FileMetadata } from '../../types/files'
 import type { AppCaches, AppService } from '../service'
 
 function parseLogRow(row: {
@@ -180,6 +181,18 @@ export function buildDbNamespaces(
     },
     files: {
       getById: (id) => ops.readFileRecord(db, id),
+      getMetadata: async (id) => {
+        const record = await ops.readFileRecord(db, id)
+        if (!record) return null
+        let metadata: FileMetadata = record
+        if (record.kind === 'file') {
+          const tags = await ops.queryTagNamesForFile(db, id)
+          if (tags && tags.length > 0) metadata = { ...metadata, tags }
+          const directory = await ops.queryDirectoryPathForFile(db, id)
+          if (directory) metadata = { ...metadata, directory }
+        }
+        return metadata
+      },
       getByIds: (ids) => ops.readFileRecordsByIds(db, ids),
       getByObjectId: (objectId, indexerURL) =>
         ops.readFileRecordByObjectId(db, objectId, indexerURL),
