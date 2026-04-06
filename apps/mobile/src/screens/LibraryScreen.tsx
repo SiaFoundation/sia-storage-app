@@ -146,11 +146,11 @@ export function LibraryScreen({ route, navigation }: Props) {
   }, [])
 
   const handleDirectoryCreated = useCallback(
-    (directoryId: string, directoryName: string) => {
+    (directoryId: string, name: string, path: string) => {
       navigation.navigate('DirectoryScreen', {
         directoryId,
-        directoryName,
-        directoryPath: directoryName,
+        directoryName: name,
+        directoryPath: path,
       })
     },
     [navigation],

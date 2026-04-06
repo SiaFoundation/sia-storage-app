@@ -13,7 +13,7 @@ export function useAllDirectories() {
 export function useDirectoryChildren(parentPath: string | null) {
   const app = useApp()
   const cacheKey =
-    parentPath === null ? 'children:root' : `children:${parentPath}`
+    parentPath === null ? 'children:root' : `children:path:${parentPath}`
   return useSWR(app.caches.directories.key(cacheKey), () =>
     app.directories.getChildren(parentPath),
   )
