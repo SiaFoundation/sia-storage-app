@@ -4,7 +4,7 @@ import { daysInMs, minutesInMs, secondsInMs } from '../lib/time'
 export const APP_KEY =
   'ac38d91cfb250d50820a0c658628662b8c2dcfc6a5f3fe4d5755eb0a7b67eeac'
 // Default indexer.
-export const DEFAULT_INDEXER_URL = 'https://app.sia.storage'
+export const DEFAULT_INDEXER_URL = 'https://sia.storage'
 // Max concurrent uploads.
 export const DEFAULT_MAX_UPLOADS = 1
 // Max concurrent downloads.
