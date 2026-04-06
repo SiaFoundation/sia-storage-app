@@ -16,12 +16,18 @@ import { overlay, palette, whiteA } from '../styles/colors'
 import { ModalSheet } from './ModalSheet'
 
 type Props = {
+  parentPath?: string
+  sheetName?: string
   onCreated?: (directoryId: string, directoryName: string) => void
 }
 
-export function CreateDirectorySheet({ onCreated }: Props) {
+export function CreateDirectorySheet({
+  parentPath,
+  sheetName = 'createDirectory',
+  onCreated,
+}: Props) {
   const toast = useToast()
-  const isOpen = useSheetOpen('createDirectory')
+  const isOpen = useSheetOpen(sheetName)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const inputRef = useRef<TextInput | null>(null)
@@ -46,16 +52,16 @@ export function CreateDirectorySheet({ onCreated }: Props) {
     const trimmed = name.trim()
     if (!trimmed) return
     try {
-      const dir = await app().directories.create(trimmed)
+      const dir = await app().directories.create(trimmed, parentPath)
       setName('')
       setError('')
       closeSheet()
       toast.show(`Created "${dir.path}"`)
-      onCreated?.(dir.id, dir.path)
+      onCreated?.(dir.id, trimmed)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create folder')
     }
-  }, [name, onCreated, toast])
+  }, [name, parentPath, onCreated, toast])
 
   return (
     <ModalSheet

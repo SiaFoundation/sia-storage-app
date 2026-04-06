@@ -1,7 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
+import {
+  type DirectoryWithCount,
+  UNFILED_DIRECTORY_ID,
+} from '@siastorage/core/db/operations'
 import {
   type FileListParams,
+  useDirectoryChildren,
   useDirectoryFileCount,
   useFileList,
 } from '@siastorage/core/stores'
@@ -10,6 +14,7 @@ import {
   ArrowLeftIcon,
   FilePlusIcon,
   FolderIcon,
+  FolderPlusIcon,
   ListFilterIcon,
   MoreVerticalIcon,
   PencilIcon,
@@ -31,6 +36,8 @@ import { ActionSheet } from '../components/ActionSheet'
 import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { BottomControlBar, FloatingPill } from '../components/BottomControlBar'
+import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
+import { DirectoryListItem } from '../components/DirectoryListItem'
 import { DragToDismiss } from '../components/DragToDismiss'
 import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
@@ -64,10 +71,16 @@ type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 
 export function DirectoryScreen({ route, navigation }: Props) {
   const toast = useToast()
-  const { directoryId, directoryName: initialDirectoryName } = route.params
+  const {
+    directoryId,
+    directoryName: initialDirectoryName,
+    directoryPath: initialDirectoryPath,
+  } = route.params
   const [directoryName, setDirectoryName] = useState(initialDirectoryName)
+  const [directoryPath, setDirectoryPath] = useState(initialDirectoryPath)
   const isUnfiled = directoryId === UNFILED_DIRECTORY_ID
   const scope = `dir.${directoryId}`
+  const subdirectories = useDirectoryChildren(isUnfiled ? null : directoryPath)
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
     () => ({
@@ -182,24 +195,68 @@ export function DirectoryScreen({ route, navigation }: Props) {
 
   const dirCount = useDirectoryFileCount(directoryId)
   const fileCount = dirCount.data ?? 0
-  const subtitle = `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`
+  const subDirCount = isUnfiled ? 0 : (subdirectories.data?.length ?? 0)
+  const subtitleParts: string[] = []
+  subtitleParts.push(
+    `${fileCount.toLocaleString()} ${fileCount === 1 ? 'file' : 'files'}`,
+  )
+  if (subDirCount > 0) {
+    subtitleParts.push(
+      `${subDirCount} ${subDirCount === 1 ? 'folder' : 'folders'}`,
+    )
+  }
+  const subtitle = subtitleParts.join(', ')
   const dirActionsOpen = useSheetOpen('directoryActions')
 
   const handleRenameDirectory = useCallback(
     async (newName: string) => {
-      await app().directories.rename(directoryId, newName)
-      setDirectoryName(newName)
-      toast.show(`Renamed to "${newName}"`)
+      const updated = await app().directories.rename(directoryId, newName)
+      setDirectoryName(updated.name)
+      setDirectoryPath(updated.path)
+      toast.show(`Renamed to "${updated.name}"`)
     },
     [directoryId, toast],
   )
+
+  const handleSelectSubdirectory = useCallback(
+    (dir: DirectoryWithCount) => {
+      navigation.push('DirectoryScreen', {
+        directoryId: dir.id,
+        directoryName: dir.name,
+        directoryPath: dir.path,
+      })
+    },
+    [navigation],
+  )
+
+  const handleCreateSubfolder = useCallback(() => {
+    closeSheet()
+    setTimeout(() => openSheet('createSubdirectory'), 300)
+  }, [])
+
+  const hasSubdirs = !isUnfiled && (subdirectories.data?.length ?? 0) > 0
+
+  const directoryListHeader = useMemo(() => {
+    if (isUnfiled || !subdirectories.data?.length) return null
+    return (
+      <View>
+        {subdirectories.data.map((sub) => (
+          <DirectoryListItem
+            key={sub.id}
+            dir={sub}
+            onPress={() => handleSelectSubdirectory(sub)}
+          />
+        ))}
+      </View>
+    )
+  }, [subdirectories.data, isUnfiled, handleSelectSubdirectory])
 
   const handleDeleteDirectory = useCallback(() => {
     closeSheet()
     setTimeout(() => {
       Alert.alert(
         `Delete "${directoryName}"?`,
-        'This will delete the folder and move all files to trash.',
+        'This will delete the folder and all its contents, and move files to trash.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -268,18 +325,20 @@ export function DirectoryScreen({ route, navigation }: Props) {
         <View style={styles.emptyWrap}>
           <ActivityIndicator color={palette.blue[400]} />
         </View>
-      ) : files.data.length > 0 ? (
+      ) : files.data.length > 0 || hasSubdirs ? (
         vs.viewMode === 'gallery' ? (
           <FileGallery
             filters={filters}
             onPressItem={handlePressItem}
             onLongPressItem={handleLongPressItem}
+            ListHeaderComponent={directoryListHeader}
           />
         ) : (
           <FileList
             filters={filters}
             onPressItem={handlePressItem}
             onLongPressItem={handleLongPressItem}
+            ListHeaderComponent={directoryListHeader}
           />
         )
       ) : (
@@ -371,6 +430,12 @@ export function DirectoryScreen({ route, navigation }: Props) {
         onRequestClose={() => closeSheet('directoryActions')}
       >
         <ActionSheetButton
+          icon={<FolderPlusIcon size={18} />}
+          onPress={handleCreateSubfolder}
+        >
+          New folder
+        </ActionSheetButton>
+        <ActionSheetButton
           icon={<PencilIcon size={18} />}
           onPress={() => {
             closeSheet()
@@ -416,6 +481,19 @@ export function DirectoryScreen({ route, navigation }: Props) {
         sheetName="directoryMoveToDir"
         onComplete={isSelectionMode ? handleBulkActionComplete : undefined}
       />
+      {!isUnfiled ? (
+        <CreateDirectorySheet
+          sheetName="createSubdirectory"
+          parentPath={directoryPath}
+          onCreated={(subId, subName) => {
+            navigation.push('DirectoryScreen', {
+              directoryId: subId,
+              directoryName: subName,
+              directoryPath: `${directoryPath}/${subName}`,
+            })
+          }}
+        />
+      ) : null}
     </View>
   )
 }

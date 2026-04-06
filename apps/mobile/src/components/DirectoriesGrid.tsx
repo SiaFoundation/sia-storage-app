@@ -1,6 +1,9 @@
 import type { DirectoryWithCount } from '@siastorage/core/db/operations'
 import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
-import { useAllDirectories, useUnfiledFileCount } from '@siastorage/core/stores'
+import {
+  useDirectoryChildren,
+  useUnfiledFileCount,
+} from '@siastorage/core/stores'
 import { FolderIcon, InboxIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
 import {
@@ -15,7 +18,11 @@ import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
 
 type Props = {
-  onSelectDirectory: (directoryId: string, directoryName: string) => void
+  onSelectDirectory: (
+    directoryId: string,
+    directoryName: string,
+    directoryPath: string,
+  ) => void
   onCreateDirectory: () => void
 }
 
@@ -23,24 +30,26 @@ export function DirectoriesGrid({
   onSelectDirectory,
   onCreateDirectory,
 }: Props) {
-  const allDirs = useAllDirectories()
+  const rootDirs = useDirectoryChildren(null)
   const unfiledCount = useUnfiledFileCount()
-  const dirs = allDirs.data ?? []
+  const dirs = rootDirs.data ?? []
 
   const listData = useMemo(() => {
     const items: DirectoryWithCount[] = [...dirs]
     if ((unfiledCount.data ?? 0) > 0) {
       items.push({
         id: UNFILED_DIRECTORY_ID,
-        path: 'No folder',
+        name: 'No folder',
+        path: '',
         createdAt: 0,
         fileCount: unfiledCount.data ?? 0,
+        subdirectoryCount: 0,
       })
     }
     return items
   }, [dirs, unfiledCount.data])
 
-  if (!allDirs.data) {
+  if (!rootDirs.data) {
     return (
       <View style={styles.emptyWrap}>
         <ActivityIndicator color={palette.blue[400]} />
@@ -68,7 +77,7 @@ export function DirectoriesGrid({
       renderItem={({ item }) => (
         <DirectoryCard
           dir={item}
-          onPress={() => onSelectDirectory(item.id, item.path)}
+          onPress={() => onSelectDirectory(item.id, item.name, item.path)}
           isUnfiled={item.id === UNFILED_DIRECTORY_ID}
         />
       )}
@@ -98,11 +107,14 @@ function DirectoryCard({
       )}
       <View style={styles.cardText}>
         <Text style={styles.dirName} numberOfLines={1}>
-          {dir.path}
+          {dir.name}
         </Text>
         <Text style={styles.dirCount}>
           {dir.fileCount.toLocaleString()}{' '}
           {dir.fileCount === 1 ? 'file' : 'files'}
+          {dir.subdirectoryCount > 0
+            ? `, ${dir.subdirectoryCount} ${dir.subdirectoryCount === 1 ? 'folder' : 'folders'}`
+            : ''}
         </Text>
       </View>
     </Pressable>

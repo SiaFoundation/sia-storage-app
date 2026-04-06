@@ -1,5 +1,6 @@
 import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
+import type React from 'react'
 import { useCallback } from 'react'
 import {
   ActivityIndicator,
@@ -17,6 +18,8 @@ type Props = {
   onLongPressItem?: (item: FileRecord) => void
   numColumns?: number
   keyboardDismissMode?: FlatListProps<FileRecord>['keyboardDismissMode']
+  contentPaddingTop?: number
+  ListHeaderComponent?: React.ReactElement | null
 }
 
 export function FileGallery({
@@ -25,6 +28,8 @@ export function FileGallery({
   onLongPressItem,
   numColumns = 3,
   keyboardDismissMode,
+  contentPaddingTop,
+  ListHeaderComponent,
 }: Props) {
   const {
     data: files,
@@ -64,7 +69,12 @@ export function FileGallery({
       automaticallyAdjustContentInsets={false}
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
-      contentContainerStyle={styles.galleryContent}
+      contentContainerStyle={
+        contentPaddingTop
+          ? { ...styles.galleryContent, paddingTop: contentPaddingTop }
+          : styles.galleryContent
+      }
+      ListHeaderComponent={ListHeaderComponent}
       renderItem={renderItem}
       onEndReachedThreshold={0.95}
       onEndReached={handleEndReached}

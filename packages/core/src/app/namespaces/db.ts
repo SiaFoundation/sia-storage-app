@@ -389,14 +389,18 @@ export function buildDbNamespaces(
     },
     directories: {
       getAll: () => ops.queryAllDirectoriesWithCounts(db),
+      getById: (id) => ops.queryDirectoryById(db, id),
       getByPath: (path) => ops.queryDirectoryByPath(db, path),
       getPathForFile: (fileId) => ops.queryDirectoryPathForFile(db, fileId),
-      create: async (path) => {
-        const dir = await ops.insertDirectory(db, path)
-        caches.directories.invalidate('all')
+      getChildren: (parentPath) => ops.queryDirectoryChildren(db, parentPath),
+      create: async (name, parentPath) => {
+        const dir = await ops.insertDirectory(db, name, parentPath)
+        caches.directories.invalidateAll()
         return dir
       },
-      getOrCreate: (path) => ops.getOrCreateDirectory(db, path),
+      getOrCreate: (name, parentPath) =>
+        ops.getOrCreateDirectory(db, name, parentPath),
+      getOrCreateAtPath: (path) => ops.getOrCreateDirectoryAtPath(db, path),
       delete: async (id) => {
         await ops.deleteDirectory(db, id)
         caches.directories.invalidateAll()
@@ -409,20 +413,26 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
         return fileIds
       },
-      rename: async (id, path) => {
-        await ops.renameDirectory(db, id, path)
-        caches.directories.invalidate('all')
+      rename: async (id, name) => {
+        const dir = await ops.renameDirectory(db, id, name)
+        caches.directories.invalidateAll()
+        caches.libraryVersion.invalidate()
+        return dir
+      },
+      moveDirectory: async (directoryId, newParentPath) => {
+        await ops.moveDirectory(db, directoryId, newParentPath)
+        caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
       },
       moveFile: async (fileId, dirId) => {
         await ops.moveFileToDirectory(db, fileId, dirId)
-        caches.directories.invalidate('all')
+        caches.directories.invalidateAll()
         caches.directories.invalidate(`file/${fileId}`)
         caches.libraryVersion.invalidate()
       },
       moveFiles: async (fileIds, dirId) => {
         await ops.moveFilesToDirectory(db, fileIds, dirId)
-        caches.directories.invalidate('all')
+        caches.directories.invalidateAll()
         for (const id of fileIds) {
           caches.directories.invalidate(`file/${id}`)
         }
@@ -436,7 +446,7 @@ export function buildDbNamespaces(
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (!opts?.skipInvalidation) {
-          caches.directories.invalidate('all')
+          caches.directories.invalidateAll()
           caches.directories.invalidate(`file/${fileId}`)
           caches.libraryVersion.invalidate()
         }
