@@ -145,9 +145,9 @@ describe('autoPurgeOldTrashedFiles', () => {
     const oldTrashedAt = 1
     await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: oldTrashedAt }))
 
-    const purgedIds = await autoPurgeOldTrashedFiles(db())
+    const purgedCount = await autoPurgeOldTrashedFiles(db())
 
-    expect(purgedIds).toContain('f1')
+    expect(purgedCount).toBe(1)
     const f1 = await getFile('f1')
     expect(f1!.deletedAt).not.toBeNull()
   })
@@ -155,17 +155,17 @@ describe('autoPurgeOldTrashedFiles', () => {
   it('does not purge recently trashed files', async () => {
     await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: Date.now() }))
 
-    const purgedIds = await autoPurgeOldTrashedFiles(db())
+    const purgedCount = await autoPurgeOldTrashedFiles(db())
 
-    expect(purgedIds).toEqual([])
+    expect(purgedCount).toBe(0)
   })
 
   it('does not purge already-deleted files', async () => {
     await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: 1, deletedAt: 2 }))
 
-    const purgedIds = await autoPurgeOldTrashedFiles(db())
+    const purgedCount = await autoPurgeOldTrashedFiles(db())
 
-    expect(purgedIds).toEqual([])
+    expect(purgedCount).toBe(0)
   })
 
   it('only purges kind=file, not thumbnails', async () => {
@@ -179,8 +179,8 @@ describe('autoPurgeOldTrashedFiles', () => {
       }),
     )
 
-    const purgedIds = await autoPurgeOldTrashedFiles(db())
+    const purgedCount = await autoPurgeOldTrashedFiles(db())
 
-    expect(purgedIds).toEqual([])
+    expect(purgedCount).toBe(0)
   })
 })

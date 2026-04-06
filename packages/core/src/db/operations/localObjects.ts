@@ -68,10 +68,10 @@ export async function queryLocalObjectsForFiles(
   fileIds: string[],
 ): Promise<Record<string, LocalObject[]>> {
   if (fileIds.length === 0) return {}
-  const placeholders = fileIds.map(() => '?').join(',')
+  const ph = fileIds.map(() => '?').join(',')
   const rows = await db.getAllAsync<LocalObjectRow>(
     `SELECT id, fileId, indexerURL, slabs, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt
-     FROM objects WHERE fileId IN (${placeholders})`,
+     FROM objects WHERE fileId IN (${ph})`,
     ...fileIds,
   )
   const map: Record<string, LocalObject[]> = {}
@@ -107,24 +107,18 @@ export async function insertManyLocalObjects(
   await sql.insertMany(db, 'objects', rows, { conflictClause: 'OR REPLACE' })
 }
 
-const MAX_SQL_VARS = 999
-
 export async function deleteManyLocalObjectsByObjectIds(
   db: DatabaseAdapter,
   objectIds: string[],
   indexerURL: string,
 ): Promise<void> {
   if (objectIds.length === 0) return
-  const chunkSize = MAX_SQL_VARS - 1
-  for (let i = 0; i < objectIds.length; i += chunkSize) {
-    const chunk = objectIds.slice(i, i + chunkSize)
-    const placeholders = chunk.map(() => '?').join(',')
-    await db.runAsync(
-      `DELETE FROM objects WHERE indexerURL = ? AND id IN (${placeholders})`,
-      indexerURL,
-      ...chunk,
-    )
-  }
+  const ph = objectIds.map(() => '?').join(',')
+  await db.runAsync(
+    `DELETE FROM objects WHERE indexerURL = ? AND id IN (${ph})`,
+    indexerURL,
+    ...objectIds,
+  )
 }
 
 export async function queryFilesWithNoObjects(
@@ -132,20 +126,13 @@ export async function queryFilesWithNoObjects(
   fileIds: string[],
 ): Promise<string[]> {
   if (fileIds.length === 0) return []
-  const result: string[] = []
-  for (let i = 0; i < fileIds.length; i += MAX_SQL_VARS) {
-    const chunk = fileIds.slice(i, i + MAX_SQL_VARS)
-    const placeholders = chunk.map(() => '?').join(',')
-    const rows = await db.getAllAsync<{ id: string }>(
-      `SELECT id FROM files WHERE id IN (${placeholders})
-       AND NOT EXISTS (SELECT 1 FROM objects WHERE fileId = files.id)`,
-      ...chunk,
-    )
-    for (const row of rows) {
-      result.push(row.id)
-    }
-  }
-  return result
+  const ph = fileIds.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM files WHERE id IN (${ph})
+     AND NOT EXISTS (SELECT 1 FROM objects WHERE fileId = files.id)`,
+    ...fileIds,
+  )
+  return rows.map((row) => row.id)
 }
 
 export async function deleteManyLocalObjectsByFileIds(

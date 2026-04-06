@@ -40,11 +40,30 @@ export async function insert<
   return await run(db, sql, params)
 }
 
-// SQLite limits the number of ? placeholders per statement
-// (SQLITE_MAX_VARIABLE_NUMBER, default 999). Each row contributes one
-// placeholder per non-null column, so the chunk size is computed from the
-// column count to stay safely under the limit.
-const MAX_VARIABLES = 999
+// SQLITE_MAX_VARIABLE_NUMBER: 32766 (pre-3.32.0 was 999).
+const MAX_VARIABLES = 32766
+
+// Repeatedly executes a SELECT with LIMIT, processes each batch, then
+// re-queries. fn must cause processed rows to no longer match query
+// (e.g. by deleting, trashing, or updating them so the WHERE no longer hits).
+export async function processInBatches<T>(
+  db: DatabaseAdapter,
+  query: string,
+  params: SqlValue[],
+  batchSize: number,
+  fn: (batch: T[]) => Promise<void>,
+): Promise<number> {
+  const limitedQuery = `${query} LIMIT ?`
+  const normalized = params.map((v) => normalizeSqlValue(v))
+  let total = 0
+  while (true) {
+    const rows = await db.getAllAsync<T>(limitedQuery, ...normalized, batchSize)
+    if (rows.length === 0) break
+    await fn(rows)
+    total += rows.length
+  }
+  return total
+}
 
 export async function insertMany<
   T extends Record<string, string | number | boolean | null | undefined>,

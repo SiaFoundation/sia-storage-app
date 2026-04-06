@@ -256,19 +256,19 @@ describe('deleteLostFiles', () => {
       usedAt: 1000,
     })
     await insertFileRecord(db(), makeFileRecord('lost'))
-    const deleted = await deleteLostFiles(db(), indexerURL)
-    expect(deleted).toEqual(['lost'])
+    const deletedCount = await deleteLostFiles(db(), indexerURL)
+    expect(deletedCount).toBe(1)
     expect(await readFileRecord(db(), 'pinned')).not.toBeNull()
     expect(await readFileRecord(db(), 'local-only')).not.toBeNull()
     expect(await readFileRecord(db(), 'lost')).toBeNull()
   })
 
-  it('returns empty when no files are lost', async () => {
+  it('returns 0 when no files are lost', async () => {
     const indexerURL = 'https://indexer.example.com'
     await insertFileRecord(db(), makeFileRecord('pinned'))
     await insertLocalObject(db(), makeLocalObject('pinned', { indexerURL }))
-    const deleted = await deleteLostFiles(db(), indexerURL)
-    expect(deleted).toEqual([])
+    const deletedCount = await deleteLostFiles(db(), indexerURL)
+    expect(deletedCount).toBe(0)
   })
 })
 
