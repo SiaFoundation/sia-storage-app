@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.9.1 (2026-04-07)
+
+### Fixes
+
+- Fixed production builds using the dev app group container, causing a black screen on launch.
+
 ## 1.9.0 (2026-04-06)
 
 ### Features
