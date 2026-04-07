@@ -196,7 +196,7 @@ describe('sdk store', () => {
       expect(internal().getSdk()).toBeNull()
     })
 
-    it('returns null when connectWithKey times out (10s)', async () => {
+    it('returns null when connectWithKey times out (20s)', async () => {
       jest.useFakeTimers()
 
       try {
@@ -206,7 +206,7 @@ describe('sdk store', () => {
         )
 
         const initPromise = sdkStore.connectSdk()
-        await jest.advanceTimersByTimeAsync(10_000)
+        await jest.advanceTimersByTimeAsync(20_000)
         const sdk = await initPromise
 
         expect(sdk).toBeNull()
@@ -282,7 +282,7 @@ describe('sdk store', () => {
       await first
     })
 
-    it('returns false when connectWithKey times out (10s)', async () => {
+    it('returns false when connectWithKey times out (20s)', async () => {
       jest.useFakeTimers()
 
       try {
@@ -292,7 +292,7 @@ describe('sdk store', () => {
         )
 
         const reconnectPromise = sdkStore.reconnectIndexer()
-        await jest.advanceTimersByTimeAsync(10_000)
+        await jest.advanceTimersByTimeAsync(20_000)
         const result = await reconnectPromise
 
         expect(result).toBe(false)
@@ -360,7 +360,7 @@ describe('sdk store', () => {
           )
 
           const promise = sdkStore.authenticateIndexer(indexerUrl)
-          await jest.advanceTimersByTimeAsync(10_000)
+          await jest.advanceTimersByTimeAsync(20_000)
           const [, error] = await promise
 
           expect(error?.type).toBe('error')
@@ -633,7 +633,7 @@ describe('sdk store', () => {
           mockOpenAuthURL.mockImplementation(() => new Promise(() => {}))
 
           sdkStore.authenticateIndexer(indexerUrl)
-          await jest.advanceTimersByTimeAsync(10_000)
+          await jest.advanceTimersByTimeAsync(20_000)
 
           expect(mock.callCount()).toBe(0)
           expect(mockBuilderWaitForApproval).not.toHaveBeenCalled()
@@ -1007,7 +1007,7 @@ describe('sdk store', () => {
           mnemonic,
           testIndexerURL,
         )
-        await jest.advanceTimersByTimeAsync(10_000)
+        await jest.advanceTimersByTimeAsync(20_000)
         const [, error] = await registerPromise
 
         expect(error?.type).toBe('error')
@@ -1032,7 +1032,7 @@ describe('sdk store', () => {
           mnemonic,
           testIndexerURL,
         )
-        await jest.advanceTimersByTimeAsync(10_000)
+        await jest.advanceTimersByTimeAsync(60_000)
         const [, error] = await registerPromise
 
         expect(error?.type).toBe('error')

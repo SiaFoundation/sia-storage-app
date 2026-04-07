@@ -42,7 +42,8 @@ let pendingApproval: {
   indexerURL: string
 } | null = null
 
-const CONNECTION_TIMEOUT_MS = 10_000
+const CONNECTION_TIMEOUT_MS = 20_000
+const REGISTER_TIMEOUT_MS = 60_000
 
 getMobileSdkAuth().setOnConnected(async () => {
   const sdk = getMobileSdkAuth().getLastSdk()
@@ -291,7 +292,7 @@ export async function registerWithIndexer(
     logger.info('sdk', 'registering')
     const keyHex = await withTimeout(
       app().auth.builder.register(mnemonic),
-      CONNECTION_TIMEOUT_MS,
+      REGISTER_TIMEOUT_MS,
     )
 
     await app().auth.setMnemonicHash(mnemonic)
