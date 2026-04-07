@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.9.2 (2026-04-07)
+
+### Fixes
+
+- Fixed app reset failing on upgrade when the database had not yet been created at the app group container path.
+
 ## 1.9.1 (2026-04-07)
 
 ### Fixes
