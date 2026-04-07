@@ -123,7 +123,11 @@ export async function resetDb() {
         await database.closeAsync()
       } catch {}
     }
-    await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
+    try {
+      await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
+    } catch {
+      // Database may not exist at this path (e.g. upgrading from pre-app-group location).
+    }
     database = await SQLite.openDatabaseAsync(
       dbName,
       { useNewConnection: true },
