@@ -70,6 +70,7 @@ jobs:
       - name: Release Android
         working-directory: apps/mobile
         env:
+          RELEASE: 'true'
           SIA_RELEASE_STORE_FILE: ${{ github.workspace }}/apps/mobile/android-release.keystore
           SIA_RELEASE_STORE_PASSWORD: ${{ secrets.SIA_RELEASE_STORE_PASSWORD }}
           SIA_RELEASE_KEY_ALIAS: ${{ secrets.SIA_RELEASE_KEY_ALIAS }}
@@ -143,6 +144,7 @@ jobs:
       - name: Release iOS
         working-directory: apps/mobile
         env:
+          RELEASE: 'true'
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           CI: true
