@@ -57,12 +57,11 @@ export class ServiceScheduler {
 
       // Increment the token to invalidate any previously scheduled or in-flight ticks.
       const token = (existing?.token ?? 0) + 1
-      const abortController = new AbortController()
       running = false
       this.schedulerStateMap.set(name, {
         token,
         timeoutId: null,
-        abortController,
+        abortController: new AbortController(),
       })
 
       runTick = () => {
@@ -84,9 +83,10 @@ export class ServiceScheduler {
         running = true
         let nextInterval = interval
         try {
-          const customInterval = await Promise.resolve(
-            worker(abortController.signal),
-          )
+          // Always read signal from the map so abortAll() replacements
+          // take effect on subsequent ticks.
+          const signal = current.abortController.signal
+          const customInterval = await Promise.resolve(worker(signal))
           if (typeof customInterval === 'number') {
             nextInterval = customInterval
           }
@@ -102,13 +102,14 @@ export class ServiceScheduler {
         if (!current || current.token !== token) return
 
         if (this.paused) {
-          // Defer the tick until resumed
+          // Defer the tick until resumed.
           this.pausedCallbacks.push(() => scheduleNextRun(interval))
           return
         }
 
         const timeoutId = setTimeout(runTick!, interval)
-        this.schedulerStateMap.set(name, { token, timeoutId, abortController })
+        // Update only the timeoutId, preserving the current abortController.
+        current.timeoutId = timeoutId
       }
 
       scheduleNextRun(interval)
@@ -119,12 +120,27 @@ export class ServiceScheduler {
       if (!current || !runTick || running) return
       if (current.timeoutId) {
         clearTimeout(current.timeoutId)
-        this.schedulerStateMap.set(name, { ...current, timeoutId: null })
+        current.timeoutId = null
       }
       runTick()
     }
 
     return { init, triggerNow }
+  }
+
+  /** Abort all in-flight workers and replace their AbortControllers
+   * with fresh ones so subsequent ticks get clean signals. */
+  abortAll(): void {
+    this.schedulerStateMap.forEach((state) => {
+      state.abortController.abort()
+      state.abortController = new AbortController()
+    })
+  }
+
+  async waitForIdle(): Promise<void> {
+    while (this.runningPromises.size > 0) {
+      await Promise.allSettled([...this.runningPromises])
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -159,6 +175,14 @@ export function createServiceInterval(opts: ServiceIntervalOptions): {
   triggerNow: () => void
 } {
   return defaultScheduler.createInterval(opts)
+}
+
+export function abortAllServiceIntervals(): void {
+  defaultScheduler.abortAll()
+}
+
+export async function waitForAllServiceIntervalsIdle(): Promise<void> {
+  return defaultScheduler.waitForIdle()
 }
 
 export async function shutdownAllServiceIntervals(): Promise<void> {
