@@ -147,6 +147,12 @@ export class UploadManager {
   private polledFiles: FileEntry[] = []
   /** Whether the async loop is running; set false by shutdown() to exit. */
   private active = false
+  /** Whether the loop is parked waiting for DB to become available. */
+  private _suspended = false
+  /** Resolves to unblock the loop when resume() is called. */
+  private _resumeResolve: (() => void) | null = null
+  /** Resolves to signal the caller of suspend() that the loop has parked. */
+  private _parkedResolve: (() => void) | null = null
   /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
   private wakeResolver: (() => void) | null = null
   /** Whether saveBatchObjects succeeded and invalidation is pending. */
@@ -307,6 +313,14 @@ export class UploadManager {
   /** Stop the loop, cancel in-flight uploads, and clean up upload state. */
   async shutdown(): Promise<void> {
     this.active = false
+    if (this._resumeResolve) {
+      this._resumeResolve()
+      this._resumeResolve = null
+    }
+    if (this._parkedResolve) {
+      this._parkedResolve()
+      this._parkedResolve = null
+    }
 
     if (this.packer) {
       logger.info('uploadManager', 'batch_cancel', {
@@ -353,6 +367,37 @@ export class UploadManager {
     this.batch = null
 
     this.wake()
+  }
+
+  suspend(): Promise<void> {
+    logger.info('uploadManager', 'suspending')
+    this._suspended = true
+    this.wake()
+    if (!this.active) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      this._parkedResolve = resolve
+    })
+  }
+
+  resume(): void {
+    if (!this._suspended) return
+    logger.info('uploadManager', 'resuming')
+    this._suspended = false
+    if (this._resumeResolve) {
+      this._resumeResolve()
+      this._resumeResolve = null
+    }
+  }
+
+  get isSuspended(): boolean {
+    return this._suspended
+  }
+
+  private async waitForResume(): Promise<void> {
+    if (!this._suspended) return
+    return new Promise<void>((resolve) => {
+      this._resumeResolve = resolve
+    })
   }
 
   get flushHistory(): FlushRecord[] {
@@ -458,6 +503,16 @@ export class UploadManager {
    */
   private async runLoop(): Promise<void> {
     while (this.active) {
+      if (this._suspended) {
+        if (this._parkedResolve) {
+          this._parkedResolve()
+          this._parkedResolve = null
+        }
+        await this.waitForResume()
+        if (!this.active) break
+        continue
+      }
+
       const next =
         this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
 
@@ -623,7 +678,7 @@ export class UploadManager {
   private async processEntries(entries: FileEntry[]): Promise<void> {
     let i = 0
 
-    while (i < entries.length && this.active) {
+    while (i < entries.length && this.active && !this._suspended) {
       // computeWindowEnd needs a packer+batch — when neither exists or
       // when the next file would trigger a pre-flush, fall back to
       // processEntry which handles packer creation and pre-flush checks.
@@ -642,6 +697,12 @@ export class UploadManager {
         await this.flush('max_duration')
       }
     }
+
+    // Re-queue unprocessed entries so they're picked up on resume.
+    // drainQueues() already removed them from the original queues.
+    if (this._suspended && i < entries.length) {
+      this.explicitQueue.unshift(...entries.slice(i))
+    }
   }
 
   /**
@@ -657,7 +718,8 @@ export class UploadManager {
 
     const inflight = []
     for (let j = from; j < end; j++) {
-      if (!this.active) break
+      // Stop launching new packer.add() calls on shutdown or suspension.
+      if (!this.active || this._suspended) break
       const entry = entries[j]
       this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
@@ -685,7 +747,8 @@ export class UploadManager {
       try {
         const t1 = Date.now()
         await promise
-        if (!this.active || !this.batch) break
+        // Exit after current add completes if shutting down or suspending.
+        if (!this.active || !this.batch || this._suspended) break
         const t2 = Date.now()
         const addMs = t2 - t1
         const slabsBefore = this.batch.slabsFilled

@@ -515,7 +515,8 @@ export class ThumbnailScanner {
           })
 
           for (const size of missingSizes) {
-            if (producedCount >= MAX_THUMBS_PER_TICK) break
+            // Exit early on suspension so the DB can close promptly.
+            if (signal?.aborted || producedCount >= MAX_THUMBS_PER_TICK) break
             logger.debug('thumbnailScanner', 'attempt', { id: c.id, size })
             summary.attempts.push({
               originalId: c.id,

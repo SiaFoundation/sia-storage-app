@@ -1393,4 +1393,56 @@ describe('UploadManager', () => {
       getManagerSpy.mockRestore()
     })
   })
+
+  describe('suspend / resume', () => {
+    it('suspend sets isSuspended and resume clears it', () => {
+      expect(manager.isSuspended).toBe(false)
+      manager.suspend()
+      expect(manager.isSuspended).toBe(true)
+      manager.resume()
+      expect(manager.isSuspended).toBe(false)
+    })
+
+    it('resume is a no-op when not suspended', () => {
+      manager.resume()
+      expect(manager.isSuspended).toBe(false)
+    })
+
+    it('suspend pauses the loop and resume unblocks it', async () => {
+      manager.initialize(app(), internal(), defaultAdapters())
+
+      const entry = await createTestFile('suspend-test', 1000)
+      manager.enqueue([entry])
+
+      // Let the loop process
+      await jest.advanceTimersByTimeAsync(0)
+
+      manager.suspend()
+      expect(manager.isSuspended).toBe(true)
+
+      // Enqueue another file while suspended
+      const entry2 = await createTestFile('suspend-test-2', 1000)
+      manager.enqueue([entry2])
+
+      // Advance time — the loop should be parked, not processing
+      await jest.advanceTimersByTimeAsync(10_000)
+      const uploadsWhileSuspended = getActiveUploads()
+      const suspendedIds = uploadsWhileSuspended.map((u) => u.id)
+      expect(suspendedIds).toContain('suspend-test-2')
+
+      manager.resume()
+      expect(manager.isSuspended).toBe(false)
+
+      // Let the loop process the queued file
+      await jest.advanceTimersByTimeAsync(0)
+    })
+
+    it('shutdown while suspended resolves without hanging', async () => {
+      manager.initialize(app(), internal(), defaultAdapters())
+      manager.suspend()
+
+      await manager.shutdown()
+      expect(manager.isSuspended).toBe(true)
+    })
+  })
 })

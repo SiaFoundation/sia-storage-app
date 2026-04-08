@@ -148,6 +148,8 @@ export class ImportScanner {
 
           // Pass 1: local file on disk — hash and finalize.
           if (localFileUri) {
+            // Exit early on suspension before starting CPU-intensive hash.
+            if (signal?.aborted) break
             const outcome = await this.hashExistingFile(file, localFileUri)
             if (outcome.action === 'finalized') {
               updates.push({
@@ -188,10 +190,13 @@ export class ImportScanner {
             }
 
             try {
+              // Exit early on suspension before starting file copy + hash.
+              if (signal?.aborted) break
               const uri = await app.fs.copyFile(
                 { id: file.id, type: file.type },
                 resolvedUri,
               )
+              if (signal?.aborted) break
               const outcome = await this.hashExistingFile(file, uri)
               if (outcome.action === 'finalized') {
                 updates.push({
