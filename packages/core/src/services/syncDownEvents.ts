@@ -424,8 +424,10 @@ async function processBatch(
   const deletedFileIdSet = new Set(deletedFileIds)
   let needsLibraryInvalidation = false
 
-  // 3A: FS cleanup (non-fatal).
+  // 3A: FS cleanup (non-fatal). Check signal between deletions so
+  // suspension can close the DB promptly.
   for (const event of deletes) {
+    if (signal.aborted) break
     if (deletedFileIdSet.has(event.fileId)) {
       try {
         await app.fs.removeFile({
@@ -455,6 +457,7 @@ async function processBatch(
   )
 
   // 3B: Batch directory sync.
+  if (signal.aborted) return
   const dirEntries = syncableEvents
     .filter((e) => e.directory !== undefined)
     .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
@@ -467,6 +470,7 @@ async function processBatch(
   }
 
   // 3C: Batch tag sync.
+  if (signal.aborted) return
   const tagEntries = syncableEvents
     .filter((e) => e.tags !== undefined && e.tags.length > 0)
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
