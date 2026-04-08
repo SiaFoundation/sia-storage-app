@@ -1,4 +1,9 @@
-import type { ThumbnailAdapter } from '@siastorage/core/adapters'
+import type {
+  DatabaseAdapter,
+  SQLParam,
+  SQLRunResult,
+  ThumbnailAdapter,
+} from '@siastorage/core/adapters'
 import type { AppService, AppServiceInternal } from '@siastorage/core/app'
 import { createAppService } from '@siastorage/core/app'
 import { runMigrations } from '@siastorage/core/db'
@@ -10,6 +15,7 @@ import type {
   TagWithCount,
 } from '@siastorage/core/db/operations'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { CoalescingQueue } from '@siastorage/core/lib/coalescingQueue'
 import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
@@ -52,6 +58,59 @@ export {
   waitForCondition,
 } from './utils'
 
+/**
+ * Mirrors the real mobile app's DB lifecycle (initializeDB / closeDb / reopen).
+ * Uses a file-backed better-sqlite3 database with the same PRAGMAs
+ * (WAL, busy_timeout, foreign_keys) and runs migrations on open.
+ * The proxy delegates to the active connection; calls throw after close.
+ */
+function createTestDatabase(dbPath: string) {
+  let inner: (DatabaseAdapter & { close(): void }) | null = null
+
+  function requireOpen(): DatabaseAdapter & { close(): void } {
+    if (!inner) throw new Error('Database is closed')
+    return inner
+  }
+
+  const proxy: DatabaseAdapter = {
+    getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
+      return requireOpen().getAllAsync(sql, ...params)
+    },
+    getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
+      return requireOpen().getFirstAsync(sql, ...params)
+    },
+    runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult> {
+      return requireOpen().runAsync(sql, ...params)
+    },
+    execAsync(sql: string): Promise<void> {
+      return requireOpen().execAsync(sql)
+    },
+    withTransactionAsync(fn: () => Promise<void>): Promise<void> {
+      return requireOpen().withTransactionAsync(fn)
+    },
+  }
+
+  return {
+    proxy,
+    async open() {
+      inner = createBetterSqlite3Database(dbPath)
+      await inner.execAsync(
+        'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
+      )
+      await runMigrations(proxy, sortMigrations(coreMigrations))
+    },
+    close() {
+      if (inner) {
+        inner.close()
+        inner = null
+      }
+    },
+    get isOpen() {
+      return inner !== null
+    },
+  }
+}
+
 const INDEXER_URL = 'https://test.indexer'
 const SYNC_INTERVAL = 200
 const THUMBNAIL_SCAN_INTERVAL = 1000
@@ -69,6 +128,11 @@ export interface TestApp {
   shutdown(): Promise<void>
   pause(): void
   resume(): void
+  suspend(): Promise<void>
+  resumeFromSuspension(): Promise<void>
+  suspendIfBackground(): Promise<void>
+  isSuspended(): boolean
+  isBackground: boolean
 
   app: AppService
   internal: AppServiceInternal
@@ -153,18 +217,25 @@ export function createTestApp(
   indexerStorage?: MockIndexerStorage,
   options?: TestAppOptions,
 ): TestApp {
-  const db = createBetterSqlite3Database()
+  const hasMockAdapters = options?.fsIO || options?.thumbnail
+  const tempDir = hasMockAdapters
+    ? ''
+    : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
+  const dbDir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-db-'))
+  const dbPath = path.join(dbDir, 'test.db')
+
+  const testDb = createTestDatabase(dbPath)
+  const db = testDb.proxy
+
   const storage = createInMemoryStorage()
   const scheduler = new ServiceScheduler()
   const sdk = new MockSdk(indexerStorage ?? createEmptyIndexerStorage())
   const appKey = sdk.appKey()
   const thumbnailScanner = new ThumbnailScanner()
   let connected = true
-
-  const hasMockAdapters = options?.fsIO || options?.thumbnail
-  const tempDir = hasMockAdapters
-    ? ''
-    : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
+  let suspended = false
+  let background = false
+  const suspensionQueue = new CoalescingQueue()
 
   const secrets = createInMemoryStorage()
   const crypto = options?.crypto ?? {
@@ -271,7 +342,7 @@ export function createTestApp(
     tempDir,
 
     async start() {
-      await runMigrations(db, sortMigrations(coreMigrations))
+      await testDb.open()
       await appService.optimize()
       internal.setSdk(testSdkAdapter)
       appService.connection.setState({ isConnected: true })
@@ -289,12 +360,14 @@ export function createTestApp(
       thumbnailScanner.reset()
       await scheduler.shutdown()
       await new Promise((r) => setTimeout(r, 100))
-      db.close()
-      if (tempDir) {
-        try {
-          nodeFs.rmSync(tempDir, { recursive: true })
-        } catch {
-          // ignore cleanup errors
+      testDb.close()
+      for (const dir of [tempDir, dbDir]) {
+        if (dir) {
+          try {
+            nodeFs.rmSync(dir, { recursive: true })
+          } catch {
+            // ignore cleanup errors
+          }
         }
       }
     },
@@ -305,6 +378,55 @@ export function createTestApp(
 
     resume() {
       scheduler.resume()
+    },
+
+    async suspend() {
+      return suspensionQueue.enqueue(async () => {
+        if (suspended) return
+        scheduler.pause()
+        await uploadManager.suspend()
+        await scheduler.waitForIdle()
+        testDb.close()
+        suspended = true
+      })
+    },
+
+    async resumeFromSuspension() {
+      return suspensionQueue.enqueue(async () => {
+        if (!suspended) {
+          uploadManager.adjustBatchForSuspension()
+          return
+        }
+        await testDb.open()
+        suspended = false
+        uploadManager.adjustBatchForSuspension()
+        uploadManager.resume()
+        scheduler.resume()
+      })
+    },
+
+    async suspendIfBackground() {
+      if (!background) return
+      return suspensionQueue.enqueue(async () => {
+        if (suspended) return
+        scheduler.pause()
+        await uploadManager.suspend()
+        await scheduler.waitForIdle()
+        testDb.close()
+        suspended = true
+      })
+    },
+
+    isSuspended() {
+      return suspended
+    },
+
+    get isBackground() {
+      return background
+    },
+
+    set isBackground(value: boolean) {
+      background = value
     },
 
     triggerSyncDown() {

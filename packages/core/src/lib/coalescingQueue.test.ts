@@ -111,6 +111,39 @@ describe('CoalescingQueue', () => {
     expect(executed).toEqual(['error', 'after-error'])
   })
 
+  it('pending resolvers resolve even when the pending operation throws', async () => {
+    const queue = new CoalescingQueue()
+    const executed: string[] = []
+
+    let resolveFirst!: () => void
+    const firstBlocking = new Promise<void>((r) => {
+      resolveFirst = r
+    })
+
+    const first = queue.enqueue(async () => {
+      executed.push('first')
+      await firstBlocking
+    })
+
+    // This gets discarded
+    const discarded = queue.enqueue(async () => {
+      executed.push('discarded')
+    })
+
+    // This replaces the above and will throw
+    const failing = queue.enqueue(async () => {
+      executed.push('failing')
+      throw new Error('boom')
+    })
+
+    resolveFirst()
+
+    // All promises should resolve (failing's error is caught)
+    await Promise.all([first, discarded, failing.catch(() => {})])
+
+    expect(executed).toEqual(['first', 'failing'])
+  })
+
   it('new operations after queue drains run immediately', async () => {
     const queue = new CoalescingQueue()
     const executed: string[] = []

@@ -49,7 +49,9 @@ export class CoalescingQueue {
           const resolvers = this.pendingResolvers
           this.pending = null
           this.pendingResolvers = []
-          await this.run(next)
+          // Errors from the pending operation should not propagate
+          // to the caller of the operation that just completed.
+          await this.run(next).catch(() => {})
           for (const resolve of resolvers) {
             resolve()
           }
