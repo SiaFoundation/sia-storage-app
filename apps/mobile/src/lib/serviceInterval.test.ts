@@ -3,8 +3,12 @@ jest.mock('@siastorage/logger', () => ({
 }))
 
 import {
+  abortAllServiceIntervals,
   createServiceInterval,
+  pauseAllServiceIntervals,
+  resumeAllServiceIntervals,
   shutdownAllServiceIntervals,
+  waitForAllServiceIntervalsIdle,
 } from '@siastorage/core/lib/serviceInterval'
 
 beforeEach(async () => {
@@ -153,4 +157,119 @@ test('triggerNow is a noop while worker is running', async () => {
   triggerNow()
   await jest.advanceTimersByTimeAsync(0)
   expect(callCount).toBe(2)
+
+  resolveWork!()
+  await shutdownAllServiceIntervals()
+})
+
+test('waitForIdle resolves immediately when no workers are running', async () => {
+  await waitForAllServiceIntervalsIdle()
+})
+
+test('waitForIdle waits for in-flight worker without aborting', async () => {
+  let resolveWork: (() => void) | null = null
+  let workerRan = false
+
+  const { init } = createServiceInterval({
+    name: 'idleTest',
+    worker: async () => {
+      workerRan = true
+      await new Promise<void>((r) => {
+        resolveWork = r
+      })
+    },
+    interval: 100,
+  })
+
+  init()
+  await jest.advanceTimersByTimeAsync(100)
+  expect(workerRan).toBe(true)
+
+  let idleDone = false
+  const idlePromise = waitForAllServiceIntervalsIdle().then(() => {
+    idleDone = true
+  })
+
+  await jest.advanceTimersByTimeAsync(0)
+  expect(idleDone).toBe(false)
+
+  resolveWork!()
+  await jest.advanceTimersByTimeAsync(0)
+  await idlePromise
+  expect(idleDone).toBe(true)
+})
+
+test('pause then waitForIdle then resume', async () => {
+  const ticks: number[] = []
+  let resolveWork: (() => void) | null = null
+
+  const { init } = createServiceInterval({
+    name: 'pauseIdleTest',
+    worker: async () => {
+      ticks.push(ticks.length + 1)
+      await new Promise<void>((r) => {
+        resolveWork = r
+      })
+    },
+    interval: 100,
+  })
+
+  init()
+  await jest.advanceTimersByTimeAsync(100)
+  expect(ticks).toEqual([1])
+
+  pauseAllServiceIntervals()
+
+  resolveWork!()
+  await jest.advanceTimersByTimeAsync(0)
+  await waitForAllServiceIntervalsIdle()
+
+  // Paused — advancing time should not trigger another tick
+  await jest.advanceTimersByTimeAsync(500)
+  expect(ticks).toEqual([1])
+
+  resumeAllServiceIntervals()
+  await jest.advanceTimersByTimeAsync(100)
+  expect(ticks).toEqual([1, 2])
+
+  resolveWork!()
+  await shutdownAllServiceIntervals()
+})
+
+test('abortAll aborts in-flight worker and provides fresh signal on next tick', async () => {
+  let signalAborted = false
+  let tickCount = 0
+  let resolveWork: (() => void) | null = null
+
+  const { init } = createServiceInterval({
+    name: 'abortTest',
+    worker: async (signal) => {
+      tickCount++
+      signalAborted = signal.aborted
+      await new Promise<void>((r) => {
+        resolveWork = r
+      })
+    },
+    interval: 100,
+  })
+
+  init()
+  await jest.advanceTimersByTimeAsync(100)
+  expect(tickCount).toBe(1)
+  expect(signalAborted).toBe(false)
+
+  // Abort while worker is in-flight.
+  abortAllServiceIntervals()
+
+  // Complete the worker so the tick finishes.
+  resolveWork!()
+  await jest.advanceTimersByTimeAsync(0)
+
+  // Next tick should get a fresh (non-aborted) signal.
+  await jest.advanceTimersByTimeAsync(100)
+  expect(tickCount).toBe(2)
+  expect(signalAborted).toBe(false)
+
+  resolveWork!()
+  await shutdownAllServiceIntervals()
 })
