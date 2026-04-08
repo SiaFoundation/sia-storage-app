@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.9.3 (2026-04-08)
+
+### Fixes
+
+- Fixed iOS killing the app when backgrounded by closing the database connection before suspension to release SQLite WAL file locks.
+- Raised general indexer connection timeouts to 20 seconds and registration timeout to 60 seconds to accommodate slower indexer cold starts.
+
 ## 1.9.2 (2026-04-07)
 
 ### Fixes
