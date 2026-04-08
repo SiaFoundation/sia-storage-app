@@ -369,20 +369,27 @@ export class UploadManager {
     this.wake()
   }
 
+  /** Cached promise so multiple suspend() calls return the same promise
+   * instead of overwriting _parkedResolve and leaving earlier callers hanging. */
+  private _suspendPromise: Promise<void> | null = null
+
   suspend(): Promise<void> {
+    if (this._suspendPromise) return this._suspendPromise
     logger.info('uploadManager', 'suspending')
     this._suspended = true
     this.wake()
     if (!this.active) return Promise.resolve()
-    return new Promise<void>((resolve) => {
+    this._suspendPromise = new Promise<void>((resolve) => {
       this._parkedResolve = resolve
     })
+    return this._suspendPromise
   }
 
   resume(): void {
     if (!this._suspended) return
     logger.info('uploadManager', 'resuming')
     this._suspended = false
+    this._suspendPromise = null // Allow future suspend() calls to create a new promise.
     if (this._resumeResolve) {
       this._resumeResolve()
       this._resumeResolve = null

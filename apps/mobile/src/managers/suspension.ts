@@ -26,6 +26,7 @@ let state: State = 'active'
 const queue = new CoalescingQueue()
 
 export function initSuspensionManager(): void {
+  if (subscription) return
   logger.info('suspension', 'init', { state: appStateRef })
   subscription = AppState.addEventListener('change', onAppStateChange)
 }
