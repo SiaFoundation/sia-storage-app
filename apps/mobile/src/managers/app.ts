@@ -20,6 +20,7 @@ import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
+import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
 import { resetPhotosArchiveCursor } from './syncPhotosArchive'
@@ -68,8 +69,8 @@ export async function initApp(): Promise<void> {
             updateDetail(event.message)
           },
         })
-        await initLogger()
         await app().optimize()
+        await initLogger()
       },
     },
   ]
@@ -130,6 +131,7 @@ export async function initApp(): Promise<void> {
   const success = await runSteps(steps)
   if (success) {
     endInitState()
+    initSuspensionManager()
   }
 }
 
@@ -141,6 +143,7 @@ async function cancelAllTransfers() {
 }
 
 export async function shutdownApp() {
+  teardownSuspensionManager()
   await cancelAllTransfers()
 }
 

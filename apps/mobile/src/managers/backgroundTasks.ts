@@ -9,6 +9,11 @@ import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
+import {
+  getIsSuspended,
+  resumeFromSuspension,
+  suspendForBackground,
+} from './suspension'
 import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -95,6 +100,12 @@ export function getIsBackgroundTaskRunning(): boolean {
   return Object.values(taskStates).some((s) => s.status === 'running')
 }
 
+function hasOtherRunningTasks(excludeId: TaskId): boolean {
+  return Object.entries(taskStates).some(
+    ([id, s]) => id !== excludeId && s.status === 'running',
+  )
+}
+
 function createFreshTaskState(): TaskState {
   return {
     startTime: 0,
@@ -152,6 +163,15 @@ export async function initBackgroundTasks() {
       transitionTaskState(state, 'running')
       await runBackgroundWork(config, state)
       transitionTaskState(state, 'finished')
+      // Only re-suspend if the app is still in background.
+      // If the user opened the app during the task, skip — the
+      // AppState listener will handle suspension on next background.
+      if (
+        !hasOtherRunningTasks(config.id) &&
+        AppState.currentState !== 'active'
+      ) {
+        await suspendForBackground()
+      }
       BackgroundFetch.finish(config.id)
     },
     (taskId: string) => {
@@ -246,6 +266,12 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // Create instance-based cancellable delay for this invocation
   const { delay: delayFn, abort } = createBackgroundDelay()
   state.abort = abort
+
+  const wasSuspended = getIsSuspended()
+  if (wasSuspended) {
+    log('resuming_from_suspension')
+    await resumeFromSuspension()
+  }
 
   // Check if user has onboarded - if not, there's nothing to do
   const hasOnboarded = await app().settings.getHasOnboarded()

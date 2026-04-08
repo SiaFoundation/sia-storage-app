@@ -7,17 +7,10 @@ import {
 import { AppProvider } from '@siastorage/core/app'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
-import { logger } from '@siastorage/logger'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
-import { useEffect, useRef } from 'react'
-import {
-  AppState,
-  type AppStateStatus,
-  Platform,
-  StatusBar,
-  StyleSheet,
-} from 'react-native'
+import { useEffect } from 'react'
+import { Platform, StatusBar, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AppSplash } from './components/AppSplash'
@@ -42,32 +35,11 @@ const darkNavigationTheme = {
 }
 
 export function Root() {
-  // Track the previous AppState for logging transitions.
-  const appStateRef = useRef(AppState.currentState)
-
   useEffect(() => {
     initApp()
     return () => {
       shutdownApp()
     }
-  }, [])
-
-  // Log AppState changes.
-  useEffect(() => {
-    logger.info('appState', 'initial_state', { state: appStateRef.current })
-
-    const subscription = AppState.addEventListener(
-      'change',
-      (nextAppState: AppStateStatus) => {
-        logger.info('appState', 'state_changed', {
-          from: appStateRef.current,
-          to: nextAppState,
-        })
-        appStateRef.current = nextAppState
-      },
-    )
-
-    return () => subscription.remove()
   }, [])
 
   useEffect(() => {
