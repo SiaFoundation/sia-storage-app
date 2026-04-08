@@ -33,6 +33,12 @@ export async function initLogger(): Promise<void> {
   hasInit = true
 }
 
+/** Re-register the log appender after suspension without re-reading
+ * settings. initLogger() can't be reused due to its hasInit guard. */
+export function resumeLogger(): void {
+  setLogAppender(appendLogsToDb)
+}
+
 export function useAvailableScopes() {
   return useSWR(cache.key('availableScopes'), () =>
     app().logs.availableScopes(),

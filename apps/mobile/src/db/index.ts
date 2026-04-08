@@ -14,15 +14,26 @@ export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
   databaseName?: string
+  /** Bypass expo-sqlite connection cache when reopening after suspension. */
+  reopen?: boolean
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
   dbName = name
-  logger.info('db', 'initializing', { name, directory: dbDirectory })
-  database = await SQLite.openDatabaseAsync(name, undefined, dbDirectory)
-  await db().execAsync(
+  // Clear the cached proxy so db() creates a fresh one bound to the new connection.
+  _dbProxy = null
+  const openOptions = options?.reopen ? { useNewConnection: true } : undefined
+  logger.info('db', 'initializing', {
+    name,
+    directory: dbDirectory,
+    reopen: !!options?.reopen,
+  })
+  database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
+  // Use database directly (not the db() proxy) to avoid triggering
+  // withRecovery during init, which would open a competing connection.
+  await database.execAsync(
     'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
   )
-  await runMigrations(db(), migrations, {
+  await runMigrations(database, migrations, {
     log: logger,
     onProgress: options?.onProgress,
   })
@@ -31,16 +42,18 @@ export async function initializeDB(options?: {
 }
 
 /**
- * Detects expo-sqlite Android NullPointerException where the native
- * database handle becomes invalid while operations are still in flight.
- * The exact cause is unconfirmed — possibly related to SharedObject
- * lifecycle or native resource management on Android.
+ * Detects errors from an invalidated native database handle:
+ * - Android NullPointerException: SharedObject lifecycle issue.
+ * - "Access to closed resource": DB was closed for background suspension
+ *   while a query was in-flight (e.g., from a SWR React hook).
+ * In both cases, reopening the connection and retrying resolves it.
  */
 function isNativeHandleError(error: unknown): boolean {
   return (
     error instanceof Error &&
     error.message.includes('has been rejected') &&
-    error.message.includes('NullPointerException')
+    (error.message.includes('NullPointerException') ||
+      error.message.includes('closed resource'))
   )
 }
 
@@ -92,8 +105,12 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
   } catch (error) {
-    if (isNativeHandleError(error) && (await reopenDb())) {
-      return await fn()
+    if (isNativeHandleError(error)) {
+      // If the DB was already reopened by the suspension manager,
+      // just retry against the current connection.
+      if (dbInitialized || (await reopenDb())) {
+        return await fn()
+      }
     }
     throw error
   }
@@ -125,8 +142,15 @@ export async function resetDb() {
     }
     try {
       await SQLite.deleteDatabaseAsync(dbName, dbDirectory)
-    } catch {
-      // Database may not exist at this path (e.g. upgrading from pre-app-group location).
+    } catch (e) {
+      // TODO: Remove after all users have upgraded past v1.9 (app group migration).
+      // Ignore "not found" on upgrade from pre-app-group location.
+      // Re-throw other errors so reset failures aren't silently swallowed.
+      if (e instanceof Error && e.message.includes('not found')) {
+        // Expected on first upgrade — DB was at old location.
+      } else {
+        throw e
+      }
     }
     database = await SQLite.openDatabaseAsync(
       dbName,
