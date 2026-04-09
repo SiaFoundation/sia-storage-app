@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Sia Storage will be documented in this file.
+## 1.9.4 (2026-04-09)
+
+### Fixes
+
+- Updated iOS permission purpose strings with detailed descriptions and concrete examples to comply with App Store Guideline 5.1.1(i). Removed unused photo library write permission.
+
 ## 1.9.3 (2026-04-08)
 
 ### Fixes
