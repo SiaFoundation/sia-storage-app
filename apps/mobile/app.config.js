@@ -33,13 +33,11 @@ export default {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSPhotoLibraryUsageDescription:
-          'Allow $(PRODUCT_NAME) to access your photo library to select and upload photos.',
-        NSPhotoLibraryAddUsageDescription:
-          'Allow $(PRODUCT_NAME) to save images to your photo library.',
+          'Photos and videos from your library are uploaded to your Sia decentralized cloud storage. For example, you can select photos to back up manually, or enable automatic sync to continuously back up new photos as you take them.',
         NSCameraUsageDescription:
-          'Allow $(PRODUCT_NAME) to use the camera to take photos and videos.',
+          'Capture photos and videos to upload directly to your Sia cloud storage. For example, take a photo of a document to immediately back it up for safekeeping.',
         NSMicrophoneUsageDescription:
-          'Allow $(PRODUCT_NAME) to use the microphone to record audio with videos.',
+          'The microphone captures audio when you record videos with the camera. For example, when you record a video to upload to Sia, the audio is preserved alongside the video.',
         UIBackgroundModes: ['fetch', 'processing'],
         BGTaskSchedulerPermittedIdentifiers: [
           'com.transistorsoft.fetch',
