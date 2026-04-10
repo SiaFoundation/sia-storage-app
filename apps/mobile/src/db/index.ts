@@ -7,6 +7,77 @@ import * as SQLite from 'expo-sqlite'
 import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
 
+// Thrown by the adapter when a query is attempted while the database is
+// suspending or closed. SWR hooks and other callers see this instead of
+// "Access to closed resource", and withRecovery knows not to reopen.
+export class DatabaseSuspendedError extends Error {
+  constructor() {
+    super('Database is suspended for background transition')
+    this.name = 'DatabaseSuspendedError'
+  }
+}
+
+// Suspension lifecycle state (separate from dbInitialized).
+// - 'active':     queries flow normally through the adapter.
+// - 'suspending': new queries are rejected instantly; in-flight queries drain.
+// - 'closed':     database handle is closed, WAL lock released.
+//
+// This prevents iOS 0xdead10cc kills by ensuring no SQLite operations are
+// dispatched to expo-sqlite's native GCD queue during background suspension.
+// Without this gate, SWR hooks and other callers keep dispatching queries
+// that race with closeAsync() on the same concurrent native queue.
+type DbState = 'active' | 'suspending' | 'closed'
+
+let state: DbState = 'active'
+
+// Tracks how many queries are currently dispatched to native but haven't
+// resolved yet. The suspension manager waits for this to hit 0 before
+// closing the database, ensuring no in-progress queries hold the WAL lock.
+let inflightCount = 0
+let idleResolvers: Array<() => void> = []
+
+function trackStart(): void {
+  inflightCount++
+}
+
+function trackEnd(): void {
+  inflightCount--
+  if (inflightCount === 0) {
+    const resolvers = idleResolvers
+    idleResolvers = []
+    for (const r of resolvers) r()
+  }
+}
+
+export function getDbState(): DbState {
+  return state
+}
+
+// Called by the suspension manager as the first step when the app backgrounds.
+// After this, any new query through db() rejects immediately.
+export function suspendDb(): void {
+  state = 'suspending'
+  logger.debug('db', 'suspended')
+}
+
+// Called by the suspension manager after initializeDB({ reopen: true })
+// succeeds, so queries flow to a valid connection.
+export function resumeDb(): void {
+  state = 'active'
+  inflightCount = 0
+  idleResolvers = []
+  logger.debug('db', 'resumed')
+}
+
+// Resolves when all in-flight queries have completed. Used by the suspension
+// manager to wait for the native GCD queue to drain before closing.
+export function waitForQueriesIdle(): Promise<void> {
+  if (inflightCount === 0) return Promise.resolve()
+  return new Promise<void>((r) => {
+    idleResolvers.push(r)
+  })
+}
+
 export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
 let dbName = 'app.db'
@@ -20,6 +91,15 @@ export async function initializeDB(options?: {
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
   dbName = name
+  // Close any existing connection before opening a new one. Without this,
+  // a suspend → resume (reopen=true) → full reinit (reopen=false) sequence
+  // leaks the intermediate connection, and expo-sqlite refuses to delete
+  // the database file while any connection is open.
+  if (database) {
+    try {
+      await database.closeAsync()
+    } catch {}
+  }
   const openOptions = options?.reopen ? { useNewConnection: true } : undefined
   logger.info('db', 'initializing', {
     name,
@@ -99,6 +179,11 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
   } catch (error) {
+    // During suspension or close, never attempt to reopen — the close is
+    // intentional and reopening would fight the suspension manager.
+    if (error instanceof DatabaseSuspendedError || state !== 'active') {
+      throw error
+    }
     if (isNativeHandleError(error)) {
       // If the DB was already reopened by the suspension manager,
       // just retry against the current connection.
@@ -110,15 +195,28 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Close the database connection (for test cleanup). */
 export async function closeDb(): Promise<void> {
   if (database && dbInitialized) {
+    // Set these BEFORE any async work so that withRecovery — which may be
+    // triggered by racing queries — sees the closed state and doesn't reopen.
+    dbInitialized = false
+    state = 'closed'
+    try {
+      // Zero the busy timeout so any straggler query blocked on the SQLite
+      // mutex fails immediately instead of waiting up to 5 seconds.
+      await database.execAsync('PRAGMA busy_timeout = 0')
+      // Flush WAL pages to the main database file and truncate the WAL.
+      // This releases the WAL file lock — the actual cause of 0xdead10cc —
+      // even if closeAsync() subsequently fails.
+      await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE)')
+    } catch (e) {
+      logger.debug('db', 'pre_close_pragma_error', { error: e as Error })
+    }
     try {
       await database.closeAsync()
     } catch (e) {
       logger.debug('db', 'close_error', { error: e as Error })
     }
-    dbInitialized = false
   }
 }
 
@@ -126,8 +224,14 @@ const txMutex = new Mutex()
 
 // Delete the database and start fresh. Closes the existing connection,
 // removes the DB file, and reopens so migrations can run on next init.
+// Also resets the suspension state machine — resetDb is only called from
+// the foreground (settings reset button / forced reset on boot), so the
+// suspension state should always be active afterward.
 export async function resetDb() {
   dbInitialized = false
+  state = 'active'
+  inflightCount = 0
+  idleResolvers = []
   const release = await txMutex.acquire()
   try {
     if (database) {
@@ -164,6 +268,13 @@ export async function resetDb() {
 // so connection swaps from initializeDB/resetDb/reopenDb are transparent.
 class MobileDbAdapter implements DatabaseAdapter {
   private query<T>(method: string, args: unknown[]): Promise<T> {
+    // Gate: reject queries while suspending or closed. This is the key
+    // mechanism that prevents SWR hooks from dispatching work to the
+    // native GCD queue during background suspension.
+    if (state !== 'active') return Promise.reject(new DatabaseSuspendedError())
+    // Track in-flight count so the suspension manager can wait for all
+    // dispatched queries to drain before closing the database.
+    trackStart()
     return withRecovery(async () => {
       const start = performance.now()
       const result = await (database as any)[method](...args)
@@ -177,7 +288,7 @@ class MobileDbAdapter implements DatabaseAdapter {
         })
       }
       return result
-    })
+    }).finally(trackEnd)
   }
 
   getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
@@ -197,7 +308,11 @@ class MobileDbAdapter implements DatabaseAdapter {
   }
 
   withTransactionAsync(fn: () => Promise<void>): Promise<void> {
-    return txMutex.runExclusive(() => withRecovery(() => database.withTransactionAsync(fn)))
+    if (state !== 'active') return Promise.reject(new DatabaseSuspendedError())
+    trackStart()
+    return txMutex
+      .runExclusive(() => withRecovery(() => database.withTransactionAsync(fn)))
+      .finally(trackEnd)
   }
 }
 
