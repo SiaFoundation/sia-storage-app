@@ -8,7 +8,14 @@ import {
 import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
-import { closeDb, dbInitialized, initializeDB } from '../db'
+import {
+  closeDb,
+  dbInitialized,
+  initializeDB,
+  resumeDb,
+  suspendDb,
+  waitForQueriesIdle,
+} from '../db'
 import { resumeLogger } from '../stores/logs'
 import { getIsBackgroundTaskRunning } from './backgroundTasks'
 import { getUploadManager } from './uploader'
@@ -76,6 +83,14 @@ async function doSuspend(): Promise<void> {
   await BackgroundTimer.start(0)
 
   try {
+    // Phase 0: Flush logs while the DB adapter is still open, then gate
+    // all new queries. After suspendDb(), any query from SWR hooks or
+    // other callers throws DatabaseSuspendedError instantly without
+    // reaching the native GCD queue.
+    await stopLogAppender()
+    suspendDb()
+    logger.debug('suspension', 'db_gated')
+
     // Phase 1: Signal all services to stop.
     // pause prevents new ticks, abort signals in-flight workers to exit
     // at their next signal.aborted check.
@@ -84,10 +99,11 @@ async function doSuspend(): Promise<void> {
     await getUploadManager()?.suspend()
     logger.debug('suspension', 'services_paused')
 
-    // Phase 2: Wait for in-flight work to finish, with a hard deadline.
+    // Phase 2: Wait for in-flight work AND in-flight DB queries to
+    // finish, with a hard deadline.
     const drainStart = Date.now()
     const drained = await Promise.race([
-      waitForAllServiceIntervalsIdle().then(() => true),
+      Promise.all([waitForAllServiceIntervalsIdle(), waitForQueriesIdle()]).then(() => true),
       new Promise<false>((r) => setTimeout(() => r(false), HARD_DEADLINE_MS)),
     ])
 
@@ -101,12 +117,13 @@ async function doSuspend(): Promise<void> {
       })
     }
 
-    // Phase 3: Close DB to release WAL file lock.
-    await stopLogAppender()
+    // Phase 3: Checkpoint WAL to release file locks, then close.
     await closeDb()
     state = 'suspended'
   } catch (e) {
     logger.error('suspension', 'suspend_error', { error: e as Error })
+    // Lift the query gate so the app remains usable if it comes back.
+    resumeDb()
     state = 'active'
   } finally {
     BackgroundTimer.stop()
@@ -130,6 +147,9 @@ async function doResume(): Promise<void> {
     return
   }
 
+  // Lift the query gate AFTER the new connection is ready, so queries
+  // flow to a valid database handle.
+  resumeDb()
   resumeLogger()
   logger.debug('suspension', 'db_reopened')
 
