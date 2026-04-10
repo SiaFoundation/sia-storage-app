@@ -1,3 +1,4 @@
+import type { DatabaseAdapter, SQLParam, SQLRunResult } from '@siastorage/core/adapters'
 import type { MigrationProgressHandler } from '@siastorage/core/db'
 import { runMigrations } from '@siastorage/core/db'
 import { Mutex } from '@siastorage/core/lib/mutex'
@@ -19,8 +20,6 @@ export async function initializeDB(options?: {
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
   dbName = name
-  // Clear the cached proxy so db() creates a fresh one bound to the new connection.
-  _dbProxy = null
   const openOptions = options?.reopen ? { useNewConnection: true } : undefined
   logger.info('db', 'initializing', {
     name,
@@ -28,7 +27,7 @@ export async function initializeDB(options?: {
     reopen: !!options?.reopen,
   })
   database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
-  // Use database directly (not the db() proxy) to avoid triggering
+  // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
   await database.execAsync(
     'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
@@ -123,13 +122,14 @@ export async function closeDb(): Promise<void> {
   }
 }
 
+const txMutex = new Mutex()
+
 // Delete the database and start fresh. Closes the existing connection,
 // removes the DB file, and reopens so migrations can run on next init.
 export async function resetDb() {
   dbInitialized = false
   const release = await txMutex.acquire()
   try {
-    _dbProxy = null
     if (database) {
       try {
         await database.closeAsync()
@@ -158,62 +158,51 @@ export async function resetDb() {
   }
 }
 
-const RECOVERY_METHODS = new Set([
-  'getAllAsync',
-  'getFirstAsync',
-  'getEachAsync',
-  'runAsync',
-  'execAsync',
-  'prepareAsync',
-])
-
-let _dbProxy: SQLite.SQLiteDatabase | null = null
-
-const txMutex = new Mutex()
-
-/**
- * Returns a proxy around the current database connection that automatically
- * retries operations on native handle invalidation (Android NPE).
- * All async query/exec methods are wrapped with recovery.
- * `withTransactionAsync` is wrapped with mutex serialization + recovery
- * so all code paths (including core operations) get these guarantees.
- */
-export function db(): SQLite.SQLiteDatabase {
-  if (!_dbProxy) {
-    _dbProxy = new Proxy({} as SQLite.SQLiteDatabase, {
-      get(_, prop) {
-        if (prop === 'withTransactionAsync') {
-          return (fn: () => Promise<void>) =>
-            txMutex.runExclusive(() =>
-              withRecovery(async () => {
-                await database.withTransactionAsync(fn)
-              }),
-            )
-        }
-        const value = (database as any)[prop]
-        if (typeof prop === 'string' && RECOVERY_METHODS.has(prop)) {
-          return (...args: unknown[]) =>
-            withRecovery(async () => {
-              const start = performance.now()
-              const result = await (database as any)[prop](...args)
-              const duration = performance.now() - start
-              const sql = typeof args[0] === 'string' ? args[0] : undefined
-              if (duration > 500 && !sql?.startsWith('INSERT INTO logs')) {
-                logger.warn('db', 'slow_query', {
-                  method: prop,
-                  duration: Math.round(duration),
-                  sql,
-                })
-              }
-              return result
-            })
-        }
-        if (typeof value === 'function') {
-          return value.bind(database)
-        }
-        return value
-      },
+// Wraps the raw expo-sqlite connection with recovery (automatic reopen on
+// native handle invalidation), transaction mutex serialization, and slow
+// query logging. Reads the module-level `database` variable on every call,
+// so connection swaps from initializeDB/resetDb/reopenDb are transparent.
+class MobileDbAdapter implements DatabaseAdapter {
+  private query<T>(method: string, args: unknown[]): Promise<T> {
+    return withRecovery(async () => {
+      const start = performance.now()
+      const result = await (database as any)[method](...args)
+      const duration = performance.now() - start
+      const sql = typeof args[0] === 'string' ? args[0] : undefined
+      if (duration > 500 && !sql?.startsWith('INSERT INTO logs')) {
+        logger.warn('db', 'slow_query', {
+          method,
+          duration: Math.round(duration),
+          sql,
+        })
+      }
+      return result
     })
   }
-  return _dbProxy
+
+  getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
+    return this.query('getAllAsync', [sql, ...params])
+  }
+
+  getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
+    return this.query('getFirstAsync', [sql, ...params])
+  }
+
+  runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult> {
+    return this.query('runAsync', [sql, ...params])
+  }
+
+  execAsync(sql: string): Promise<void> {
+    return this.query('execAsync', [sql])
+  }
+
+  withTransactionAsync(fn: () => Promise<void>): Promise<void> {
+    return txMutex.runExclusive(() => withRecovery(() => database.withTransactionAsync(fn)))
+  }
+}
+
+const adapter = new MobileDbAdapter()
+
+export function db(): DatabaseAdapter {
+  return adapter
 }
