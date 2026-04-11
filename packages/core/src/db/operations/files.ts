@@ -1,12 +1,12 @@
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
-import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
+import type { LocalObject, LocalObjectRow, LocalObjectWithSlabs } from '../../encoding/localObject'
 import { localObjectFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { buildActiveFileFilter, buildActiveFilter } from './library'
-import { insertObject, queryObjectsForFile } from './localObjects'
+import { insertObject, queryObjectMetasForFile, queryObjectsForFileWithSlabs } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 
 export async function recalculateCurrentForGroup(
@@ -125,8 +125,11 @@ export async function queryFilesByObjectIds(
   return result
 }
 
-export function transformRow(row: FileRecordRow, objects?: LocalObject[]): FileRecord {
-  const objectsMap: Record<string, LocalObject> = {}
+export function transformRow<T extends LocalObject = LocalObject>(
+  row: FileRecordRow,
+  objects?: T[],
+): FileRecordRow & { objects: Record<string, T> } {
+  const objectsMap: Record<string, T> = {}
   for (const o of objects || []) {
     objectsMap[o.indexerURL] = o
   }
@@ -340,7 +343,7 @@ export async function queryFiles(db: DatabaseAdapter, opts: FileQueryOpts): Prom
       }
   >(
     `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
-            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
+            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
             o.metadataSignature as metadataSignature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
@@ -594,7 +597,17 @@ export async function deleteAllFiles(db: DatabaseAdapter): Promise<void> {
 export async function readFile(db: DatabaseAdapter, id: string): Promise<FileRecord | null> {
   const row = await queryFileById(db, id)
   if (!row) return null
-  const objects = await queryObjectsForFile(db, id)
+  const objects = await queryObjectMetasForFile(db, id)
+  return transformRow(row, objects)
+}
+
+export async function readFileWithSlabs(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<(FileRecordRow & { objects: Record<string, LocalObjectWithSlabs> }) | null> {
+  const row = await queryFileById(db, id)
+  if (!row) return null
+  const objects = await queryObjectsForFileWithSlabs(db, id)
   return transformRow(row, objects)
 }
 
@@ -605,7 +618,7 @@ export async function readFileByObjectId(
 ): Promise<FileRecord | null> {
   const row = await queryFileByObjectId(db, objectId, indexerURL)
   if (!row) return null
-  const objects = await queryObjectsForFile(db, row.id)
+  const objects = await queryObjectMetasForFile(db, row.id)
   return transformRow(row, objects)
 }
 
@@ -615,7 +628,7 @@ export async function readFileByContentHash(
 ): Promise<FileRecord | null> {
   const row = await queryFileByContentHash(db, hash)
   if (!row) return null
-  const objects = await queryObjectsForFile(db, row.id)
+  const objects = await queryObjectMetasForFile(db, row.id)
   return transformRow(row, objects)
 }
 
@@ -661,7 +674,7 @@ export async function queryLocalOnlyFiles(
 export async function createFileWithLocalObject(
   db: DatabaseAdapter,
   record: Omit<FileRecord, 'objects'>,
-  localObject: LocalObject,
+  localObject: LocalObjectWithSlabs,
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await insertFile(db, record)
@@ -672,7 +685,7 @@ export async function createFileWithLocalObject(
 export async function updateFileWithLocalObject(
   db: DatabaseAdapter,
   update: Partial<FileRecordRow> & { id: string },
-  localObject: LocalObject,
+  localObject: LocalObjectWithSlabs,
   options?: { includeUpdatedAt?: boolean },
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
@@ -756,7 +769,7 @@ export async function readFilesByIds(db: DatabaseAdapter, ids: string[]): Promis
       }
   >(
     `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
-            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId, o.slabs as slabs,
+            o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId,
             o.encryptedDataKey as encryptedDataKey, o.encryptedMetadataKey as encryptedMetadataKey,
             o.encryptedMetadata as encryptedMetadata, o.dataSignature as dataSignature,
             o.metadataSignature as metadataSignature, o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
@@ -939,7 +952,7 @@ export async function readFileByName(
 ): Promise<FileRecord | null> {
   const row = await queryFileByName(db, name)
   if (!row) return null
-  const objects = await queryObjectsForFile(db, row.id)
+  const objects = await queryObjectMetasForFile(db, row.id)
   return transformRow(row, objects)
 }
 

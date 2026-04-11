@@ -1,27 +1,26 @@
-import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { PinnedObject, type PinnedObjectInterface } from 'react-native-sia'
 import useSWR from 'swr'
 import { getAppKeyForIndexer } from '../stores/appKey'
+import { app } from '../stores/appService'
 
-export function usePinnedObjects(file: FileRecord) {
+export function usePinnedObjects(fileId: string) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(
-    ['pinnedObjects', file.id],
+    ['pinnedObjects', fileId],
     async () => {
-      const objects = Object.entries(file.objects)
+      const objects = await app().localObjects.getForFileWithSlabs(fileId)
       const results = await Promise.all(
-        objects.map(async ([indexerURL, so]) => {
-          const appKey = await getAppKeyForIndexer(indexerURL)
+        objects.map(async (so) => {
+          const appKey = await getAppKeyForIndexer(so.indexerURL)
           if (!appKey) {
-            // TODO: Figure out how to handle this situation.
             logger.warn('usePinnedObjects', 'no_app_key', {
-              fileId: file.id,
-              indexerURL,
+              fileId,
+              indexerURL: so.indexerURL,
             })
             return null
           }
           return {
-            indexerURL,
+            indexerURL: so.indexerURL,
             pinnedObject: PinnedObject.open(appKey, so),
           }
         }),

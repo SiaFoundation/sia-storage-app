@@ -1,5 +1,5 @@
 import { daysInMs } from '@siastorage/core'
-import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { LocalObjectWithSlabs } from '@siastorage/core/encoding/localObject'
 import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
@@ -165,7 +165,7 @@ function makeLocalObject(params: {
   indexerURL: string
   createdAt: number
   updatedAt: number
-}): LocalObject {
+}): LocalObjectWithSlabs {
   return {
     id: params.objectId,
     fileId: params.fileId,

@@ -60,10 +60,10 @@ const localObjectStorageCodec = z.codec(
   },
 )
 
-export type LocalObject = ReturnType<typeof localObjectStorageCodec.decode>
-export type LocalObjectsMap = Record<string, LocalObject>
+export type LocalObjectWithSlabs = ReturnType<typeof localObjectStorageCodec.decode>
+export type LocalObject = Omit<LocalObjectWithSlabs, 'slabs'>
 
-export type LocalObjectRow = {
+export type LocalObjectRowWithSlabs = {
   id: string
   fileId: string
   indexerURL: string
@@ -77,7 +77,11 @@ export type LocalObjectRow = {
   updatedAt: number
 }
 
-export function localObjectToStorageRow(lo: LocalObject): LocalObjectRow {
+export type LocalObjectRow = Omit<LocalObjectRowWithSlabs, 'slabs'>
+
+export function localObjectWithSlabsToStorageRow(
+  lo: LocalObjectWithSlabs,
+): LocalObjectRowWithSlabs {
   const e = localObjectStorageCodec.encode({
     id: lo.id,
     fileId: lo.fileId,
@@ -106,7 +110,9 @@ export function localObjectToStorageRow(lo: LocalObject): LocalObjectRow {
   }
 }
 
-export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
+export function localObjectWithSlabsFromStorageRow(
+  row: LocalObjectRowWithSlabs,
+): LocalObjectWithSlabs {
   return localObjectStorageCodec.decode({
     id: row.id,
     fileId: row.fileId,
@@ -120,4 +126,19 @@ export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   })
+}
+
+export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
+  return {
+    id: row.id,
+    fileId: row.fileId,
+    indexerURL: row.indexerURL,
+    encryptedDataKey: hexArrayBufferCodec.decode(row.encryptedDataKey),
+    encryptedMetadataKey: hexArrayBufferCodec.decode(row.encryptedMetadataKey),
+    encryptedMetadata: hexArrayBufferCodec.decode(row.encryptedMetadata),
+    dataSignature: hexArrayBufferCodec.decode(row.dataSignature),
+    metadataSignature: hexArrayBufferCodec.decode(row.metadataSignature),
+    createdAt: isoToEpochCodec.decode(row.createdAt),
+    updatedAt: isoToEpochCodec.decode(row.updatedAt),
+  }
 }

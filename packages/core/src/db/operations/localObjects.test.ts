@@ -5,8 +5,10 @@ import {
   deleteObjectsForFile,
   deleteManyObjectsForFiles,
   insertObject,
-  queryObjectsForFile,
-  queryObjectsForFiles,
+  queryObjectMetasForFile,
+  queryObjectMetasForFiles,
+  queryObjectsForFileWithSlabs,
+  queryObjectsForFilesWithSlabs,
 } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
@@ -53,7 +55,7 @@ describe('insertObject', () => {
     const obj = makeLocalObject('f1', 'https://idx.example.com', 'obj1')
     await insertObject(db(), obj)
 
-    const results = await queryObjectsForFile(db(), 'f1')
+    const results = await queryObjectMetasForFile(db(), 'f1')
     expect(results).toHaveLength(1)
     expect(results[0].id).toBe('obj1')
     expect(results[0].fileId).toBe('f1')
@@ -61,39 +63,66 @@ describe('insertObject', () => {
   })
 })
 
-describe('queryObjectsForFile', () => {
-  it('returns objects for a file', async () => {
+describe('queryObjectMetasForFile', () => {
+  it('returns objects without slabs', async () => {
     await createTestFile('f1')
     await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
     await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
-    const results = await queryObjectsForFile(db(), 'f1')
+    const results = await queryObjectMetasForFile(db(), 'f1')
     expect(results).toHaveLength(2)
+    expect(results[0]).not.toHaveProperty('slabs')
+    expect(results[0].id).toBeDefined()
+    expect(results[0].encryptedDataKey).toBeInstanceOf(ArrayBuffer)
   })
 
   it('returns empty for non-existent file', async () => {
-    const results = await queryObjectsForFile(db(), 'nonexistent')
+    const results = await queryObjectMetasForFile(db(), 'nonexistent')
     expect(results).toEqual([])
   })
 })
 
-describe('queryObjectsForFiles', () => {
-  it('returns map keyed by fileId', async () => {
+describe('queryObjectsForFileWithSlabs', () => {
+  it('returns objects with slabs', async () => {
+    await createTestFile('f1')
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+
+    const results = await queryObjectsForFileWithSlabs(db(), 'f1')
+    expect(results).toHaveLength(1)
+    expect(results[0]).toHaveProperty('slabs')
+    expect(results[0].slabs).toEqual([])
+  })
+})
+
+describe('queryObjectMetasForFiles', () => {
+  it('returns map keyed by fileId without slabs', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
     await insertObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
 
-    const map = await queryObjectsForFiles(db(), ['f1', 'f2'])
+    const map = await queryObjectMetasForFiles(db(), ['f1', 'f2'])
     expect(map.f1).toHaveLength(1)
     expect(map.f1[0].id).toBe('obj1')
+    expect(map.f1[0]).not.toHaveProperty('slabs')
     expect(map.f2).toHaveLength(1)
     expect(map.f2[0].id).toBe('obj2')
   })
 
   it('returns empty object for empty input', async () => {
-    const map = await queryObjectsForFiles(db(), [])
+    const map = await queryObjectMetasForFiles(db(), [])
     expect(map).toEqual({})
+  })
+})
+
+describe('queryObjectsForFilesWithSlabs', () => {
+  it('returns map with slabs included', async () => {
+    await createTestFile('f1')
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+
+    const map = await queryObjectsForFilesWithSlabs(db(), ['f1'])
+    expect(map.f1).toHaveLength(1)
+    expect(map.f1[0]).toHaveProperty('slabs')
   })
 })
 
@@ -122,7 +151,7 @@ describe('deleteObject', () => {
 
     await deleteObject(db(), 'obj1', 'https://a.com')
 
-    const results = await queryObjectsForFile(db(), 'f1')
+    const results = await queryObjectMetasForFile(db(), 'f1')
     expect(results).toHaveLength(1)
     expect(results[0].id).toBe('obj2')
   })
@@ -136,7 +165,7 @@ describe('deleteObjectsForFile', () => {
 
     await deleteObjectsForFile(db(), 'f1')
 
-    const results = await queryObjectsForFile(db(), 'f1')
+    const results = await queryObjectMetasForFile(db(), 'f1')
     expect(results).toEqual([])
   })
 })
@@ -152,9 +181,9 @@ describe('deleteManyObjectsForFiles', () => {
 
     await deleteManyObjectsForFiles(db(), ['f1', 'f2'])
 
-    expect(await queryObjectsForFile(db(), 'f1')).toEqual([])
-    expect(await queryObjectsForFile(db(), 'f2')).toEqual([])
-    expect(await queryObjectsForFile(db(), 'f3')).toHaveLength(1)
+    expect(await queryObjectMetasForFile(db(), 'f1')).toEqual([])
+    expect(await queryObjectMetasForFile(db(), 'f2')).toEqual([])
+    expect(await queryObjectMetasForFile(db(), 'f3')).toHaveLength(1)
   })
 
   it('handles empty array', async () => {
