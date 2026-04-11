@@ -1,6 +1,11 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "paths": {
+      "@siastorage/core": ["../../packages/core/src/index.ts"],
+      "@siastorage/core/*": ["../../packages/core/src/*"],
+      "@siastorage/logger": ["../../packages/logger/src/index.ts"]
+    }
   }
 }

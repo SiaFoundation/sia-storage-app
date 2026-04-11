@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@siastorage/core": ["./packages/core/src/index.ts"],
+      "@siastorage/core/*": ["./packages/core/src/*"],
+      "@siastorage/logger": ["./packages/logger/src/index.ts"],
+      "@siastorage/node-adapters": ["./packages/node-adapters/src/index.ts"],
+      "@siastorage/node-adapters/*": ["./packages/node-adapters/src/*.ts"],
+      "@siastorage/sdk-mock": ["./packages/sdk-mock/src/index.ts"]
+    }
+  }
+}
