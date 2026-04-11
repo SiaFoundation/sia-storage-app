@@ -1,6 +1,7 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import { uniqueId } from '../../lib/uniqueId'
 import * as sql from '../sql'
+import { buildActiveFileFilter } from './library'
 
 export const SYSTEM_TAGS = {
   favorites: { id: 'sys:favorites', name: 'Favorites' },
@@ -111,7 +112,7 @@ export async function queryAllTagsWithCounts(db: DatabaseAdapter): Promise<TagWi
     `SELECT t.id, t.name, t.createdAt, t.usedAt, t.system, COUNT(f.id) as fileCount
      FROM tags t
      LEFT JOIN file_tags ft ON ft.tagId = t.id
-     LEFT JOIN files f ON f.id = ft.fileId AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+     LEFT JOIN files f ON f.id = ft.fileId AND ${buildActiveFileFilter('f')}
      GROUP BY t.id
      ORDER BY t.system DESC, t.name`,
   )
