@@ -178,12 +178,12 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       }),
     },
     {
-      name: 'trashFiles:1k',
+      name: 'trashFilesAndThumbnails:1k',
       category: 'write',
       run: async () => {
         const ids = Array.from({ length: 1000 }, (_, i) => `f-${i}`)
-        await ops.trashFiles(db, ids)
-        await ops.restoreFiles(db, ids)
+        await ops.trashFilesAndThumbnails(db, ids)
+        await ops.restoreFilesAndThumbnails(db, ids)
       },
     },
     {
@@ -196,7 +196,7 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       },
     },
     {
-      name: 'upsertManyFileRecords:500',
+      name: 'upsertManyFiles:500',
       category: 'write',
       run: withRollback(async () => {
         const now = Date.now()
@@ -216,7 +216,7 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
           trashedAt: null,
           deletedAt: null,
         }))
-        await ops.upsertManyFileRecords(db, records, {
+        await ops.upsertManyFiles(db, records, {
           skipCurrentRecalc: true,
         })
       }),

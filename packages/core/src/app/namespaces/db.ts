@@ -59,7 +59,7 @@ export function buildDbNamespaces(
 > {
   async function removeFile(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
-    await ops.deleteFsFileMetadata(db, file.id)
+    await ops.deleteFsMeta(db, file.id)
   }
 
   function invalidateLibrary() {
@@ -68,22 +68,21 @@ export function buildDbNamespaces(
   }
 
   const fsNamespace: AppService['fs'] = {
-    readMeta: (fileId) => ops.readFsFileMetadata(db, fileId),
-    upsertMeta: (row) => ops.upsertFsFileMetadata(db, row),
-    deleteMeta: (fileId) => ops.deleteFsFileMetadata(db, fileId),
-    deleteMetaBatch: (fileIds) => ops.deleteFsFileMetadataBatch(db, fileIds),
-    updateMetaUsedAt: (fileId, usedAt) =>
-      ops.updateFsFileMetadataUsedAt(db, fileId, usedAt ?? Date.now()),
-    calcTotalSize: () => ops.calcFsFilesMetadataTotalSize(db),
+    readMeta: (fileId) => ops.readFsMeta(db, fileId),
+    upsertMeta: (row) => ops.upsertFsMeta(db, row),
+    deleteMeta: (fileId) => ops.deleteFsMeta(db, fileId),
+    deleteMetaBatch: (fileIds) => ops.deleteManyFsMeta(db, fileIds),
+    updateMetaUsedAt: (fileId, usedAt) => ops.updateFsMetaUsedAt(db, fileId, usedAt ?? Date.now()),
+    calcTotalSize: () => ops.queryFsMetaTotalSize(db),
     evictionCandidates: (thresholdUsedAt, limit) =>
-      ops.queryFsCacheEvictionCandidates(db, thresholdUsedAt, limit),
+      ops.queryEvictionCandidates(db, thresholdUsedAt, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     removeFile,
     copyFile: async (file, sourceUri) => {
       const result = await fsIO.copy(file, sourceUri)
-      const previous = await ops.readFsFileMetadata(db, file.id)
-      await ops.upsertFsFileMetadata(db, {
+      const previous = await ops.readFsMeta(db, file.id)
+      await ops.upsertFsMeta(db, {
         fileId: file.id,
         size: result.size,
         addedAt: previous?.addedAt ?? Date.now(),
@@ -98,7 +97,7 @@ export function buildDbNamespaces(
       if (adapters?.crypto) {
         hash = await adapters.crypto.sha256(data)
       }
-      await ops.upsertFsFileMetadata(db, {
+      await ops.upsertFsMeta(db, {
         fileId: file.id,
         size: result.size,
         addedAt: Date.now(),
@@ -180,9 +179,9 @@ export function buildDbNamespaces(
       },
     },
     files: {
-      getById: (id) => ops.readFileRecord(db, id),
+      getById: (id) => ops.readFile(db, id),
       getMetadata: async (id) => {
-        const record = await ops.readFileRecord(db, id)
+        const record = await ops.readFile(db, id)
         if (!record) return null
         let metadata: FileMetadata = record
         if (record.kind === 'file') {
@@ -193,22 +192,21 @@ export function buildDbNamespaces(
         }
         return metadata
       },
-      getByIds: (ids) => ops.readFileRecordsByIds(db, ids),
-      getByObjectId: (objectId, indexerURL) =>
-        ops.readFileRecordByObjectId(db, objectId, indexerURL),
-      getByLocalIds: (localIds) => ops.readFileRecordsByLocalIds(db, localIds),
-      getByName: (name) => ops.readFileRecordByName(db, name),
-      getByContentHash: (hash) => ops.readFileRecordByContentHash(db, hash),
-      getByContentHashes: (hashes) => ops.readFileRecordsByContentHashes(db, hashes),
-      query: (opts) => ops.queryFileRecords(db, opts),
-      queryCount: (opts) => ops.queryFileRecordsCount(db, opts),
-      queryStats: (opts) => ops.queryFileRecordsStats(db, opts),
+      getByIds: (ids) => ops.readFilesByIds(db, ids),
+      getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
+      getByLocalIds: (localIds) => ops.readFilesByLocalIds(db, localIds),
+      getByName: (name) => ops.readFileByName(db, name),
+      getByContentHash: (hash) => ops.readFileByContentHash(db, hash),
+      getByContentHashes: (hashes) => ops.readFilesByContentHashes(db, hashes),
+      query: (opts) => ops.queryFiles(db, opts),
+      queryCount: (opts) => ops.queryFileCount(db, opts),
+      queryStats: (opts) => ops.queryFileStats(db, opts),
       queryLibrary: (opts) => ops.queryLibraryFiles(db, opts),
       create: async (record, localObject, opts) => {
         if (localObject) {
-          await ops.createFileRecordWithLocalObject(db, record, localObject)
+          await ops.createFileWithLocalObject(db, record, localObject)
         } else {
-          await ops.insertFileRecord(db, record, {
+          await ops.insertFile(db, record, {
             skipCurrentRecalc: opts?.skipCurrentRecalc,
           })
         }
@@ -217,7 +215,7 @@ export function buildDbNamespaces(
         }
       },
       createMany: async (records, opts) => {
-        await ops.insertManyFileRecords(db, records, {
+        await ops.insertManyFiles(db, records, {
           conflictClause: opts?.conflictClause,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
@@ -226,24 +224,24 @@ export function buildDbNamespaces(
         }
       },
       upsertMany: async (records, opts) => {
-        await ops.upsertManyFileRecords(db, records, {
+        await ops.upsertManyFiles(db, records, {
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (records.length > 0 && !opts?.skipCurrentRecalc) {
           invalidateLibrary()
         }
       },
-      getRowsByIds: (ids) => ops.queryFileRecordRowsByIds(db, ids),
+      getRowsByIds: (ids) => ops.queryFilesByIds(db, ids),
       getRowsByObjectIds: (objectIds, indexerURL) =>
-        ops.queryFileRecordRowsByObjectIds(db, objectIds, indexerURL),
+        ops.queryFilesByObjectIds(db, objectIds, indexerURL),
       tombstone: async (fileIds, opts) => {
-        await ops.tombstoneFileRecords(db, fileIds, Date.now())
+        await ops.tombstoneFiles(db, fileIds, Date.now())
         if (!opts?.skipInvalidation) {
           invalidateLibrary()
         }
       },
       update: async (update, opts) => {
-        await ops.updateFileRecordFields(db, update, {
+        await ops.updateFile(db, update, {
           includeUpdatedAt: opts?.includeUpdatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
@@ -253,7 +251,7 @@ export function buildDbNamespaces(
         }
       },
       updateMany: async (updates, opts) => {
-        await ops.updateManyFileRecordFields(db, updates, {
+        await ops.updateManyFiles(db, updates, {
           includeUpdatedAt: opts?.includeUpdatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
@@ -265,7 +263,7 @@ export function buildDbNamespaces(
         }
       },
       updateWithLocalObject: async (update, localObject, opts) => {
-        await ops.updateFileRecordWithLocalObject(db, update, localObject, opts)
+        await ops.updateFileWithLocalObject(db, update, localObject, opts)
         if (!opts?.skipInvalidation) {
           caches.fileById.invalidate(update.id)
           await caches.library.invalidateAll()
@@ -273,44 +271,44 @@ export function buildDbNamespaces(
         }
       },
       delete: async (id, opts) => {
-        await ops.deleteFileRecordById(db, id)
+        await ops.deleteFileById(db, id)
         if (!opts?.skipInvalidation) {
           invalidateLibrary()
         }
       },
       deleteMany: async (ids) => {
-        await ops.deleteManyFileRecordsByIds(db, ids)
+        await ops.deleteManyFilesByIds(db, ids)
         if (ids.length > 0) {
           invalidateLibrary()
         }
       },
       deleteAll: async () => {
-        await ops.deleteAllFileRecords(db)
+        await ops.deleteAllFiles(db)
       },
-      deleteAndThumbnails: async (id) => {
-        await ops.deleteFileRecordAndThumbnails(db, id)
+      deleteWithThumbnails: async (id) => {
+        await ops.deleteFileAndThumbnails(db, id)
         invalidateLibrary()
       },
-      deleteManyAndThumbnails: async (ids) => {
-        await ops.deleteFileRecordsAndThumbnails(db, ids)
+      deleteManyWithThumbnails: async (ids) => {
+        await ops.deleteFilesAndThumbnails(db, ids)
         invalidateLibrary()
       },
       recalculateCurrent: (fileIds) => ops.recalculateCurrentForFileIds(db, fileIds),
       recalculateCurrentForGroups: (groups) => ops.recalculateCurrentForGroups(db, groups),
       deleteLost: async (indexerURL) => {
-        const count = await ops.deleteLostFiles(db, indexerURL)
+        const count = await ops.deleteLostFilesAndThumbnails(db, indexerURL)
         if (count > 0) {
           invalidateLibrary()
         }
         return count
       },
       trash: async (ids) => {
-        await ops.trashFiles(db, ids)
+        await ops.trashFilesAndThumbnails(db, ids)
         uploads.removeMany(ids)
         invalidateLibrary()
       },
       restore: async (ids) => {
-        await ops.restoreFiles(db, ids)
+        await ops.restoreFilesAndThumbnails(db, ids)
         invalidateLibrary()
       },
       getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
@@ -320,22 +318,22 @@ export function buildDbNamespaces(
       getActiveSummaries: () => ops.queryActiveFileSummaries(db),
       getUploadedIds: (url) => ops.queryUploadedFileIds(db, url),
       autoPurge: () => ops.autoPurgeOldTrashedFiles(db),
-      permanentlyDelete: async (ids) => {
-        await ops.permanentlyDeleteFiles(db, ids)
+      tombstoneWithThumbnails: async (ids) => {
+        await ops.tombstoneFilesAndThumbnails(db, ids)
         invalidateLibrary()
       },
-      permanentlyDeleteWithCleanup: async (files) => {
+      tombstoneWithThumbnailsAndCleanup: async (files) => {
         if (files.length === 0) return
         const ids = files.map((f) => f.id)
         uploads.removeMany(ids)
-        await ops.permanentlyDeleteFiles(db, ids)
+        await ops.tombstoneFilesAndThumbnails(db, ids)
         const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, ids)
         await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
         invalidateLibrary()
       },
       autoPurgeWithCleanup: async () => {
         const total = await ops.autoPurgeOldTrashedFiles(db, async (batchIds) => {
-          const files = await ops.readFileRecordsByIds(db, batchIds)
+          const files = await ops.readFilesByIds(db, batchIds)
           if (files.length === 0) return
           uploads.removeMany(batchIds)
           const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, batchIds)
@@ -458,8 +456,7 @@ export function buildDbNamespaces(
     thumbnails: {
       getForFile: (fileId) => ops.queryThumbnailsByFileId(db, fileId),
       getBest: (fileId, requiredSize) => ops.queryBestThumbnailByFileId(db, fileId, requiredSize),
-      getByFileIdAndSize: (fileId, size) =>
-        ops.queryThumbnailRecordByFileIdAndSize(db, fileId, size),
+      getByFileIdAndSize: (fileId, size) => ops.queryThumbnailByFileIdAndSize(db, fileId, size),
       getInfoForFiles: (fileIds) => ops.queryThumbnailFileInfoByFileIds(db, fileIds),
       getSizesForFile: (fileId) => ops.queryThumbnailSizesForFileId(db, fileId),
       existsForFileAndSize: (fileId, size) =>
@@ -481,24 +478,24 @@ export function buildDbNamespaces(
       },
     },
     localObjects: {
-      getForFile: (fileId) => ops.queryLocalObjectsForFile(db, fileId),
-      getForFiles: (fileIds) => ops.queryLocalObjectsForFiles(db, fileIds),
+      getForFile: (fileId) => ops.queryObjectsForFile(db, fileId),
+      getForFiles: (fileIds) => ops.queryObjectsForFiles(db, fileIds),
       upsert: async (object, opts) => {
-        await ops.insertLocalObject(db, object)
+        await ops.insertObject(db, object)
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()
         }
       },
       delete: async (objectId, indexerURL, opts) => {
-        await ops.deleteLocalObjectById(db, objectId, indexerURL)
+        await ops.deleteObject(db, objectId, indexerURL)
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()
         }
       },
       deleteForFile: async (fileId, opts) => {
-        await ops.deleteLocalObjectsByFileId(db, fileId)
+        await ops.deleteObjectsForFile(db, fileId)
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()
@@ -506,20 +503,20 @@ export function buildDbNamespaces(
       },
       deleteManyForFiles: async (fileIds) => {
         if (fileIds.length === 0) return
-        await ops.deleteManyLocalObjectsByFileIds(db, fileIds)
+        await ops.deleteManyObjectsForFiles(db, fileIds)
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
       },
       upsertMany: async (objects, opts) => {
-        await ops.insertManyLocalObjects(db, objects)
+        await ops.insertManyObjects(db, objects)
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()
         }
       },
-      countForFile: (fileId) => ops.countLocalObjectsForFile(db, fileId),
+      countForFile: (fileId) => ops.countObjectsForFile(db, fileId),
       deleteManyByObjectIds: async (objectIds, indexerURL, opts) => {
-        await ops.deleteManyLocalObjectsByObjectIds(db, objectIds, indexerURL)
+        await ops.deleteManyObjectsByIds(db, objectIds, indexerURL)
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()

@@ -1,4 +1,4 @@
-import { insertFileRecord } from './files'
+import { insertFile } from './files'
 import {
   buildLibraryQueryParts,
   queryDirectoryFileCount,
@@ -28,7 +28,7 @@ async function createTestFile(
     directoryId: string
   }>,
 ) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: overrides?.name ?? `${id}.jpg`,
     type: overrides?.type ?? 'image/jpeg',

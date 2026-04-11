@@ -1,4 +1,4 @@
-import { insertFileRecord } from './files'
+import { insertFile } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   queryBestThumbnailByFileId,
@@ -9,7 +9,7 @@ import {
 } from './thumbnails'
 
 async function createTestFile(id: string, overrides?: Record<string, any>) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: `${id}.jpg`,
     type: 'image/jpeg',
@@ -27,7 +27,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
 }
 
 async function createThumbnail(id: string, parentId: string, thumbSize: 64 | 512) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: `${id}.jpg`,
     type: 'image/jpeg',

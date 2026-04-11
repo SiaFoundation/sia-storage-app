@@ -144,7 +144,7 @@ describe('Multi-Device Convergence', () => {
     const trashedFiles = (await appA.getFiles())
       .filter((f) => f.trashedAt != null)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
-    await appA.app.files.permanentlyDeleteWithCleanup(trashedFiles)
+    await appA.app.files.tombstoneWithThumbnailsAndCleanup(trashedFiles)
 
     await appA.waitForCondition(async () => {
       const file = await appA.getFileById(deviceAFiles[0].id)
@@ -273,7 +273,7 @@ describe('Multi-Device Convergence', () => {
     const trashedA = (await appA.getFiles())
       .filter((f) => f.id === fileIdA)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
-    await appA.app.files.permanentlyDeleteWithCleanup(trashedA)
+    await appA.app.files.tombstoneWithThumbnailsAndCleanup(trashedA)
 
     await waitForCondition(
       async () => {
@@ -291,7 +291,7 @@ describe('Multi-Device Convergence', () => {
     const trashedB = (await appB.getFiles())
       .filter((f) => f.id === fileIdB)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
-    await appB.app.files.permanentlyDeleteWithCleanup(trashedB)
+    await appB.app.files.tombstoneWithThumbnailsAndCleanup(trashedB)
 
     await waitForCondition(
       async () => {

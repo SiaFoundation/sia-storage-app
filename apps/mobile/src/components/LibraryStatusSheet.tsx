@@ -7,7 +7,7 @@ import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
 import { app } from '../stores/appService'
-import { deleteLostFiles, useFileStatsLocal, useFileStatsLost } from '../stores/files'
+import { deleteLostFilesAndThumbnails, useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
 import { useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
@@ -497,7 +497,7 @@ export function LibraryStatusSheet() {
                           style: 'destructive',
                           onPress: async () => {
                             try {
-                              await deleteLostFiles()
+                              await deleteLostFilesAndThumbnails()
                               Alert.alert(
                                 'Lost files deleted',
                                 'Lost file records were successfully deleted.',

@@ -37,7 +37,7 @@ export function buildActiveFileFilter(alias: string): string {
  * Filters to non-trashed, non-deleted records of any kind.
  * Use for thumbnail queries or when kind/version filtering is handled separately.
  */
-export function buildActiveRecordFilter(alias: string): string {
+export function buildActiveFilter(alias: string): string {
   return `${alias}.trashedAt IS NULL AND ${alias}.deletedAt IS NULL`
 }
 

@@ -1,11 +1,11 @@
 import { queryAllDirectoriesWithCounts } from './directories'
 import {
-  deleteFileRecordAndThumbnails,
-  deleteManyFileRecordsByIds,
-  insertFileRecord,
-  insertManyFileRecords,
+  deleteFileAndThumbnails,
+  deleteManyFilesByIds,
+  insertFile,
+  insertManyFiles,
   moveAllFileVersions,
-  queryFileRecordByName,
+  queryFileByName,
   queryFileVersions,
   recalculateCurrentForGroup,
   renameAllFileVersions,
@@ -22,7 +22,7 @@ import {
 } from './library'
 import { addTagToFile, queryTagsForFile } from './tags'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
-import { restoreFiles, trashFiles } from './trash'
+import { restoreFilesAndThumbnails, trashFilesAndThumbnails } from './trash'
 
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
@@ -40,7 +40,7 @@ async function createFile(
     directoryId: string | null
   }>,
 ) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: overrides?.name ?? `${id}.jpg`,
     type: overrides?.type ?? 'image/jpeg',
@@ -78,7 +78,7 @@ describe('version filtering', () => {
     const count = await queryLibraryFileCount(db())
     expect(count).toBe(1)
 
-    const latest = await queryFileRecordByName(db(), 'foo.txt')
+    const latest = await queryFileByName(db(), 'foo.txt')
     expect(latest?.id).toBe('v2')
   })
 
@@ -120,11 +120,11 @@ describe('version filtering', () => {
     expect(versions[2].id).toBe('v1')
   })
 
-  test('queryFileRecordByName returns latest version', async () => {
+  test('queryFileByName returns latest version', async () => {
     await createFile('old', { name: 'test.txt', updatedAt: base })
     await createFile('new', { name: 'test.txt', updatedAt: base + 500 })
 
-    const result = await queryFileRecordByName(db(), 'test.txt')
+    const result = await queryFileByName(db(), 'test.txt')
     expect(result?.id).toBe('new')
   })
 
@@ -454,7 +454,7 @@ describe('rename merge', () => {
     const count = await queryLibraryFileCount(db())
     expect(count).toBe(1)
 
-    const latest = await queryFileRecordByName(db(), 'foo.txt')
+    const latest = await queryFileByName(db(), 'foo.txt')
     expect(latest?.id).toBe('b1')
   })
 
@@ -538,13 +538,13 @@ describe('current column maintenance', () => {
     await createFile('v3', { name: 'doc.txt', updatedAt: base + 200 })
 
     expect(await queryLibraryFileCount(db())).toBe(1)
-    const before = await queryFileRecordByName(db(), 'doc.txt')
+    const before = await queryFileByName(db(), 'doc.txt')
     expect(before?.id).toBe('v3')
 
-    await deleteFileRecordAndThumbnails(db(), 'v3')
+    await deleteFileAndThumbnails(db(), 'v3')
 
     expect(await queryLibraryFileCount(db())).toBe(1)
-    const after = await queryFileRecordByName(db(), 'doc.txt')
+    const after = await queryFileByName(db(), 'doc.txt')
     expect(after?.id).toBe('v2')
   })
 
@@ -552,10 +552,10 @@ describe('current column maintenance', () => {
     await createFile('v1', { name: 'doc.txt', updatedAt: base })
     await createFile('v2', { name: 'doc.txt', updatedAt: base + 100 })
 
-    await deleteFileRecordAndThumbnails(db(), 'v1')
+    await deleteFileAndThumbnails(db(), 'v1')
 
     expect(await queryLibraryFileCount(db())).toBe(1)
-    const current = await queryFileRecordByName(db(), 'doc.txt')
+    const current = await queryFileByName(db(), 'doc.txt')
     expect(current?.id).toBe('v2')
   })
 
@@ -567,21 +567,21 @@ describe('current column maintenance', () => {
 
     expect(await queryLibraryFileCount(db())).toBe(2)
 
-    await deleteManyFileRecordsByIds(db(), ['a2', 'b2'])
+    await deleteManyFilesByIds(db(), ['a2', 'b2'])
 
     expect(await queryLibraryFileCount(db())).toBe(2)
-    expect((await queryFileRecordByName(db(), 'a.txt'))?.id).toBe('a1')
-    expect((await queryFileRecordByName(db(), 'b.txt'))?.id).toBe('b1')
+    expect((await queryFileByName(db(), 'a.txt'))?.id).toBe('a1')
+    expect((await queryFileByName(db(), 'b.txt'))?.id).toBe('b1')
   })
 
   test('trashing current version makes next-latest current', async () => {
     await createFile('v1', { name: 'doc.txt', updatedAt: base })
     await createFile('v2', { name: 'doc.txt', updatedAt: base + 100 })
 
-    await trashFiles(db(), ['v2'])
+    await trashFilesAndThumbnails(db(), ['v2'])
 
     expect(await queryLibraryFileCount(db())).toBe(1)
-    const current = await queryFileRecordByName(db(), 'doc.txt')
+    const current = await queryFileByName(db(), 'doc.txt')
     expect(current?.id).toBe('v1')
   })
 
@@ -589,12 +589,12 @@ describe('current column maintenance', () => {
     await createFile('v1', { name: 'doc.txt', updatedAt: base })
     await createFile('v2', { name: 'doc.txt', updatedAt: base + 100 })
 
-    await trashFiles(db(), ['v2'])
-    expect((await queryFileRecordByName(db(), 'doc.txt'))?.id).toBe('v1')
+    await trashFilesAndThumbnails(db(), ['v2'])
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('v1')
 
-    await restoreFiles(db(), ['v2'])
+    await restoreFilesAndThumbnails(db(), ['v2'])
     expect(await queryLibraryFileCount(db())).toBe(1)
-    expect((await queryFileRecordByName(db(), 'doc.txt'))?.id).toBe('v2')
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('v2')
   })
 
   test('partial restore: restoring one of three trashed versions makes it current', async () => {
@@ -602,22 +602,22 @@ describe('current column maintenance', () => {
     await createFile('v2', { name: 'doc.txt', updatedAt: base + 100 })
     await createFile('v3', { name: 'doc.txt', updatedAt: base + 200 })
 
-    await trashFiles(db(), ['v1', 'v2', 'v3'])
+    await trashFilesAndThumbnails(db(), ['v1', 'v2', 'v3'])
     expect(await queryLibraryFileCount(db())).toBe(0)
 
-    await restoreFiles(db(), ['v1'])
+    await restoreFilesAndThumbnails(db(), ['v1'])
     expect(await queryLibraryFileCount(db())).toBe(1)
-    expect((await queryFileRecordByName(db(), 'doc.txt'))?.id).toBe('v1')
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('v1')
   })
 
   test('deleting last version in group leaves no current file', async () => {
     await createFile('v1', { name: 'doc.txt', updatedAt: base })
-    await deleteFileRecordAndThumbnails(db(), 'v1')
+    await deleteFileAndThumbnails(db(), 'v1')
     expect(await queryLibraryFileCount(db())).toBe(0)
   })
 
-  test('insertManyFileRecords sets current correctly across version groups', async () => {
-    await insertManyFileRecords(db(), [
+  test('insertManyFiles sets current correctly across version groups', async () => {
+    await insertManyFiles(db(), [
       {
         id: 'a1',
         name: 'shared.txt',
@@ -663,8 +663,8 @@ describe('current column maintenance', () => {
     ])
 
     expect(await queryLibraryFileCount(db())).toBe(2)
-    expect((await queryFileRecordByName(db(), 'shared.txt'))?.id).toBe('a2')
-    expect((await queryFileRecordByName(db(), 'unique.txt'))?.id).toBe('b1')
+    expect((await queryFileByName(db(), 'shared.txt'))?.id).toBe('a2')
+    expect((await queryFileByName(db(), 'unique.txt'))?.id).toBe('b1')
   })
 })
 
@@ -740,9 +740,9 @@ describe('trash file trashes all versions', () => {
     expect(await queryLibraryFileCount(db())).toBe(0)
 
     // Restore all — v3 should be current again
-    await restoreFiles(db(), ids)
+    await restoreFilesAndThumbnails(db(), ids)
     expect(await queryLibraryFileCount(db())).toBe(1)
-    expect((await queryFileRecordByName(db(), 'doc.txt'))?.id).toBe('v3')
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('v3')
   })
 })
 

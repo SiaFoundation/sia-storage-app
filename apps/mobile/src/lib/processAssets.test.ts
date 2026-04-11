@@ -6,9 +6,6 @@ import { getMimeType } from './fileTypes'
 import { getMediaLibraryUri } from './mediaLibrary'
 import { catalogAssets, importFiles, syncAssets } from './processAssets'
 
-jest.mock('./deleteFile', () => ({
-  permanentlyDeleteFiles: jest.fn(),
-}))
 jest.mock('./mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
 }))

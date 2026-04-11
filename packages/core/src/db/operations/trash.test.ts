@@ -1,6 +1,11 @@
-import { insertFileRecord } from './files'
+import { insertFile } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
-import { autoPurgeOldTrashedFiles, permanentlyDeleteFiles, restoreFiles, trashFiles } from './trash'
+import {
+  autoPurgeOldTrashedFiles,
+  tombstoneFilesAndThumbnails,
+  restoreFilesAndThumbnails,
+  trashFilesAndThumbnails,
+} from './trash'
 
 function makeFileRecord(id: string, overrides?: Record<string, any>) {
   return {
@@ -31,12 +36,12 @@ async function getFile(id: string) {
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
 
-describe('trashFiles', () => {
+describe('trashFilesAndThumbnails', () => {
   it('sets trashedAt on files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
-    await insertFileRecord(db(), makeFileRecord('f2'))
+    await insertFile(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('f2'))
 
-    await trashFiles(db(), ['f1', 'f2'])
+    await trashFilesAndThumbnails(db(), ['f1', 'f2'])
 
     const f1 = await getFile('f1')
     const f2 = await getFile('f2')
@@ -45,67 +50,61 @@ describe('trashFiles', () => {
   })
 
   it('trashes thumbnails for the given files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
-    await insertFileRecord(
-      db(),
-      makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }),
-    )
+    await insertFile(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
 
-    await trashFiles(db(), ['f1'])
+    await trashFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.trashedAt).not.toBeNull()
   })
 
   it('bumps updatedAt', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('f1'))
 
-    await trashFiles(db(), ['f1'])
+    await trashFilesAndThumbnails(db(), ['f1'])
 
     const f1 = await getFile('f1')
     expect(f1!.updatedAt).toBeGreaterThan(1000)
   })
 
   it('no-ops on empty array', async () => {
-    await trashFiles(db(), [])
+    await trashFilesAndThumbnails(db(), [])
   })
 })
 
-describe('restoreFiles', () => {
+describe('restoreFilesAndThumbnails', () => {
   it('clears trashedAt on files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
-    await trashFiles(db(), ['f1'])
+    await insertFile(db(), makeFileRecord('f1'))
+    await trashFilesAndThumbnails(db(), ['f1'])
 
-    await restoreFiles(db(), ['f1'])
+    await restoreFilesAndThumbnails(db(), ['f1'])
 
     const f1 = await getFile('f1')
     expect(f1!.trashedAt).toBeNull()
   })
 
   it('restores thumbnails for the given files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
-    await insertFileRecord(
-      db(),
-      makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }),
-    )
-    await trashFiles(db(), ['f1'])
+    await insertFile(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
+    await trashFilesAndThumbnails(db(), ['f1'])
 
-    await restoreFiles(db(), ['f1'])
+    await restoreFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.trashedAt).toBeNull()
   })
 
   it('no-ops on empty array', async () => {
-    await restoreFiles(db(), [])
+    await restoreFilesAndThumbnails(db(), [])
   })
 })
 
-describe('permanentlyDeleteFiles', () => {
+describe('tombstoneFilesAndThumbnails', () => {
   it('sets deletedAt and trashedAt as tombstone', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('f1'))
 
-    await permanentlyDeleteFiles(db(), ['f1'])
+    await tombstoneFilesAndThumbnails(db(), ['f1'])
 
     const f1 = await getFile('f1')
     expect(f1!.deletedAt).not.toBeNull()
@@ -113,22 +112,19 @@ describe('permanentlyDeleteFiles', () => {
   })
 
   it('preserves existing trashedAt', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: 2000 }))
+    await insertFile(db(), makeFileRecord('f1', { trashedAt: 2000 }))
 
-    await permanentlyDeleteFiles(db(), ['f1'])
+    await tombstoneFilesAndThumbnails(db(), ['f1'])
 
     const f1 = await getFile('f1')
     expect(f1!.trashedAt).toBe(2000)
   })
 
   it('tombstones thumbnails', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1'))
-    await insertFileRecord(
-      db(),
-      makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }),
-    )
+    await insertFile(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
 
-    await permanentlyDeleteFiles(db(), ['f1'])
+    await tombstoneFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.deletedAt).not.toBeNull()
@@ -136,14 +132,14 @@ describe('permanentlyDeleteFiles', () => {
   })
 
   it('no-ops on empty array', async () => {
-    await permanentlyDeleteFiles(db(), [])
+    await tombstoneFilesAndThumbnails(db(), [])
   })
 })
 
 describe('autoPurgeOldTrashedFiles', () => {
   it('purges files trashed longer than the cutoff', async () => {
     const oldTrashedAt = 1
-    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: oldTrashedAt }))
+    await insertFile(db(), makeFileRecord('f1', { trashedAt: oldTrashedAt }))
 
     const purgedCount = await autoPurgeOldTrashedFiles(db())
 
@@ -153,7 +149,7 @@ describe('autoPurgeOldTrashedFiles', () => {
   })
 
   it('does not purge recently trashed files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: Date.now() }))
+    await insertFile(db(), makeFileRecord('f1', { trashedAt: Date.now() }))
 
     const purgedCount = await autoPurgeOldTrashedFiles(db())
 
@@ -161,7 +157,7 @@ describe('autoPurgeOldTrashedFiles', () => {
   })
 
   it('does not purge already-deleted files', async () => {
-    await insertFileRecord(db(), makeFileRecord('f1', { trashedAt: 1, deletedAt: 2 }))
+    await insertFile(db(), makeFileRecord('f1', { trashedAt: 1, deletedAt: 2 }))
 
     const purgedCount = await autoPurgeOldTrashedFiles(db())
 
@@ -169,7 +165,7 @@ describe('autoPurgeOldTrashedFiles', () => {
   })
 
   it('only purges kind=file, not thumbnails', async () => {
-    await insertFileRecord(
+    await insertFile(
       db(),
       makeFileRecord('t1', {
         kind: 'thumb',
