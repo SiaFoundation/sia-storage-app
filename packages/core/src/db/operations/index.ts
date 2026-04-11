@@ -66,6 +66,7 @@ export {
   readFileByContentHash,
   readFileByName,
   readFileByObjectId,
+  readFileWithSlabs,
   readFilesByContentHashes,
   readFilesByIds,
   readFilesByLocalIds,
@@ -124,8 +125,10 @@ export {
   insertObject,
   insertManyObjects,
   queryFilesWithNoObjects,
-  queryObjectsForFile,
-  queryObjectsForFiles,
+  queryObjectMetasForFile,
+  queryObjectMetasForFiles,
+  queryObjectsForFileWithSlabs,
+  queryObjectsForFilesWithSlabs,
 } from './localObjects'
 export {
   deleteAllLogs,

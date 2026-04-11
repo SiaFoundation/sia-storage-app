@@ -33,7 +33,7 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
       app().files.update({ id: file.id, name: value })
     },
   })
-  const pinnedObjects = usePinnedObjects(file)
+  const pinnedObjects = usePinnedObjects(file.id)
   const thumbnails = useSWR(
     showAdvanced.data ? app().caches.thumbnails.byFileId.key(file.id) : null,
     async () => {
@@ -129,7 +129,7 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
       <RowGroup title="File shard storage locations">
         <InfoCard>
           <View style={{ height: Math.round(windowHeight * 0.5) }}>
-            <FileMap file={file} />
+            <FileMap fileId={file.id} />
           </View>
         </InfoCard>
       </RowGroup>

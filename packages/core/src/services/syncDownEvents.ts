@@ -7,7 +7,7 @@ import {
   hasCompleteFileMetadata,
   hasCompleteThumbnailMetadata,
 } from '../encoding/fileMetadata'
-import type { LocalObject } from '../encoding/localObject'
+import type { LocalObjectWithSlabs } from '../encoding/localObject'
 import { sealPinnedObject } from '../lib/localObjects'
 import type { FileMetadata, FileRecordRow } from '../types/files'
 
@@ -33,7 +33,7 @@ type Counts = {
 type PreparedCreate = {
   kind: 'create'
   fileRecord: FileRecordRow
-  localObject: LocalObject
+  localObject: LocalObjectWithSlabs
   tags?: string[]
   directory?: string
   isFile: boolean
@@ -43,7 +43,7 @@ type PreparedCreate = {
 type PreparedUpdate = {
   kind: 'update'
   fileRecord: FileRecordRow
-  localObject: LocalObject
+  localObject: LocalObjectWithSlabs
   fileId: string
   tags?: string[]
   directory?: string

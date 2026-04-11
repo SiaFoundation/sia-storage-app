@@ -5,7 +5,7 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import type { Writer } from 'react-native-sia'
-import { getOneSealedObject } from '../lib/file'
+import { getOneObject } from '../lib/file'
 import { streamToCache } from '../lib/streamToCache'
 import { useToast } from '../lib/toastContext'
 import { app, internal } from '../stores/appService'
@@ -24,8 +24,8 @@ export function useDownload(file?: FileRecord | null) {
   return useCallback(() => {
     if (!file) return
     if (!isConnected) return
-    const sealedObject = getOneSealedObject(file)
-    if (!sealedObject) {
+    const obj = getOneObject(file)
+    if (!obj) {
       toast.show('No slabs available for this file')
       return
     }

@@ -14,6 +14,7 @@ import {
   queryFileCount,
   queryFileStats,
   readFile,
+  readFileWithSlabs,
   readFilesByIds,
   updateFile,
   updateManyFiles,
@@ -85,6 +86,27 @@ describe('readFile', () => {
   it('returns null for non-existent ID', async () => {
     const result = await readFile(db(), 'does-not-exist')
     expect(result).toBeNull()
+  })
+
+  it('excludes slabs from objects', async () => {
+    await insertFile(db(), makeFileRecord('file-1'))
+    await insertObject(db(), makeLocalObject('file-1'))
+    const result = await readFile(db(), 'file-1')
+    const obj = result!.objects['https://indexer.example.com']
+    expect(obj).toBeDefined()
+    expect(obj).not.toHaveProperty('slabs')
+  })
+})
+
+describe('readFileWithSlabs', () => {
+  it('includes slabs in objects', async () => {
+    await insertFile(db(), makeFileRecord('file-1'))
+    await insertObject(db(), makeLocalObject('file-1'))
+    const result = await readFileWithSlabs(db(), 'file-1')
+    expect(result).not.toBeNull()
+    const obj = result!.objects['https://indexer.example.com']
+    expect(obj).toBeDefined()
+    expect(obj).toHaveProperty('slabs')
   })
 })
 

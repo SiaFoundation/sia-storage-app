@@ -3,8 +3,6 @@ import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
-import { PinnedObject, type PinnedObjectInterface, type SealedObject } from 'react-native-sia'
-import { getAppKeyForIndexer } from '../stores/appKey'
 import { app } from '../stores/appService'
 import { useFsFileUri } from '../stores/fs'
 import { type UploadState, useUploadState } from '../stores/uploads'
@@ -182,22 +180,11 @@ export function getFileTypeName(
           : 'other'
 }
 
-export function getOneSealedObject(file: {
+export function getOneObject(file: {
   objects: Record<string, LocalObject> | null
-}): { indexerURL: string; sealedObject: SealedObject } | null {
+}): { indexerURL: string; object: LocalObject } | null {
   const entries = Object.entries(file.objects ?? {})
   if (entries.length === 0) return null
-  const [indexerURL, sealedObject] = entries[0]
-  return { indexerURL, sealedObject }
-}
-
-export async function getPinnedObject(
-  indexerURL: string,
-  sealedObject: SealedObject,
-): Promise<PinnedObjectInterface> {
-  const appKey = await getAppKeyForIndexer(indexerURL)
-  if (!appKey) {
-    throw new Error(`No AppKey found for indexer: ${indexerURL}`)
-  }
-  return PinnedObject.open(appKey, sealedObject)
+  const [indexerURL, object] = entries[0]
+  return { indexerURL, object }
 }

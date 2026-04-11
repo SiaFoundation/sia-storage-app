@@ -1,12 +1,12 @@
 import type { AppKeyRef, PinnedObjectRef } from '../adapters/sdk'
-import type { LocalObject } from '../encoding/localObject'
+import type { LocalObjectWithSlabs } from '../encoding/localObject'
 
 export function sealPinnedObject(
   fileId: string,
   indexerURL: string,
   pinnedObject: PinnedObjectRef,
   appKey: AppKeyRef,
-): LocalObject {
+): LocalObjectWithSlabs {
   const sealed = pinnedObject.seal(appKey)
   return {
     ...sealed,

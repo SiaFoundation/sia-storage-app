@@ -1,18 +1,22 @@
 import { AddressProtocol, type Host } from '@siastorage/core/adapters'
+import type { Slab } from '@siastorage/core/types'
 import { useHosts } from '@siastorage/core/stores'
-import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { getOneSealedObject } from '../../lib/file'
+import useSWR from 'swr'
+import { app } from '../../stores/appService'
 import Map from '../Map/Map'
 import { MapMarker } from '../Map/MapMarker'
 import { determineBestRegion } from '../Map/mapHelpers'
 import { SWROverlay } from '../SWROverlay'
 
-export function FileMap({ file }: { file: FileRecord }) {
+export function FileMap({ fileId }: { fileId: string }) {
   const hosts = useHosts()
 
-  const firstSlab = getOneSealedObject(file)?.sealedObject.slabs[0]
+  const { data: firstSlab } = useSWR<Slab | null>(['fileMap:firstSlab', fileId], async () => {
+    const objects = await app().localObjects.getForFileWithSlabs(fileId)
+    return objects[0]?.slabs[0] ?? null
+  })
 
   const matchingHosts: Host[] = useMemo(() => {
     if (!hosts.data || !firstSlab) return []
