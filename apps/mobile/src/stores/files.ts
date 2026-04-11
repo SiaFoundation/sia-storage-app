@@ -1,7 +1,7 @@
 import useSWR, { type SWRConfiguration } from 'swr'
 import { app } from './appService'
 
-export async function deleteLostFiles(): Promise<number> {
+export async function deleteLostFilesAndThumbnails(): Promise<number> {
   const currentIndexerURL = await app().settings.getIndexerURL()
   return app().files.deleteLost(currentIndexerURL)
 }

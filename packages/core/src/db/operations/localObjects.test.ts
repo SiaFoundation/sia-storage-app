@@ -1,17 +1,17 @@
-import { insertFileRecord } from './files'
+import { insertFile } from './files'
 import {
-  countLocalObjectsForFile,
-  deleteLocalObjectById,
-  deleteLocalObjectsByFileId,
-  deleteManyLocalObjectsByFileIds,
-  insertLocalObject,
-  queryLocalObjectsForFile,
-  queryLocalObjectsForFiles,
+  countObjectsForFile,
+  deleteObject,
+  deleteObjectsForFile,
+  deleteManyObjectsForFiles,
+  insertObject,
+  queryObjectsForFile,
+  queryObjectsForFiles,
 } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 async function createTestFile(id: string, overrides?: Record<string, any>) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: `${id}.jpg`,
     type: 'image/jpeg',
@@ -47,13 +47,13 @@ function makeLocalObject(fileId: string, indexerURL: string, objectId: string) {
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
 
-describe('insertLocalObject', () => {
+describe('insertObject', () => {
   it('inserts and can be read back', async () => {
     await createTestFile('f1')
     const obj = makeLocalObject('f1', 'https://idx.example.com', 'obj1')
-    await insertLocalObject(db(), obj)
+    await insertObject(db(), obj)
 
-    const results = await queryLocalObjectsForFile(db(), 'f1')
+    const results = await queryObjectsForFile(db(), 'f1')
     expect(results).toHaveLength(1)
     expect(results[0].id).toBe('obj1')
     expect(results[0].fileId).toBe('f1')
@@ -61,30 +61,30 @@ describe('insertLocalObject', () => {
   })
 })
 
-describe('queryLocalObjectsForFile', () => {
+describe('queryObjectsForFile', () => {
   it('returns objects for a file', async () => {
     await createTestFile('f1')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
-    const results = await queryLocalObjectsForFile(db(), 'f1')
+    const results = await queryObjectsForFile(db(), 'f1')
     expect(results).toHaveLength(2)
   })
 
   it('returns empty for non-existent file', async () => {
-    const results = await queryLocalObjectsForFile(db(), 'nonexistent')
+    const results = await queryObjectsForFile(db(), 'nonexistent')
     expect(results).toEqual([])
   })
 })
 
-describe('queryLocalObjectsForFiles', () => {
+describe('queryObjectsForFiles', () => {
   it('returns map keyed by fileId', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
 
-    const map = await queryLocalObjectsForFiles(db(), ['f1', 'f2'])
+    const map = await queryObjectsForFiles(db(), ['f1', 'f2'])
     expect(map.f1).toHaveLength(1)
     expect(map.f1[0].id).toBe('obj1')
     expect(map.f2).toHaveLength(1)
@@ -92,72 +92,72 @@ describe('queryLocalObjectsForFiles', () => {
   })
 
   it('returns empty object for empty input', async () => {
-    const map = await queryLocalObjectsForFiles(db(), [])
+    const map = await queryObjectsForFiles(db(), [])
     expect(map).toEqual({})
   })
 })
 
-describe('countLocalObjectsForFile', () => {
+describe('countObjectsForFile', () => {
   it('counts correctly', async () => {
     await createTestFile('f1')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
-    const count = await countLocalObjectsForFile(db(), 'f1')
+    const count = await countObjectsForFile(db(), 'f1')
     expect(count).toBe(2)
   })
 
   it('returns 0 for no objects', async () => {
     await createTestFile('f1')
-    const count = await countLocalObjectsForFile(db(), 'f1')
+    const count = await countObjectsForFile(db(), 'f1')
     expect(count).toBe(0)
   })
 })
 
-describe('deleteLocalObjectById', () => {
+describe('deleteObject', () => {
   it('deletes specific object', async () => {
     await createTestFile('f1')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
-    await deleteLocalObjectById(db(), 'obj1', 'https://a.com')
+    await deleteObject(db(), 'obj1', 'https://a.com')
 
-    const results = await queryLocalObjectsForFile(db(), 'f1')
+    const results = await queryObjectsForFile(db(), 'f1')
     expect(results).toHaveLength(1)
     expect(results[0].id).toBe('obj2')
   })
 })
 
-describe('deleteLocalObjectsByFileId', () => {
+describe('deleteObjectsForFile', () => {
   it('deletes all objects for a file', async () => {
     await createTestFile('f1')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj2'))
 
-    await deleteLocalObjectsByFileId(db(), 'f1')
+    await deleteObjectsForFile(db(), 'f1')
 
-    const results = await queryLocalObjectsForFile(db(), 'f1')
+    const results = await queryObjectsForFile(db(), 'f1')
     expect(results).toEqual([])
   })
 })
 
-describe('deleteManyLocalObjectsByFileIds', () => {
+describe('deleteManyObjectsForFiles', () => {
   it('batch deletes across multiple files', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await createTestFile('f3')
-    await insertLocalObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
-    await insertLocalObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
-    await insertLocalObject(db(), makeLocalObject('f3', 'https://a.com', 'obj3'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj1'))
+    await insertObject(db(), makeLocalObject('f2', 'https://a.com', 'obj2'))
+    await insertObject(db(), makeLocalObject('f3', 'https://a.com', 'obj3'))
 
-    await deleteManyLocalObjectsByFileIds(db(), ['f1', 'f2'])
+    await deleteManyObjectsForFiles(db(), ['f1', 'f2'])
 
-    expect(await queryLocalObjectsForFile(db(), 'f1')).toEqual([])
-    expect(await queryLocalObjectsForFile(db(), 'f2')).toEqual([])
-    expect(await queryLocalObjectsForFile(db(), 'f3')).toHaveLength(1)
+    expect(await queryObjectsForFile(db(), 'f1')).toEqual([])
+    expect(await queryObjectsForFile(db(), 'f2')).toEqual([])
+    expect(await queryObjectsForFile(db(), 'f3')).toHaveLength(1)
   })
 
   it('handles empty array', async () => {
-    await deleteManyLocalObjectsByFileIds(db(), [])
+    await deleteManyObjectsForFiles(db(), [])
   })
 })

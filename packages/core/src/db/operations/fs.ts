@@ -8,17 +8,14 @@ export type FsMetaRow = {
   usedAt: number
 }
 
-export async function readFsFileMetadata(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<FsMetaRow | null> {
+export async function readFsMeta(db: DatabaseAdapter, fileId: string): Promise<FsMetaRow | null> {
   return db.getFirstAsync<FsMetaRow>(
     'SELECT fileId, size, addedAt, usedAt FROM fs WHERE fileId = ?',
     fileId,
   )
 }
 
-export async function upsertFsFileMetadata(db: DatabaseAdapter, row: FsMetaRow): Promise<void> {
+export async function upsertFsMeta(db: DatabaseAdapter, row: FsMetaRow): Promise<void> {
   await sql.insert(
     db,
     'fs',
@@ -32,7 +29,7 @@ export async function upsertFsFileMetadata(db: DatabaseAdapter, row: FsMetaRow):
   )
 }
 
-export async function updateFsFileMetadataUsedAt(
+export async function updateFsMetaUsedAt(
   db: DatabaseAdapter,
   fileId: string,
   usedAt: number = Date.now(),
@@ -40,20 +37,17 @@ export async function updateFsFileMetadataUsedAt(
   await sql.update(db, 'fs', { usedAt }, { fileId })
 }
 
-export async function deleteFsFileMetadata(db: DatabaseAdapter, fileId: string): Promise<void> {
+export async function deleteFsMeta(db: DatabaseAdapter, fileId: string): Promise<void> {
   await sql.del(db, 'fs', { fileId })
 }
 
-export async function deleteFsFileMetadataBatch(
-  db: DatabaseAdapter,
-  fileIds: string[],
-): Promise<void> {
+export async function deleteManyFsMeta(db: DatabaseAdapter, fileIds: string[]): Promise<void> {
   if (fileIds.length === 0) return
   const ph = fileIds.map(() => '?').join(',')
   await db.runAsync(`DELETE FROM fs WHERE fileId IN (${ph})`, ...fileIds)
 }
 
-export async function queryFsCacheEvictionCandidates(
+export async function queryEvictionCandidates(
   db: DatabaseAdapter,
   thresholdUsedAt: number,
   limit: number,
@@ -89,7 +83,7 @@ export async function queryOrphanedFileIds(
   return new Set(rows.map((r) => r.fileId))
 }
 
-export async function calcFsFilesMetadataTotalSize(db: DatabaseAdapter): Promise<number> {
+export async function queryFsMetaTotalSize(db: DatabaseAdapter): Promise<number> {
   const result = await db.getFirstAsync<{ total: number }>(
     'SELECT COALESCE(SUM(size), 0) AS total FROM fs',
   )

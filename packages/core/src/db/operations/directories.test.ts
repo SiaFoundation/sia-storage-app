@@ -21,11 +21,11 @@ import {
   sanitizeDirectorySegment,
   syncDirectoryFromMetadata,
 } from './directories'
-import { insertFileRecord, queryFileRecordById } from './files'
+import { insertFile, queryFileById } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 async function createTestFile(id: string) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: `${id}.jpg`,
     type: 'image/jpeg',
@@ -459,14 +459,14 @@ describe('renameDirectory', () => {
     await moveFileToDirectory(db(), 'f1', dir.id)
     await moveFileToDirectory(db(), 'f2', vacation.id)
 
-    const before1 = (await queryFileRecordById(db(), 'f1'))!.updatedAt
-    const before2 = (await queryFileRecordById(db(), 'f2'))!.updatedAt
+    const before1 = (await queryFileById(db(), 'f1'))!.updatedAt
+    const before2 = (await queryFileById(db(), 'f2'))!.updatedAt
 
     await new Promise((r) => setTimeout(r, 10))
     await renameDirectory(db(), dir.id, 'Images')
 
-    const after1 = (await queryFileRecordById(db(), 'f1'))!.updatedAt
-    const after2 = (await queryFileRecordById(db(), 'f2'))!.updatedAt
+    const after1 = (await queryFileById(db(), 'f1'))!.updatedAt
+    const after2 = (await queryFileById(db(), 'f2'))!.updatedAt
     expect(after1).toBeGreaterThan(before1)
     expect(after2).toBeGreaterThan(before2)
   })
@@ -546,11 +546,11 @@ describe('deleteDirectoryAndTrashFiles', () => {
     const dirs = await queryAllDirectoriesWithCounts(db())
     expect(dirs).toHaveLength(0)
 
-    const f1 = await queryFileRecordById(db(), 'f1')
+    const f1 = await queryFileById(db(), 'f1')
     expect(f1!.trashedAt).not.toBeNull()
-    const f2 = await queryFileRecordById(db(), 'f2')
+    const f2 = await queryFileById(db(), 'f2')
     expect(f2!.trashedAt).not.toBeNull()
-    const f3 = await queryFileRecordById(db(), 'f3')
+    const f3 = await queryFileById(db(), 'f3')
     expect(f3!.trashedAt).not.toBeNull()
   })
 
@@ -582,7 +582,7 @@ describe('deleteDirectoryAndTrashFiles', () => {
     const dirs = await queryAllDirectoriesWithCounts(db())
     expect(dirs.map((d) => d.path).sort()).toEqual(['Videos', 'Videos/Work'])
 
-    const f2 = await queryFileRecordById(db(), 'f2')
+    const f2 = await queryFileById(db(), 'f2')
     expect(f2!.trashedAt).toBeNull()
 
     const path2 = await queryDirectoryPathForFile(db(), 'f2')
@@ -677,14 +677,14 @@ describe('moveDirectory', () => {
     await moveFileToDirectory(db(), 'f2', q1.id)
     await insertDirectory(db(), 'Archive')
 
-    const before1 = (await queryFileRecordById(db(), 'f1'))!.updatedAt
-    const before2 = (await queryFileRecordById(db(), 'f2'))!.updatedAt
+    const before1 = (await queryFileById(db(), 'f1'))!.updatedAt
+    const before2 = (await queryFileById(db(), 'f2'))!.updatedAt
 
     await new Promise((r) => setTimeout(r, 10))
     await moveDirectory(db(), reports.id, 'Archive')
 
-    const after1 = (await queryFileRecordById(db(), 'f1'))!.updatedAt
-    const after2 = (await queryFileRecordById(db(), 'f2'))!.updatedAt
+    const after1 = (await queryFileById(db(), 'f1'))!.updatedAt
+    const after2 = (await queryFileById(db(), 'f2'))!.updatedAt
     expect(after1).toBeGreaterThan(before1)
     expect(after2).toBeGreaterThan(before2)
   })
@@ -831,7 +831,7 @@ describe('moveFileToDirectory', () => {
     await new Promise((r) => setTimeout(r, 10))
     await moveFileToDirectory(db(), 'f1', dir.id)
 
-    const file = await queryFileRecordById(db(), 'f1')
+    const file = await queryFileById(db(), 'f1')
     expect(file!.updatedAt).toBeGreaterThan(1000)
   })
 })

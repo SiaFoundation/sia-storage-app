@@ -2,8 +2,8 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecord, FileRecordRow, ThumbSize } from '../../types/files'
 import { ThumbSizes } from '../../types/files'
 import { transformRow } from './files'
-import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
-import { queryLocalObjectsForFile } from './localObjects'
+import { buildActiveFileFilter, buildActiveFilter } from './library'
+import { queryObjectsForFile } from './localObjects'
 
 export type ThumbnailCandidateRow = {
   id: string
@@ -71,7 +71,7 @@ export async function queryBestThumbnailByFileId(
     requiredSize,
   )
   if (!row) return null
-  const objects = await queryLocalObjectsForFile(db, row.id)
+  const objects = await queryObjectsForFile(db, row.id)
   return transformRow(row, objects)
 }
 
@@ -88,7 +88,7 @@ export async function queryThumbnailFileInfoByFileIds(
   }>(`SELECT id, type, localId FROM files WHERE thumbForId IN (${ph})`, ...fileIds)
 }
 
-export async function queryThumbnailRecordByFileIdAndSize(
+export async function queryThumbnailByFileIdAndSize(
   db: DatabaseAdapter,
   fileId: string,
   size: ThumbSize,
@@ -100,7 +100,7 @@ export async function queryThumbnailRecordByFileIdAndSize(
     size,
   )
   if (!row) return null
-  const objects = await queryLocalObjectsForFile(db, row.id)
+  const objects = await queryObjectsForFile(db, row.id)
   return transformRow(row, objects)
 }
 
@@ -142,7 +142,7 @@ export async function queryThumbnailScanProgress(
     `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND ${buildActiveFileFilter('f')}`,
   )
   const thumbsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildActiveRecordFilter('f')} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildActiveFilter('f')} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
   )
   return {
     originals: originalsRow?.count ?? 0,

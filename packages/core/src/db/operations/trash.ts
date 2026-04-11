@@ -14,7 +14,10 @@ async function getGroupsForFileIds(
   )
 }
 
-export async function trashFiles(db: DatabaseAdapter, fileIds: string[]): Promise<void> {
+export async function trashFilesAndThumbnails(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<void> {
   if (fileIds.length === 0) return
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
@@ -36,7 +39,10 @@ export async function trashFiles(db: DatabaseAdapter, fileIds: string[]): Promis
   await recalculateCurrentForGroups(db, groups)
 }
 
-export async function restoreFiles(db: DatabaseAdapter, fileIds: string[]): Promise<void> {
+export async function restoreFilesAndThumbnails(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<void> {
   if (fileIds.length === 0) return
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
@@ -56,7 +62,7 @@ export async function restoreFiles(db: DatabaseAdapter, fileIds: string[]): Prom
   await recalculateCurrentForGroups(db, groups)
 }
 
-export async function permanentlyDeleteFiles(
+export async function tombstoneFilesAndThumbnails(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<void> {
@@ -95,7 +101,7 @@ export async function autoPurgeOldTrashedFiles(
     500,
     async (rows) => {
       const ids = rows.map((r) => r.id)
-      await permanentlyDeleteFiles(db, ids)
+      await tombstoneFilesAndThumbnails(db, ids)
       if (onBatch) await onBatch(ids)
     },
   )

@@ -1,4 +1,4 @@
-import { insertFileRecord } from './files'
+import { insertFile } from './files'
 import {
   addTagToFile,
   addTagToFiles,
@@ -20,7 +20,7 @@ import {
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 async function createTestFile(id: string) {
-  await insertFileRecord(db(), {
+  await insertFile(db(), {
     id,
     name: `${id}.jpg`,
     type: 'image/jpeg',
@@ -166,7 +166,7 @@ describe('queryAllTagsWithCounts', () => {
   })
 
   it('excludes trashed files from count', async () => {
-    await insertFileRecord(db(), {
+    await insertFile(db(), {
       id: 'trashed',
       name: 'trashed.jpg',
       type: 'image/jpeg',

@@ -438,7 +438,7 @@ describe('Version Sync', () => {
     const toDelete = trashedOnA
       .filter((f) => f.trashedAt != null)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
-    await appA.app.files.permanentlyDeleteWithCleanup(toDelete)
+    await appA.app.files.tombstoneWithThumbnailsAndCleanup(toDelete)
 
     // Wait for A's sync-up to delete the objects and B to see the tombstone
     await waitForCondition(async () => (await appB.getFileById('lc-v3'))?.deletedAt != null, {
@@ -551,7 +551,7 @@ describe('Version Sync', () => {
     const toDelete = trashedOnA
       .filter((f) => f.trashedAt != null)
       .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
-    await appA.app.files.permanentlyDeleteWithCleanup(toDelete)
+    await appA.app.files.tombstoneWithThumbnailsAndCleanup(toDelete)
     await waitForCondition(async () => (await appA.getFileById('tri-v1'))?.deletedAt != null, {
       timeout: 15_000,
       message: 'A tombstones v1+v2',

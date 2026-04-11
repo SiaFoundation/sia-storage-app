@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService, AppServiceInternal } from '../app/service'
-import type { FileRecordsQueryOpts } from '../db/operations/files'
+import type { FileQueryOpts } from '../db/operations/files'
 import {
   decodeFileMetadata,
   encodeFileMetadata,
@@ -108,7 +108,7 @@ export async function syncUpMetadataBatch(
     return
   }
   if (!app.sync.getState().isSyncingUp) {
-    const queryOpts: FileRecordsQueryOpts = {
+    const queryOpts: FileQueryOpts = {
       order: 'ASC',
       orderBy: 'updatedAt',
       pinned: { indexerURL, isPinned: true },

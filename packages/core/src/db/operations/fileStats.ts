@@ -1,5 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
-import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
+import { buildActiveFileFilter, buildActiveFilter } from './library'
 
 export type UploadCategoryStats = {
   total: number
@@ -99,7 +99,7 @@ export async function queryUploadStats(
     q(
       `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
-    q(`f.kind = 'thumb' AND ${buildActiveRecordFilter('f')} AND f.hash != ''`),
+    q(`f.kind = 'thumb' AND ${buildActiveFilter('f')} AND f.hash != ''`),
   ])
 
   const fileCategories = [photos, videos, audio, docs, other]

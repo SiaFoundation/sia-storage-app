@@ -2,7 +2,7 @@ import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
 import type {
   Directory,
   DirectoryWithCount,
-  FileRecordsQueryOpts,
+  FileQueryOpts,
   FsMetaRow,
   LibraryQueryParams,
   Tag,
@@ -113,59 +113,57 @@ export interface AppService {
       opts?: { skipInvalidation?: boolean },
     ): Promise<void>
   }
-  /** File record CRUD, queries, trash, and purge operations. */
+  /** File CRUD, queries, trash, and purge operations. */
   files: {
-    /** Returns a file record by its ID, or null if not found. */
+    /** Returns a file by ID. */
     getById(id: string): Promise<FileRecord | null>
-    /** Returns file records for the given IDs. */
+    /** Returns files by IDs. */
     getByIds(ids: string[]): Promise<FileRecord[]>
-    /** Returns a file record matching a remote object ID and indexer URL. */
+    /** Returns a file by object ID and indexer URL. */
     getByObjectId(objectId: string, indexerURL: string): Promise<FileRecord | null>
-    /** Returns file records matching the given local IDs. */
+    /** Returns files by local IDs. */
     getByLocalIds(localIds: string[]): Promise<FileRecord[]>
-    /** Returns a file record by exact name match. */
+    /** Returns a file by name (current version). */
     getByName(name: string): Promise<FileRecord | null>
-    /** Returns a file record by content hash. */
+    /** Returns a file by content hash. */
     getByContentHash(hash: string): Promise<FileRecord | null>
-    /** Returns file records matching any of the given content hashes. */
+    /** Returns files by content hashes. */
     getByContentHashes(hashes: string[]): Promise<FileRecord[]>
-    /** Queries file records with filtering, sorting, and pagination. */
-    query(opts: FileRecordsQueryOpts): Promise<FileRecord[]>
-    /** Returns the count of file records matching the query. */
-    queryCount(opts: FileRecordsQueryOpts): Promise<number>
-    /** Returns count and total byte size for file records matching the query. */
-    queryStats(opts: FileRecordsQueryOpts): Promise<{ count: number; totalBytes: number }>
-    /** Queries raw file record rows for library display with pagination. */
+    /** Queries files with filtering, sorting, and pagination. */
+    query(opts: FileQueryOpts): Promise<FileRecord[]>
+    /** Returns the count of files matching the query. */
+    queryCount(opts: FileQueryOpts): Promise<number>
+    /** Returns count and total size for files matching the query. */
+    queryStats(opts: FileQueryOpts): Promise<{ count: number; totalBytes: number }>
+    /** Queries file rows for library display. */
     queryLibrary(
       opts: LibraryQueryParams & { limit?: number; offset?: number },
     ): Promise<FileRecordRow[]>
-    /** Creates a new file record, optionally with a local object reference. */
+    /** Creates a file, optionally with a local object. */
     create(
       record: Omit<FileRecord, 'objects'>,
       localObject?: LocalObject,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
-    /** Creates multiple file records via bulk insert. Pass conflictClause
-     * 'OR IGNORE' to silently skip duplicates (e.g. localId conflicts). */
+    /** Creates multiple files. */
     createMany(
       records: Omit<FileRecord, 'objects'>[],
       opts?: { conflictClause?: 'OR IGNORE'; skipCurrentRecalc?: boolean },
     ): Promise<void>
-    /** Bulk upsert file records. Creates new rows, updates existing rows' metadata
-     * fields (name, size, type, etc.) while preserving addedAt, localId, deletedAt. */
+    /** Upserts multiple files. */
     upsertMany(
       records: Omit<FileRecord, 'objects'>[],
       opts?: { skipCurrentRecalc?: boolean },
     ): Promise<void>
-    /** Returns the full encodable metadata for a file, including tags and directory. */
+    /** Returns full metadata for a file, including tags and directory. */
     getMetadata(id: string): Promise<FileMetadata | null>
-    /** Returns file record rows by IDs (no objects join). */
+    /** Returns file rows by IDs (no objects join). */
     getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
-    /** Returns file record rows by object IDs and indexer URL (no objects join). */
+    /** Returns file rows by object IDs and indexer URL (no objects join). */
     getRowsByObjectIds(objectIds: string[], indexerURL: string): Promise<Map<string, FileRecordRow>>
-    /** Batch tombstone: sets deletedAt and trashedAt on multiple files. */
+    /** Tombstones files (sets deletedAt and trashedAt). */
     tombstone(fileIds: string[], opts?: { skipInvalidation?: boolean }): Promise<void>
-    /** Partially updates a file record by ID. */
+    /** Updates a file. */
     update(
       update: Partial<FileRecordRow> & { id: string },
       opts?: {
@@ -174,7 +172,7 @@ export interface AppService {
         skipCurrentRecalc?: boolean
       },
     ): Promise<void>
-    /** Partially updates multiple file records in a single transaction. */
+    /** Updates multiple files. */
     updateMany(
       updates: (Partial<FileRecordRow> & { id: string })[],
       opts?: {
@@ -182,65 +180,65 @@ export interface AppService {
         skipCurrentRecalc?: boolean
       },
     ): Promise<void>
-    /** Updates a file record and upserts its local object in one operation. */
+    /** Updates a file and upserts its local object. */
     updateWithLocalObject(
       update: Partial<FileRecordRow> & { id: string },
       localObject: LocalObject,
       opts?: { includeUpdatedAt?: boolean; skipInvalidation?: boolean },
     ): Promise<void>
-    /** Soft-deletes a file record (tombstone). */
+    /** Hard-deletes a file by ID. */
     delete(id: string, opts?: { skipInvalidation?: boolean }): Promise<void>
-    /** Soft-deletes multiple file records. */
+    /** Hard-deletes multiple files by ID. */
     deleteMany(ids: string[]): Promise<void>
-    /** Soft-deletes all file records. */
+    /** Hard-deletes all files. */
     deleteAll(): Promise<void>
-    /** Soft-deletes a file and all its associated thumbnails. */
-    deleteAndThumbnails(id: string): Promise<void>
-    /** Soft-deletes multiple files and all their associated thumbnails. */
-    deleteManyAndThumbnails(ids: string[]): Promise<void>
-    /** Deletes files that have no remaining remote objects on the given indexer. */
+    /** Hard-deletes a file and its thumbnails. */
+    deleteWithThumbnails(id: string): Promise<void>
+    /** Hard-deletes multiple files and their thumbnails. */
+    deleteManyWithThumbnails(ids: string[]): Promise<void>
+    /** Hard-deletes lost files and their thumbnails. */
     deleteLost(indexerURL: string): Promise<number>
-    /** Recalculates the current column for all version groups containing the given file IDs. */
+    /** Recalculates the current version flag for version groups containing the given file IDs. */
     recalculateCurrent(fileIds: string[]): Promise<void>
-    /** Recalculates the current column for the given version groups. */
+    /** Recalculates the current version flag for the given version groups. */
     recalculateCurrentForGroups(
       groups: { name: string; directoryId: string | null }[],
     ): Promise<void>
-    /** Moves files to the trash. */
+    /** Trashes files and their thumbnails. */
     trash(ids: string[]): Promise<void>
-    /** Restores files from the trash. */
+    /** Restores files and their thumbnails from trash. */
     restore(ids: string[]): Promise<void>
-    /** Returns the count of files that have not yet been uploaded. */
+    /** Returns the count of unuploaded files. */
     getUnuploadedCount(): Promise<number>
-    /** Returns summary info for files that have not yet been uploaded. */
+    /** Returns unuploaded files. */
     getUnuploaded(): Promise<{ id: string; name: string; type: string; size: number }[]>
-    /** Returns summary info for all active (non-trashed, non-deleted) files. */
+    /** Returns summaries of all active files. */
     getActiveSummaries(): Promise<{ id: string; kind: string; type: string; size: number }[]>
-    /** Returns IDs of files that have been uploaded to the given indexer. */
+    /** Returns IDs of files uploaded to the given indexer. */
     getUploadedIds(indexerUrl: string): Promise<string[]>
-    /** Permanently deletes files past the trash retention period. */
+    /** Tombstones files past the trash retention period. */
     autoPurge(): Promise<number>
-    /** Permanently deletes file records by ID (hard delete). */
-    permanentlyDelete(ids: string[]): Promise<void>
-    /** Permanently deletes files and cleans up local files and uploads. */
-    permanentlyDeleteWithCleanup(
+    /** Tombstones files and thumbnails (sets deletedAt). */
+    tombstoneWithThumbnails(ids: string[]): Promise<void>
+    /** Tombstones files and thumbnails, then cleans up local files and uploads. */
+    tombstoneWithThumbnailsAndCleanup(
       files: { id: string; type: string; localId: string | null }[],
     ): Promise<void>
-    /** Runs auto-purge and cleans up local files and uploads for purged files. */
+    /** Tombstones files past trash retention, then cleans up local files and uploads. */
     autoPurgeWithCleanup(): Promise<void>
-    /** Returns the count of lost files for the given indexer. */
+    /** Returns the count of lost files for an indexer. */
     getLostCount(indexerURL: string): Promise<number>
-    /** Returns count and total byte size of lost files for the given indexer. */
+    /** Returns count and total size of lost files for an indexer. */
     getLostStats(indexerURL: string): Promise<{ count: number; totalBytes: number }>
-    /** Returns all versions of a file (same name + directory), ordered by updatedAt DESC. */
+    /** Returns all versions of a file, ordered by updatedAt DESC. */
     getVersionHistory(name: string, directoryId: string | null): Promise<FileRecord[]>
-    /** Renames all versions of a file. Merges into target group if it exists. */
+    /** Renames all versions of a file. */
     renameFile(id: string, newName: string): Promise<void>
-    /** Moves all versions of a file to a directory. Merges into target group if it exists. */
+    /** Moves all versions of a file to a directory. */
     moveFile(id: string, dirId: string | null): Promise<void>
-    /** Trashes all versions of a file by looking up its version group from the file ID. */
+    /** Trashes all versions of a file by ID. */
     trashFile(id: string): Promise<void>
-    /** Trashes all versions of a file (same name + directory). */
+    /** Trashes all versions of a file by name and directory. */
     trashAllVersions(name: string, directoryId: string | null): Promise<string[]>
   }
   /** Directory operations: create, rename, delete, move, and organize files into directories. */

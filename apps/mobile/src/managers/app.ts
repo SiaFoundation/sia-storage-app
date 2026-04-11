@@ -4,7 +4,6 @@ import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { stopLogAppender } from '@siastorage/logger'
 import { mutate } from 'swr'
 import { initializeDB, resetDb } from '../db'
-import { autoPurgeOldTrashedFiles } from '../lib/deleteFile'
 import { app } from '../stores/appService'
 import { resetFileSelection } from '../stores/fileSelection'
 import { initLogger } from '../stores/logs'
@@ -93,7 +92,7 @@ export async function initApp(): Promise<void> {
       label: 'Cleaning up old files',
       message: 'Cleaning up old files...',
       runner: async (updateMessage) => {
-        await autoPurgeOldTrashedFiles()
+        await app().files.autoPurgeWithCleanup()
         await runFsOrphanScanner({
           onProgress: (removed) => {
             updateMessage(`Cleaning up old files... ${removed} removed`)

@@ -3,7 +3,7 @@ import type { LocalObject, LocalObjectRow } from '../../encoding/localObject'
 import { localObjectFromStorageRow, localObjectToStorageRow } from '../../encoding/localObject'
 import * as sql from '../sql'
 
-export async function queryLocalObjectsForFile(
+export async function queryObjectsForFile(
   db: DatabaseAdapter,
   fileId: string,
 ): Promise<LocalObject[]> {
@@ -15,7 +15,7 @@ export async function queryLocalObjectsForFile(
   return rows.map(localObjectFromStorageRow)
 }
 
-export async function insertLocalObject(db: DatabaseAdapter, object: LocalObject): Promise<void> {
+export async function insertObject(db: DatabaseAdapter, object: LocalObject): Promise<void> {
   const e = localObjectToStorageRow(object)
   await sql.insert(
     db,
@@ -37,7 +37,7 @@ export async function insertLocalObject(db: DatabaseAdapter, object: LocalObject
   )
 }
 
-export async function deleteLocalObjectById(
+export async function deleteObject(
   db: DatabaseAdapter,
   objectId: string,
   indexerURL: string,
@@ -45,10 +45,7 @@ export async function deleteLocalObjectById(
   await sql.del(db, 'objects', { id: objectId, indexerURL })
 }
 
-export async function countLocalObjectsForFile(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<number> {
+export async function countObjectsForFile(db: DatabaseAdapter, fileId: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM objects WHERE fileId = ?',
     fileId,
@@ -56,14 +53,11 @@ export async function countLocalObjectsForFile(
   return row?.count ?? 0
 }
 
-export async function deleteLocalObjectsByFileId(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<void> {
+export async function deleteObjectsForFile(db: DatabaseAdapter, fileId: string): Promise<void> {
   await sql.del(db, 'objects', { fileId })
 }
 
-export async function queryLocalObjectsForFiles(
+export async function queryObjectsForFiles(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<Record<string, LocalObject[]>> {
@@ -83,7 +77,7 @@ export async function queryLocalObjectsForFiles(
   return map
 }
 
-export async function insertManyLocalObjects(
+export async function insertManyObjects(
   db: DatabaseAdapter,
   objects: LocalObject[],
 ): Promise<void> {
@@ -107,7 +101,7 @@ export async function insertManyLocalObjects(
   await sql.insertMany(db, 'objects', rows, { conflictClause: 'OR REPLACE' })
 }
 
-export async function deleteManyLocalObjectsByObjectIds(
+export async function deleteManyObjectsByIds(
   db: DatabaseAdapter,
   objectIds: string[],
   indexerURL: string,
@@ -135,12 +129,12 @@ export async function queryFilesWithNoObjects(
   return rows.map((row) => row.id)
 }
 
-export async function deleteManyLocalObjectsByFileIds(
+export async function deleteManyObjectsForFiles(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
   for (const fileId of fileIds) {
-    await deleteLocalObjectsByFileId(db, fileId)
+    await deleteObjectsForFile(db, fileId)
   }
 }

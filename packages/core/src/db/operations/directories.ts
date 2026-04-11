@@ -4,8 +4,8 @@ import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { recalculateCurrentForGroup, recalculateCurrentForGroups } from './files'
-import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
-import { trashFiles } from './trash'
+import { buildActiveFileFilter, buildActiveFilter } from './library'
+import { trashFilesAndThumbnails } from './trash'
 
 export type Directory = {
   id: string
@@ -414,11 +414,11 @@ export async function deleteDirectoryAndTrashFiles(
     `SELECT f.id FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
-       AND f.kind = 'file' AND ${buildActiveRecordFilter('f')}`,
+       AND f.kind = 'file' AND ${buildActiveFilter('f')}`,
     [dir.path, escaped],
     500,
     async (rows) => {
-      await trashFiles(
+      await trashFilesAndThumbnails(
         db,
         rows.map((r) => r.id),
       )

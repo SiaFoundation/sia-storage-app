@@ -21,7 +21,7 @@ export function buildUploaderNamespace(
       let skipped = 0
       const entries: FileEntry[] = []
       for (const fileId of fileIds) {
-        const file = await ops.readFileRecord(db, fileId)
+        const file = await ops.readFile(db, fileId)
         if (!file) {
           skipped++
           continue
@@ -42,7 +42,7 @@ export function buildUploaderNamespace(
     async enqueueWithUri(entries) {
       const fileEntries: FileEntry[] = []
       for (const entry of entries) {
-        const file = await ops.readFileRecord(db, entry.fileId)
+        const file = await ops.readFile(db, entry.fileId)
         if (!file) continue
         fileEntries.push({
           fileId: entry.fileId,

@@ -1,10 +1,5 @@
 import type { DatabaseAdapter } from '../adapters/db'
-import {
-  deleteFsFileMetadata,
-  readFsFileMetadata,
-  updateFsFileMetadataUsedAt,
-  upsertFsFileMetadata,
-} from '../db/operations/fs'
+import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
 
 const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
@@ -37,12 +32,12 @@ export async function getFsFileUri(
   adapter: FsFileUriAdapter,
   opts?: { usedAtUpdateInterval?: number },
 ): Promise<string | null> {
-  const existingMeta = await readFsFileMetadata(db, file.id)
+  const existingMeta = await readFsMeta(db, file.id)
   const { value: size, error } = await adapter.size(file.id, file.type)
 
   if (size === null) {
     if (error === 'not_found' && existingMeta) {
-      await deleteFsFileMetadata(db, file.id)
+      await deleteFsMeta(db, file.id)
     }
     // On stat_error, preserve existing metadata so we don't lose
     // track of files that haven't been uploaded yet.
@@ -51,7 +46,7 @@ export async function getFsFileUri(
   const now = Date.now()
 
   if (!existingMeta) {
-    await upsertFsFileMetadata(db, {
+    await upsertFsMeta(db, {
       fileId: file.id,
       size,
       addedAt: now,
@@ -61,7 +56,7 @@ export async function getFsFileUri(
     const interval = opts?.usedAtUpdateInterval ?? USED_AT_UPDATE_INTERVAL_MS
     const timeSinceLastUse = now - existingMeta.usedAt
     if (timeSinceLastUse > interval) {
-      await updateFsFileMetadataUsedAt(db, file.id, now)
+      await updateFsMetaUsedAt(db, file.id, now)
     }
   }
 

@@ -68,7 +68,7 @@ export function buildDownloadsNamespace(
   }
 
   async function execute(fileId: string): Promise<void> {
-    const file = await ops.readFileRecord(db, fileId)
+    const file = await ops.readFile(db, fileId)
     if (!file) throw new Error('File record not found')
 
     const { value: size } = await fsIO.size(fileId, file.type)
@@ -76,7 +76,7 @@ export function buildDownloadsNamespace(
 
     const sdk = getSdk()
     if (!sdk) throw new Error('SDK not initialized')
-    const objects = await ops.queryLocalObjectsForFile(db, fileId)
+    const objects = await ops.queryObjectsForFile(db, fileId)
     if (!objects.length) throw new Error('No object available for download')
 
     register(fileId)
@@ -97,7 +97,7 @@ export function buildDownloadsNamespace(
 
       if (controller.signal.aborted) return
 
-      await ops.upsertFsFileMetadata(db, {
+      await ops.upsertFsMeta(db, {
         fileId,
         size: file.size,
         addedAt: Date.now(),
