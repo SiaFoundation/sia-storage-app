@@ -95,6 +95,8 @@ export {
 } from './fs'
 export {
   ALL_CATEGORIES,
+  buildActiveFileFilter,
+  buildActiveRecordFilter,
   buildLatestVersionFilter,
   buildLibraryQueryParts,
   type Category,

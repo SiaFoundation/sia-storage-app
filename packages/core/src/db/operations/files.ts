@@ -5,7 +5,7 @@ import { localObjectFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import { buildLatestVersionFilter } from './library'
+import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
 import { insertLocalObject, queryLocalObjectsForFile } from './localObjects'
 import { trashFiles } from './trash'
 
@@ -593,10 +593,8 @@ export async function deleteFileRecordsAndThumbnails(
     directoryId: string | null
   }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
   await db.withTransactionAsync(async () => {
-    for (const id of ids) {
-      await sql.del(db, 'files', { thumbForId: id })
-      await sql.del(db, 'files', { id })
-    }
+    await db.runAsync(`DELETE FROM files WHERE thumbForId IN (${ph})`, ...ids)
+    await db.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
   })
   await recalculateCurrentForGroups(db, rows)
 }
@@ -698,7 +696,7 @@ export async function updateFileRecordWithLocalObject(
 export async function queryLostFileCount(db: DatabaseAdapter, indexerURL: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE ${buildActiveFileFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
@@ -716,7 +714,7 @@ export async function queryLostFileStats(
 ): Promise<{ count: number; totalBytes: number }> {
   const row = await db.getFirstAsync<{ count: number; totalBytes: number }>(
     `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files f
-     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE ${buildActiveFileFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
@@ -937,11 +935,7 @@ export async function deleteManyFileRecordsByIds(
     name: string
     directoryId: string | null
   }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
-  await db.withTransactionAsync(async () => {
-    for (const id of ids) {
-      await deleteFileRecordById(db, id)
-    }
-  })
+  await db.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
   await recalculateCurrentForGroups(db, groups)
 }
 
@@ -951,8 +945,7 @@ export async function queryFileRecordByName(
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
-     FROM files f WHERE f.name = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}
+     FROM files f WHERE f.name = ? AND ${buildActiveFileFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC`,
     name,
   )
@@ -971,8 +964,7 @@ export async function readFileRecordByName(
 export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.kind = 'file'
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE ${buildActiveFileFilter('f')}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)`,
   )
   return row?.count ?? 0
@@ -988,8 +980,7 @@ export async function queryUnuploadedFiles(
     size: number
   }>(
     `SELECT f.id, f.name, f.type, f.size FROM files f
-     WHERE f.kind = 'file'
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE ${buildActiveFileFilter('f')}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
      ORDER BY f.addedAt DESC`,
   )
@@ -1003,7 +994,7 @@ export async function queryActiveFileSummaries(
     kind: string
     type: string
     size: number
-  }>('SELECT id, kind, type, size FROM files WHERE trashedAt IS NULL AND deletedAt IS NULL')
+  }>(`SELECT f.id, f.kind, f.type, f.size FROM files f WHERE ${buildActiveFileFilter('f')}`)
 }
 
 export async function queryUploadedFileIds(
@@ -1021,7 +1012,7 @@ export async function deleteLostFiles(db: DatabaseAdapter, indexerURL: string): 
   return sql.processInBatches<{ id: string }>(
     db,
     `SELECT f.id FROM files f
-     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE f.kind = 'file' AND ${buildActiveRecordFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)

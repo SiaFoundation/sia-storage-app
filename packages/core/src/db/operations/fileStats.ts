@@ -1,5 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
-import { buildLatestVersionFilter } from './library'
+import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
 
 export type UploadCategoryStats = {
   total: number
@@ -88,21 +88,18 @@ export async function queryUploadStats(
 ): Promise<UploadStats> {
   // Exclude pending imports (hash = '') — they have no size yet and are
   // shown separately in the "Pending import" row.
-  const active = `f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.hash != ''`
-  const latestVersion = buildLatestVersionFilter('f')
+  const activeFile = `${buildActiveFileFilter('f')} AND f.hash != ''`
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
   const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'image/%' AND ${latestVersion}`),
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'video/%' AND ${latestVersion}`),
-    q(`f.kind = 'file' AND ${active} AND f.type LIKE 'audio/%' AND ${latestVersion}`),
+    q(`${activeFile} AND f.type LIKE 'image/%'`),
+    q(`${activeFile} AND f.type LIKE 'video/%'`),
+    q(`${activeFile} AND f.type LIKE 'audio/%'`),
+    q(`${activeFile} AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')`),
     q(
-      `f.kind = 'file' AND ${active} AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%') AND ${latestVersion}`,
+      `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
-    q(
-      `f.kind = 'file' AND ${active} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%' AND ${latestVersion}`,
-    ),
-    q(`f.kind = 'thumb' AND ${active}`),
+    q(`f.kind = 'thumb' AND ${buildActiveRecordFilter('f')} AND f.hash != ''`),
   ])
 
   const fileCategories = [photos, videos, audio, docs, other]

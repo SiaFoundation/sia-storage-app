@@ -2,7 +2,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecord, FileRecordRow, ThumbSize } from '../../types/files'
 import { ThumbSizes } from '../../types/files'
 import { transformRow } from './files'
-import { buildLatestVersionFilter } from './library'
+import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
 import { queryLocalObjectsForFile } from './localObjects'
 
 export type ThumbnailCandidateRow = {
@@ -124,10 +124,8 @@ export async function queryThumbnailCandidatePage(
       AND t.thumbSize IN (${ThumbSizes.join(',')})
      WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
        AND f.type != 'image/tiff'
-       AND f.kind = 'file'
+       AND ${buildActiveFileFilter('f')}
        AND f.hash != ''
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}
        ${cursorClause}
      GROUP BY f.id
      HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
@@ -141,10 +139,10 @@ export async function queryThumbnailScanProgress(
   db: DatabaseAdapter,
 ): Promise<{ originals: number; thumbs: number }> {
   const originalsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND ${buildActiveFileFilter('f')}`,
   )
   const thumbsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE kind = 'thumb' AND deletedAt IS NULL AND thumbSize IN (${ThumbSizes.join(',')})`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildActiveRecordFilter('f')} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
   )
   return {
     originals: originalsRow?.count ?? 0,

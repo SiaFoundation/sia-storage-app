@@ -24,6 +24,23 @@ export function buildLatestVersionFilter(alias: string): string {
   return `${alias}.current = 1`
 }
 
+/**
+ * Filters to active, user-visible file records: non-trashed, non-deleted,
+ * kind = 'file', latest version only. Do NOT use for thumbnail queries
+ * (thumbnails don't maintain the `current` column).
+ */
+export function buildActiveFileFilter(alias: string): string {
+  return `${alias}.kind = 'file' AND ${alias}.trashedAt IS NULL AND ${alias}.deletedAt IS NULL AND ${alias}.current = 1`
+}
+
+/**
+ * Filters to non-trashed, non-deleted records of any kind.
+ * Use for thumbnail queries or when kind/version filtering is handled separately.
+ */
+export function buildActiveRecordFilter(alias: string): string {
+  return `${alias}.trashedAt IS NULL AND ${alias}.deletedAt IS NULL`
+}
+
 export function buildLibraryQueryParts(
   opts: {
     sortBy?: SortBy
@@ -58,9 +75,7 @@ export function buildLibraryQueryParts(
 
   const whereParts: string[] = []
   const params: (string | number)[] = []
-  whereParts.push(`${tableAlias}.kind = 'file'`)
-  whereParts.push(`${tableAlias}.trashedAt IS NULL`)
-  whereParts.push(`${tableAlias}.deletedAt IS NULL`)
+  whereParts.push(buildActiveFileFilter(tableAlias))
 
   if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
     const categoryConditions: string[] = []
@@ -103,7 +118,6 @@ export function buildLibraryQueryParts(
     whereParts.push(`${tableAlias}.directoryId = ?`)
     params.push(directoryId)
   }
-  whereParts.push(buildLatestVersionFilter(tableAlias))
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
   let orderExpr: string
@@ -136,7 +150,7 @@ export type LibraryQueryParams = {
 
 export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f WHERE ${buildActiveFileFilter('f')}`,
   )
   return row?.count ?? 0
 }
@@ -144,10 +158,8 @@ export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number
 export async function queryMediaFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.kind = 'file'
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')
-       AND ${buildLatestVersionFilter('f')}`,
+     WHERE ${buildActiveFileFilter('f')}
+       AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')`,
   )
   return row?.count ?? 0
 }
@@ -156,8 +168,7 @@ export async function queryTagFileCount(db: DatabaseAdapter, tagId: string): Pro
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      INNER JOIN file_tags ft ON ft.fileId = f.id
-     WHERE ft.tagId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}`,
+     WHERE ft.tagId = ? AND ${buildActiveFileFilter('f')}`,
     tagId,
   )
   return row?.count ?? 0
@@ -172,8 +183,7 @@ export async function queryDirectoryFileCount(
   }
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.directoryId = ? AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}`,
+     WHERE f.directoryId = ? AND ${buildActiveFileFilter('f')}`,
     directoryId,
   )
   return row?.count ?? 0
@@ -182,8 +192,7 @@ export async function queryDirectoryFileCount(
 export async function queryUnfiledFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.directoryId IS NULL AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}`,
+     WHERE f.directoryId IS NULL AND ${buildActiveFileFilter('f')}`,
   )
   return row?.count ?? 0
 }

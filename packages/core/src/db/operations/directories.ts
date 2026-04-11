@@ -4,7 +4,7 @@ import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { recalculateCurrentForGroup, recalculateCurrentForGroups } from './files'
-import { buildLatestVersionFilter } from './library'
+import { buildActiveFileFilter, buildActiveRecordFilter } from './library'
 import { trashFiles } from './trash'
 
 export type Directory = {
@@ -202,7 +202,7 @@ export async function queryDirectoryChildren(
   if (parentPath === null) {
     rows = await db.getAllAsync<Row>(
       `SELECT d.id, d.path, d.createdAt,
-        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}) as fileCount,
+        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildActiveFileFilter('f')}) as fileCount,
         (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
        FROM directories d
        WHERE d.path NOT LIKE '%/%' ESCAPE '\\'
@@ -212,7 +212,7 @@ export async function queryDirectoryChildren(
     const escaped = escapeLikePattern(parentPath)
     rows = await db.getAllAsync<Row>(
       `SELECT d.id, d.path, d.createdAt,
-        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}) as fileCount,
+        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildActiveFileFilter('f')}) as fileCount,
         (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
        FROM directories d
        WHERE d.path LIKE ? || '/%' ESCAPE '\\' AND d.path NOT LIKE ? || '/%/%' ESCAPE '\\'
@@ -236,7 +236,7 @@ export async function queryAllDirectoriesWithCounts(
 
   const rows = await db.getAllAsync<Row>(
     `SELECT d.id, d.path, d.createdAt,
-      (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ${buildLatestVersionFilter('f')}) as fileCount,
+      (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildActiveFileFilter('f')}) as fileCount,
       (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
      FROM directories d
      ORDER BY d.nameSortKey`,
@@ -414,7 +414,7 @@ export async function deleteDirectoryAndTrashFiles(
     `SELECT f.id FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
-       AND f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
+       AND f.kind = 'file' AND ${buildActiveRecordFilter('f')}`,
     [dir.path, escaped],
     500,
     async (rows) => {
@@ -441,7 +441,7 @@ export async function queryCountFilesWithDirectories(
   if (fileIds.length === 0) return 0
   const ph = fileIds.map(() => '?').join(',')
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files WHERE id IN (${ph}) AND directoryId IS NOT NULL`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.id IN (${ph}) AND f.directoryId IS NOT NULL AND ${buildActiveFileFilter('f')}`,
     ...fileIds,
   )
   return row?.count ?? 0
@@ -458,10 +458,8 @@ export async function queryFileByNameInDirectory(
             f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
      FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
-     WHERE f.name = ? AND f.kind = 'file'
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+     WHERE f.name = ? AND ${buildActiveFileFilter('f')}
        AND d.path = ?
-       AND ${buildLatestVersionFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC
      LIMIT 1`,
     fileName,
@@ -478,9 +476,7 @@ export async function queryFilesByDirectoryPath(
             f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
      FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
-     WHERE d.path = ? AND f.kind = 'file'
-       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
-       AND ${buildLatestVersionFilter('f')}
+     WHERE d.path = ? AND ${buildActiveFileFilter('f')}
      ORDER BY f.nameSortKey`,
     directoryPath,
   )
