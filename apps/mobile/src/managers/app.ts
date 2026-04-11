@@ -36,9 +36,12 @@ export async function initApp(): Promise<void> {
   if (FORCED_RESET_VERSION) {
     const completed = await app().settings.getCompletedResetVersion()
     const hasOnboarded = await app().settings.getHasOnboarded()
-    if (completed !== FORCED_RESET_VERSION && hasOnboarded) {
-      await resetApp()
-      return
+    if (completed !== FORCED_RESET_VERSION) {
+      if (hasOnboarded) {
+        await resetApp()
+        return
+      }
+      await app().settings.setCompletedResetVersion(FORCED_RESET_VERSION)
     }
   }
 
