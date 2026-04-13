@@ -177,7 +177,8 @@ export function SearchScreen({ navigation }: Props) {
   const toggleTag = useCallback((tagId: string) => {
     setSelectedTags((prev) => {
       const next = new Set(prev)
-      next.has(tagId) ? next.delete(tagId) : next.add(tagId)
+      if (next.has(tagId)) next.delete(tagId)
+      else next.add(tagId)
       return next
     })
   }, [])

@@ -86,7 +86,8 @@ export function setSortDir(scope: string, sortDir: SortDir) {
 export function toggleCategory(scope: string, category: Category) {
   const current = getSettings(scope)
   const set = new Set(current.selectedCategories)
-  set.has(category) ? set.delete(category) : set.add(category)
+  if (set.has(category)) set.delete(category)
+  else set.add(category)
   updateScope(scope, { selectedCategories: Array.from(set) })
 }
 
