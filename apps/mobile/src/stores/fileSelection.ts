@@ -25,7 +25,8 @@ export function exitSelectionMode(): void {
 export function toggleFileSelection(id: string): void {
   const s = store.getState()
   const set = selectedSet()
-  set.has(id) ? set.delete(id) : set.add(id)
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
   store.setState({ ...s, selectedIds: [...set] })
 }
 

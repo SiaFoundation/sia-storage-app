@@ -47,7 +47,7 @@ command = "bun install"
 
 [[workflows.steps]]
 type = "Command"
-command = "bunx biome format --write ."
+command = "bunx oxfmt --write ."
 
 [[workflows.steps]]
 type = "Command"
