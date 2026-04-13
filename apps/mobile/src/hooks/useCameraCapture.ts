@@ -20,7 +20,9 @@ export function useCameraCapture() {
       const result = await ImagePicker.launchCamera({
         mediaType: 'mixed',
         saveToPhotos: false,
-        includeExtra: true,
+        // Keep false — includeExtra triggers a photo library permission request on iOS,
+        // preventing users who only grant camera access from using capture.
+        includeExtra: false,
         // Docs: A mode that determines which representation to use if an asset
         // contains more than one on iOS or disables HEIC/HEIF to JPEG conversion on Android
         // if set to 'current'.
