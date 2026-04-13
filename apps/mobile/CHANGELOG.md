@@ -2,6 +2,15 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.9.5 (2026-04-13)
+
+### Fixes
+
+- Exclude slabs from default object queries for faster reads. Add getForFileWithSlabs for callers that need slab data.
+- Fixed background crashes (iOS 0xdead10cc) caused by SQLite file locks held during app suspension. The database now gates queries, drains in-flight operations, and checkpoints the WAL before closing.
+- Fixed camera capture requesting photo library permission instead of camera permission.
+- Fixed an issue where fresh installs would loop back to the welcome screen after completing onboarding.
+
 ## 1.9.4 (2026-04-09)
 
 ### Fixes

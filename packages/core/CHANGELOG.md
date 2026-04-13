@@ -1,3 +1,15 @@
+## 0.0.4 (2026-04-13)
+
+### Features
+
+- Exclude slabs from default object queries for faster reads. Add getForFileWithSlabs for callers that need slab data.
+
+### Fixes
+
+- Add operation-level batching for unbounded SQL queries (auto-purge, delete lost files, delete directory) to keep memory bounded and yield to the event loop between batches.
+- Standardized DB operation naming for consistency and clarity.
+- Standardized and fixed SQL filters across file queries.
+
 ## 0.0.3 (2026-04-06)
 
 ### Features
