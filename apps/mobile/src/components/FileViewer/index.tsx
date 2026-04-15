@@ -48,7 +48,8 @@ export function FileViewer({
   const mediaLibrarySwr = useSWR(localId ? ['mediaLibraryUri', localId] : null, () =>
     getMediaLibraryUri(localId),
   )
-  const mediaLibraryUri = mediaLibrarySwr.data
+  const mediaLibraryUri =
+    mediaLibrarySwr.data?.status === 'resolved' ? mediaLibrarySwr.data.uri : null
   const mediaLibraryLoading = localId ? !mediaLibrarySwr.data && !mediaLibrarySwr.error : false
 
   const baseMediaStyle = styles.media

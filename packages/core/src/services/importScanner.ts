@@ -11,7 +11,11 @@ export type ImportScannerResult = {
   skipped: number
 }
 
-export type ResolveLocalId = (localId: string) => Promise<string | null>
+export type ResolveLocalIdResult =
+  | { status: 'resolved'; uri: string }
+  | { status: 'deleted' }
+  | { status: 'unavailable' }
+export type ResolveLocalId = (localId: string) => Promise<ResolveLocalIdResult>
 export type CalculateContentHash = (uri: string) => Promise<string | null>
 export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<string>
 
@@ -172,8 +176,8 @@ export class ImportScanner {
             }
             deferredProcessed++
 
-            const resolvedUri = await resolveLocalId(file.localId)
-            if (!resolvedUri) {
+            const resolved = await resolveLocalId(file.localId)
+            if (resolved.status === 'deleted') {
               logger.debug('importScanner', 'localId_not_resolved', {
                 fileId: file.id,
                 localId: file.localId,
@@ -185,11 +189,19 @@ export class ImportScanner {
               result.lost++
               continue
             }
+            if (resolved.status === 'unavailable') {
+              logger.debug('importScanner', 'localId_content_unavailable', {
+                fileId: file.id,
+                localId: file.localId,
+              })
+              result.skipped++
+              continue
+            }
 
             try {
               // Exit early on suspension before starting file copy + hash.
               if (signal?.aborted) break
-              const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolvedUri)
+              const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri)
               if (signal?.aborted) break
               const outcome = await this.hashExistingFile(file, uri)
               if (outcome.action === 'finalized') {

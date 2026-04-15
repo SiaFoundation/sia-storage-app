@@ -215,8 +215,8 @@ describe('syncAssets — eager background sync for recent photos', () => {
       })
 
       jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
-        if (localId === '1') return 'file://1'
-        return null
+        if (localId === '1') return { status: 'resolved', uri: 'file://1' }
+        return { status: 'deleted' }
       })
       const assets = [
         {
@@ -276,7 +276,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
 
     it('allows same-hash files within a single batch', async () => {
       jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
-        return null
+        return { status: 'deleted' }
       })
       jest.mocked(calculateContentHash).mockImplementation(async () => 'sha256:same-for-all')
       const assets = [
@@ -331,7 +331,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
 
     it('prefers full-quality media library URI over sourceUri', async () => {
       jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
-        return 'file:///full-quality.jpg'
+        return { status: 'resolved', uri: 'file:///full-quality.jpg' }
       })
       const assets = [
         {
@@ -359,7 +359,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
 
     it('falls back to sourceUri when media library URI is unavailable', async () => {
       jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
-        return null
+        return { status: 'deleted' }
       })
       const assets = [
         {
@@ -389,7 +389,7 @@ describe('syncAssets — eager background sync for recent photos', () => {
 
     it('retries MIME detection from local file when initial returns octet-stream', async () => {
       jest.mocked(getMediaLibraryUri).mockImplementation(async () => {
-        return 'file:///local/photo'
+        return { status: 'resolved', uri: 'file:///local/photo' }
       })
       jest
         .mocked(getMimeType)
@@ -458,8 +458,8 @@ describe('syncAssets — eager background sync for recent photos', () => {
       })
 
       jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
-        if (localId === '1') return 'file://1'
-        return null
+        if (localId === '1') return { status: 'resolved', uri: 'file://1' }
+        return { status: 'deleted' }
       })
       const assets = [
         {
@@ -497,8 +497,8 @@ describe('syncAssets — eager background sync for recent photos', () => {
       })
 
       jest.mocked(getMediaLibraryUri).mockImplementation(async (localId) => {
-        if (localId === '1') return 'file://1'
-        return null
+        if (localId === '1') return { status: 'resolved', uri: 'file://1' }
+        return { status: 'deleted' }
       })
       const assets = [
         {
