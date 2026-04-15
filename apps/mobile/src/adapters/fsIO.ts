@@ -19,12 +19,12 @@ export function createFsIOAdapter(): FsIOAdapter {
       try {
         const stat = await RNFS.stat(fsFileUri(fileId, type))
         return { value: stat.size }
-      } catch (e: any) {
-        const msg = e?.message ?? ''
-        if (msg.includes('does not exist') || msg.includes('ENOENT')) {
-          return { value: null, error: 'not_found' as const }
+      } catch {
+        const exists = await RNFS.exists(fsFileUri(fileId, type))
+        if (!exists) {
+          return { value: null, error: 'not_found' }
         }
-        return { value: null, error: 'stat_error' as const }
+        return { value: null, error: 'stat_error' }
       }
     },
     async remove(fileId, type) {

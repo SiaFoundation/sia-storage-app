@@ -20,9 +20,9 @@ export function createFsAdapter(params: { tempDir: string }) {
         return { value: nodeFs.statSync(fsFilePath(fileId, type)).size }
       } catch (e: any) {
         if (e?.code === 'ENOENT') {
-          return { value: null, error: 'not_found' as const }
+          return { value: null, error: 'not_found' }
         }
-        return { value: null, error: 'stat_error' as const }
+        return { value: null, error: 'stat_error' }
       }
     },
     async remove(fileId, type) {
