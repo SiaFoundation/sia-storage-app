@@ -1,8 +1,8 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
+import { BackoffTracker } from '../lib/backoffTracker'
 
 const MAX_PER_TICK = 20
-const ERROR_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
 
 export type ImportScannerResult = {
   finalized: number
@@ -22,7 +22,7 @@ export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<str
 export class ImportScanner {
   private app: AppService | null = null
   private processingFiles = new Set<string>()
-  private erroredFiles = new Map<string, number>()
+  private backoff = new BackoffTracker()
   private _calculateContentHash: CalculateContentHash | null = null
   private _getMimeType: GetMimeType | null = null
 
@@ -41,7 +41,7 @@ export class ImportScanner {
     this._calculateContentHash = null
     this._getMimeType = null
     this.processingFiles.clear()
-    this.erroredFiles.clear()
+    this.backoff.reset()
   }
 
   isInitialized(): boolean {
@@ -52,40 +52,30 @@ export class ImportScanner {
     return this.processingFiles.has(fileId)
   }
 
-  isFileInErrorCooldown(fileId: string): boolean {
-    const lastError = this.erroredFiles.get(fileId)
-    if (!lastError) return false
-    const elapsed = Date.now() - lastError
-    if (elapsed >= ERROR_COOLDOWN_MS) {
-      this.erroredFiles.delete(fileId)
-      return false
-    }
-    return true
-  }
-
-  private markFileErrored(fileId: string): void {
-    this.erroredFiles.set(fileId, Date.now())
-  }
-
   private getApp(): AppService {
     if (!this.app) throw new Error('ImportScanner not initialized')
     return this.app
   }
 
   /**
-   * Finalizes placeholder files (hash: '') in two passes:
+   * Finalizes placeholder files (hash: '') in two phases:
    *
-   * 1. File already on disk (importFiles background copy landed, or
-   *    manually added): hash the local file and update the record.
-   *    Always processed — no I/O pressure since the file is local.
+   * Phase 1 — requires hash: file is already on disk (user import, camera
+   * capture, or background copy). Just hash and update the record.
+   * Always runs regardless of backpressure — the source may be a
+   * temp file that gets cleaned up, so delaying risks data loss.
    *
-   * 2. File has localId but no local copy (catalogAssets placeholder):
-   *    copy from the media library, then hash. Throttled by maxDeferred
-   *    to avoid filling device storage faster than uploads drain it.
+   * Phase 2 — requires copy and hash: file has a localId but no local copy
+   * (archive sync placeholder). Copy from the media library, then hash.
+   * Throttled by maxDeferred to avoid filling device storage faster
+   * than uploads drain it. When maxDeferred=0, this phase is skipped.
    *
-   * Files that cannot be recovered (localId doesn't resolve, no local
-   * file and no localId) are marked with lostReason so the UI can
-   * surface them to the user.
+   * Files that fail transiently (unavailable cloud content, copy errors,
+   * hash errors) enter the BackoffTracker and are excluded from queries
+   * on subsequent ticks until their backoff expires (5m → 15m → 60m cap).
+   *
+   * Files that cannot be recovered (deleted from device, no local file
+   * and no localId) are marked with lostReason for the UI.
    */
   async runScan(
     signal?: AbortSignal,
@@ -101,21 +91,6 @@ export class ImportScanner {
     }
 
     try {
-      const candidates = await app.files.query({
-        hashEmpty: true,
-        activeOnly: true,
-        limit: MAX_PER_TICK,
-        order: 'DESC',
-        orderBy: 'addedAt',
-      })
-
-      if (candidates.length === 0) return result
-
-      logger.debug('importScanner', 'tick', { candidates: candidates.length })
-
-      const effectiveMaxDeferred = maxDeferred ?? Infinity
-      let deferredProcessed = 0
-
       const updates: Array<{
         id: string
         hash: string
@@ -127,28 +102,44 @@ export class ImportScanner {
         lostReason: string
       }> = []
 
-      for (const file of candidates) {
-        if (signal?.aborted) break
+      const excludeIds = this.backoff.getExcludeIds()
+      const excludeOpt = excludeIds.length > 0 ? excludeIds : undefined
 
-        if (this.processingFiles.has(file.id)) {
-          result.skipped++
-          continue
-        }
+      // Phase 1: files already on disk, just need hashing.
+      if (!signal?.aborted) {
+        const localCandidates = await app.files.query({
+          hashEmpty: true,
+          fileExistsLocally: true,
+          activeOnly: true,
+          limit: MAX_PER_TICK,
+          order: 'DESC',
+          orderBy: 'addedAt',
+          excludeIds: excludeOpt,
+        })
 
-        if (this.isFileInErrorCooldown(file.id)) {
-          result.skipped++
-          continue
-        }
-
-        this.processingFiles.add(file.id)
-        try {
-          const localFileUri = await app.fs.getFileUri({
-            id: file.id,
-            type: file.type,
+        if (localCandidates.length > 0) {
+          logger.debug('importScanner', 'tick_local', {
+            candidates: localCandidates.length,
           })
+        }
 
-          // Pass 1: local file on disk — hash and finalize.
-          if (localFileUri) {
+        for (const file of localCandidates) {
+          if (signal?.aborted) break
+          if (this.processingFiles.has(file.id)) {
+            result.skipped++
+            continue
+          }
+
+          this.processingFiles.add(file.id)
+          try {
+            const localFileUri = await app.fs.getFileUri({
+              id: file.id,
+              type: file.type,
+            })
+            if (!localFileUri) {
+              result.skipped++
+              continue
+            }
             // Exit early on suspension before starting CPU-intensive hash.
             if (signal?.aborted) break
             const outcome = await this.hashExistingFile(file, localFileUri)
@@ -160,98 +151,136 @@ export class ImportScanner {
                 type: outcome.type,
               })
               result.finalized++
+              this.backoff.clear(file.id)
             } else {
-              this.markFileErrored(file.id)
+              this.backoff.recordSkip(file.id)
               result.failed++
             }
-            continue
+          } catch (e) {
+            logger.error('importScanner', 'process_error', {
+              fileId: file.id,
+              error: e as Error,
+            })
+            this.backoff.recordSkip(file.id)
+            result.failed++
+          } finally {
+            this.processingFiles.delete(file.id)
           }
+        }
+      }
 
-          // Pass 2: has localId, no local file — copy from media library
-          // then hash. Throttled by maxDeferred to limit storage pressure.
-          if (file.localId && resolveLocalId) {
-            if (deferredProcessed >= effectiveMaxDeferred) {
-              result.skipped++
-              continue
-            }
-            deferredProcessed++
+      // Phase 2: files needing copy from media library, throttled by maxDeferred.
+      const effectiveMaxDeferred = maxDeferred ?? Infinity
+      if (!signal?.aborted && effectiveMaxDeferred > 0) {
+        const deferredLimit =
+          effectiveMaxDeferred === Infinity
+            ? MAX_PER_TICK
+            : Math.min(effectiveMaxDeferred, MAX_PER_TICK)
 
-            const resolved = await resolveLocalId(file.localId)
-            if (resolved.status === 'deleted') {
-              logger.debug('importScanner', 'localId_not_resolved', {
-                fileId: file.id,
-                localId: file.localId,
-              })
-              lostUpdates.push({
-                id: file.id,
-                lostReason: 'Source photo deleted from device',
-              })
-              result.lost++
-              continue
-            }
-            if (resolved.status === 'unavailable') {
-              logger.debug('importScanner', 'localId_content_unavailable', {
-                fileId: file.id,
-                localId: file.localId,
-              })
-              result.skipped++
-              continue
-            }
+        const deferredCandidates = await app.files.query({
+          hashEmpty: true,
+          fileExistsLocally: false,
+          activeOnly: true,
+          limit: deferredLimit,
+          order: 'DESC',
+          orderBy: 'addedAt',
+          excludeIds: excludeOpt,
+        })
 
-            try {
-              // Exit early on suspension before starting file copy + hash.
-              if (signal?.aborted) break
-              const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri)
-              if (signal?.aborted) break
-              const outcome = await this.hashExistingFile(file, uri)
-              if (outcome.action === 'finalized') {
-                updates.push({
-                  id: file.id,
-                  hash: outcome.hash,
-                  size: outcome.size,
-                  type: outcome.type,
-                })
-                result.finalized++
-              } else {
-                this.markFileErrored(file.id)
-                result.failed++
-              }
-            } catch (e) {
-              logger.error('importScanner', 'copy_from_localId_failed', {
-                fileId: file.id,
-                error: e as Error,
-              })
-              lostUpdates.push({
-                id: file.id,
-                lostReason: 'Failed to copy from device',
-              })
-              result.lost++
-            }
-            continue
-          }
+        if (deferredCandidates.length > 0) {
+          logger.debug('importScanner', 'tick_deferred', {
+            candidates: deferredCandidates.length,
+          })
+        }
 
-          // Has localId but no resolver available — skip, don't mark lost.
-          if (file.localId) {
+        for (const file of deferredCandidates) {
+          if (signal?.aborted) break
+          if (this.processingFiles.has(file.id)) {
             result.skipped++
             continue
           }
 
-          // No local file, no localId — orphan.
-          logger.debug('importScanner', 'orphan', { fileId: file.id })
-          lostUpdates.push({
-            id: file.id,
-            lostReason: 'No local file or source available',
-          })
-          result.lost++
-        } catch (e) {
-          logger.error('importScanner', 'process_error', {
-            fileId: file.id,
-            error: e as Error,
-          })
-          this.markFileErrored(file.id)
-          result.failed++
-        } finally {
-          this.processingFiles.delete(file.id)
+          this.processingFiles.add(file.id)
+          try {
+            if (file.localId && resolveLocalId) {
+              const resolved = await resolveLocalId(file.localId)
+              if (resolved.status === 'deleted') {
+                logger.debug('importScanner', 'localId_not_resolved', {
+                  fileId: file.id,
+                  localId: file.localId,
+                })
+                lostUpdates.push({
+                  id: file.id,
+                  lostReason: 'Source photo deleted from device',
+                })
+                result.lost++
+                continue
+              }
+              if (resolved.status === 'unavailable') {
+                logger.debug('importScanner', 'localId_content_unavailable', {
+                  fileId: file.id,
+                  localId: file.localId,
+                })
+                this.backoff.recordSkip(file.id)
+                result.skipped++
+                continue
+              }
+
+              try {
+                // Exit early on suspension before starting file copy + hash.
+                if (signal?.aborted) break
+                const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri)
+                if (signal?.aborted) break
+                const outcome = await this.hashExistingFile(file, uri)
+                if (outcome.action === 'finalized') {
+                  updates.push({
+                    id: file.id,
+                    hash: outcome.hash,
+                    size: outcome.size,
+                    type: outcome.type,
+                  })
+                  result.finalized++
+                  this.backoff.clear(file.id)
+                } else {
+                  this.backoff.recordSkip(file.id)
+                  result.failed++
+                }
+              } catch (e) {
+                logger.error('importScanner', 'copy_from_localId_failed', {
+                  fileId: file.id,
+                  error: e as Error,
+                })
+                this.backoff.recordSkip(file.id)
+                result.failed++
+              }
+              continue
+            }
+
+            if (file.localId) {
+              logger.debug('importScanner', 'skipped_no_resolver', {
+                fileId: file.id,
+              })
+              this.backoff.recordSkip(file.id)
+              result.skipped++
+              continue
+            }
+
+            logger.debug('importScanner', 'orphan', { fileId: file.id })
+            lostUpdates.push({
+              id: file.id,
+              lostReason: 'No local file or source available',
+            })
+            result.lost++
+          } catch (e) {
+            logger.error('importScanner', 'process_error', {
+              fileId: file.id,
+              error: e as Error,
+            })
+            this.backoff.recordSkip(file.id)
+            result.failed++
+          } finally {
+            this.processingFiles.delete(file.id)
+          }
         }
       }
 
