@@ -1,6 +1,7 @@
 import { IMPORT_SCANNER_BACKLOG_LIMIT, IMPORT_SCANNER_INTERVAL } from '@siastorage/core/config'
 import { createServiceInterval } from '@siastorage/core/lib/serviceInterval'
 import { ImportScanner, type ImportScannerResult } from '@siastorage/core/services/importScanner'
+import { logger } from '@siastorage/logger'
 import { calculateContentHash } from '../lib/contentHash'
 import { getMimeType } from '../lib/fileTypes'
 import { getMediaLibraryUri } from '../lib/mediaLibrary'
@@ -28,8 +29,14 @@ async function computeMaxDeferred(): Promise<number> {
     activeOnly: true,
     hashNotEmpty: true,
   })
-  if (pendingUpload >= IMPORT_SCANNER_BACKLOG_LIMIT) return 0
-  return IMPORT_SCANNER_BACKLOG_LIMIT - pendingUpload
+  const maxDeferred =
+    pendingUpload >= IMPORT_SCANNER_BACKLOG_LIMIT ? 0 : IMPORT_SCANNER_BACKLOG_LIMIT - pendingUpload
+  logger.debug('importScanner', 'backpressure', {
+    pendingUpload,
+    limit: IMPORT_SCANNER_BACKLOG_LIMIT,
+    maxDeferred,
+  })
+  return maxDeferred
 }
 
 export async function runImportScanner(signal?: AbortSignal): Promise<ImportScannerResult> {
