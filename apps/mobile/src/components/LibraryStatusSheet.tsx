@@ -1,5 +1,6 @@
 import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
 import { useSyncState } from '@siastorage/core/stores'
+import { TriangleAlertIcon } from 'lucide-react-native'
 import { useCallback } from 'react'
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
@@ -68,16 +69,6 @@ export function LibraryStatusSheet() {
     {
       refreshInterval,
     },
-  )
-  const importing = useSWR(
-    ['importing-stats', isOpen ?? null],
-    async () =>
-      app().files.queryStats({
-        hashEmpty: true,
-        activeOnly: true,
-        order: 'ASC',
-      }),
-    { refreshInterval },
   )
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
   const pendingBackup = useFileStatsLocal({ localOnly: true }, { refreshInterval })
@@ -190,15 +181,22 @@ export function LibraryStatusSheet() {
         </RowGroup>
 
         <RowGroup title="Files" indicator={toggle} style={styles.groupSpacing}>
+          {displayMode === 'size' && (stats.data?.importingCount ?? 0) > 0 && (
+            <View style={styles.warningRow}>
+              <TriangleAlertIcon color={palette.yellow[400]} size={14} />
+              <Text style={styles.warningText}>
+                Sizes do not include {(stats.data?.importingCount ?? 0).toLocaleString()} file
+                {stats.data?.importingCount === 1 ? '' : 's'} pending import.
+              </Text>
+            </View>
+          )}
           <RowSubGroup title="Library" style={styles.subGroupSpacing}>
-            <Text style={styles.sectionDesc}>
-              All files tracked in the library. Pending imports are waiting to be copied from your
-              device's photo library.
-            </Text>
+            <Text style={styles.sectionDesc}>All files tracked in the library.</Text>
             <InfoCard>
               <LabeledValueRow
-                label="Device and network"
-                labelWidth={180}
+                label="Total"
+                labelStyle={styles.boldLabel}
+                labelWidth={120}
                 value={
                   <View style={styles.valueRight}>
                     <Text style={styles.valueText}>
@@ -209,14 +207,15 @@ export function LibraryStatusSheet() {
                 align="right"
                 canCopy={false}
               />
-              {(importing.data?.count ?? 0) > 0 && (
+              {(stats.data?.importingCount ?? 0) > 0 && (
                 <LabeledValueRow
                   label="Pending import"
+                  labelStyle={styles.indentedLabel}
                   labelWidth={120}
                   value={
                     <View style={styles.valueRight}>
                       <Text style={styles.valueText}>
-                        {`${(importing.data?.count ?? 0).toLocaleString()} files`}
+                        {`${(stats.data?.importingCount ?? 0).toLocaleString()} files`}
                       </Text>
                       <View style={styles.dotSyncing} />
                     </View>
@@ -226,26 +225,10 @@ export function LibraryStatusSheet() {
                   showDividerTop
                 />
               )}
-              <LabeledValueRow
-                label="Total"
-                labelWidth={120}
-                value={
-                  <View style={styles.valueRight}>
-                    <Text style={styles.valueText}>
-                      {`${((stats.data?.files.total ?? 0) + (importing.data?.count ?? 0)).toLocaleString()} files`}
-                    </Text>
-                  </View>
-                }
-                align="right"
-                canCopy={false}
-                showDividerTop
-              />
             </InfoCard>
           </RowSubGroup>
           <RowSubGroup title="Sync" style={styles.subGroupSpacing}>
-            <Text style={styles.sectionDesc}>
-              Upload progress across all files ready to be synced to the network.
-            </Text>
+            <Text style={styles.sectionDesc}>Upload progress across all files in the library.</Text>
             {(batch.data?.count ?? 0) > 0 && (
               <InfoCard>
                 <LabeledValueRow
@@ -540,8 +523,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 8,
   },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  warningText: {
+    color: palette.yellow[400],
+    fontSize: 12,
+    flex: 1,
+  },
   networkGroupGap: { height: 8 },
   boldLabel: { fontWeight: '700' },
+  indentedLabel: { paddingLeft: 12 },
   toggleTrack: {
     flexDirection: 'row',
     backgroundColor: whiteA.a08,
