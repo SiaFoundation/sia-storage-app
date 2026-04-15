@@ -1,4 +1,4 @@
-import { ImportScanner } from './importScanner'
+import { ImportScanner, type ResolveLocalIdResult } from './importScanner'
 
 type MockHelper = {
   app: any
@@ -165,7 +165,12 @@ describe('ImportScanner', () => {
   describe('requires copy and hash (photo library placeholder)', () => {
     it('resolves localId and copies', async () => {
       mock.addFile('f4', { localId: 'ph://asset-123' })
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId)
 
@@ -181,7 +186,12 @@ describe('ImportScanner', () => {
       mock.addFile('f1', { localId: 'ph://1', addedAt: 3000 })
       mock.addFile('f2', { localId: 'ph://2', addedAt: 2000 })
       mock.addFile('f3', { localId: 'ph://3', addedAt: 1000 })
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId, 1)
 
@@ -192,7 +202,12 @@ describe('ImportScanner', () => {
 
     it('skips entirely when maxDeferred=0', async () => {
       mock.addFile('f1', { localId: 'ph://1' })
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId, 0)
 
@@ -214,7 +229,9 @@ describe('ImportScanner', () => {
   describe('lostReason marking', () => {
     it('marks file lost when localId does not resolve', async () => {
       mock.addFile('f5', { localId: 'ph://deleted-asset' })
-      const resolveLocalId = jest.fn(async () => null)
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({ status: 'deleted' }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId)
 
@@ -229,7 +246,12 @@ describe('ImportScanner', () => {
 
     it('marks file lost when copy from localId fails', async () => {
       mock.addFile('f6', { localId: 'ph://asset' })
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
       mock.app.fs.copyFile.mockRejectedValueOnce(new Error('Copy failed'))
 
       const result = await scanner.runScan(undefined, resolveLocalId)
@@ -241,6 +263,36 @@ describe('ImportScanner', () => {
           lostReason: 'Failed to copy from device',
         }),
       ])
+    })
+
+    it('skips file when content is temporarily unavailable (not lost)', async () => {
+      mock.addFile('f-icloud', { localId: 'ph://icloud-video' })
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({ status: 'unavailable' }),
+      )
+
+      const result = await scanner.runScan(undefined, resolveLocalId)
+
+      expect(result.skipped).toBe(1)
+      expect(result.lost).toBe(0)
+      expect(mock.app.files.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('counts unavailable asset against deferred budget', async () => {
+      mock.addFile('f-unavail', { localId: 'ph://unavail', addedAt: 2000 })
+      mock.addFile('f-ok', { localId: 'ph://ok', addedAt: 1000 })
+      const resolveLocalId = jest.fn(
+        async (id: string): Promise<ResolveLocalIdResult> =>
+          id === 'ph://unavail'
+            ? { status: 'unavailable' }
+            : { status: 'resolved', uri: 'file:///photo.jpg' },
+      )
+
+      const result = await scanner.runScan(undefined, resolveLocalId, 1)
+
+      expect(result.skipped).toBe(2) // 1 unavailable + 1 throttled
+      expect(result.finalized).toBe(0)
+      expect(result.lost).toBe(0)
     })
 
     it('marks orphan file (no local file, no localId) as lost', async () => {
@@ -408,7 +460,12 @@ describe('ImportScanner', () => {
 
       mock.addFile('photo-file', { localId: 'ph://123', addedAt: 1000 })
 
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId)
 
@@ -441,7 +498,12 @@ describe('ImportScanner', () => {
       mock.addFile('deferred1', { localId: 'ph://1', addedAt: 3000 })
       mock.addFile('deferred2', { localId: 'ph://2', addedAt: 2000 })
 
-      const resolveLocalId = jest.fn(async () => 'file:///photo.jpg')
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({
+          status: 'resolved',
+          uri: 'file:///photo.jpg',
+        }),
+      )
 
       const result = await scanner.runScan(undefined, resolveLocalId, 1)
 

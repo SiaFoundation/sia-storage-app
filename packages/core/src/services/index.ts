@@ -10,6 +10,7 @@ export {
   ImportScanner,
   type ImportScannerResult,
   type ResolveLocalId,
+  type ResolveLocalIdResult,
 } from './importScanner'
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'

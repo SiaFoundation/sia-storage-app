@@ -187,12 +187,12 @@ export async function syncAssets(
     candidateFiles.filter((f) => f.status === 'new'),
     BATCH_SIZE,
     async (f) => {
-      const localUri = await getMediaLibraryUri(f.localId)
-      if (!localUri) {
+      const resolved = await getMediaLibraryUri(f.localId)
+      if (resolved.status === 'deleted') {
         f.localId = null
       }
 
-      const bestUri = localUri ?? f.sourceUri
+      const bestUri = (resolved.status === 'resolved' ? resolved.uri : null) ?? f.sourceUri
       if (!bestUri) {
         f.status = 'incomplete'
         f.statusDetails = 'noUri'
