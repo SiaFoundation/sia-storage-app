@@ -38,6 +38,7 @@
     "./services/thumbnailScanner": "./src/services/thumbnailScanner.ts",
     "./services/cacheEviction": "./src/services/cacheEviction.ts",
     "./services/importScanner": "./src/services/importScanner.ts",
+    "./services/suspension": "./src/services/suspension.ts",
     "./services/uploader": "./src/services/uploader.ts",
     "./services/fsFileUri": "./src/services/fsFileUri.ts",
     "./app": "./src/app/index.ts",

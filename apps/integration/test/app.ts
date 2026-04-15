@@ -16,7 +16,7 @@ import type {
   TagWithCount,
 } from '@siastorage/core/db/operations'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
-import { CoalescingQueue } from '@siastorage/core/lib/coalescingQueue'
+import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
@@ -55,16 +55,26 @@ export {
   waitForCondition,
 } from './utils'
 
+export class DatabaseSuspendedError extends Error {
+  constructor() {
+    super('Database is suspended')
+    this.name = 'DatabaseSuspendedError'
+  }
+}
+
 /**
  * Mirrors the real mobile app's DB lifecycle (initializeDB / closeDb / reopen).
  * Uses a file-backed better-sqlite3 database with the same PRAGMAs
  * (WAL, busy_timeout, foreign_keys) and runs migrations on open.
- * The proxy delegates to the active connection; calls throw after close.
+ * The adapter delegates to the active connection; calls throw after close.
+ * Supports a query gate that rejects queries while suspended.
  */
 function createTestDatabase(dbPath: string) {
   let inner: (DatabaseAdapter & { close(): void }) | null = null
+  let gated = false
 
   function requireOpen(): DatabaseAdapter & { close(): void } {
+    if (gated) throw new DatabaseSuspendedError()
     if (!inner) throw new Error('Database is closed')
     return inner
   }
@@ -94,13 +104,21 @@ function createTestDatabase(dbPath: string) {
       await inner.execAsync(
         'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
       )
-      await runMigrations(proxy, sortMigrations(coreMigrations))
+      // Run migrations on the raw connection (not the proxy) so open()
+      // works while the gate is active during resume.
+      await runMigrations(inner, sortMigrations(coreMigrations))
     },
     close() {
       if (inner) {
         inner.close()
         inner = null
       }
+    },
+    gate() {
+      gated = true
+    },
+    ungate() {
+      gated = false
     },
     get isOpen() {
       return inner !== null
@@ -221,9 +239,7 @@ export function createTestApp(
   const appKey = sdk.appKey()
   const thumbnailScanner = new ThumbnailScanner()
   let connected = true
-  let suspended = false
   let background = false
-  const suspensionQueue = new CoalescingQueue()
 
   const secrets = createInMemoryStorage()
   const crypto = options?.crypto ?? {
@@ -319,6 +335,28 @@ export function createTestApp(
     interval: DB_OPTIMIZE_INTERVAL,
   })
 
+  const suspensionManager = createSuspensionManager({
+    scheduler: {
+      pause: () => scheduler.pause(),
+      abort: () => scheduler.abortAll(),
+      resume: () => scheduler.resume(),
+      waitForIdle: () => scheduler.waitForIdle(),
+    },
+    uploader: {
+      suspend: () => uploadManager.suspend(),
+      resume: () => uploadManager.resume(),
+      adjustBatchForSuspension: () => uploadManager.adjustBatchForSuspension(),
+    },
+    db: {
+      gate: () => testDb.gate(),
+      ungate: () => testDb.ungate(),
+      waitForIdle: () => Promise.resolve(),
+      close: async () => testDb.close(),
+      reopen: () => testDb.open(),
+    },
+    hardDeadlineMs: 15_000,
+  })
+
   return {
     app: appService,
     internal,
@@ -366,46 +404,16 @@ export function createTestApp(
       scheduler.resume()
     },
 
-    async suspend() {
-      return suspensionQueue.enqueue(async () => {
-        if (suspended) return
-        scheduler.pause()
-        await uploadManager.suspend()
-        await scheduler.waitForIdle()
-        testDb.close()
-        suspended = true
-      })
-    },
+    suspend: () => suspensionManager.suspend(),
 
-    async resumeFromSuspension() {
-      return suspensionQueue.enqueue(async () => {
-        if (!suspended) {
-          uploadManager.adjustBatchForSuspension()
-          return
-        }
-        await testDb.open()
-        suspended = false
-        uploadManager.adjustBatchForSuspension()
-        uploadManager.resume()
-        scheduler.resume()
-      })
-    },
+    resumeFromSuspension: () => suspensionManager.resume(),
 
     async suspendIfBackground() {
       if (!background) return
-      return suspensionQueue.enqueue(async () => {
-        if (suspended) return
-        scheduler.pause()
-        await uploadManager.suspend()
-        await scheduler.waitForIdle()
-        testDb.close()
-        suspended = true
-      })
+      return suspensionManager.suspend()
     },
 
-    isSuspended() {
-      return suspended
-    },
+    isSuspended: () => suspensionManager.isSuspended(),
 
     get isBackground() {
       return background

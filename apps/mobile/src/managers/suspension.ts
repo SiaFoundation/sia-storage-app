@@ -1,10 +1,10 @@
-import { CoalescingQueue } from '@siastorage/core/lib/coalescingQueue'
 import {
   abortAllServiceIntervals,
   pauseAllServiceIntervals,
   resumeAllServiceIntervals,
   waitForAllServiceIntervalsIdle,
 } from '@siastorage/core/lib/serviceInterval'
+import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
@@ -16,21 +16,53 @@ import {
   suspendDb,
   waitForQueriesIdle,
 } from '../db'
+import { setSWREnabled } from '../lib/swr'
 import { resumeLogger } from '../stores/logs'
 import { getIsBackgroundTaskRunning } from './backgroundTasks'
 import { getUploadManager } from './uploader'
 
-type State = 'active' | 'suspending' | 'suspended' | 'resuming'
+// Hard deadline for service drain. iOS gives ~30s via beginBackgroundTask
+// before freezing the process. The DB stays open during drain so services
+// can finish their work, so we keep this conservative to leave margin for
+// gate + WAL checkpoint + close. On Android this entire sequence is
+// unnecessary (Android's cached apps freezer doesn't enforce file lock
+// checks like iOS's 0xdead10cc), but it runs harmlessly.
+const HARD_DEADLINE_MS = 15_000
 
-// Hard deadline for drain — if services haven't drained by this time,
-// close the DB anyway. iOS gives ~30s with beginBackgroundTask; we use
-// 25s to leave margin for the close + cleanup.
-const HARD_DEADLINE_MS = 25_000
+const manager = createSuspensionManager({
+  scheduler: {
+    pause: pauseAllServiceIntervals,
+    abort: abortAllServiceIntervals,
+    resume: resumeAllServiceIntervals,
+    waitForIdle: waitForAllServiceIntervalsIdle,
+  },
+  uploader: {
+    suspend: () => getUploadManager()?.suspend() ?? Promise.resolve(),
+    resume: () => getUploadManager()?.resume(),
+    adjustBatchForSuspension: () => getUploadManager()?.adjustBatchForSuspension(),
+  },
+  db: {
+    gate: suspendDb,
+    ungate: resumeDb,
+    waitForIdle: waitForQueriesIdle,
+    close: closeDb,
+    reopen: () => initializeDB({ reopen: true }),
+  },
+  hooks: {
+    onBeforeSuspend: async () => {
+      await stopLogAppender()
+      setSWREnabled(false)
+    },
+    onAfterResume: () => {
+      setSWREnabled(true)
+      resumeLogger()
+    },
+  },
+  hardDeadlineMs: HARD_DEADLINE_MS,
+})
 
 let subscription: ReturnType<typeof AppState.addEventListener> | null = null
 let appStateRef: AppStateStatus = AppState.currentState
-let state: State = 'active'
-const queue = new CoalescingQueue()
 
 export function initSuspensionManager(): void {
   if (subscription) return
@@ -51,23 +83,15 @@ function onAppStateChange(nextState: AppStateStatus): void {
   appStateRef = nextState
 
   if (nextState === 'background') {
-    queue.enqueue(doSuspend)
+    suspendForBackground()
   } else if (nextState === 'active') {
-    queue.enqueue(doResume)
+    resumeFromSuspension()
   }
 }
 
-async function doSuspend(): Promise<void> {
-  if (state !== 'active') {
-    logger.debug('suspension', 'skipped', {
-      reason: state === 'suspended' ? 'already_suspended' : state,
-    })
-    return
-  }
+export async function suspendForBackground(): Promise<void> {
   if (getIsBackgroundTaskRunning()) {
-    logger.debug('suspension', 'skipped', {
-      reason: 'background_task_running',
-    })
+    logger.debug('suspension', 'skipped', { reason: 'background_task_running' })
     return
   }
   if (!dbInitialized) {
@@ -75,100 +99,20 @@ async function doSuspend(): Promise<void> {
     return
   }
 
-  state = 'suspending'
-  logger.info('suspension', 'starting')
-
   // Request extra execution time from iOS (~30s) before it suspends
   // the process. On Android this is a no-op.
   await BackgroundTimer.start(0)
-
   try {
-    // Phase 0: Flush logs while the DB adapter is still open, then gate
-    // all new queries. After suspendDb(), any query from SWR hooks or
-    // other callers throws DatabaseSuspendedError instantly without
-    // reaching the native GCD queue.
-    await stopLogAppender()
-    suspendDb()
-    logger.debug('suspension', 'db_gated')
-
-    // Phase 1: Signal all services to stop.
-    // pause prevents new ticks, abort signals in-flight workers to exit
-    // at their next signal.aborted check.
-    pauseAllServiceIntervals()
-    abortAllServiceIntervals()
-    await getUploadManager()?.suspend()
-    logger.debug('suspension', 'services_paused')
-
-    // Phase 2: Wait for in-flight work AND in-flight DB queries to
-    // finish, with a hard deadline.
-    const drainStart = Date.now()
-    const drained = await Promise.race([
-      Promise.all([waitForAllServiceIntervalsIdle(), waitForQueriesIdle()]).then(() => true),
-      new Promise<false>((r) => setTimeout(() => r(false), HARD_DEADLINE_MS)),
-    ])
-
-    if (drained) {
-      logger.debug('suspension', 'services_drained', {
-        drainMs: Date.now() - drainStart,
-      })
-    } else {
-      logger.warn('suspension', 'hard_deadline_reached', {
-        drainMs: Date.now() - drainStart,
-      })
-    }
-
-    // Phase 3: Checkpoint WAL to release file locks, then close.
-    await closeDb()
-    state = 'suspended'
-  } catch (e) {
-    logger.error('suspension', 'suspend_error', { error: e as Error })
-    // Lift the query gate so the app remains usable if it comes back.
-    resumeDb()
-    state = 'active'
+    await manager.suspend()
   } finally {
     BackgroundTimer.stop()
   }
 }
 
-async function doResume(): Promise<void> {
-  if (state !== 'suspended') {
-    getUploadManager()?.adjustBatchForSuspension()
-    return
-  }
-
-  state = 'resuming'
-  logger.info('suspension', 'resuming')
-
-  try {
-    await initializeDB({ reopen: true })
-  } catch (e) {
-    logger.error('suspension', 'resume_error', { error: e as Error })
-    state = 'suspended'
-    return
-  }
-
-  // Lift the query gate AFTER the new connection is ready, so queries
-  // flow to a valid database handle.
-  resumeDb()
-  resumeLogger()
-  logger.debug('suspension', 'db_reopened')
-
-  const manager = getUploadManager()
-  manager?.adjustBatchForSuspension()
-  manager?.resume()
-  resumeAllServiceIntervals()
-  state = 'active'
-  logger.info('suspension', 'resumed')
-}
-
 export function resumeFromSuspension(): Promise<void> {
-  return queue.enqueue(doResume)
-}
-
-export function suspendForBackground(): Promise<void> {
-  return queue.enqueue(doSuspend)
+  return manager.resume()
 }
 
 export function getIsSuspended(): boolean {
-  return state === 'suspended'
+  return manager.isSuspended()
 }
