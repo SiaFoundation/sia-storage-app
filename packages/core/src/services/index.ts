@@ -13,6 +13,7 @@ export {
 } from './importScanner'
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'
+export { type SuspensionAdapters, createSuspensionManager } from './suspension'
 export { syncDownEventsBatch } from './syncDownEvents'
 export { diffFileMetadata, type SyncUpCursor, syncUpMetadataBatch } from './syncUpMetadata'
 export {

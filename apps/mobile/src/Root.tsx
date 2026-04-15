@@ -1,6 +1,8 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 import { DarkTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
 import { AppProvider } from '@siastorage/core/app'
+import { SWRConfig } from 'swr'
+import { isSWREnabled } from './lib/swr'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
 import * as ScreenOrientation from 'expo-screen-orientation'
@@ -76,7 +78,9 @@ export function Root() {
                 })}
               />
               <AppProvider value={app()}>
-                <RootContent />
+                <SWRConfig value={{ isPaused: () => !isSWREnabled() }}>
+                  <RootContent />
+                </SWRConfig>
               </AppProvider>
             </SafeAreaView>
           </ToastProvider>

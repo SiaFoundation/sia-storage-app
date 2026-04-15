@@ -28,7 +28,10 @@ export function createTestUploaderAdapters(): UploaderAdapters {
       return {
         async read() {
           const data = nodeFs.readFileSync(filePath)
-          return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+          return data.buffer.slice(
+            data.byteOffset,
+            data.byteOffset + data.byteLength,
+          ) as ArrayBuffer
         },
       }
     },

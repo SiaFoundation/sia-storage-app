@@ -1,11 +1,18 @@
 /**
- * Tests the suspension coordination protocol: scheduler pause/drain,
- * upload manager suspend/resume, and DB close/reopen. The test harness
- * mirrors the mobile lifecycle but is independent of suspension.ts —
- * these verify the building blocks, not the mobile orchestration.
+ * Tests the suspension coordination protocol using the shared
+ * createSuspensionManager from core. The test harness and mobile both
+ * use the same orchestration code — these tests exercise the real
+ * phase ordering with real services, uploads, and DB operations.
  */
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import { createTestApp, generateTestFiles, sleep, type TestApp, waitForCondition } from './app'
+import {
+  createTestApp,
+  DatabaseSuspendedError,
+  generateTestFiles,
+  sleep,
+  type TestApp,
+  waitForCondition,
+} from './app'
 
 describe('Suspension', () => {
   let app: TestApp
@@ -315,6 +322,99 @@ describe('Suspension', () => {
 
     // App should still work normally
     await app.addFiles(generateTestFiles(2, { startId: 100 }))
+    await app.waitForNoActiveUploads()
+    expect(app.sdk.getStoredObjects().length).toBe(5)
+  }, 60_000)
+
+  it('DB queries are rejected after suspend and work after resume', async () => {
+    await app.addFiles(generateTestFiles(2, { startId: 1 }))
+    await app.waitForNoActiveUploads()
+
+    await app.suspend()
+
+    // DB is gated — queries should throw DatabaseSuspendedError.
+    await expect(app.app.files.queryCount({ order: 'ASC' })).rejects.toThrow(DatabaseSuspendedError)
+
+    await app.resumeFromSuspension()
+
+    // DB is open again — queries work.
+    const count = await app.app.files.queryCount({ order: 'ASC' })
+    expect(count).toBe(2)
+  }, 60_000)
+
+  it('sync-down writes reach the DB during drain', async () => {
+    // Inject objects so sync-down has work to do.
+    const now = Date.now()
+    for (let i = 0; i < 10; i++) {
+      app.sdk.injectObject({
+        metadata: {
+          id: `drain-file-${i}`,
+          name: `drain-photo-${i}.jpg`,
+          type: 'image/jpeg',
+          kind: 'file',
+          size: 1024,
+          hash: `drain-hash-${i}`,
+          createdAt: now - i * 1000,
+          updatedAt: now - i * 1000,
+          trashedAt: null,
+        },
+      })
+    }
+
+    // Trigger sync-down and let it start processing.
+    app.triggerSyncDown()
+    await waitForCondition(async () => (await app.getFiles()).length > 0, {
+      timeout: 10_000,
+      message: 'At least one file synced before suspend',
+    })
+
+    // Record how many files were synced before suspend.
+    const countBeforeSuspend = (await app.getFiles()).length
+
+    // Suspend while sync-down may still be processing. The drain phase
+    // lets the in-flight batch finish its DB writes before the gate closes.
+    await app.suspend()
+    await app.resumeFromSuspension()
+
+    // Pause the scheduler immediately so no new sync ticks run.
+    app.pause()
+
+    // The drain should have allowed sync-down to write at least as many
+    // files as were present before suspend — no work should be lost.
+    const countAfterResume = (await app.getFiles()).length
+    expect(countAfterResume).toBeGreaterThanOrEqual(countBeforeSuspend)
+
+    // Resume and let everything finish.
+    app.resume()
+    await app.waitForFileCount(10, 30_000)
+    expect((await app.getFiles()).length).toBe(10)
+  }, 60_000)
+
+  it('upload DB writes succeed during drain', async () => {
+    await app.addFiles(generateTestFiles(5, { startId: 1 }))
+
+    // Wait for at least one file to be packing.
+    await waitForCondition(
+      () => {
+        const uploads = app.app.uploads.getState().uploads
+        return Object.values(uploads).some((u) => u.status === 'packing' || u.status === 'packed')
+      },
+      { timeout: 10_000, message: 'At least one file packing' },
+    )
+
+    // Record upload progress before suspend.
+    const packedBefore = app.uploadManager.packedCount
+
+    // Suspend — upload manager parks after finishing its current
+    // packer.add() call. The DB write should succeed during drain.
+    await app.suspend()
+    await app.resumeFromSuspension()
+
+    // No packed work should be lost — the upload manager's count
+    // should not have regressed.
+    expect(app.uploadManager.packedCount).toBeGreaterThanOrEqual(packedBefore)
+
+    // All files should upload successfully after resume.
     await app.waitForNoActiveUploads()
     expect(app.sdk.getStoredObjects().length).toBe(5)
   }, 60_000)
