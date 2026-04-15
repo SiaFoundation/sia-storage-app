@@ -836,13 +836,13 @@ export class UploadManager {
         order: 'ASC',
         pinned: { indexerURL, isPinned: false },
         fileExistsLocally: true,
+        hashNotEmpty: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
         activeOnly: true,
       })
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
-        if (!file.hash) continue
         const fileUri = await this.app.fs.getFileUri(file)
         if (!fileUri) continue
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })

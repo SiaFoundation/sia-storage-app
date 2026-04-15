@@ -1116,58 +1116,59 @@ describe('UploadManager', () => {
       expect(mockPacker.add).not.toHaveBeenCalled()
     })
 
-    it('skips files with empty hash (placeholder files still processing)', async () => {
+    it('filters out empty-hash files at the SQL level', async () => {
       enablePolling()
-      const filesWithEmptyHash = [
-        {
-          id: 'empty-hash-1',
-          name: 'empty-hash-1.bin',
-          size: 400,
-          type: 'application/octet-stream',
-          hash: '',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          localId: null,
-          addedAt: Date.now(),
-          objects: {},
-        },
-        {
-          id: 'has-hash-1',
-          name: 'has-hash-1.bin',
-          size: 400,
-          type: 'application/octet-stream',
-          hash: 'sha256:abc123',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          localId: null,
-          addedAt: Date.now(),
-          objects: {},
-        },
-        {
-          id: 'empty-hash-2',
-          name: 'empty-hash-2.bin',
-          size: 400,
-          type: 'application/octet-stream',
-          hash: '',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          localId: null,
-          addedAt: Date.now(),
-          objects: {},
-        },
-      ]
-      queryFilesSpy.mockResolvedValueOnce(filesWithEmptyHash).mockResolvedValue([] as any)
+      // Restore the spy so the real DB query runs with hashNotEmpty: true.
+      queryFilesSpy.mockRestore()
+
+      const now = Date.now()
+      await app().files.create({
+        id: 'has-hash-1',
+        name: 'has-hash-1.bin',
+        type: 'application/octet-stream',
+        kind: 'file',
+        size: 400,
+        hash: 'sha256:abc123',
+        createdAt: now,
+        updatedAt: now,
+        localId: null,
+        addedAt: now,
+        trashedAt: null,
+        deletedAt: null,
+      })
+      await app().fs.upsertMeta({
+        fileId: 'has-hash-1',
+        size: 400,
+        addedAt: now,
+        usedAt: now,
+      })
+      await app().files.create({
+        id: 'empty-hash-1',
+        name: 'empty-hash-1.bin',
+        type: 'application/octet-stream',
+        kind: 'file',
+        size: 0,
+        hash: '',
+        createdAt: now,
+        updatedAt: now,
+        localId: null,
+        addedAt: now,
+        trashedAt: null,
+        deletedAt: null,
+      })
+      await app().fs.upsertMeta({
+        fileId: 'empty-hash-1',
+        size: 0,
+        addedAt: now,
+        usedAt: now,
+      })
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      // Only the file with a hash should be added to the packer
       expect(mockPacker.add).toHaveBeenCalledTimes(1)
-
-      // Only has-hash-1 should be registered in the upload store
       expect(app().uploads.getEntry('has-hash-1')).toBeDefined()
       expect(app().uploads.getEntry('empty-hash-1')).toBeUndefined()
-      expect(app().uploads.getEntry('empty-hash-2')).toBeUndefined()
     })
 
     it('excludeIds allows polling past the 200-file query limit', async () => {
