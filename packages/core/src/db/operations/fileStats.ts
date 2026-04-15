@@ -20,6 +20,7 @@ export type UploadStats = {
   docs: UploadCategoryStats
   other: UploadCategoryStats
   thumbnails: UploadCategoryStats
+  importingCount: number
 }
 
 async function queryStatsForWhere(
@@ -86,12 +87,12 @@ export async function queryUploadStats(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<UploadStats> {
-  // Exclude pending imports (hash = '') — they have no size yet and are
-  // shown separately in the "Pending import" row.
-  const activeFile = `${buildActiveFileFilter('f')} AND f.hash != ''`
+  // Include all active files. Importing files (hash = '') have size = 0,
+  // so byte totals remain accurate while counts reflect the full library.
+  const activeFile = buildActiveFileFilter('f')
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
-  const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([
+  const [photos, videos, audio, docs, other, thumbnails, importingRow] = await Promise.all([
     q(`${activeFile} AND f.type LIKE 'image/%'`),
     q(`${activeFile} AND f.type LIKE 'video/%'`),
     q(`${activeFile} AND f.type LIKE 'audio/%'`),
@@ -99,7 +100,10 @@ export async function queryUploadStats(
     q(
       `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
-    q(`f.kind = 'thumb' AND ${buildActiveFilter('f')} AND f.hash != ''`),
+    q(`f.kind = 'thumb' AND ${buildActiveFilter('f')}`),
+    db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files f WHERE ${activeFile} AND f.hash = ''`,
+    ),
   ])
 
   const fileCategories = [photos, videos, audio, docs, other]
@@ -113,5 +117,6 @@ export async function queryUploadStats(
     docs,
     other,
     thumbnails,
+    importingCount: importingRow?.count ?? 0,
   }
 }
