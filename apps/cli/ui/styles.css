@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* Remove bottom border from last table row to prevent overlap with panel border */
+tbody tr:last-child td {
+  border-bottom: none;
+}
