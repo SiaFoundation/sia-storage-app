@@ -313,6 +313,7 @@ export function buildDbNamespaces(
       },
       getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
       getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
+      getLost: (indexerURL) => ops.queryLostFiles(db, indexerURL),
       getUnuploadedCount: () => ops.queryUnuploadedFileCount(db),
       getUnuploaded: () => ops.queryUnuploadedFiles(db),
       getActiveSummaries: () => ops.queryActiveFileSummaries(db),

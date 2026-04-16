@@ -727,6 +727,24 @@ export async function queryLostFileStats(
   return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 }
 }
 
+export async function queryLostFiles(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<FileRecordRow[]> {
+  return db.getAllAsync<FileRecordRow>(
+    `SELECT ${FILE_ROW_COLUMNS} FROM files f
+     WHERE ${buildActiveFileFilter('f')}
+     AND (
+       f.lostReason IS NOT NULL
+       OR (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
+           AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
+           AND f.hash != '')
+     )
+     ORDER BY f.addedAt DESC`,
+    indexerURL,
+  )
+}
+
 export async function queryLocalFileCount(
   db: DatabaseAdapter,
   indexerURL: string,

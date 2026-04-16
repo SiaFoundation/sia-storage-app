@@ -45,6 +45,7 @@ export function MenuScreen({ navigation }: Props) {
       <MenuSection title="Settings">
         <MenuItem label="Indexer" onPress={() => navigation.navigate('Indexer')} />
         <MenuItem label="Sync" onPress={() => navigation.navigate('Sync')} />
+        <MenuItem label="Import" onPress={() => navigation.navigate('Import')} />
         <MenuItem label="Hosts" onPress={() => navigation.navigate('Hosts')} />
         <MenuItem label="Advanced" onPress={() => navigation.navigate('Advanced')} />
         <MenuItem label="Logs" onPress={() => navigation.navigate('Logs')} />

@@ -236,6 +236,8 @@ export interface AppService {
     getLostCount(indexerURL: string): Promise<number>
     /** Returns count and total size of lost files for an indexer. */
     getLostStats(indexerURL: string): Promise<{ count: number; totalBytes: number }>
+    /** Returns lost files for an indexer. */
+    getLost(indexerURL: string): Promise<FileRecordRow[]>
     /** Returns all versions of a file, ordered by updatedAt DESC. */
     getVersionHistory(name: string, directoryId: string | null): Promise<FileRecord[]>
     /** Renames all versions of a file. */
