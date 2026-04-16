@@ -58,6 +58,8 @@ export const IMPORT_SCANNER_INTERVAL = secondsInMs(3) // 3 seconds
 export const IMPORT_SCANNER_BACKLOG_LIMIT = 50
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
+// How often the CLI daemon's directory-watch worker scans configured watch rules.
+export const WATCH_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.
 export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.
