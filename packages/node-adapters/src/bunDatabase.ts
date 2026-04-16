@@ -1,6 +1,6 @@
 import type { DatabaseAdapter, SQLParam, SQLRunResult } from '@siastorage/core/adapters'
 import { logger } from '@siastorage/logger'
-import sqlite3 from 'better-sqlite3'
+import { Database } from 'bun:sqlite'
 
 const SLOW_QUERY_THRESHOLD = 500
 
@@ -15,20 +15,18 @@ function logSlowQuery(method: string, sql: string, start: number) {
   }
 }
 
-export function createBetterSqlite3Database(
-  path = ':memory:',
-): DatabaseAdapter & { close(): void } {
-  const db = new sqlite3(path)
-  db.pragma('journal_mode = WAL')
+export function createBunDatabase(path = ':memory:'): DatabaseAdapter & { close(): void } {
+  const db = new Database(path)
+  db.exec('PRAGMA journal_mode = WAL')
   // synchronous = NORMAL moves fsync out of the per-commit path; durability
   // cost only applies to full OS crashes, which sync-down recovers from.
-  db.pragma('synchronous = NORMAL')
+  db.exec('PRAGMA synchronous = NORMAL')
   // Bound the WAL at ~2MB so a long-running daemon doesn't accumulate disk.
-  db.pragma('wal_autocheckpoint = 500')
+  db.exec('PRAGMA wal_autocheckpoint = 500')
   // Wait up to 5s on lock contention before returning SQLITE_BUSY, so CLI
   // clients connecting mid-write don't fail spuriously.
-  db.pragma('busy_timeout = 5000')
-  db.pragma('foreign_keys = ON')
+  db.exec('PRAGMA busy_timeout = 5000')
+  db.exec('PRAGMA foreign_keys = ON')
 
   return {
     async getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
