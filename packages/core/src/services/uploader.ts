@@ -426,6 +426,21 @@ export class UploadManager {
     })
   }
 
+  get currentBatch(): {
+    batchId: string
+    files: { fileId: string; name: string; size: number }[]
+  } | null {
+    if (!this.batch) return null
+    return {
+      batchId: this.batch.batchId,
+      files: this.batch.files.map((f) => ({
+        fileId: f.fileId,
+        name: f.file?.name ?? f.fileId,
+        size: f.size,
+      })),
+    }
+  }
+
   get flushHistory(): FlushRecord[] {
     return this._flushHistory
   }

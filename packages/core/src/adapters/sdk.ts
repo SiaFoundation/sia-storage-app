@@ -84,6 +84,9 @@ export interface DownloadOptions {
   maxInflight: number
   offset: bigint
   length: bigint | undefined
+  shardDownloaded?: {
+    progress: (p: ShardProgress) => void
+  }
 }
 
 export interface ObjectEvent {

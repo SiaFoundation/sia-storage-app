@@ -18,7 +18,7 @@
  */
 
 import { err, ok, type Result, uint8ToHex } from '@siastorage/core'
-import { APP_KEY } from '@siastorage/core/config'
+import { APP_META } from '@siastorage/core/config'
 import { getErrorMessage, isAbortError } from '@siastorage/core/lib/errors'
 import { raceWithTimeout, withTimeout } from '@siastorage/core/lib/timeout'
 import { refreshLogAccount } from '@siastorage/core/services/logForwarder'
@@ -33,10 +33,7 @@ import { initializeUploader } from '../managers/uploader'
 import { app, getMobileSdkAuth, internal } from './appService'
 
 const APP_META_JSON = JSON.stringify({
-  appID: APP_KEY,
-  name: 'Sia Storage',
-  description: 'Privacy-first, decentralized cloud storage',
-  serviceURL: 'https://sia.storage',
+  ...APP_META,
   callbackUrl: 'sia://callback',
   logoUrl: 'https://app.sia.storage/icon.png',
 })
