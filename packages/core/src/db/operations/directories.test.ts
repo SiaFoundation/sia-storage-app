@@ -318,6 +318,18 @@ describe('queryDirectoryChildren', () => {
     expect(roots[0].fileCount).toBe(2)
   })
 
+  it('counts fileCount recursively across descendant directories', async () => {
+    await insertDirectory(db(), 'Photos')
+    await insertDirectory(db(), 'Trips', 'Photos')
+    const italy = await insertDirectory(db(), 'Italy', 'Photos/Trips')
+    await createTestFile('f1')
+    await moveFileToDirectory(db(), 'f1', italy.id)
+
+    const roots = await queryDirectoryChildren(db(), null)
+    const photos = roots.find((d) => d.name === 'Photos')
+    expect(photos?.fileCount).toBe(1)
+  })
+
   it('includes subdirectoryCount per child', async () => {
     await insertDirectory(db(), 'Photos')
     await insertDirectory(db(), 'Vacation', 'Photos')

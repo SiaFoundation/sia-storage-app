@@ -125,6 +125,19 @@ export async function queryFilesByObjectIds(
   return result
 }
 
+export async function queryDirectoryIdsForFiles(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<string[]> {
+  if (fileIds.length === 0) return []
+  const ph = fileIds.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{ directoryId: string }>(
+    `SELECT DISTINCT directoryId FROM files WHERE id IN (${ph}) AND directoryId IS NOT NULL`,
+    ...fileIds,
+  )
+  return rows.map((r) => r.directoryId)
+}
+
 export function transformRow<T extends LocalObjectRef = LocalObjectRef>(
   row: FileRecordRow,
   objects?: T[],

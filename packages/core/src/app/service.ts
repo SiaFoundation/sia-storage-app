@@ -198,6 +198,8 @@ export interface AppService {
     getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
     /** Returns file rows by object IDs and indexer URL (no objects join). */
     getRowsByObjectIds(objectIds: string[], indexerURL: string): Promise<Map<string, FileRecordRow>>
+    /** Returns distinct directory IDs for the given file IDs. */
+    getDirectoryIdsForFiles(fileIds: string[]): Promise<string[]>
     /** Tombstones files (sets deletedAt and trashedAt). */
     tombstone(fileIds: string[], opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Updates a file. */
@@ -302,6 +304,8 @@ export interface AppService {
     delete(id: string): Promise<void>
     /** Deletes a directory, all descendants, and trashes their files. */
     deleteAndTrashFiles(id: string): Promise<number>
+    /** Deletes directories that have no active files or subdirectories. Walks up the tree. */
+    deleteEmpty(directoryIds: string[], opts?: { skipInvalidation?: boolean }): Promise<number>
     /** Renames a directory and updates all descendant paths. Returns the updated directory. */
     rename(id: string, name: string): Promise<Directory>
     /** Moves a directory under a new parent (null for root). */

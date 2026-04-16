@@ -216,6 +216,21 @@ export async function syncDownEventsBatch(
   }
 }
 
+/**
+ * Apply a batch of indexer events to the local state. Runs in three zones:
+ *
+ *   1. Classify (no writes) — decode + categorize each event as create / update / delete.
+ *   2. Transaction (atomic SQL writes) — file upserts, localObject upserts, deletes
+ *      (tombstone + drop localObjects), directory + tag sync, `current` recalc,
+ *      empty-directory cleanup.
+ *   3. Post-commit (non-atomic) — filesystem cleanup of orphan local files, then cache
+ *      invalidation. Outside the transaction because FS ops aren't transactional and
+ *      cache subscribers must observe committed state.
+ *
+ * On transaction error the rollback prevents cursor advancement so the same batch is
+ * retried next cycle. Aborts via `signal` are checked at every exit point so suspension
+ * releases the transaction promptly.
+ */
 async function processBatch(
   events: {
     id: string
@@ -231,8 +246,8 @@ async function processBatch(
   const indexerURL = await app.settings.getIndexerURL()
   const appKey = internal.requireSdk().appKey()
 
-  // Phase 1: Prepare — decode metadata and classify events using batch reads.
-  // Events with malformed/incomplete metadata are skipped (the only legitimate skip).
+  // Classify events: decode metadata using batch reads. Events with malformed
+  // or incomplete metadata are skipped (the only legitimate skip).
   const deleteObjectIds: string[] = []
   const upsertEntries: {
     objectId: string
@@ -357,7 +372,7 @@ async function processBatch(
   if (prepared.length === 0 || signal.aborted) return
 
   // Dedup: multiple objects can share metadata.id (e.g., same file uploaded
-  // from two devices pre-migration). Phase 1 reads happen before any writes,
+  // from two devices pre-migration). Classification happens before any writes,
   // so both resolve as 'create'. Convert duplicates to 'update' so the file
   // record is created only once while each object's localObject is upserted.
   const seenFileIds = new Set<string>()
@@ -374,16 +389,14 @@ async function processBatch(
     }
   }
 
-  // Phases 2 + 3B/3C + 4 run in one DB transaction so each batch is
-  // atomic — on error the rollback prevents cursor advancement and the
-  // same batch is retried next cycle. Phase 3A (FS cleanup) and the
-  // cache invalidations stay outside.
   const creates = prepared.filter((e): e is PreparedCreate => e.kind === 'create')
   const updates = prepared.filter((e): e is PreparedUpdate => e.kind === 'update')
   const deletes = prepared.filter((e): e is PreparedDelete => e.kind === 'delete')
 
   let deletedFileIds: string[] = []
+  let toTombstone: string[] = []
   let oldDirGroups: { name: string; directoryId: string | null }[] = []
+  let emptyDirsDeleted = 0
 
   const syncableEvents = prepared.filter(
     (e): e is PreparedCreate | PreparedUpdate =>
@@ -399,10 +412,9 @@ async function processBatch(
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
 
   await internal.withTransaction(async () => {
-    // 2A: Single UPSERT for all creates + isRemoteNewer updates.
-    // ON CONFLICT(id) DO UPDATE SET only touches metadata fields —
-    // addedAt, localId, deletedAt, lostReason are preserved from
-    // the existing row, so tombstones can't be cleared by sync.
+    // Upsert files for creates + isRemoteNewer updates. ON CONFLICT(id) only
+    // touches metadata fields — addedAt, localId, deletedAt, lostReason are
+    // preserved from the existing row, so tombstones can't be cleared by sync.
     const fileUpserts = [
       ...creates.map((e) => e.fileRecord),
       ...updates.filter((e) => e.isRemoteNewer).map((e) => e.fileRecord),
@@ -411,7 +423,7 @@ async function processBatch(
       await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true })
     }
 
-    // 2B: Batch upsert all local objects (creates + updates).
+    // Upsert all local objects (creates + updates).
     const allLocalObjects = [
       ...creates.map((e) => e.localObject),
       ...updates.map((e) => e.localObject),
@@ -422,44 +434,40 @@ async function processBatch(
       })
     }
 
-    // 2C: Batch deletes.
+    // Apply deletes: drop localObjects, tombstone files that aren't already
+    // tombstoned, then identify files with no remaining objects (fully deleted).
     if (deletes.length > 0) {
-      // Delete local objects for all delete events.
       await app.localObjects.deleteManyByObjectIds(
         deletes.map((e) => e.objectId),
         indexerURL,
         { skipInvalidation: true },
       )
 
-      // Batch tombstone files that aren't already tombstoned.
-      const toTombstone = deletes.filter((e) => !e.fileRecord.deletedAt).map((e) => e.fileId)
+      toTombstone = deletes.filter((e) => !e.fileRecord.deletedAt).map((e) => e.fileId)
       if (toTombstone.length > 0) {
         await app.files.tombstone(toTombstone, { skipInvalidation: true })
       }
 
-      // Find files with no remaining objects (fully deleted).
       const deleteFileIdSet = [...new Set(deletes.map((e) => e.fileId))]
       deletedFileIds = await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
     }
 
-    counts.total += creates.length + updates.length + deletedFileIds.length
-
-    // 3B: Batch directory sync.
+    // Sync directory associations from metadata.
     if (dirEntries.length > 0) {
       oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
         skipInvalidation: true,
       })
     }
 
-    // 3C: Batch tag sync.
+    // Sync tag associations from metadata.
     if (tagEntries.length > 0) {
       await app.tags.syncManyFromMetadata(tagEntries, {
         skipInvalidation: true,
       })
     }
 
-    // Phase 4: Recalculate current column for all affected version groups
-    // in one pass, rather than per-file during the batch.
+    // Recalculate `current` for all affected version groups in one pass,
+    // rather than per-file during the batch.
     const affectedFileIds: string[] = []
     for (const e of prepared) {
       if (e.kind === 'delete') {
@@ -471,21 +479,45 @@ async function processBatch(
     if (affectedFileIds.length > 0) {
       await app.files.recalculateCurrent(affectedFileIds)
     }
-    // Recalculate old directory groups from Phase 3B. When a file moves from
-    // dir-A to dir-B, the file-ID-based recalculation above handles dir-B
-    // (the file's current directory). The old group (dir-A) needs separate
-    // recalculation to promote the next version as current.
+    // Recalculate old directory groups. When a file moves from dir-A to dir-B,
+    // the file-ID-based recalc above handles dir-B (the file's current dir).
+    // dir-A needs separate recalc to promote the next version as current.
     if (oldDirGroups.length > 0) {
       await app.files.recalculateCurrentForGroups(oldDirGroups)
     }
+
+    // Clean up directories left empty by this batch. Must run after the
+    // `current` recalc above — buildRecordFilter checks `current = 1`.
+    // Candidates come from two sources: directories of files that were
+    // tombstoned or fully deleted, and source directories of moves
+    // (captured in oldDirGroups when files relocated via sync).
+    const candidateDirIds = new Set<string>()
+    for (const g of oldDirGroups) {
+      if (g.directoryId !== null) candidateDirIds.add(g.directoryId)
+    }
+    const newlyInactiveFiles = [...new Set([...toTombstone, ...deletedFileIds])]
+    if (newlyInactiveFiles.length > 0) {
+      for (const id of await app.files.getDirectoryIdsForFiles(newlyInactiveFiles)) {
+        candidateDirIds.add(id)
+      }
+    }
+    if (candidateDirIds.size > 0) {
+      emptyDirsDeleted = await app.directories.deleteEmpty([...candidateDirIds], {
+        skipInvalidation: true,
+      })
+    }
   })
 
-  // Phase 3A: FS cleanup runs after the SQL transaction commits. FS
-  // operations aren't transactional, and an orphan-on-disk after a
-  // committed delete is recoverable; lost-data-without-FS-deletion is
-  // not, so SQL-first ordering is intentional. Non-fatal errors are
-  // logged. Check signal between deletions so suspension can close
-  // the DB promptly.
+  // counts.total is updated after the transaction commits. On mobile,
+  // withTransaction can rerun the closure after reopening the DB handle,
+  // and an in-closure `+=` would double-count on retry.
+  counts.total += creates.length + updates.length + deletedFileIds.length
+
+  // Filesystem cleanup runs after the transaction commits. FS isn't
+  // transactional, and an orphan-on-disk after a committed delete is
+  // recoverable; lost-data-without-FS-deletion is not, so SQL-first
+  // ordering is intentional. Non-fatal errors are logged. Check signal
+  // between deletions so suspension can close the DB promptly.
   const deletedFileIdSet = new Set(deletedFileIds)
   for (const event of deletes) {
     if (signal.aborted) break
@@ -506,7 +538,7 @@ async function processBatch(
   // Cache invalidations fire after the transaction commits so subscribers
   // never see stale state mid-write.
   let needsLibraryInvalidation =
-    creates.length > 0 || dirEntries.length > 0 || tagEntries.length > 0
+    creates.length > 0 || dirEntries.length > 0 || tagEntries.length > 0 || emptyDirsDeleted > 0
   for (const event of updates) {
     app.caches.fileById.invalidate(event.fileId)
     needsLibraryInvalidation = true
