@@ -15,7 +15,7 @@ function logSlowQuery(method: string, sql: string, start: number) {
   }
 }
 
-export function createBunDatabase(path = ':memory:'): DatabaseAdapter & { close(): void } {
+export function createBunDatabase(path = ':memory:'): DatabaseAdapter {
   const db = new Database(path)
   db.exec('PRAGMA journal_mode = WAL')
   // synchronous = NORMAL moves fsync out of the per-commit path; durability
@@ -68,6 +68,15 @@ export function createBunDatabase(path = ':memory:'): DatabaseAdapter & { close(
         db.exec('ROLLBACK')
         throw e
       }
+    },
+
+    /**
+     * Refresh query planner stats and truncate the WAL. Call before `close()`
+     * on graceful shutdown so the next start opens a clean, optimized database.
+     */
+    async finalize(): Promise<void> {
+      db.exec('PRAGMA optimize')
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     },
 
     close() {

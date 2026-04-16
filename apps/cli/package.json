@@ -1,5 +1,41 @@
 {
   "name": "@siastorage/cli",
-  "version": "0.0.0",
-  "private": true
+  "version": "0.0.1",
+  "private": true,
+  "bin": {
+    "sia": "src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --compile --outfile dist/sia",
+    "build:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/sia-linux",
+    "link": "bun run build && ln -sf $(pwd)/dist/sia ~/.sia/bin/sia",
+    "lint": "oxlint . && oxfmt --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --selectProjects unit --passWithNoTests",
+    "test:e2e": "bun run build && jest --selectProjects e2e --passWithNoTests",
+    "test:all": "bun run build && jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.2.0",
+    "@siastorage/core": "workspace:*",
+    "@siastorage/logger": "workspace:*",
+    "@siastorage/node-adapters": "workspace:*",
+    "@siastorage/sdk-mock": "workspace:*",
+    "commander": "14.0.3",
+    "lucide-react": "1.8.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "swr": "2.4.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.2.2",
+    "@types/node": "22.15.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "jest": "29.7.0",
+    "tailwindcss": "4.2.2",
+    "ts-jest": "29.4.6",
+    "typescript": "5.9.3"
+  }
 }

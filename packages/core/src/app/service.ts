@@ -143,6 +143,8 @@ export interface AppService {
     getCurrentByNamesInDirectory(names: string[], directoryId: string | null): Promise<FileRecord[]>
     /** Returns a file by name (current version). */
     getByName(name: string): Promise<FileRecord | null>
+    /** Returns a file by name among unfiled files (no directory). */
+    getByNameInUnfiled(name: string): Promise<FileRecord | null>
     /** Returns a file by name within a directory path. */
     getByNameInDirectoryPath(name: string, directoryPath: string): Promise<FileRecord | null>
     /** Returns a file by content hash. */
