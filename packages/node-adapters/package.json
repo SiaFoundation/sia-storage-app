@@ -14,7 +14,10 @@
     "./uploader": "./src/uploader.ts",
     "./detectMimeType": "./src/detectMimeType.ts",
     "./thumbnail": "./src/thumbnail.ts",
-    "./bunDatabase": "./src/bunDatabase.ts"
+    "./bunDatabase": "./src/bunDatabase.ts",
+    "./lock": "./src/lock.ts",
+    "./ipc": "./src/ipc.ts",
+    "./state": "./src/state.ts"
   },
   "scripts": {
     "lint": "oxlint . && oxfmt --check .",
