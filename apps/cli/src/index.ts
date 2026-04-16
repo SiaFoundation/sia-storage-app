@@ -37,8 +37,23 @@ if (process.env.SIA_DAEMON_MODE === '1') {
     console.log('Run "sia --help" for available commands')
   })
 
-  // Commands are registered in subsequent PRs via program.command()
-  // They use dynamic imports so the scaffold compiles independently.
+  program
+    .command('connect')
+    .description('Connect to a Sia indexer')
+    .action(async () => {
+      const { connectCommand } = await import('./commands/connect')
+      await connectCommand(resolveDataDir())
+    })
+
+  program
+    .command('daemon')
+    .description('Manage the background daemon')
+    .argument('[action]', 'start, stop, restart, or status', 'status')
+    .option('-f, --foreground', 'Run in foreground')
+    .action(async (action: string, opts: { foreground?: boolean }) => {
+      const { daemonCommand } = await import('./commands/daemon')
+      await daemonCommand(resolveDataDir(), action, opts)
+    })
 
   program.parseAsync(process.argv).catch((err) => {
     console.error(err)
