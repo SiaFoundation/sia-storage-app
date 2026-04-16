@@ -9,7 +9,7 @@ import type {
   TagWithCount,
   UploadStats,
 } from '../db/operations'
-import type { LocalObject, LocalObjectWithSlabs } from '../encoding/localObject'
+import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { SyncUpCursor } from '../services/syncUpMetadata'
 import type { FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -154,7 +154,7 @@ export interface AppService {
     /** Creates a file, optionally with a local object. */
     create(
       record: Omit<FileRecord, 'objects'>,
-      localObject?: LocalObjectWithSlabs,
+      localObject?: LocalObject,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
     /** Creates multiple files. */
@@ -195,7 +195,7 @@ export interface AppService {
     /** Updates a file and upserts its local object. */
     updateWithLocalObject(
       update: Partial<FileRecordRow> & { id: string },
-      localObject: LocalObjectWithSlabs,
+      localObject: LocalObject,
       opts?: { includeUpdatedAt?: boolean; skipInvalidation?: boolean },
     ): Promise<void>
     /** Hard-deletes a file by ID. */
@@ -348,14 +348,14 @@ export interface AppService {
   }
   /** Local object (remote reference) CRUD for file-to-indexer mappings. */
   localObjects: {
-    /** Returns local objects for a file (without slabs). */
+    /** Returns lightweight object refs for a file. */
+    getRefsForFile(fileId: string): Promise<LocalObjectRef[]>
+    /** Returns lightweight object refs for multiple files. */
+    getRefsForFiles(fileIds: string[]): Promise<Record<string, LocalObjectRef[]>>
+    /** Returns full local objects for a file. */
     getForFile(fileId: string): Promise<LocalObject[]>
-    /** Returns local objects for multiple files (without slabs). */
-    getForFiles(fileIds: string[]): Promise<Record<string, LocalObject[]>>
-    /** Returns local objects for a file with full slab data. */
-    getForFileWithSlabs(fileId: string): Promise<LocalObjectWithSlabs[]>
     /** Creates or updates a local object. */
-    upsert(object: LocalObjectWithSlabs, opts?: { skipInvalidation?: boolean }): Promise<void>
+    upsert(object: LocalObject, opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Deletes a local object by object ID and indexer URL. */
     delete(
       objectId: string,
@@ -367,10 +367,7 @@ export interface AppService {
     /** Deletes all local objects for multiple files. */
     deleteManyForFiles(fileIds: string[]): Promise<void>
     /** Creates or updates multiple local objects. */
-    upsertMany(
-      objects: LocalObjectWithSlabs[],
-      opts?: { skipInvalidation?: boolean },
-    ): Promise<void>
+    upsertMany(objects: LocalObject[], opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Returns the count of local objects for a file. */
     countForFile(fileId: string): Promise<number>
     /** Deletes local objects by object IDs for a given indexer. */

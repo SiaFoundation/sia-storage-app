@@ -21,7 +21,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
     const sdk = internal().getSdk()
     if (!sdk) return
 
-    const objects = await app().localObjects.getForFileWithSlabs(file.id)
+    const objects = await app().localObjects.getForFile(file.id)
     if (!objects.length) return
     const obj = objects[0]
     const appKey = await getAppKeyForIndexer(obj.indexerURL)

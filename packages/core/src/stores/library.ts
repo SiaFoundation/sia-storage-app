@@ -70,7 +70,7 @@ export function useFileList(params: FileListParams) {
     })
 
     const fileIds = rows.map((r) => r.id)
-    const objectsByFile = await app.localObjects.getForFiles(fileIds)
+    const objectsByFile = await app.localObjects.getRefsForFiles(fileIds)
     return rows.map((row) => transformRow(row, objectsByFile[row.id]))
   }
 

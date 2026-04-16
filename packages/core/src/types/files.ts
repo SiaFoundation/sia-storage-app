@@ -1,4 +1,4 @@
-import type { LocalObject } from '../encoding/localObject'
+import type { LocalObjectRef } from '../encoding/localObject'
 import { keysOf } from '../lib/types'
 
 /** Valid thumbnail sizes in pixels. */
@@ -63,5 +63,5 @@ export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
 ])
 
 export type FileRecord = FileRecordRow & {
-  objects: Record<string, LocalObject>
+  objects: Record<string, LocalObjectRef>
 }

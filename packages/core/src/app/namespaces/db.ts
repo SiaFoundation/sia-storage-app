@@ -479,9 +479,9 @@ export function buildDbNamespaces(
       },
     },
     localObjects: {
-      getForFile: (fileId) => ops.queryObjectMetasForFile(db, fileId),
-      getForFiles: (fileIds) => ops.queryObjectMetasForFiles(db, fileIds),
-      getForFileWithSlabs: (fileId) => ops.queryObjectsForFileWithSlabs(db, fileId),
+      getRefsForFile: (fileId) => ops.queryObjectRefsForFile(db, fileId),
+      getRefsForFiles: (fileIds) => ops.queryObjectRefsForFiles(db, fileIds),
+      getForFile: (fileId) => ops.queryObjectsForFile(db, fileId),
       upsert: async (object, opts) => {
         await ops.insertObject(db, object)
         if (!opts?.skipInvalidation) {

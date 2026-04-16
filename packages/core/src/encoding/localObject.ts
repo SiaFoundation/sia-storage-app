@@ -60,10 +60,18 @@ const localObjectStorageCodec = z.codec(
   },
 )
 
-export type LocalObjectWithSlabs = ReturnType<typeof localObjectStorageCodec.decode>
-export type LocalObject = Omit<LocalObjectWithSlabs, 'slabs'>
+export type LocalObject = ReturnType<typeof localObjectStorageCodec.decode>
+export type LocalObjectRef = Omit<
+  LocalObject,
+  | 'slabs'
+  | 'encryptedDataKey'
+  | 'encryptedMetadataKey'
+  | 'encryptedMetadata'
+  | 'dataSignature'
+  | 'metadataSignature'
+>
 
-export type LocalObjectRowWithSlabs = {
+export type LocalObjectRow = {
   id: string
   fileId: string
   indexerURL: string
@@ -77,11 +85,17 @@ export type LocalObjectRowWithSlabs = {
   updatedAt: number
 }
 
-export type LocalObjectRow = Omit<LocalObjectRowWithSlabs, 'slabs'>
+export type LocalObjectRefRow = Omit<
+  LocalObjectRow,
+  | 'slabs'
+  | 'encryptedDataKey'
+  | 'encryptedMetadataKey'
+  | 'encryptedMetadata'
+  | 'dataSignature'
+  | 'metadataSignature'
+>
 
-export function localObjectWithSlabsToStorageRow(
-  lo: LocalObjectWithSlabs,
-): LocalObjectRowWithSlabs {
+export function localObjectToStorageRow(lo: LocalObject): LocalObjectRow {
   const e = localObjectStorageCodec.encode({
     id: lo.id,
     fileId: lo.fileId,
@@ -110,9 +124,7 @@ export function localObjectWithSlabsToStorageRow(
   }
 }
 
-export function localObjectWithSlabsFromStorageRow(
-  row: LocalObjectRowWithSlabs,
-): LocalObjectWithSlabs {
+export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
   return localObjectStorageCodec.decode({
     id: row.id,
     fileId: row.fileId,
@@ -128,16 +140,11 @@ export function localObjectWithSlabsFromStorageRow(
   })
 }
 
-export function localObjectFromStorageRow(row: LocalObjectRow): LocalObject {
+export function localObjectRefFromStorageRow(row: LocalObjectRefRow): LocalObjectRef {
   return {
     id: row.id,
     fileId: row.fileId,
     indexerURL: row.indexerURL,
-    encryptedDataKey: hexArrayBufferCodec.decode(row.encryptedDataKey),
-    encryptedMetadataKey: hexArrayBufferCodec.decode(row.encryptedMetadataKey),
-    encryptedMetadata: hexArrayBufferCodec.decode(row.encryptedMetadata),
-    dataSignature: hexArrayBufferCodec.decode(row.dataSignature),
-    metadataSignature: hexArrayBufferCodec.decode(row.metadataSignature),
     createdAt: isoToEpochCodec.decode(row.createdAt),
     updatedAt: isoToEpochCodec.decode(row.updatedAt),
   }
