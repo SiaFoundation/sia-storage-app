@@ -13,6 +13,7 @@ import {
   queryFilesByLocalIds,
   queryFileCount,
   queryFileStats,
+  queryLostFiles,
   readFile,
   readFileWithSlabs,
   readFilesByIds,
@@ -279,6 +280,53 @@ describe('deleteLostFilesAndThumbnails', () => {
     await insertObject(db(), makeLocalObject('pinned', { indexerURL }))
     const deletedCount = await deleteLostFilesAndThumbnails(db(), indexerURL)
     expect(deletedCount).toBe(0)
+  })
+})
+
+describe('queryLostFiles', () => {
+  const indexerURL = 'https://indexer.example.com'
+
+  it('returns files with an explicit lostReason even when pinned or local', async () => {
+    await insertFile(db(), makeFileRecord('explicit-pinned', { lostReason: 'Corrupted' }))
+    await insertObject(db(), makeLocalObject('explicit-pinned', { indexerURL }))
+    await insertFile(db(), makeFileRecord('explicit-local', { lostReason: 'Unreadable' }))
+    await upsertFsMeta(db(), {
+      fileId: 'explicit-local',
+      size: 100,
+      addedAt: 1000,
+      usedAt: 1000,
+    })
+    const results = await queryLostFiles(db(), indexerURL)
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['explicit-local', 'explicit-pinned'])
+  })
+
+  it('returns files that are hashed but missing from both objects and fs', async () => {
+    await insertFile(db(), makeFileRecord('implicit-lost'))
+    const results = await queryLostFiles(db(), indexerURL)
+    expect(results.map((r) => r.id)).toEqual(['implicit-lost'])
+  })
+
+  it('excludes pinned, local-only, and empty-hash files', async () => {
+    await insertFile(db(), makeFileRecord('pinned'))
+    await insertObject(db(), makeLocalObject('pinned', { indexerURL }))
+    await insertFile(db(), makeFileRecord('local-only'))
+    await upsertFsMeta(db(), {
+      fileId: 'local-only',
+      size: 100,
+      addedAt: 1000,
+      usedAt: 1000,
+    })
+    await insertFile(db(), makeFileRecord('no-hash', { hash: '' }))
+    const results = await queryLostFiles(db(), indexerURL)
+    expect(results).toHaveLength(0)
+  })
+
+  it('orders results by addedAt DESC', async () => {
+    await insertFile(db(), makeFileRecord('older', { addedAt: 1000 }))
+    await insertFile(db(), makeFileRecord('newer', { addedAt: 2000 }))
+    const results = await queryLostFiles(db(), indexerURL)
+    expect(results.map((r) => r.id)).toEqual(['newer', 'older'])
   })
 })
 

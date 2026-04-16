@@ -8,6 +8,7 @@ import { LearnRecoveryPhraseScreen } from '../screens/learn/LearnRecoveryPhraseS
 import { LearnSiaNetworkScreen } from '../screens/learn/LearnSiaNetworkScreen'
 import { MenuScreen } from '../screens/MenuScreen'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
+import { SettingsImportScreen } from '../screens/SettingsImportScreen'
 import { SettingsIndexerScreen } from '../screens/SettingsIndexerScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
 import { SettingsSyncScreen } from '../screens/SettingsSyncScreen'
@@ -34,6 +35,7 @@ export function MenuStack() {
         options={{ title: 'Indexer' }}
       />
       <Stack.Screen name="Sync" component={SettingsSyncScreen} options={{ title: 'Sync' }} />
+      <Stack.Screen name="Import" component={SettingsImportScreen} options={{ title: 'Import' }} />
       <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
       <Stack.Screen name="Hosts" component={HostListScreen} options={{ title: 'Hosts' }} />
       <Stack.Screen

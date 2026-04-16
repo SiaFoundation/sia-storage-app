@@ -1,20 +1,22 @@
+import { type NavigationProp, useNavigation } from '@react-navigation/native'
 import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
 import { useSyncState } from '@siastorage/core/stores'
 import { TriangleAlertIcon } from 'lucide-react-native'
 import { useCallback } from 'react'
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
 import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { humanUploadPercent } from '../lib/uploadPercent'
+import { getImportBackoffEntries } from '../managers/importScanner'
+import type { RootTabParamList } from '../stacks/types'
 import { app } from '../stores/appService'
-import { deleteLostFilesAndThumbnails, useFileStatsLocal, useFileStatsLost } from '../stores/files'
+import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { useIsConnected } from '../stores/sdk'
 import { useStatusDisplayMode } from '../stores/settings'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { getActiveUploads } from '../stores/uploads'
 import { palette, whiteA } from '../styles/colors'
-import { Button } from './Button'
 import { RowGroup, RowSubGroup } from './Group'
 import { InfoCard } from './InfoCard'
 import { LabeledValueRow } from './LabeledValueRow'
@@ -73,6 +75,19 @@ export function LibraryStatusSheet() {
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
   const pendingBackup = useFileStatsLocal({ localOnly: true }, { refreshInterval })
   const lost = useFileStatsLost({ refreshInterval })
+  const importErrors = useSWR(
+    ['import-errors', isOpen ?? null],
+    () => getImportBackoffEntries().length,
+    { refreshInterval },
+  )
+  const navigation = useNavigation<NavigationProp<RootTabParamList>>()
+  const openImportSettings = useCallback(
+    (tab: 'retrying' | 'lost') => {
+      closeSheet()
+      navigation.navigate('MenuTab', { screen: 'Import', params: { tab }, initial: false })
+    },
+    [navigation],
+  )
   const batch = useSWR(
     ['active-batch', isOpen ?? null],
     () => {
@@ -224,6 +239,26 @@ export function LibraryStatusSheet() {
                   canCopy={false}
                   showDividerTop
                 />
+              )}
+              {(importErrors.data ?? 0) > 0 && (
+                <Pressable onPress={() => openImportSettings('retrying')}>
+                  <LabeledValueRow
+                    label="Import errors"
+                    labelStyle={styles.indentedLabel}
+                    labelWidth={120}
+                    value={
+                      <View style={styles.valueRight}>
+                        <Text style={styles.valueText}>
+                          {`${(importErrors.data ?? 0).toLocaleString()} files`}
+                        </Text>
+                        <View style={styles.dotOffline} />
+                      </View>
+                    }
+                    align="right"
+                    canCopy={false}
+                    showDividerTop
+                  />
+                </Pressable>
               )}
             </InfoCard>
           </RowSubGroup>
@@ -446,63 +481,26 @@ export function LibraryStatusSheet() {
                 canCopy={false}
                 showDividerTop
               />
-              <LabeledValueRow
-                label="Lost"
-                labelWidth={120}
-                value={
-                  <View style={styles.valueRight}>
-                    <Text style={styles.valueText}>
-                      {formatDeviceValue(lost.data, stats.data?.files, displayMode)}
-                    </Text>
-                    <Text style={styles.valuePercent}>
-                      {humanUploadPercent(devicePercent(lost.data, stats.data?.files))}
-                    </Text>
-                  </View>
-                }
-                align="right"
-                canCopy={false}
-                showDividerTop
-              />
+              <Pressable onPress={() => openImportSettings('lost')}>
+                <LabeledValueRow
+                  label="Lost"
+                  labelWidth={120}
+                  value={
+                    <View style={styles.valueRight}>
+                      <Text style={styles.valueText}>
+                        {formatDeviceValue(lost.data, stats.data?.files, displayMode)}
+                      </Text>
+                      <Text style={styles.valuePercent}>
+                        {humanUploadPercent(devicePercent(lost.data, stats.data?.files))}
+                      </Text>
+                    </View>
+                  }
+                  align="right"
+                  canCopy={false}
+                  showDividerTop
+                />
+              </Pressable>
             </InfoCard>
-            {(lost.data?.count ?? 0) > 0 && (
-              <View style={styles.deleteLostContainer}>
-                <Button
-                  variant="secondary"
-                  style={styles.deleteLostButton}
-                  onPress={() => {
-                    Alert.alert(
-                      'Delete Lost Files',
-                      `This will delete ${(lost.data?.count ?? 0).toLocaleString()} file records that are not on the network or this device. This cannot be undone.`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Delete',
-                          style: 'destructive',
-                          onPress: async () => {
-                            try {
-                              await deleteLostFilesAndThumbnails()
-                              Alert.alert(
-                                'Lost files deleted',
-                                'Lost file records were successfully deleted.',
-                              )
-                            } catch (error) {
-                              Alert.alert(
-                                'Error deleting lost files',
-                                error instanceof Error
-                                  ? error.message
-                                  : 'An unexpected error occurred while deleting lost files.',
-                              )
-                            }
-                          },
-                        },
-                      ],
-                    )
-                  }}
-                >
-                  Delete lost files
-                </Button>
-              </View>
-            )}
           </RowSubGroup>
         </RowGroup>
       </ScrollView>
@@ -594,13 +592,5 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: palette.yellow[400],
-  },
-  deleteLostContainer: {
-    marginTop: 8,
-    alignItems: 'flex-end',
-  },
-  deleteLostButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
   },
 })

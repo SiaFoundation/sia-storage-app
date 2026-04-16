@@ -104,6 +104,33 @@ describe('BackoffTracker', () => {
     expect(tracker.getExcludeIds()).toEqual([])
   })
 
+  it('stores reason with entry', () => {
+    tracker.recordSkip('a', 'Content temporarily unavailable')
+    const entries = tracker.getEntries()
+    expect(entries).toHaveLength(1)
+    expect(entries[0].id).toBe('a')
+    expect(entries[0].reason).toBe('Content temporarily unavailable')
+  })
+
+  it('getEntries returns all entries with metadata', () => {
+    tracker.recordSkip('a', 'Unavailable')
+    tracker.recordSkip('b', 'Copy failed')
+    const entries = tracker.getEntries()
+    expect(entries).toHaveLength(2)
+    expect(entries.map((e) => e.id).sort()).toEqual(['a', 'b'])
+    expect(entries.find((e) => e.id === 'a')?.reason).toBe('Unavailable')
+    expect(entries.find((e) => e.id === 'b')?.reason).toBe('Copy failed')
+    expect(entries.every((e) => e.attempts === 1)).toBe(true)
+  })
+
+  it('getEntries includes expired entries', () => {
+    tracker.recordSkip('a')
+    jest.advanceTimersByTime(5 * 60 * 1000)
+    const entries = tracker.getEntries()
+    expect(entries).toHaveLength(1)
+    expect(entries[0].id).toBe('a')
+  })
+
   it('tracks independent backoff per ID', () => {
     tracker.recordSkip('a')
     jest.advanceTimersByTime(3 * 60 * 1000)

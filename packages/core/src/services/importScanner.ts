@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
-import { BackoffTracker } from '../lib/backoffTracker'
+import { type BackoffEntry, BackoffTracker } from '../lib/backoffTracker'
 
 const MAX_PER_TICK = 20
 
@@ -50,6 +50,21 @@ export class ImportScanner {
 
   isFileBeingProcessed(fileId: string): boolean {
     return this.processingFiles.has(fileId)
+  }
+
+  /** Returns all backoff entries for UI display. */
+  getBackoffEntries(): BackoffEntry[] {
+    return this.backoff.getEntries()
+  }
+
+  /** Removes a single ID from backoff so it's re-eligible on the next tick. */
+  clearBackoff(id: string): void {
+    this.backoff.clear(id)
+  }
+
+  /** Removes all IDs from backoff so all retrying files are re-eligible. */
+  clearAllBackoff(): void {
+    this.backoff.reset()
   }
 
   private getApp(): AppService {
@@ -153,7 +168,7 @@ export class ImportScanner {
               result.finalized++
               this.backoff.clear(file.id)
             } else {
-              this.backoff.recordSkip(file.id)
+              this.backoff.recordSkip(file.id, 'Hash computation failed')
               result.failed++
             }
           } catch (e) {
@@ -161,7 +176,7 @@ export class ImportScanner {
               fileId: file.id,
               error: e as Error,
             })
-            this.backoff.recordSkip(file.id)
+            this.backoff.recordSkip(file.id, 'Processing error')
             result.failed++
           } finally {
             this.processingFiles.delete(file.id)
@@ -221,7 +236,7 @@ export class ImportScanner {
                   fileId: file.id,
                   localId: file.localId,
                 })
-                this.backoff.recordSkip(file.id)
+                this.backoff.recordSkip(file.id, 'Content temporarily unavailable')
                 result.skipped++
                 continue
               }
@@ -242,7 +257,7 @@ export class ImportScanner {
                   result.finalized++
                   this.backoff.clear(file.id)
                 } else {
-                  this.backoff.recordSkip(file.id)
+                  this.backoff.recordSkip(file.id, 'Hash computation failed')
                   result.failed++
                 }
               } catch (e) {
@@ -250,7 +265,7 @@ export class ImportScanner {
                   fileId: file.id,
                   error: e as Error,
                 })
-                this.backoff.recordSkip(file.id)
+                this.backoff.recordSkip(file.id, 'Failed to copy from device')
                 result.failed++
               }
               continue
@@ -260,7 +275,7 @@ export class ImportScanner {
               logger.debug('importScanner', 'skipped_no_resolver', {
                 fileId: file.id,
               })
-              this.backoff.recordSkip(file.id)
+              this.backoff.recordSkip(file.id, 'No resolver available')
               result.skipped++
               continue
             }
@@ -276,7 +291,7 @@ export class ImportScanner {
               fileId: file.id,
               error: e as Error,
             })
-            this.backoff.recordSkip(file.id)
+            this.backoff.recordSkip(file.id, 'Processing error')
             result.failed++
           } finally {
             this.processingFiles.delete(file.id)

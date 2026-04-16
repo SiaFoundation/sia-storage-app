@@ -45,6 +45,10 @@ export async function runImportScanner(signal?: AbortSignal): Promise<ImportScan
   return scanner.runScan(signal, getMediaLibraryUri, maxDeferred)
 }
 
+export function getImportBackoffEntries() {
+  return scanner.getBackoffEntries()
+}
+
 export const { init: initImportScanner, triggerNow: triggerImportScanner } = createServiceInterval({
   name: 'importScanner',
   worker: async (signal) => {
@@ -52,3 +56,13 @@ export const { init: initImportScanner, triggerNow: triggerImportScanner } = cre
   },
   interval: IMPORT_SCANNER_INTERVAL,
 })
+
+export function retryImportFile(id: string): void {
+  scanner.clearBackoff(id)
+  triggerImportScanner()
+}
+
+export function retryAllImportFiles(): void {
+  scanner.clearAllBackoff()
+  triggerImportScanner()
+}
