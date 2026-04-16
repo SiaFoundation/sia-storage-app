@@ -4,10 +4,17 @@ import { Command } from 'commander'
 import { isDaemonRunning, readDaemonPid, getDataDir, getPaths } from '@siastorage/node-adapters'
 import { c } from './lib/format'
 
-// Hidden entry point for daemon mode
+// Hidden entry points for daemon mode and shell completion
 if (process.env.SIA_DAEMON_MODE === '1') {
   import('./daemon/entry')
     .then(({ startDaemon }) => startDaemon())
+    .catch((err) => {
+      console.error(err)
+      process.exit(1)
+    })
+} else if (process.argv[2] === '__complete') {
+  import('./commands/completions')
+    .then(({ completeCommand }) => completeCommand(process.argv.slice(3)))
     .catch((err) => {
       console.error(err)
       process.exit(1)
@@ -152,6 +159,91 @@ if (process.env.SIA_DAEMON_MODE === '1') {
     .action(async (parts: string[]) => {
       const { infoCommand } = await import('./commands/info')
       await infoCommand(resolveDataDir(), parts.join('/'))
+    })
+
+  program
+    .command('status')
+    .description('Show sync and storage status')
+    .option('--size', 'Show bytes instead of counts')
+    .action(async (opts: { size?: boolean }) => {
+      const { statusCommand } = await import('./commands/status')
+      await statusCommand(resolveDataDir(), opts)
+    })
+
+  program
+    .command('sync')
+    .description('Show sync status')
+    .action(async () => {
+      const { syncCommand } = await import('./commands/sync')
+      await syncCommand(resolveDataDir())
+    })
+
+  program
+    .command('tags')
+    .description('List all tags')
+    .action(async () => {
+      const { tagsCommand } = await import('./commands/tags')
+      await tagsCommand(resolveDataDir())
+    })
+
+  program
+    .command('tag')
+    .description('Add a tag to a file')
+    .argument('<file>', 'File name or ID')
+    .argument('<tag>', 'Tag name')
+    .action(async (file: string, tag: string) => {
+      const { tagCommand } = await import('./commands/tags')
+      await tagCommand(resolveDataDir(), file, tag)
+    })
+
+  program
+    .command('untag')
+    .description('Remove a tag from a file')
+    .argument('<file>', 'File name or ID')
+    .argument('<tag>', 'Tag name')
+    .action(async (file: string, tag: string) => {
+      const { untagCommand } = await import('./commands/tags')
+      await untagCommand(resolveDataDir(), file, tag)
+    })
+
+  program
+    .command('search')
+    .description('Search files')
+    .argument('<query...>', 'Search query')
+    .action(async (parts: string[]) => {
+      const query = parts.join(' ')
+      const { searchCommand } = await import('./commands/search')
+      await searchCommand(resolveDataDir(), query)
+    })
+
+  program
+    .command('config')
+    .description('View or set configuration')
+    .argument('[action]', 'Action: set')
+    .argument('[key]', 'Config key')
+    .argument('[value]', 'Config value')
+    .action(async (action?: string, key?: string, value?: string) => {
+      const { configCommand } = await import('./commands/config')
+      await configCommand(resolveDataDir(), action, key, value)
+    })
+
+  program
+    .command('logs')
+    .description('Show daemon logs')
+    .option('-f, --follow', 'Follow log output')
+    .option('-n, --lines <count>', 'Number of lines to show', '50')
+    .action(async (opts: { follow?: boolean; lines?: string }) => {
+      const { logsCommand } = await import('./commands/logs')
+      await logsCommand(resolveDataDir(), opts)
+    })
+
+  program
+    .command('completions')
+    .description('Generate shell completion script')
+    .argument('[shell]', 'Shell type: zsh or bash')
+    .action(async (shell?: string) => {
+      const { completionsCommand } = await import('./commands/completions')
+      await completionsCommand(resolveDataDir(), shell)
     })
 
   program.parseAsync(process.argv).catch((err) => {
