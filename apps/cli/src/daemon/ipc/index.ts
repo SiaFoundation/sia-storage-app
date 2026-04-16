@@ -3,17 +3,16 @@ import { startIpcServer } from '@siastorage/node-adapters'
 import type { CliApp } from '../../app'
 import { registerStatusHandlers } from './status'
 import { registerUploadHandlers } from './upload'
+import { registerWatchHandlers } from './watch'
 
 export type IpcHandler = (params: Record<string, unknown>) => Promise<unknown>
 export type IpcHandlerMap = Map<string, IpcHandler>
 
 /**
  * Wires the daemon's IPC server. Custom handlers (`ping`, `status`, `upload`,
- * `uploadState`, `shutdown`) are registered explicitly; the AppService facade
- * is reflected onto `ds:<namespace>:<method>` channels via
- * `registerAppServiceIpc`. Both flow through the same handler map. Feature
- * branches (e.g. `cli/watch`) extend the handler map by registering their own
- * custom handlers in this same way.
+ * `uploadState`, `watch:*`, `shutdown`) are registered explicitly; the
+ * AppService facade is reflected onto `ds:<namespace>:<method>` channels via
+ * `registerAppServiceIpc`. Both flow through the same handler map.
  */
 export function startIpcDispatcher(
   app: CliApp,
@@ -24,6 +23,7 @@ export function startIpcDispatcher(
 
   registerStatusHandlers(handlers, app, onShutdown)
   registerUploadHandlers(handlers, app)
+  registerWatchHandlers(handlers, app)
 
   registerAppServiceIpc(
     {

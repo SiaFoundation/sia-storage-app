@@ -238,6 +238,46 @@ if (process.env.SIA_DAEMON_MODE === '1') {
       await completionsCommand(resolveDataDir(), shell)
     })
 
+  const watch = program
+    .command('watch')
+    .description('Watch directories for new files and auto-ingest')
+    .action(async () => {
+      const { watchListCommand } = await import('./commands/watch')
+      await watchListCommand(resolveDataDir())
+    })
+
+  watch
+    .command('add')
+    .description('Add a directory to watch')
+    .argument('<source>', 'Local directory path to watch')
+    .option('-d, --dir <directory>', 'Target Sia directory', 'watched')
+    .option('-p, --pattern <glob>', 'Only ingest files matching this pattern')
+    .option('--append-id', 'Append a random ID to filenames for unlisted sharing')
+    .option('--no-append-id', 'Keep original filenames')
+    .action(
+      async (source: string, opts: { dir?: string; pattern?: string; appendId?: boolean }) => {
+        const { watchAddCommand } = await import('./commands/watch')
+        await watchAddCommand(resolveDataDir(), source, opts)
+      },
+    )
+
+  watch
+    .command('rm')
+    .description('Stop watching a directory')
+    .argument('<source>', 'Directory path to stop watching')
+    .action(async (source: string) => {
+      const { watchRmCommand } = await import('./commands/watch')
+      await watchRmCommand(resolveDataDir(), source)
+    })
+
+  watch
+    .command('list')
+    .description('List watched directories')
+    .action(async () => {
+      const { watchListCommand } = await import('./commands/watch')
+      await watchListCommand(resolveDataDir())
+    })
+
   const serve = program
     .command('serve')
     .description('Start HTTP file server')
