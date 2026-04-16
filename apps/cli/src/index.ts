@@ -238,5 +238,52 @@ if (process.env.SIA_DAEMON_MODE === '1') {
       await completionsCommand(resolveDataDir(), shell)
     })
 
+  const serve = program
+    .command('serve')
+    .description('Start HTTP file server')
+    .option('-p, --port <port>', 'Port to listen on', '3000')
+    .option('--host <host>', 'Host to bind to', '0.0.0.0')
+    .action(async (opts: { port: string; host: string }) => {
+      const { serveCommand } = await import('./commands/serve')
+      await serveCommand(resolveDataDir(), opts)
+    })
+
+  const serveRoutes = serve
+    .command('routes')
+    .description('Manage serve route access control')
+    .action(async () => {
+      const { listRoutesCommand } = await import('./commands/serveRoutes')
+      await listRoutesCommand(resolveDataDir())
+    })
+
+  serveRoutes
+    .command('add')
+    .description('Add or update a route')
+    .argument('<path>', 'Directory path to serve')
+    .option('--listing', 'Enable directory listing')
+    .option('--no-listing', 'Disable directory listing')
+    .option('--download', 'Enable file downloads')
+    .option('--no-download', 'Disable file downloads')
+    .option('--recursive', 'Apply to all subdirectories')
+    .option('--no-recursive', 'Only apply to this directory and its files')
+    .action(
+      async (
+        routePath: string,
+        opts: { listing?: boolean; download?: boolean; recursive?: boolean },
+      ) => {
+        const { addRouteCommand } = await import('./commands/serveRoutes')
+        await addRouteCommand(resolveDataDir(), routePath, opts)
+      },
+    )
+
+  serveRoutes
+    .command('rm')
+    .description('Remove a route')
+    .argument('<path>', 'Route path to remove')
+    .action(async (routePath: string) => {
+      const { removeRouteCommand } = await import('./commands/serveRoutes')
+      await removeRouteCommand(resolveDataDir(), routePath)
+    })
+
   program.parse()
 }
