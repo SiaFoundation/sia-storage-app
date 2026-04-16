@@ -61,9 +61,9 @@ export {
  * the suspend pipeline no longer closes the DB.
  */
 function createTestDatabase(dbPath: string) {
-  let inner: (DatabaseAdapter & { close(): void }) | null = null
+  let inner: DatabaseAdapter | null = null
 
-  function requireOpen(): DatabaseAdapter & { close(): void } {
+  function requireOpen(): DatabaseAdapter {
     if (!inner) throw new Error('Database is closed')
     return inner
   }
@@ -89,17 +89,16 @@ function createTestDatabase(dbPath: string) {
   return {
     proxy,
     async open() {
-      inner = createBetterSqlite3Database(dbPath)
-      await inner.execAsync(
+      const db = createBetterSqlite3Database(dbPath)
+      await db.execAsync(
         'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
       )
-      await runMigrations(inner, sortMigrations(coreMigrations))
+      await runMigrations(db, sortMigrations(coreMigrations))
+      inner = db
     },
     close() {
-      if (inner) {
-        inner.close()
-        inner = null
-      }
+      inner?.close?.()
+      inner = null
     },
     get isOpen() {
       return inner !== null

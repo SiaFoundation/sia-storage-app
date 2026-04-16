@@ -3,7 +3,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import { runMigrations } from '..'
 import { coreMigrations, sortMigrations } from '../migrations'
 
-let _db: DatabaseAdapter & { close(): void }
+let _db: DatabaseAdapter
 
 export function db(): DatabaseAdapter {
   return _db
@@ -15,5 +15,5 @@ export async function setupTestDb(): Promise<void> {
 }
 
 export async function teardownTestDb(): Promise<void> {
-  _db?.close()
+  _db?.close?.()
 }
