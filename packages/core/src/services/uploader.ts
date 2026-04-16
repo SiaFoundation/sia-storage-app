@@ -18,7 +18,7 @@ import {
   UPLOAD_PARITY_SHARDS,
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
-import type { LocalObjectWithSlabs } from '../encoding/localObject'
+import type { LocalObject } from '../encoding/localObject'
 import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
@@ -1037,7 +1037,7 @@ export class UploadManager {
           type: 'success'
           fileId: string
           size: number
-          localObject: LocalObjectWithSlabs
+          localObject: LocalObject
         }
       | { type: 'deleted'; fileId: string }
       | { type: 'error'; fileId: string }

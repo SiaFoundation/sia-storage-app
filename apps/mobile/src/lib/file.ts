@@ -1,5 +1,5 @@
 import type { DownloadEntry } from '@siastorage/core/app'
-import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { LocalObjectRef } from '@siastorage/core/encoding/localObject'
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
@@ -181,8 +181,8 @@ export function getFileTypeName(
 }
 
 export function getOneObject(file: {
-  objects: Record<string, LocalObject> | null
-}): { indexerURL: string; object: LocalObject } | null {
+  objects: Record<string, LocalObjectRef> | null
+}): { indexerURL: string; object: LocalObjectRef } | null {
   const entries = Object.entries(file.objects ?? {})
   if (entries.length === 0) return null
   const [indexerURL, object] = entries[0]

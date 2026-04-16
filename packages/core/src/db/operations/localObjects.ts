@@ -1,49 +1,45 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type {
   LocalObject,
+  LocalObjectRef,
+  LocalObjectRefRow,
   LocalObjectRow,
-  LocalObjectRowWithSlabs,
-  LocalObjectWithSlabs,
 } from '../../encoding/localObject'
 import {
   localObjectFromStorageRow,
-  localObjectWithSlabsFromStorageRow,
-  localObjectWithSlabsToStorageRow,
+  localObjectRefFromStorageRow,
+  localObjectToStorageRow,
 } from '../../encoding/localObject'
 import * as sql from '../sql'
 
-const OBJECT_META_COLUMNS =
-  'id, fileId, indexerURL, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, createdAt, updatedAt'
+const OBJECT_REF_COLUMNS = 'id, fileId, indexerURL, createdAt, updatedAt'
 
-const OBJECT_ALL_COLUMNS = `${OBJECT_META_COLUMNS}, slabs`
+const OBJECT_ALL_COLUMNS = `${OBJECT_REF_COLUMNS}, encryptedDataKey, encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, slabs`
 
-export async function queryObjectMetasForFile(
+export async function queryObjectRefsForFile(
+  db: DatabaseAdapter,
+  fileId: string,
+): Promise<LocalObjectRef[]> {
+  const rows = await db.getAllAsync<LocalObjectRefRow>(
+    `SELECT ${OBJECT_REF_COLUMNS} FROM objects WHERE fileId = ?`,
+    fileId,
+  )
+  return rows.map(localObjectRefFromStorageRow)
+}
+
+export async function queryObjectsForFile(
   db: DatabaseAdapter,
   fileId: string,
 ): Promise<LocalObject[]> {
   const rows = await db.getAllAsync<LocalObjectRow>(
-    `SELECT ${OBJECT_META_COLUMNS} FROM objects WHERE fileId = ?`,
+    `SELECT ${OBJECT_ALL_COLUMNS} FROM objects WHERE fileId = ?`,
     fileId,
   )
   return rows.map(localObjectFromStorageRow)
 }
 
-export async function queryObjectsForFileWithSlabs(
-  db: DatabaseAdapter,
-  fileId: string,
-): Promise<LocalObjectWithSlabs[]> {
-  const rows = await db.getAllAsync<LocalObjectRowWithSlabs>(
-    `SELECT ${OBJECT_ALL_COLUMNS} FROM objects WHERE fileId = ?`,
-    fileId,
-  )
-  return rows.map(localObjectWithSlabsFromStorageRow)
-}
-
-export async function insertObject(
-  db: DatabaseAdapter,
-  object: LocalObjectWithSlabs,
-): Promise<void> {
-  const e = localObjectWithSlabsToStorageRow(object)
+export async function insertObject(db: DatabaseAdapter, object: LocalObject): Promise<void> {
+  const e = localObjectToStorageRow(object)
   await sql.insert(
     db,
     'objects',
@@ -84,14 +80,33 @@ export async function deleteObjectsForFile(db: DatabaseAdapter, fileId: string):
   await sql.del(db, 'objects', { fileId })
 }
 
-export async function queryObjectMetasForFiles(
+export async function queryObjectRefsForFiles(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<Record<string, LocalObjectRef[]>> {
+  if (fileIds.length === 0) return {}
+  const ph = fileIds.map(() => '?').join(',')
+  const rows = await db.getAllAsync<LocalObjectRefRow>(
+    `SELECT ${OBJECT_REF_COLUMNS} FROM objects WHERE fileId IN (${ph})`,
+    ...fileIds,
+  )
+  const map: Record<string, LocalObjectRef[]> = {}
+  for (const r of rows) {
+    const lo = localObjectRefFromStorageRow(r)
+    if (!map[r.fileId]) map[r.fileId] = []
+    map[r.fileId].push(lo)
+  }
+  return map
+}
+
+export async function queryObjectsForFiles(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<Record<string, LocalObject[]>> {
   if (fileIds.length === 0) return {}
   const ph = fileIds.map(() => '?').join(',')
   const rows = await db.getAllAsync<LocalObjectRow>(
-    `SELECT ${OBJECT_META_COLUMNS} FROM objects WHERE fileId IN (${ph})`,
+    `SELECT ${OBJECT_ALL_COLUMNS} FROM objects WHERE fileId IN (${ph})`,
     ...fileIds,
   )
   const map: Record<string, LocalObject[]> = {}
@@ -103,32 +118,13 @@ export async function queryObjectMetasForFiles(
   return map
 }
 
-export async function queryObjectsForFilesWithSlabs(
-  db: DatabaseAdapter,
-  fileIds: string[],
-): Promise<Record<string, LocalObjectWithSlabs[]>> {
-  if (fileIds.length === 0) return {}
-  const ph = fileIds.map(() => '?').join(',')
-  const rows = await db.getAllAsync<LocalObjectRowWithSlabs>(
-    `SELECT ${OBJECT_ALL_COLUMNS} FROM objects WHERE fileId IN (${ph})`,
-    ...fileIds,
-  )
-  const map: Record<string, LocalObjectWithSlabs[]> = {}
-  for (const r of rows) {
-    const lo = localObjectWithSlabsFromStorageRow(r)
-    if (!map[r.fileId]) map[r.fileId] = []
-    map[r.fileId].push(lo)
-  }
-  return map
-}
-
 export async function insertManyObjects(
   db: DatabaseAdapter,
-  objects: LocalObjectWithSlabs[],
+  objects: LocalObject[],
 ): Promise<void> {
   if (objects.length === 0) return
   const rows = objects.map((o) => {
-    const e = localObjectWithSlabsToStorageRow(o)
+    const e = localObjectToStorageRow(o)
     return {
       fileId: e.fileId,
       indexerURL: e.indexerURL,

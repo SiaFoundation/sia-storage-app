@@ -3,7 +3,7 @@ import type { FileRecord, FileRecordRow, ThumbSize } from '../../types/files'
 import { ThumbSizes } from '../../types/files'
 import { transformRow } from './files'
 import { buildActiveFileFilter, buildActiveFilter } from './library'
-import { queryObjectMetasForFile } from './localObjects'
+import { queryObjectRefsForFile } from './localObjects'
 
 export type ThumbnailCandidateRow = {
   id: string
@@ -71,7 +71,7 @@ export async function queryBestThumbnailByFileId(
     requiredSize,
   )
   if (!row) return null
-  const objects = await queryObjectMetasForFile(db, row.id)
+  const objects = await queryObjectRefsForFile(db, row.id)
   return transformRow(row, objects)
 }
 
@@ -100,7 +100,7 @@ export async function queryThumbnailByFileIdAndSize(
     size,
   )
   if (!row) return null
-  const objects = await queryObjectMetasForFile(db, row.id)
+  const objects = await queryObjectRefsForFile(db, row.id)
   return transformRow(row, objects)
 }
 

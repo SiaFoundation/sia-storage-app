@@ -1,5 +1,5 @@
 import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
-import type { LocalObjectWithSlabs } from '@siastorage/core/encoding/localObject'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata, FileRecord } from '@siastorage/core/types'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
@@ -12,7 +12,7 @@ function makeLocalObject(params: {
   indexerURL: string
   createdAt: number
   updatedAt: number
-}): LocalObjectWithSlabs {
+}): LocalObject {
   return {
     id: params.objectId,
     fileId: params.fileId,

@@ -14,7 +14,7 @@ export function FileMap({ fileId }: { fileId: string }) {
   const hosts = useHosts()
 
   const { data: firstSlab } = useSWR<Slab | null>(['fileMap:firstSlab', fileId], async () => {
-    const objects = await app().localObjects.getForFileWithSlabs(fileId)
+    const objects = await app().localObjects.getForFile(fileId)
     return objects[0]?.slabs[0] ?? null
   })
 

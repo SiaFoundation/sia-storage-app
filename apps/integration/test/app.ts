@@ -15,7 +15,7 @@ import type {
   Tag,
   TagWithCount,
 } from '@siastorage/core/db/operations'
-import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import type { LocalObjectRef } from '@siastorage/core/encoding/localObject'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
@@ -222,7 +222,7 @@ export interface TestApp {
     update: Partial<FileRecordRow> & { id: string },
     opts?: { includeUpdatedAt?: boolean },
   ): Promise<void>
-  readLocalObjectsForFile(fileId: string): Promise<LocalObject[]>
+  readLocalObjectsForFile(fileId: string): Promise<LocalObjectRef[]>
 
   removeFsFile(fileId: string, type: string): Promise<void>
   listFsFiles(): Promise<string[]>
@@ -633,7 +633,7 @@ export function createTestApp(
 
     updateFileRecord: (update, opts) => appService.files.update(update, opts),
 
-    readLocalObjectsForFile: (fileId) => appService.localObjects.getForFile(fileId),
+    readLocalObjectsForFile: (fileId) => appService.localObjects.getRefsForFile(fileId),
 
     async removeFsFile(fileId, type) {
       await appService.fs.removeFile({ id: fileId, type })

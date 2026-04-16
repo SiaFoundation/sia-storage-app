@@ -3,7 +3,7 @@ import type { SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import { DEFAULT_MAX_DOWNLOADS } from '../../config'
 import * as ops from '../../db/operations'
-import type { LocalObjectWithSlabs } from '../../encoding/localObject'
+import type { LocalObject } from '../../encoding/localObject'
 import { SlotPool } from '../../lib/slotPool'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { AppCaches, AppService } from '../service'
@@ -13,7 +13,7 @@ import type { DownloadsState } from '../stores'
 export type DownloadObjectAdapter = {
   download(params: {
     file: { id: string; type: string; size: number }
-    object: LocalObjectWithSlabs
+    object: LocalObject
     sdk: SdkAdapter
     onProgress: (progress: number) => void
     signal: AbortSignal
@@ -76,7 +76,7 @@ export function buildDownloadsNamespace(
 
     const sdk = getSdk()
     if (!sdk) throw new Error('SDK not initialized')
-    const objects = await ops.queryObjectsForFileWithSlabs(db, fileId)
+    const objects = await ops.queryObjectsForFile(db, fileId)
     if (!objects.length) throw new Error('No object available for download')
 
     register(fileId)

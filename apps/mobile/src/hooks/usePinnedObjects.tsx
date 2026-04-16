@@ -8,7 +8,7 @@ export function usePinnedObjects(fileId: string) {
   return useSWR<{ indexerURL: string; pinnedObject: PinnedObjectInterface }[]>(
     ['pinnedObjects', fileId],
     async () => {
-      const objects = await app().localObjects.getForFileWithSlabs(fileId)
+      const objects = await app().localObjects.getForFile(fileId)
       const results = await Promise.all(
         objects.map(async (so) => {
           const appKey = await getAppKeyForIndexer(so.indexerURL)

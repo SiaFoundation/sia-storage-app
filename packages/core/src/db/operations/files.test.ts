@@ -15,7 +15,7 @@ import {
   queryFileStats,
   queryLostFiles,
   readFile,
-  readFileWithSlabs,
+  readFileWithObjects,
   readFilesByIds,
   updateFile,
   updateManyFiles,
@@ -99,11 +99,11 @@ describe('readFile', () => {
   })
 })
 
-describe('readFileWithSlabs', () => {
+describe('readFileWithObjects', () => {
   it('includes slabs in objects', async () => {
     await insertFile(db(), makeFileRecord('file-1'))
     await insertObject(db(), makeLocalObject('file-1'))
-    const result = await readFileWithSlabs(db(), 'file-1')
+    const result = await readFileWithObjects(db(), 'file-1')
     expect(result).not.toBeNull()
     const obj = result!.objects['https://indexer.example.com']
     expect(obj).toBeDefined()
