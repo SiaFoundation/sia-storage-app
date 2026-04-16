@@ -8,6 +8,7 @@ export function createMockThumbnailAdapter(
   overrides?: Partial<ThumbnailAdapter>,
 ): ThumbnailAdapter {
   return {
+    thumbnailableTypes: ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'],
     async generateImageThumbnail() {
       return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
     },

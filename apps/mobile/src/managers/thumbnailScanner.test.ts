@@ -339,6 +339,44 @@ describe('thumbnailScanner', () => {
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
   })
 
+  it('skips files whose type is not in the adapter allowlist (camera RAW, JXL, etc.)', async () => {
+    const now = Date.now()
+    const unsupportedTypes = [
+      'image/x-canon-cr3',
+      'image/jxl',
+      'image/vnd.adobe.photoshop',
+      'image/svg+xml',
+      'image/heic-sequence',
+      'image/tiff',
+      'video/x-matroska',
+      'video/webm',
+      'video/x-ms-wmv',
+    ]
+    for (let i = 0; i < unsupportedTypes.length; i++) {
+      await app().files.create({
+        id: `unsupported-${i}`,
+        name: `file${i}`,
+        type: unsupportedTypes[i],
+        kind: 'file',
+        size: 1000,
+        hash: `unsupported-hash-${i}`,
+        createdAt: now - i,
+        updatedAt: now - i,
+        addedAt: now - i,
+        localId: `local-unsupported-${i}`,
+        trashedAt: null,
+        deletedAt: null,
+      })
+    }
+
+    const result = await runThumbnailScanner()
+
+    expect(result.processedCandidates).toBe(0)
+    expect(result.produced).toHaveLength(0)
+    expect(generateMock).not.toHaveBeenCalled()
+    expect(generateVideoMock).not.toHaveBeenCalled()
+  })
+
   it('limits production per tick (20)', async () => {
     const now = Date.now()
     for (let i = 0; i < 15; i++) {

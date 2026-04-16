@@ -6,6 +6,7 @@ import {
   type FileFacts,
   fileRecordEqual,
   getFileCapabilities,
+  getFileTypeName,
 } from './file'
 
 function makeFacts(overrides?: Partial<FileFacts>): FileFacts {
@@ -503,6 +504,66 @@ describe('computeFileStatus', () => {
       const status = computeFileStatus({ ...baseArgs, file })
       expect(status.isPinned).toBe(false)
       expect(status.isOnNetwork).toBe(false)
+    })
+  })
+})
+
+describe('getFileTypeName', () => {
+  describe('image/* → photo', () => {
+    const cases = [
+      'image/jpeg',
+      'image/png',
+      'image/heic',
+      'image/heic-sequence',
+      'image/bmp',
+      'image/avif',
+      'image/x-canon-cr3',
+    ]
+    it.each(cases)('%s', (type) => {
+      expect(getFileTypeName(makeFileRecord({ type }))).toBe('photo')
+    })
+  })
+
+  describe('video/* → video', () => {
+    const cases = [
+      'video/mp4',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-matroska',
+      'video/webm',
+    ]
+    it.each(cases)('%s', (type) => {
+      expect(getFileTypeName(makeFileRecord({ type }))).toBe('video')
+    })
+  })
+
+  describe('audio/* → audio', () => {
+    const cases = ['audio/mpeg', 'audio/mp4', 'audio/flac', 'audio/ogg', 'audio/aiff']
+    it.each(cases)('%s', (type) => {
+      expect(getFileTypeName(makeFileRecord({ type }))).toBe('audio')
+    })
+  })
+
+  // application/* maps to 'document', so archives and installers all read as
+  // documents in UI surfaces using this label.
+  describe('application/* → document', () => {
+    const cases = [
+      'application/pdf',
+      'application/zip',
+      'application/x-bzip2',
+      'application/json',
+      'application/vnd.android.package-archive',
+      'application/x-apple-diskimage',
+    ]
+    it.each(cases)('%s', (type) => {
+      expect(getFileTypeName(makeFileRecord({ type }))).toBe('document')
+    })
+  })
+
+  describe('text/* and unknown → other', () => {
+    const cases = ['text/plain', 'text/markdown', 'text/csv', 'foo/bar']
+    it.each(cases)('%s', (type) => {
+      expect(getFileTypeName(makeFileRecord({ type }))).toBe('other')
     })
   })
 })

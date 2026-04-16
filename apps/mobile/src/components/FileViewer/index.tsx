@@ -14,6 +14,7 @@ import { MarkdownViewer } from '../MediaConsumers/MarkdownViewer'
 import { PDFViewer } from '../MediaConsumers/PDFViewer'
 import { TextViewer } from '../MediaConsumers/TextViewer'
 import { VideoPlayer } from '../MediaConsumers/VideoPlayer'
+import { pickViewerForFile } from './pickViewer'
 
 type FileViewerProps = {
   file: FileRecord
@@ -60,8 +61,6 @@ export function FileViewer({
     if (customDownloader) customDownloader()
     else fileDownload()
   }, [isDownloading, customDownloader, fileDownload, onViewerControlPress])
-
-  const lowerCasedFileName = useMemo(() => name?.toLowerCase() ?? '', [name])
 
   const isQueued = fileDownloadState?.status === 'queued'
 
@@ -161,76 +160,78 @@ export function FileViewer({
 
   const renderViewer = useCallback(
     (uri: string) => {
-      if (type?.includes('image'))
-        return <ImageViewer uri={uri} style={baseMediaStyle} onZoomChange={onImageZoomChange} />
-      if (type?.includes('video'))
-        return (
-          <VideoPlayer
-            source={uri}
-            style={baseMediaStyle}
-            onViewerControlPress={onViewerControlPress}
-          />
-        )
-      if (type?.includes('audio'))
-        return (
-          <AudioPlayer
-            source={uri}
-            filename={name}
-            style={baseMediaStyle}
-            onViewerControlPress={onViewerControlPress}
-          />
-        )
-      if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf'))
-        return (
-          <PDFViewer
-            source={uri}
-            style={baseMediaStyle}
-            onSwipeLeft={onSwipeLeft}
-            onSwipeRight={onSwipeRight}
-          />
-        )
-      if (type?.includes('application/json') || lowerCasedFileName.endsWith('.json'))
-        return (
-          <JSONViewer
-            uri={uri}
-            fileSize={file.size}
-            style={baseMediaStyle}
-            topInset={textInsetValue}
-          />
-        )
-      if (
-        type?.includes('text/markdown') ||
-        lowerCasedFileName.endsWith('.md') ||
-        lowerCasedFileName.endsWith('.markdown')
-      )
-        return (
-          <MarkdownViewer
-            uri={uri}
-            style={textMediaStyle}
-            onViewerControlPress={onViewerControlPress}
-          />
-        )
-      if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt'))
-        return (
-          <TextViewer
-            uri={uri}
-            fileSize={file.size}
-            style={baseMediaStyle}
-            topInset={textInsetValue}
-          />
-        )
-
-      return (
-        <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
-          <FileIcon color={colors.textPrimary} size={40} />
-          <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
-        </View>
-      )
+      const kind = pickViewerForFile(type, name)
+      switch (kind) {
+        case 'image':
+          return <ImageViewer uri={uri} style={baseMediaStyle} onZoomChange={onImageZoomChange} />
+        case 'video':
+          return (
+            <VideoPlayer
+              source={uri}
+              style={baseMediaStyle}
+              onViewerControlPress={onViewerControlPress}
+            />
+          )
+        case 'audio':
+          return (
+            <AudioPlayer
+              source={uri}
+              filename={name}
+              style={baseMediaStyle}
+              onViewerControlPress={onViewerControlPress}
+            />
+          )
+        case 'pdf':
+          return (
+            <PDFViewer
+              source={uri}
+              style={baseMediaStyle}
+              onSwipeLeft={onSwipeLeft}
+              onSwipeRight={onSwipeRight}
+            />
+          )
+        case 'json':
+          return (
+            <JSONViewer
+              uri={uri}
+              fileSize={file.size}
+              style={baseMediaStyle}
+              topInset={textInsetValue}
+            />
+          )
+        case 'markdown':
+          return (
+            <MarkdownViewer
+              uri={uri}
+              style={textMediaStyle}
+              onViewerControlPress={onViewerControlPress}
+            />
+          )
+        case 'text':
+          return (
+            <TextViewer
+              uri={uri}
+              fileSize={file.size}
+              style={baseMediaStyle}
+              topInset={textInsetValue}
+            />
+          )
+        case 'unsupported':
+          return (
+            <View
+              style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}
+            >
+              <FileIcon color={colors.textPrimary} size={40} />
+              <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
+            </View>
+          )
+        default:
+          return assertNever(kind)
+      }
     },
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
     [
       type,
-      lowerCasedFileName,
       name,
       textInsetValue,
       textMediaStyle,

@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "ignoreDependencies": ["expo-system-ui"],
-  "ignore": ["scripts/**"],
+  "ignore": ["scripts/**", "test/fixtures/files/**"],
   "workspaces": {
     "packages/core": {
       "entry": ["src/**/index.ts", "src/**/*.ts", "!src/**/*.test.ts"],

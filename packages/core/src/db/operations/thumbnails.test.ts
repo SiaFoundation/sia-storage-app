@@ -2,11 +2,15 @@ import { insertFile } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   queryBestThumbnailByFileId,
+  queryThumbnailCandidatePage,
   queryThumbnailExistsForFileIdAndSize,
   queryThumbnailFileInfoByFileIds,
+  queryThumbnailScanProgress,
   queryThumbnailSizesForFileId,
   queryThumbnailsByFileId,
 } from './thumbnails'
+
+const DEFAULT_ALLOWED = ['image/jpeg', 'image/png', 'video/mp4']
 
 async function createTestFile(id: string, overrides?: Record<string, any>) {
   await insertFile(db(), {
@@ -142,5 +146,57 @@ describe('queryThumbnailFileInfoByFileIds', () => {
   it('returns empty for empty input', async () => {
     const infos = await queryThumbnailFileInfoByFileIds(db(), [])
     expect(infos).toEqual([])
+  })
+})
+
+describe('queryThumbnailCandidatePage allowlist', () => {
+  it('includes only files whose type is in allowedTypes', async () => {
+    await createTestFile('jpeg', { type: 'image/jpeg' })
+    await createTestFile('png', { type: 'image/png' })
+    await createTestFile('raw', { type: 'image/x-canon-cr3' })
+    await createTestFile('jxl', { type: 'image/jxl' })
+    await createTestFile('mp4', { type: 'video/mp4' })
+    await createTestFile('mkv', { type: 'video/x-matroska' })
+
+    const rows = await queryThumbnailCandidatePage(db(), 10, undefined, DEFAULT_ALLOWED)
+    const ids = rows.map((r) => r.id).sort()
+    expect(ids).toEqual(['jpeg', 'mp4', 'png'])
+  })
+
+  it('returns no rows when allowedTypes is empty', async () => {
+    await createTestFile('jpeg')
+    const rows = await queryThumbnailCandidatePage(db(), 10, undefined, [])
+    expect(rows).toEqual([])
+  })
+
+  it('skips files whose thumbnails are already complete', async () => {
+    await createTestFile('jpeg')
+    // 64 and 512 are the ThumbSizes (both must exist to be complete)
+    await createThumbnail('thumb64', 'jpeg', 64)
+    await createThumbnail('thumb512', 'jpeg', 512)
+    const rows = await queryThumbnailCandidatePage(db(), 10, undefined, DEFAULT_ALLOWED)
+    expect(rows).toEqual([])
+  })
+})
+
+describe('queryThumbnailScanProgress', () => {
+  it('counts only allowed types as originals', async () => {
+    await createTestFile('jpeg')
+    await createTestFile('raw', { type: 'image/x-canon-cr3' })
+    await createTestFile('mp4', { type: 'video/mp4' })
+    await createThumbnail('thumb', 'jpeg', 64)
+
+    const progress = await queryThumbnailScanProgress(db(), DEFAULT_ALLOWED)
+    expect(progress.originals).toBe(2)
+    expect(progress.thumbs).toBe(1)
+  })
+
+  it('returns 0 originals when allowedTypes is empty (but still counts thumbs)', async () => {
+    await createTestFile('jpeg')
+    await createThumbnail('thumb', 'jpeg', 64)
+
+    const progress = await queryThumbnailScanProgress(db(), [])
+    expect(progress.originals).toBe(0)
+    expect(progress.thumbs).toBe(1)
   })
 })

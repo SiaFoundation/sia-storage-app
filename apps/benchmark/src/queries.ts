@@ -114,12 +114,12 @@ export function buildQuerySpecs(
     {
       name: 'thumbnailCandidatePage',
       category: 'thumbnails',
-      run: () => app.thumbnails.queryCandidatePage(50),
+      run: () => app.thumbnails.queryCandidatePage(50, undefined, app.thumbnails.allowedTypes),
     },
     {
       name: 'thumbnailScanProgress',
       category: 'thumbnails',
-      run: () => app.thumbnails.queryProgress(),
+      run: () => app.thumbnails.queryProgress(app.thumbnails.allowedTypes),
     },
   ]
 }
