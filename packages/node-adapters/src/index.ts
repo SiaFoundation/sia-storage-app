@@ -16,3 +16,9 @@ export { startIpcServer, sendIpcCommand, connectToIpc } from './ipc'
 export type { IpcHandler, IpcServer } from './ipc'
 export { readState, writeState, removeState } from './state'
 export type { DaemonState } from './state'
+
+// SDK integration
+export { createNodeSdkAdapter } from './sdk'
+export { createNodeSdkAuthAdapter } from './auth'
+export type { NodeSdkAuthResult } from './auth'
+export { createNodeDownloadAdapter } from './download'
