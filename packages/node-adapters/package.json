@@ -17,7 +17,10 @@
     "./bunDatabase": "./src/bunDatabase.ts",
     "./lock": "./src/lock.ts",
     "./ipc": "./src/ipc.ts",
-    "./state": "./src/state.ts"
+    "./state": "./src/state.ts",
+    "./sdk": "./src/sdk.ts",
+    "./auth": "./src/auth.ts",
+    "./download": "./src/download.ts"
   },
   "scripts": {
     "lint": "oxlint . && oxfmt --check .",
@@ -25,6 +28,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@siafoundation/sia-storage": "0.0.9",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
     "better-sqlite3": "12.6.2",
