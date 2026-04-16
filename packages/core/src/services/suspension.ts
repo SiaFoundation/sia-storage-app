@@ -1,4 +1,5 @@
 import { CoalescingQueue } from '../lib/coalescingQueue'
+import { raceWithTimeout } from '../lib/timeout'
 import { logger } from '@siastorage/logger'
 
 export type SuspensionAdapters = {
@@ -61,18 +62,9 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       // workers can complete their current unit of work (DB writes, cursor
       // updates) without hitting DatabaseSuspendedError.
       const drainStart = Date.now()
-      let deadlineTimer: ReturnType<typeof setTimeout>
-      const deadlinePromise = new Promise<false>((r) => {
-        deadlineTimer = setTimeout(() => r(false), hardDeadlineMs)
-      })
-      let drained: boolean
-      try {
-        drained = await Promise.race([scheduler.waitForIdle().then(() => true), deadlinePromise])
-      } finally {
-        clearTimeout(deadlineTimer!)
-      }
+      const drained = await raceWithTimeout(scheduler.waitForIdle(), hardDeadlineMs)
 
-      if (drained) {
+      if (drained.ok) {
         logger.debug('suspension', 'services_drained', {
           drainMs: Date.now() - drainStart,
         })
@@ -92,11 +84,8 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       // can't block suspension indefinitely.
       const elapsedMs = Date.now() - drainStart
       const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 1000)
-      const dbDrained = await Promise.race([
-        db.waitForIdle().then(() => true),
-        new Promise<false>((r) => setTimeout(() => r(false), remainingMs)),
-      ])
-      if (!dbDrained) {
+      const dbDrainResult = await raceWithTimeout(db.waitForIdle(), remainingMs)
+      if (!dbDrainResult.ok) {
         logger.warn('suspension', 'db_drain_timeout', {
           remainingMs,
         })

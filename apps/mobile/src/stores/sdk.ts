@@ -19,7 +19,7 @@
 
 import { err, ok, type Result, uint8ToHex } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
-import { withTimeout } from '@siastorage/core/lib/timeout'
+import { raceWithTimeout, withTimeout } from '@siastorage/core/lib/timeout'
 import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
@@ -396,13 +396,10 @@ async function waitForUserApproval(responseUrl: string): Promise<Result<void, Au
       approvalPromise = startApprovalPoll()
     }
 
-    const grace = await Promise.race([
-      approvalPromise.then(() => 'approved' as const),
-      new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), BROWSER_CLOSE_GRACE_MS)),
-    ])
+    const grace = await raceWithTimeout(approvalPromise, BROWSER_CLOSE_GRACE_MS)
 
-    if (grace === 'approved') {
-      const outcome = await approvalPromise
+    if (grace.ok) {
+      const outcome = grace.value
       if (outcome.ok) return ok(undefined)
       if (outcome.error.name === 'AbortError') return err({ type: 'cancelled' })
       return err({ type: 'error', message: outcome.error.message })
