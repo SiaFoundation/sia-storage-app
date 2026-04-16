@@ -143,6 +143,8 @@ export interface AppService {
     getCurrentByNamesInDirectory(names: string[], directoryId: string | null): Promise<FileRecord[]>
     /** Returns a file by name (current version). */
     getByName(name: string): Promise<FileRecord | null>
+    /** Returns a file by name within a directory path. */
+    getByNameInDirectoryPath(name: string, directoryPath: string): Promise<FileRecord | null>
     /** Returns a file by content hash. */
     getByContentHash(hash: string): Promise<FileRecord | null>
     /** Returns files by content hashes. */
@@ -747,6 +749,11 @@ export interface AppService {
     shutdown(): Promise<void>
     /** Returns whether the upload manager is actively processing. */
     isRunning(): boolean
+    /** Returns the current batch being packed, or null if idle. */
+    currentBatch(): {
+      batchId: string
+      files: Array<{ fileId: string; name: string; size: number }>
+    } | null
   }
   /** Returns the list of known hosts from the indexer. */
   hosts(): Promise<Host[]>

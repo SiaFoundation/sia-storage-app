@@ -21,6 +21,7 @@ export {
   queryDirectoryPathForFile,
   queryFileByNameInDirectory,
   queryFilesByDirectoryPath,
+  readFileByNameInDirectoryPath,
   renameDirectory,
   sanitizeDirectoryPath,
   sanitizeDirectorySegment,

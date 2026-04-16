@@ -1,10 +1,11 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
-import type { FileRecordRow } from '../../types/files'
+import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import { recalculateCurrentForGroup, recalculateCurrentForGroups } from './files'
+import { recalculateCurrentForGroup, recalculateCurrentForGroups, transformRow } from './files'
 import { buildRecordFilter } from './library'
+import { queryObjectRefsForFile } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 
 export type Directory = {
@@ -523,6 +524,17 @@ export async function queryFileByNameInDirectory(
     fileName,
     directoryPath,
   )
+}
+
+export async function readFileByNameInDirectoryPath(
+  db: DatabaseAdapter,
+  fileName: string,
+  directoryPath: string,
+): Promise<FileRecord | null> {
+  const row = await queryFileByNameInDirectory(db, fileName, directoryPath)
+  if (!row) return null
+  const objects = await queryObjectRefsForFile(db, row.id)
+  return transformRow(row, objects)
 }
 
 export async function queryFilesByDirectoryPath(
