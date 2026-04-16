@@ -1,4 +1,5 @@
 import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
+import type { MimeType } from '@siastorage/core/lib/fileTypes'
 import type { ThumbSize } from '@siastorage/core/types'
 // oxlint-disable-next-line no-restricted-imports -- File constructor + .bytes() (async)
 import { File } from 'expo-file-system'
@@ -82,8 +83,43 @@ async function resizeToWebP(
   }
 }
 
+// Image MIMEs that ImageIO (iOS) and BitmapFactory (Android) can decode.
+// Excluded: proprietary camera RAW (CR2/CR3/NEF/NRW/ARW/RAF/ORF/RW2/PEF),
+// JPEG XL, PSD, SVG (vector), HEIC sequence (multi-frame), AVCI/AVCS, ICO
+// (multi-resolution), TIFF.
+const MOBILE_THUMBNAILABLE_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/bmp',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/avif',
+  'image/dng',
+  'image/x-adobe-dng',
+  'image/x-apple-proraw',
+] as const satisfies readonly MimeType[]
+
+// Video MIMEs where AVAssetImageGenerator (iOS) and MediaMetadataRetriever
+// (Android) can produce a frame. Excluded: MKV/WebM (Android-only),
+// WMV/FLV/MPEG/OGV (neither), AVI (codec-dependent).
+const MOBILE_THUMBNAILABLE_VIDEO_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/3gpp',
+  'video/3gpp2',
+] as const satisfies readonly MimeType[]
+
+const MOBILE_THUMBNAILABLE_TYPES: readonly string[] = [
+  ...MOBILE_THUMBNAILABLE_IMAGE_TYPES,
+  ...MOBILE_THUMBNAILABLE_VIDEO_TYPES,
+]
+
 export function createMobileThumbnailAdapter(): ThumbnailAdapter {
   return {
+    thumbnailableTypes: MOBILE_THUMBNAILABLE_TYPES,
     async generateImageThumbnail(sourcePath: string, targetSize: number): Promise<ThumbnailResult> {
       const { result } = await resizeToWebP(sourcePath, targetSize as ThumbSize)
       return result

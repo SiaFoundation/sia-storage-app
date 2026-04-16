@@ -107,14 +107,17 @@ export async function queryThumbnailByFileIdAndSize(
 export async function queryThumbnailCandidatePage(
   db: DatabaseAdapter,
   pageSize: number,
-  cursor?: { createdAt: number; id: string },
+  cursor: { createdAt: number; id: string } | undefined,
+  allowedTypes: readonly string[],
 ): Promise<ThumbnailCandidateRow[]> {
-  const params: (string | number)[] = []
+  if (allowedTypes.length === 0) return []
+  const params: (string | number)[] = [...allowedTypes]
   const cursorClause = cursor ? 'AND (f.createdAt < ? OR (f.createdAt = ? AND f.id < ?))' : ''
   if (cursor) {
     params.push(cursor.createdAt, cursor.createdAt, cursor.id)
   }
   params.push(pageSize)
+  const typePlaceholders = allowedTypes.map(() => '?').join(',')
 
   return db.getAllAsync<ThumbnailCandidateRow>(
     `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
@@ -122,8 +125,7 @@ export async function queryThumbnailCandidatePage(
      LEFT JOIN files t
        ON t.thumbForId = f.id
       AND t.thumbSize IN (${ThumbSizes.join(',')})
-     WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
-       AND f.type != 'image/tiff'
+     WHERE f.type IN (${typePlaceholders})
        AND ${buildRecordFilter('f')}
        AND f.hash != ''
        ${cursorClause}
@@ -137,9 +139,18 @@ export async function queryThumbnailCandidatePage(
 
 export async function queryThumbnailScanProgress(
   db: DatabaseAdapter,
+  allowedTypes: readonly string[],
 ): Promise<{ originals: number; thumbs: number }> {
+  if (allowedTypes.length === 0) {
+    const thumbsRow = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
+    )
+    return { originals: 0, thumbs: thumbsRow?.count ?? 0 }
+  }
+  const typePlaceholders = allowedTypes.map(() => '?').join(',')
   const originalsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND ${buildRecordFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.type IN (${typePlaceholders}) AND ${buildRecordFilter('f')}`,
+    ...allowedTypes,
   )
   const thumbsRow = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })} AND f.thumbSize IN (${ThumbSizes.join(',')})`,

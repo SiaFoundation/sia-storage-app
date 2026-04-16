@@ -474,6 +474,7 @@ export function buildDbNamespaces(
       },
     },
     thumbnails: {
+      allowedTypes: adapters?.thumbnail?.thumbnailableTypes ?? [],
       getForFile: (fileId) => ops.queryThumbnailsByFileId(db, fileId),
       getBest: (fileId, requiredSize) => ops.queryBestThumbnailByFileId(db, fileId, requiredSize),
       getByFileIdAndSize: (fileId, size) => ops.queryThumbnailByFileIdAndSize(db, fileId, size),
@@ -481,9 +482,9 @@ export function buildDbNamespaces(
       getSizesForFile: (fileId) => ops.queryThumbnailSizesForFileId(db, fileId),
       existsForFileAndSize: (fileId, size) =>
         ops.queryThumbnailExistsForFileIdAndSize(db, fileId, size),
-      queryCandidatePage: (pageSize, cursor) =>
-        ops.queryThumbnailCandidatePage(db, pageSize, cursor),
-      queryProgress: () => ops.queryThumbnailScanProgress(db),
+      queryCandidatePage: (pageSize, cursor, allowedTypes) =>
+        ops.queryThumbnailCandidatePage(db, pageSize, cursor, allowedTypes),
+      queryProgress: (allowedTypes) => ops.queryThumbnailScanProgress(db, allowedTypes),
       generate: (sourcePath, targetSize) => {
         if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
         return adapters.thumbnail.generateImageThumbnail(sourcePath, targetSize)

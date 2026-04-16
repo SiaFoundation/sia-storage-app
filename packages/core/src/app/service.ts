@@ -325,6 +325,12 @@ export interface AppService {
   }
   /** Thumbnail queries and generation. */
   thumbnails: {
+    /**
+     * MIME types the configured thumbnail adapter can decode. Used by the
+     * scanner to filter candidates at the SQL level so unsupported types
+     * don't get re-scanned on every cold start.
+     */
+    readonly allowedTypes: readonly string[]
     /** Returns all thumbnail records for a file. */
     getForFile(fileId: string): Promise<FileRecord[]>
     /** Returns the best available thumbnail at or above the required size. */
@@ -342,7 +348,8 @@ export interface AppService {
     /** Returns a page of candidate originals that still need thumbnails generated. */
     queryCandidatePage(
       pageSize: number,
-      cursor?: { createdAt: number; id: string },
+      cursor: { createdAt: number; id: string } | undefined,
+      allowedTypes: readonly string[],
     ): Promise<
       {
         id: string
@@ -353,7 +360,7 @@ export interface AppService {
       }[]
     >
     /** Returns overall thumbnail scan progress (count of originals and thumbs). */
-    queryProgress(): Promise<{ originals: number; thumbs: number }>
+    queryProgress(allowedTypes: readonly string[]): Promise<{ originals: number; thumbs: number }>
     /** Generates a single image thumbnail at the given size. */
     generate(
       sourcePath: string,

@@ -23,6 +23,7 @@ android-release.keystore
 *.p8
 *.p12
 *.key
+!test/fixtures/files/sample.key
 *.mobileprovision
 *.pem
 
@@ -45,3 +46,4 @@ CLAUDE.md
 
 # docs
 docs/
+

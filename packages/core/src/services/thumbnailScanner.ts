@@ -140,11 +140,11 @@ export class ThumbnailScanner {
   }
 
   async generateThumbnailsForFile(fileRecord: FileRecord): Promise<void> {
-    if (!fileRecord.type?.startsWith('image/') && !fileRecord.type?.startsWith('video/')) {
+    const app = this.getApp()
+    if (!fileRecord.type || !app.thumbnails.allowedTypes.includes(fileRecord.type)) {
       return
     }
 
-    const app = this.getApp()
     this.processingFiles.add(fileRecord.id)
     try {
       const sourceUri = await app.fs.getFileUri({
@@ -219,7 +219,7 @@ export class ThumbnailScanner {
       })
     }
 
-    if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
+    if (!actualType || !app.thumbnails.allowedTypes.includes(actualType)) {
       logger.error('thumbnailer', 'unsupported_format', {
         fileId,
         fileHash,
@@ -332,7 +332,7 @@ export class ThumbnailScanner {
     const detectedType = await app.fs.detectMimeType(sourceUri)
     const actualType = detectedType ?? fileType
 
-    if (!actualType?.startsWith('image/') && !actualType?.startsWith('video/')) {
+    if (!actualType || !app.thumbnails.allowedTypes.includes(actualType)) {
       this.markFileErrored(fileId)
       return
     }
@@ -410,7 +410,11 @@ export class ThumbnailScanner {
     const pageSize = Math.max(limit, 25)
 
     while (results.length < limit) {
-      const batch = await app.thumbnails.queryCandidatePage(pageSize, cursor)
+      const batch = await app.thumbnails.queryCandidatePage(
+        pageSize,
+        cursor,
+        app.thumbnails.allowedTypes,
+      )
 
       if (batch.length === 0) break
 
@@ -432,7 +436,7 @@ export class ThumbnailScanner {
   private async logOverallProgress(): Promise<void> {
     const app = this.getApp()
     try {
-      const { originals, thumbs } = await app.thumbnails.queryProgress()
+      const { originals, thumbs } = await app.thumbnails.queryProgress(app.thumbnails.allowedTypes)
       const targetThumbs = originals * ThumbSizes.length
       const remaining = Math.max(targetThumbs - thumbs, 0)
       const percent = targetThumbs > 0 ? Math.min(1, thumbs / targetThumbs) : 1

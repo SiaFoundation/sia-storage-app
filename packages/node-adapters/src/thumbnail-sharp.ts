@@ -1,7 +1,22 @@
 import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
+import type { MimeType } from '@siastorage/core/lib/fileTypes'
 import sharp from 'sharp'
 
 const WEBP_QUALITY = 80
+
+// Image MIMEs that sharp (libvips) can decode. Video unsupported in this
+// adapter (generateVideoThumbnail throws), so video MIMEs are absent.
+const SHARP_THUMBNAILABLE_TYPES: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/tiff',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+  'image/svg+xml',
+] as const satisfies readonly MimeType[]
 
 async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailResult> {
   const path = filePath.replace(/^file:\/\//, '')
@@ -22,6 +37,7 @@ async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailRe
  */
 export function createSharpThumbnailAdapter(): ThumbnailAdapter {
   return {
+    thumbnailableTypes: SHARP_THUMBNAILABLE_TYPES,
     generateImageThumbnail(sourcePath: string, targetSize: number) {
       return resizeToWebp(sourcePath, targetSize)
     },
