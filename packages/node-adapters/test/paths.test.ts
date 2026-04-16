@@ -14,9 +14,9 @@ describe('getDataDir', () => {
     }
   })
 
-  it('returns ~/.siastorage by default', () => {
+  it('returns ~/.sia by default', () => {
     delete process.env.SIA_DATA_DIR
-    expect(getDataDir()).toBe(path.join(os.homedir(), '.siastorage'))
+    expect(getDataDir()).toBe(path.join(os.homedir(), '.sia'))
   })
 
   it('respects SIA_DATA_DIR env var', () => {

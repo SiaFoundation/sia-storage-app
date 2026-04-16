@@ -1023,6 +1023,23 @@ export async function readFileByName(
   return transformRow(row, objects)
 }
 
+export async function readFileByNameInUnfiled(
+  db: DatabaseAdapter,
+  name: string,
+): Promise<FileRecord | null> {
+  const row = await db.getFirstAsync<FileRecordRow>(
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+     FROM files f
+     WHERE f.name = ? AND f.directoryId IS NULL AND ${buildRecordFilter('f')}
+     ORDER BY f.updatedAt DESC, f.id DESC
+     LIMIT 1`,
+    name,
+  )
+  if (!row) return null
+  const objects = await queryObjectRefsForFile(db, row.id)
+  return transformRow(row, objects)
+}
+
 export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f

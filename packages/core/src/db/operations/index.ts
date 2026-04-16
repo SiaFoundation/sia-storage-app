@@ -69,6 +69,7 @@ export {
   readFile,
   readFileByContentHash,
   readFileByName,
+  readFileByNameInUnfiled,
   readFileByObjectId,
   readFileWithObjects,
   readFilesByContentHashes,

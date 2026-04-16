@@ -58,7 +58,7 @@ async function seedUploadedThumb(
     },
     makeLocalObject(params.id),
   )
-  await app.app.fs.writeFileData(file, crypto.randomBytes(params.size).buffer)
+  await app.app.fs.writeFileData(file, new Uint8Array(crypto.randomBytes(params.size)).buffer)
   await app.app.fs.upsertMeta({
     fileId: params.id,
     size: params.size,

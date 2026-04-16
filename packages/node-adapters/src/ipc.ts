@@ -36,6 +36,14 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
   })
 
   server.listen(sockPath, () => {
+    // Restrict the socket to the owning user. Without this, a permissive
+    // umask could leave it group/world-accessible and any local user could
+    // invoke daemon methods (e.g. `upload` reading arbitrary paths).
+    try {
+      fs.chmodSync(sockPath, 0o600)
+    } catch (err) {
+      logger.error('ipc', 'chmod_failed', { error: err as Error })
+    }
     logger.debug('ipc', 'server_listening', { path: sockPath })
   })
 
