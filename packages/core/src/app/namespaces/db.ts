@@ -266,6 +266,7 @@ export function buildDbNamespaces(
       getRowsByIds: (ids) => ops.queryFilesByIds(db, ids),
       getRowsByObjectIds: (objectIds, indexerURL) =>
         ops.queryFilesByObjectIds(db, objectIds, indexerURL),
+      getDirectoryIdsForFiles: (fileIds) => ops.queryDirectoryIdsForFiles(db, fileIds),
       tombstone: async (fileIds, opts) => {
         await ops.tombstoneFiles(db, fileIds, Date.now())
         if (!opts?.skipInvalidation) {
@@ -438,6 +439,11 @@ export function buildDbNamespaces(
         caches.directories.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
+        return count
+      },
+      deleteEmpty: async (directoryIds, opts) => {
+        const count = await ops.deleteEmptyDirectories(db, directoryIds)
+        if (count > 0 && !opts?.skipInvalidation) caches.directories.invalidateAll()
         return count
       },
       rename: async (id, name) => {

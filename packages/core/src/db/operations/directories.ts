@@ -192,6 +192,10 @@ export async function queryDirectoryByPath(
   return row ? toDirectory(row) : null
 }
 
+// File count includes all files in this directory and all descendant directories.
+const RECURSIVE_FILE_COUNT_EXPR = `(SELECT COUNT(*) FROM files f JOIN directories fd ON f.directoryId = fd.id WHERE (fd.id = d.id OR fd.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\') AND ${buildRecordFilter('f')})`
+const DIRECT_SUBDIR_COUNT_EXPR = `(SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\')`
+
 export async function queryDirectoryChildren(
   db: DatabaseAdapter,
   parentPath: string | null,
@@ -203,8 +207,8 @@ export async function queryDirectoryChildren(
   if (parentPath === null) {
     rows = await db.getAllAsync<Row>(
       `SELECT d.id, d.path, d.createdAt,
-        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}) as fileCount,
-        (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
+        ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
+        ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
        FROM directories d
        WHERE d.path NOT LIKE '%/%' ESCAPE '\\'
        ORDER BY d.nameSortKey`,
@@ -213,8 +217,8 @@ export async function queryDirectoryChildren(
     const escaped = escapeLikePattern(parentPath)
     rows = await db.getAllAsync<Row>(
       `SELECT d.id, d.path, d.createdAt,
-        (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}) as fileCount,
-        (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
+        ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
+        ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
        FROM directories d
        WHERE d.path LIKE ? || '/%' ESCAPE '\\' AND d.path NOT LIKE ? || '/%/%' ESCAPE '\\'
        ORDER BY d.nameSortKey`,
@@ -237,8 +241,8 @@ export async function queryAllDirectoriesWithCounts(
 
   const rows = await db.getAllAsync<Row>(
     `SELECT d.id, d.path, d.createdAt,
-      (SELECT COUNT(*) FROM files f WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}) as fileCount,
-      (SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\') as subdirectoryCount
+      ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
+      ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
      FROM directories d
      ORDER BY d.nameSortKey`,
   )
@@ -491,6 +495,65 @@ export async function deleteDirectoryAndTrashFiles(
   )
 
   return totalTrashed
+}
+
+/**
+ * Deletes directories that have no active files and no subdirectories.
+ * Walks up the tree one level per iteration: if removing a directory makes
+ * its parent empty, the parent is evaluated on the next pass.
+ *
+ * Iteration count is bounded by tree depth (3 queries per level). Per
+ * iteration the queries scale linearly with the candidate set, which
+ * starts at `directoryIds.length` and shrinks toward the tree's width
+ * (one row per unique parent path) after the first pass.
+ */
+export async function deleteEmptyDirectories(
+  db: DatabaseAdapter,
+  directoryIds: string[],
+): Promise<number> {
+  if (directoryIds.length === 0) return 0
+  let candidates = [...new Set(directoryIds)]
+  let totalDeleted = 0
+
+  while (candidates.length > 0) {
+    const ph = candidates.map(() => '?').join(',')
+    const empties = await db.getAllAsync<{ id: string; path: string }>(
+      `SELECT d.id, d.path FROM directories d
+       WHERE d.id IN (${ph})
+         AND NOT EXISTS (
+           SELECT 1 FROM files f
+           WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM directories c
+           WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\'
+             AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\'
+         )`,
+      ...candidates,
+    )
+
+    if (empties.length === 0) break
+
+    const idPh = empties.map(() => '?').join(',')
+    await db.runAsync(`DELETE FROM directories WHERE id IN (${idPh})`, ...empties.map((e) => e.id))
+    totalDeleted += empties.length
+
+    const parentPaths = [
+      ...new Set(
+        empties.map((e) => directoryParentPath(e.path)).filter((p): p is string => p !== null),
+      ),
+    ]
+    if (parentPaths.length === 0) break
+
+    const pathPh = parentPaths.map(() => '?').join(',')
+    const parents = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM directories WHERE path IN (${pathPh})`,
+      ...parentPaths,
+    )
+    candidates = parents.map((p) => p.id)
+  }
+
+  return totalDeleted
 }
 
 export async function queryCountFilesWithDirectories(
