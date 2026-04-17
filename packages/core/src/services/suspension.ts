@@ -13,6 +13,13 @@ export type SuspensionAdapters = {
     suspend(): Promise<void>
     resume(): void
     adjustBatchForSuspension(): void
+    getDiagnostics(): {
+      isSuspended: boolean
+      batchId: string | null
+      filesInBatch: number
+      hasPacker: boolean
+      finalizing: boolean
+    }
   }
   db: {
     gate(): void
@@ -82,17 +89,32 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       // Phase 4: Drain queries already dispatched to the native queue.
       // Use remaining budget from the hard deadline so a stuck query
       // can't block suspension indefinitely.
-      const elapsedMs = Date.now() - drainStart
+      const dbDrainStart = Date.now()
+      const elapsedMs = dbDrainStart - drainStart
       const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 1000)
       const dbDrainResult = await raceWithTimeout(db.waitForIdle(), remainingMs)
-      if (!dbDrainResult.ok) {
+      const dbDrainMs = Date.now() - dbDrainStart
+      if (dbDrainResult.ok) {
+        logger.debug('suspension', 'db_drained', { dbDrainMs })
+      } else {
         logger.warn('suspension', 'db_drain_timeout', {
+          dbDrainMs,
           remainingMs,
         })
       }
 
-      // Phase 5: Checkpoint WAL to release file locks, then close.
-      await db.close()
+      // Phase 5: Checkpoint WAL to release file locks, then close. Race
+      // against the remaining deadline — if native close hangs on fsync,
+      // the OS kill is coming regardless, so we don't wait forever in JS.
+      const dbCloseStart = Date.now()
+      const closeBudget = Math.max(hardDeadlineMs - (dbCloseStart - drainStart), 1000)
+      const closed = await raceWithTimeout(db.close(), closeBudget)
+      const dbCloseMs = Date.now() - dbCloseStart
+      if (closed.ok) {
+        logger.debug('suspension', 'db_closed', { dbCloseMs })
+      } else {
+        logger.warn('suspension', 'db_close_timeout', { dbCloseMs, closeBudget })
+      }
       state = 'suspended'
     } catch (e) {
       // Unlikely — each phase handles its own errors internally.

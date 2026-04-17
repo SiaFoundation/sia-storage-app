@@ -90,101 +90,105 @@ export async function syncDownEventsBatch(
   let firstEventTime: number | undefined
   const now = Date.now()
 
-  while (true) {
-    if (signal.aborted) break
-    try {
-      const cursor = await app.sync.getSyncDownCursor()
-      logger.debug('syncDownEvents', 'syncing', {
-        id: cursor?.id,
-        after: cursor?.after,
-      })
+  try {
+    while (true) {
+      if (signal.aborted) break
+      try {
+        const cursor = await app.sync.getSyncDownCursor()
+        logger.debug('syncDownEvents', 'syncing', {
+          id: cursor?.id,
+          after: cursor?.after,
+        })
 
-      const events = await sdk.objectEvents(cursor, batchSize)
-      totalEventsFetched += events.length
+        const events = await sdk.objectEvents(cursor, batchSize)
+        totalEventsFetched += events.length
 
-      if (totalEventsFetched > 1) {
+        if (totalEventsFetched > 1) {
+          app.sync.setState({
+            isSyncingDown: true,
+            syncDownCount: counts.total,
+          })
+        }
+
+        const gateStatus = app.sync.getState().syncGateStatus
+        if (gateStatus === 'pending' && totalEventsFetched >= SYNC_GATE_THRESHOLD) {
+          app.sync.setState({ syncGateStatus: 'active' })
+        }
+
+        // If the batch size is 1, we are probably synced and repeatedly polling the last event.
+        if (events.length === 1) {
+          logger.debug('syncDownEvents', 'batch', { size: events.length })
+        } else {
+          logger.info('syncDownEvents', 'batch', { size: events.length })
+        }
+
+        const prevTotal = counts.total
+        await processBatch(events, counts, signal, app, internal)
+        const batchChanged = counts.total > prevTotal
+
+        // Track the first event's timestamp for progress estimation.
+        if (firstEventTime === undefined && events.length > 0) {
+          firstEventTime = events[0].updatedAt.getTime()
+        }
+
+        // Update the cursor to the last event in the batch.
+        const lastEvent = events[events.length - 1]
+        const nextTimestamp = lastEvent ? lastEvent.updatedAt.getTime() + 1 : 0
+        if (lastEvent) {
+          await app.sync.setSyncDownCursor({
+            id: lastEvent.id,
+            after: new Date(nextTimestamp),
+          })
+        }
+
+        // Estimate progress as how far through the event timeline we are.
+        const timeRange = firstEventTime !== undefined ? now - firstEventTime : 0
+        const elapsed =
+          lastEvent && firstEventTime !== undefined
+            ? lastEvent.updatedAt.getTime() - firstEventTime
+            : 0
+        const progress = timeRange > 0 ? Math.min(elapsed / timeRange, 1) : 0
+
+        // Update progress after each batch. Only report isSyncing when there are
+        // real events to process (>1), not on the periodic heartbeat check which
+        // returns a single cursor-marker event.
         app.sync.setState({
-          isSyncingDown: true,
+          isSyncingDown: totalEventsFetched > 1,
           syncDownCount: counts.total,
+          syncDownProgress: progress,
         })
-      }
+        if (batchChanged) {
+          app.caches.library.invalidateAll()
+          app.caches.libraryVersion.invalidate()
+        }
 
-      const gateStatus = app.sync.getState().syncGateStatus
-      if (gateStatus === 'pending' && totalEventsFetched >= SYNC_GATE_THRESHOLD) {
-        app.sync.setState({ syncGateStatus: 'active' })
-      }
-
-      // If the batch size is 1, we are probably synced and repeatedly polling the last event.
-      if (events.length === 1) {
-        logger.debug('syncDownEvents', 'batch', { size: events.length })
-      } else {
-        logger.info('syncDownEvents', 'batch', { size: events.length })
-      }
-
-      const prevTotal = counts.total
-      await processBatch(events, counts, signal, app, internal)
-      const batchChanged = counts.total > prevTotal
-
-      // Track the first event's timestamp for progress estimation.
-      if (firstEventTime === undefined && events.length > 0) {
-        firstEventTime = events[0].updatedAt.getTime()
-      }
-
-      // Update the cursor to the last event in the batch.
-      const lastEvent = events[events.length - 1]
-      const nextTimestamp = lastEvent ? lastEvent.updatedAt.getTime() + 1 : 0
-      if (lastEvent) {
-        await app.sync.setSyncDownCursor({
-          id: lastEvent.id,
-          after: new Date(nextTimestamp),
-        })
-      }
-
-      // Estimate progress as how far through the event timeline we are.
-      const timeRange = firstEventTime !== undefined ? now - firstEventTime : 0
-      const elapsed =
-        lastEvent && firstEventTime !== undefined
-          ? lastEvent.updatedAt.getTime() - firstEventTime
-          : 0
-      const progress = timeRange > 0 ? Math.min(elapsed / timeRange, 1) : 0
-
-      // Update progress after each batch. Only report isSyncing when there are
-      // real events to process (>1), not on the periodic heartbeat check which
-      // returns a single cursor-marker event.
-      app.sync.setState({
-        isSyncingDown: totalEventsFetched > 1,
-        syncDownCount: counts.total,
-        syncDownProgress: progress,
-      })
-      if (batchChanged) {
-        app.caches.library.invalidateAll()
-        app.caches.libraryVersion.invalidate()
-      }
-
-      // If the batch is not full, we're done for now.
-      if (events.length < batchSize) {
+        // If the batch is not full, we're done for now.
+        if (events.length < batchSize) {
+          break
+        }
+      } catch (e) {
+        logger.error('syncDownEvents', 'sync_error', { error: e as Error })
         break
       }
-    } catch (e) {
-      logger.error('syncDownEvents', 'sync_error', { error: e as Error })
-      break
     }
+  } finally {
+    // Always restore isSyncingDown so a throw anywhere above can't leave it
+    // stuck at `true` — otherwise thumbnailScanner and syncUpMetadata remain
+    // gated until the next successful tick. Planner-stat refresh is delegated
+    // to the 60s dbOptimize scheduler; running it here was 6× more frequent
+    // than needed and fired on empty ticks.
+    logger.info('syncDownEvents', 'synced', { total: counts.total })
+    const willContinue = totalEventsFetched > 1 && !signal.aborted
+    const endGateStatus = app.sync.getState().syncGateStatus
+    const dismissGate = endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
+    app.sync.setState({
+      isSyncingDown: willContinue,
+      syncDownCount: counts.total,
+      ...(dismissGate && { syncGateStatus: 'dismissed' }),
+    })
   }
 
-  logger.info('syncDownEvents', 'synced', { total: counts.total })
-
-  await app.optimize()
-
-  const willContinue = totalEventsFetched > 1 && !signal.aborted
-  const endGateStatus = app.sync.getState().syncGateStatus
-  const dismissGate = endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
-  app.sync.setState({
-    isSyncingDown: willContinue,
-    syncDownCount: counts.total,
-    ...(dismissGate && { syncGateStatus: 'dismissed' }),
-  })
-
-  if (willContinue) {
+  if (totalEventsFetched > 1 && !signal.aborted) {
     return 0 // Zero interval — poll again immediately.
   }
 }

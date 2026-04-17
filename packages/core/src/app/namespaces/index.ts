@@ -109,7 +109,15 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
   )
 
   const service: AppService = {
-    optimize: () => adapters.db.execAsync('PRAGMA optimize'),
+    // PRAGMA optimize refreshes query planner stats for tables flagged as
+    // having stale sqlite_stat*. WAL trimming is delegated to SQLite's own
+    // wal_autocheckpoint (set at DB open) which fires inside the writer's
+    // commit path — a manual wal_checkpoint(PASSIVE) statement here would
+    // instead run as a queued prepared statement whose finalizeAsync can
+    // surface SQLITE_LOCKED under concurrent reader load.
+    optimize: async () => {
+      await adapters.db.execAsync('PRAGMA optimize')
+    },
     ...buildDbNamespaces(adapters.db, caches, uploadsNamespace, adapters.fsIO, {
       crypto: adapters.crypto,
       thumbnail: adapters.thumbnail,

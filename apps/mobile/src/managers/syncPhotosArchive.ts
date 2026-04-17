@@ -82,6 +82,11 @@ export function pauseArchiveSync(): void {
   walkAbortController?.abort()
 }
 
+/** True while a walk is active (for diagnostic logging). */
+export function isArchiveWalkActive(): boolean {
+  return activeWalk !== null
+}
+
 /** Restart the walk from where it left off if cursor isn't DONE. */
 export async function resumeArchiveSync(): Promise<void> {
   if (activeWalk) return

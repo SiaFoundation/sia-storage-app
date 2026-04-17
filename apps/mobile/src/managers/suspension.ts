@@ -8,9 +8,12 @@ import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
+import RNFS from 'react-native-fs'
 import {
   closeDb,
   dbInitialized,
+  getInflightCount,
+  getWalPath,
   initializeDB,
   resumeDb,
   suspendDb,
@@ -20,16 +23,40 @@ import { setSWREnabled } from '../lib/swr'
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { getIsBackgroundTaskRunning } from './backgroundTasks'
-import { pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
+import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
+/** Snapshot of subsystem state at suspension start. Lets a future 0xdead10cc
+ * investigation see at a glance what was in flight — active DB queries,
+ * upload-manager state, photo-archive walk activity, and current WAL size.
+ * All values are cheap in-memory reads except WAL size (one RNFS.stat call). */
+async function logSuspendDiagnostics(): Promise<void> {
+  try {
+    const walPath = getWalPath()
+    const walStat = await RNFS.stat(walPath).catch((e) => {
+      logger.warn('suspension', 'wal_stat_failed', { error: e as Error })
+      return null
+    })
+    logger.info('suspension', 'diagnostics', {
+      inflightQueries: getInflightCount(),
+      uploader: getUploadManager()?.getDiagnostics() ?? null,
+      archiveWalkActive: isArchiveWalkActive(),
+      walBytes: walStat ? Number(walStat.size) : null,
+    })
+  } catch (e) {
+    logger.debug('suspension', 'diagnostics_failed', { error: e as Error })
+  }
+}
+
 // Hard deadline for service drain. iOS gives ~30s via beginBackgroundTask
-// before freezing the process. The DB stays open during drain so services
-// can finish their work, so we keep this conservative to leave margin for
-// gate + WAL checkpoint + close. On Android this entire sequence is
-// unnecessary (Android's cached apps freezer doesn't enforce file lock
-// checks like iOS's 0xdead10cc), but it runs harmlessly.
-const HARD_DEADLINE_MS = 15_000
+// before freezing the process. Production logs show real drain completes
+// in 0–1.4s, so 5s is ~3.5× the observed worst case with plenty of margin.
+// The remaining ~25s of the iOS window goes to Phase 4 (drain in-flight
+// native SQLite queries) and Phase 5 (WAL checkpoint + close) — which is
+// where the fsync-overrun that triggers 0xdead10cc actually happens.
+// Android doesn't enforce file-lock checks on suspend, but the sequence
+// runs harmlessly there.
+const HARD_DEADLINE_MS = 5_000
 
 const manager = createSuspensionManager({
   scheduler: {
@@ -42,6 +69,14 @@ const manager = createSuspensionManager({
     suspend: () => getUploadManager()?.suspend() ?? Promise.resolve(),
     resume: () => getUploadManager()?.resume(),
     adjustBatchForSuspension: () => getUploadManager()?.adjustBatchForSuspension(),
+    getDiagnostics: () =>
+      getUploadManager()?.getDiagnostics() ?? {
+        isSuspended: false,
+        batchId: null,
+        filesInBatch: 0,
+        hasPacker: false,
+        finalizing: false,
+      },
   },
   db: {
     gate: suspendDb,
@@ -52,6 +87,7 @@ const manager = createSuspensionManager({
   },
   hooks: {
     onBeforeSuspend: async () => {
+      await logSuspendDiagnostics()
       await stopLogAppender()
       setSWREnabled(false)
       // Cancel in-flight downloads (disk I/O contention with SQLite fsync

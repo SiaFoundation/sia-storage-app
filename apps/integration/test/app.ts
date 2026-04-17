@@ -331,7 +331,9 @@ export function createTestApp(
 
   const dbOptimize = scheduler.createInterval({
     name: 'dbOptimize',
-    worker: () => appService.optimize(),
+    worker: async () => {
+      await appService.optimize()
+    },
     interval: DB_OPTIMIZE_INTERVAL,
   })
 
@@ -346,6 +348,7 @@ export function createTestApp(
       suspend: () => uploadManager.suspend(),
       resume: () => uploadManager.resume(),
       adjustBatchForSuspension: () => uploadManager.adjustBatchForSuspension(),
+      getDiagnostics: () => uploadManager.getDiagnostics(),
     },
     db: {
       gate: () => testDb.gate(),
