@@ -131,6 +131,12 @@ export type FlushRecord = {
  * in the order they were added to the library. Photos arrive before their
  * thumbnails (which are generated asynchronously), naturally mixing large
  * and small files for efficient slab packing.
+ *
+ * Suspension signal policy: does NOT use the scheduler abort signal.
+ * Coordinates with native packer state via internal _suspended flag and
+ * dedicated suspend()/resume() methods that preserve batch state across
+ * suspension. The scheduler signal would only stop the JS loop — it
+ * couldn't reach the in-flight network I/O inside the packer.
  */
 export class UploadManager {
   private app!: AppService

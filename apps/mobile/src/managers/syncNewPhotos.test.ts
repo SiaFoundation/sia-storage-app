@@ -120,6 +120,7 @@ describe('syncNewPhotos', () => {
       ],
       'file',
       { addToImportDirectory: true, skipExistingUpdates: true },
+      undefined,
     )
   })
 

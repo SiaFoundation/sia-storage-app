@@ -85,6 +85,15 @@ export function computeTargetDimensions(
   return { targetWidth: size, targetHeight: undefined }
 }
 
+/**
+ * Generates and stores thumbnails for files lacking them, prioritized
+ * by recency and bounded per tick to avoid starving other services.
+ *
+ * Suspension signal policy: accepts AbortSignal. DB-holding loop — each
+ * tick queries candidate files and writes thumbnails via app().files /
+ * app().thumbs. Checks signal at loop boundaries so straggler workers
+ * don't issue queries after the gate and hit DatabaseSuspendedError.
+ */
 export class ThumbnailScanner {
   private app: AppService | null = null
   private processingFiles = new Set<string>()

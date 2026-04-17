@@ -19,6 +19,17 @@ export type ResolveLocalId = (localId: string) => Promise<ResolveLocalIdResult>
 export type CalculateContentHash = (uri: string) => Promise<string | null>
 export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<string>
 
+/**
+ * Finalizes placeholder file records by hashing local files (phase 1)
+ * or copying from the media library via resolveLocalId (phase 2).
+ * Phase 2 is throttled via maxDeferred to backpressure against upload.
+ *
+ * Suspension signal policy: accepts AbortSignal. DB-holding loop —
+ * each tick processes placeholder files (hash: '') by hashing local
+ * files or copying from media library. Checks signal at loop boundaries
+ * (phase 1 file loop, phase 2 deferred loop) so workers exit before the
+ * DB gate closes.
+ */
 export class ImportScanner {
   private app: AppService | null = null
   private processingFiles = new Set<string>()
