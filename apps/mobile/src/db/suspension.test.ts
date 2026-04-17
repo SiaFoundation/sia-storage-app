@@ -57,54 +57,108 @@ describe('state transitions', () => {
 })
 
 describe('query gating', () => {
-  it('getAllAsync rejects when suspended', async () => {
+  it('getAllAsync parks and resolves after resumeDb', async () => {
     suspendDb()
-    await expect(db().getAllAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
-  })
-
-  it('getFirstAsync rejects when suspended', async () => {
-    suspendDb()
-    await expect(db().getFirstAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
-  })
-
-  it('runAsync rejects when suspended', async () => {
-    suspendDb()
-    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-  })
-
-  it('execAsync rejects when suspended', async () => {
-    suspendDb()
-    await expect(db().execAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
-  })
-
-  it('withTransactionAsync rejects when suspended', async () => {
-    suspendDb()
-    await expect(db().withTransactionAsync(async () => {})).rejects.toThrow(DatabaseSuspendedError)
-  })
-
-  it('queries work normally after resumeDb', async () => {
-    suspendDb()
-    await expect(db().getAllAsync('SELECT 1 as v')).rejects.toThrow(DatabaseSuspendedError)
+    const queryPromise = db().getAllAsync<{ v: number }>('SELECT 1 as v')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
     resumeDb()
-    const rows = await db().getAllAsync<{ v: number }>('SELECT 1 as v')
+    const rows = await queryPromise
     expect(rows).toEqual([{ v: 1 }])
   })
 
-  it('queries also reject in closed state', async () => {
+  it('getFirstAsync parks while suspended', async () => {
+    suspendDb()
+    const queryPromise = db().getFirstAsync<{ v: number }>('SELECT 1 as v')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resumeDb()
+    const row = await queryPromise
+    expect(row).toEqual({ v: 1 })
+  })
+
+  it('runAsync parks while suspended', async () => {
+    suspendDb()
+    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resumeDb()
+    await queryPromise
+  })
+
+  it('execAsync parks while suspended', async () => {
+    suspendDb()
+    const queryPromise = db().execAsync('SELECT 1')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resumeDb()
+    await queryPromise
+  })
+
+  it('withTransactionAsync parks while suspended', async () => {
+    suspendDb()
+    let txRan = false
+    const queryPromise = db().withTransactionAsync(async () => {
+      txRan = true
+    })
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(txRan).toBe(false)
+    resumeDb()
+    await queryPromise
+    expect(txRan).toBe(true)
+  })
+
+  it('queries also park in closed state and drain after reopen+resume', async () => {
     await closeDb()
-    await expect(db().getAllAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
+    const queryPromise = db().getAllAsync<{ v: number }>('SELECT 1 as v')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    await initializeDB({ databaseName: ':memory:', reopen: true })
+    resumeDb()
+    const rows = await queryPromise
+    expect(rows).toEqual([{ v: 1 }])
+  })
+
+  it('parked query rejects with DatabaseSuspendedError after wait timeout', async () => {
+    jest.useFakeTimers()
+    try {
+      suspendDb()
+      const queryPromise = db().getAllAsync('SELECT 1')
+      queryPromise.catch(() => {})
+      jest.advanceTimersByTime(30_000)
+      await expect(queryPromise).rejects.toThrow(DatabaseSuspendedError)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
 
 describe('withRecovery during suspension', () => {
-  it('does not attempt recovery for DatabaseSuspendedError', async () => {
-    const fn = jest.fn().mockRejectedValue(new DatabaseSuspendedError())
-    await expect(withRecovery(fn)).rejects.toThrow(DatabaseSuspendedError)
-    expect(fn).toHaveBeenCalledTimes(1)
-  })
-
   it('does not reopen when state is suspending', async () => {
     suspendDb()
     const fn = jest.fn().mockRejectedValue(new Error(NPE_MESSAGE))
@@ -247,21 +301,22 @@ describe('closeDb', () => {
 })
 
 describe('full suspend/resume cycle', () => {
-  it('queries work → suspend → rejected → close → reopen → resume → queries work', async () => {
+  it('queries parked during suspend/close drain after reopen+resume', async () => {
     const rows1 = await db().getAllAsync<{ v: number }>('SELECT 1 as v')
     expect(rows1).toEqual([{ v: 1 }])
 
     suspendDb()
-    await expect(db().getAllAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
+    const duringSuspend = db().getAllAsync<{ v: number }>('SELECT 1 as v')
 
     await closeDb()
     expect(dbInitialized).toBe(false)
+    const duringClosed = db().getAllAsync<{ v: number }>('SELECT 2 as v')
 
     await initializeDB({ databaseName: ':memory:', reopen: true })
     resumeDb()
 
-    const rows2 = await db().getAllAsync<{ v: number }>('SELECT 2 as v')
-    expect(rows2).toEqual([{ v: 2 }])
+    expect(await duringSuspend).toEqual([{ v: 1 }])
+    expect(await duringClosed).toEqual([{ v: 2 }])
   })
 
   it('in-flight query at suspend time completes, then drain resolves', async () => {
@@ -276,7 +331,14 @@ describe('full suspend/resume cycle', () => {
     const queryPromise = db().getAllAsync('SELECT 1')
 
     suspendDb()
-    await expect(db().getAllAsync('SELECT 2')).rejects.toThrow(DatabaseSuspendedError)
+    // A new query issued during suspend parks; it does not count toward inflight.
+    const parked = db().getAllAsync<{ v: number }>('SELECT 2 as v')
+    let parkedSettled = false
+    parked.then(() => {
+      parkedSettled = true
+    })
+    await Promise.resolve()
+    expect(parkedSettled).toBe(false)
 
     let drained = false
     waitForQueriesIdle().then(() => {
@@ -289,6 +351,9 @@ describe('full suspend/resume cycle', () => {
     await queryPromise
     await Promise.resolve()
     expect(drained).toBe(true)
+
+    resumeDb()
+    expect(await parked).toEqual([{ v: 2 }])
   })
 
   it('resetDb works after suspend → resume → reinit sequence', async () => {

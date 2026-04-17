@@ -36,10 +36,13 @@ export type SuspensionAdapters = {
 }
 
 type State = 'active' | 'suspending' | 'suspended' | 'resuming'
+type AppStateValue = 'foreground' | 'background'
 
 export function createSuspensionManager(adapters: SuspensionAdapters) {
   const { scheduler, uploader, db, hooks, hardDeadlineMs } = adapters
   let state: State = 'active'
+  let appState: AppStateValue = 'foreground'
+  const runningTasks = new Set<string>()
   const queue = new CoalescingQueue()
 
   async function doSuspend(): Promise<void> {
@@ -159,9 +162,109 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
     logger.info('suspension', 'resumed')
   }
 
+  // Guarded wrapper: re-checks preconditions at the moment the queue runs
+  // it, not at enqueue time. Between enqueue and execution, another
+  // registerBackgroundTask could have added a task that should now block
+  // the suspend.
+  async function maybeSuspend(trigger: string): Promise<void> {
+    if (runningTasks.size > 0) {
+      logger.debug('suspension', 'skipped', {
+        reason: 'background_task_running',
+        activeCount: runningTasks.size,
+        trigger,
+      })
+      return
+    }
+    if (appState !== 'background') {
+      logger.debug('suspension', 'skipped', {
+        reason: 'appstate_foreground',
+        trigger,
+      })
+      return
+    }
+    await doSuspend()
+  }
+
   return {
+    // Direct triggers — kept for manual control (e.g. tests that want to
+    // force a suspend without touching appState).
     suspend: () => queue.enqueue(doSuspend),
     resume: () => queue.enqueue(doResume),
     isSuspended: () => state === 'suspended',
+
+    /**
+     * Record the app's current foreground/background state. When
+     * transitioning to background with no BG tasks running, enqueues a
+     * guarded suspend. When transitioning to foreground, enqueues a
+     * resume (no-op if not suspended). Returns a Promise that resolves
+     * when any enqueued work settles — callers that need to grant iOS
+     * extra execution time (via BackgroundTimer.start) should await it.
+     */
+    setAppState(next: AppStateValue): Promise<void> {
+      const prev = appState
+      if (prev === next) return Promise.resolve()
+      appState = next
+      const activeCount = runningTasks.size
+      if (next === 'background') {
+        const willSuspend = activeCount === 0
+        logger.info('suspension', 'app_state', {
+          appState: next,
+          prev,
+          activeCount,
+          willSuspend,
+        })
+        if (willSuspend) {
+          return queue.enqueue(() => maybeSuspend('app_state'))
+        }
+        return Promise.resolve()
+      }
+      logger.info('suspension', 'app_state', {
+        appState: next,
+        prev,
+        activeCount,
+        willResume: true,
+      })
+      return queue.enqueue(doResume)
+    },
+
+    /**
+     * Register a BG task as running. Ensures the DB is open before
+     * returning so callers can safely query.
+     */
+    async registerBackgroundTask(id: string): Promise<void> {
+      runningTasks.add(id)
+      logger.info('suspension', 'register_task', {
+        id,
+        activeCount: runningTasks.size,
+        state,
+        appState,
+      })
+      await queue.enqueue(doResume)
+    },
+
+    /**
+     * Release a BG task. If this was the last running task AND the app
+     * is in background, await a guarded suspend. Otherwise return
+     * immediately.
+     */
+    async releaseBackgroundTask(id: string): Promise<void> {
+      runningTasks.delete(id)
+      const activeCount = runningTasks.size
+      const willSuspend = activeCount === 0 && appState === 'background'
+      logger.info('suspension', 'release_task', {
+        id,
+        activeCount,
+        state,
+        appState,
+        willSuspend,
+      })
+      if (willSuspend) {
+        await queue.enqueue(() => maybeSuspend('release_task'))
+      }
+    },
+
+    getRunningBackgroundTaskIds(): readonly string[] {
+      return [...runningTasks]
+    },
   }
 }
