@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native'
 import InAppBrowser from 'react-native-inappbrowser-reborn'
-import { palette } from '../styles/colors'
+import { IN_APP_BROWSER_OPTIONS } from './inAppBrowser'
 
 /**
  * Opens the auth URL in the system browser.
@@ -24,18 +24,7 @@ export async function openAuthURL(authURL: string): Promise<boolean> {
   })
 
   try {
-    await InAppBrowser.open(authURL, {
-      dismissButtonStyle: 'done',
-      preferredBarTintColor: palette.gray[950],
-      preferredControlTintColor: 'white',
-      modalPresentationStyle: 'fullScreen',
-      modalTransitionStyle: 'coverVertical',
-      modalEnabled: true,
-      animated: true,
-      showTitle: true,
-      toolbarColor: palette.gray[950],
-      navigationBarColor: palette.gray[950],
-    })
+    await InAppBrowser.open(authURL, IN_APP_BROWSER_OPTIONS)
 
     if (Platform.OS === 'android') {
       await new Promise((resolve) => setTimeout(resolve, 100))
