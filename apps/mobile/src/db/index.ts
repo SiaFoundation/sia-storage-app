@@ -53,6 +53,15 @@ export function getDbState(): DbState {
   return state
 }
 
+export function getInflightCount(): number {
+  return inflightCount
+}
+
+/** Path to the SQLite WAL file, for diagnostic stat() calls. */
+export function getWalPath(): string {
+  return `${dbDirectory}/${dbName}-wal`
+}
+
 // Called by the suspension manager as the first step when the app backgrounds.
 // After this, any new query through db() rejects immediately.
 export function suspendDb(): void {
@@ -82,6 +91,17 @@ export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
 let dbName = 'app.db'
 const dbDirectory = getSharedDbDirectory()
+
+// synchronous=NORMAL under WAL trades fsync-per-commit for fsync-per-checkpoint,
+// drastically reducing the chance a commit is mid-fsync at iOS suspension time
+// (the mechanism behind 0xdead10cc). Durable across app kills — the WAL file
+// survives; only a full OS crash loses the last few uncheckpointed seconds,
+// which syncDown recovers from the indexer on next launch.
+// wal_autocheckpoint=500 (~2MB at 4KB pages, down from default 1000/~4MB) keeps
+// each checkpoint's fsync small so the fsyncs that remain finish in tens of ms
+// even under disk I/O contention from Photos exports or large file copies.
+const INIT_PRAGMAS =
+  'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
@@ -109,9 +129,7 @@ export async function initializeDB(options?: {
   database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
-  await database.execAsync(
-    'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
-  )
+  await database.execAsync(INIT_PRAGMAS)
   await runMigrations(database, migrations, {
     log: logger,
     onProgress: options?.onProgress,
@@ -154,9 +172,7 @@ async function reopenDb(): Promise<boolean> {
       } catch {}
       // useNewConnection bypasses expo-sqlite's per-name connection cache.
       database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-      await database.execAsync(
-        'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
-      )
+      await database.execAsync(INIT_PRAGMAS)
       dbInitialized = true
       logger.warn('db', 'reopened_successfully')
       return true
@@ -252,9 +268,7 @@ export async function resetDb() {
       }
     }
     database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-    await database.execAsync(
-      'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
-    )
+    await database.execAsync(INIT_PRAGMAS)
     await runMigrations(database, migrations, { log: logger })
     dbInitialized = true
   } finally {

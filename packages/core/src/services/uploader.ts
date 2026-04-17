@@ -395,6 +395,28 @@ export class UploadManager {
     return this._suspended
   }
 
+  /**
+   * Snapshot of internal state for diagnostic logging at suspension time.
+   * Crash investigations need to know what the manager was doing — e.g.
+   * mid-finalize of a large batch or mid-pack of a big video can hold
+   * disk I/O past iOS's grace window regardless of signal plumbing.
+   */
+  getDiagnostics(): {
+    isSuspended: boolean
+    batchId: string | null
+    filesInBatch: number
+    hasPacker: boolean
+    finalizing: boolean
+  } {
+    return {
+      isSuspended: this._suspended,
+      batchId: this.batch?.batchId ?? null,
+      filesInBatch: this.batch?.files.length ?? 0,
+      hasPacker: this.packer !== null,
+      finalizing: this.uploadingPacker !== null,
+    }
+  }
+
   private async waitForResume(): Promise<void> {
     if (!this._suspended) return
     return new Promise<void>((resolve) => {

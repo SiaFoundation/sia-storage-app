@@ -75,7 +75,13 @@ export interface AppCaches {
 
 /** Primary API contract for all platform apps. All state and mutations flow through this facade. */
 export interface AppService {
-  /** Runs PRAGMA optimize to refresh query planner statistics for tables with stale stats. */
+  /**
+   * Runs PRAGMA optimize to refresh query planner stats. WAL trimming is
+   * handled by SQLite's own wal_autocheckpoint (configured at DB open),
+   * which fires inside the writer's commit path — safer than a manual
+   * checkpoint statement, which on expo-sqlite can surface SQLITE_LOCKED
+   * through finalizeAsync under concurrent reader load.
+   */
   optimize(): Promise<void>
   /** Tag operations: create, query, and manage file tags. */
   tags: {
