@@ -214,6 +214,7 @@ describe('syncPhotosArchive', () => {
       ],
       'file',
       { addToImportDirectory: true },
+      undefined,
     )
   })
 
@@ -238,6 +239,7 @@ describe('syncPhotosArchive', () => {
       ],
       'file',
       { addToImportDirectory: true },
+      undefined,
     )
   })
 
@@ -346,6 +348,7 @@ describe('syncPhotosArchive', () => {
         [expect.objectContaining({ id: 'a1' }), expect.objectContaining({ id: 'a2' })],
         'file',
         { addToImportDirectory: true },
+        undefined,
       )
     })
   })

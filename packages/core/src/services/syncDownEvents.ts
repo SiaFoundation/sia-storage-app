@@ -70,6 +70,11 @@ type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
  *
  * Returns 0 when multiple events were fetched (run again immediately),
  * or void to use the default interval.
+ *
+ * Suspension signal policy: accepts AbortSignal. DB-holding loop —
+ * fetches event batches from the indexer and writes objects to the
+ * local DB in a transaction. Checks signal at every exit point so a
+ * mid-batch abort releases the transaction before the DB gate closes.
  */
 export async function syncDownEventsBatch(
   signal: AbortSignal,

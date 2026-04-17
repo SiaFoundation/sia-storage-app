@@ -30,6 +30,12 @@ const unavailable: ResolveLocalIdResult = { status: 'unavailable' }
  * - unavailable: file exists but can't be accessed right now, skip
  *   without marking as lost (retry on next scan)
  * - deleted: file is gone from the device, mark as lost
+ *
+ * Suspension signal policy: does NOT accept a signal. Wraps a single
+ * native MediaLibrary.getAssetInfoAsync call (which itself may invoke
+ * an iCloud download on iOS). The native work runs to completion and
+ * can't be cancelled from JS. Callers that loop should check their
+ * signal at the loop boundary before invoking.
  */
 export async function getMediaLibraryUri(localId: string | null): Promise<ResolveLocalIdResult> {
   if (!localId) return deleted

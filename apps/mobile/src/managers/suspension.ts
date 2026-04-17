@@ -17,8 +17,10 @@ import {
   waitForQueriesIdle,
 } from '../db'
 import { setSWREnabled } from '../lib/swr'
+import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { getIsBackgroundTaskRunning } from './backgroundTasks'
+import { pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
 // Hard deadline for service drain. iOS gives ~30s via beginBackgroundTask
@@ -52,10 +54,18 @@ const manager = createSuspensionManager({
     onBeforeSuspend: async () => {
       await stopLogAppender()
       setSWREnabled(false)
+      // Cancel in-flight downloads (disk I/O contention with SQLite fsync
+      // is a known 0xdead10cc trigger) and pause the photo-archive walk
+      // (an independent loop not driven by the service scheduler, so it
+      // keeps issuing catalogAssets writes otherwise).
+      app().downloads.cancelAll()
+      pauseArchiveSync()
     },
     onAfterResume: () => {
       setSWREnabled(true)
       resumeLogger()
+      // Resume archive walk from the same cursor if it wasn't complete.
+      void resumeArchiveSync()
     },
   },
   hardDeadlineMs: HARD_DEADLINE_MS,

@@ -26,6 +26,12 @@
  * Catches: the full historical tail plus periodic re-scans of the
  * recent window for cross-device synced photos.
  * Misses: newly taken photos (covered by syncNewPhotos).
+ *
+ * Suspension signal policy: accepts AbortSignal. DB-holding walk loop
+ * — writes via catalogAssets on each page. NOT driven by the service
+ * scheduler; uses its own module-level walkAbortController managed
+ * by pauseArchiveSync() / resumeArchiveSync() hooks wired into the
+ * suspension manager's onBeforeSuspend / onAfterResume.
  */
 
 import { useApp } from '@siastorage/core/app'
@@ -71,17 +77,36 @@ export async function stopArchiveSync(): Promise<void> {
   await setPhotosArchiveCursor(CURSOR_DONE)
 }
 
+/** Abort the in-flight walk without clearing cursor so it resumes from the same page. */
+export function pauseArchiveSync(): void {
+  walkAbortController?.abort()
+}
+
+/** Restart the walk from where it left off if cursor isn't DONE. */
+export async function resumeArchiveSync(): Promise<void> {
+  if (activeWalk) return
+  const cursor = await getPhotosArchiveCursor()
+  if (cursor === CURSOR_DONE) return
+  walkAbortController = new AbortController()
+  activeWalk = runArchiveWalk(walkAbortController.signal)
+  activeWalk.finally(() => {
+    activeWalk = null
+    walkAbortController = null
+  })
+}
+
 async function runArchiveWalk(signal: AbortSignal): Promise<void> {
   while (!signal.aborted) {
     const cursor = await getPhotosArchiveCursor()
     if (cursor === CURSOR_DONE) break
-    await run()
+    await run(signal)
     await yieldToEventLoop()
   }
 }
 
-export async function run() {
+export async function run(signal?: AbortSignal) {
   logger.debug('syncPhotosArchive', 'tick')
+  if (signal?.aborted) return
   if (!(await getMediaLibraryPermissions())) {
     logger.debug('syncPhotosArchive', 'skipped', { reason: 'no_permission' })
     return
@@ -92,6 +117,7 @@ export async function run() {
     return
   }
 
+  if (signal?.aborted) return
   logger.info('syncPhotosArchive', 'query', {
     cursor: cursor === CURSOR_START ? 'start' : cursor,
   })
@@ -103,6 +129,7 @@ export async function run() {
       sortBy: [[MediaLibrary.SortBy.modificationTime, false]],
       mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
     })
+    if (signal?.aborted) return
     if (page.assets.length === 0) {
       if (cursor !== CURSOR_START) {
         logger.info('syncPhotosArchive', 'cursor_reached_end', {
@@ -138,6 +165,7 @@ export async function run() {
       })),
       'file',
       { addToImportDirectory: true },
+      signal,
     )
     photosAddedCount += assets.length
     photosExistingCount += existingCount

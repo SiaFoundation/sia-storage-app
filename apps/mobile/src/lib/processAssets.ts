@@ -15,6 +15,16 @@
 //   placeholder records in bulk via INSERT OR IGNORE (no copy, no hash).
 //   The import scanner finalizes these in the background with
 //   backpressure based on the upload backlog.
+//
+// Suspension signal policy:
+//   processInBatches and processFileContent accept a signal and check at
+//   loop boundaries / step boundaries. The signal is NOT plumbed into
+//   the per-file leaves (copyFileToFs, calculateContentHash,
+//   getMediaLibraryUri) because those wrap single native calls that
+//   can't be cancelled mid-flight in JS. Leaf-level checks would only
+//   duplicate the loop-level skip one statement earlier. copyImportedFiles
+//   is fire-and-forget: the user-initiated import path doesn't block
+//   shutdown, and native copies ride the iOS freeze/thaw naturally.
 
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
@@ -35,8 +45,10 @@ async function processInBatches<T>(
   items: T[],
   batchSize: number,
   processor: (item: T) => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<void> {
   for (let i = 0; i < items.length; i += batchSize) {
+    if (signal?.aborted) return
     const batch = items.slice(i, i + batchSize)
     await Promise.all(batch.map(processor))
     await yieldToEventLoop()
@@ -65,15 +77,19 @@ type FileContentResult = {
 async function processFileContent(
   file: { id: string; name: string; type: string },
   sourceUri: string,
+  signal?: AbortSignal,
 ): Promise<FileContentResult | null> {
+  if (signal?.aborted) return null
   let type = file.type
   if (type === 'application/octet-stream') {
     type = await getMimeType({ name: file.name, uri: sourceUri })
   }
 
+  if (signal?.aborted) return null
   const fileUri = await copyFileToFs(file, sourceUri)
   if (!fileUri) return null
 
+  if (signal?.aborted) return null
   const hash = await calculateContentHash(fileUri)
   if (!hash) return null
 
@@ -154,6 +170,7 @@ export async function syncAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
   { addToImportDirectory = false, skipExistingUpdates = false }: SyncAssetsOptions = {},
+  signal?: AbortSignal,
 ) {
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
@@ -199,7 +216,7 @@ export async function syncAssets(
         return
       }
 
-      const result = await processFileContent(f, bestUri)
+      const result = await processFileContent(f, bestUri, signal)
       if (!result) {
         f.status = 'incomplete'
         f.statusDetails = 'processingFailed'
@@ -210,7 +227,12 @@ export async function syncAssets(
       f.hash = result.hash
       f.size = result.size
     },
+    signal,
   )
+
+  if (signal?.aborted) {
+    return { files: [], updatedFiles: [], warnings: [] }
+  }
 
   const existingContentHashes = await app().files.getByContentHashes(
     candidateFiles.filter((f) => f.status === 'new' && f.hash !== null).map((f) => f.hash!),
@@ -278,6 +300,10 @@ export async function syncAssets(
     await moveMediaToImportDirectory(newFiles)
   }
 
+  if (signal?.aborted) {
+    return { files: newFiles, updatedFiles: existingFiles, warnings }
+  }
+
   logger.debug('syncAssets', 'generating_thumbnails', {
     count: newFiles.length,
   })
@@ -307,6 +333,7 @@ export async function catalogAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
   { addToImportDirectory = false }: CatalogAssetsOptions = {},
+  signal?: AbortSignal,
 ) {
   const candidates: FileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
@@ -326,6 +353,8 @@ export async function catalogAssets(
     }),
   )
 
+  if (signal?.aborted) return { newCount: 0, existingCount: 0 }
+
   const localIds = candidates.filter((f) => f.localId).map((f) => f.localId!)
   const existingFiles = localIds.length > 0 ? await app().files.getByLocalIds(localIds) : []
   const existingLocalIds = new Set(existingFiles.map((f) => f.localId))
@@ -337,6 +366,8 @@ export async function catalogAssets(
     newCount,
     existingCount,
   })
+
+  if (signal?.aborted) return { newCount: 0, existingCount: 0 }
 
   await app().files.createMany(candidates, { conflictClause: 'OR IGNORE' })
   await app().optimize()
@@ -406,11 +437,12 @@ export async function importFiles(
     await app().optimize()
   }
 
-  // Fire-and-forget: sourceURIs are ephemeral (document picker content://
-  // URIs, share intent file:// paths) and must be copied promptly. The
-  // copy runs without blocking the caller so the UI shows placeholders
-  // immediately. If interrupted, files with localId are recovered by the
-  // scanner via media library.
+  // Fire-and-forget: each copy dispatches to a native RNFS thread that
+  // holds the source URI open once it starts reading, so ephemeral
+  // picker/share URIs are captured by the native call before the caller
+  // can do anything else. The native thread freezes with the process on
+  // iOS suspension and thaws on resume. If iOS terminates (rather than
+  // suspends) the import is lost — same as before.
   void copyImportedFiles(pendingCopies)
 
   triggerImportScanner()

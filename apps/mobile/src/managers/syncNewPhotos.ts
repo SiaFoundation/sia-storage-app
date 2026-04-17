@@ -78,6 +78,7 @@ export async function run(signal?: AbortSignal): Promise<void> {
       })),
       'file',
       { addToImportDirectory: true, skipExistingUpdates: true },
+      signal,
     )
     if (files.length > 0) {
       await app().caches.library.invalidateAll()

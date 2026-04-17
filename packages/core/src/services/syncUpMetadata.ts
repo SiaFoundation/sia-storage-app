@@ -64,6 +64,10 @@ async function tryWithLog<T>(
  * cleanup service should scan for tombstoned files that still have object
  * rows on non-current indexers. Alternatively, the cursor could be reset
  * or stored per-indexer when multi-indexer support is added.
+ *
+ * Suspension signal policy: accepts AbortSignal. DB-holding loop —
+ * reads remote metadata and writes local DB. Checks signal at exit
+ * points so a mid-batch abort doesn't issue queries after the gate.
  */
 export async function syncUpMetadataBatch(
   batchSize: number,

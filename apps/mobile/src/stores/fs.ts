@@ -16,6 +16,14 @@ export async function removeFsFile(file: FsFileInfo): Promise<void> {
   await fsFileUriCache.set(null, file.id)
 }
 
+/**
+ * Copy a file into app storage.
+ *
+ * Suspension signal policy: does NOT accept a signal. Wraps a single
+ * native RNFS.copyFile call that can't be cancelled mid-flight in JS.
+ * Callers that loop over many copies should check their signal at the
+ * loop boundary before invoking.
+ */
 export async function copyFileToFs(file: FsFileInfo, sourceUri: string): Promise<string> {
   logger.debug('fs', 'copy_file', { fileId: file.id, sourceUri })
   const uri = await app().fs.copyFile(file, sourceUri)
