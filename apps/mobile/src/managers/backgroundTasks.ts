@@ -2,12 +2,16 @@ import { minutesInMs, secondsInMs } from '@siastorage/core'
 import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
 import BackgroundFetch, { type BackgroundFetchConfig } from 'react-native-background-fetch'
-import { createBackgroundDelay } from '../lib/backgroundDelay'
+import { delayWithSignal, isAbortError } from '../lib/delayWithSignal'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { runFsOrphanScanner } from './fsOrphanScanner'
-import { getIsSuspended, resumeFromSuspension, suspendForBackground } from './suspension'
+import {
+  getIsSuspended,
+  registerBackgroundTaskLifecycle,
+  releaseBackgroundTaskLifecycle,
+} from './suspension'
 import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -34,7 +38,7 @@ type TaskState = {
   startTime: number
   status: 'running' | 'finished'
   invocationId: string
-  abort?: () => void
+  controller?: AbortController
 }
 const taskConfigs: Record<TaskId, TaskConfig> = {
   // This is the library's default task ID on Android.
@@ -70,32 +74,9 @@ const sharedConfig: BackgroundFetchConfig = {
 }
 
 const taskStates: Record<TaskId, TaskState> = {
-  'com.transistorsoft.fetch': {
-    startTime: 0,
-    status: 'finished',
-    invocationId: '',
-    abort: undefined,
-  },
-  'com.transistorsoft.processing': {
-    startTime: 0,
-    status: 'finished',
-    invocationId: '',
-    abort: undefined,
-  },
-  'react-native-background-fetch': {
-    startTime: 0,
-    status: 'finished',
-    invocationId: '',
-    abort: undefined,
-  },
-}
-
-export function getIsBackgroundTaskRunning(): boolean {
-  return Object.values(taskStates).some((s) => s.status === 'running')
-}
-
-function hasOtherRunningTasks(excludeId: TaskId): boolean {
-  return Object.entries(taskStates).some(([id, s]) => id !== excludeId && s.status === 'running')
+  'com.transistorsoft.fetch': createFreshTaskState(),
+  'com.transistorsoft.processing': createFreshTaskState(),
+  'react-native-background-fetch': createFreshTaskState(),
 }
 
 function createFreshTaskState(): TaskState {
@@ -103,7 +84,7 @@ function createFreshTaskState(): TaskState {
     startTime: 0,
     status: 'finished',
     invocationId: '',
-    abort: undefined,
+    controller: undefined,
   }
 }
 
@@ -112,9 +93,8 @@ function createFreshTaskState(): TaskState {
  */
 function resetTaskState(taskId: TaskId) {
   const state = taskStates[taskId]
-  // Abort any pending delay from previous invocation
-  state.abort?.()
-  // Reset to fresh state
+  // Abort any pending work from a previous invocation.
+  state.controller?.abort()
   Object.assign(state, createFreshTaskState())
 }
 
@@ -148,20 +128,29 @@ export async function initBackgroundTasks() {
         return
       }
 
-      // Reset state for this task to ensure fresh start,
-      // aborting any lingering operations from previous invocation
+      // Reset state for this task to ensure fresh start, aborting any
+      // lingering work from a previous invocation.
       resetTaskState(taskId as TaskId)
 
       transitionTaskState(state, 'running')
-      await runBackgroundWork(config, state)
-      transitionTaskState(state, 'finished')
-      // Only re-suspend if the app is still in background.
-      // If the user opened the app during the task, skip — the
-      // AppState listener will handle suspension on next background.
-      if (!hasOtherRunningTasks(config.id) && AppState.currentState !== 'active') {
-        await suspendForBackground()
+      const log = logTask(config, state)
+      log('handler_enter', { path: 'normal' })
+      try {
+        await runBackgroundWork(config, state)
+      } catch (error) {
+        log('work_error', { error: error as Error })
+      } finally {
+        transitionTaskState(state, 'finished')
+        // Always release — the suspension manager decides whether to
+        // actually suspend based on appState and other running tasks.
+        try {
+          await releaseBackgroundTaskLifecycle(config.id)
+        } catch (error) {
+          log('release_error', { error: error as Error })
+        }
+        log('handler_exit', { path: 'normal', didSuspend: getIsSuspended() })
+        BackgroundFetch.finish(config.id)
       }
-      BackgroundFetch.finish(config.id)
     },
     (taskId: string) => {
       const config = taskConfigs[taskId as TaskId]
@@ -172,15 +161,31 @@ export async function initBackgroundTasks() {
         return
       }
       const log = logTask(config, state)
-
+      log('handler_enter', { path: 'timeout' })
       log('timeout')
 
-      // Abort any pending delay BEFORE setting status, so the while loop
-      // can exit cleanly when the Promise resolves.
-      state.abort?.()
+      // Abort the work loop immediately — signal.aborted is sticky, so
+      // any subsequent await-point check inside runBackgroundWork will
+      // bail out even if no delayWithSignal is in flight right now.
+      state.controller?.abort()
       transitionTaskState(state, 'finished')
-      BackgroundFetch.finish(config.id)
       log('timeout_finished', { elapsedMs: Date.now() - state.startTime })
+
+      // iOS's timeout callback is void-returning (library can't await a
+      // Promise here), so drive release + finish through a fire-and-
+      // forget IIFE. releaseBackgroundTaskLifecycle acquires
+      // beginBackgroundTask slack internally, giving the WAL checkpoint
+      // + close enough time to complete before iOS freezes the process.
+      ;(async () => {
+        try {
+          await releaseBackgroundTaskLifecycle(config.id)
+        } catch (error) {
+          log('release_error', { error: error as Error })
+        } finally {
+          log('handler_exit', { path: 'timeout', didSuspend: getIsSuspended() })
+          BackgroundFetch.finish(config.id)
+        }
+      })()
     },
   )
 
@@ -210,20 +215,22 @@ export async function initBackgroundTasks() {
 }
 
 /**
- * Wait for app initialization to complete, polling every second.
- * Returns 'ready' when init completes, 'timeout' after 30s, or 'aborted' if delay was aborted.
+ * Poll app init state every second, bounded by a 30s timeout.
+ * Returns 'ready' when init completes, 'timeout' after 30s, or 'aborted'.
  */
 async function waitForInitialization(
-  delayFn: (ms: number) => Promise<'completed' | 'aborted'>,
+  signal: AbortSignal,
 ): Promise<'ready' | 'timeout' | 'aborted'> {
   const maxWaitMs = secondsInMs(30)
   const pollIntervalMs = secondsInMs(1)
   let elapsed = 0
 
   while (app().init.getState().isInitializing && elapsed < maxWaitMs) {
-    const result = await delayFn(pollIntervalMs)
-    if (result === 'aborted') {
-      return 'aborted'
+    try {
+      await delayWithSignal(pollIntervalMs, signal)
+    } catch (e) {
+      if (isAbortError(e)) return 'aborted'
+      throw e
     }
     elapsed += pollIntervalMs
   }
@@ -252,15 +259,14 @@ async function waitForInitialization(
 async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const log = logTask(config, state)
 
-  // Create instance-based cancellable delay for this invocation
-  const { delay: delayFn, abort } = createBackgroundDelay()
-  state.abort = abort
+  const controller = new AbortController()
+  state.controller = controller
+  const { signal } = controller
 
-  const wasSuspended = getIsSuspended()
-  if (wasSuspended) {
-    log('resuming_from_suspension')
-    await resumeFromSuspension()
-  }
+  // Register with the suspension manager. Ensures the DB is open before
+  // we start querying. If the app was suspended, this triggers a resume.
+  await registerBackgroundTaskLifecycle(config.id)
+  if (signal.aborted) return
 
   // Check if user has onboarded - if not, there's nothing to do
   const hasOnboarded = await app().settings.getHasOnboarded()
@@ -268,6 +274,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
     log('skipped', { reason: 'not_onboarded' })
     return
   }
+  if (signal.aborted) return
 
   // Wait for app initialization to complete (handles both warm and cold starts)
   // On warm start, init is already done. On cold start, initApp() runs the full
@@ -275,7 +282,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isInitializing = app().init.getState().isInitializing
   if (isInitializing) {
     log('waiting_for_init')
-    const initResult = await waitForInitialization(delayFn)
+    const initResult = await waitForInitialization(signal)
     if (initResult === 'timeout') {
       log('skipped', { reason: 'init_timeout' })
       return
@@ -300,8 +307,11 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // runs these. The upload polling loop below still runs regardless.
   if (AppState.currentState !== 'active') {
     await runFsOrphanScanner()
+    if (signal.aborted) return
     await runFsEvictionScanner()
+    if (signal.aborted) return
     await triggerRecentScanIfNeeded()
+    if (signal.aborted) return
   }
 
   const manager = getUploadManager()!
@@ -317,16 +327,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
     totalBytes: initialStats.totalBytes,
   })
 
-  while (true) {
-    if (state.status === 'finished') {
-      const finalStats = await getFileStatsLocal({ localOnly: true })
-      log(
-        'finished',
-        buildSummaryData('timed out', initialStats, finalStats, initialSnapshot, manager, state),
-      )
-      return
-    }
+  while (!signal.aborted) {
     const stats = await getFileStatsLocal({ localOnly: true })
+    if (signal.aborted) break
     log('still_uploading', {
       filesRemaining: stats.count,
       bytesRemaining: stats.totalBytes,
@@ -346,16 +349,23 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       )
       return
     }
-    const result = await delayFn(secondsInMs(10))
-    if (result === 'aborted') {
-      const finalStats = await getFileStatsLocal({ localOnly: true })
-      log(
-        'finished',
-        buildSummaryData('aborted', initialStats, finalStats, initialSnapshot, manager, state),
-      )
-      return
+    try {
+      await delayWithSignal(secondsInMs(10), signal)
+    } catch (e) {
+      if (isAbortError(e)) break
+      throw e
     }
   }
+
+  // Fell out of the loop because the signal aborted (timeout callback).
+  const finalStats = await getFileStatsLocal({ localOnly: true }).catch(() => ({
+    count: -1,
+    totalBytes: -1,
+  }))
+  log(
+    'finished',
+    buildSummaryData('aborted', initialStats, finalStats, initialSnapshot, manager, state),
+  )
 }
 
 type UploadSnapshot = {

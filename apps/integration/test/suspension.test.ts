@@ -298,34 +298,6 @@ describe('Suspension', () => {
     expect(app.sdk.getStoredObjects().length).toBe(5)
   }, 60_000)
 
-  it('background task ending while foregrounded does not suspend', async () => {
-    // Simulate: app backgrounded → suspended → background task starts
-    app.isBackground = true
-    await app.suspend()
-    expect(app.isSuspended()).toBe(true)
-
-    // Background task resumes the DB to do work
-    await app.resumeFromSuspension()
-    await app.addFiles(generateTestFiles(3, { startId: 1 }))
-    await app.waitForNoActiveUploads()
-
-    // User opens the app while background task is still "running"
-    app.isBackground = false
-    await app.resumeFromSuspension()
-
-    // Background task ends — calls suspendIfBackground
-    // Since app is foregrounded, this should be a no-op
-    await app.suspendIfBackground()
-
-    expect(app.isSuspended()).toBe(false)
-    expect(app.areServicesRunning()).toBe(true)
-
-    // App should still work normally
-    await app.addFiles(generateTestFiles(2, { startId: 100 }))
-    await app.waitForNoActiveUploads()
-    expect(app.sdk.getStoredObjects().length).toBe(5)
-  }, 60_000)
-
   it('DB queries are rejected after suspend and work after resume', async () => {
     await app.addFiles(generateTestFiles(2, { startId: 1 }))
     await app.waitForNoActiveUploads()
@@ -418,4 +390,91 @@ describe('Suspension', () => {
     await app.waitForNoActiveUploads()
     expect(app.sdk.getStoredObjects().length).toBe(5)
   }, 60_000)
+
+  /**
+   * These tests reflect the four BG-task lifecycle shapes from the
+   * 0xdead10cc TestFlight crashes (v1.9.5):
+   *
+   * 1. Normal completion while backgrounded → DB closes.
+   * 2. Timeout path (crash #1: timeout callback did not release) → DB closes.
+   * 3. Overlapping tasks (logs showed two invocation IDs) → DB stays
+   *    open until the last task releases.
+   * 4. User foregrounds during task → release is a no-op (DB stays open).
+   *
+   * All four drive the same createSuspensionManager used by mobile.
+   */
+  describe('Background task lifecycle', () => {
+    it('normal completion → auto-suspends when app is background', async () => {
+      await app.setAppState('background')
+      expect(app.isSuspended()).toBe(true)
+
+      await app.simulateBackgroundTask('bg-fetch', async () => {
+        expect(app.isSuspended()).toBe(false) // register reopened DB
+        await app.addFiles(generateTestFiles(2, { startId: 1 }))
+        await app.waitForNoActiveUploads()
+      })
+
+      // Release auto-suspended because appState=background and no more tasks.
+      expect(app.isSuspended()).toBe(true)
+      expect(app.getRunningBackgroundTaskIds()).toEqual([])
+    }, 60_000)
+
+    it('timeout path still releases and re-suspends (crash-1 regression guard)', async () => {
+      await app.setAppState('background')
+      expect(app.isSuspended()).toBe(true)
+
+      await app.registerBackgroundTask('bg-fetch')
+      expect(app.isSuspended()).toBe(false)
+
+      // Simulate iOS firing expirationHandler: the backgroundTasks.ts
+      // timeout callback's IIFE calls releaseBackgroundTaskLifecycle —
+      // which is what the harness's releaseBackgroundTask models.
+      await app.releaseBackgroundTask('bg-fetch')
+
+      expect(app.isSuspended()).toBe(true)
+      expect(app.getRunningBackgroundTaskIds()).toEqual([])
+    }, 60_000)
+
+    it('overlapping tasks — DB stays open until last release', async () => {
+      await app.setAppState('background')
+      expect(app.isSuspended()).toBe(true)
+
+      await app.registerBackgroundTask('A')
+      expect(app.isSuspended()).toBe(false)
+      expect(app.getRunningBackgroundTaskIds()).toEqual(['A'])
+
+      await app.registerBackgroundTask('B')
+      expect(app.isSuspended()).toBe(false)
+      expect(new Set(app.getRunningBackgroundTaskIds())).toEqual(new Set(['A', 'B']))
+
+      await app.releaseBackgroundTask('A')
+      expect(app.isSuspended()).toBe(false) // B still running
+      expect(app.getRunningBackgroundTaskIds()).toEqual(['B'])
+
+      await app.releaseBackgroundTask('B')
+      expect(app.isSuspended()).toBe(true) // only now
+      expect(app.getRunningBackgroundTaskIds()).toEqual([])
+    }, 60_000)
+
+    it('user foregrounds during BG task — release does not suspend', async () => {
+      await app.setAppState('background')
+      expect(app.isSuspended()).toBe(true)
+
+      await app.registerBackgroundTask('bg-fetch')
+      expect(app.isSuspended()).toBe(false)
+
+      // User opens the app while the BG task is still registered.
+      await app.setAppState('foreground')
+      expect(app.isSuspended()).toBe(false)
+
+      await app.releaseBackgroundTask('bg-fetch')
+      expect(app.isSuspended()).toBe(false) // user still has app open
+      expect(app.areServicesRunning()).toBe(true)
+
+      // App should still function normally.
+      await app.addFiles(generateTestFiles(2, { startId: 1 }))
+      await app.waitForNoActiveUploads()
+      expect(app.sdk.getStoredObjects().length).toBe(2)
+    }, 60_000)
+  })
 })

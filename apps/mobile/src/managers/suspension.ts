@@ -6,7 +6,7 @@ import {
 } from '@siastorage/core/lib/serviceInterval'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { logger, stopLogAppender } from '@siastorage/logger'
-import { AppState, type AppStateStatus } from 'react-native'
+import { AppState, type AppStateStatus, Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
 import {
@@ -22,7 +22,6 @@ import {
 import { setSWREnabled } from '../lib/swr'
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
-import { getIsBackgroundTaskRunning } from './backgroundTasks'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -112,8 +111,24 @@ let appStateRef: AppStateStatus = AppState.currentState
 
 export function initSuspensionManager(): void {
   if (subscription) return
-  logger.info('suspension', 'init', { state: appStateRef })
-  subscription = AppState.addEventListener('change', onAppStateChange)
+  logger.info('appState', 'initial_state', { state: appStateRef })
+  logger.info('suspension', 'init', { state: appStateRef, platform: Platform.OS })
+  subscription = AppState.addEventListener('change', (nextState) => {
+    logger.info('appState', 'state_changed', { from: appStateRef, to: nextState })
+    appStateRef = nextState
+    // The suspend/close flow exists for iOS 0xdead10cc protection (mach
+    // exception when iOS freezes the process while the SQLite WAL lock
+    // is held). Android has no analog, and on Android many things that
+    // aren't really "backgrounding" — opening image/document pickers,
+    // share sheets — still fire AppState 'background'. Running the full
+    // flow on every picker round-trip degrades the experience: cancels
+    // in-flight downloads, closes and reopens the DB, re-runs migration
+    // checks, pauses all services. iOS pickers don't background the app,
+    // so the flow only fires when the user actually leaves.
+    if (Platform.OS === 'ios') {
+      onAppStateChange(nextState)
+    }
+  })
 }
 
 export function teardownSuspensionManager(): void {
@@ -121,42 +136,54 @@ export function teardownSuspensionManager(): void {
   subscription = null
 }
 
-function onAppStateChange(nextState: AppStateStatus): void {
-  logger.info('appState', 'state_changed', {
-    from: appStateRef,
-    to: nextState,
-  })
-  appStateRef = nextState
-
-  if (nextState === 'background') {
-    suspendForBackground()
-  } else if (nextState === 'active') {
-    resumeFromSuspension()
-  }
-}
-
-export async function suspendForBackground(): Promise<void> {
-  if (getIsBackgroundTaskRunning()) {
-    logger.debug('suspension', 'skipped', { reason: 'background_task_running' })
-    return
-  }
-  if (!dbInitialized) {
-    logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
-    return
-  }
-
-  // Request extra execution time from iOS (~30s) before it suspends
-  // the process. On Android this is a no-op.
+/**
+ * Wrap an async operation with an iOS beginBackgroundTask grant so the
+ * process isn't suspended while the operation is in flight. iOS gives
+ * ~30s of additional execution time. On Android this is a no-op.
+ */
+async function withIosExecutionTime<T>(fn: () => Promise<T>): Promise<T> {
   await BackgroundTimer.start(0)
   try {
-    await manager.suspend()
+    return await fn()
   } finally {
     BackgroundTimer.stop()
   }
 }
 
-export function resumeFromSuspension(): Promise<void> {
-  return manager.resume()
+function onAppStateChange(nextState: AppStateStatus): void {
+  if (nextState === 'background') {
+    if (!dbInitialized) {
+      logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
+      return
+    }
+    // Fire-and-forget; errors surface via the manager's own logging.
+    // The setAppState Promise resolves after any enqueued doSuspend
+    // settles, so BackgroundTimer keeps iOS from freezing the process
+    // until WAL checkpoint + close complete.
+    void withIosExecutionTime(() => manager.setAppState('background'))
+  } else if (nextState === 'active') {
+    void manager.setAppState('foreground')
+  }
+}
+
+/**
+ * Called by backgroundTasks.ts at the start of every BG task invocation.
+ * Registers the task with the suspension manager and returns once the
+ * DB is open (reopen happens inside the manager's queue if needed).
+ */
+export function registerBackgroundTaskLifecycle(id: string): Promise<void> {
+  return manager.registerBackgroundTask(id)
+}
+
+/**
+ * Called by backgroundTasks.ts at the end of every BG task invocation,
+ * including the timeout path. If this is the last running BG task and
+ * the app is in background, triggers a suspend. Wrapped with
+ * beginBackgroundTask to keep iOS from freezing the process during the
+ * WAL checkpoint and close.
+ */
+export function releaseBackgroundTaskLifecycle(id: string): Promise<void> {
+  return withIosExecutionTime(() => manager.releaseBackgroundTask(id))
 }
 
 export function getIsSuspended(): boolean {

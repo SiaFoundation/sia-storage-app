@@ -145,9 +145,20 @@ export interface TestApp {
   resume(): void
   suspend(): Promise<void>
   resumeFromSuspension(): Promise<void>
-  suspendIfBackground(): Promise<void>
   isSuspended(): boolean
-  isBackground: boolean
+  /** Records foreground/background state on the suspension manager. When
+   * transitioning to background with no BG tasks running, the manager
+   * auto-suspends. When transitioning to foreground, it auto-resumes. */
+  setAppState(state: 'foreground' | 'background'): Promise<void>
+  /** Register a simulated BG task. Returns once DB is open. */
+  registerBackgroundTask(id: string): Promise<void>
+  /** Release a simulated BG task. If it was the last AND appState is
+   * background, awaits a suspend. */
+  releaseBackgroundTask(id: string): Promise<void>
+  getRunningBackgroundTaskIds(): readonly string[]
+  /** Convenience: register → run fn → release (always releases even if
+   * fn throws). Mirrors what backgroundTasks.ts does in production. */
+  simulateBackgroundTask(id: string, fn: () => Promise<void>): Promise<void>
 
   app: AppService
   internal: AppServiceInternal
@@ -239,7 +250,6 @@ export function createTestApp(
   const appKey = sdk.appKey()
   const thumbnailScanner = new ThumbnailScanner()
   let connected = true
-  let background = false
 
   const secrets = createInMemoryStorage()
   const crypto = options?.crypto ?? {
@@ -411,19 +421,21 @@ export function createTestApp(
 
     resumeFromSuspension: () => suspensionManager.resume(),
 
-    async suspendIfBackground() {
-      if (!background) return
-      return suspensionManager.suspend()
-    },
-
     isSuspended: () => suspensionManager.isSuspended(),
 
-    get isBackground() {
-      return background
-    },
+    setAppState: (state) => suspensionManager.setAppState(state),
 
-    set isBackground(value: boolean) {
-      background = value
+    registerBackgroundTask: (id) => suspensionManager.registerBackgroundTask(id),
+    releaseBackgroundTask: (id) => suspensionManager.releaseBackgroundTask(id),
+    getRunningBackgroundTaskIds: () => suspensionManager.getRunningBackgroundTaskIds(),
+
+    async simulateBackgroundTask(id, fn) {
+      await suspensionManager.registerBackgroundTask(id)
+      try {
+        await fn()
+      } finally {
+        await suspensionManager.releaseBackgroundTask(id)
+      }
     },
 
     triggerSyncDown() {

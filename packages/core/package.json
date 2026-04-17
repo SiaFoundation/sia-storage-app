@@ -13,6 +13,7 @@
     "./lib/detectMimeType": "./src/lib/detectMimeType.ts",
     "./lib/debouncedAction": "./src/lib/debouncedAction.ts",
     "./lib/fileTypes": "./src/lib/fileTypes.ts",
+    "./lib/errors": "./src/lib/errors.ts",
     "./lib/mutex": "./src/lib/mutex.ts",
     "./lib/retry": "./src/lib/retry.ts",
     "./lib/coalescingQueue": "./src/lib/coalescingQueue.ts",
