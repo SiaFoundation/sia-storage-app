@@ -1,3 +1,17 @@
+## 0.0.5 (2026-04-17)
+
+### Features
+
+- Add debounced cache invalidation API to SWR cache helpers. Batch upload operations now use single bulk invalidation instead of per-item cascades.
+- Split import scanner into two targeted queries and add BackoffTracker for exponential backoff on transiently-failing files.
+- Add import status screen showing files in retry backoff and permanently lost files.
+- Add `createSuspensionManager` with dependency-injected adapters for scheduler, uploader, and DB lifecycle.
+
+### Fixes
+
+- Distinguish temporarily unavailable assets from permanently deleted ones in the import scanner.
+- Filter out files without hashes at the SQL level in upload manager polling.
+
 ## 0.0.4 (2026-04-13)
 
 ### Features

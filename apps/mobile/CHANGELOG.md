@@ -2,6 +2,22 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.10.0 (2026-04-17)
+
+### Features
+
+- Add import status screen showing files in retry backoff and permanently lost files.
+
+### Fixes
+
+- Add debounced cache invalidation API to SWR cache helpers. Batch upload operations now use single bulk invalidation instead of per-item cascades.
+- Added a Delete Account entry in the Menu that opens the sia.storage account page where account deletion is performed.
+- Distinguish temporarily unavailable assets from permanently deleted ones in the import scanner.
+- Fixed a bug where missing files on iOS were not detected, blocking photo import and upload.
+- File counts in the status sheet now include files pending import.
+- Fixed background suspension draining services cleanly instead of rejecting their queries.
+- Added a Help section in the Menu with links to Support, Report Content, Terms of Service, and Privacy Policy on sia.storage.
+
 ## 1.9.5 (2026-04-13)
 
 ### Fixes
