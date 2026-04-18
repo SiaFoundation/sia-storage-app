@@ -3,6 +3,7 @@ import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
 import { extFromMime, getMimeType } from '../lib/fileTypes'
+import { showPermissionDeniedAlert } from '../lib/permissionAlert'
 import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 
@@ -33,6 +34,13 @@ export function useCameraCapture() {
 
       if (result.didCancel) {
         logger.debug('cameraCapture', 'canceled')
+        return []
+      }
+      if (result.errorCode === 'permission') {
+        showPermissionDeniedAlert(
+          'Camera Access Required',
+          'To take photos and videos, allow camera access in Settings.',
+        )
         return []
       }
       if (result.errorCode) {
