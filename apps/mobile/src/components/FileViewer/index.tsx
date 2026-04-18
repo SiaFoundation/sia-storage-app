@@ -41,7 +41,7 @@ export function FileViewer({
   const { type, name } = file
   const status = useFileStatus(file, isShared)
   const { fileUri, isDownloaded, isDownloading, isProcessing, isDeferredImport } = status.data ?? {}
-  const fileDownload = useDownload(file)
+  const fileDownload = useDownload(file, 0)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
   const localId = file.hash === '' && file.localId ? file.localId : null

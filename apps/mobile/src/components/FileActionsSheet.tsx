@@ -136,7 +136,7 @@ function SingleFileActionsSheet({
     }
   }, [file, navigation, toast, onComplete])
 
-  const handleDownload = useDownload(file)
+  const handleDownload = useDownload(file, 0)
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
@@ -253,7 +253,7 @@ function BulkFileActionsSheet({
         const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
         if (hasSealed && !uri) {
-          void downloadFile(file)
+          void downloadFile(file, 0)
         }
       }
       onComplete?.()

@@ -13,11 +13,11 @@ import { copyFileToFs } from '../stores/fs'
 type Downloads = ReturnType<typeof app>['downloads']
 
 /** Non-hook version for programmatic downloads (e.g., bulk operations) */
-export async function downloadFile(file: FileRecord): Promise<void> {
-  await app().downloads.downloadFile(file.id)
+export async function downloadFile(file: FileRecord, priority?: number): Promise<void> {
+  await app().downloads.downloadFile(file.id, priority)
 }
 
-export function useDownload(file?: FileRecord | null) {
+export function useDownload(file?: FileRecord | null, priority?: number) {
   const toast = useToast()
   const { data: isConnected } = useSdk()
   return useCallback(() => {
@@ -28,10 +28,10 @@ export function useDownload(file?: FileRecord | null) {
       toast.show('No slabs available for this file')
       return
     }
-    downloadFile(file).catch((e) => {
+    downloadFile(file, priority).catch((e) => {
       logger.error('download', 'failed', { id: file.id, error: e as Error })
     })
-  }, [isConnected, file, toast])
+  }, [isConnected, file, toast, priority])
 }
 
 export function useDownloadFromShareURL() {

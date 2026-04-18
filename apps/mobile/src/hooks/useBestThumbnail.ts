@@ -26,11 +26,11 @@ export function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 51
     () => (file ? app().thumbnails.getBest(file.id, thumbSize) : null),
   )
 
-  // Auto-download the chosen thumbnail.
+  // Auto-download the chosen thumbnail at auto priority.
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const status = useFileStatus(thumbRecord.data ?? undefined)
-  const download = useDownload(thumbRecord.data)
+  const download = useDownload(thumbRecord.data, 1)
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return

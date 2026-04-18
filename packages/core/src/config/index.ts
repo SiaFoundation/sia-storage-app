@@ -8,6 +8,8 @@ export const DEFAULT_INDEXER_URL = 'https://sia.storage'
 export const DEFAULT_MAX_UPLOADS = 1
 // Max concurrent downloads.
 export const DEFAULT_MAX_DOWNLOADS = 2
+// Max queued auto-priority downloads before oldest are evicted.
+export const MAX_AUTO_DOWNLOAD_QUEUE = 20
 // Max inflight per download.
 export const DOWNLOAD_MAX_INFLIGHT = 15
 // Max inflight per upload.
