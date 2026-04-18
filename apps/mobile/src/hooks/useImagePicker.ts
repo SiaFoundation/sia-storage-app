@@ -2,6 +2,7 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
+import { showPermissionDeniedAlert } from '../lib/permissionAlert'
 import { importFiles } from '../lib/processAssets'
 
 export function useImagePicker() {
@@ -29,6 +30,13 @@ export function useImagePicker() {
 
       if (result.didCancel) {
         logger.debug('imagePicker', 'canceled')
+        return []
+      }
+      if (result.errorCode === 'permission') {
+        showPermissionDeniedAlert(
+          'Photo Access Required',
+          'To choose photos and videos, allow photo library access in Settings.',
+        )
         return []
       }
       if (result.errorCode) {

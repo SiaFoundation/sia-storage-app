@@ -109,6 +109,11 @@ jest.mock('react-native', () => ({
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
     currentState: 'active',
   },
+  Alert: { alert: jest.fn() },
+  Linking: {
+    openSettings: jest.fn().mockResolvedValue(undefined),
+    openURL: jest.fn().mockResolvedValue(undefined),
+  },
 }))
 
 // jest-expo's ImageLoader.getSize mock uses a callback API that doesn't match
