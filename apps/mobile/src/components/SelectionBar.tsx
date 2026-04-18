@@ -53,7 +53,7 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
         const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
         if (hasSealed && !uri) {
-          void downloadFile(file)
+          void downloadFile(file, 0)
         }
       }
       if (counts.downloadable > 0) {

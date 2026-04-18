@@ -656,8 +656,8 @@ export interface AppService {
     acquireSlot(): Promise<string>
     /** Releases a previously acquired concurrency slot. */
     releaseSlot(token: string): void
-    /** Downloads a file to local storage. */
-    downloadFile(fileId: string): Promise<void>
+    /** Downloads a file to local storage. Lower priority numbers are served first. */
+    downloadFile(fileId: string, priority?: number): Promise<void>
     /** Cancels a single in-progress download. */
     cancel(id: string): void
     /** Cancels all in-progress downloads. */

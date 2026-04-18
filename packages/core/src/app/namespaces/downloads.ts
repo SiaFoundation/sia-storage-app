@@ -1,7 +1,7 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
-import { DEFAULT_MAX_DOWNLOADS } from '../../config'
+import { DEFAULT_MAX_DOWNLOADS, MAX_AUTO_DOWNLOAD_QUEUE } from '../../config'
 import * as ops from '../../db/operations'
 import type { LocalObject } from '../../encoding/localObject'
 import { SlotPool } from '../../lib/slotPool'
@@ -67,7 +67,7 @@ export function buildDownloadsNamespace(
     caches.downloads.invalidate(id)
   }
 
-  async function execute(fileId: string): Promise<void> {
+  async function execute(fileId: string, priority = 1): Promise<void> {
     // Caller (downloadFile) registers synchronously before awaiting, so the
     // controller is guaranteed to exist here. Capturing it first means a
     // cancel() arriving during any await below properly aborts this run.
@@ -88,7 +88,10 @@ export function buildDownloadsNamespace(
       const objects = await ops.queryObjectsForFile(db, fileId)
       if (!objects.length) throw new Error('No object available for download')
 
-      release = await slotPool.acquire(controller.signal)
+      release = await slotPool.acquire(controller.signal, {
+        priority,
+        maxQueueDepth: priority === 1 ? MAX_AUTO_DOWNLOAD_QUEUE : undefined,
+      })
       update(fileId, { status: 'downloading' })
 
       await downloadObject.download({
@@ -142,11 +145,11 @@ export function buildDownloadsNamespace(
         slotReleases.delete(token)
       }
     },
-    downloadFile: (fileId) => {
+    downloadFile: (fileId, priority) => {
       const existing = inFlight.get(fileId)
       if (existing) return existing
       register(fileId)
-      const promise = execute(fileId).finally(() => {
+      const promise = execute(fileId, priority).finally(() => {
         inFlight.delete(fileId)
       })
       inFlight.set(fileId, promise)
