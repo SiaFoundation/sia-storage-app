@@ -75,3 +75,48 @@ jobs:
         with:
           bun_version: 1.2.19
       - run: bun --cwd apps/integration test
+
+  test-cli:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun --cwd apps/cli test
+
+  test-cli-e2e:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      - run: bun --cwd apps/cli test:e2e
+
+  build-cli:
+    # Verify the cross-compile produces a binary for every release target on
+    # every PR — keeps platform-specific breakage out of the release pipeline.
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+          - name: darwin-x64
+          - name: linux-x64
+          - name: linux-arm64
+          - name: windows-x64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+      # `bun --cwd <dir> run <script>` is broken when the script name contains
+      # a colon — bun prints its usage help and exits 0, so the build silently
+      # no-ops. Use working-directory + a plain `bun run` instead.
+      - working-directory: apps/cli
+        run: bun run build:${{ matrix.name }}
