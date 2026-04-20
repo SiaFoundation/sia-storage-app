@@ -1,0 +1,85 @@
+name: Release CLI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build only — skip release upload (for verifying CI changes)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Run on every cli/v* release and on every manual dispatch. Skip mobile/*
+    # releases so this workflow doesn't fire alongside the mobile build.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/')) }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            target: bun-darwin-arm64
+          - name: darwin-x64
+            target: bun-darwin-x64
+          - name: linux-x64
+            target: bun-linux-x64
+          - name: linux-arm64
+            target: bun-linux-arm64
+          - name: windows-x64
+            target: bun-windows-x64
+            ext: .exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          bun_version: 1.2.19
+
+      - name: Build sia-storage-${{ matrix.name }}${{ matrix.ext }}
+        working-directory: apps/cli
+        run: |
+          bun build src/index.ts \
+            --compile \
+            --target=${{ matrix.target }} \
+            --outfile dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sia-storage-${{ matrix.name }}
+          path: apps/cli/dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
+          if-no-files-found: error
+          retention-days: 7
+
+  upload:
+    # Only attach to the GitHub release on real release events (not dispatch),
+    # and skip when the operator is dry-running CI changes.
+    if: ${{ github.event_name == 'release' && !inputs.dry_run }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload binaries to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        # --clobber lets re-runs replace assets cleanly if the workflow
+        # is restarted after a partial upload.
+        run: gh release upload "$TAG" dist/sia-storage-* --clobber
