@@ -159,45 +159,81 @@ export async function resetData() {
   app().caches.libraryVersion.invalidate()
 }
 
-export async function resetApp() {
-  // 1. Show splash screen immediately.
+// AsyncStorage keys preserved across a resync-style reset so the user stays
+// signed in, reconnects to the same indexer, and doesn't re-run onboarding.
+// Auth identity (mnemonicHash, appKeys) lives in SecureStore and is untouched
+// when keepAuth is true.
+const RESYNC_KEEP_KEYS = ['hasOnboarded', 'indexerURL', 'completedResetVersion']
+
+async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
+  // Tear down the SDK first so the rust layer stops retrying uploads against
+  // the DB we're about to drop.
+  await resetSdk()
+
+  // Cancel uploads and downloads (side-effect cleanup).
+  await cancelAllTransfers()
+
+  // Stop the log appender before resetting the DB so it can't write to a
+  // replaced connection.
+  await stopLogAppender()
+
+  // Drop and recreate all database tables.
+  await resetDb()
+
+  if (keepAuth) {
+    // Resync path: preserve the auth-adjacent AsyncStorage keys so the user
+    // stays onboarded and reconnects to the same indexer on next init. Auth
+    // identity (mnemonicHash, appKeys) lives in SecureStore and is untouched.
+    const allKeys = await AsyncStorage.getAllKeys()
+    const toRemove = allKeys.filter((key) => !RESYNC_KEEP_KEYS.includes(key))
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove)
+    }
+  } else {
+    // Sign-out path: wipe everything including SecureStore auth so the next
+    // launch returns to onboarding.
+    await AsyncStorage.clear()
+    await app().auth.clearAppKeys()
+    await app().auth.clearMnemonicHash()
+  }
+
+  // Reset all in-memory state (zustand stores).
+  resetAllStores()
+
+  // Reset cursor caches.
+  await resetPhotosArchiveCursor()
+
+  // Clear SWR cache last; must come after store resets to avoid races where
+  // hooks re-read stale data into a fresh cache.
+  await mutate(() => true, undefined, { revalidate: false })
+}
+
+export async function resetLocalDataAndResync() {
+  await runResetFlow({ label: 'Clearing local data', keepAuth: true })
+}
+
+export async function resetLocalDataAndSignOut() {
+  await runResetFlow({ label: 'Signing out', keepAuth: false })
+}
+
+// Preserved as an alias because initApp's FORCED_RESET_VERSION branch and
+// other callers still reference it; sign-out is the historical behavior.
+export const resetApp = resetLocalDataAndSignOut
+
+async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: boolean }) {
+  // Show splash immediately so the UI stops rendering data we're about to wipe.
   startInitState()
 
-  // 2. Stop all service intervals and wait for in-flight workers to finish.
+  // Stop service intervals and wait for in-flight workers to finish before
+  // tearing down the SDK and DB.
   await shutdownAllServiceIntervals()
 
   const success = await runSteps([
     {
       id: 'reset',
-      label: 'Resetting application',
+      label,
       message: 'Clearing data...',
-      runner: async () => {
-        // 3. Tear down SDK to stop the rust layer from retrying uploads.
-        await resetSdk()
-
-        // 4. Cancel uploads and downloads (side-effect cleanup).
-        await cancelAllTransfers()
-
-        // 5. Flush remaining logs and stop the appender before touching the DB.
-        await stopLogAppender()
-
-        // 6. Drop and recreate all database tables.
-        await resetDb()
-
-        // 5. Wipe all persisted state.
-        await AsyncStorage.clear()
-        await app().auth.clearAppKeys()
-        await app().auth.clearMnemonicHash()
-
-        // 6. Reset all in-memory state (zustand stores).
-        resetAllStores()
-
-        // 7. Reset cursor caches.
-        await resetPhotosArchiveCursor()
-
-        // 8. Clear SWR cache (must come after store resets to avoid races).
-        await mutate(() => true, undefined, { revalidate: false })
-      },
+      runner: () => clearAppState({ keepAuth }),
     },
   ])
 
@@ -205,13 +241,13 @@ export async function resetApp() {
     return
   }
 
-  // 9. Mark forced reset as completed so it doesn't re-trigger.
-  // Saved after success so failed resets retry on next launch.
+  // Mark the forced reset complete only on success so a failed reset retries
+  // on next launch.
   if (FORCED_RESET_VERSION) {
     await app().settings.setCompletedResetVersion(FORCED_RESET_VERSION)
   }
 
-  // 10. Re-initialize the app from clean state.
+  // Re-initialize the app from clean state.
   await initApp()
 }
 
