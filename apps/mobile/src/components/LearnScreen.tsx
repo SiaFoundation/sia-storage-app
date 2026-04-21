@@ -28,6 +28,7 @@ export function LearnScreen({ children }: LearnScreenProps) {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
       >
         {children}
       </ScrollView>

@@ -1,14 +1,13 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
 import { useIndexerURL } from '@siastorage/core/stores'
-import type React from 'react'
 import { useCallback } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert } from 'react-native'
+import { InsetGroupLink, InsetGroupSection } from '../components/InsetGroup'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { useMenuHeader } from '../hooks/useMenuHeader'
 import { openExternalURL } from '../lib/inAppBrowser'
 import type { MenuStackParamList } from '../stacks/types'
-import { colors, palette } from '../styles/colors'
 
 const SIA_STORAGE_HOST = 'sia.storage'
 const SIA_STORAGE_DELETE_URL = 'https://sia.storage/dashboard/account'
@@ -40,36 +39,6 @@ function promptDeleteAccount(indexerURL: string) {
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'MenuHome'>
 
-type MenuSectionProps = {
-  title: string
-  children: React.ReactNode
-}
-
-function MenuSection({ title, children }: MenuSectionProps) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionItems}>{children}</View>
-    </View>
-  )
-}
-
-type MenuItemProps = {
-  label: string
-  onPress: () => void
-}
-
-function MenuItem({ label, onPress }: MenuItemProps) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress}>
-      <View style={styles.rowItem}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowChevron}>›</Text>
-      </View>
-    </Pressable>
-  )
-}
-
 export function MenuScreen({ navigation }: Props) {
   useMenuHeader()
   const indexerURL = useIndexerURL()
@@ -78,69 +47,55 @@ export function MenuScreen({ navigation }: Props) {
   }, [indexerURL.data])
   return (
     <SettingsScrollLayout>
-      <MenuSection title="Settings">
-        <MenuItem label="Indexer" onPress={() => navigation.navigate('Indexer')} />
-        <MenuItem label="Sync" onPress={() => navigation.navigate('Sync')} />
-        <MenuItem label="Import" onPress={() => navigation.navigate('Import')} />
-        <MenuItem label="Advanced" onPress={() => navigation.navigate('Advanced')} />
-        <MenuItem label="Logs" onPress={() => navigation.navigate('Logs')} />
-      </MenuSection>
+      <InsetGroupSection header="Settings">
+        <InsetGroupLink label="Indexer" onPress={() => navigation.navigate('Indexer')} />
+        <InsetGroupLink label="Sync" onPress={() => navigation.navigate('Sync')} />
+        <InsetGroupLink label="Import" onPress={() => navigation.navigate('Import')} />
+        <InsetGroupLink label="Advanced" onPress={() => navigation.navigate('Advanced')} />
+        <InsetGroupLink label="Logs" onPress={() => navigation.navigate('Logs')} />
+      </InsetGroupSection>
 
-      <MenuSection title="Learn">
-        <MenuItem
+      <InsetGroupSection header="Learn">
+        <InsetGroupLink
           label="Recovery Phrase"
           onPress={() => navigation.navigate('LearnRecoveryPhrase')}
         />
-        <MenuItem
+        <InsetGroupLink
           label="How Storage Works"
           onPress={() => navigation.navigate('LearnHowItWorks')}
         />
-        <MenuItem label="What is an Indexer?" onPress={() => navigation.navigate('LearnIndexer')} />
-        <MenuItem label="The Sia Network" onPress={() => navigation.navigate('LearnSiaNetwork')} />
-      </MenuSection>
+        <InsetGroupLink
+          label="What is an Indexer?"
+          onPress={() => navigation.navigate('LearnIndexer')}
+        />
+        <InsetGroupLink
+          label="The Sia Network"
+          onPress={() => navigation.navigate('LearnSiaNetwork')}
+        />
+      </InsetGroupSection>
 
-      <MenuSection title="Help">
-        <MenuItem label="Support" onPress={() => void openExternalURL(SIA_STORAGE_SUPPORT_URL)} />
-        <MenuItem
+      <InsetGroupSection header="Help">
+        <InsetGroupLink
+          label="Support"
+          onPress={() => void openExternalURL(SIA_STORAGE_SUPPORT_URL)}
+        />
+        <InsetGroupLink
           label="Report Content"
           onPress={() => void openExternalURL(SIA_STORAGE_REPORT_URL)}
         />
-        <MenuItem
+        <InsetGroupLink
           label="Terms of Service"
           onPress={() => void openExternalURL(SIA_STORAGE_TERMS_URL)}
         />
-        <MenuItem
+        <InsetGroupLink
           label="Privacy Policy"
           onPress={() => void openExternalURL(SIA_STORAGE_PRIVACY_URL)}
         />
-      </MenuSection>
+      </InsetGroupSection>
 
-      <MenuSection title="Account">
-        <MenuItem label="Delete Account" onPress={handleDeleteAccount} />
-      </MenuSection>
+      <InsetGroupSection header="Account">
+        <InsetGroupLink label="Delete Account" destructive onPress={handleDeleteAccount} />
+      </InsetGroupSection>
     </SettingsScrollLayout>
   )
 }
-
-const styles = StyleSheet.create({
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    color: palette.gray[50],
-    fontSize: 32,
-    fontWeight: '800',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  sectionItems: {},
-  rowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: colors.bgPanel,
-  },
-  rowLabel: { flex: 1, color: palette.gray[100], fontSize: 16 },
-  rowChevron: { color: palette.gray[300], fontSize: 18 },
-})

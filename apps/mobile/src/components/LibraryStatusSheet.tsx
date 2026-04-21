@@ -123,7 +123,7 @@ export function LibraryStatusSheet() {
 
   return (
     <ModalSheet visible={isOpen} onRequestClose={handleClose} title="Status">
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <RowGroup title="Connectivity" style={styles.groupSpacing}>
           <InfoCard>
             <LabeledValueRow
