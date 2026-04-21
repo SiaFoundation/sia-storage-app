@@ -19,6 +19,7 @@
 
 import { err, ok, type Result, uint8ToHex } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
+import { getErrorMessage, isAbortError } from '@siastorage/core/lib/errors'
 import { raceWithTimeout, withTimeout } from '@siastorage/core/lib/timeout'
 import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
@@ -151,7 +152,7 @@ export async function reconnectIndexer(): Promise<boolean> {
     }
     return connected
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = getErrorMessage(e)
     app().connection.setState({
       isConnected: false,
       connectionError: message,
@@ -209,7 +210,7 @@ export async function authenticateIndexer(indexerURL: string): Promise<Authentic
       logger.error('sdk', 'connect_error', { error: e as Error })
       return err({
         type: 'error',
-        message: e instanceof Error ? e.message : String(e),
+        message: getErrorMessage(e),
       })
     }
     app().connection.setState({ isAuthing: false })
@@ -296,7 +297,7 @@ export async function registerWithIndexer(
     logger.error('sdk', 'register_error', { error: e as Error })
     return err({
       type: 'error',
-      message: e instanceof Error ? e.message : String(e),
+      message: getErrorMessage(e),
     })
   }
 }
@@ -388,7 +389,7 @@ async function waitForUserApproval(responseUrl: string): Promise<Result<void, Au
       closeAuthBrowser()
       const outcome = await approvalPromise!
       if (outcome.ok) return ok(undefined)
-      if (outcome.error.name === 'AbortError') return err({ type: 'cancelled' })
+      if (isAbortError(outcome.error)) return err({ type: 'cancelled' })
       return err({ type: 'error', message: outcome.error.message })
     }
 
@@ -401,7 +402,7 @@ async function waitForUserApproval(responseUrl: string): Promise<Result<void, Au
     if (grace.ok) {
       const outcome = grace.value
       if (outcome.ok) return ok(undefined)
-      if (outcome.error.name === 'AbortError') return err({ type: 'cancelled' })
+      if (isAbortError(outcome.error)) return err({ type: 'cancelled' })
       return err({ type: 'error', message: outcome.error.message })
     }
 
@@ -442,7 +443,7 @@ async function runBrowserAuthFlow(indexerURL: string): Promise<Result<void, Auth
     logger.error('sdk', 'connection_request_error', { error: e as Error })
     return err({
       type: 'error',
-      message: e instanceof Error ? e.message : String(e),
+      message: getErrorMessage(e),
     })
   }
 }

@@ -61,7 +61,6 @@ jest.mock('../lib/delayWithSignal', () => ({
       signal.addEventListener('abort', entry.onAbort, { once: true })
       mockPendingDelays.push(entry)
     }),
-  isAbortError: (e: unknown) => e instanceof Error && e.name === 'AbortError',
 }))
 
 const mockGetFileStatsLocal = jest.fn()

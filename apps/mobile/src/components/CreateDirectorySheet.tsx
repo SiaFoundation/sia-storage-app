@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { FolderPlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
@@ -52,7 +53,7 @@ export function CreateDirectorySheet({
       toast.show(`Created "${dir.path}"`)
       onCreated?.(dir.id, dir.name, dir.path)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create folder')
+      setError(getErrorMessage(e, 'Failed to create folder'))
     }
   }, [name, parentPath, onCreated, toast])
 

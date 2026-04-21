@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { TagIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
@@ -41,7 +42,7 @@ export function CreateTagSheet() {
       closeSheet()
       toast.show(`Created "${trimmed}"`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create tag')
+      setError(getErrorMessage(e, 'Failed to create tag'))
     }
   }, [name, toast])
 

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { logger } from '@siastorage/logger'
 import { useEffect, useMemo, useState } from 'react'
 import { app } from '../stores/appService'
@@ -33,11 +34,8 @@ export function useRecoveryPhraseValidation(manualPhrase: string) {
             error: e as Error,
           })
 
-        const message =
-          e instanceof Error ? e.message : typeof e === 'string' ? e : 'Invalid recovery phrase.'
-
         setIsManualPhraseValid(false)
-        setManualValidationError(message)
+        setManualValidationError(getErrorMessage(e, 'Invalid recovery phrase.'))
       })
   }, [normalizedManualPhrase])
 

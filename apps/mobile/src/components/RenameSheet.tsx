@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { PencilIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
@@ -43,7 +44,7 @@ export function RenameSheet({ sheetName, title, placeholder, initialValue, onRen
       await onRename(trimmed)
       closeSheet()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to rename')
+      setError(getErrorMessage(e, 'Failed to rename'))
     }
   }, [name, initialValue, onRename])
 

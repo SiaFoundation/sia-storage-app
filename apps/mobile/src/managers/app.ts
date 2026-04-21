@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { stopLogAppender } from '@siastorage/logger'
@@ -283,7 +284,7 @@ async function runSteps(steps: StepDefinition[]): Promise<boolean> {
     try {
       await stepDef.runner(updateMessage)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error)
       updateMessage(message)
       app().init.setState({ initializationError: message })
       return false
