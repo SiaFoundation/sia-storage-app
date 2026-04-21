@@ -135,58 +135,12 @@ describe('Downloads', () => {
     await expect(app.app.downloads.downloadFile(file.id)).rejects.toThrow('SDK not initialized')
   })
 
-  it('cancel removes a download entry', () => {
-    app.app.downloads.register('dl-1')
-    expect(app.app.downloads.getEntry('dl-1')).toBeDefined()
-
-    app.app.downloads.cancel('dl-1')
-    expect(app.app.downloads.getEntry('dl-1')).toBeUndefined()
-    expect(app.app.downloads.getState().downloads).toEqual({})
-  })
-
-  it('cancelAll clears all download entries', () => {
-    app.app.downloads.register('dl-1')
-    app.app.downloads.register('dl-2')
-    expect(Object.keys(app.app.downloads.getState().downloads)).toHaveLength(2)
-
-    app.app.downloads.cancelAll()
-    expect(app.app.downloads.getState().downloads).toEqual({})
-  })
-
   it('setMaxSlots persists and applies', async () => {
     await app.app.downloads.setMaxSlots(5)
     expect(await app.app.settings.getMaxDownloads()).toBe(5)
 
     await app.app.downloads.setMaxSlots(0)
     expect(await app.app.settings.getMaxDownloads()).toBe(1)
-  })
-
-  it('acquireSlot / releaseSlot', async () => {
-    const token = await app.app.downloads.acquireSlot()
-    expect(typeof token).toBe('string')
-
-    app.app.downloads.releaseSlot(token)
-    app.app.downloads.releaseSlot(token)
-  })
-
-  it('register / update / remove / getEntry / getState', () => {
-    app.app.downloads.register('x')
-    expect(app.app.downloads.getEntry('x')).toEqual({
-      id: 'x',
-      status: 'queued',
-      progress: 0,
-    })
-
-    app.app.downloads.update('x', { status: 'downloading', progress: 0.5 })
-    expect(app.app.downloads.getEntry('x')).toEqual({
-      id: 'x',
-      status: 'downloading',
-      progress: 0.5,
-    })
-
-    app.app.downloads.remove('x')
-    expect(app.app.downloads.getEntry('x')).toBeUndefined()
-    expect(app.app.downloads.getState().downloads).toEqual({})
   })
 
   it('progress reports file.size-based progress', async () => {

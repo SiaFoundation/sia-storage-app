@@ -646,18 +646,10 @@ export interface AppService {
     getState(): DownloadsState
     /** Returns a single download entry by ID. */
     getEntry(id: string): DownloadEntry | undefined
-    /** Registers a queued download entry. */
-    register(id: string): void
-    /** Updates a download entry with a partial patch. */
-    update(id: string, patch: Partial<DownloadEntry>): void
-    /** Removes a completed or failed download entry. */
-    remove(id: string): void
-    /** Acquires a concurrency slot; resolves with an opaque token to pass to releaseSlot. */
-    acquireSlot(): Promise<string>
-    /** Releases a previously acquired concurrency slot. */
-    releaseSlot(token: string): void
     /** Downloads a file to local storage. Lower priority numbers are served first. */
     downloadFile(fileId: string, priority?: number): Promise<void>
+    /** Resolves a share URL via the SDK and downloads its contents to local storage. */
+    downloadFromShareUrl(id: string, url: string): Promise<void>
     /** Cancels a single in-progress download. */
     cancel(id: string): void
     /** Cancels all in-progress downloads. */

@@ -18,6 +18,14 @@ export type DownloadObjectAdapter = {
     onProgress: (progress: number) => void
     signal: AbortSignal
   }): Promise<void>
+  /** Resolves a share URL via the SDK and streams its contents to local storage. */
+  downloadFromShareUrl(params: {
+    file: { id: string; type: string }
+    url: string
+    sdk: SdkAdapter
+    onProgress: (progress: number) => void
+    signal: AbortSignal
+  }): Promise<void>
 }
 
 /** Builds the downloads namespace: queue, track, cancel, and download files. */
@@ -33,8 +41,6 @@ export function buildDownloadsNamespace(
   const controllers = new Map<string, AbortController>()
   const slotPool = new SlotPool(DEFAULT_MAX_DOWNLOADS)
   const inFlight = new Map<string, Promise<void>>()
-  const slotReleases = new Map<string, () => void>()
-  let slotTokenCounter = 0
 
   function register(id: string) {
     const controller = new AbortController()
@@ -126,25 +132,45 @@ export function buildDownloadsNamespace(
     }
   }
 
+  async function executeShareUrl(id: string, url: string): Promise<void> {
+    // Caller (downloadFromShareUrl) registers synchronously before awaiting.
+    const controller = controllers.get(id)!
+    let release: (() => void) | undefined
+    try {
+      const sdk = getSdk()
+      if (!sdk) throw new Error('SDK not initialized')
+
+      release = await slotPool.acquire(controller.signal)
+      update(id, { status: 'downloading' })
+
+      await downloadObject.downloadFromShareUrl({
+        file: { id, type: 'application/octet-stream' },
+        url,
+        sdk,
+        onProgress: (progress) => update(id, { progress: Math.min(1, progress) }),
+        signal: controller.signal,
+      })
+
+      if (controller.signal.aborted) return
+      remove(id)
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        return
+      }
+      if (!controller.signal.aborted) {
+        const message = e instanceof Error ? e.message : String(e)
+        update(id, { status: 'error', error: message })
+      }
+      throw e
+    } finally {
+      release?.()
+      inFlight.delete(id)
+    }
+  }
+
   return {
     getState: () => ({ ...state }),
     getEntry: (id) => state.downloads[id],
-    register: (id) => register(id),
-    update: (id, patch) => update(id, patch),
-    remove: (id) => remove(id),
-    acquireSlot: async () => {
-      const release = await slotPool.acquire()
-      const token = String(++slotTokenCounter)
-      slotReleases.set(token, release)
-      return token
-    },
-    releaseSlot: (token) => {
-      const release = slotReleases.get(token)
-      if (release) {
-        release()
-        slotReleases.delete(token)
-      }
-    },
     downloadFile: (fileId, priority) => {
       const existing = inFlight.get(fileId)
       if (existing) return existing
@@ -153,6 +179,16 @@ export function buildDownloadsNamespace(
         inFlight.delete(fileId)
       })
       inFlight.set(fileId, promise)
+      return promise
+    },
+    downloadFromShareUrl: (id, url) => {
+      const existing = inFlight.get(id)
+      if (existing) return existing
+      register(id)
+      const promise = executeShareUrl(id, url).finally(() => {
+        inFlight.delete(id)
+      })
+      inFlight.set(id, promise)
       return promise
     },
     cancel: (id) => {
