@@ -8,7 +8,11 @@ type Props = {
 
 export function SettingsScrollLayout({ children, style }: Props) {
   return (
-    <ScrollView style={[styles.container]}>
+    <ScrollView
+      style={[styles.container]}
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
+    >
       <View style={[styles.content, style]}>{children}</View>
     </ScrollView>
   )

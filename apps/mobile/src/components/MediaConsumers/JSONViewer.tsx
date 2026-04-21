@@ -105,7 +105,12 @@ export function JSONViewer({ uri, style, fileSize, topInset }: Props) {
   }
 
   return (
-    <ScrollView style={style} contentContainerStyle={styles.content} {...(insetProps ?? {})}>
+    <ScrollView
+      style={style}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      {...(insetProps ?? {})}
+    >
       {note ? (
         <Text style={styles.note}>
           {note}

@@ -46,7 +46,11 @@ export class ErrorBoundary extends Component<Props, State> {
           <View style={styles.content}>
             <Text style={styles.title}>Something went wrong</Text>
             <Text style={styles.subtitle}>The app encountered an unexpected error.</Text>
-            <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailContent}>
+            <ScrollView
+              style={styles.detailScroll}
+              contentContainerStyle={styles.detailContent}
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={styles.detailText} selectable>
                 {detail}
               </Text>

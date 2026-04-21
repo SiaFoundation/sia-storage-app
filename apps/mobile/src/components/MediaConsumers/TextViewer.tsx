@@ -82,7 +82,12 @@ export function TextViewer({ uri, style, fileSize, topInset }: Props) {
   }
 
   return (
-    <ScrollView style={style} contentContainerStyle={styles.content} {...(insetProps ?? {})}>
+    <ScrollView
+      style={style}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      {...(insetProps ?? {})}
+    >
       <Text selectable style={styles.mono}>
         {text}
       </Text>
