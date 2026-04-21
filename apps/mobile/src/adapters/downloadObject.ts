@@ -29,5 +29,25 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
         onProgress,
       })
     },
+    async downloadFromShareUrl({ file, url, sdk, onProgress, signal }) {
+      const sharedObject = await sdk.sharedObject(url)
+      const totalSize = Number(sharedObject.size())
+      const dl = await sdk.download(sharedObject, {
+        maxInflight: DOWNLOAD_MAX_INFLIGHT,
+        offset: BigInt(0),
+        length: undefined,
+      })
+
+      await streamToCache({
+        file,
+        totalSize,
+        dl,
+        signal,
+        onAfterClose: async (targetFile) => {
+          await copyFileToFs(file, targetFile.uri)
+        },
+        onProgress,
+      })
+    },
   }
 }

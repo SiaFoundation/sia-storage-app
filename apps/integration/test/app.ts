@@ -292,6 +292,9 @@ export function createTestApp(
         if (!fsIO.writeFile) throw new Error('writeFile not implemented')
         await fsIO.writeFile(file, data)
       },
+      async downloadFromShareUrl() {
+        throw new Error('downloadFromShareUrl not implemented in integration tests')
+      },
     },
     uploader: createTestUploaderAdapters(),
     sdkAuth: {

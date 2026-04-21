@@ -5,12 +5,8 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
 import { getOneObject } from '../lib/file'
-import { streamToCache } from '../lib/streamToCache'
 import { useToast } from '../lib/toastContext'
-import { app, internal } from '../stores/appService'
-import { copyFileToFs } from '../stores/fs'
-
-type Downloads = ReturnType<typeof app>['downloads']
+import { app } from '../stores/appService'
 
 /** Non-hook version for programmatic downloads (e.g., bulk operations) */
 export async function downloadFile(file: FileRecord, priority?: number): Promise<void> {
@@ -36,44 +32,7 @@ export function useDownload(file?: FileRecord | null, priority?: number) {
 
 export function useDownloadFromShareURL() {
   return useCallback(async (id: string, sharedUrl: string) => {
-    const downloads: Downloads = app().downloads
-    const sdk = internal().requireSdk()
-    const sharedObject = await sdk.sharedObject(sharedUrl)
-    const totalSize = Number(sharedObject.size())
-
-    const file = {
-      id,
-      type: 'application/octet-stream',
-    }
-
-    downloads.register(id)
-    const slotToken = await downloads.acquireSlot()
-    try {
-      downloads.update(id, { status: 'downloading' })
-      const dl = await sdk.download(sharedObject, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
-        offset: BigInt(0),
-        length: undefined,
-      })
-      await streamToCache({
-        file,
-        totalSize,
-        dl,
-        onAfterClose: async (targetFile) => {
-          await copyFileToFs(file, targetFile.uri)
-        },
-        onProgress: (progress) => {
-          downloads.update(id, { progress: Math.min(1, progress) })
-        },
-      })
-      downloads.remove(id)
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      downloads.update(id, { status: 'error', error: message })
-      throw e
-    } finally {
-      downloads.releaseSlot(slotToken)
-    }
+    await app().downloads.downloadFromShareUrl(id, sharedUrl)
     return id
   }, [])
 }
