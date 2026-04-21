@@ -4,6 +4,7 @@ import type { StorageAdapter } from '../../adapters/storage'
 import { DEFAULT_MAX_DOWNLOADS, MAX_AUTO_DOWNLOAD_QUEUE } from '../../config'
 import * as ops from '../../db/operations'
 import type { LocalObject } from '../../encoding/localObject'
+import { getErrorMessage, isAbortError } from '../../lib/errors'
 import { SlotPool } from '../../lib/slotPool'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { AppCaches, AppService } from '../service'
@@ -118,12 +119,9 @@ export function buildDownloadsNamespace(
       })
       update(fileId, { status: 'done', progress: 1 })
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        return
-      }
+      if (isAbortError(e)) return
       if (!controller.signal.aborted) {
-        const message = e instanceof Error ? e.message : String(e)
-        update(fileId, { status: 'error', error: message })
+        update(fileId, { status: 'error', error: getErrorMessage(e) })
       }
       throw e
     } finally {
@@ -154,12 +152,9 @@ export function buildDownloadsNamespace(
       if (controller.signal.aborted) return
       remove(id)
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        return
-      }
+      if (isAbortError(e)) return
       if (!controller.signal.aborted) {
-        const message = e instanceof Error ? e.message : String(e)
-        update(id, { status: 'error', error: message })
+        update(id, { status: 'error', error: getErrorMessage(e) })
       }
       throw e
     } finally {

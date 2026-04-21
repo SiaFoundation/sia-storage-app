@@ -26,6 +26,7 @@
 
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { $ } from 'bun'
 import { buildAndroid, buildIosSim } from './build'
 import { type BuildTarget, getTargetPaths, needsRebuild, PROJECT_ROOT } from './buildCache'
@@ -592,7 +593,7 @@ async function main() {
     stopMetro()
     process.exit(0)
   } catch (error) {
-    console.error('\n❌ Error:', error instanceof Error ? error.message : error)
+    console.error('\n❌ Error:', getErrorMessage(error))
     stopMetro()
     process.exit(1)
   }

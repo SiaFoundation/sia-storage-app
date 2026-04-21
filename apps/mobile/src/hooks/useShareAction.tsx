@@ -1,4 +1,5 @@
 import Clipboard from '@react-native-clipboard/clipboard'
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { useFileDetails, useSdk } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
@@ -54,7 +55,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
         subject: `Sia Storage - ${file.type}`,
       })
     } catch (e) {
-      const msg = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      const msg = getErrorMessage(e, '')
       if (!msg.includes('User did not share')) {
         logger.error('shareAction', 'share_failed', { error: e as Error })
       }

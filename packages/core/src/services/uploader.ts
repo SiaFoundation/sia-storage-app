@@ -19,6 +19,7 @@ import {
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
+import { getErrorMessage } from '../lib/errors'
 import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
@@ -291,7 +292,7 @@ export class UploadManager {
         saveMs: Date.now() - saveStart,
       })
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = getErrorMessage(e)
       logger.error('uploadManager', 'batch_finalize_error', {
         batchId: batch.batchId,
         error: e as Error,
@@ -669,7 +670,7 @@ export class UploadManager {
           this.batch.totalSize -= entry.size
         }
       }
-      const message = e instanceof Error ? e.message : String(e)
+      const message = getErrorMessage(e)
       logger.error('uploadManager', 'file_process_error', {
         fileId: entry.fileId,
         error: e as Error,
@@ -788,7 +789,7 @@ export class UploadManager {
             this.batch.totalSize -= entry.size
           }
         }
-        const message = e instanceof Error ? e.message : String(e)
+        const message = getErrorMessage(e)
         logger.error('uploadManager', 'file_process_error', {
           fileId: entry.fileId,
           error: e as Error,
@@ -1081,7 +1082,7 @@ export class UploadManager {
               localObject,
             }
           } catch (e) {
-            const message = e instanceof Error ? e.message : String(e)
+            const message = getErrorMessage(e)
             logger.error('uploadManager', 'object_save_error', {
               fileId: entry.fileId,
               error: e as Error,

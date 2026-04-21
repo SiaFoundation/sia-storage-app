@@ -39,6 +39,7 @@ import {
   SYNC_ARCHIVE_RECENT_SCAN_INTERVAL,
   SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
 } from '@siastorage/core/config'
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
@@ -202,7 +203,7 @@ export async function run(signal?: AbortSignal) {
       await setArchiveSyncCompletedAt(Date.now())
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = getErrorMessage(e)
     if (cursor !== CURSOR_START && msg.includes('cursor')) {
       logger.warn('syncPhotosArchive', 'cursor_invalid_restarting', {
         cursor,

@@ -27,7 +27,3 @@ export function delayWithSignal(ms: number, signal: AbortSignal): Promise<void> 
     signal.addEventListener('abort', onAbort, { once: true })
   })
 }
-
-export function isAbortError(e: unknown): boolean {
-  return e instanceof Error && e.name === 'AbortError'
-}

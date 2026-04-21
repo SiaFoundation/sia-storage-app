@@ -1,4 +1,5 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
+import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { useIsFavorite } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
@@ -168,7 +169,7 @@ export function FileCarousel({
         subject: `Sia Storage - ${currentFile.type}`,
       })
     } catch (e) {
-      const msg = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+      const msg = getErrorMessage(e, '')
       if (!msg.includes('User did not share')) {
         logger.error('FileCarousel', 'share_failed', { error: e as Error })
       }
