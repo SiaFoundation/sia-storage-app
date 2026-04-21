@@ -1,7 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { StyleSheet } from 'react-native'
-import { HostDetailScreen } from '../screens/HostDetailScreen'
-import { HostListScreen } from '../screens/HostListScreen'
 import { LearnHowItWorksScreen } from '../screens/learn/LearnHowItWorksScreen'
 import { LearnIndexerScreen } from '../screens/learn/LearnIndexerScreen'
 import { LearnRecoveryPhraseScreen } from '../screens/learn/LearnRecoveryPhraseScreen'
@@ -28,7 +26,6 @@ export function MenuStack() {
       }}
     >
       <Stack.Screen name="MenuHome" component={MenuScreen} options={{ title: '' }} />
-      <Stack.Screen name="HostDetail" component={HostDetailScreen} options={{ title: 'Host' }} />
       <Stack.Screen
         name="Indexer"
         component={SettingsIndexerScreen}
@@ -37,7 +34,6 @@ export function MenuStack() {
       <Stack.Screen name="Sync" component={SettingsSyncScreen} options={{ title: 'Sync' }} />
       <Stack.Screen name="Import" component={SettingsImportScreen} options={{ title: 'Import' }} />
       <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
-      <Stack.Screen name="Hosts" component={HostListScreen} options={{ title: 'Hosts' }} />
       <Stack.Screen
         name="Advanced"
         component={SettingsAdvancedScreen}

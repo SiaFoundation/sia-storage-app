@@ -19,8 +19,6 @@ export type SwitchIndexerStackParamList = {
 
 export type MenuStackParamList = {
   MenuHome: undefined
-  Hosts: undefined
-  HostDetail: { publicKey: string }
   Indexer: undefined
   SwitchIndexer: NavigatorScreenParams<SwitchIndexerStackParamList> | undefined
   Sync: undefined
