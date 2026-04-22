@@ -11,12 +11,14 @@ import type { FileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
 import { app } from '../../stores/appService'
 import { openSheet } from '../../stores/sheets'
-import { colors, palette } from '../../styles/colors'
+import { palette } from '../../styles/colors'
 import { BulkManageTagsSheet } from '../BulkManageTagsSheet'
-import { RowGroup } from '../Group'
-import { InfoCard } from '../InfoCard'
-import { InputRow } from '../InputRow'
-import { LabeledValueRow } from '../LabeledValueRow'
+import {
+  InsetGroupCopyRow,
+  InsetGroupInputRow,
+  InsetGroupSection,
+  InsetGroupValueRow,
+} from '../InsetGroup'
 import { TagPill } from '../TagPill'
 import { FileMap } from './FileMap'
 
@@ -52,188 +54,103 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
   const tagSheetName = `manageTags-${file.id}`
   return (
     <View style={styles.container}>
-      <RowGroup title="Details">
-        <InfoCard>
-          <InputRow label="Name" placeholder="Untitled file" {...fileNameInputProps} />
-          {showAdvanced.data && (
-            <LabeledValueRow label="ID" value={file.id} isMonospace showDividerTop />
+      <InsetGroupSection header="Details">
+        <InsetGroupInputRow label="Name" placeholder="Untitled file" {...fileNameInputProps} />
+        <InsetGroupValueRow label="Size" value={fileSize ?? '—'} />
+        <InsetGroupValueRow label="Type" value={file.type ?? '—'} />
+        <InsetGroupValueRow label="Created" value={new Date(file.createdAt).toLocaleString()} />
+        <InsetGroupValueRow label="Updated" value={new Date(file.updatedAt).toLocaleString()} />
+      </InsetGroupSection>
+
+      {showAdvanced.data ? (
+        <InsetGroupSection header="Identity">
+          <InsetGroupCopyRow label="ID" value={file.id} />
+          {file.localId ? <InsetGroupCopyRow label="Local ID" value={file.localId} /> : null}
+          {file.hash ? <InsetGroupCopyRow label="Content hash" value={file.hash} /> : null}
+          {status.fileUri ? <InsetGroupCopyRow label="File URI" value={status.fileUri} /> : null}
+        </InsetGroupSection>
+      ) : null}
+
+      <InsetGroupSection header="Tags">
+        <View style={styles.tagsRow}>
+          {userTags && userTags.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tagsContainer}
+            >
+              {userTags.map((tag) => (
+                <TagPill key={tag.id} tag={tag} />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noTagsText}>No tags</Text>
           )}
-          {showAdvanced.data && (
-            <LabeledValueRow
-              label="Local ID"
-              value={file.localId ?? '-'}
-              isMonospace
-              ellipsizeMode="middle"
-              canCopy={!!file.localId}
-              showDividerTop
-            />
-          )}
-          {showAdvanced.data && (
-            <LabeledValueRow
-              label="Content Hash"
-              value={file.hash ?? '-'}
-              isMonospace
-              ellipsizeMode="middle"
-              canCopy={!!file.hash}
-              showDividerTop
-            />
-          )}
-          {showAdvanced.data && (
-            <LabeledValueRow
-              label="File URI"
-              value={status.fileUri ?? 'Not available'}
-              isMonospace
-              ellipsizeMode="middle"
-              canCopy={!!status.fileUri}
-              showDividerTop
-            />
-          )}
-          <LabeledValueRow label="Size" value={fileSize ?? '—'} showDividerTop />
-          <LabeledValueRow
-            label="Created"
-            value={new Date(file.createdAt).toLocaleString()}
-            showDividerTop
-          />
-          <LabeledValueRow
-            label="Updated"
-            value={new Date(file.updatedAt).toLocaleString()}
-            showDividerTop
-          />
-          <LabeledValueRow label="Type" value={file.type ?? '—'} showDividerTop />
-        </InfoCard>
-      </RowGroup>
-      <RowGroup title="Tags">
-        <InfoCard>
-          <View style={styles.tagsSection}>
-            {userTags && userTags.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tagsContainer}
-              >
-                {userTags.map((tag) => (
-                  <TagPill key={tag.id} tag={tag} />
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.noTagsText}>No tags</Text>
-            )}
-            <Pressable style={styles.addTagButton} onPress={() => openSheet(tagSheetName)}>
-              <PlusIcon size={14} color={palette.blue[400]} />
-              <Text style={styles.addTagText}>Add Tag</Text>
-            </Pressable>
-          </View>
-        </InfoCard>
-      </RowGroup>
+          <Pressable style={styles.addTagButton} onPress={() => openSheet(tagSheetName)}>
+            <PlusIcon size={14} color={palette.blue[400]} />
+            <Text style={styles.addTagText}>Add tag</Text>
+          </Pressable>
+        </View>
+      </InsetGroupSection>
       <BulkManageTagsSheet sheetName={tagSheetName} fileIds={[file.id]} />
-      <RowGroup title="File shard storage locations">
-        <InfoCard>
-          <View style={{ height: Math.round(windowHeight * 0.5) }}>
-            <FileMap fileId={file.id} />
-          </View>
-        </InfoCard>
-      </RowGroup>
-      {showAdvanced.data && (
-        <>
-          {thumbnails.data?.length ? (
-            <RowGroup title="Thumbnails">
-              <InfoCard>
-                {thumbnails.data.map(({ record, uri }, index) => {
-                  const thumbSizeLabel = record.thumbSize ? `${record.thumbSize}px` : 'Unknown'
-                  const label = `Thumbnail ${thumbSizeLabel} URI`
-                  const value = uri ?? 'Not cached'
-                  return (
-                    <LabeledValueRow
-                      key={record.id}
-                      labelWidth={200}
-                      label={label}
-                      value={value}
-                      isMonospace
-                      align="left"
-                      ellipsizeMode="middle"
-                      numberOfLines={1}
-                      showDividerTop={index > 0}
-                      canCopy={!!uri}
-                    />
-                  )
-                })}
-              </InfoCard>
-            </RowGroup>
-          ) : null}
-          {pinnedObjects.data && pinnedObjects.data.length > 1 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Pinned Objects</Text>
-            </View>
-          )}
-          {pinnedObjects.data?.map(({ indexerURL, pinnedObject }) => (
+
+      <InsetGroupSection header="Storage locations">
+        <View style={{ height: Math.round(windowHeight * 0.5) }}>
+          <FileMap fileId={file.id} />
+        </View>
+      </InsetGroupSection>
+
+      {showAdvanced.data && thumbnails.data?.length ? (
+        <InsetGroupSection header="Thumbnails">
+          {thumbnails.data.map(({ record, uri }) => {
+            const label = `${record.thumbSize ? `${record.thumbSize}px` : 'Unknown'} URI`
+            return uri ? (
+              <InsetGroupCopyRow key={record.id} label={label} value={uri} />
+            ) : (
+              <InsetGroupValueRow key={record.id} label={label} value="Not cached" />
+            )
+          })}
+        </InsetGroupSection>
+      ) : null}
+
+      {showAdvanced.data && pinnedObjects.data
+        ? pinnedObjects.data.map(({ indexerURL, pinnedObject }) => (
             <Fragment key={indexerURL}>
-              <RowGroup title="Pinned Object">
-                <InfoCard>
-                  <LabeledValueRow label="Indexer URL" value={indexerURL} isMonospace />
-                  <LabeledValueRow
-                    label="Created"
-                    value={new Date(pinnedObject.createdAt()).toLocaleString()}
-                    showDividerTop
-                  />
-                  <LabeledValueRow
-                    label="Updated"
-                    value={new Date(pinnedObject.updatedAt()).toLocaleString()}
-                    showDividerTop
-                  />
-                  <LabeledValueRow
-                    label="ID"
-                    value={pinnedObject.id()}
-                    isMonospace
-                    showDividerTop
-                  />
-                  <LabeledValueRow
-                    label="Slabs"
-                    value={String(pinnedObject.slabs().length)}
-                    isMonospace
-                    showDividerTop
-                  />
-                  <LabeledValueRow
-                    label="Metadata"
-                    value={JSON.stringify(decodeFileMetadata(pinnedObject.metadata()), null, 2)}
-                    numberOfLines={10}
-                    isMonospace
-                    align="left"
-                    showDividerTop
-                  />
-                </InfoCard>
-              </RowGroup>
+              <InsetGroupSection header="Pinned object" footer={indexerURL}>
+                <InsetGroupCopyRow label="ID" value={pinnedObject.id()} />
+                <InsetGroupValueRow
+                  label="Created"
+                  value={new Date(pinnedObject.createdAt()).toLocaleString()}
+                />
+                <InsetGroupValueRow
+                  label="Updated"
+                  value={new Date(pinnedObject.updatedAt()).toLocaleString()}
+                />
+                <InsetGroupValueRow label="Slabs" value={String(pinnedObject.slabs().length)} />
+              </InsetGroupSection>
+              <InsetGroupSection header="Pinned metadata">
+                <View style={styles.metadataBlock}>
+                  <Text style={styles.metadataText} numberOfLines={20}>
+                    {JSON.stringify(decodeFileMetadata(pinnedObject.metadata()), null, 2)}
+                  </Text>
+                </View>
+              </InsetGroupSection>
             </Fragment>
-          ))}
-        </>
-      )}
+          ))
+        : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
-    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
     backgroundColor: palette.gray[950],
   },
-  section: { marginTop: 30, marginBottom: 6 },
-  sectionTitle: {
-    color: palette.gray[400],
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  groupCard: {
-    marginTop: 8,
-    backgroundColor: colors.bgPanel,
-    borderRadius: 12,
-    borderColor: colors.borderSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  tagsSection: {
-    padding: 12,
+  tagsRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 12,
   },
   tagsContainer: {
@@ -254,5 +171,14 @@ const styles = StyleSheet.create({
     color: palette.blue[400],
     fontSize: 14,
     fontWeight: '500',
+  },
+  metadataBlock: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  metadataText: {
+    color: palette.gray[100],
+    fontFamily: 'Menlo',
+    fontSize: 12,
   },
 })
