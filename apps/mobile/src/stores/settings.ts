@@ -2,15 +2,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import useSWR from 'swr'
 import { app } from './appService'
 
-export type StatusDisplayMode = 'count' | 'size'
 export type ActiveLibraryTab = 'files' | 'tags' | 'media'
-
-export function useStatusDisplayMode() {
-  return useSWR(
-    app().caches.settings.key('statusDisplayMode'),
-    () => app().settings.getStatusDisplayMode() as Promise<StatusDisplayMode>,
-  )
-}
 
 export function useActiveLibraryTab() {
   return useSWR(

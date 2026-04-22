@@ -118,8 +118,8 @@ function LostTab() {
 
   const removeAll = useCallback(() => {
     Alert.alert(
-      'Remove all lost files',
-      'This will permanently remove all lost files from this library. This cannot be undone. Continue?',
+      'Remove all unavailable files',
+      'This will permanently remove all unavailable files from this library. This cannot be undone. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -154,7 +154,7 @@ function LostTab() {
   if (files.length === 0) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyText}>No lost files</Text>
+        <Text style={styles.emptyText}>No unavailable files</Text>
       </View>
     )
   }
@@ -162,7 +162,7 @@ function LostTab() {
   return (
     <View style={styles.flex}>
       <View style={styles.listHeader}>
-        <Text style={styles.listHeaderCount}>{files.length.toLocaleString()} lost</Text>
+        <Text style={styles.listHeaderCount}>{files.length.toLocaleString()} unavailable</Text>
         <Pressable onPress={removeAll}>
           <Text style={styles.removeAllText}>Remove all</Text>
         </Pressable>
@@ -209,7 +209,9 @@ export function SettingsImportScreen({ route }: Props) {
           style={[styles.tab, activeTab === 'lost' && styles.tabActive]}
           onPress={() => setActiveTab('lost')}
         >
-          <Text style={[styles.tabText, activeTab === 'lost' && styles.tabTextActive]}>Lost</Text>
+          <Text style={[styles.tabText, activeTab === 'lost' && styles.tabTextActive]}>
+            Unavailable
+          </Text>
         </Pressable>
       </View>
       {activeTab === 'retrying' ? <RetryingTab /> : <LostTab />}
