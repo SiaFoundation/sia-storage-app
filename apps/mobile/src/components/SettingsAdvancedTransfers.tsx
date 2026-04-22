@@ -2,11 +2,12 @@ import { useDownloadCounts, useMaxDownloads } from '@siastorage/core/stores'
 import { useInputValue } from '../hooks/useInputValue'
 import { app } from '../stores/appService'
 import { useUploadCounts } from '../stores/uploads'
-import { Button } from './Button'
-import { RowGroup } from './Group'
-import { InfoCard } from './InfoCard'
-import { InputRow } from './InputRow'
-import { LabeledValueRow } from './LabeledValueRow'
+import {
+  InsetGroupInputRow,
+  InsetGroupLink,
+  InsetGroupSection,
+  InsetGroupValueRow,
+} from './InsetGroup'
 
 export function SettingsAdvancedTransfers() {
   const uploadCounts = useUploadCounts()
@@ -27,51 +28,47 @@ export function SettingsAdvancedTransfers() {
 
   return (
     <>
-      <RowGroup title="Uploads">
-        <InfoCard>
-          <LabeledValueRow
-            label="Queued"
-            value={String(uploadCounts.totalQueued)}
-            canCopy={false}
-          />
-          <LabeledValueRow
-            label="Active"
-            value={String(uploadCounts.totalActive)}
-            canCopy={false}
-          />
-        </InfoCard>
-        <Button
-          style={{ marginTop: 10 }}
+      <InsetGroupSection header="Uploads">
+        <InsetGroupValueRow label="Queued" value={String(uploadCounts.totalQueued)} />
+        <InsetGroupValueRow label="Active" value={String(uploadCounts.totalActive)} />
+      </InsetGroupSection>
+      <InsetGroupSection>
+        <InsetGroupLink
+          label="Cancel uploads"
+          description="Stops all pending and in-progress uploads."
+          destructive
           disabled={uploadCounts.total === 0}
+          showChevron={false}
           onPress={async () => {
             await app().uploader.shutdown()
             app().uploads.clear()
           }}
-        >
-          Cancel uploads
-        </Button>
-      </RowGroup>
-      <RowGroup title="Downloads">
-        <InfoCard>
-          <InputRow
-            label="Max concurrent downloads"
-            labelWidth={200}
-            keyboardType="number-pad"
-            {...maxDownloadsInputProps}
-          />
-          <LabeledValueRow label="Queued" value={String(totalDownloadsQueued)} canCopy={false} />
-          <LabeledValueRow label="Active" value={String(totalDownloadsActive)} canCopy={false} />
-        </InfoCard>
-        <Button
-          style={{ marginTop: 10 }}
+        />
+      </InsetGroupSection>
+      <InsetGroupSection
+        header="Downloads"
+        footer="Higher values download faster but use more data and battery."
+      >
+        <InsetGroupInputRow
+          label="Max concurrent downloads"
+          keyboardType="number-pad"
+          {...maxDownloadsInputProps}
+        />
+        <InsetGroupValueRow label="Queued" value={String(totalDownloadsQueued)} />
+        <InsetGroupValueRow label="Active" value={String(totalDownloadsActive)} />
+      </InsetGroupSection>
+      <InsetGroupSection>
+        <InsetGroupLink
+          label="Cancel downloads"
+          description="Stops all pending and in-progress downloads."
+          destructive
           disabled={totalDownloads === 0}
+          showChevron={false}
           onPress={() => {
             app().downloads.cancelAll()
           }}
-        >
-          Cancel downloads
-        </Button>
-      </RowGroup>
+        />
+      </InsetGroupSection>
     </>
   )
 }
