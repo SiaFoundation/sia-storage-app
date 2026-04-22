@@ -1,82 +1,68 @@
 import { useAutoScanUploads, useAutoSyncDownEvents } from '@siastorage/core/stores'
-import { Alert, Switch } from 'react-native'
+import { Alert } from 'react-native'
 import { app } from '../stores/appService'
 import { toggleAutoScanUploads, toggleAutoSyncDownEvents } from '../stores/settings'
-import { Button } from './Button'
-import { RowGroup } from './Group'
-import { InfoCard } from './InfoCard'
-import { LabeledValueRow } from './LabeledValueRow'
+import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
+
+function confirmResetCursor(kind: 'down' | 'up') {
+  const title = kind === 'down' ? 'Reset Sync Down Cursor' : 'Reset Sync Up Cursor'
+  const message =
+    kind === 'down'
+      ? 'This will reset the sync down cursor and cause the app to resync all events from the beginning. Continue?'
+      : 'This will reset the sync up cursor and cause the app to re-push metadata for all files. Continue?'
+  Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Reset',
+      style: 'destructive',
+      onPress: () => {
+        if (kind === 'down') {
+          app().sync.setSyncDownCursor(undefined)
+        } else {
+          app().sync.setSyncUpCursor(undefined)
+        }
+      },
+    },
+  ])
+}
 
 export function SettingsAdvancedSync() {
   const autoScan = useAutoScanUploads()
   const autoSync = useAutoSyncDownEvents()
 
   return (
-    <RowGroup title="Advanced Sync">
-      <InfoCard>
-        <LabeledValueRow
+    <>
+      <InsetGroupSection
+        header="Sync"
+        footer="Automatic sync keeps this device in step with your library on other devices."
+      >
+        <InsetGroupToggleRow
           label="Upload files to network"
-          labelWidth={250}
-          value={<Switch value={autoScan.data ?? false} onValueChange={toggleAutoScanUploads} />}
+          value={autoScan.data ?? false}
+          onValueChange={toggleAutoScanUploads}
         />
-        <LabeledValueRow
+        <InsetGroupToggleRow
           label="Sync with other devices"
-          labelWidth={250}
-          value={<Switch value={autoSync.data ?? false} onValueChange={toggleAutoSyncDownEvents} />}
+          value={autoSync.data ?? false}
+          onValueChange={toggleAutoSyncDownEvents}
         />
-        <LabeledValueRow
+      </InsetGroupSection>
+      <InsetGroupSection>
+        <InsetGroupLink
           label="Reset sync down cursor"
-          labelWidth={250}
-          value={
-            <Button
-              variant="secondary"
-              style={{ paddingVertical: 8, paddingHorizontal: 16 }}
-              onPress={() => {
-                Alert.alert(
-                  'Reset Sync Down Cursor',
-                  'This will reset the sync down cursor and cause the app to resync all events from the beginning. Continue?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Reset',
-                      style: 'destructive',
-                      onPress: () => app().sync.setSyncDownCursor(undefined),
-                    },
-                  ],
-                )
-              }}
-            >
-              Reset
-            </Button>
-          }
+          description="Re-downloads all events from the indexer. Can be slow on large libraries."
+          destructive
+          onPress={() => confirmResetCursor('down')}
+          showChevron={false}
         />
-        <LabeledValueRow
+        <InsetGroupLink
           label="Reset sync up cursor"
-          labelWidth={250}
-          value={
-            <Button
-              variant="secondary"
-              style={{ paddingVertical: 8, paddingHorizontal: 16 }}
-              onPress={() => {
-                Alert.alert(
-                  'Reset Sync Up Cursor',
-                  'This will reset the sync up cursor and cause the app to re-push metadata for all files. Continue?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Reset',
-                      style: 'destructive',
-                      onPress: () => app().sync.setSyncUpCursor(undefined),
-                    },
-                  ],
-                )
-              }}
-            >
-              Reset
-            </Button>
-          }
+          description="Re-pushes local metadata to the indexer. Can be slow on large libraries."
+          destructive
+          onPress={() => confirmResetCursor('up')}
+          showChevron={false}
         />
-      </InfoCard>
-    </RowGroup>
+      </InsetGroupSection>
+    </>
   )
 }

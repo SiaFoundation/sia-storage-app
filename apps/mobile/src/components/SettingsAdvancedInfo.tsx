@@ -1,79 +1,50 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useShowAdvanced } from '@siastorage/core/stores'
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Alert } from 'react-native'
 import Share from 'react-native-share'
 import { database } from '../db'
 import type { MenuStackParamList } from '../stacks/types'
 import { app } from '../stores/appService'
-import { colors, palette } from '../styles/colors'
-import { RowGroup } from './Group'
-import { InfoCard } from './InfoCard'
-import { LabeledValueRow } from './LabeledValueRow'
+import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
 
-export function SettingsAdvancedInfo({ navigation }: Props) {
+export function SettingsAdvancedInfo(_props: Props) {
   const showAdvanced = useShowAdvanced()
 
+  const handleExportDatabase = async () => {
+    try {
+      await Share.open({
+        url: `file://${database.databasePath}`,
+        type: 'application/x-sqlite3',
+        filename: 'app.db',
+      })
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message?.includes('User did not share')) return
+      Alert.alert('Error', String(e))
+    }
+  }
+
   return (
-    <RowGroup title="Developers">
-      <InfoCard>
-        <LabeledValueRow
+    <>
+      <InsetGroupSection
+        header="Debugging"
+        footer="Shows extra technical details like file IDs, hashes, and URIs on file info screens."
+      >
+        <InsetGroupToggleRow
           label="Show advanced information"
-          labelWidth={200}
-          value={
-            <Switch
-              value={showAdvanced.data}
-              onValueChange={(val) => app().settings.setShowAdvanced(val)}
-            />
-          }
+          value={showAdvanced.data ?? false}
+          onValueChange={(val) => app().settings.setShowAdvanced(val)}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Export database"
-          onPress={async () => {
-            try {
-              await Share.open({
-                url: `file://${database.databasePath}`,
-                type: 'application/x-sqlite3',
-                filename: 'app.db',
-              })
-            } catch (e: unknown) {
-              if (e instanceof Error && e.message?.includes('User did not share')) return
-              Alert.alert('Error', String(e))
-            }
-          }}
-          style={styles.debugButton}
-        >
-          <View style={styles.rowItem}>
-            <Text style={styles.rowLabel}>Export Database</Text>
-            <Text style={styles.rowChevron}>›</Text>
-          </View>
-        </Pressable>
-      </InfoCard>
-    </RowGroup>
+      </InsetGroupSection>
+      <InsetGroupSection>
+        <InsetGroupLink
+          label="Export database"
+          description="Saves the app's SQLite database file for debugging."
+          onPress={handleExportDatabase}
+          showChevron={false}
+        />
+      </InsetGroupSection>
+    </>
   )
 }
-
-const styles = StyleSheet.create({
-  debugButton: {
-    marginTop: 12,
-  },
-  rowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: colors.bgPanel,
-    borderRadius: 10,
-  },
-  rowLabel: {
-    flex: 1,
-    color: palette.gray[100],
-    fontSize: 16,
-  },
-  rowChevron: {
-    color: palette.gray[300],
-    fontSize: 18,
-  },
-})

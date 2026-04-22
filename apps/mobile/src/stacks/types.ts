@@ -19,9 +19,7 @@ export type SwitchIndexerStackParamList = {
 
 export type MenuStackParamList = {
   MenuHome: undefined
-  Indexer: undefined
   SwitchIndexer: NavigatorScreenParams<SwitchIndexerStackParamList> | undefined
-  Sync: undefined
   Import: { tab?: 'retrying' | 'lost' } | undefined
   Logs: undefined
   Advanced: undefined

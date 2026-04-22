@@ -1,20 +1,27 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
-import { useIndexerURL } from '@siastorage/core/stores'
-import { useCallback } from 'react'
+import { useAccount, useIndexerURL } from '@siastorage/core/stores'
+import { useCallback, useState } from 'react'
 import { Alert } from 'react-native'
-import { InsetGroupLink, InsetGroupSection } from '../components/InsetGroup'
+import {
+  InsetGroupCopyRow,
+  InsetGroupLink,
+  InsetGroupSection,
+  InsetGroupToggleRow,
+  InsetGroupValueRow,
+} from '../components/InsetGroup'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
+import { SettingsSyncPhotos } from '../components/SettingsSyncPhotos'
+import { LINKS } from '../config/links'
 import { useMenuHeader } from '../hooks/useMenuHeader'
 import { openExternalURL } from '../lib/inAppBrowser'
+import { useToast } from '../lib/toastContext'
+import { resetLocalDataAndResync, resetLocalDataAndSignOut } from '../managers/app'
 import type { MenuStackParamList } from '../stacks/types'
+import { reconnectIndexer, useIsConnected } from '../stores/sdk'
+import { toggleKeepAwake, useKeepAwake } from '../stores/settings'
 
 const SIA_STORAGE_HOST = 'sia.storage'
-const SIA_STORAGE_DELETE_URL = 'https://sia.storage/dashboard/account'
-const SIA_STORAGE_SUPPORT_URL = 'https://sia.storage/resources/support'
-const SIA_STORAGE_REPORT_URL = 'https://sia.storage/resources/report'
-const SIA_STORAGE_TERMS_URL = 'https://sia.storage/resources/terms'
-const SIA_STORAGE_PRIVACY_URL = 'https://sia.storage/resources/privacy'
 
 function isSiaStorageIndexer(indexerURL: string): boolean {
   try {
@@ -26,7 +33,7 @@ function isSiaStorageIndexer(indexerURL: string): boolean {
 
 function promptDeleteAccount(indexerURL: string) {
   const isSiaStorage = isSiaStorageIndexer(indexerURL)
-  const targetURL = isSiaStorage ? SIA_STORAGE_DELETE_URL : indexerURL
+  const targetURL = isSiaStorage ? LINKS.deleteAccountDashboard : indexerURL
   const message = isSiaStorage
     ? 'Your Sia Storage account is managed on the sia.storage website. Tap Continue to sign in and permanently delete your account and all data stored with Sia Storage.'
     : `Your account is managed by your indexer at ${indexerURL}. Tap Continue to sign in and permanently delete your account and all your data.`
@@ -37,22 +44,68 @@ function promptDeleteAccount(indexerURL: string) {
   ])
 }
 
+function promptResync() {
+  Alert.alert(
+    'Clear local data and resync',
+    'This wipes your locally cached metadata and re-downloads everything from your indexer. Your account stays signed in.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear and resync',
+        style: 'destructive',
+        onPress: () => void resetLocalDataAndResync(),
+      },
+    ],
+  )
+}
+
+function promptSignOut() {
+  Alert.alert(
+    'Clear local data and sign out',
+    'This wipes all local data and signs you out. You will need your recovery phrase to sign back in.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear and sign out',
+        style: 'destructive',
+        onPress: () => void resetLocalDataAndSignOut(),
+      },
+    ],
+  )
+}
+
 type Props = NativeStackScreenProps<MenuStackParamList, 'MenuHome'>
 
 export function MenuScreen({ navigation }: Props) {
   useMenuHeader()
+  const toast = useToast()
   const indexerURL = useIndexerURL()
+  const isConnected = useIsConnected()
+  const account = useAccount()
+  const keepAwake = useKeepAwake()
+  const [isReconnecting, setIsReconnecting] = useState(false)
+
   const handleDeleteAccount = useCallback(() => {
     promptDeleteAccount(indexerURL.data ?? DEFAULT_INDEXER_URL)
   }, [indexerURL.data])
+
+  const handleReconnect = useCallback(async () => {
+    setIsReconnecting(true)
+    const success = await reconnectIndexer()
+    setIsReconnecting(false)
+    toast.show(success ? 'Reconnected' : 'Failed to reconnect')
+  }, [toast])
+
   return (
     <SettingsScrollLayout>
-      <InsetGroupSection header="Settings">
-        <InsetGroupLink label="Indexer" onPress={() => navigation.navigate('Indexer')} />
-        <InsetGroupLink label="Sync" onPress={() => navigation.navigate('Sync')} />
-        <InsetGroupLink label="Import" onPress={() => navigation.navigate('Import')} />
-        <InsetGroupLink label="Advanced" onPress={() => navigation.navigate('Advanced')} />
-        <InsetGroupLink label="Logs" onPress={() => navigation.navigate('Logs')} />
+      <SettingsSyncPhotos />
+
+      <InsetGroupSection header="Device">
+        <InsetGroupToggleRow
+          label="Stay awake during uploads"
+          value={keepAwake.data ?? false}
+          onValueChange={toggleKeepAwake}
+        />
       </InsetGroupSection>
 
       <InsetGroupSection header="Learn">
@@ -74,27 +127,100 @@ export function MenuScreen({ navigation }: Props) {
         />
       </InsetGroupSection>
 
-      <InsetGroupSection header="Help">
+      <InsetGroupSection header="Community">
+        <InsetGroupLink
+          label="Website"
+          onPress={() => void openExternalURL(LINKS.website)}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Discord"
+          onPress={() => void openExternalURL(LINKS.discord)}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="X"
+          onPress={() => void openExternalURL(LINKS.x)}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="GitHub"
+          onPress={() => void openExternalURL(LINKS.github)}
+          showChevron={false}
+        />
         <InsetGroupLink
           label="Support"
-          onPress={() => void openExternalURL(SIA_STORAGE_SUPPORT_URL)}
-        />
-        <InsetGroupLink
-          label="Report Content"
-          onPress={() => void openExternalURL(SIA_STORAGE_REPORT_URL)}
-        />
-        <InsetGroupLink
-          label="Terms of Service"
-          onPress={() => void openExternalURL(SIA_STORAGE_TERMS_URL)}
-        />
-        <InsetGroupLink
-          label="Privacy Policy"
-          onPress={() => void openExternalURL(SIA_STORAGE_PRIVACY_URL)}
+          onPress={() => void openExternalURL(`mailto:${LINKS.supportEmail}`)}
+          showChevron={false}
         />
       </InsetGroupSection>
 
-      <InsetGroupSection header="Account">
-        <InsetGroupLink label="Delete Account" destructive onPress={handleDeleteAccount} />
+      <InsetGroupSection header="Legal">
+        <InsetGroupLink
+          label="Terms of Service"
+          onPress={() => void openExternalURL(LINKS.terms)}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Privacy Policy"
+          onPress={() => void openExternalURL(LINKS.privacy)}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Report Content"
+          onPress={() => void openExternalURL(LINKS.reportContent)}
+          showChevron={false}
+        />
+      </InsetGroupSection>
+
+      <InsetGroupSection header="Indexer">
+        <InsetGroupValueRow label="Status" value={isConnected ? 'Connected' : 'Offline'} />
+        <InsetGroupValueRow label="URL" value={indexerURL.data ?? ''} />
+        {account.data ? (
+          <InsetGroupCopyRow label="Account key" value={account.data.accountKey} />
+        ) : null}
+      </InsetGroupSection>
+      <InsetGroupSection>
+        <InsetGroupLink
+          label={isReconnecting ? 'Reconnecting…' : 'Reconnect'}
+          description="Disconnect and reconnect to the current indexer."
+          onPress={handleReconnect}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Switch indexers"
+          description="Sign into a different indexer with the same recovery phrase."
+          onPress={() => navigation.navigate('SwitchIndexer')}
+          showChevron={false}
+        />
+      </InsetGroupSection>
+
+      <InsetGroupSection header="Developers">
+        <InsetGroupLink label="Developers" onPress={() => navigation.navigate('Advanced')} />
+      </InsetGroupSection>
+
+      <InsetGroupSection header="Danger zone">
+        <InsetGroupLink
+          label="Clear local data and resync"
+          description="Re-downloads metadata from your indexer. You stay signed in."
+          destructive
+          onPress={promptResync}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Clear local data and sign out"
+          description="Signs you out. You'll need your recovery phrase to sign back in."
+          destructive
+          onPress={promptSignOut}
+          showChevron={false}
+        />
+        <InsetGroupLink
+          label="Delete account"
+          description="Permanently deletes your indexer account and all storage data."
+          destructive
+          onPress={handleDeleteAccount}
+          showChevron={false}
+        />
       </InsetGroupSection>
     </SettingsScrollLayout>
   )
