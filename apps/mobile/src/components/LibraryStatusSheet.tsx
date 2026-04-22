@@ -1,22 +1,19 @@
 import { type NavigationProp, useNavigation } from '@react-navigation/native'
 import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
-import { useAccount, useStatusDisplayMode, useSyncState } from '@siastorage/core/stores'
+import { useAccount, useStatusDisplayMode } from '@siastorage/core/stores'
 import { useCallback } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
-import { useIsOnline } from '../hooks/useIsOnline'
 import { humanSize } from '../lib/humanSize'
 import { getImportBackoffEntries } from '../managers/importScanner'
 import type { RootTabParamList } from '../stacks/types'
 import { app } from '../stores/appService'
 import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
-import { reconnectIndexer, useIsConnected } from '../stores/sdk'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { getActiveUploads } from '../stores/uploads'
 import { palette, whiteA } from '../styles/colors'
+import { ActivityStatusRow } from './ActivityStatusRow'
 import { InsetGroupLink, InsetGroupSection, InsetGroupValueRow } from './InsetGroup'
 import { ModalSheet } from './ModalSheet'
-import { StatusBanner } from './StatusBanner'
 
 const refreshInterval = 5_000
 type Mode = 'count' | 'size'
@@ -62,13 +59,6 @@ function humanLimit(maxPinnedData: bigint | string | undefined): string {
 }
 
 export function LibraryStatusSheet() {
-  const isConnected = useIsConnected()
-  const isOnline = useIsOnline()
-  const { data: syncState } = useSyncState()
-  const isSyncingDown = syncState?.isSyncingDown ?? false
-  const isSyncingUpMetadata = syncState?.isSyncingUp ?? false
-  const syncUpProcessed = syncState?.syncUpProcessed ?? 0
-  const syncUpTotal = syncState?.syncUpTotal ?? 0
   const isOpen = useSheetOpen('libraryStatus')
   const { data: rawMode = 'count' } = useStatusDisplayMode()
   const mode: Mode = rawMode === 'size' ? 'size' : 'count'
@@ -97,31 +87,12 @@ export function LibraryStatusSheet() {
     },
     [navigation],
   )
-  const batch = useSWR(
-    ['active-batch', isOpen ?? null],
-    () => {
-      const uploads = getActiveUploads()
-      const count = uploads.length
-      const totalBytes = uploads.reduce((s, u) => s + u.size, 0)
-      return { count, totalBytes }
-    },
-    { refreshInterval },
-  )
-
   const handleClose = useCallback(() => {
     closeSheet()
   }, [])
 
-  const handleReconnect = useCallback(() => {
-    void reconnectIndexer()
-  }, [])
-
-  const offline = isOnline.data === false
-  const indexerDown = isOnline.data === true && !isConnected
-
   const importingCount = stats.data?.importingCount ?? 0
   const importErrorCount = importErrors.data ?? 0
-  const activeBatchCount = batch.data?.count ?? 0
 
   const totalCount = stats.data?.files.total ?? 0
   const totalBytes = account.data ? Number(account.data.pinnedData) : undefined
@@ -140,13 +111,7 @@ export function LibraryStatusSheet() {
   return (
     <ModalSheet visible={isOpen} onRequestClose={handleClose} title="Status">
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <StatusBanner active={offline} message="No internet connection." />
-        <StatusBanner
-          active={indexerDown}
-          message="Can't reach indexer."
-          actionLabel="Reconnect"
-          onAction={handleReconnect}
-        />
+        <ActivityStatusRow />
 
         <View style={styles.toolbar}>
           <View style={styles.toggleTrack}>
@@ -186,19 +151,6 @@ export function LibraryStatusSheet() {
           ) : null}
         </InsetGroupSection>
 
-        {activeBatchCount > 0 ? (
-          <InsetGroupSection header="Active upload">
-            <InsetGroupValueRow
-              label="This batch"
-              value={
-                mode === 'count'
-                  ? formatCount(activeBatchCount)
-                  : formatSize(batch.data?.totalBytes)
-              }
-            />
-          </InsetGroupSection>
-        ) : null}
-
         <InsetGroupSection
           header="Upload progress"
           footer="Upload progress across all files in the library."
@@ -230,21 +182,6 @@ export function LibraryStatusSheet() {
             description="Files that were unavailable during import."
             onPress={() => openImportSettings('lost')}
             value={formatModeValue(mode, lost.data?.count ?? 0, lost.data?.totalBytes)}
-          />
-        </InsetGroupSection>
-
-        <InsetGroupSection
-          header="Sync metadata"
-          footer="Background metadata sync with other devices."
-        >
-          <InsetGroupValueRow label="Remote down" value={isSyncingDown ? 'Syncing…' : 'Synced'} />
-          <InsetGroupValueRow
-            label="Local up"
-            value={
-              isSyncingUpMetadata
-                ? `${syncUpProcessed.toLocaleString()} / ${syncUpTotal.toLocaleString()}`
-                : 'Synced'
-            }
           />
         </InsetGroupSection>
       </ScrollView>

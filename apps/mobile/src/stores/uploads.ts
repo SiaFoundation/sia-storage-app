@@ -9,7 +9,7 @@ import {
 import useSWR from 'swr'
 import { humanUploadPercent } from '../lib/uploadPercent'
 import { app } from './appService'
-import { useFileCountLocal, useFileStatsLocal } from './files'
+import { useFileStatsLocal } from './files'
 
 export type UploadState = UploadEntry
 
@@ -71,17 +71,16 @@ export function useUploadProgress(): {
   total: number
 } {
   const totalCount = useFileCountAll()
-  const localOnlyCount = useFileCountLocal({ localOnly: true })
   const totalStats = useFileStatsAll()
   const localOnlyStats = useFileStatsLocal({ localOnly: true })
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
   const totalFiles = totalCount.data ?? 0
-  const localOnlyFiles = localOnlyCount.data ?? 0
   const totalBytes = totalStats.data?.totalBytes ?? 0
   const localOnlyBytes = localOnlyStats.data?.totalBytes ?? 0
   const uploadedBytes = totalBytes - localOnlyBytes
   const isEnabled = enabled.data ?? false
+  const activeCount = activeUploads.length
   const activeWeightedProgress = activeUploads
     .map((u) => u.progress * u.size)
     .reduce((a, b) => a + b, 0)
@@ -90,9 +89,9 @@ export function useUploadProgress(): {
     : 0
 
   return {
-    show: isEnabled && !!localOnlyFiles,
+    show: isEnabled && activeCount > 0,
     enabled: isEnabled,
-    remaining: localOnlyFiles,
+    remaining: activeCount,
     percentDecimal,
     percentComplete: humanUploadPercent(percentDecimal),
     total: totalFiles,
