@@ -1082,6 +1082,30 @@ export class UploadManager {
         await new Promise((resolve) => setTimeout(resolve, SAVE_REMOVAL_DELAY_MS))
       }
       this.app.uploads.removeMany(successfulFileIds)
+
+      // Phase 4: Delete the local on-disk copy of each successfully
+      // uploaded file. The pinned object is persisted remotely and
+      // referenced locally, so the cached source file is no longer
+      // needed. Without this, files accumulate until the eviction
+      // scanner runs (every FS_EVICTION_FREQUENCY, only above
+      // FS_MAX_BYTES, only for files older than FS_EVICTABLE_MIN_AGE),
+      // which can leave gigabytes of uploaded data on disk for a day
+      // or more.
+      const typeByFileId = new Map(batch.files.map((e) => [e.fileId, e.file.type]))
+      await Promise.all(
+        successfulFileIds.map(async (fileId) => {
+          const type = typeByFileId.get(fileId)
+          if (type === undefined) return
+          try {
+            await this.app.fs.removeFile({ id: fileId, type })
+          } catch (e) {
+            logger.warn('uploadManager', 'post_upload_cleanup_failed', {
+              fileId,
+              error: e as Error,
+            })
+          }
+        }),
+      )
     }
 
     return successfulFileIds
