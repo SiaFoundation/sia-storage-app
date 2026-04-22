@@ -1,6 +1,7 @@
 import type {
   Account,
   AppKeyRef,
+  DownloadLikeRef,
   DownloadOptions,
   Host,
   ObjectEvent,
@@ -11,8 +12,8 @@ import type {
   SdkAdapter,
   SealedObjectRef,
   UploadOptions,
-  Writer,
 } from '@siastorage/core/adapters'
+import { SECTOR_SIZE } from '@siastorage/core/config'
 import { decodeFileMetadata, encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { FileMetadata } from '@siastorage/core/types'
 
@@ -84,19 +85,12 @@ function createMockPinnedObject(stored: StoredObject): PinnedObjectRef {
 
 class MockPacker implements PackedUploadRef {
   private storage: MockIndexerStorage
-  private options: {
-    progressCallback?: { progress: (uploaded: bigint, total: bigint) => void }
-  }
+  private options: UploadOptions
   private files: Array<{ data: Uint8Array; size: bigint }> = []
   private totalSize = 0n
   private slabSize = 120n * 1024n * 1024n
 
-  constructor(
-    storage: MockIndexerStorage,
-    options: {
-      progressCallback?: { progress: (uploaded: bigint, total: bigint) => void }
-    },
-  ) {
+  constructor(storage: MockIndexerStorage, options: UploadOptions) {
     this.storage = storage
     this.options = options
   }
@@ -145,16 +139,37 @@ class MockPacker implements PackedUploadRef {
     const results: PinnedObjectRef[] = []
     const totalBytes = this.totalSize
 
-    const progressSteps = [0.0, 0.25, 0.5, 0.75, 1.0]
-    const delayPerStep = 50
+    // Simulate per-shard progress: emit one event per (slab × shard)
+    // with SECTOR_SIZE-sized shards, matching the real SDK's emission.
+    // A batch of totalBytes spans ceil(totalBytes / slabBytes) slabs,
+    // each containing (dataShards + parityShards) shards of SECTOR_SIZE.
+    // Summing reported shardSize across all events equals the batch's
+    // expectedEncoded = slabs × totalShards × SECTOR_SIZE, so consumers
+    // computing progress from shard events reach exactly 1.0 at end.
+    const dataShards = this.options.dataShards
+    const parityShards = this.options.parityShards
+    const totalShards = dataShards + parityShards
+    const slabBytes = BigInt(SECTOR_SIZE) * BigInt(dataShards)
+    const slabCount =
+      totalBytes > 0n && slabBytes > 0n ? Number((totalBytes + slabBytes - 1n) / slabBytes) : 0
+    const shardSize = BigInt(SECTOR_SIZE)
+    const delayPerShard = 50
 
-    for (const progress of progressSteps) {
-      if (this.options.progressCallback && totalBytes > 0n) {
-        const uploaded = BigInt(Math.floor(Number(totalBytes) * progress))
-        this.options.progressCallback.progress(uploaded, totalBytes)
-      }
-      if (progress < 1.0) {
-        await this.sleep(delayPerStep)
+    for (let slab = 0; slab < slabCount; slab++) {
+      for (let shard = 0; shard < totalShards; shard++) {
+        if (this.options.shardUploaded) {
+          this.options.shardUploaded.progress({
+            hostKey: `mock-host-${slab}-${shard}`,
+            shardSize,
+            shardIndex: shard,
+            slabIndex: slab,
+            elapsedMs: BigInt(delayPerShard),
+          })
+        }
+        const isLast = slab === slabCount - 1 && shard === totalShards - 1
+        if (!isLast) {
+          await this.sleep(delayPerShard)
+        }
       }
     }
 
@@ -242,11 +257,9 @@ export class MockSdk implements SdkAdapter {
   }
 
   async download(
-    _writer: Writer,
     _pinnedObject: PinnedObjectRef,
     _options: DownloadOptions,
-    _control?: { signal: AbortSignal },
-  ): Promise<void> {
+  ): Promise<DownloadLikeRef> {
     throw new Error('Not implemented in mock')
   }
 

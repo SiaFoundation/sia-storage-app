@@ -29,6 +29,7 @@ import {
   UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '@siastorage/core/config'
+import type { ShardProgress } from '@siastorage/core/adapters'
 import { type UploaderAdapters, UploadManager } from '@siastorage/core/services/uploader'
 import type { PackedUploadInterface, PinnedObjectInterface, SdkInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
@@ -238,7 +239,7 @@ describe('UploadManager', () => {
         maxInflight: UPLOAD_MAX_INFLIGHT,
         dataShards: UPLOAD_DATA_SHARDS,
         parityShards: UPLOAD_PARITY_SHARDS,
-        progressCallback: expect.any(Object),
+        shardUploaded: expect.any(Object),
       })
     })
 
@@ -709,7 +710,7 @@ describe('UploadManager', () => {
   })
 
   describe('progress callback', () => {
-    it('updates progress in upload store when reported', async () => {
+    it('updates progress in upload store when a shard finishes', async () => {
       manager.initialize(app(), internal(), {
         createFileReader: jest.fn(() => ({
           read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
@@ -717,29 +718,35 @@ describe('UploadManager', () => {
         progressScheduler: (cb) => cb(),
       })
 
-      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null = null
+      let shardProgress: ((p: ShardProgress) => void) | null = null
       mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
-        progressCallback = opts.progressCallback.progress
+        shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
 
       await manager.__testProcessFiles([createFileEntry('file1', 100)])
 
-      expect(progressCallback).not.toBeNull()
+      expect(shardProgress).not.toBeNull()
 
       // Initial progress should be 0
       const uploadBefore = app().uploads.getEntry('file1')
       expect(uploadBefore?.progress).toBe(0)
 
-      // Simulate progress update (50%)
-      progressCallback!(BigInt(50), BigInt(100))
+      // Simulate one shard uploaded (the SDK reports per-shard, not cumulative bytes)
+      shardProgress!({
+        hostKey: 'host-0',
+        shardSize: BigInt(50),
+        shardIndex: 0,
+        slabIndex: 0,
+        elapsedMs: BigInt(10),
+      })
 
       // Progress should be updated in store (progressScheduler applies synchronously)
       const uploadAfter = app().uploads.getEntry('file1')
       expect(uploadAfter?.progress).toBeGreaterThan(0)
     })
 
-    it('progress never decreases when SDK encoded total grows at slab boundaries', async () => {
+    it('progress is monotonic across successive shard events', async () => {
       const fileSize = Math.floor(SLAB_SIZE * 1.5)
       manager.initialize(app(), internal(), {
         createFileReader: jest.fn(() => ({
@@ -748,32 +755,28 @@ describe('UploadManager', () => {
         progressScheduler: (cb) => cb(),
       })
 
-      let progressCallback: ((uploaded: bigint, total: bigint) => void) | null = null
+      let shardProgress: ((p: ShardProgress) => void) | null = null
       mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
-        progressCallback = opts.progressCallback.progress
+        shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
 
       await manager.__testProcessFiles([createFileEntry('multi-slab', fileSize)])
-      expect(progressCallback).not.toBeNull()
+      expect(shardProgress).not.toBeNull()
 
-      // Our stable denominator: ceil(1.5 slabs) = 2 slabs worth of encoded sectors
-      const expectedEncoded = 2 * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
-
-      // Simulate SDK sawtooth: first slab uploads with total = 1 slab of sectors,
-      // then second slab starts and total jumps to 2 slabs of sectors.
-      const oneSlab = (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
-
-      const calls: [bigint, bigint][] = [
-        [BigInt(oneSlab / 2), BigInt(oneSlab)], // 50% of first slab
-        [BigInt(oneSlab), BigInt(oneSlab)], // first slab done (SDK: 100%)
-        [BigInt(oneSlab), BigInt(expectedEncoded)], // SDK total jumps (SDK: 50% — sawtooth!)
-        [BigInt(oneSlab * 1.5), BigInt(expectedEncoded)], // more progress
+      // Simulate four shards completing over two slabs. Each shard adds to the
+      // running uploadedShardBytes — batch progress should never decrease.
+      const shardSize = BigInt(SECTOR_SIZE)
+      const shards: ShardProgress[] = [
+        { hostKey: 'h-0', shardSize, shardIndex: 0, slabIndex: 0, elapsedMs: BigInt(5) },
+        { hostKey: 'h-1', shardSize, shardIndex: 1, slabIndex: 0, elapsedMs: BigInt(5) },
+        { hostKey: 'h-0', shardSize, shardIndex: 0, slabIndex: 1, elapsedMs: BigInt(5) },
+        { hostKey: 'h-1', shardSize, shardIndex: 1, slabIndex: 1, elapsedMs: BigInt(5) },
       ]
 
       let prevProgress = 0
-      for (const [uploaded, total] of calls) {
-        progressCallback!(uploaded, total)
+      for (const s of shards) {
+        shardProgress!(s)
         const entry = app().uploads.getEntry('multi-slab')
         expect(entry?.progress).toBeGreaterThanOrEqual(prevProgress)
         prevProgress = entry?.progress ?? 0

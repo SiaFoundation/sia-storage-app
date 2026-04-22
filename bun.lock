@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "siastorage",
@@ -103,12 +102,11 @@
         "react-native-safe-area-context": "5.6.2",
         "react-native-screens": "4.23.0",
         "react-native-share": "12.2.5",
-        "react-native-sia": "0.13.18",
+        "react-native-sia": "0.13.21",
         "react-native-svg": "15.15.3",
         "react-native-webview": "13.16.0",
         "react-native-worklets": "0.7.2",
         "swr": "2.4.1",
-        "web-streams-polyfill": "4.2.0",
         "zod": "4.3.6",
       },
       "devDependencies": {
@@ -1859,7 +1857,7 @@
 
     "react-native-share": ["react-native-share@12.2.5", "", {}, "sha512-2uwd/PdlUyvpsSBfL7OMiL4sD0Ja51wu5m62JSIXjrtlF+uSTUOGsMrE49ncIRYziqAfYUeI195WwhpvqXB0ww=="],
 
-    "react-native-sia": ["react-native-sia@0.13.18", "", { "dependencies": { "uniffi-bindgen-react-native": "^0.29.3-1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-vmO4WZpebKNKY01ofexdgSJ6mVxRvl94eYJC2Jjv6EZ7szapwa3cx9vXPLv94c2fqa0qEwgGEoVCgguIYFpg4A=="],
+    "react-native-sia": ["react-native-sia@0.13.21", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-o8xV1+l2xLKNLvXbJiqODG5Ilm+L2VwXRWCHNs4H0z8e+OaL7rhbvDgEyFr/XL4Nl3IBtqT41uFFo+h6+sAi5A=="],
 
     "react-native-svg": ["react-native-svg@15.15.3", "", { "dependencies": { "css-select": "^5.1.0", "css-tree": "^1.1.3", "warn-once": "0.1.1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA=="],
 
@@ -2081,7 +2079,7 @@
 
     "unicode-property-aliases-ecmascript": ["unicode-property-aliases-ecmascript@2.2.0", "", {}, "sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ=="],
 
-    "uniffi-bindgen-react-native": ["uniffi-bindgen-react-native@0.29.3-1", "", { "bin": { "ubrn": "bin/cli.cjs", "uniffi-bindgen-react-native": "bin/cli.cjs" } }, "sha512-o6gXZsAh55yuvhwF2WSFdIHV4phyfWcCmg4DuyfJWJ7CvUz1UcIz2S4u9SmXAz1jsuqvu6Xc9hexrRBB0a5osg=="],
+    "uniffi-bindgen-react-native": ["uniffi-bindgen-react-native@0.31.0-2", "", { "bin": { "ubrn": "bin/cli.cjs", "uniffi-bindgen-react-native": "bin/cli.cjs" } }, "sha512-kcmW4/ayEEQH3mg4r3wJAgDoBd7Ix7Y/4E2npS51ydUKuHMzLsTU+lgzanZVAwC+yQsDduEK63TFXq54imJWsA=="],
 
     "universalify": ["universalify@0.2.0", "", {}, "sha512-CJ1QgKmNg3CwvAv/kOFmtnEN05f0D/cn9QntgNOQlQF9dgvVTHj3t+8JPdjqawCHk7V/KA+fbUqzZ9XWhcqPUg=="],
 
@@ -2122,8 +2120,6 @@
     "warn-once": ["warn-once@0.1.1", "", {}, "sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q=="],
 
     "wcwidth": ["wcwidth@1.0.1", "", { "dependencies": { "defaults": "^1.0.3" } }, "sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg=="],
-
-    "web-streams-polyfill": ["web-streams-polyfill@4.2.0", "", {}, "sha512-0rYDzGOh9EZpig92umN5g5D/9A1Kff7k0/mzPSSCY8jEQeYkgRMoY7LhbXtUCWzLCMX0TUE9aoHkjFNB7D9pfA=="],
 
     "webidl-conversions": ["webidl-conversions@7.0.0", "", {}, "sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g=="],
 

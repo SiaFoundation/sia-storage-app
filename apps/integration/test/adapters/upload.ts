@@ -7,7 +7,7 @@ export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter
   return {
     objectEvents: (cursor, limit) => sdk.objectEvents(cursor, limit),
     updateObjectMetadata: (po) => sdk.updateObjectMetadata(po),
-    download: async () => {},
+    download: (po, opts) => sdk.download(po, opts),
     uploadPacked: (opts) => sdk.uploadPacked(opts),
     pinObject: (po) => sdk.pinObject(po),
     deleteObject: (id) => sdk.deleteObject(id),

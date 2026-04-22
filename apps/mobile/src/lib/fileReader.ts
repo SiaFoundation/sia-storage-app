@@ -1,36 +1,41 @@
-// oxlint-disable-next-line no-restricted-imports -- File constructor + .open() (sync native reads)
+// oxlint-disable-next-line no-restricted-imports -- File constructor + .stream() (async)
 import { File } from 'expo-file-system'
 import type { Reader } from 'react-native-sia'
 
-// Read 256KB at a time. The previous stream-based approach used 1KB chunks
-// (expo-file-system's default), meaning ~40,000 reads per 40MB file.
 const CHUNK_SIZE = 256 * 1024
 
 /**
- * Creates a Reader interface that reads file data for the SDK's packed upload
- * API using direct FileHandle.readBytes() instead of File.stream().
+ * Creates a Reader that streams a file via `File.stream()` with a BYOB
+ * reader pulling `CHUNK_SIZE`-byte chunks directly into our buffer.
  *
- * Why not streams: File.stream() goes through web-streams-polyfill which calls
- * structuredClone (@ungap/structured-clone → pair()) on every chunk enqueued
- * to the ReadableStream. With 1KB default chunks, that's ~40k clones per 40MB
- * file — profiling showed pair() consuming ~34% of total JS CPU during uploads.
+ * Why BYOB: expo-file-system's default ReadableStream pull size is 1KB
+ * (see node_modules/expo-file-system/src/streams.ts). A BYOB reader lets
+ * us dictate the chunk size — we pass a 256KB view and `pull` reads into
+ * it, so we get one native file read per 256KB (vs ~40k per 40MB file).
  *
- * Direct readBytes() is synchronous but at 256KB chunks it's negligible per
- * call and eliminates the polyfill overhead entirely. Profiled result: file
- * reading dropped from 34% CPU to <1.5%.
+ * Why not File.open() + handle.readBytes(): synchronous JSI call — panics
+ * the SDK's Rust upload task post-0.13.20 (UploadError.Closed before the
+ * body runs). Any reader that makes a fresh native read per invocation
+ * hits the same panic. File.stream() works because its chunks are
+ * pre-buffered into JS memory via the stream machinery before our
+ * `read()` returns.
+ *
+ * Why not File.bytes(): loads the whole file into memory, bad for videos.
  */
 export function createFileReader(fileUri: string): Reader {
-  const file = new File(fileUri)
-  const handle = file.open()
-
+  const stream = new File(fileUri).stream()
+  const streamReader = stream.getReader({ mode: 'byob' })
   return {
     async read(): Promise<ArrayBuffer> {
-      const bytes = handle.readBytes(CHUNK_SIZE)
-      if (bytes.length === 0) {
-        handle.close()
-        return new ArrayBuffer(0)
-      }
-      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      const view = new Uint8Array(CHUNK_SIZE)
+      const { value, done } = await streamReader.read(view)
+      if (done || !value || value.byteLength === 0) return new ArrayBuffer(0)
+      // Copy into a fresh JS-owned Uint8Array before handing to uniffi.
+      // value's buffer is the one we passed in (after transfer); slicing
+      // creates a clean, exact-sized JS-owned ArrayBuffer.
+      const owned = new Uint8Array(value.byteLength)
+      owned.set(value)
+      return owned.buffer
     },
   }
 }

@@ -1,24 +1,41 @@
+import type { DownloadLikeRef } from '@siastorage/core/adapters'
 import { logger } from '@siastorage/logger'
 // oxlint-disable-next-line no-restricted-imports -- type-only import for .writableStream() (async)
 import type { File } from 'expo-file-system'
-import type { Writer } from 'react-native-sia'
 import { getOrCreateTempDownloadFile } from '../stores/tempFs'
 
-function createFileWriter(params: {
-  writer: WritableStreamDefaultWriter<Uint8Array>
+/**
+ * Streams a pull-based download handle into a temp cache file. Reads
+ * chunks from `dl.read()` and writes each to the target file's
+ * writableStream until EOF.
+ */
+export async function streamToCache(params: {
+  file: { id: string; type: string }
   totalSize?: number
+  dl: DownloadLikeRef
+  signal?: AbortSignal
+  onAfterClose?: (targetFile: File) => Promise<void>
   onProgress?: (progress: number) => void
-}): Writer {
-  const { writer, totalSize, onProgress } = params
+}): Promise<void> {
+  const { file, totalSize, dl, signal, onAfterClose, onProgress } = params
+  const targetFile = await getOrCreateTempDownloadFile({
+    ...file,
+    localId: null,
+  })
+  logger.debug('streamToCache', 'write_start', { uri: targetFile.uri })
+
+  const fileWriter = targetFile.writableStream().getWriter()
   let bytesWritten = 0
   let chunks = 0
 
-  return {
-    async write(data: ArrayBuffer): Promise<void> {
-      const buf = new Uint8Array(data)
+  try {
+    while (true) {
+      const chunk = await dl.read(signal ? { signal } : undefined)
+      if (chunk.byteLength === 0) break
+      const buf = new Uint8Array(chunk)
+      await fileWriter.write(buf)
       bytesWritten += buf.byteLength
       chunks += 1
-      await writer.write(buf)
 
       if (onProgress) {
         if (typeof totalSize === 'number' && totalSize > 0) {
@@ -31,39 +48,12 @@ function createFileWriter(params: {
       if (chunks % 10 === 0) {
         logger.debug('streamToCache', 'progress', { bytesWritten })
       }
-    },
-  }
-}
-
-export async function streamToCache(params: {
-  file: { id: string; type: string }
-  totalSize?: number
-  download: (writer: Writer) => Promise<void>
-  onAfterClose?: (targetFile: File) => Promise<void>
-  onProgress?: (progress: number) => void
-}): Promise<void> {
-  const { file, totalSize, download, onAfterClose, onProgress } = params
-  const targetFile = await getOrCreateTempDownloadFile({
-    ...file,
-    localId: null,
-  })
-  logger.debug('streamToCache', 'write_start', { uri: targetFile.uri })
-
-  const fileWriter = targetFile.writableStream().getWriter()
-
-  try {
-    const writer = createFileWriter({
-      writer: fileWriter,
-      totalSize,
-      onProgress,
-    })
-
-    await download(writer)
-
+    }
     logger.debug('streamToCache', 'stream_ended')
   } finally {
     await fileWriter.close()
     logger.debug('streamToCache', 'writer_closed')
+    await dl.cancel().catch(() => {})
   }
 
   if (onAfterClose) {

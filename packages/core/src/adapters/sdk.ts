@@ -1,4 +1,4 @@
-import type { Reader, Writer } from './fs'
+import type { Reader } from './fs'
 
 export interface ObjectsCursor {
   id: string
@@ -57,15 +57,26 @@ export interface PackedUploadRef {
   slabs(): bigint
 }
 
+/**
+ * Progress information emitted by the SDK for each successfully uploaded
+ * or downloaded shard. Matches the shape of `react-native-sia`'s
+ * `ShardProgress` record.
+ */
+export interface ShardProgress {
+  hostKey: string
+  shardSize: bigint
+  shardIndex: number
+  slabIndex: number
+  elapsedMs: bigint
+}
+
 export interface UploadOptions {
   maxInflight: number
   dataShards: number
   parityShards: number
-  progressCallback:
-    | {
-        progress: (uploaded: bigint, total: bigint) => void
-      }
-    | undefined
+  shardUploaded?: {
+    progress: (p: ShardProgress) => void
+  }
 }
 
 export interface DownloadOptions {
@@ -117,15 +128,28 @@ export interface Account {
   lastUsed: Date
 }
 
+/**
+ * Pull-based download handle. Call `read()` repeatedly to receive decoded
+ * chunks; an empty ArrayBuffer signals end of stream. Call `cancel()` to
+ * abort in-flight chunk recovery (subsequent reads resolve with an empty
+ * buffer or throw `DownloadError::Cancelled`). Matches the shape of
+ * uniffi-generated `DownloadLike` across platforms.
+ */
+export interface DownloadLikeRef {
+  /**
+   * Resolves to the next decoded chunk, or an empty `ArrayBuffer` on
+   * end of stream. Also resolves with an empty buffer (or rejects with
+   * `DownloadError::Cancelled`) once `cancel()` has been called.
+   * Callers loop until `byteLength === 0` or an exception propagates.
+   */
+  read(control?: { signal: AbortSignal }): Promise<ArrayBuffer>
+  cancel(): Promise<void>
+}
+
 export interface SdkAdapter {
   objectEvents(cursor: ObjectsCursor | undefined, limit: number): Promise<ObjectEvent[]>
   updateObjectMetadata(pinnedObject: PinnedObjectRef): Promise<void>
-  download(
-    writer: Writer,
-    pinnedObject: PinnedObjectRef,
-    options: DownloadOptions,
-    control?: { signal: AbortSignal },
-  ): Promise<void>
+  download(pinnedObject: PinnedObjectRef, options: DownloadOptions): Promise<DownloadLikeRef>
   uploadPacked(options: UploadOptions): Promise<PackedUploadRef>
   pinObject(pinnedObject: PinnedObjectRef): Promise<void>
   deleteObject(objectId: string): Promise<void>

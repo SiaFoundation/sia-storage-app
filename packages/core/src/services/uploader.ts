@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { Reader } from '../adapters/fs'
-import type { PackedUploadRef, PinnedObjectRef } from '../adapters/sdk'
+import type { PackedUploadRef, PinnedObjectRef, ShardProgress } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
 import {
   PACKER_IDLE_TIMEOUT,
@@ -95,6 +95,12 @@ type BatchState = {
   totalAddMs: number
   /** Number of packer.add() calls that triggered a slab upload (slabs increased). */
   slabUploadAdds: number
+  /**
+   * Running sum of uploaded-shard byte counts reported by the SDK's
+   * per-shard progress callback. Divided by expected encoded size to
+   * compute batch-level progress.
+   */
+  uploadedShardBytes: number
 }
 
 /** Recorded after each flush for efficiency analysis and testing. */
@@ -579,14 +585,15 @@ export class UploadManager {
           suspendedMs: 0,
           totalAddMs: 0,
           slabUploadAdds: 0,
+          uploadedShardBytes: 0,
         }
         this.batch = batch
         this.packer = await sdk.uploadPacked({
           maxInflight: UPLOAD_MAX_INFLIGHT,
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
-          progressCallback: {
-            progress: (uploaded, total) => this.onProgress(batch, uploaded, total),
+          shardUploaded: {
+            progress: (p) => this.onShardUploaded(batch, p),
           },
         })
       }
@@ -640,6 +647,9 @@ export class UploadManager {
         error: e as Error,
       })
       this.app.uploads.setError(entry.fileId, message)
+      // Keep this.packer / this.batch alive — the SDK leaves the packer
+      // usable after add() errors, so subsequent entries continue in the
+      // same batch instead of orphaning already-successful adds.
     }
   }
 
@@ -756,6 +766,13 @@ export class UploadManager {
           error: e as Error,
         })
         this.app.uploads.setError(entry.fileId, message)
+        // Abandon the rest of this window on first error; the loop below
+        // attaches .catch so skipped in-flight promises don't surface as
+        // unhandled rejections. Keep this.packer / this.batch alive — the
+        // SDK leaves the packer usable after add() errors, so the next
+        // entry continues in the same batch instead of orphaning its
+        // already-successful adds.
+        break
       }
     }
 
@@ -933,11 +950,18 @@ export class UploadManager {
     return (this.batch.totalSize % SLAB_SIZE) / SLAB_SIZE
   }
 
-  /** Distribute batch upload progress across individual files by size weight. */
-  private onProgress(batch: BatchState, uploaded: bigint, _encodedTotal: bigint): void {
+  /**
+   * Per-shard progress from the SDK. Each callback reports one uploaded
+   * shard's size; we accumulate into batch.uploadedShardBytes and divide
+   * by the expected encoded size (slabs × (data+parity) shards × SECTOR_SIZE)
+   * to produce a batch-level progress fraction, then distribute across
+   * files by size weight.
+   */
+  private onShardUploaded(batch: BatchState, p: ShardProgress): void {
+    batch.uploadedShardBytes += Number(p.shardSize)
     const slabs = Math.ceil(batch.totalSize / SLAB_SIZE)
     const expectedEncoded = slabs * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
-    const batchProgress = expectedEncoded > 0 ? Number(uploaded) / expectedEncoded : 0
+    const batchProgress = expectedEncoded > 0 ? batch.uploadedShardBytes / expectedEncoded : 0
 
     const batchInfo: BatchInfo = {
       files: batch.files.map((f) => ({
