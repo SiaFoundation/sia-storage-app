@@ -12,21 +12,17 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
       if (!appKey) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
       const pinnedObject = PinnedObject.open(appKey, object)
+      const dl = await sdk.download(pinnedObject, {
+        maxInflight: DOWNLOAD_MAX_INFLIGHT,
+        offset: BigInt(0),
+        length: undefined,
+      })
 
       await streamToCache({
         file,
         totalSize: file.size,
-        download: (writer) =>
-          sdk.download(
-            writer,
-            pinnedObject,
-            {
-              maxInflight: DOWNLOAD_MAX_INFLIGHT,
-              offset: BigInt(0),
-              length: undefined,
-            },
-            { signal },
-          ),
+        dl,
+        signal,
         onAfterClose: async (targetFile) => {
           await copyFileToFs(file, targetFile.uri)
         },

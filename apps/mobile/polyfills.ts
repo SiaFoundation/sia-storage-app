@@ -1,10 +1,8 @@
 /* eslint-disable import/order */
 
-// Use a WHATWG-compliant ReadableStream for File.stream().
-import { ReadableStream } from 'web-streams-polyfill'
-
-// @ts-expect-error - globalThis.ReadableStream type mismatch with polyfill
-globalThis.ReadableStream = ReadableStream
+// Expo SDK 55 ships a native ReadableStream/WritableStream/TransformStream,
+// so we no longer polyfill with web-streams-polyfill (which was ~34% of
+// upload CPU via its per-chunk structuredClone).
 
 import '@azure/core-asynciterator-polyfill'
 

@@ -6,6 +6,7 @@ export type {
   Account,
   AccountApp,
   AppKeyRef,
+  DownloadLikeRef,
   DownloadOptions,
   Host,
   NetAddress,
@@ -15,6 +16,7 @@ export type {
   PinnedObjectRef,
   SdkAdapter,
   SealedObjectRef,
+  ShardProgress,
   UploadOptions,
 } from './sdk'
 export { AddressProtocol } from './sdk'

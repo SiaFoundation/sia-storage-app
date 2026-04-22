@@ -4,7 +4,6 @@ import { useSdk } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
-import type { Writer } from 'react-native-sia'
 import { getOneObject } from '../lib/file'
 import { streamToCache } from '../lib/streamToCache'
 import { useToast } from '../lib/toastContext'
@@ -51,20 +50,15 @@ export function useDownloadFromShareURL() {
     const slotToken = await downloads.acquireSlot()
     try {
       downloads.update(id, { status: 'downloading' })
+      const dl = await sdk.download(sharedObject, {
+        maxInflight: DOWNLOAD_MAX_INFLIGHT,
+        offset: BigInt(0),
+        length: undefined,
+      })
       await streamToCache({
         file,
         totalSize,
-        download: (writer) =>
-          sdk.download(
-            writer,
-            sharedObject,
-            {
-              maxInflight: DOWNLOAD_MAX_INFLIGHT,
-              offset: BigInt(0),
-              length: undefined,
-            },
-            { signal: new AbortController().signal },
-          ),
+        dl,
         onAfterClose: async (targetFile) => {
           await copyFileToFs(file, targetFile.uri)
         },
@@ -99,37 +93,23 @@ export async function downloadFirstBytesFromShared(
 
   logger.debug('downloadFirstBytesFromShared', 'downloading', { byteCount })
 
+  const dl = await sdk.download(sharedObject, {
+    maxInflight: DOWNLOAD_MAX_INFLIGHT,
+    offset: BigInt(0),
+    length: BigInt(byteCount),
+  })
   const chunks: Uint8Array[] = []
   let totalBytes = 0
-  const abortController = new AbortController()
-
-  const writer: Writer = {
-    async write(data: ArrayBuffer): Promise<void> {
-      const buf = new Uint8Array(data)
+  try {
+    while (totalBytes < byteCount) {
+      const chunk = await dl.read()
+      if (chunk.byteLength === 0) break
+      const buf = new Uint8Array(chunk)
       chunks.push(buf)
       totalBytes += buf.length
-
-      if (totalBytes >= byteCount) {
-        abortController.abort()
-      }
-    },
-  }
-
-  try {
-    await sdk.download(
-      writer,
-      sharedObject,
-      {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
-        offset: BigInt(0),
-        length: BigInt(byteCount),
-      },
-      { signal: abortController.signal },
-    )
-  } catch (e) {
-    if (e instanceof Error && e.name !== 'AbortError') {
-      throw e
     }
+  } finally {
+    await dl.cancel().catch(() => {})
   }
 
   const bytes = new Uint8Array(Math.min(totalBytes, byteCount))

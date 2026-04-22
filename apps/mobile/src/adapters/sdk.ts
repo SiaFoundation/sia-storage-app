@@ -1,6 +1,7 @@
 import type {
   Account,
   AppKeyRef,
+  DownloadLikeRef,
   DownloadOptions,
   Host,
   ObjectEvent,
@@ -9,7 +10,6 @@ import type {
   PinnedObjectRef,
   SdkAdapter,
   UploadOptions,
-  Writer,
 } from '@siastorage/core/adapters'
 import type { SdkInterface } from 'react-native-sia'
 
@@ -29,27 +29,29 @@ export class MobileSdkAdapter implements SdkAdapter {
   }
 
   async download(
-    writer: Writer,
     pinnedObject: PinnedObjectRef,
     options: DownloadOptions,
-    control?: { signal: AbortSignal },
-  ): Promise<void> {
-    await this.sdk.download(writer, pinnedObject, options, control)
+  ): Promise<DownloadLikeRef> {
+    return this.sdk.download(pinnedObject, options)
   }
 
   async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
     const obj = await this.sdk.object(objectId)
-    const chunks: ArrayBuffer[] = []
-    const writer: Writer = {
-      write: async (data: ArrayBuffer) => {
-        chunks.push(data)
-      },
-    }
-    await this.sdk.download(writer, obj as PinnedObjectRef, {
+    const dl = this.sdk.download(obj, {
       maxInflight: 1,
       offset: 0n,
       length: undefined,
     })
+    const chunks: ArrayBuffer[] = []
+    try {
+      while (true) {
+        const chunk = await dl.read()
+        if (chunk.byteLength === 0) break
+        chunks.push(chunk)
+      }
+    } finally {
+      await dl.cancel().catch(() => {})
+    }
     const totalLength = chunks.reduce((sum, c) => sum + c.byteLength, 0)
     const combined = new Uint8Array(totalLength)
     let offset = 0
