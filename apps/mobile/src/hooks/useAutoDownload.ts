@@ -36,7 +36,6 @@ export function useAutoDownload(
     if (!status.data.isUploaded) return
     if (status.data.isDownloaded) return
     if (status.data.isDownloading) return
-    if (file.localId) return
     if (!shouldDownload(file)) return
     download()
   }, [isInitializing, isConnected, status.data, download, file, shouldDownload])
