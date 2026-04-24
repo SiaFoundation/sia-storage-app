@@ -16,11 +16,14 @@ const flight = new SingleInit()
  */
 export async function runFsOrphanScanner(options?: {
   onProgress?: (removed: number, total: number) => void
+  force?: boolean
 }): Promise<OrphanScannerResult | undefined> {
-  const lastRun = await app().settings.getFsOrphanLastRun()
-  if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {
-    logger.debug('fsOrphanScanner', 'skipped', { reason: 'too_recent' })
-    return
+  if (!options?.force) {
+    const lastRun = await app().settings.getFsOrphanLastRun()
+    if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {
+      logger.debug('fsOrphanScanner', 'skipped', { reason: 'too_recent' })
+      return
+    }
   }
   return flight.run(async () => {
     try {

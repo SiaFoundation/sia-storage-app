@@ -78,6 +78,22 @@ describe('fsEvictionScanner', () => {
     expect(await app().fs.readMeta('file-t')).toBeNull()
   })
 
+  it('force bypasses the throttle check', async () => {
+    await createRemoteFile({
+      id: 'file-x',
+      size: 200,
+      usedAt: now - daysInMs(1000),
+    })
+    await app().storage.setItem('fsEvictionLastRun', String(now - 1_000))
+
+    const skipped = await runFsEvictionScanner()
+    expect(skipped).toBeUndefined()
+
+    const forced = await runFsEvictionScanner({ force: true })
+    expect(forced).toBeDefined()
+    expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
+  })
+
   it('evicts oldest remote files until under limit', async () => {
     // Keep
     await createLocalOnlyFile({
