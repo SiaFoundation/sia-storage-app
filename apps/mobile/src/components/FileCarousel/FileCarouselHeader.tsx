@@ -30,7 +30,7 @@ export function FileCarouselHeader({ file, title, navigation, icon = 'back' }: P
         <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {title}
         </Text>
-        {status.data ? <UploadStatusIcon status={status.data} size={16} /> : null}
+        {file && status.data ? <UploadStatusIcon status={status.data} size={16} /> : null}
       </View>
     </View>
   )

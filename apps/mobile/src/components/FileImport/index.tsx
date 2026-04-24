@@ -1,5 +1,4 @@
 import type { NavigationProp } from '@react-navigation/native'
-import type { PinnedObjectRef, SdkAdapter } from '@siastorage/core/adapters'
 import { SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD } from '@siastorage/core/config'
 import { useDownloadEntry, useSdk } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
@@ -13,11 +12,10 @@ import { calculateContentHash } from '../../lib/contentHash'
 import { detectMimeTypeFromBytes, MAGIC_BYTES_LENGTH } from '../../lib/detectMimeType'
 import { useFileStatus } from '../../lib/file'
 import { getMimeType } from '../../lib/fileTypes'
-import { pinnedObjectToLocalObject } from '../../lib/localObjects'
 import { useToast } from '../../lib/toastContext'
-import { downloadFirstBytesFromShared, useDownloadFromShareURL } from '../../managers/downloader'
+import { useDownloadFromShareURL } from '../../managers/downloader'
 import type { RootTabParamList } from '../../stacks/types'
-import { app, internal } from '../../stores/appService'
+import { app } from '../../stores/appService'
 import { copyFileToFs } from '../../stores/fs'
 import { colors } from '../../styles/colors'
 import { BottomActionButton } from '../BottomActionButton'
@@ -26,27 +24,14 @@ import { DownloadPrompt } from './DownloadPrompt'
 import { FileMetaImport } from './FileMetaImport'
 
 // Helper function to detect file type from first few bytes.
-async function detectFileType(
-  sdk: SdkAdapter | null,
-  sharedObject: PinnedObjectRef,
-  id: string,
-): Promise<string> {
-  logger.debug('FileImport', 'detecting_type', {
-    id,
-    byteCount: MAGIC_BYTES_LENGTH,
-  })
+async function detectFileType(shareUrl: string, id: string): Promise<string> {
+  logger.debug('FileImport', 'detecting_type', { id, byteCount: MAGIC_BYTES_LENGTH })
   try {
-    if (!sdk || !sharedObject) {
-      throw new Error('Missing required data for type detection')
-    }
-
-    const bytes = await downloadFirstBytesFromShared(sdk, sharedObject, MAGIC_BYTES_LENGTH)
-
+    const bytes = await app().shares.downloadFirstBytes(shareUrl, MAGIC_BYTES_LENGTH)
     if (bytes.length === 0) {
       logger.warn('FileImport', 'no_bytes_for_detection')
       return 'application/octet-stream'
     }
-
     const type = detectMimeTypeFromBytes(bytes)
     logger.debug('FileImport', 'detected_type', { type })
     return type || 'application/octet-stream'
@@ -143,30 +128,18 @@ export function FileImport({
   const downloadFromShareURL = useDownloadFromShareURL()
   const [hasConfirmedLargeDownload, setHasConfirmedLargeDownload] = useState(false)
 
-  const sharedObject = useSWR(isConnected ? ['sharedObject', shareUrl, id] : null, async () => {
-    try {
-      const sdk = internal().getSdk()
-      if (!sdk || !shareUrl) return null
-      return sdk.sharedObject(shareUrl)
-    } catch (e) {
-      logger.error('FileImport', 'shared_object_error', { error: e as Error })
-      return null
-    }
+  const sharedObject = useSWR(isConnected ? ['sharedObject', shareUrl, id] : null, () => {
+    if (!shareUrl) throw new Error('Missing share URL')
+    return app().shares.getMetadata(shareUrl)
   })
 
-  const fileSize = sharedObject.data ? Number(sharedObject.data.size()) : null
+  const fileSize = sharedObject.data ? sharedObject.data.size : null
   const shouldAutoDownload = fileSize !== null && fileSize <= SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD
   const requiresConfirmation = !hasConfirmedLargeDownload && !shouldAutoDownload
 
   const detectedType = useSWR(
     sharedObject.data && shareUrl && isConnected ? ['detectedType', id, shareUrl] : null,
-    async () => {
-      const sdk = internal().getSdk()
-      if (!sdk || !sharedObject.data) {
-        throw new Error('Missing SDK or shared object')
-      }
-      return detectFileType(sdk, sharedObject.data, id)
-    },
+    () => detectFileType(shareUrl, id),
   )
 
   // Download and build file metadata. Auto-download if file is small, otherwise require confirmation.
@@ -237,14 +210,7 @@ export function FileImport({
     try {
       logger.info('FileImport', 'importing_file', { id: sharedFile.data.id })
 
-      const sdk = internal().requireSdk()
-      const indexerURL = await app().settings.getIndexerURL()
-      await sdk.pinObject(sharedObject.data)
-      const localObject = await pinnedObjectToLocalObject(
-        sharedFile.data.id,
-        indexerURL,
-        sharedObject.data,
-      )
+      const localObject = await app().shares.pin(shareUrl, sharedFile.data.id)
       await app().files.create(sharedFile.data, localObject)
 
       toast.show('File added')
@@ -258,18 +224,25 @@ export function FileImport({
     } finally {
       setIsAddingToDatabase(false)
     }
-  }, [sharedObject.data, isConnected, sharedFile.data, toast, navigation])
+  }, [sharedObject.data, isConnected, sharedFile.data, shareUrl, toast, navigation])
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {sharedObject.isLoading ? (
+        {!isConnected ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.accentPrimary} />
+            <Text style={styles.loadingText}>Waiting for connection…</Text>
+          </View>
+        ) : sharedObject.isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.accentPrimary} />
             <Text style={styles.loadingText}>Loading…</Text>
           </View>
         ) : sharedObject.error ? (
-          <Text style={styles.errorText}>{sharedObject.error.message}</Text>
+          <View style={styles.center}>
+            <Text style={styles.errorText}>{sharedObject.error.message}</Text>
+          </View>
         ) : displayFile ? (
           <>
             <View style={{ height: 500 }}>

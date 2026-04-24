@@ -3,12 +3,10 @@ import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { useFileDetails, useSdk } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useCallback } from 'react'
-import { PinnedObject } from 'react-native-sia'
 import Share from 'react-native-share'
 import { useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
-import { getAppKeyForIndexer } from '../stores/appKey'
-import { app, internal } from '../stores/appService'
+import { app } from '../stores/appService'
 
 export function useShareAction({ fileId }: { fileId: string }) {
   const toast = useToast()
@@ -19,18 +17,9 @@ export function useShareAction({ fileId }: { fileId: string }) {
   const getShareUrl = useCallback(async () => {
     if (!file) return
     if (!isConnected) return
-    const sdk = internal().getSdk()
-    if (!sdk) return
-
-    const objects = await app().localObjects.getForFile(file.id)
-    if (!objects.length) return
-    const obj = objects[0]
-    const appKey = await getAppKeyForIndexer(obj.indexerURL)
-    if (!appKey) return
-    const pinnedObject = PinnedObject.open(appKey, obj)
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 1)
-    return sdk.shareObject(pinnedObject, expiresAt)
+    return app().shares.create(file.id, expiresAt)
   }, [file, isConnected])
 
   const handleShareURL = useCallback(async () => {
