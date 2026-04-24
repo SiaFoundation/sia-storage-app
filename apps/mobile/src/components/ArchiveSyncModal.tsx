@@ -1,5 +1,5 @@
 import * as MediaLibrary from 'expo-media-library'
-import { CheckCircle2Icon, ImageIcon, LoaderCircleIcon } from 'lucide-react-native'
+import { CheckCircle2Icon, ImageIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useReducer } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
@@ -13,6 +13,7 @@ import {
 import { colors, palette } from '../styles/colors'
 import { Button } from './Button'
 import { ModalSheet } from './ModalSheet'
+import { SpinnerIcon } from './SpinnerIcon'
 
 type LibraryStats = {
   totalCount: number
@@ -171,7 +172,7 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
         <View style={styles.slots}>
           <View style={styles.iconRow}>
             {phase === 'running' ? (
-              <LoaderCircleIcon color={palette.blue[400]} size={48} strokeWidth={1.5} />
+              <SpinnerIcon color={palette.blue[400]} size={48} />
             ) : phase === 'complete' ? (
               <CheckCircle2Icon color={palette.green[500]} size={48} strokeWidth={1.5} />
             ) : (
