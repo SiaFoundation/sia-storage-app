@@ -2,6 +2,35 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.0 (2026-04-24)
+
+### Features
+
+- Split "Reset application" into two actions: `resetLocalDataAndResync` keeps the user signed in and re-downloads their library from the indexer, and `resetLocalDataAndSignOut` wipes everything and returns to onboarding.
+- Added a Community section in Settings linking to the Sia website, Discord, X, GitHub, and support email.
+- Grouped destructive account actions into a Danger zone at the bottom of Settings: Clear local data and resync, Clear local data and sign out, and Delete account. Closes https://github.com/SiaFoundation/sia-storage-app/issues/545
+- Consolidated account, storage, photo sync, and stay-awake settings onto the main Settings page instead of nested sub-screens.
+
+### Fixes
+
+- Tapping a file now takes precedence over in-flight thumbnail downloads, so user-initiated downloads start immediately even under heavy background thumbnail activity.
+- On Android, opening the camera, photo picker, share sheet, or anything else that suspends the app no longer triggers a suspension manager lifecycle. The suspension manager is now iOS-only.
+- Fixed an issue where files imported on this device could get stuck on "Press to download" after their local cache copy was evicted.
+- Fixed an Android-only issue where photos from the camera or picker could fail to import when the app was resuming.
+- Fixed a blank screen when opening a shared file link from another app.
+- Reduced iOS background crashes that could occur while the app was being suspended.
+- Reduced iOS crashes that could occur when the app's background work ran long.
+- Reduced iOS crashes that could occur while a photo scan or download was running when the app was suspended.
+- Library status sheet now opens with a one-line activity indicator ("Online and synced", "Syncing metadata from indexer", "Uploading files", etc.) driven by the same hook as the toolbar status pill. Connectivity issues surface inline on that row with a Reconnect shortcut when the indexer is unreachable, replacing the separate banner. The redundant Sync metadata section has been removed.
+- Redesigned the library status sheet: library size and counts now lead, connectivity issues surface as a top banner only when offline or unreachable, and sync metadata moved to the bottom. Renamed "Lost" files to "Unavailable" in both the sheet and the Import screen.
+- Mobile uploads now use the platform's native `ReadableStream` with a BYOB file reader instead of a JS polyfill.
+- Show an alert with an "Open Settings" button when camera or photo library permission is permanently denied.
+- Removed the Hosts list and map from Settings. Host information is no longer shown as a browsable list; individual file shard locations remain visible in file details.
+- Upgraded react-native-sia to 0.13.21: shard-based upload progress and a pull-based SDK download handle.
+- Moved Import and Logs under a single Advanced screen reachable from Settings.
+- Redesigned the Settings menu with a modern iOS inset-grouped card style. Section headers now appear as uppercased captions above rounded cards; rows show a chevron to indicate tapping will open another screen.
+- Cancelling a share-link download now stops it reliably, matching the behavior of regular file downloads.
+
 ## 1.10.0 (2026-04-17)
 
 ### Features
