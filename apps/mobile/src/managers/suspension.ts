@@ -9,6 +9,7 @@ import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus, Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
+import { mutate as swrGlobalMutate } from 'swr'
 import {
   closeDb,
   dbInitialized,
@@ -99,6 +100,13 @@ const manager = createSuspensionManager({
     onAfterResume: () => {
       setSWREnabled(true)
       resumeLogger()
+      // Any SWR hook that mounted while we were paused got isLoading:false with
+      // no data and no error — isPaused gates revalidation events but doesn't
+      // trigger them when it flips back, so those hooks stay frozen. Force a
+      // global revalidation so newly-mounted (and any stale) keys refetch.
+      // Fires when iOS delivers a deep link before the app fully resumes, which
+      // mounts screens against a paused SWR.
+      void swrGlobalMutate(() => true)
       // Resume archive walk from the same cursor if it wasn't complete.
       void resumeArchiveSync()
     },
