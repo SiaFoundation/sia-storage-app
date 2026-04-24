@@ -17,7 +17,6 @@ import { Button } from './Button'
 function useSyncProgress() {
   const { data } = useSyncState()
   return {
-    count: data?.syncDownCount ?? 0,
     progress: data?.syncDownProgress ?? 0,
   }
 }
@@ -26,7 +25,7 @@ export function AppSplash() {
   const currentStep = useCurrentInitStep()
   const initializationError = useInitializationError()
   const syncGateStatus = useSyncGateStatus()
-  const { count, progress } = useSyncProgress()
+  const { progress } = useSyncProgress()
   const { top, bottom } = useSafeAreaInsets()
   useSyncGateGuard()
 
@@ -80,11 +79,8 @@ export function AppSplash() {
               <>
                 <View style={styles.syncHeader}>
                   <Text style={styles.syncTitle}>Syncing your library</Text>
-                  <Text style={styles.syncSubtitle}>Syncing your files from the indexer.</Text>
+                  <Text style={styles.syncSubtitle}>Catching up on new files...</Text>
                 </View>
-                {count > 0 && (
-                  <Text style={styles.syncCounts}>{count.toLocaleString()} files synced</Text>
-                )}
                 <View style={styles.progressTrack}>
                   <View
                     style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]}
@@ -137,10 +133,6 @@ const styles = StyleSheet.create({
     color: palette.gray[400],
     fontSize: 15,
     textAlign: 'center',
-  },
-  syncCounts: {
-    color: palette.gray[500],
-    fontSize: 12,
   },
   progressTrack: {
     width: '60%',
