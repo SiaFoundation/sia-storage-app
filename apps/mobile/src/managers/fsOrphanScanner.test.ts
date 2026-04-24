@@ -36,6 +36,15 @@ describe('fsOrphanScanner', () => {
     expect(result).toBeUndefined()
   })
 
+  it('force bypasses the throttle check', async () => {
+    await app().storage.setItem('fsOrphanLastRun', String(now - FS_ORPHAN_FREQUENCY / 2))
+
+    await runFsOrphanScanner({ force: true })
+
+    expect(listFilesSpy).toHaveBeenCalled()
+    expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
+  })
+
   it('records timestamp even when there are no files', async () => {
     const result = await runFsOrphanScanner()
 
