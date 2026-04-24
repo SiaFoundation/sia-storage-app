@@ -14,7 +14,7 @@ describe('Trash and Restore', () => {
   })
 
   async function getActiveFiles() {
-    return app.app.files.query({ order: 'ASC', activeOnly: true })
+    return app.app.files.query({ order: 'ASC', includeThumbnails: true, includeOldVersions: true })
   }
 
   it('trash excludes files from library queries', async () => {

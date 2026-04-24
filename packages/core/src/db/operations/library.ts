@@ -24,21 +24,45 @@ export function buildLatestVersionFilter(alias: string): string {
   return `${alias}.current = 1`
 }
 
-/**
- * Filters to active, user-visible file records: non-trashed, non-deleted,
- * kind = 'file', latest version only. Do NOT use for thumbnail queries
- * (thumbnails don't maintain the `current` column).
- */
-export function buildActiveFileFilter(alias: string): string {
-  return `${alias}.kind = 'file' AND ${alias}.trashedAt IS NULL AND ${alias}.deletedAt IS NULL AND ${alias}.current = 1`
+export type RecordFilterOpts = {
+  /** Include kind='thumb' rows. Default: only kind='file'. */
+  includeThumbnails?: boolean
+  /** Include superseded file versions (current=0) and thumbnails whose original is superseded. Default: current only. */
+  includeOldVersions?: boolean
+  /** Include trashed rows (trashedAt IS NOT NULL). Default: excluded. */
+  includeTrashed?: boolean
+  /** Include tombstoned rows (deletedAt IS NOT NULL). Default: excluded. */
+  includeDeleted?: boolean
 }
 
 /**
- * Filters to non-trashed, non-deleted records of any kind.
- * Use for thumbnail queries or when kind/version filtering is handled separately.
+ * Canonical WHERE fragment for "visible library record".
+ * Default: kind='file' AND current=1 AND trashedAt IS NULL AND deletedAt IS NULL.
+ *
+ * Thumbnails don't carry `current` directly — their currency is inherited
+ * from their original via `thumbForId`. With `includeThumbnails: true` and
+ * `includeOldVersions: false` (default), only thumbs whose original is
+ * current=1 pass. `includeOldVersions: true` widens both files and thumbs
+ * to every version.
  */
-export function buildActiveFilter(alias: string): string {
-  return `${alias}.trashedAt IS NULL AND ${alias}.deletedAt IS NULL`
+export function buildRecordFilter(alias: string, opts: RecordFilterOpts = {}): string {
+  const clauses: string[] = []
+  if (!opts.includeThumbnails) clauses.push(`${alias}.kind = 'file'`)
+  if (!opts.includeOldVersions) {
+    if (opts.includeThumbnails) {
+      const originalClauses = [`o.id = ${alias}.thumbForId`, `o.current = 1`]
+      if (!opts.includeTrashed) originalClauses.push(`o.trashedAt IS NULL`)
+      if (!opts.includeDeleted) originalClauses.push(`o.deletedAt IS NULL`)
+      clauses.push(
+        `((${alias}.kind = 'file' AND ${alias}.current = 1) OR (${alias}.kind = 'thumb' AND EXISTS (SELECT 1 FROM files o WHERE ${originalClauses.join(' AND ')})))`,
+      )
+    } else {
+      clauses.push(`${alias}.current = 1`)
+    }
+  }
+  if (!opts.includeTrashed) clauses.push(`${alias}.trashedAt IS NULL`)
+  if (!opts.includeDeleted) clauses.push(`${alias}.deletedAt IS NULL`)
+  return clauses.length === 0 ? '1=1' : clauses.join(' AND ')
 }
 
 export function buildLibraryQueryParts(
@@ -75,7 +99,7 @@ export function buildLibraryQueryParts(
 
   const whereParts: string[] = []
   const params: (string | number)[] = []
-  whereParts.push(buildActiveFileFilter(tableAlias))
+  whereParts.push(buildRecordFilter(tableAlias))
 
   if (!allSelected && (mediaCategories.length > 0 || includesFiles)) {
     const categoryConditions: string[] = []
@@ -150,7 +174,7 @@ export type LibraryQueryParams = {
 
 export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE ${buildActiveFileFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f WHERE ${buildRecordFilter('f')}`,
   )
   return row?.count ?? 0
 }
@@ -158,7 +182,7 @@ export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number
 export async function queryMediaFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
        AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')`,
   )
   return row?.count ?? 0
@@ -168,7 +192,7 @@ export async function queryTagFileCount(db: DatabaseAdapter, tagId: string): Pro
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
      INNER JOIN file_tags ft ON ft.fileId = f.id
-     WHERE ft.tagId = ? AND ${buildActiveFileFilter('f')}`,
+     WHERE ft.tagId = ? AND ${buildRecordFilter('f')}`,
     tagId,
   )
   return row?.count ?? 0
@@ -183,7 +207,7 @@ export async function queryDirectoryFileCount(
   }
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.directoryId = ? AND ${buildActiveFileFilter('f')}`,
+     WHERE f.directoryId = ? AND ${buildRecordFilter('f')}`,
     directoryId,
   )
   return row?.count ?? 0
@@ -192,7 +216,7 @@ export async function queryDirectoryFileCount(
 export async function queryUnfiledFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE f.directoryId IS NULL AND ${buildActiveFileFilter('f')}`,
+     WHERE f.directoryId IS NULL AND ${buildRecordFilter('f')}`,
   )
   return row?.count ?? 0
 }

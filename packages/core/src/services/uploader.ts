@@ -884,7 +884,8 @@ export class UploadManager {
         fileExistsLocally: true,
         hashNotEmpty: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
-        activeOnly: true,
+        includeThumbnails: true,
+        includeOldVersions: true,
       })
 
       const newEntries: FileEntry[] = []

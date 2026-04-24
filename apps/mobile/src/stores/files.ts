@@ -26,7 +26,8 @@ export async function getFilesLocalOnly(params: {
       isPinned: false,
     },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 
@@ -69,7 +70,8 @@ export async function getFileCountLocal(params: { localOnly: boolean }) {
       isPinned: !params.localOnly,
     },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 
@@ -87,7 +89,8 @@ export async function getFileStatsLocal(params: { localOnly: boolean }) {
       isPinned: !params.localOnly,
     },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 

@@ -101,6 +101,10 @@ export async function syncUpMetadataBatch(
           id: after.id,
         }
       : undefined,
+    includeThumbnails: true,
+    includeOldVersions: true,
+    includeTrashed: true,
+    includeDeleted: true,
   })
   if (batch.length === 0) {
     logger.debug('syncUpMetadata', 'no_updates')
@@ -117,6 +121,10 @@ export async function syncUpMetadataBatch(
       orderBy: 'updatedAt',
       pinned: { indexerURL, isPinned: true },
       after: after ? { value: after.updatedAt, id: after.id } : undefined,
+      includeThumbnails: true,
+      includeOldVersions: true,
+      includeTrashed: true,
+      includeDeleted: true,
     }
     const total = await app.files.queryCount(queryOpts)
     app.sync.setState({

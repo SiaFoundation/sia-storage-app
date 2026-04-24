@@ -2,7 +2,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecord, FileRecordRow, ThumbSize } from '../../types/files'
 import { ThumbSizes } from '../../types/files'
 import { transformRow } from './files'
-import { buildActiveFileFilter, buildActiveFilter } from './library'
+import { buildRecordFilter } from './library'
 import { queryObjectRefsForFile } from './localObjects'
 
 export type ThumbnailCandidateRow = {
@@ -124,7 +124,7 @@ export async function queryThumbnailCandidatePage(
       AND t.thumbSize IN (${ThumbSizes.join(',')})
      WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%')
        AND f.type != 'image/tiff'
-       AND ${buildActiveFileFilter('f')}
+       AND ${buildRecordFilter('f')}
        AND f.hash != ''
        ${cursorClause}
      GROUP BY f.id
@@ -139,10 +139,10 @@ export async function queryThumbnailScanProgress(
   db: DatabaseAdapter,
 ): Promise<{ originals: number; thumbs: number }> {
   const originalsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND ${buildActiveFileFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f WHERE (f.type LIKE 'image/%' OR f.type LIKE 'video/%') AND ${buildRecordFilter('f')}`,
   )
   const thumbsRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildActiveFilter('f')} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
+    `SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })} AND f.thumbSize IN (${ThumbSizes.join(',')})`,
   )
   return {
     originals: originalsRow?.count ?? 0,

@@ -365,13 +365,14 @@ describe('queryFiles', () => {
     expect(results[1].id).toBe('file-3')
   })
 
-  it('filters by activeOnly', async () => {
+  it('filters out trashed and deleted records', async () => {
     await insertFile(db(), makeFileRecord('active'))
     await insertFile(db(), makeFileRecord('trashed', { trashedAt: 2000 }))
     await insertFile(db(), makeFileRecord('deleted', { deletedAt: 3000 }))
     const results = await queryFiles(db(), {
       order: 'ASC',
-      activeOnly: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
     })
     expect(results).toHaveLength(1)
     expect(results[0].id).toBe('active')
@@ -432,16 +433,23 @@ describe('queryFiles', () => {
     expect(results.map((r) => r.id)).toEqual(['f2', 'f3'])
   })
 
-  it('activeOnly excludes trashed separately from deleted', async () => {
+  it('excludes trashed separately from deleted', async () => {
     await insertFile(db(), makeFileRecord('active'))
     await insertFile(db(), makeFileRecord('trashed', { trashedAt: 2000 }))
     await insertFile(db(), makeFileRecord('deleted', { deletedAt: 3000, trashedAt: 3000 }))
     const active = await queryFiles(db(), {
       order: 'ASC',
-      activeOnly: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
     })
     expect(active.map((r) => r.id)).toEqual(['active'])
-    const all = await queryFiles(db(), { order: 'ASC' })
+    const all = await queryFiles(db(), {
+      order: 'ASC',
+      includeThumbnails: true,
+      includeOldVersions: true,
+      includeTrashed: true,
+      includeDeleted: true,
+    })
     expect(all).toHaveLength(3)
   })
 })
@@ -471,7 +479,8 @@ describe('queryFileCount', () => {
     await insertFile(db(), makeFileRecord('f3', { trashedAt: 2000 }))
     const count = await queryFileCount(db(), {
       order: 'ASC',
-      activeOnly: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
     })
     expect(count).toBe(2)
   })
@@ -479,7 +488,8 @@ describe('queryFileCount', () => {
   it('returns 0 when no records match', async () => {
     const count = await queryFileCount(db(), {
       order: 'ASC',
-      activeOnly: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
     })
     expect(count).toBe(0)
   })
@@ -497,7 +507,8 @@ describe('queryFileStats', () => {
   it('returns zeros when no records match', async () => {
     const stats = await queryFileStats(db(), {
       order: 'ASC',
-      activeOnly: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
     })
     expect(stats.count).toBe(0)
     expect(stats.totalBytes).toBe(0)

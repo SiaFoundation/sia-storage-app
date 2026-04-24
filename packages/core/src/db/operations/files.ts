@@ -5,7 +5,7 @@ import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import { buildActiveFileFilter, buildActiveFilter } from './library'
+import { buildRecordFilter } from './library'
 import { insertObject, queryObjectRefsForFile, queryObjectsForFile } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 
@@ -215,7 +215,14 @@ export type FileQueryOpts = {
   }
   fileExistsLocally?: boolean
   excludeIds?: string[]
-  activeOnly?: boolean
+  /** Include kind='thumb' rows. Default: only kind='file'. */
+  includeThumbnails?: boolean
+  /** Include superseded versions (current=0). Default: current version only. */
+  includeOldVersions?: boolean
+  /** Include trashed rows. Default: excluded. */
+  includeTrashed?: boolean
+  /** Include tombstoned rows. Default: excluded. */
+  includeDeleted?: boolean
   hashEmpty?: boolean
   hashNotEmpty?: boolean
 }
@@ -237,7 +244,10 @@ function buildFileRecordsQuery(
     orderBy,
     fileExistsLocally,
     excludeIds,
-    activeOnly,
+    includeThumbnails,
+    includeOldVersions,
+    includeTrashed,
+    includeDeleted,
     hashEmpty,
     hashNotEmpty,
   } = opts
@@ -245,12 +255,14 @@ function buildFileRecordsQuery(
 
   const params: (string | number)[] = []
 
-  const whereClauses: string[] = []
-
-  if (activeOnly) {
-    whereClauses.push(`${tableAlias}.trashedAt IS NULL`)
-    whereClauses.push(`${tableAlias}.deletedAt IS NULL`)
-  }
+  const whereClauses: string[] = [
+    buildRecordFilter(tableAlias, {
+      includeThumbnails,
+      includeOldVersions,
+      includeTrashed,
+      includeDeleted,
+    }),
+  ]
 
   if (hashEmpty) {
     whereClauses.push(`${tableAlias}.hash = ''`)
@@ -665,7 +677,8 @@ export async function queryLocalOnlyFiles(
     pinned: { indexerURL, isPinned: false },
     fileExistsLocally: true,
     excludeIds: opts.excludeIds,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 
@@ -695,7 +708,7 @@ export async function updateFileWithLocalObject(
 export async function queryLostFileCount(db: DatabaseAdapter, indexerURL: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
@@ -713,7 +726,7 @@ export async function queryLostFileStats(
 ): Promise<{ count: number; totalBytes: number }> {
   const row = await db.getFirstAsync<{ count: number; totalBytes: number }>(
     `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
@@ -731,7 +744,7 @@ export async function queryLostFiles(
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
     `SELECT ${FILE_ROW_COLUMNS} FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
      AND (
        f.lostReason IS NOT NULL
        OR (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
@@ -752,7 +765,8 @@ export async function queryLocalFileCount(
     order: 'ASC',
     pinned: { indexerURL, isPinned: !localOnly },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 
@@ -765,7 +779,8 @@ export async function queryLocalFileStats(
     order: 'ASC',
     pinned: { indexerURL, isPinned: !localOnly },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
   })
 }
 
@@ -954,7 +969,7 @@ export async function queryFileByName(
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
     `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
-     FROM files f WHERE f.name = ? AND ${buildActiveFileFilter('f')}
+     FROM files f WHERE f.name = ? AND ${buildRecordFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC`,
     name,
   )
@@ -973,7 +988,7 @@ export async function readFileByName(
 export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)`,
   )
   return row?.count ?? 0
@@ -989,7 +1004,7 @@ export async function queryUnuploadedFiles(
     size: number
   }>(
     `SELECT f.id, f.name, f.type, f.size FROM files f
-     WHERE ${buildActiveFileFilter('f')}
+     WHERE ${buildRecordFilter('f')}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
      ORDER BY f.addedAt DESC`,
   )
@@ -1003,7 +1018,7 @@ export async function queryActiveFileSummaries(
     kind: string
     type: string
     size: number
-  }>(`SELECT f.id, f.kind, f.type, f.size FROM files f WHERE ${buildActiveFileFilter('f')}`)
+  }>(`SELECT f.id, f.kind, f.type, f.size FROM files f WHERE ${buildRecordFilter('f')}`)
 }
 
 export async function queryUploadedFileIds(
@@ -1024,7 +1039,7 @@ export async function deleteLostFilesAndThumbnails(
   return sql.processInBatches<{ id: string }>(
     db,
     `SELECT f.id FROM files f
-     WHERE f.kind = 'file' AND ${buildActiveFilter('f')}
+     WHERE f.kind = 'file' AND ${buildRecordFilter('f', { includeOldVersions: true })}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)

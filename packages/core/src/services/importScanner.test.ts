@@ -28,7 +28,8 @@ function createMockApp(): MockHelper {
         const results: any[] = []
         for (const [, file] of fileRecords) {
           if (excludeSet.has(file.id)) continue
-          if (opts.activeOnly && (file.trashedAt || file.deletedAt)) continue
+          if (!opts.includeTrashed && file.trashedAt) continue
+          if (!opts.includeDeleted && file.deletedAt) continue
           if (opts.hashEmpty && file.hash !== '') continue
           if (opts.fileExistsLocally === true && !fsFiles.has(file.id)) continue
           if (opts.fileExistsLocally === false && fsFiles.has(file.id)) continue
@@ -174,7 +175,8 @@ describe('ImportScanner', () => {
         expect.objectContaining({
           hashEmpty: true,
           fileExistsLocally: true,
-          activeOnly: true,
+          includeThumbnails: true,
+          includeOldVersions: true,
         }),
       )
     })
@@ -252,7 +254,8 @@ describe('ImportScanner', () => {
         expect.objectContaining({
           hashEmpty: true,
           fileExistsLocally: false,
-          activeOnly: true,
+          includeThumbnails: true,
+          includeOldVersions: true,
         }),
       )
     })

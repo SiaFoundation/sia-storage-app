@@ -1,5 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
-import { buildActiveFileFilter, buildActiveFilter } from './library'
+import { buildRecordFilter } from './library'
 
 export type UploadCategoryStats = {
   total: number
@@ -89,7 +89,7 @@ export async function queryUploadStats(
 ): Promise<UploadStats> {
   // Include all active files. Importing files (hash = '') have size = 0,
   // so byte totals remain accurate while counts reflect the full library.
-  const activeFile = buildActiveFileFilter('f')
+  const activeFile = buildRecordFilter('f')
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
   const [photos, videos, audio, docs, other, thumbnails, importingRow] = await Promise.all([
@@ -100,7 +100,9 @@ export async function queryUploadStats(
     q(
       `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
-    q(`f.kind = 'thumb' AND ${buildActiveFilter('f')}`),
+    q(
+      `f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })}`,
+    ),
     db.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files f WHERE ${activeFile} AND f.hash = ''`,
     ),
