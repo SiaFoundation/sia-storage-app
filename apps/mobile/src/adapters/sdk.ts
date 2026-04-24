@@ -11,6 +11,8 @@ import type {
   SdkAdapter,
   UploadOptions,
 } from '@siastorage/core/adapters'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
+import { AppKey, type AppKeyInterface, PinnedObject } from 'react-native-sia'
 import type { SdkInterface } from 'react-native-sia'
 
 export class MobileSdkAdapter implements SdkAdapter {
@@ -84,6 +86,14 @@ export class MobileSdkAdapter implements SdkAdapter {
 
   shareObject(object: PinnedObjectRef, validUntil: Date): string {
     return this.sdk.shareObject(object, validUntil)
+  }
+
+  openAppKey(bytes: Uint8Array): AppKeyRef {
+    return new AppKey(bytes.buffer as ArrayBuffer) as AppKeyRef
+  }
+
+  openPinnedObject(appKey: AppKeyRef, object: LocalObject): PinnedObjectRef {
+    return PinnedObject.open(appKey as AppKeyInterface, object) as PinnedObjectRef
   }
 
   appKey(): AppKeyRef {

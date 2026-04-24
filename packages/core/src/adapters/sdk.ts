@@ -1,3 +1,4 @@
+import type { LocalObject } from '../encoding/localObject'
 import type { Reader } from './fs'
 
 export interface ObjectsCursor {
@@ -156,6 +157,10 @@ export interface SdkAdapter {
   getPinnedObject(objectId: string): Promise<PinnedObjectRef>
   sharedObject(url: string): Promise<PinnedObjectRef>
   shareObject(object: PinnedObjectRef, validUntil: Date): string
+  /** Reconstructs a live AppKeyRef from stored key bytes. */
+  openAppKey(bytes: Uint8Array): AppKeyRef
+  /** Reconstructs a live PinnedObjectRef from a stored LocalObject. */
+  openPinnedObject(appKey: AppKeyRef, object: LocalObject): PinnedObjectRef
   appKey(): AppKeyRef
   downloadByObjectId(objectId: string): Promise<ArrayBuffer>
   hosts(): Promise<Host[]>

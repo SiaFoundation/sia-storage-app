@@ -657,6 +657,17 @@ export interface AppService {
     /** Sets the maximum concurrent download slots and persists the value. */
     setMaxSlots(n: number): Promise<void>
   }
+  /** Share URL operations: resolve, preview, pin, and create share links. */
+  shares: {
+    /** Returns serializable metadata (size) for a share URL. */
+    getMetadata(url: string): Promise<{ size: number }>
+    /** Downloads the first N bytes of a shared object for MIME sniffing. */
+    downloadFirstBytes(url: string, byteCount: number): Promise<Uint8Array>
+    /** Pins a shared URL to the current indexer and returns the new local object. */
+    pin(url: string, fileId: string): Promise<LocalObject>
+    /** Creates a share URL for a file, valid until the given date. */
+    create(fileId: string, validUntil: Date): Promise<string>
+  }
   /** Connection state: tracks whether the app is connected to an indexer. */
   connection: {
     /** Returns the current connection state snapshot. */

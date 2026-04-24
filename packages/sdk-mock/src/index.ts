@@ -15,6 +15,7 @@ import type {
 } from '@siastorage/core/adapters'
 import { SECTOR_SIZE } from '@siastorage/core/config'
 import { decodeFileMetadata, encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
+import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata } from '@siastorage/core/types'
 
 export type StoredObject = {
@@ -338,6 +339,16 @@ export class MockSdk implements SdkAdapter {
 
   shareObject(_object: PinnedObjectRef, _validUntil: Date): string {
     return 'https://mock-share-url.com'
+  }
+
+  openAppKey(_bytes: Uint8Array): AppKeyRef {
+    return this.appKey()
+  }
+
+  openPinnedObject(_appKey: AppKeyRef, object: LocalObject): PinnedObjectRef {
+    const stored = this.storage.objects.get(object.id)
+    if (!stored) throw new Error(`Object not found: ${object.id}`)
+    return createMockPinnedObject(stored)
   }
 
   async hosts(): Promise<Host[]> {
