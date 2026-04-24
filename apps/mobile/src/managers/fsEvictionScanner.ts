@@ -13,7 +13,9 @@ const flight = new SingleInit()
  * - Only start eviction if we are above the FS_MAX_BYTES limit.
  * - Only evict a specific file if it is older than FS_EVICTABLE_MIN_AGE.
  */
-export async function runFsEvictionScanner(): Promise<CacheEvictionResult | undefined> {
+export async function runFsEvictionScanner(
+  opts: { signal?: AbortSignal } = {},
+): Promise<CacheEvictionResult | undefined> {
   const lastRun = await app().settings.getFsEvictionLastRun()
   if (Date.now() - lastRun < FS_EVICTION_FREQUENCY) {
     logger.debug('fsEvictionScanner', 'skipped', { reason: 'too_recent' })
@@ -21,7 +23,7 @@ export async function runFsEvictionScanner(): Promise<CacheEvictionResult | unde
   }
   return flight.run(async () => {
     try {
-      const result = await runCacheEviction(app())
+      const result = await runCacheEviction(app(), undefined, opts.signal)
       await app().settings.setFsEvictionLastRun(Date.now())
       return result
     } catch (error) {

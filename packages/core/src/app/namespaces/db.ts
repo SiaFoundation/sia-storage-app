@@ -77,6 +77,9 @@ export function buildDbNamespaces(
     calcTotalSize: () => ops.queryFsMetaTotalSize(db),
     evictionCandidates: (thresholdUsedAt, limit) =>
       ops.queryEvictionCandidates(db, thresholdUsedAt, limit),
+    nonCurrentCachedFiles: (thresholdUsedAt, limit) =>
+      ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, limit),
+    trashedCachedFiles: (limit) => ops.queryTrashedCachedFiles(db, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     removeFile,

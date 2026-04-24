@@ -47,6 +47,9 @@ export async function deleteManyFsMeta(db: DatabaseAdapter, fileIds: string[]): 
   await db.runAsync(`DELETE FROM fs WHERE fileId IN (${ph})`, ...fileIds)
 }
 
+// LRU pass: only current originals. Thumbnails are never evicted by LRU —
+// regenerating a current thumb is wasted work and causes UI flicker. Non-
+// current and trashed rows are handled by the dedicated pre-passes.
 export async function queryEvictionCandidates(
   db: DatabaseAdapter,
   thresholdUsedAt: number,
@@ -55,13 +58,63 @@ export async function queryEvictionCandidates(
   return db.getAllAsync<{ fileId: string; size: number; type: string }>(
     `SELECT fs.fileId, fs.size, f.type FROM fs
      JOIN files f ON f.id = fs.fileId
-     WHERE fs.usedAt <= ?
+     WHERE f.kind = 'file' AND f.current = 1
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND fs.usedAt <= ?
        AND EXISTS (
          SELECT 1 FROM objects o WHERE o.fileId = fs.fileId
        )
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     thresholdUsedAt,
+    limit,
+  )
+}
+
+// Non-current pass: superseded files (current=0) and the thumbnails that
+// belong to them (matched via thumbForId). Current files' thumbs are never
+// included here — only thumbs whose parent is itself non-current.
+export async function queryNonCurrentCachedFiles(
+  db: DatabaseAdapter,
+  thresholdUsedAt: number,
+  limit: number,
+): Promise<{ fileId: string; size: number; type: string }[]> {
+  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
+    `SELECT fs.fileId, fs.size, f.type FROM fs
+     JOIN files f ON f.id = fs.fileId
+     WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND (
+         (f.kind = 'file' AND f.current = 0)
+         OR (f.kind = 'thumb' AND EXISTS (
+           SELECT 1 FROM files o
+           WHERE o.id = f.thumbForId
+             AND o.kind = 'file'
+             AND o.current = 0
+             AND o.trashedAt IS NULL
+             AND o.deletedAt IS NULL
+         ))
+       )
+       AND fs.usedAt <= ?
+       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId)
+     ORDER BY fs.usedAt ASC, fs.fileId ASC
+     LIMIT ?`,
+    thresholdUsedAt,
+    limit,
+  )
+}
+
+export async function queryTrashedCachedFiles(
+  db: DatabaseAdapter,
+  limit: number,
+): Promise<{ fileId: string; size: number; type: string }[]> {
+  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
+    `SELECT fs.fileId, fs.size, f.type FROM fs
+     JOIN files f ON f.id = fs.fileId
+     WHERE f.trashedAt IS NOT NULL
+       AND f.deletedAt IS NULL
+       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId)
+     ORDER BY fs.fileId ASC
+     LIMIT ?`,
     limit,
   )
 }
