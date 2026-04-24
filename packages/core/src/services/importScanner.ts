@@ -136,7 +136,8 @@ export class ImportScanner {
         const localCandidates = await app.files.query({
           hashEmpty: true,
           fileExistsLocally: true,
-          activeOnly: true,
+          includeThumbnails: true,
+          includeOldVersions: true,
           limit: MAX_PER_TICK,
           order: 'DESC',
           orderBy: 'addedAt',
@@ -206,7 +207,8 @@ export class ImportScanner {
         const deferredCandidates = await app.files.query({
           hashEmpty: true,
           fileExistsLocally: false,
-          activeOnly: true,
+          includeThumbnails: true,
+          includeOldVersions: true,
           limit: deferredLimit,
           order: 'DESC',
           orderBy: 'addedAt',

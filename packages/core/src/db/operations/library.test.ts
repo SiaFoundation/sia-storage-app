@@ -1,6 +1,7 @@
 import { insertFile } from './files'
 import {
   buildLibraryQueryParts,
+  buildRecordFilter,
   queryDirectoryFileCount,
   queryFileCountWithFilters,
   queryFilePositionInSortedList,
@@ -653,5 +654,69 @@ describe('querySortedFileIds', () => {
 
     const ids = await querySortedFileIds(db(), { sortBy: 'NAME', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['f20', 'f10', 'f3', 'f2', 'f1'])
+  })
+})
+
+describe('buildRecordFilter', () => {
+  test('default: kind=file AND current=1, non-trashed, non-deleted', () => {
+    expect(buildRecordFilter('f')).toBe(
+      "f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+    )
+  })
+
+  test('includeTrashed drops trashedAt clause', () => {
+    expect(buildRecordFilter('f', { includeTrashed: true })).toBe(
+      "f.kind = 'file' AND f.current = 1 AND f.deletedAt IS NULL",
+    )
+  })
+
+  test('includeOldVersions alone drops current clause', () => {
+    expect(buildRecordFilter('f', { includeOldVersions: true })).toBe(
+      "f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+    )
+  })
+
+  test('includeThumbnails + includeOldVersions: all rows, just trashed/deleted guarded', () => {
+    expect(buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })).toBe(
+      'f.trashedAt IS NULL AND f.deletedAt IS NULL',
+    )
+  })
+
+  test('includeThumbnails alone: current files + thumbs of current, non-trashed, non-deleted originals', () => {
+    const filter = buildRecordFilter('f', { includeThumbnails: true })
+    expect(filter).toContain("f.kind = 'file' AND f.current = 1")
+    expect(filter).toContain("f.kind = 'thumb' AND EXISTS")
+    expect(filter).toContain(
+      'o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL AND o.deletedAt IS NULL',
+    )
+    expect(filter).toContain('f.trashedAt IS NULL')
+    expect(filter).toContain('f.deletedAt IS NULL')
+  })
+
+  test('includeThumbnails + includeTrashed: thumbs of trashed originals also pass', () => {
+    const filter = buildRecordFilter('f', { includeThumbnails: true, includeTrashed: true })
+    expect(filter).toContain('o.id = f.thumbForId AND o.current = 1 AND o.deletedAt IS NULL')
+    expect(filter).not.toContain('o.trashedAt IS NULL')
+    expect(filter).not.toContain('f.trashedAt IS NULL')
+    expect(filter).toContain('f.deletedAt IS NULL')
+  })
+
+  test('includeThumbnails + includeDeleted: thumbs of deleted originals also pass', () => {
+    const filter = buildRecordFilter('f', { includeThumbnails: true, includeDeleted: true })
+    expect(filter).toContain('o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL')
+    expect(filter).not.toContain('o.deletedAt IS NULL')
+    expect(filter).toContain('f.trashedAt IS NULL')
+    expect(filter).not.toContain('f.deletedAt IS NULL')
+  })
+
+  test('all include flags produce 1=1', () => {
+    expect(
+      buildRecordFilter('f', {
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      }),
+    ).toBe('1=1')
   })
 })

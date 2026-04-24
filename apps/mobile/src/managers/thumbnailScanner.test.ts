@@ -54,7 +54,16 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue(null)
     const result = await runThumbnailScanner()
     expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
-    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(1)
+    expect(
+      await app().files.queryCount({
+        limit: 100,
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      }),
+    ).toBe(1)
   })
 
   it('skips files that already have all thumbnail sizes', async () => {
@@ -96,7 +105,16 @@ describe('thumbnailScanner', () => {
     expect(result.produced).toHaveLength(0)
     expect(result.attempts).toHaveLength(0)
     expect(result.skippedFullyCovered).toHaveLength(0)
-    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(
+      await app().files.queryCount({
+        limit: 100,
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      }),
+    ).toBe(3)
   })
 
   it('generates a missing thumbnail (64px)', async () => {
@@ -143,7 +161,16 @@ describe('thumbnailScanner', () => {
     expect(producedSizes).toEqual([64])
     const sizes = await app().thumbnails.getSizesForFile('file1')
     expect(sizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
-    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(
+      await app().files.queryCount({
+        limit: 100,
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      }),
+    ).toBe(3)
   })
 
   it('pages past skipped candidates to find eligible originals', async () => {
@@ -271,7 +298,16 @@ describe('thumbnailScanner', () => {
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
     expect(result.produced.filter((p) => p.size === 64)).toHaveLength(0)
-    expect(await app().files.queryCount({ limit: 100, order: 'ASC' })).toBe(3)
+    expect(
+      await app().files.queryCount({
+        limit: 100,
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      }),
+    ).toBe(3)
   })
 
   it('generates thumbnails for video files using captured frames', async () => {

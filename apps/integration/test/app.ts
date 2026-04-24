@@ -454,7 +454,13 @@ export function createTestApp(
     },
 
     async getFiles() {
-      return appService.files.query({ order: 'ASC' })
+      return appService.files.query({
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      })
     },
 
     async getFileById(id) {
@@ -462,13 +468,20 @@ export function createTestApp(
     },
 
     async waitForFileCount(count, timeout = 15_000) {
+      const queryOpts = {
+        order: 'ASC',
+        includeThumbnails: true,
+        includeOldVersions: true,
+        includeTrashed: true,
+        includeDeleted: true,
+      } as const
       const start = Date.now()
       while (Date.now() - start < timeout) {
-        const files = await appService.files.query({ order: 'ASC' })
+        const files = await appService.files.query(queryOpts)
         if (files.length === count) return
         await new Promise((r) => setTimeout(r, 50))
       }
-      const final = await appService.files.query({ order: 'ASC' })
+      const final = await appService.files.query(queryOpts)
       throw new Error(`Expected ${count} files but got ${final.length} within ${timeout}ms`)
     },
 
@@ -494,6 +507,10 @@ export function createTestApp(
             order: 'ASC',
             pinned: { indexerURL: INDEXER_URL, isPinned: false },
             fileExistsLocally: true,
+            includeThumbnails: true,
+            includeOldVersions: true,
+            includeTrashed: true,
+            includeDeleted: true,
           })
           return pending.length === 0
         },

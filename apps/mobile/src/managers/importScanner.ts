@@ -26,7 +26,8 @@ async function computeMaxDeferred(): Promise<number> {
     order: 'ASC',
     pinned: { indexerURL, isPinned: false },
     fileExistsLocally: true,
-    activeOnly: true,
+    includeThumbnails: true,
+    includeOldVersions: true,
     hashNotEmpty: true,
   })
   const maxDeferred =
