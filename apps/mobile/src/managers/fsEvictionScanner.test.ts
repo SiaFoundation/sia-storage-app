@@ -31,7 +31,7 @@ describe('fsEvictionScanner', () => {
     await resetDb()
   })
 
-  it('does nothing when total size is below limit', async () => {
+  it('does not evict current versions when total size is below limit', async () => {
     await createRemoteFile({
       id: 'file-1',
       size: 200,
@@ -41,7 +41,7 @@ describe('fsEvictionScanner', () => {
 
     expect(await app().fs.readMeta('file-1')).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
-    expect(result).toBeUndefined()
+    expect(result?.evictedFileIds ?? []).toHaveLength(0)
   })
 
   it('never evicts local-only files', async () => {
@@ -60,7 +60,22 @@ describe('fsEvictionScanner', () => {
     expect(await app().fs.readMeta('file-2')).toBeDefined()
     expect(await app().fs.readMeta('file-3')).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
-    expect(result).toBeUndefined()
+    expect(result?.evictedFileIds ?? []).toHaveLength(0)
+  })
+
+  it('evicts trashed uploaded files on the next pass regardless of age', async () => {
+    await createRemoteFile({
+      id: 'file-t',
+      size: 200,
+      usedAt: now,
+    })
+    await app().files.trash(['file-t'])
+
+    const result = await runFsEvictionScanner()
+
+    expect(result).toBeDefined()
+    expect(result!.evictedFileIds).toContain('file-t')
+    expect(await app().fs.readMeta('file-t')).toBeNull()
   })
 
   it('evicts oldest remote files until under limit', async () => {

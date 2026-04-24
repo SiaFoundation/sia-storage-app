@@ -57,8 +57,10 @@ export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 // File system file eviction frequency.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
-// Age threshold for considering files evictable.
+// Age threshold for evicting cached files via the LRU cap pass.
 export const FS_EVICTABLE_MIN_AGE = daysInMs(1) // 1 day
+// Age threshold for evicting superseded file versions.
+export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.
 export const SYNC_UP_METADATA_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync up metadata batch size.

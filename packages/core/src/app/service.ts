@@ -398,6 +398,13 @@ export interface AppService {
       thresholdUsedAt: number,
       limit: number,
     ): Promise<{ fileId: string; size: number; type: string }[]>
+    /** Returns cached superseded file versions (current=0) eligible for eviction. */
+    nonCurrentCachedFiles(
+      thresholdUsedAt: number,
+      limit: number,
+    ): Promise<{ fileId: string; size: number; type: string }[]>
+    /** Returns cached trashed files (and their thumbs) that are uploaded. No age gate. */
+    trashedCachedFiles(limit: number): Promise<{ fileId: string; size: number; type: string }[]>
     /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
     /** Returns the local file URI if the file exists on disk, or null. */

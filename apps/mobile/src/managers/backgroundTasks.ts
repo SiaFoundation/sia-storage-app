@@ -309,7 +309,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   if (AppState.currentState !== 'active') {
     await runFsOrphanScanner()
     if (signal.aborted) return
-    await runFsEvictionScanner()
+    await runFsEvictionScanner({ signal })
     if (signal.aborted) return
     await triggerRecentScanIfNeeded()
     if (signal.aborted) return
