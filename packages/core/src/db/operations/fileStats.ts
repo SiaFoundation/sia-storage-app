@@ -100,9 +100,7 @@ export async function queryUploadStats(
     q(
       `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
-    q(
-      `f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true, includeOldVersions: true })}`,
-    ),
+    q(`f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true })}`),
     db.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM files f WHERE ${activeFile} AND f.hash = ''`,
     ),

@@ -71,7 +71,6 @@ export async function getFileCountLocal(params: { localOnly: boolean }) {
     },
     fileExistsLocally: true,
     includeThumbnails: true,
-    includeOldVersions: true,
   })
 }
 
@@ -90,7 +89,6 @@ export async function getFileStatsLocal(params: { localOnly: boolean }) {
     },
     fileExistsLocally: true,
     includeThumbnails: true,
-    includeOldVersions: true,
   })
 }
 

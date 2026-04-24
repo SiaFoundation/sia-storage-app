@@ -16,7 +16,6 @@ export function useFileCountAll() {
       after: undefined,
       order: 'ASC',
       includeThumbnails: true,
-      includeOldVersions: true,
     }),
   )
 }
@@ -30,7 +29,6 @@ export function useFileStatsAll() {
       after: undefined,
       order: 'ASC',
       includeThumbnails: true,
-      includeOldVersions: true,
     }),
   )
 }
