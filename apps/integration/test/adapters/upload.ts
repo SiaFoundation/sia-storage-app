@@ -14,6 +14,8 @@ export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter
     getPinnedObject: (id) => sdk.getPinnedObject(id),
     sharedObject: (url) => sdk.sharedObject(url),
     shareObject: () => '',
+    openAppKey: (bytes) => sdk.openAppKey(bytes),
+    openPinnedObject: (key, object) => sdk.openPinnedObject(key, object),
     appKey: () => appKey,
     downloadByObjectId: (id) => sdk.downloadByObjectId(id),
     hosts: async () => [],

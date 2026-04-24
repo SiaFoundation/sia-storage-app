@@ -15,6 +15,7 @@ import { buildAuthNamespace } from './auth'
 import { buildDbNamespaces } from './db'
 import { buildDownloadsNamespace, type DownloadObjectAdapter } from './downloads'
 import { buildSettingsNamespace } from './settings'
+import { buildSharesNamespace } from './shares'
 import { buildUploaderNamespace, initUploader } from './uploader'
 import { buildUploadsNamespace } from './uploads'
 
@@ -108,6 +109,16 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     () => sdkRef,
   )
 
+  const settingsNamespace = buildSettingsNamespace(adapters.storage, caches)
+  const authNamespace = buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth)
+
+  const sharesNamespace = buildSharesNamespace(
+    adapters.db,
+    () => sdkRef,
+    () => settingsNamespace.getIndexerURL(),
+    (indexerURL) => authNamespace.getAppKey(indexerURL),
+  )
+
   const service: AppService = {
     // PRAGMA optimize refreshes query planner stats for tables flagged as
     // having stale sqlite_stat*. WAL trimming is delegated to SQLite's own
@@ -123,7 +134,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       thumbnail: adapters.thumbnail,
       detectMimeType: adapters.detectMimeType,
     }),
-    settings: buildSettingsNamespace(adapters.storage, caches),
+    settings: settingsNamespace,
     storage: {
       getItem: (k) => adapters.storage.getItem(k),
       setItem: (k, v) => adapters.storage.setItem(k, v),
@@ -134,7 +145,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       setItem: (k, v) => adapters.secrets.setItem(k, v),
       deleteItem: (k) => adapters.secrets.deleteItem(k),
     },
-    auth: buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth),
+    auth: authNamespace,
     sync: {
       getState: () => ({ ...syncState }),
       setState: (patch) => {
@@ -175,6 +186,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     },
     uploads: uploadsNamespace,
     downloads: downloadsNamespace,
+    shares: sharesNamespace,
     connection: {
       getState: () => ({ ...connectionState }),
       setState: (patch) => {

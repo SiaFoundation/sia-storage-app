@@ -36,6 +36,9 @@ function createStubAppService(db: any) {
       async download() {
         throw new Error('not implemented')
       },
+      async downloadFromShareUrl() {
+        throw new Error('not implemented')
+      },
     },
     uploader: {
       calculateContentHash: async () => '',

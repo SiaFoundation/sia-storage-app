@@ -50,6 +50,7 @@ export function buildDbNamespaces(
   | 'sync'
   | 'uploads'
   | 'downloads'
+  | 'shares'
   | 'connection'
   | 'init'
   | 'uploader'
