@@ -83,8 +83,8 @@ export async function initApp(): Promise<void> {
   if (hasOnboarded) {
     steps.push({
       id: 'connect',
-      label: 'Connecting to indexer',
-      message: 'Initializing SDK...',
+      label: 'Sia network',
+      message: 'Connecting to the Sia network...',
       runner: async () => {
         await reconnectIndexer()
       },
@@ -92,15 +92,11 @@ export async function initApp(): Promise<void> {
 
     steps.push({
       id: 'cleanup',
-      label: 'Cleaning up old files',
-      message: 'Cleaning up old files...',
-      runner: async (updateMessage) => {
+      label: 'Local storage',
+      message: 'Tidying up your cache...',
+      runner: async () => {
         await app().files.autoPurgeWithCleanup()
-        await runFsOrphanScanner({
-          onProgress: (removed) => {
-            updateMessage(`Cleaning up old files... ${removed} removed`)
-          },
-        })
+        await runFsOrphanScanner()
         await runFsEvictionScanner()
       },
     })
