@@ -3,7 +3,7 @@ import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
-import { runFsEvictionScanner } from './fsEvictionScanner'
+import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
 
 jest.mock('@siastorage/core/config', () => {
   const { daysInMs } = jest.requireActual('@siastorage/core')
@@ -92,6 +92,29 @@ describe('fsEvictionScanner', () => {
     const forced = await runFsEvictionScanner({ force: true })
     expect(forced).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
+  })
+
+  it('does not advance lastRun when aborted mid-scan', async () => {
+    await createRemoteFile({
+      id: 'file-abort',
+      size: 2_000,
+      usedAt: now - daysInMs(1000),
+    })
+
+    const trashedSpy = jest
+      .spyOn(app().fs, 'trashedCachedFiles')
+      .mockImplementationOnce(async () => {
+        cancelFsEvictionScanner()
+        return []
+      })
+
+    try {
+      const result = await runFsEvictionScanner()
+      expect(result).toBeDefined()
+      expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(0)
+    } finally {
+      trashedSpy.mockRestore()
+    }
   })
 
   it('evicts oldest remote files until under limit', async () => {
