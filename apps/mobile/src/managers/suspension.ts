@@ -24,6 +24,7 @@ import { setSWREnabled } from '../lib/swr'
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
+import { cancelFsOrphanScanner } from './fsOrphanScanner'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -97,6 +98,7 @@ const manager = createSuspensionManager({
       // keeps issuing catalogAssets writes otherwise).
       app().downloads.cancelAll()
       cancelFsEvictionScanner()
+      cancelFsOrphanScanner()
       pauseArchiveSync()
     },
     onAfterResume: () => {

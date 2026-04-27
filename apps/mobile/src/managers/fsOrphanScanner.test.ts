@@ -1,7 +1,7 @@
 import { FS_ORPHAN_FREQUENCY } from '@siastorage/core/config'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
-import { runFsOrphanScanner } from './fsOrphanScanner'
+import { cancelFsOrphanScanner, runFsOrphanScanner } from './fsOrphanScanner'
 
 let listFilesSpy: jest.SpyInstance
 let removeFileSpy: jest.SpyInstance
@@ -205,6 +205,22 @@ describe('fsOrphanScanner', () => {
     const result = await runFsOrphanScanner()
 
     expect(result).toEqual({ removed: 60 })
+  })
+
+  it('does not advance lastRun when aborted mid-scan', async () => {
+    listFilesSpy.mockResolvedValue(['orphan-1.jpg'])
+    const findSpy = jest.spyOn(app().fs, 'findOrphanedFileIds').mockImplementationOnce(async () => {
+      cancelFsOrphanScanner()
+      return new Set<string>()
+    })
+
+    try {
+      const result = await runFsOrphanScanner()
+      expect(result).toEqual({ removed: 0 })
+      expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(0)
+    } finally {
+      findSpy.mockRestore()
+    }
   })
 
   it('coalesces concurrent calls into a single scan', async () => {

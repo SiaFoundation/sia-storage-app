@@ -307,7 +307,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   // Skip one-shot scanners if the app is foregrounded — startup already
   // runs these. The upload polling loop below still runs regardless.
   if (AppState.currentState !== 'active') {
-    await runFsOrphanScanner()
+    await runFsOrphanScanner({ signal })
     if (signal.aborted) return
     await runFsEvictionScanner({ signal })
     if (signal.aborted) return
