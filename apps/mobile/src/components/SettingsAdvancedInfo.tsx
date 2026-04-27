@@ -1,8 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useShowAdvanced } from '@siastorage/core/stores'
 import { Alert } from 'react-native'
-import Share from 'react-native-share'
-import { database } from '../db'
 import { humanSize } from '../lib/humanSize'
 import { runFsEvictionScanner } from '../managers/fsEvictionScanner'
 import { runFsOrphanScanner } from '../managers/fsOrphanScanner'
@@ -14,19 +12,6 @@ type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
 
 export function SettingsAdvancedInfo(_props: Props) {
   const showAdvanced = useShowAdvanced()
-
-  const handleExportDatabase = async () => {
-    try {
-      await Share.open({
-        url: `file://${database.databasePath}`,
-        type: 'application/x-sqlite3',
-        filename: 'app.db',
-      })
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message?.includes('User did not share')) return
-      Alert.alert('Error', String(e))
-    }
-  }
 
   const handleClearLocalFiles = async () => {
     const cached = await app().fs.calcTotalSize()
@@ -68,12 +53,6 @@ export function SettingsAdvancedInfo(_props: Props) {
         />
       </InsetGroupSection>
       <InsetGroupSection>
-        <InsetGroupLink
-          label="Export database"
-          description="Saves the app's SQLite database file for debugging."
-          onPress={handleExportDatabase}
-          showChevron={false}
-        />
         <InsetGroupLink
           label="Clear local files"
           description="Removes files on this device that are already backed up. Files that aren't backed up yet are kept."

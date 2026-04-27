@@ -1,5 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { InsetGroupLink, InsetGroupSection } from '../components/InsetGroup'
+import { SettingsAdvancedDatabase } from '../components/SettingsAdvancedDatabase'
 import { SettingsAdvancedInfo } from '../components/SettingsAdvancedInfo'
 import { SettingsAdvancedSync } from '../components/SettingsAdvancedSync'
 import { SettingsAdvancedTransfers } from '../components/SettingsAdvancedTransfers'
@@ -19,6 +20,7 @@ export function SettingsAdvancedScreen(props: Props) {
       <SettingsAdvancedInfo {...props} />
       <SettingsAdvancedTransfers />
       <SettingsAdvancedSync />
+      <SettingsAdvancedDatabase />
     </SettingsScrollLayout>
   )
 }
