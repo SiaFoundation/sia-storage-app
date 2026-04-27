@@ -257,7 +257,10 @@ export class ImportScanner {
               try {
                 // Exit early on suspension before starting file copy + hash.
                 if (signal?.aborted) break
-                const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri)
+                // usedAt: 0 — imported files are evictable as soon as they're uploaded.
+                const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri, {
+                  usedAt: 0,
+                })
                 if (signal?.aborted) break
                 const outcome = await this.hashExistingFile(file, uri)
                 if (outcome.action === 'finalized') {

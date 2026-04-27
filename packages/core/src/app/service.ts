@@ -412,7 +412,11 @@ export interface AppService {
     /** Removes a local file from disk. */
     removeFile(file: { id: string; type: string }): Promise<void>
     /** Copies a file from the source URI into managed storage; returns the new URI. */
-    copyFile(file: { id: string; type: string }, sourceUri: string): Promise<string>
+    copyFile(
+      file: { id: string; type: string },
+      sourceUri: string,
+      opts?: { usedAt?: number },
+    ): Promise<string>
     /** Writes file data to managed storage, computes hash, and upserts metadata. */
     writeFileData(
       file: { id: string; type: string },

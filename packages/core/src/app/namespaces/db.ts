@@ -83,14 +83,14 @@ export function buildDbNamespaces(
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     removeFile,
-    copyFile: async (file, sourceUri) => {
+    copyFile: async (file, sourceUri, opts) => {
       const result = await fsIO.copy(file, sourceUri)
       const previous = await ops.readFsMeta(db, file.id)
       await ops.upsertFsMeta(db, {
         fileId: file.id,
         size: result.size,
         addedAt: previous?.addedAt ?? Date.now(),
-        usedAt: Date.now(),
+        usedAt: opts?.usedAt ?? Date.now(),
       })
       return result.uri
     },

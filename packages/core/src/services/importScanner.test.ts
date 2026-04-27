@@ -199,6 +199,7 @@ describe('ImportScanner', () => {
       expect(mock.app.fs.copyFile).toHaveBeenCalledWith(
         { id: 'f4', type: 'image/jpeg' },
         'file:///photo.jpg',
+        { usedAt: 0 },
       )
     })
 
