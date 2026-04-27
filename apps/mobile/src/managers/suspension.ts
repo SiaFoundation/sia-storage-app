@@ -23,6 +23,7 @@ import {
 import { setSWREnabled } from '../lib/swr'
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
+import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -95,6 +96,7 @@ const manager = createSuspensionManager({
       // (an independent loop not driven by the service scheduler, so it
       // keeps issuing catalogAssets writes otherwise).
       app().downloads.cancelAll()
+      cancelFsEvictionScanner()
       pauseArchiveSync()
     },
     onAfterResume: () => {
@@ -109,6 +111,9 @@ const manager = createSuspensionManager({
       void swrGlobalMutate(() => true)
       // Resume archive walk from the same cursor if it wasn't complete.
       void resumeArchiveSync()
+      // Eviction's frequency gate short-circuits when it ran recently, so a
+      // quick app-switch is cheap; a long suspension triggers a real pass.
+      void runFsEvictionScanner()
     },
   },
   hardDeadlineMs: HARD_DEADLINE_MS,
