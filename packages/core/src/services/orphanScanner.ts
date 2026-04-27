@@ -19,10 +19,16 @@ function extractFileIdFromName(name: string): string | null {
  * Scans the local file system for files not indexed in the database and deletes them.
  * Files may be orphaned from a different account, previous app version, or interrupted operations.
  * Processes in batches, yielding to the event loop between each.
+ *
+ * Suspension signal policy: accepts AbortSignal. DB + disk write loop —
+ * removes orphaned files and metadata in batches. Checks the signal at
+ * the batch boundary and per-row so a mid-scan abort releases promptly
+ * before the DB gate closes.
  */
 export async function runOrphanScanner(
   app: AppService,
   onProgress?: (removed: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<OrphanScannerResult | undefined> {
   const files = await app.fs.listFiles()
   if (files.length === 0) return undefined
@@ -30,6 +36,7 @@ export async function runOrphanScanner(
   let removed = 0
 
   for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    if (signal?.aborted) break
     const batch = files.slice(i, i + BATCH_SIZE)
 
     const entries = batch
@@ -39,6 +46,7 @@ export async function runOrphanScanner(
     const orphanedIds = await app.fs.findOrphanedFileIds(entries.map((e) => e.fileId))
 
     for (const entry of entries) {
+      if (signal?.aborted) break
       if (!orphanedIds.has(entry.fileId)) continue
       try {
         const type = getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
@@ -64,6 +72,7 @@ export async function runOrphanScanner(
   logger.info('orphanScanner', 'summary', {
     removed,
     total: files.length,
+    aborted: signal?.aborted ?? false,
   })
   return { removed }
 }

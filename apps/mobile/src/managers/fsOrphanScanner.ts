@@ -7,6 +7,12 @@ import { app } from '../stores/appService'
 import { fsFileUriCache } from '../stores/fs'
 
 const flight = new SingleInit()
+let activeController: AbortController | null = null
+
+/** Aborts an in-flight orphan scan. No-op if nothing is running. */
+export function cancelFsOrphanScanner(): void {
+  activeController?.abort()
+}
 
 /**
  * fsOrphanScanner scans the file system for files that are not indexed in the database.
@@ -17,6 +23,7 @@ const flight = new SingleInit()
 export async function runFsOrphanScanner(options?: {
   onProgress?: (removed: number, total: number) => void
   force?: boolean
+  signal?: AbortSignal
 }): Promise<OrphanScannerResult | undefined> {
   if (!options?.force) {
     const lastRun = await app().settings.getFsOrphanLastRun()
@@ -26,14 +33,26 @@ export async function runFsOrphanScanner(options?: {
     }
   }
   return flight.run(async () => {
+    activeController = new AbortController()
+    const onExternalAbort = () => activeController?.abort()
+    options?.signal?.addEventListener('abort', onExternalAbort)
     try {
-      const result = await runOrphanScanner(app(), options?.onProgress)
+      const result = await runOrphanScanner(app(), options?.onProgress, activeController.signal)
       fsFileUriCache.invalidateAll()
-      await app().settings.setFsOrphanLastRun(Date.now())
+      // Don't advance lastRun on abort — the scan didn't complete, so the
+      // throttle gate should let the next attempt through instead of skipping it.
+      if (activeController.signal.aborted) {
+        logger.debug('fsOrphanScanner', 'aborted', { lastRunAdvanced: false })
+      } else {
+        await app().settings.setFsOrphanLastRun(Date.now())
+      }
       return result
     } catch (error) {
       logger.error('fsOrphanScanner', 'scan_error', { error: error as Error })
       return undefined
+    } finally {
+      options?.signal?.removeEventListener('abort', onExternalAbort)
+      activeController = null
     }
   })
 }
