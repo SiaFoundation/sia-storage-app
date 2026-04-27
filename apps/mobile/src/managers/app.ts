@@ -4,12 +4,12 @@ import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterva
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { stopLogAppender } from '@siastorage/logger'
 import { mutate } from 'swr'
-import { initializeDB, resetDb } from '../db'
+import { initializeDB, resetDb, setJournalMode } from '../db'
 import { app } from '../stores/appService'
 import { resetFileSelection } from '../stores/fileSelection'
 import { initLogger } from '../stores/logs'
 import { reconnectIndexer, resetSdk } from '../stores/sdk'
-import { initKeepAwake } from '../stores/settings'
+import { getUseWalMode, initKeepAwake } from '../stores/settings'
 import { resetSheets } from '../stores/sheets'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
@@ -60,6 +60,8 @@ export async function initApp(): Promise<void> {
         await initKeepAwake()
         const maxDownloads = await app().settings.getMaxDownloads()
         await app().downloads.setMaxSlots(maxDownloads)
+        const useWal = await getUseWalMode()
+        setJournalMode(useWal ? 'WAL' : 'DELETE')
       },
     },
     {

@@ -55,3 +55,27 @@ export async function initKeepAwake() {
     await activateKeepAwakeAsync(KEEP_AWAKE_TAG)
   }
 }
+
+// Developer preference exposing SQLite WAL journal mode as a toggle so we can
+// test it in the field. Default off. The toggle goes away once a feature
+// requires WAL. Read at bootstrap and applied to the DB module before
+// initializeDB runs.
+
+export async function getUseWalMode(): Promise<boolean> {
+  const raw = await app().storage.getItem('devUseWalMode')
+  return raw === 'true'
+}
+
+export function useUseWalMode() {
+  return useSWR(app().caches.settings.key('devUseWalMode'), () => getUseWalMode())
+}
+
+export async function setUseWalMode(value: boolean) {
+  await app().storage.setItem('devUseWalMode', String(value))
+  app().caches.settings.invalidate('devUseWalMode')
+}
+
+export async function toggleUseWalMode() {
+  const current = await getUseWalMode()
+  await setUseWalMode(!current)
+}

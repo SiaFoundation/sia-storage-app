@@ -135,16 +135,37 @@ export let dbInitialized = false
 let dbName = 'app.db'
 const dbDirectory = getSharedDbDirectory()
 
-// synchronous=NORMAL under WAL trades fsync-per-commit for fsync-per-checkpoint,
-// drastically reducing the chance a commit is mid-fsync at iOS suspension time
-// (the mechanism behind 0xdead10cc). Durable across app kills — the WAL file
-// survives; only a full OS crash loses the last few uncheckpointed seconds,
-// which syncDown recovers from the indexer on next launch.
-// wal_autocheckpoint=500 (~2MB at 4KB pages, down from default 1000/~4MB) keeps
-// each checkpoint's fsync small so the fsyncs that remain finish in tens of ms
-// even under disk I/O contention from Photos exports or large file copies.
-const INIT_PRAGMAS =
-  'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
+export type JournalMode = 'WAL' | 'DELETE'
+
+// The mode the next initializeDB / reopenDb / resetDb will open the database
+// with. Set once during bootstrap from the persisted developer preference.
+// Defaults to DELETE; WAL is exposed as a developer toggle (Settings →
+// Advanced → Database) so we can test it in the field. Once a feature
+// requires WAL, the toggle and this default both go away.
+let currentJournalMode: JournalMode = 'DELETE'
+
+export function setJournalMode(mode: JournalMode): void {
+  currentJournalMode = mode
+}
+
+export function getActiveJournalMode(): JournalMode {
+  return currentJournalMode
+}
+
+function buildInitPragmas(mode: JournalMode): string {
+  if (mode === 'WAL') {
+    // synchronous=NORMAL under WAL trades fsync-per-commit for fsync-per-checkpoint,
+    // drastically reducing the chance a commit is mid-fsync at iOS suspension time
+    // (the mechanism behind 0xdead10cc). Durable across app kills — the WAL file
+    // survives; only a full OS crash loses the last few uncheckpointed seconds,
+    // which syncDown recovers from the indexer on next launch.
+    // wal_autocheckpoint=500 (~2MB at 4KB pages, down from default 1000/~4MB) keeps
+    // each checkpoint's fsync small so the fsyncs that remain finish in tens of ms
+    // even under disk I/O contention from Photos exports or large file copies.
+    return 'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
+  }
+  return 'PRAGMA journal_mode = DELETE; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
+}
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
@@ -172,7 +193,7 @@ export async function initializeDB(options?: {
   database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
-  await database.execAsync(INIT_PRAGMAS)
+  await database.execAsync(buildInitPragmas(currentJournalMode))
   await runMigrations(database, migrations, {
     log: logger,
     onProgress: options?.onProgress,
@@ -215,7 +236,7 @@ async function reopenDb(): Promise<boolean> {
       } catch {}
       // useNewConnection bypasses expo-sqlite's per-name connection cache.
       database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-      await database.execAsync(INIT_PRAGMAS)
+      await database.execAsync(buildInitPragmas(currentJournalMode))
       dbInitialized = true
       logger.warn('db', 'reopened_successfully')
       return true
@@ -314,7 +335,7 @@ export async function resetDb() {
       }
     }
     database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-    await database.execAsync(INIT_PRAGMAS)
+    await database.execAsync(buildInitPragmas(currentJournalMode))
     await runMigrations(database, migrations, { log: logger })
     dbInitialized = true
   } finally {
