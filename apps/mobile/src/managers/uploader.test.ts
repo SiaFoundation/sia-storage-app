@@ -21,6 +21,7 @@ jest.mock('@siastorage/core/config', () => ({
 
 import {
   PACKER_IDLE_TIMEOUT,
+  PACKER_POLL_INTERVAL,
   SECTOR_SIZE,
   SLAB_FILL_THRESHOLD,
   SLAB_SIZE,
@@ -1381,6 +1382,29 @@ describe('UploadManager', () => {
 
       await manager.shutdown()
       expect(manager.isSuspended).toBe(true)
+    })
+  })
+
+  describe('sync gate', () => {
+    afterEach(() => {
+      app().sync.setState({ syncGateStatus: 'idle' })
+    })
+
+    it('skips processing while syncGateStatus is active and resumes after dismissal', async () => {
+      app().sync.setState({ syncGateStatus: 'active' })
+      manager.initialize(app(), internal(), defaultAdapters())
+
+      const entry = await createTestFile('gated-1', 1000)
+      manager.enqueue([entry])
+
+      await jest.advanceTimersByTimeAsync(0)
+      expect(mockPacker.add).not.toHaveBeenCalled()
+
+      app().sync.setState({ syncGateStatus: 'dismissed' })
+      await jest.advanceTimersByTimeAsync(PACKER_POLL_INTERVAL)
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(1)
     })
   })
 })
