@@ -85,6 +85,8 @@ export type LogRow = {
   data: string | null
 }
 
+export type LogRowWithId = LogRow & { id: number }
+
 export async function queryLogs(
   db: DatabaseAdapter,
   opts?: { logLevel?: LogLevel; logScopes?: string[]; limit?: number },
@@ -94,6 +96,18 @@ export async function queryLogs(
     opts?.limit !== undefined && Number.isFinite(opts.limit) ? ` LIMIT ${opts.limit | 0}` : ''
   const query = `SELECT timestamp, level, scope, message, data FROM logs ${whereClause} ORDER BY createdAt DESC, id DESC${limitClause}`
   return db.getAllAsync<LogRow>(query, ...params)
+}
+
+export async function queryLogsSinceId(
+  db: DatabaseAdapter,
+  sinceId: number,
+  limit: number,
+): Promise<LogRowWithId[]> {
+  return db.getAllAsync<LogRowWithId>(
+    'SELECT id, timestamp, level, scope, message, data FROM logs WHERE id > ? ORDER BY id ASC LIMIT ?',
+    sinceId,
+    limit | 0,
+  )
 }
 
 export async function queryLogCount(

@@ -21,6 +21,7 @@ import { err, ok, type Result, uint8ToHex } from '@siastorage/core'
 import { APP_KEY } from '@siastorage/core/config'
 import { getErrorMessage, isAbortError } from '@siastorage/core/lib/errors'
 import { raceWithTimeout, withTimeout } from '@siastorage/core/lib/timeout'
+import { refreshLogAccount } from '@siastorage/core/services/logForwarder'
 import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
@@ -198,6 +199,7 @@ export async function authenticateIndexer(indexerURL: string): Promise<Authentic
       if (connected) {
         logger.info('sdk', 'already_registered')
         app().settings.setIndexerURL(indexerURL)
+        await refreshLogAccount()
         const sdk = getMobileSdkAuth().getLastSdk()
         if (sdk) {
           await setSdkWithUploader(sdk)
@@ -287,6 +289,7 @@ export async function registerWithIndexer(
     await app().auth.setMnemonicHash(mnemonic)
     await app().auth.onConnected(keyHex, indexerURL)
     await app().settings.setIndexerURL(indexerURL)
+    await refreshLogAccount()
 
     app().connection.setState({ isAuthing: false, isConnected: true })
     pendingApproval = null

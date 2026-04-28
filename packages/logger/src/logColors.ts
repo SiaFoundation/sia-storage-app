@@ -1,6 +1,7 @@
 // ANSI color codes for terminal output.
 export const ANSI_RESET = '\x1b[0m'
 export const ANSI_BOLD = '\x1b[1m'
+export const ANSI_DIM = '\x1b[2m'
 const ANSI_CYAN = '\x1b[36m'
 const ANSI_GREEN = '\x1b[32m'
 const ANSI_YELLOW = '\x1b[33m'

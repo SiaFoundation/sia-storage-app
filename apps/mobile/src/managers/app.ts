@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
+import { applyLogContext } from '@siastorage/core/services/logForwarder'
 import { stopLogAppender } from '@siastorage/logger'
 import { mutate } from 'swr'
 import { initializeDB, resetDb, setJournalMode } from '../db'
@@ -33,6 +34,16 @@ import { getUploadManager } from './uploader'
 const FORCED_RESET_VERSION: string | null = '71936'
 
 export async function initApp(): Promise<void> {
+  // Tag every subsequent log with device + account before any subsystem
+  // fires. Reading both here means initApp called after sign-in (e.g., from
+  // OnboardingFinishedScreen) lands on the right context instead of wiping
+  // the account just-set by refreshLogAccount.
+  const [deviceId, mnemonicHash] = await Promise.all([
+    app().settings.getDeviceId(),
+    app().auth.getMnemonicHash(),
+  ])
+  applyLogContext(deviceId, mnemonicHash)
+
   if (FORCED_RESET_VERSION) {
     const completed = await app().settings.getCompletedResetVersion()
     const hasOnboarded = await app().settings.getHasOnboarded()
@@ -157,11 +168,18 @@ export async function resetData() {
   app().caches.libraryVersion.invalidate()
 }
 
-// AsyncStorage keys preserved across a resync-style reset so the user stays
-// signed in, reconnects to the same indexer, and doesn't re-run onboarding.
-// Auth identity (mnemonicHash, appKeys) lives in SecureStore and is untouched
-// when keepAuth is true.
-const RESYNC_KEEP_KEYS = ['hasOnboarded', 'indexerURL', 'completedResetVersion']
+// Preserved across both reset paths so log forwarding survives — useful for
+// debugging the reset flows themselves. Cursor is intentionally NOT preserved:
+// the DB is dropped, so a stale cursor would stall shipping.
+const REMOTE_LOG_KEEP_KEYS = ['remoteLogEnabled', 'remoteLogEndpoint', 'deviceId']
+
+// Resync additionally preserves onboarding/indexer so the user stays signed in.
+const RESYNC_KEEP_KEYS = [
+  'hasOnboarded',
+  'indexerURL',
+  'completedResetVersion',
+  ...REMOTE_LOG_KEEP_KEYS,
+]
 
 async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
   // Tear down the SDK first so the rust layer stops retrying uploads against
@@ -178,19 +196,16 @@ async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
   // Drop and recreate all database tables.
   await resetDb()
 
-  if (keepAuth) {
-    // Resync path: preserve the auth-adjacent AsyncStorage keys so the user
-    // stays onboarded and reconnects to the same indexer on next init. Auth
-    // identity (mnemonicHash, appKeys) lives in SecureStore and is untouched.
-    const allKeys = await AsyncStorage.getAllKeys()
-    const toRemove = allKeys.filter((key) => !RESYNC_KEEP_KEYS.includes(key))
-    if (toRemove.length > 0) {
-      await AsyncStorage.multiRemove(toRemove)
-    }
-  } else {
-    // Sign-out path: wipe everything including SecureStore auth so the next
-    // launch returns to onboarding.
-    await AsyncStorage.clear()
+  // Wipe AsyncStorage except the keep list. The Bearer token lives in
+  // SecureStore and is preserved by both paths.
+  const keepKeys = keepAuth ? RESYNC_KEEP_KEYS : REMOTE_LOG_KEEP_KEYS
+  const allKeys = await AsyncStorage.getAllKeys()
+  const toRemove = allKeys.filter((key) => !keepKeys.includes(key))
+  if (toRemove.length > 0) {
+    await AsyncStorage.multiRemove(toRemove)
+  }
+  if (!keepAuth) {
+    // Sign-out also clears auth identity so the next launch returns to onboarding.
     await app().auth.clearAppKeys()
     await app().auth.clearMnemonicHash()
   }

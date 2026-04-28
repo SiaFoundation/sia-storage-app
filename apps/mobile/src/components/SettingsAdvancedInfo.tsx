@@ -1,16 +1,16 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useShowAdvanced } from '@siastorage/core/stores'
 import { Alert } from 'react-native'
 import { humanSize } from '../lib/humanSize'
 import { runFsEvictionScanner } from '../managers/fsEvictionScanner'
 import { runFsOrphanScanner } from '../managers/fsOrphanScanner'
-import type { MenuStackParamList } from '../stacks/types'
 import { app } from '../stores/appService'
 import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
 
-type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
+type Props = {
+  onImport: () => void
+}
 
-export function SettingsAdvancedInfo(_props: Props) {
+export function SettingsAdvancedInfo({ onImport }: Props) {
   const showAdvanced = useShowAdvanced()
 
   const handleClearLocalFiles = async () => {
@@ -42,10 +42,10 @@ export function SettingsAdvancedInfo(_props: Props) {
 
   return (
     <>
-      <InsetGroupSection
-        header="Debugging"
-        footer="Shows extra technical details like file IDs, hashes, and URIs on file info screens."
-      >
+      <InsetGroupSection header="Debugging">
+        <InsetGroupLink label="Import" onPress={onImport} />
+      </InsetGroupSection>
+      <InsetGroupSection footer="Shows extra technical details like file IDs, hashes, and URIs on file info screens.">
         <InsetGroupToggleRow
           label="Show advanced information"
           value={showAdvanced.data ?? false}

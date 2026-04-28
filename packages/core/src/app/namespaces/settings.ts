@@ -1,5 +1,6 @@
 import type { StorageAdapter } from '../../adapters/storage'
 import { DEFAULT_INDEXER_URL, DEFAULT_MAX_DOWNLOADS } from '../../config'
+import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
 /** Builds the settings namespace: typed getters/setters backed by key-value storage. */
@@ -74,6 +75,19 @@ export function buildSettingsNamespace(
     setLogScopes: async (v) => {
       await storage.setItem('logScopes', v.join(','))
       caches.settings.invalidate('logScopes')
+    },
+    getRemoteLogEnabled: () => getBool('remoteLogEnabled', false),
+    setRemoteLogEnabled: (v) => setBool('remoteLogEnabled', v),
+    getRemoteLogEndpoint: () => getStr('remoteLogEndpoint', ''),
+    setRemoteLogEndpoint: (v) => setStr('remoteLogEndpoint', v),
+    getRemoteLogCursor: () => getNum('remoteLogCursor', 0),
+    setRemoteLogCursor: (v) => setNum('remoteLogCursor', v),
+    getDeviceId: async () => {
+      const existing = await storage.getItem('deviceId')
+      if (existing) return existing
+      const next = uniqueId().slice(0, 8)
+      await storage.setItem('deviceId', next)
+      return next
     },
     getFsEvictionLastRun: () => getNum('fsEvictionLastRun', 0),
     setFsEvictionLastRun: (v) => setNum('fsEvictionLastRun', v),

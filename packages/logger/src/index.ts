@@ -10,4 +10,4 @@ export {
   SCOPE_COLORS,
 } from './logColors'
 export type { LogData, LogEntry, LogLevel } from './logger'
-export { formatDataPairs, logger, rustLogger, serializeData } from './logger'
+export { formatDataPairs, logger, rustLogger, serializeData, setLogContext } from './logger'

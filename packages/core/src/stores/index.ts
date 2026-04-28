@@ -34,6 +34,8 @@ export {
   useLogScopes,
   useMaxDownloads,
   usePhotoImportDirectory,
+  useRemoteLogEnabled,
+  useRemoteLogEndpoint,
   useShowAdvanced,
   useStatusDisplayMode,
 } from './settings'
