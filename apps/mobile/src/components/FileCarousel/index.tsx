@@ -78,7 +78,7 @@ export function FileCarousel({
     },
     [onViewStyleChange],
   )
-  const [showChrome, setShowChrome] = useState(false)
+  const [showChrome, setShowChrome] = useState(true)
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false)
   const [isZoomed, setIsZoomed] = useState(false)
 
