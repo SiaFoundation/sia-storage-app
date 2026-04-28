@@ -50,11 +50,17 @@ export function getImportBackoffEntries() {
   return scanner.getBackoffEntries()
 }
 
+async function run(signal: AbortSignal): Promise<void> {
+  if (app().sync.getState().syncGateStatus === 'active') {
+    logger.debug('importScanner', 'skipped', { reason: 'sync_gate_active' })
+    return
+  }
+  await runImportScanner(signal)
+}
+
 export const { init: initImportScanner, triggerNow: triggerImportScanner } = createServiceInterval({
   name: 'importScanner',
-  worker: async (signal) => {
-    await runImportScanner(signal)
-  },
+  worker: run,
   interval: IMPORT_SCANNER_INTERVAL,
 })
 

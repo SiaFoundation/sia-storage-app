@@ -532,6 +532,12 @@ export class UploadManager {
         continue
       }
 
+      if (this.app.sync.getState().syncGateStatus === 'active') {
+        logger.debug('uploadManager', 'skipped', { reason: 'sync_gate_active' })
+        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL)
+        continue
+      }
+
       const next = this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
 
       if (next) {
