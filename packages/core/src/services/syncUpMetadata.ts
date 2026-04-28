@@ -237,7 +237,11 @@ export async function syncUpMetadataBatch(
       })
     }),
   )
-  app.sync.setState({ isSyncingUp: true, syncUpProcessed: batch.length })
+  const prevProcessed = app.sync.getState().syncUpProcessed ?? 0
+  app.sync.setState({
+    isSyncingUp: true,
+    syncUpProcessed: prevProcessed + batch.length,
+  })
   if (hasErrors) {
     logger.warn('syncUpMetadata', 'batch_had_errors_cursor_not_advanced')
     app.sync.setState({
