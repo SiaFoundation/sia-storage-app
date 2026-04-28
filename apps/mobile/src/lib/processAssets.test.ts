@@ -49,17 +49,18 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const placeholders = await importFiles(assets)
+      const { files, newVersionCount } = await importFiles(assets)
 
-      expect(placeholders).toHaveLength(1)
-      expect(placeholders[0]).toMatchObject({
+      expect(files).toHaveLength(1)
+      expect(newVersionCount).toBe(0)
+      expect(files[0]).toMatchObject({
         name: 'large.zip',
         hash: '',
         size: 100_000_000,
         kind: 'file',
       })
 
-      const row = await app().files.getById(placeholders[0].id)
+      const row = await app().files.getById(files[0].id)
       expect(row).toBeTruthy()
       expect(row!.hash).toBe('')
     })
@@ -82,10 +83,10 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const placeholders = await importFiles(assets)
+      const { files } = await importFiles(assets)
 
-      expect(placeholders).toHaveLength(1)
-      const row = await app().files.getById(placeholders[0].id)
+      expect(files).toHaveLength(1)
+      const row = await app().files.getById(files[0].id)
       expect(row).toBeTruthy()
       expect(row!.hash).toBe('')
 
@@ -123,10 +124,12 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const placeholders = await importFiles(assets)
-      expect(placeholders).toHaveLength(3)
+      const { files } = await importFiles(assets)
+      expect(files).toHaveLength(3)
 
-      expect(placeholders[2].localId).toBe('local-id-3')
+      // Manual imports never set localId — that namespace belongs to auto-sync.
+      // Even if the picker hands us a localId on the asset, we drop it.
+      expect(files.every((f) => f.localId === null)).toBe(true)
 
       await new Promise((r) => setTimeout(r, 0))
 
@@ -145,9 +148,285 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const placeholders = await importFiles(assets)
-      expect(placeholders).toHaveLength(0)
+      const { files } = await importFiles(assets)
+      expect(files).toHaveLength(0)
       expect(copyFileToFs).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('manual import is independent of localId / hash', () => {
+    it('regression #594: succeeds even when an existing row holds the picked localId', async () => {
+      await app().files.create({
+        id: 'existing-1',
+        name: 'old-name.jpg',
+        size: 100,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: 'ph://A',
+        hash: 'sha256:known',
+        addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
+      })
+
+      const { files, newVersionCount } = await importFiles([
+        {
+          id: 'ph://A',
+          name: 'fresh-name.jpg',
+          size: 100,
+          sourceUri: 'file:///tmp/fresh-name.jpg',
+          type: 'image/jpeg',
+          timestamp: '2024-06-01',
+        },
+      ])
+
+      expect(files).toHaveLength(1)
+      expect(files[0].localId).toBeNull()
+      expect(newVersionCount).toBe(0)
+
+      const original = await app().files.getById('existing-1')
+      expect(original!.localId).toBe('ph://A')
+    })
+
+    it('does not dedup by content hash at import — the import scanner handles that later', async () => {
+      await app().files.create({
+        id: 'existing-1',
+        name: 'something.jpg',
+        size: 100,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: null,
+        hash: 'sha256:abc',
+        addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
+      })
+
+      const { files, newVersionCount } = await importFiles([
+        {
+          id: undefined,
+          name: 'else.jpg',
+          size: 100,
+          sourceUri: 'file:///tmp/else.jpg',
+          type: 'image/jpeg',
+          timestamp: '2024-06-01',
+        },
+      ])
+
+      expect(files).toHaveLength(1)
+      expect(newVersionCount).toBe(0)
+      const all = await app().files.query({ order: 'ASC' })
+      expect(all).toHaveLength(2)
+    })
+
+    it('re-importing a previously trashed photo inserts a new row; trashed row stays in trash', async () => {
+      await app().files.create({
+        id: 'trashed-1',
+        name: 'IMG.jpg',
+        size: 100,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: 'ph://Y',
+        hash: 'sha256:trashed',
+        addedAt: 1,
+        trashedAt: 123,
+        deletedAt: null,
+      })
+
+      const { files, newVersionCount } = await importFiles([
+        {
+          id: 'ph://Y',
+          name: 'IMG.jpg',
+          size: 100,
+          sourceUri: 'file:///tmp/IMG.jpg',
+          type: 'image/jpeg',
+          timestamp: '2024-06-01',
+        },
+      ])
+
+      expect(files).toHaveLength(1)
+      expect(files[0].id).not.toBe('trashed-1')
+      expect(files[0].localId).toBeNull()
+      expect(newVersionCount).toBe(0)
+
+      const trashed = await app().files.getById('trashed-1')
+      expect(trashed!.trashedAt).toBe(123)
+    })
+  })
+
+  describe('name collisions and version bumps', () => {
+    it('bumps a new version when the picked name matches a current file in the destination directory', async () => {
+      const dir = await app().directories.getOrCreateAtPath('Docs')
+      await app().files.create({
+        id: 'existing',
+        name: 'notes.txt',
+        size: 10,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'text/plain',
+        kind: 'file',
+        localId: null,
+        hash: 'sha256:v1',
+        addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
+      })
+      await app().directories.moveFiles(['existing'], dir.id)
+
+      const { files, newVersionCount } = await importFiles(
+        [
+          {
+            id: undefined,
+            name: 'notes.txt',
+            sourceUri: 'file:///tmp/notes.txt',
+            type: 'text/plain',
+            timestamp: '2024-06-01',
+          },
+        ],
+        'file',
+        { destinationDirectoryId: dir.id },
+      )
+
+      expect(files).toHaveLength(1)
+      expect(newVersionCount).toBe(1)
+
+      const newRow = await db().getFirstAsync<{ current: number; directoryId: string | null }>(
+        'SELECT current, directoryId FROM files WHERE id = ?',
+        files[0].id,
+      )
+      expect(newRow?.current).toBe(1)
+      expect(newRow?.directoryId).toBe(dir.id)
+
+      const oldRow = await db().getFirstAsync<{ current: number; directoryId: string | null }>(
+        'SELECT current, directoryId FROM files WHERE id = ?',
+        'existing',
+      )
+      expect(oldRow?.current).toBe(0)
+      expect(oldRow?.directoryId).toBe(dir.id)
+    })
+
+    it('same name in a different directory does NOT bump a version', async () => {
+      const dir = await app().directories.getOrCreateAtPath('Docs')
+      await app().files.create({
+        id: 'root-notes',
+        name: 'notes.txt',
+        size: 10,
+        createdAt: 1,
+        updatedAt: 1,
+        type: 'text/plain',
+        kind: 'file',
+        localId: null,
+        hash: 'sha256:root',
+        addedAt: 1,
+        trashedAt: null,
+        deletedAt: null,
+      })
+
+      const { files, newVersionCount } = await importFiles(
+        [
+          {
+            id: undefined,
+            name: 'notes.txt',
+            sourceUri: 'file:///tmp/notes.txt',
+            type: 'text/plain',
+            timestamp: '2024-06-01',
+          },
+        ],
+        'file',
+        { destinationDirectoryId: dir.id },
+      )
+
+      expect(files).toHaveLength(1)
+      expect(newVersionCount).toBe(0)
+
+      const rootRow = await db().getFirstAsync<{ current: number }>(
+        'SELECT current FROM files WHERE id = ?',
+        'root-notes',
+      )
+      expect(rootRow?.current).toBe(1)
+    })
+  })
+
+  describe('destination directory and tag context', () => {
+    it('inserts directly into destinationDirectoryId', async () => {
+      const dir = await app().directories.getOrCreateAtPath('Vacation')
+      const { files } = await importFiles(
+        [
+          {
+            id: undefined,
+            name: 'beach.jpg',
+            sourceUri: 'file:///tmp/beach.jpg',
+            type: 'image/jpeg',
+            timestamp: '2024-06-01',
+          },
+        ],
+        'file',
+        { destinationDirectoryId: dir.id },
+      )
+      const row = await db().getFirstAsync<{ directoryId: string | null }>(
+        'SELECT directoryId FROM files WHERE id = ?',
+        files[0].id,
+      )
+      expect(row?.directoryId).toBe(dir.id)
+    })
+
+    it('attaches assignTagName to every inserted file', async () => {
+      const { files } = await importFiles(
+        [
+          {
+            id: undefined,
+            name: 'a.jpg',
+            sourceUri: 'file:///tmp/a.jpg',
+            type: 'image/jpeg',
+            timestamp: '2024-06-01',
+          },
+          {
+            id: undefined,
+            name: 'b.jpg',
+            sourceUri: 'file:///tmp/b.jpg',
+            type: 'image/jpeg',
+            timestamp: '2024-06-01',
+          },
+        ],
+        'file',
+        { assignTagName: 'Travel' },
+      )
+      expect(files).toHaveLength(2)
+      for (const f of files) {
+        const tags = await app().tags.getNamesForFile(f.id)
+        expect(tags).toContain('Travel')
+      }
+    })
+
+    it('combines destination directory and tag in a single import', async () => {
+      const dir = await app().directories.getOrCreateAtPath('Trip')
+      const { files } = await importFiles(
+        [
+          {
+            id: undefined,
+            name: 'sunset.jpg',
+            sourceUri: 'file:///tmp/sunset.jpg',
+            type: 'image/jpeg',
+            timestamp: '2024-06-01',
+          },
+        ],
+        'file',
+        { destinationDirectoryId: dir.id, assignTagName: 'Travel' },
+      )
+      expect(files).toHaveLength(1)
+      const row = await db().getFirstAsync<{ directoryId: string | null }>(
+        'SELECT directoryId FROM files WHERE id = ?',
+        files[0].id,
+      )
+      expect(row?.directoryId).toBe(dir.id)
+      const tags = await app().tags.getNamesForFile(files[0].id)
+      expect(tags).toContain('Travel')
     })
   })
 
@@ -164,13 +443,13 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const placeholders = await importFiles(assets)
+      const { files } = await importFiles(assets)
 
       await new Promise((r) => setTimeout(r, 0))
 
       expect(copyFileToFs).toHaveBeenCalledTimes(1)
       expect(copyFileToFs).toHaveBeenCalledWith(
-        expect.objectContaining({ id: placeholders[0].id }),
+        expect.objectContaining({ id: files[0].id }),
         'file:///tmp/doc.pdf',
       )
     })

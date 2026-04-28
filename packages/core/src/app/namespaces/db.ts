@@ -199,6 +199,8 @@ export function buildDbNamespaces(
       getByIds: (ids) => ops.readFilesByIds(db, ids),
       getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
       getByLocalIds: (localIds) => ops.readFilesByLocalIds(db, localIds),
+      getCurrentByNamesInDirectory: (names, directoryId) =>
+        ops.readCurrentFilesByNamesInDirectory(db, names, directoryId),
       getByName: (name) => ops.readFileByName(db, name),
       getByContentHash: (hash) => ops.readFileByContentHash(db, hash),
       getByContentHashes: (hashes) => ops.readFilesByContentHashes(db, hashes),

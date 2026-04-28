@@ -2,10 +2,15 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import * as DocumentPicker from 'expo-document-picker'
 import { useCallback, useRef } from 'react'
+import { showImportResultToast } from '../lib/importResultToast'
+import type { ImportFilesOptions } from '../lib/processAssets'
 import { importFiles } from '../lib/processAssets'
+import { useToast } from '../lib/toastContext'
 
-export function useDocumentPicker() {
+export function useDocumentPicker(options: ImportFilesOptions = {}) {
+  const toast = useToast()
   const isPickingRef = useRef<boolean>(false)
+  const { destinationDirectoryId, assignTagName } = options
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isPickingRef.current) {
       logger.debug('documentPicker', 'already_picking')
@@ -25,7 +30,7 @@ export function useDocumentPicker() {
         return []
       }
 
-      return importFiles(
+      const imported = await importFiles(
         result.assets?.map((a) => ({
           id: undefined,
           name: a.name,
@@ -35,12 +40,16 @@ export function useDocumentPicker() {
           sourceUri: a.uri,
         })),
         'file',
+        { destinationDirectoryId, assignTagName },
       )
+      showImportResultToast(toast, imported)
+      return imported.files
     } catch (e) {
       logger.error('documentPicker', 'error', { error: e as Error })
+      toast.show('Could not add files. Please try again.')
       return []
     } finally {
       isPickingRef.current = false
     }
-  }, [])
+  }, [toast, destinationDirectoryId, assignTagName])
 }

@@ -151,16 +151,6 @@ export function TagLibraryScreen({ route, navigation }: Props) {
     exitSelectionMode()
   }, [])
 
-  const handleFilesAdded = useCallback(
-    (files: FileRecord[]) => {
-      void app().tags.addToFiles(
-        files.map((f) => f.id),
-        tagName,
-      )
-    },
-    [tagName],
-  )
-
   const actionSheetFileIds = isSelectionMode
     ? selectedFileIds
     : selectedFile
@@ -284,7 +274,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
         />
       )}
 
-      <AddFileActionSheet sheetName="tagLibraryAddFile" onFilesAdded={handleFilesAdded} />
+      <AddFileActionSheet sheetName="tagLibraryAddFile" assignTagName={tagName} />
       {isSelectionMode ? (
         <SelectionBar
           onComplete={handleBulkActionComplete}

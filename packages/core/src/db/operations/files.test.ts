@@ -9,9 +9,11 @@ import {
   queryFileByContentHash,
   queryFileByObjectId,
   queryFiles,
+  queryCurrentFilesByNamesInDirectory,
   queryFilesByContentHashes,
   queryFilesByLocalIds,
   queryFileCount,
+  recalculateCurrentForGroups,
   queryFileStats,
   queryLostFiles,
   readFile,
@@ -20,6 +22,7 @@ import {
   updateFile,
   updateManyFiles,
 } from './files'
+import { insertDirectory } from './directories'
 import { upsertFsMeta } from './fs'
 import { insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
@@ -581,6 +584,63 @@ describe('queryFilesByContentHashes', () => {
   it('excludes deleted files', async () => {
     await insertFile(db(), makeFileRecord('f1', { hash: 'hash-a', deletedAt: 2000 }))
     const rows = await queryFilesByContentHashes(db(), ['hash-a'])
+    expect(rows).toEqual([])
+  })
+})
+
+describe('queryCurrentFilesByNamesInDirectory', () => {
+  // Move a row to a different directory and recompute current flags for both
+  // the source (root) and the destination groups, so each group's lone row
+  // ends up current = 1.
+  async function moveAndRecalc(id: string, directoryId: string | null) {
+    const row = await db().getFirstAsync<{ name: string; directoryId: string | null }>(
+      'SELECT name, directoryId FROM files WHERE id = ?',
+      id,
+    )
+    if (!row) throw new Error(`row ${id} not found`)
+    await db().runAsync('UPDATE files SET directoryId = ? WHERE id = ?', directoryId, id)
+    await recalculateCurrentForGroups(db(), [
+      { name: row.name, directoryId: row.directoryId },
+      { name: row.name, directoryId },
+    ])
+  }
+
+  it('matches by name within the given directoryId', async () => {
+    const dir = await insertDirectory(db(), 'Docs')
+    await insertFile(db(), makeFileRecord('root-a', { name: 'notes.txt' }))
+    await insertFile(db(), makeFileRecord('dir-a', { name: 'notes.txt' }))
+    await moveAndRecalc('dir-a', dir.id)
+    const root = await queryCurrentFilesByNamesInDirectory(db(), ['notes.txt'], null)
+    expect(root.map((r) => r.id)).toEqual(['root-a'])
+    const inDir = await queryCurrentFilesByNamesInDirectory(db(), ['notes.txt'], dir.id)
+    expect(inDir.map((r) => r.id)).toEqual(['dir-a'])
+  })
+
+  it('matches multiple names in one round-trip', async () => {
+    await insertFile(db(), makeFileRecord('a', { name: 'a.txt' }))
+    await insertFile(db(), makeFileRecord('b', { name: 'b.txt' }))
+    await insertFile(db(), makeFileRecord('c', { name: 'c.txt' }))
+    const rows = await queryCurrentFilesByNamesInDirectory(db(), ['a.txt', 'c.txt'], null)
+    expect(rows.map((r) => r.id).sort()).toEqual(['a', 'c'])
+  })
+
+  it('returns only the current version when name has prior versions', async () => {
+    await insertFile(db(), makeFileRecord('v1', { name: 'doc.txt', updatedAt: 1 }))
+    await insertFile(db(), makeFileRecord('v2', { name: 'doc.txt', updatedAt: 2 }))
+    const rows = await queryCurrentFilesByNamesInDirectory(db(), ['doc.txt'], null)
+    expect(rows.map((r) => r.id)).toEqual(['v2'])
+  })
+
+  it('excludes trashed and deleted rows', async () => {
+    await insertFile(db(), makeFileRecord('t', { name: 'gone.txt', trashedAt: 1 }))
+    await insertFile(db(), makeFileRecord('d', { name: 'gone.txt', deletedAt: 1 }))
+    const rows = await queryCurrentFilesByNamesInDirectory(db(), ['gone.txt'], null)
+    expect(rows).toEqual([])
+  })
+
+  it('returns [] when names is empty', async () => {
+    await insertFile(db(), makeFileRecord('a', { name: 'a.txt' }))
+    const rows = await queryCurrentFilesByNamesInDirectory(db(), [], null)
     expect(rows).toEqual([])
   })
 })

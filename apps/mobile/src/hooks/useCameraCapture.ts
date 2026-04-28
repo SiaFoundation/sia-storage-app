@@ -3,13 +3,16 @@ import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
 import { extFromMime, getMimeType } from '../lib/fileTypes'
+import { showImportResultToast } from '../lib/importResultToast'
 import { showPermissionDeniedAlert } from '../lib/permissionAlert'
+import type { ImportFilesOptions } from '../lib/processAssets'
 import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 
-export function useCameraCapture() {
+export function useCameraCapture(options: ImportFilesOptions = {}) {
   const toast = useToast()
   const isCapturingRef = useRef<boolean>(false)
+  const { destinationDirectoryId, assignTagName } = options
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isCapturingRef.current) {
       logger.debug('cameraCapture', 'already_capturing')
@@ -57,7 +60,7 @@ export function useCameraCapture() {
         return []
       }
 
-      return importFiles(
+      const imported = await importFiles(
         await Promise.all(
           (result.assets ?? []).map(async (a) => ({
             id: a.id,
@@ -76,14 +79,18 @@ export function useCameraCapture() {
           })),
         ),
         'file',
+        { destinationDirectoryId, assignTagName },
       )
+      showImportResultToast(toast, imported)
+      return imported.files
     } catch (e) {
       logger.error('cameraCapture', 'error', { error: e as Error })
+      toast.show('Could not save capture. Please try again.')
       return []
     } finally {
       isCapturingRef.current = false
     }
-  }, [toast])
+  }, [toast, destinationDirectoryId, assignTagName])
 }
 
 /* Build a date-based file name from a timestamp and mime type.

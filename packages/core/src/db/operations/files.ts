@@ -414,6 +414,30 @@ export async function queryFilesByLocalIds(
   )
 }
 
+/**
+ * Returns the current version of every file matching one of `names` in
+ * `directoryId`. `directoryId` is null-safe via SQLite's IS operator.
+ */
+export async function queryCurrentFilesByNamesInDirectory(
+  db: DatabaseAdapter,
+  names: string[],
+  directoryId: string | null,
+): Promise<FileRecordRow[]> {
+  if (names.length === 0) return []
+  const ph = names.map(() => '?').join(',')
+  return db.getAllAsync<FileRecordRow>(
+    `SELECT ${FILE_ROW_COLUMNS} FROM files
+     WHERE name IN (${ph})
+       AND directoryId IS ?
+       AND current = 1
+       AND trashedAt IS NULL
+       AND deletedAt IS NULL
+       AND kind = 'file'`,
+    ...names,
+    directoryId,
+  )
+}
+
 export async function queryFilesByContentHashes(
   db: DatabaseAdapter,
   contentHashes: string[],
@@ -650,6 +674,15 @@ export async function readFilesByLocalIds(
   return rows.map((row) => transformRow(row)) as (FileRecord & {
     localId: string
   })[]
+}
+
+export async function readCurrentFilesByNamesInDirectory(
+  db: DatabaseAdapter,
+  names: string[],
+  directoryId: string | null,
+): Promise<FileRecord[]> {
+  const rows = await queryCurrentFilesByNamesInDirectory(db, names, directoryId)
+  return rows.map((row) => transformRow(row))
 }
 
 export async function readFilesByContentHashes(
