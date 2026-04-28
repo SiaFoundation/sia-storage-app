@@ -1270,6 +1270,54 @@ describe('syncDownEvents', () => {
     expect(remainingObjects[0].indexerURL).toBe('other-indexer')
   })
 
+  describe('transaction rollback', () => {
+    test('Phase 3B failure rolls back Phase 2 file/object writes', async () => {
+      const metadata: FileMetadata = {
+        id: 'file-rb',
+        name: 'rollback.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: 'hash-rb',
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+        thumbForId: undefined,
+        thumbSize: undefined,
+        trashedAt: null,
+        directory: 'photos/2026',
+      }
+
+      const events: ObjectEvent[] = [
+        makeObjectEvent({
+          id: 'obj-rb',
+          updatedAt: new Date(NOW_BASE),
+          object: makeMockPinnedObject(metadata, 'obj-rb'),
+        }),
+      ]
+
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      const dirSpy = jest
+        .spyOn(app().directories, 'syncManyFromMetadata')
+        .mockRejectedValueOnce(new Error('directory sync failed'))
+
+      await run(new AbortController().signal)
+
+      // File row must not exist — Phase 2 commit was rolled back.
+      const file = await app().files.getByObjectId('obj-rb', INDEXER_URL)
+      expect(file).toBeNull()
+
+      // Cursor must not have advanced — batch will retry.
+      const cursor = await app().sync.getSyncDownCursor()
+      expect(cursor).toBeUndefined()
+
+      dirSpy.mockRestore()
+    })
+  })
+
   describe('syncGateStatus transitions', () => {
     function makeEvents(count: number, startId = 0) {
       return Array.from({ length: count }, (_, i) => {

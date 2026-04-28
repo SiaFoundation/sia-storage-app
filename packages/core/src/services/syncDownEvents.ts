@@ -351,14 +351,30 @@ async function processBatch(
     }
   }
 
-  // Phase 2: Commit — apply all prepared events in a single DB transaction.
-  // Errors propagate to roll back the transaction and prevent cursor advancement,
-  // so the batch retries next cycle.
+  // Phases 2 + 3B/3C + 4 run in one DB transaction so each batch is
+  // atomic — on error the rollback prevents cursor advancement and the
+  // same batch is retried next cycle. Phase 3A (FS cleanup) and the
+  // cache invalidations stay outside.
   const creates = prepared.filter((e): e is PreparedCreate => e.kind === 'create')
   const updates = prepared.filter((e): e is PreparedUpdate => e.kind === 'update')
   const deletes = prepared.filter((e): e is PreparedDelete => e.kind === 'delete')
 
   let deletedFileIds: string[] = []
+  let oldDirGroups: { name: string; directoryId: string | null }[] = []
+
+  const syncableEvents = prepared.filter(
+    (e): e is PreparedCreate | PreparedUpdate =>
+      e.kind !== 'delete' &&
+      e.isFile &&
+      (e.kind === 'create' || (e.kind === 'update' && e.isRemoteNewer)),
+  )
+  const dirEntries = syncableEvents
+    .filter((e) => e.directory !== undefined)
+    .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
+  const tagEntries = syncableEvents
+    .filter((e) => e.tags !== undefined && e.tags.length > 0)
+    .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
+
   await internal.withTransaction(async () => {
     // 2A: Single UPSERT for all creates + isRemoteNewer updates.
     // ON CONFLICT(id) DO UPDATE SET only touches metadata fields —
@@ -404,17 +420,50 @@ async function processBatch(
     }
 
     counts.total += creates.length + updates.length + deletedFileIds.length
+
+    // 3B: Batch directory sync.
+    if (dirEntries.length > 0) {
+      oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
+        skipInvalidation: true,
+      })
+    }
+
+    // 3C: Batch tag sync.
+    if (tagEntries.length > 0) {
+      await app.tags.syncManyFromMetadata(tagEntries, {
+        skipInvalidation: true,
+      })
+    }
+
+    // Phase 4: Recalculate current column for all affected version groups
+    // in one pass, rather than per-file during the batch.
+    const affectedFileIds: string[] = []
+    for (const e of prepared) {
+      if (e.kind === 'delete') {
+        affectedFileIds.push(e.fileId)
+      } else if (e.isFile) {
+        affectedFileIds.push(e.fileRecord.id)
+      }
+    }
+    if (affectedFileIds.length > 0) {
+      await app.files.recalculateCurrent(affectedFileIds)
+    }
+    // Recalculate old directory groups from Phase 3B. When a file moves from
+    // dir-A to dir-B, the file-ID-based recalculation above handles dir-B
+    // (the file's current directory). The old group (dir-A) needs separate
+    // recalculation to promote the next version as current.
+    if (oldDirGroups.length > 0) {
+      await app.files.recalculateCurrentForGroups(oldDirGroups)
+    }
   })
 
-  // Phase 3: Cleanup — delete local files for deleted records, clear
-  // upload state for updated records, sync tags/directories. Cache
-  // invalidation is deferred to the end of the batch to avoid triggering
-  // React re-render depth limits when processing large batches.
+  // Phase 3A: FS cleanup runs after the SQL transaction commits. FS
+  // operations aren't transactional, and an orphan-on-disk after a
+  // committed delete is recoverable; lost-data-without-FS-deletion is
+  // not, so SQL-first ordering is intentional. Non-fatal errors are
+  // logged. Check signal between deletions so suspension can close
+  // the DB promptly.
   const deletedFileIdSet = new Set(deletedFileIds)
-  let needsLibraryInvalidation = false
-
-  // 3A: FS cleanup (non-fatal). Check signal between deletions so
-  // suspension can close the DB promptly.
   for (const event of deletes) {
     if (signal.aborted) break
     if (deletedFileIdSet.has(event.fileId)) {
@@ -431,75 +480,18 @@ async function processBatch(
     }
   }
 
-  // Cache invalidation for updates.
+  // Cache invalidations fire after the transaction commits so subscribers
+  // never see stale state mid-write.
+  let needsLibraryInvalidation =
+    creates.length > 0 || dirEntries.length > 0 || tagEntries.length > 0
   for (const event of updates) {
     app.caches.fileById.invalidate(event.fileId)
     needsLibraryInvalidation = true
   }
-
-  // 3B + 3C: Batch directory and tag sync.
-  const syncableEvents = prepared.filter(
-    (e): e is PreparedCreate | PreparedUpdate =>
-      e.kind !== 'delete' &&
-      e.isFile &&
-      (e.kind === 'create' || (e.kind === 'update' && e.isRemoteNewer)),
-  )
-
-  // 3B: Batch directory sync.
-  if (signal.aborted) return
-  const dirEntries = syncableEvents
-    .filter((e) => e.directory !== undefined)
-    .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
-  let oldDirGroups: { name: string; directoryId: string | null }[] = []
-  if (dirEntries.length > 0) {
-    oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
-      skipInvalidation: true,
-    })
-    needsLibraryInvalidation = true
-  }
-
-  // 3C: Batch tag sync.
-  if (signal.aborted) return
-  const tagEntries = syncableEvents
-    .filter((e) => e.tags !== undefined && e.tags.length > 0)
-    .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
-  if (tagEntries.length > 0) {
-    await app.tags.syncManyFromMetadata(tagEntries, {
-      skipInvalidation: true,
-    })
-    needsLibraryInvalidation = true
-  }
-
-  if (creates.length > 0) {
-    needsLibraryInvalidation = true
-  }
-
-  // 3D: Cache invalidation.
   if (needsLibraryInvalidation) {
     app.caches.tags.invalidateAll()
     app.caches.directories.invalidateAll()
     app.caches.libraryVersion.invalidate()
-  }
-
-  // Phase 4: Recalculate current column for all affected version groups
-  // in one pass, rather than per-file during the batch.
-  const affectedFileIds: string[] = []
-  for (const e of prepared) {
-    if (e.kind === 'delete') {
-      affectedFileIds.push(e.fileId)
-    } else if (e.isFile) {
-      affectedFileIds.push(e.fileRecord.id)
-    }
-  }
-  if (affectedFileIds.length > 0) {
-    await app.files.recalculateCurrent(affectedFileIds)
-  }
-  // Recalculate old directory groups from Phase 3B. When a file moves from
-  // dir-A to dir-B, the file-ID-based recalculation above handles dir-B
-  // (the file's current directory). The old group (dir-A) needs separate
-  // recalculation to promote the next version as current.
-  if (oldDirGroups.length > 0) {
-    await app.files.recalculateCurrentForGroups(oldDirGroups)
   }
 }
 
