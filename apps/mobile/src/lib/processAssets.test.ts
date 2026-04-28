@@ -571,6 +571,32 @@ describe('syncAssets — eager background sync for recent photos', () => {
       expect(dirs).toHaveLength(1)
       expect(dirs[0].path).toBe('Camera Roll')
     })
+
+    it('places files into a nested import directory path with separators', async () => {
+      await app().settings.setPhotoImportDirectory('Media/iOS Sync')
+      const assets = [
+        {
+          id: undefined,
+          name: 'photo.jpg',
+          sourceUri: 'file:///photo.jpg',
+          type: 'image/jpeg',
+          timestamp: '2021-01-01',
+        },
+      ]
+      const { files } = await syncAssets(assets, 'file', {
+        addToImportDirectory: true,
+      })
+      expect(files).toHaveLength(1)
+      const dirs = await app().directories.getAll()
+      const paths = dirs.map((d) => d.path).sort()
+      expect(paths).toEqual(['Media', 'Media/iOS Sync'])
+      const leaf = dirs.find((d) => d.path === 'Media/iOS Sync')!
+      const row = await db().getFirstAsync<{ directoryId: string | null }>(
+        'SELECT directoryId FROM files WHERE id = ?',
+        files[0].id,
+      )
+      expect(row?.directoryId).toBe(leaf.id)
+    })
   })
 })
 

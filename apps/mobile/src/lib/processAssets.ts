@@ -130,7 +130,7 @@ async function moveMediaToImportDirectory(files: FileRecord[]): Promise<void> {
     .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
     .map((f) => f.id)
   if (mediaFileIds.length > 0) {
-    const dir = await app().directories.getOrCreate(photoImportDir)
+    const dir = await app().directories.getOrCreateAtPath(photoImportDir)
     await app().directories.moveFiles(mediaFileIds, dir.id)
   }
 }
