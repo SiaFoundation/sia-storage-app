@@ -142,6 +142,57 @@ export async function syncTagsFromMetadata(
   })
 }
 
+async function ensureTagsByName(
+  db: DatabaseAdapter,
+  names: Iterable<string>,
+): Promise<Map<string, string>> {
+  const trimmed = new Map<string, string>() // raw -> trimmed
+  const set = new Set<string>()
+  for (const raw of names) {
+    const t = raw.trim()
+    if (!t) continue
+    trimmed.set(raw, t)
+    set.add(t)
+  }
+  if (set.size === 0) return new Map()
+
+  const arr = [...set]
+  const ph = arr.map(() => '?').join(',')
+  const existing = await db.getAllAsync<{ id: string; name: string }>(
+    `SELECT id, name FROM tags WHERE name IN (${ph})`,
+    ...arr,
+  )
+  const nameToId = new Map(existing.map((r) => [r.name, r.id]))
+  const missing = arr.filter((n) => !nameToId.has(n))
+  if (missing.length > 0) {
+    const now = Date.now()
+    const rows = missing.map((name) => ({
+      id: uniqueId(),
+      name,
+      createdAt: now,
+      usedAt: now,
+      system: 0,
+    }))
+    await sql.insertMany(db, 'tags', rows, { conflictClause: 'OR IGNORE' })
+    const phM = missing.map(() => '?').join(',')
+    const inserted = await db.getAllAsync<{ id: string; name: string }>(
+      `SELECT id, name FROM tags WHERE name IN (${phM})`,
+      ...missing,
+    )
+    for (const r of inserted) nameToId.set(r.name, r.id)
+  }
+
+  const phAll = arr.map(() => '?').join(',')
+  await db.runAsync(`UPDATE tags SET usedAt = ? WHERE name IN (${phAll})`, Date.now(), ...arr)
+
+  const result = new Map<string, string>()
+  for (const [raw, name] of trimmed) {
+    const id = nameToId.get(name)
+    if (id) result.set(raw, id)
+  }
+  return result
+}
+
 export async function syncManyTagsFromMetadata(
   db: DatabaseAdapter,
   entries: { fileId: string; tagNames: string[] }[],
@@ -156,11 +207,7 @@ export async function syncManyTagsFromMetadata(
     }
   }
 
-  const tagMap = new Map<string, string>()
-  for (const name of allTagNames) {
-    const tag = await getOrCreateTag(db, name)
-    tagMap.set(name, tag.id)
-  }
+  const tagMap = await ensureTagsByName(db, allTagNames)
 
   const fileIds = entries.map((e) => e.fileId)
   const ph = fileIds.map(() => '?').join(',')
