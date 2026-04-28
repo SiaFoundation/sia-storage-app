@@ -114,8 +114,8 @@ export default function OnboardingFinishedScreen() {
 
           <Text style={styles.subtitle}>You are connected and ready to use Sia Storage.</Text>
           <Text style={styles.subtitle}>
-            Manage your recovery phrase and indexer anytime in Settings via the shard icon on the
-            top left of the home screen.
+            Manage your recovery phrase and indexer anytime in Settings via the menu icon in the top
+            left of the home screen.
           </Text>
         </View>
       </View>
