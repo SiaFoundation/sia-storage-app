@@ -1,11 +1,6 @@
+import { initLogForwarder, resumeLogForwarder } from '@siastorage/core/services/logForwarder'
 import { swrCacheBy } from '@siastorage/core/stores'
-import {
-  type LogEntry,
-  type LogLevel,
-  logger,
-  serializeData,
-  setLogAppender,
-} from '@siastorage/logger'
+import { type LogEntry, type LogLevel, logger } from '@siastorage/logger'
 import useSWR from 'swr'
 import { app } from './appService'
 
@@ -20,11 +15,13 @@ export async function initLogger(): Promise<void> {
     return
   }
 
-  setLogAppender(appendLogsToDb)
+  await initLogForwarder(app())
   logger.info('logs', 'init')
 
-  const storedLevel = await getLogLevel()
-  const storedScopes = await app().settings.getLogScopes()
+  const [storedLevel, storedScopes] = await Promise.all([
+    getLogLevel(),
+    app().settings.getLogScopes(),
+  ])
   logLevel = storedLevel
   logScopes = storedScopes
   cache.invalidate('level')
@@ -36,7 +33,7 @@ export async function initLogger(): Promise<void> {
 /** Re-register the log appender after suspension without re-reading
  * settings. initLogger() can't be reused due to its hasInit guard. */
 export function resumeLogger(): void {
-  setLogAppender(appendLogsToDb)
+  resumeLogForwarder()
 }
 
 export function useAvailableScopes() {
@@ -87,22 +84,6 @@ export async function toggleLogScope(scope: string): Promise<void> {
     ? current.filter((s) => s !== scope)
     : [...current, scope]
   await setLogScopes(newScopes)
-}
-
-async function appendLogsToDb(entries: LogEntry[]): Promise<void> {
-  try {
-    await app().logs.appendMany(
-      entries.map((entry) => ({
-        timestamp: entry.timestamp,
-        level: entry.level,
-        scope: entry.scope,
-        message: entry.message,
-        data: serializeData(entry.data),
-      })),
-    )
-  } catch (error) {
-    console.warn('[logs] Failed to append logs:', error)
-  }
 }
 
 export async function readLogs(

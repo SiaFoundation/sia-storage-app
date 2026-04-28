@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { InsetGroupLink, InsetGroupSection } from '../components/InsetGroup'
 import { SettingsAdvancedDatabase } from '../components/SettingsAdvancedDatabase'
 import { SettingsAdvancedInfo } from '../components/SettingsAdvancedInfo'
+import { SettingsAdvancedLogs } from '../components/SettingsAdvancedLogs'
 import { SettingsAdvancedSync } from '../components/SettingsAdvancedSync'
 import { SettingsAdvancedTransfers } from '../components/SettingsAdvancedTransfers'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
@@ -9,15 +9,11 @@ import type { MenuStackParamList } from '../stacks/types'
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'Advanced'>
 
-export function SettingsAdvancedScreen(props: Props) {
-  const { navigation } = props
+export function SettingsAdvancedScreen({ navigation }: Props) {
   return (
     <SettingsScrollLayout>
-      <InsetGroupSection header="Tools">
-        <InsetGroupLink label="Import" onPress={() => navigation.navigate('Import')} />
-        <InsetGroupLink label="Logs" onPress={() => navigation.navigate('Logs')} />
-      </InsetGroupSection>
-      <SettingsAdvancedInfo {...props} />
+      <SettingsAdvancedLogs onViewLogs={() => navigation.navigate('Logs')} />
+      <SettingsAdvancedInfo onImport={() => navigation.navigate('Import')} />
       <SettingsAdvancedTransfers />
       <SettingsAdvancedSync />
       <SettingsAdvancedDatabase />

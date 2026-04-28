@@ -2,6 +2,7 @@ import {
   formatDataPairs,
   getLevelColorHex,
   getScopeColorHex,
+  type LogData,
   type LogEntry,
 } from '@siastorage/logger'
 import { useCallback, useEffect, useRef } from 'react'
@@ -54,7 +55,10 @@ export function LogView({ isFollowing, onTotalCountChange, onScrollAwayFromBotto
   const renderLogItem = useCallback(({ item, index }: { item: LogEntry; index: number }) => {
     const scopeColor = getScopeColorHex(item.scope)
     const levelColor = getLevelColorHex(item.level) ?? palette.gray[50]
-    const dataPart = formatDataPairs(item.data)
+    // Hide context fields (device/account) on-device — they're already known
+    // here. They remain on every log row in the DB, terminal, exports, and
+    // the wire format for cross-device correlation.
+    const dataPart = formatDataPairs(stripContext(item.data))
 
     return (
       <Text key={`${index}-${item.timestamp}-${item.scope}`} style={styles.line}>
@@ -106,6 +110,23 @@ export function LogView({ isFollowing, onTotalCountChange, onScrollAwayFromBotto
       />
     </View>
   )
+}
+
+const CONTEXT_KEYS = new Set(['device', 'account'])
+
+function stripContext(data?: LogData): LogData | undefined {
+  if (!data) return data
+  const out: Record<string, unknown> = {}
+  let dropped = false
+  for (const key of Object.keys(data)) {
+    if (CONTEXT_KEYS.has(key)) {
+      dropped = true
+      continue
+    }
+    out[key] = data[key]
+  }
+  if (!dropped) return data
+  return Object.keys(out).length > 0 ? (out as LogData) : undefined
 }
 
 const styles = StyleSheet.create({

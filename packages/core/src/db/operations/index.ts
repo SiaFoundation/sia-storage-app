@@ -140,9 +140,11 @@ export {
   insertLog,
   insertManyLogs,
   type LogRow,
+  type LogRowWithId,
   queryAvailableLogScopes,
   queryLogCount,
   queryLogs,
+  queryLogsSinceId,
   rotateLogs,
 } from './logs'
 export {

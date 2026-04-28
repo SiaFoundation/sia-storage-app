@@ -559,6 +559,7 @@ export function buildDbNamespaces(
         const rows = await ops.queryLogs(db, opts as Parameters<typeof ops.queryLogs>[1])
         return rows.map(parseLogRow)
       },
+      readSinceId: (sinceId, limit) => ops.queryLogsSinceId(db, sinceId, limit),
       count: (opts?: { logLevel?: string; logScopes?: string[] }) =>
         ops.queryLogCount(db, opts as Parameters<typeof ops.queryLogCount>[1]),
       clear: () => ops.deleteAllLogs(db),

@@ -476,6 +476,20 @@ export interface AppService {
     ): Promise<void>
     /** Reads log entries with optional level, scope, and limit filters. */
     read(opts?: { logLevel?: string; logScopes?: string[]; limit?: number }): Promise<any[]>
+    /** Reads up to `limit` log entries with id greater than `sinceId`, oldest first. */
+    readSinceId(
+      sinceId: number,
+      limit: number,
+    ): Promise<
+      {
+        id: number
+        timestamp: string
+        level: string
+        scope: string
+        message: string
+        data: string | null
+      }[]
+    >
     /** Returns the count of log entries matching the filters. */
     count(opts?: { logLevel?: string; logScopes?: string[] }): Promise<number>
     /** Deletes all log entries. */
@@ -540,6 +554,20 @@ export interface AppService {
     getLogScopes(): Promise<string[]>
     /** Sets the enabled log scopes. */
     setLogScopes(value: string[]): Promise<void>
+    /** Returns whether remote log forwarding is enabled. */
+    getRemoteLogEnabled(): Promise<boolean>
+    /** Sets the remote log forwarding flag. */
+    setRemoteLogEnabled(value: boolean): Promise<void>
+    /** Returns the configured remote log endpoint URL. */
+    getRemoteLogEndpoint(): Promise<string>
+    /** Sets the remote log endpoint URL. */
+    setRemoteLogEndpoint(value: string): Promise<void>
+    /** Returns the highest log id successfully shipped to the remote endpoint. */
+    getRemoteLogCursor(): Promise<number>
+    /** Sets the highest log id shipped to the remote endpoint. */
+    setRemoteLogCursor(value: number): Promise<void>
+    /** Returns the persistent per-install device identifier, generating one on first read. */
+    getDeviceId(): Promise<string>
     /** Returns the timestamp of the last file system eviction run. */
     getFsEvictionLastRun(): Promise<number>
     /** Sets the timestamp of the last file system eviction run. */

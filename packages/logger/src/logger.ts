@@ -1,5 +1,5 @@
 import { appendLog } from './logAppender'
-import { ANSI_BOLD, ANSI_RESET, getLevelColorAnsi, getScopeColorAnsi } from './logColors'
+import { ANSI_BOLD, ANSI_DIM, ANSI_RESET, getLevelColorAnsi, getScopeColorAnsi } from './logColors'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -122,36 +122,66 @@ export function formatDataPairs(data?: LogData): string {
   return pairs.join(' ')
 }
 
+const NO_ACCOUNT_PLACEHOLDER = '--------'
+
 function formatTerminalLog(
   level: LogLevel,
   scope: string,
   timestamp: string,
   msg: string,
   data?: LogData,
+  context?: Record<string, unknown>,
 ): string {
   const levelColor = getLevelColorAnsi(level)
   const scopeColor = getScopeColorAnsi(scope)
   const levelUpper = level.toUpperCase().padEnd(5)
+  const contextPart = formatContextTags(context)
   const dataPart = formatDataPairs(data)
   const messagePart = dataPart ? `${msg} ${dataPart}` : msg
-  return `${timestamp} ${levelColor}${ANSI_BOLD}${levelUpper}${ANSI_RESET} ${scopeColor}${ANSI_BOLD}[${scope}]${ANSI_RESET} ${messagePart}`
+  return `${timestamp} ${levelColor}${ANSI_BOLD}${levelUpper}${ANSI_RESET} ${contextPart}${scopeColor}${ANSI_BOLD}[${scope}]${ANSI_RESET} ${messagePart}`
+}
+
+function formatContextTags(context?: Record<string, unknown>): string {
+  if (!context?.device) return ''
+  const account = context.account ? String(context.account) : NO_ACCOUNT_PLACEHOLDER
+  return `${ANSI_DIM}[${String(context.device)}][${account}]${ANSI_RESET}`
+}
+
+let logContext: Record<string, unknown> = {}
+
+/** Set per-process context fields (e.g., device id, account id) merged into
+ * the data field of every subsequent log entry. The merged data flows into
+ * the buffer, the DB sink, the terminal output, and the wire format. The
+ * in-app log viewer is responsible for hiding these keys when displaying
+ * entries on-device. Caller-supplied data keys win on conflict. */
+export function setLogContext(ctx: Record<string, unknown>): void {
+  logContext = ctx
+}
+
+function mergeContext(data?: LogData): LogData | undefined {
+  if (Object.keys(logContext).length === 0) return data
+  return { ...(logContext as LogData), ...(data ?? {}) }
 }
 
 function createLogger(level: LogLevel) {
   return (scope: string, msg: string, data?: LogData) => {
     const timestamp = formatTimestamp()
+    const merged = mergeContext(data)
     const entry: LogEntry = {
       timestamp,
       level,
       scope,
       message: msg,
-      data,
+      data: merged,
     }
 
     appendLog(entry)
 
     if (shouldLogToTerminal(level, scope)) {
-      console.log(formatTerminalLog(level, scope, timestamp, msg, data))
+      // Pass original data (without context) plus the context separately so
+      // the formatter can render device/account as front tags rather than
+      // mixing them into the trailing key=value data part.
+      console.log(formatTerminalLog(level, scope, timestamp, msg, data, logContext))
     }
   }
 }

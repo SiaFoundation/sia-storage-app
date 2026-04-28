@@ -74,3 +74,19 @@ export function useLogScopes() {
   const app = useApp()
   return useSWR(app.caches.settings.key('logScopes'), () => app.settings.getLogScopes())
 }
+
+/** Returns whether remote log forwarding is enabled. */
+export function useRemoteLogEnabled() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('remoteLogEnabled'), () =>
+    app.settings.getRemoteLogEnabled(),
+  )
+}
+
+/** Returns the configured remote log endpoint URL. */
+export function useRemoteLogEndpoint() {
+  const app = useApp()
+  return useSWR(app.caches.settings.key('remoteLogEndpoint'), () =>
+    app.settings.getRemoteLogEndpoint(),
+  )
+}

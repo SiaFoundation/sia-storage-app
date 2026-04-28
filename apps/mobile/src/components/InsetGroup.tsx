@@ -170,6 +170,7 @@ type InputRowProps = {
   | 'autoCapitalize'
   | 'autoCorrect'
   | 'editable'
+  | 'secureTextEntry'
 >
 
 export function InsetGroupInputRow({ label, description, ...inputProps }: InputRowProps) {
