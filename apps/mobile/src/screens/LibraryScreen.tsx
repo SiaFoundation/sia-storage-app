@@ -17,6 +17,7 @@ import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
 import { CreateTagSheet } from '../components/CreateTagSheet'
 import { DirectoriesGrid } from '../components/DirectoriesGrid'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { useBackClose } from '../hooks/useBackClose'
 import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
@@ -109,6 +110,14 @@ export function LibraryScreen({ route, navigation }: Props) {
     setActionFileId(file.id)
     openSheet('fileActions')
   }, [])
+
+  const handleCloseCarousel = useCallback(() => {
+    setSelectedFile(null)
+    setIsCarouselZoomed(false)
+    setIsCarouselDetail(false)
+  }, [])
+
+  useBackClose(!!selectedFile, handleCloseCarousel)
 
   const handleShowCarouselActions = useCallback(() => {
     openSheet('fileActions')
@@ -339,10 +348,8 @@ export function LibraryScreen({ route, navigation }: Props) {
         >
           <DragToDismiss
             onDismiss={() => {
-              setSelectedFile(null)
+              handleCloseCarousel()
               setIsDraggingToDismiss(false)
-              setIsCarouselZoomed(false)
-              setIsCarouselDetail(false)
             }}
             onDragStart={() => setIsDraggingToDismiss(true)}
             onDragCancel={() => setIsDraggingToDismiss(false)}
@@ -354,11 +361,7 @@ export function LibraryScreen({ route, navigation }: Props) {
               sortBy={vs.sortBy}
               sortDir={vs.sortDir}
               categories={vs.selectedCategories}
-              onClose={() => {
-                setSelectedFile(null)
-                setIsCarouselZoomed(false)
-                setIsCarouselDetail(false)
-              }}
+              onClose={handleCloseCarousel}
               onShowActionSheet={handleShowCarouselActions}
               onShowTagSheet={() => openSheet('manageFileTags')}
               onMoveToDirectory={() => openSheet('moveToDirectory')}

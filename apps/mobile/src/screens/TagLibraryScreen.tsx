@@ -20,6 +20,7 @@ import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { BottomControlBar, FloatingPill } from '../components/BottomControlBar'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { useBackClose } from '../hooks/useBackClose'
 import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
@@ -143,6 +144,8 @@ export function TagLibraryScreen({ route, navigation }: Props) {
     setIsCarouselZoomed(false)
     setIsCarouselDetail(false)
   }, [])
+
+  useBackClose(!!selectedFile, handleCloseCarousel)
 
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()

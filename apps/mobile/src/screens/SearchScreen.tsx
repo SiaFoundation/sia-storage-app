@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { useBackClose } from '../hooks/useBackClose'
 import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
@@ -155,6 +156,8 @@ export function SearchScreen({ navigation }: Props) {
     setIsCarouselZoomed(false)
     setIsCarouselDetail(false)
   }, [])
+
+  useBackClose(!!selectedFile, handleCloseCarousel)
 
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
