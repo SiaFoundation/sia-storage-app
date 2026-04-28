@@ -285,18 +285,75 @@ export async function syncDirectoryFromMetadata(
   }
 }
 
+async function ensureDirectoriesAtPaths(
+  db: DatabaseAdapter,
+  fullPaths: Iterable<string>,
+): Promise<Map<string, string>> {
+  // Expand each input path into its sanitized normal form and all of
+  // its prefixes so a/b/c also creates a and a/b. Map the original
+  // input string to the normalized path so callers can look up by what
+  // they passed in.
+  const inputToNormalized = new Map<string, string>()
+  const prefixes = new Set<string>()
+  for (const raw of fullPaths) {
+    const segments = raw.split('/').map(sanitizeDirectorySegment).filter(Boolean)
+    if (segments.length === 0) {
+      inputToNormalized.set(raw, '')
+      continue
+    }
+    let cur = ''
+    for (const seg of segments) {
+      cur = cur ? `${cur}/${seg}` : seg
+      prefixes.add(cur)
+    }
+    inputToNormalized.set(raw, cur)
+  }
+  if (prefixes.size === 0) return new Map()
+
+  const arr = [...prefixes]
+  const ph = arr.map(() => '?').join(',')
+  const existing = await db.getAllAsync<{ id: string; path: string }>(
+    `SELECT id, path FROM directories WHERE path IN (${ph})`,
+    ...arr,
+  )
+  const pathToId = new Map(existing.map((r) => [r.path, r.id]))
+  const missing = arr.filter((p) => !pathToId.has(p))
+  if (missing.length > 0) {
+    const now = Date.now()
+    const rows = missing.map((path) => ({
+      id: uniqueId(),
+      path,
+      createdAt: now,
+      nameSortKey: naturalSortKey(path),
+    }))
+    await sql.insertMany(db, 'directories', rows, { conflictClause: 'OR IGNORE' })
+    // OR IGNORE may have rejected rows that another writer inserted
+    // first — re-SELECT to pick up the actual id for every missing path.
+    const phM = missing.map(() => '?').join(',')
+    const inserted = await db.getAllAsync<{ id: string; path: string }>(
+      `SELECT id, path FROM directories WHERE path IN (${phM})`,
+      ...missing,
+    )
+    for (const r of inserted) pathToId.set(r.path, r.id)
+  }
+
+  const result = new Map<string, string>()
+  for (const [input, normalized] of inputToNormalized) {
+    if (!normalized) continue
+    const id = pathToId.get(normalized)
+    if (id) result.set(input, id)
+  }
+  return result
+}
+
 export async function syncManyDirectoriesFromMetadata(
   db: DatabaseAdapter,
   entries: { fileId: string; directoryPath: string }[],
 ): Promise<{ name: string; directoryId: string | null }[]> {
   if (entries.length === 0) return []
 
-  const dirPaths = [...new Set(entries.map((e) => e.directoryPath))]
-  const dirMap = new Map<string, string>()
-  for (const path of dirPaths) {
-    const dir = await getOrCreateDirectoryAtPath(db, path)
-    dirMap.set(path, dir.id)
-  }
+  const dirPaths = new Set(entries.map((e) => e.directoryPath))
+  const pathToId = await ensureDirectoriesAtPaths(db, dirPaths)
 
   const fileIds = entries.map((e) => e.fileId)
   const ph = fileIds.map(() => '?').join(',')
@@ -307,8 +364,9 @@ export async function syncManyDirectoriesFromMetadata(
 
   const byDirId = new Map<string, string[]>()
   for (const entry of entries) {
-    const dirId = dirMap.get(entry.directoryPath)!
-    const list = byDirId.get(dirId) || []
+    const dirId = pathToId.get(entry.directoryPath)
+    if (!dirId) continue
+    const list = byDirId.get(dirId) ?? []
     list.push(entry.fileId)
     byDirId.set(dirId, list)
   }

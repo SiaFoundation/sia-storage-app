@@ -20,6 +20,7 @@ import {
   sanitizeDirectoryPath,
   sanitizeDirectorySegment,
   syncDirectoryFromMetadata,
+  syncManyDirectoriesFromMetadata,
 } from './directories'
 import { insertFile, queryFileById } from './files'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
@@ -866,5 +867,76 @@ describe('natural sort order', () => {
     const dirs = await queryAllDirectoriesWithCounts(db())
     const names = dirs.map((d) => d.path)
     expect(names).toEqual(['Folder 1', 'Folder 2', 'Folder 3', 'Folder 10', 'Folder 20'])
+  })
+})
+
+describe('syncManyDirectoriesFromMetadata', () => {
+  async function listAllPaths(): Promise<string[]> {
+    const rows = await db().getAllAsync<{ path: string }>(
+      'SELECT path FROM directories ORDER BY path',
+    )
+    return rows.map((r) => r.path)
+  }
+
+  async function getDirectoryId(fileId: string): Promise<string | null> {
+    const row = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      fileId,
+    )
+    return row?.directoryId ?? null
+  }
+
+  it('creates all path prefixes for nested directories', async () => {
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a/b/c' }])
+    expect(await listAllPaths()).toEqual(['a', 'a/b', 'a/b/c'])
+    expect(await getDirectoryId('f1')).not.toBeNull()
+  })
+
+  it('dedups shared prefixes across paths', async () => {
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await syncManyDirectoriesFromMetadata(db(), [
+      { fileId: 'f1', directoryPath: 'a/b/c' },
+      { fileId: 'f2', directoryPath: 'a/b/d' },
+    ])
+    // a, a/b, a/b/c, a/b/d — exactly four rows
+    expect(await listAllPaths()).toEqual(['a', 'a/b', 'a/b/c', 'a/b/d'])
+  })
+
+  it('is idempotent on rerun', async () => {
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a/b' }])
+    const before = await listAllPaths()
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a/b' }])
+    expect(await listAllPaths()).toEqual(before)
+  })
+
+  it('reuses existing directories instead of inserting duplicates', async () => {
+    await getOrCreateDirectoryAtPath(db(), 'a/b')
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a/b/c' }])
+    expect(await listAllPaths()).toEqual(['a', 'a/b', 'a/b/c'])
+  })
+
+  it('skips entries whose path sanitizes to empty', async () => {
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: '...' }])
+    expect(await listAllPaths()).toEqual([])
+    expect(await getDirectoryId('f1')).toBeNull()
+  })
+
+  it('returns the previous (name, directoryId) groups for the affected files', async () => {
+    await getOrCreateDirectoryAtPath(db(), 'old')
+    const oldDir = await db().getFirstAsync<{ id: string }>(
+      "SELECT id FROM directories WHERE path = 'old'",
+    )
+    await createTestFile('f1')
+    await db().runAsync('UPDATE files SET directoryId = ? WHERE id = ?', oldDir!.id, 'f1')
+
+    const oldGroups = await syncManyDirectoriesFromMetadata(db(), [
+      { fileId: 'f1', directoryPath: 'new' },
+    ])
+    expect(oldGroups).toEqual([{ name: 'f1.jpg', directoryId: oldDir!.id }])
   })
 })

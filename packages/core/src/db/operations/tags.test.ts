@@ -14,6 +14,7 @@ import {
   removeTagFromFile,
   renameTag,
   SYSTEM_TAGS,
+  syncManyTagsFromMetadata,
   syncTagsFromMetadata,
   toggleFavorite,
 } from './tags'
@@ -491,5 +492,69 @@ describe('deleteTag', () => {
     await expect(deleteTag(db(), SYSTEM_TAGS.favorites.id)).rejects.toThrow(
       'System tags cannot be deleted',
     )
+  })
+})
+
+describe('syncManyTagsFromMetadata', () => {
+  it('creates each unique tag exactly once across files', async () => {
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await syncManyTagsFromMetadata(db(), [
+      { fileId: 'f1', tagNames: ['vacation', 'beach'] },
+      { fileId: 'f2', tagNames: ['vacation', 'sunset'] },
+    ])
+    const all = await queryAllTagsWithCounts(db())
+    const userTags = all
+      .filter((t) => t.system === 0)
+      .map((t) => t.name)
+      .sort()
+    expect(userTags).toEqual(['beach', 'sunset', 'vacation'])
+
+    expect((await queryTagNamesForFile(db(), 'f1'))?.sort()).toEqual(['beach', 'vacation'])
+    expect((await queryTagNamesForFile(db(), 'f2'))?.sort()).toEqual(['sunset', 'vacation'])
+  })
+
+  it('reuses existing tags rather than inserting duplicates', async () => {
+    await getOrCreateTag(db(), 'vacation')
+    await createTestFile('f1')
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['vacation', 'beach'] }])
+    const all = await queryAllTagsWithCounts(db())
+    const matches = all.filter((t) => t.name === 'vacation')
+    expect(matches).toHaveLength(1)
+  })
+
+  it('updates usedAt for every tag in the batch', async () => {
+    await createTestFile('f1')
+
+    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['old'] }])
+
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-28T12:00:00Z'))
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['old', 'fresh'] }])
+
+    const all = await queryAllTagsWithCounts(db())
+    const old = all.find((t) => t.name === 'old')!
+    const fresh = all.find((t) => t.name === 'fresh')!
+    const expected = new Date('2026-04-28T12:00:00Z').getTime()
+    expect(old.usedAt).toBe(expected)
+    expect(fresh.usedAt).toBe(expected)
+
+    jest.useRealTimers()
+  })
+
+  it('is idempotent on rerun', async () => {
+    await createTestFile('f1')
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['a', 'b'] }])
+    const before = (await queryTagNamesForFile(db(), 'f1'))?.sort()
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['a', 'b'] }])
+    const after = (await queryTagNamesForFile(db(), 'f1'))?.sort()
+    expect(after).toEqual(before)
+  })
+
+  it('skips empty/whitespace-only names', async () => {
+    await createTestFile('f1')
+    await syncManyTagsFromMetadata(db(), [{ fileId: 'f1', tagNames: ['', '  ', 'real'] }])
+    const names = await queryTagNamesForFile(db(), 'f1')
+    expect(names).toEqual(['real'])
   })
 })
