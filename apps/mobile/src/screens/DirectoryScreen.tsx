@@ -28,6 +28,7 @@ import { BottomControlBar, FloatingPill } from '../components/BottomControlBar'
 import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
 import { DirectoryListItem } from '../components/DirectoryListItem'
 import { DragToDismiss } from '../components/DragToDismiss'
+import { useBackClose } from '../hooks/useBackClose'
 import { EmptyState } from '../components/EmptyState'
 import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
@@ -158,6 +159,8 @@ export function DirectoryScreen({ route, navigation }: Props) {
     setIsCarouselZoomed(false)
     setIsCarouselDetail(false)
   }, [])
+
+  useBackClose(!!selectedFile, handleCloseCarousel)
 
   const handleBulkActionComplete = useCallback(() => {
     exitSelectionMode()
