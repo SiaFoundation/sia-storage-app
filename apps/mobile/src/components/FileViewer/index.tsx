@@ -44,7 +44,8 @@ export function FileViewer({
   const fileDownload = useDownload(file, 0)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
-  const localId = file.hash === '' && file.localId ? file.localId : null
+  const hasNoSealedObjects = Object.keys(file.objects).length === 0
+  const localId = (file.hash === '' || hasNoSealedObjects) && file.localId ? file.localId : null
   const mediaLibrarySwr = useSWR(localId ? ['mediaLibraryUri', localId] : null, () =>
     getMediaLibraryUri(localId),
   )
@@ -70,6 +71,19 @@ export function FileViewer({
   const isQueued = fileDownloadState?.status === 'queued'
 
   const DownloadPanel = useMemo(() => {
+    if (hasNoSealedObjects) {
+      return (
+        <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 12 }]}>
+          <CloudDownloadIcon color={colors.textSecondary} size={40} />
+          <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '600' }}>
+            File unavailable
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
+            This file was never uploaded and the local copy is unavailable.
+          </Text>
+        </View>
+      )
+    }
     return (
       <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
         <TouchableHighlight onPress={onDownloadPress} disabled={isQueued}>
@@ -92,7 +106,14 @@ export function FileViewer({
       </View>
     )
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
-  }, [isDownloading, isQueued, onDownloadPress, fileDownloadState?.progress, file.size])
+  }, [
+    isDownloading,
+    isQueued,
+    onDownloadPress,
+    fileDownloadState?.progress,
+    file.size,
+    hasNoSealedObjects,
+  ])
 
   const ImportingPanel = useMemo(() => {
     return (
