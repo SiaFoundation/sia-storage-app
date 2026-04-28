@@ -1,6 +1,6 @@
 import type { Category } from '@siastorage/core/db/operations'
-import { EllipsisIcon, ListFilterIcon, XIcon } from 'lucide-react-native'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { EllipsisIcon, ListFilterIcon, MenuIcon, XIcon } from 'lucide-react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { IconButton } from './IconButton'
 import { LibraryAppStatusIcon } from './LibraryAppStatusIcon'
@@ -39,11 +39,11 @@ export function LibraryHeader({
       <View style={styles.headerLeft}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Settings"
+          accessibilityLabel="Menu"
           onPress={onNavigateMenu}
-          style={styles.shardButton}
+          style={styles.menuButton}
         >
-          <Image source={require('../assets/icon.png')} style={styles.shardIcon} />
+          <MenuIcon color={palette.gray[50]} size={22} />
         </Pressable>
         <View>
           <Text style={styles.titleLarge} pointerEvents="none">
@@ -104,18 +104,13 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
-  shardButton: {
+  menuButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: overlay.pill,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  shardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
   },
   titleLarge: {
     color: palette.gray[50],
