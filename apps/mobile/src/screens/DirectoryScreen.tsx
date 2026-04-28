@@ -163,17 +163,6 @@ export function DirectoryScreen({ route, navigation }: Props) {
     exitSelectionMode()
   }, [])
 
-  const handleFilesAdded = useCallback(
-    (addedFiles: FileRecord[]) => {
-      if (isUnfiled) return
-      void app().directories.moveFiles(
-        addedFiles.map((f) => f.id),
-        directoryId,
-      )
-    },
-    [directoryId, isUnfiled],
-  )
-
   const actionSheetFileIds = isSelectionMode
     ? selectedFileIds
     : selectedFile
@@ -329,7 +318,10 @@ export function DirectoryScreen({ route, navigation }: Props) {
         />
       )}
 
-      <AddFileActionSheet sheetName="directoryAddFile" onFilesAdded={handleFilesAdded} />
+      <AddFileActionSheet
+        sheetName="directoryAddFile"
+        destinationDirectoryId={isUnfiled ? null : directoryId}
+      />
       {isSelectionMode ? (
         <SelectionBar
           onComplete={handleBulkActionComplete}

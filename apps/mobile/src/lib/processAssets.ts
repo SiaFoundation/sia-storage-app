@@ -3,8 +3,13 @@
 // importFiles — User-initiated (picker, camera, share intent). Creates
 //   placeholder records instantly so the UI updates, then copies files
 //   in the background. The import scanner finalizes each file once the
-//   local copy lands on disk. No dedup — manual imports always create
-//   new records.
+//   local copy lands on disk. localId is intentionally NOT set on
+//   manual imports — that field is the auto-sync path's primitive for
+//   recognizing OS assets across ticks; using it for manual import
+//   would reserve the localId slot and break re-imports of previously
+//   deleted photos. Manual import takes the (name, directoryId) the
+//   user opened the picker from and lets the version system bump
+//   collisions via recalculateCurrentForGroup.
 //
 // syncAssets — Background recent photo sync (syncNewPhotos). Copies
 //   files and computes content hashes inline so duplicates (by localId
@@ -382,6 +387,24 @@ export async function catalogAssets(
   return { newCount, existingCount }
 }
 
+export type ImportFilesOptions = {
+  /** Folder the picker was opened from. New files land here directly. Defaults to root (null). */
+  destinationDirectoryId?: string | null
+  /** Tag to attach to every newly imported file. Used when the picker was opened from a tag's view. */
+  assignTagName?: string
+}
+
+export type ImportFilesResult = {
+  /** Files that landed in the library, in candidate order. */
+  files: FileRecord[]
+  /**
+   * How many of the picked files share a name with an existing current
+   * file in the destination directory and therefore became a new version
+   * of it. Used by the caller to surface a one-line toast.
+   */
+  newVersionCount: number
+}
+
 /**
  * Import for manual flows (document picker, camera, share intent, etc.).
  *
@@ -389,19 +412,24 @@ export async function catalogAssets(
  * updates, then fires a background copy for each file. The import scanner
  * finalizes each file by hashing once the local copy lands on disk.
  *
- * Files with a localId (photos) can be recovered by the scanner via
- * resolveLocalId even if the background copy is interrupted.
+ * Manual imports always succeed: they don't reserve the localId slot
+ * (auto-sync owns that namespace) and don't dedup by content hash.
+ * Versioning happens automatically — if a pick shares (name, directoryId)
+ * with an existing current file, recalculateCurrentForGroup bumps it as
+ * a new version. The pre-check just counts how many will do that, so
+ * the caller can tell the user.
  */
 export async function importFiles(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
-): Promise<FileRecord[]> {
+  options: ImportFilesOptions = {},
+): Promise<ImportFilesResult> {
+  const { destinationDirectoryId = null, assignTagName } = options
   const now = Date.now()
 
-  type PendingCopy = { id: string; type: string; sourceUri: string }
-  const pendingCopies: PendingCopy[] = []
+  type Candidate = { placeholder: FileRecord; sourceUri: string }
 
-  const placeholders: FileRecord[] = await Promise.all(
+  const candidates: Candidate[] = await Promise.all(
     (assets ?? [])
       .filter((a) => !!a.sourceUri)
       .map(async (a) => {
@@ -413,28 +441,64 @@ export async function importFiles(
         })
         const name = a.name ?? defaultFileName
         const ts = new Date(a.timestamp ?? now).getTime()
-        pendingCopies.push({ id, type, sourceUri: a.sourceUri! })
         return {
-          id,
-          localId: a.id ?? null,
-          name,
-          createdAt: ts,
-          updatedAt: ts,
-          addedAt: now,
-          type,
-          kind: 'file' as const,
-          size: a.size ?? 0,
-          hash: '',
-          trashedAt: null,
-          deletedAt: null,
-          objects: {},
+          placeholder: {
+            id,
+            localId: null,
+            name,
+            createdAt: ts,
+            updatedAt: ts,
+            addedAt: now,
+            type,
+            kind: 'file' as const,
+            size: a.size ?? 0,
+            hash: '',
+            trashedAt: null,
+            deletedAt: null,
+            objects: {},
+          } satisfies FileRecord,
+          sourceUri: a.sourceUri!,
         }
       }),
   )
 
-  if (placeholders.length > 0) {
-    await app().files.createMany(placeholders)
-    await app().optimize()
+  if (candidates.length === 0) {
+    return { files: [], newVersionCount: 0 }
+  }
+
+  const uniqueNames = Array.from(new Set(candidates.map((c) => c.placeholder.name)))
+  const existingCurrent = await app().files.getCurrentByNamesInDirectory(
+    uniqueNames,
+    destinationDirectoryId,
+  )
+  const existingNames = new Set(existingCurrent.map((f) => f.name))
+  const newVersionCount = candidates.reduce(
+    (n, c) => (existingNames.has(c.placeholder.name) ? n + 1 : n),
+    0,
+  )
+
+  await app().files.createMany(candidates.map((c) => c.placeholder))
+
+  const insertedCandidates = candidates
+  const insertedIds = candidates.map((c) => c.placeholder.id)
+
+  if (destinationDirectoryId !== null && insertedIds.length > 0) {
+    await app().directories.moveFiles(insertedIds, destinationDirectoryId)
+  }
+
+  if (assignTagName && insertedIds.length > 0) {
+    await app().tags.addToFiles(insertedIds, assignTagName)
+  }
+
+  await app().optimize()
+
+  // Fetch post-move records so the caller sees the right directoryId.
+  // Preserve candidate order in the returned array.
+  let files: FileRecord[] = []
+  if (insertedIds.length > 0) {
+    const fetched = await app().files.getByIds(insertedIds)
+    const byId = new Map(fetched.map((f) => [f.id, f]))
+    files = insertedIds.map((id) => byId.get(id)).filter((f): f is FileRecord => !!f)
   }
 
   // Fire-and-forget: each copy dispatches to a native RNFS thread that
@@ -443,10 +507,16 @@ export async function importFiles(
   // can do anything else. The native thread freezes with the process on
   // iOS suspension and thaws on resume. If iOS terminates (rather than
   // suspends) the import is lost — same as before.
-  void copyImportedFiles(pendingCopies)
+  void copyImportedFiles(
+    insertedCandidates.map((c) => ({
+      id: c.placeholder.id,
+      type: c.placeholder.type,
+      sourceUri: c.sourceUri,
+    })),
+  )
 
   triggerImportScanner()
-  return placeholders
+  return { files, newVersionCount }
 }
 
 async function copyImportedFiles(

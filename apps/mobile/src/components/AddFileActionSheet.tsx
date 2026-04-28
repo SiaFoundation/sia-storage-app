@@ -10,14 +10,24 @@ import { ActionSheetButton } from './ActionSheetButton'
 
 type Props = {
   sheetName?: string
+  /** Folder the picker was opened from. New files land here directly. */
+  destinationDirectoryId?: string | null
+  /** Tag to attach to every newly imported file. Used when opened from a tag's view. */
+  assignTagName?: string
   onFilesAdded?: (files: FileRecord[]) => void
 }
 
-export function AddFileActionSheet({ sheetName = 'addFile', onFilesAdded }: Props) {
+export function AddFileActionSheet({
+  sheetName = 'addFile',
+  destinationDirectoryId = null,
+  assignTagName,
+  onFilesAdded,
+}: Props) {
   const isOpen = useSheetOpen(sheetName)
-  const pickImages = useImagePicker()
-  const capture = useCameraCapture()
-  const pickDocuments = useDocumentPicker()
+  const pickerOptions = { destinationDirectoryId, assignTagName }
+  const pickImages = useImagePicker(pickerOptions)
+  const capture = useCameraCapture(pickerOptions)
+  const pickDocuments = useDocumentPicker(pickerOptions)
 
   const pickAndClose = useCallback(
     async (picker: () => Promise<FileRecord[]>) => {

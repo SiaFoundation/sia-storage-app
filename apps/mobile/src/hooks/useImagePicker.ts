@@ -2,11 +2,16 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
+import { showImportResultToast } from '../lib/importResultToast'
 import { showPermissionDeniedAlert } from '../lib/permissionAlert'
+import type { ImportFilesOptions } from '../lib/processAssets'
 import { importFiles } from '../lib/processAssets'
+import { useToast } from '../lib/toastContext'
 
-export function useImagePicker() {
+export function useImagePicker(options: ImportFilesOptions = {}) {
+  const toast = useToast()
   const isPickingRef = useRef<boolean>(false)
+  const { destinationDirectoryId, assignTagName } = options
   return useCallback(async (): Promise<FileRecord[]> => {
     if (isPickingRef.current) {
       logger.debug('imagePicker', 'already_picking')
@@ -47,7 +52,7 @@ export function useImagePicker() {
         return []
       }
 
-      return importFiles(
+      const imported = await importFiles(
         result.assets?.map((a) => ({
           id: a.id,
           name: a.fileName,
@@ -57,12 +62,16 @@ export function useImagePicker() {
           sourceUri: a.uri,
         })),
         'file',
+        { destinationDirectoryId, assignTagName },
       )
+      showImportResultToast(toast, imported)
+      return imported.files
     } catch (e) {
       logger.error('imagePicker', 'error', { error: e as Error })
+      toast.show('Could not add photos. Please try again.')
       return []
     } finally {
       isPickingRef.current = false
     }
-  }, [])
+  }, [toast, destinationDirectoryId, assignTagName])
 }

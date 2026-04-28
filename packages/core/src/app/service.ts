@@ -133,8 +133,14 @@ export interface AppService {
     getByIds(ids: string[]): Promise<FileRecord[]>
     /** Returns a file by object ID and indexer URL. */
     getByObjectId(objectId: string, indexerURL: string): Promise<FileRecord | null>
-    /** Returns files by local IDs. */
+    /** Returns files by local IDs (excludes trashed/tombstoned). */
     getByLocalIds(localIds: string[]): Promise<FileRecord[]>
+    /**
+     * Returns the current version of every file matching one of `names`
+     * in `directoryId`. Used by the manual import path to count name
+     * collisions and surface an "Added N files as new versions" toast.
+     */
+    getCurrentByNamesInDirectory(names: string[], directoryId: string | null): Promise<FileRecord[]>
     /** Returns a file by name (current version). */
     getByName(name: string): Promise<FileRecord | null>
     /** Returns a file by content hash. */
