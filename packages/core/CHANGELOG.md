@@ -1,3 +1,35 @@
+## 0.0.6 (2026-04-29)
+
+### Features
+
+- `runCacheEviction` now accepts an `AbortSignal` and checks it between batches and between rows, so iOS suspension can drain the loop cleanly before the DB gate closes.
+- SlotPool.acquire() and SlotPool.withSlot() accept an optional AbortSignal so cancelled waiters release their queue position immediately. downloads.downloadFile() now registers the entry synchronously before the first DB read so cancel() arriving during initial metadata lookup is honored.
+- `runOrphanScanner` now accepts an `AbortSignal` and checks it between batches and between rows, so iOS suspension can drain the loop cleanly before the DB gate closes.
+- createSuspensionManager owns BG-task lifecycle via setAppState, registerBackgroundTask, releaseBackgroundTask, and getRunningBackgroundTaskIds; background work uses a native AbortController so signal.aborted cancels the poll loop at any await boundary.
+- Add `queryTrashedCachedFiles` and `queryNonCurrentCachedFiles` DB ops, the matching `app.fs.trashedCachedFiles` and `app.fs.nonCurrentCachedFiles` facade methods, and the `FS_EVICTABLE_MIN_AGE_NON_CURRENT` config to back the new eviction pre-passes.
+- Add isAbortError(e) and getErrorMessage(e) helpers at @siastorage/core/lib/errors for consistent handling of abort signals (DOMException and Error name='AbortError' variants) and error-message extraction across packages.
+- Added downloads.downloadFromShareUrl(id, url) and removed register, update, remove, acquireSlot, releaseSlot from the public downloads API — the share-URL flow now runs entirely inside the downloads namespace with the same cancel() / cancelAll() semantics and abortable slot-queue waits as downloadFile().
+- Imported files are evictable from the local cache as soon as they're uploaded, instead of after the standard 1-day LRU grace.
+- A brief toast appears when imported files replace existing ones as new versions.
+- Added optional log forwarding under Settings → Advanced — every log entry is sent as NDJSON to a user-supplied HTTP endpoint with optional Bearer auth, and resumes from a saved cursor after offline gaps.
+- Upgraded react-native-sia to 0.13.21: shard-based upload progress and a pull-based SDK download handle.
+- Add shares namespace to AppService facade for resolving, previewing, pinning, and creating share URLs.
+- Cache eviction now runs three passes: trashed files that have already been backed up are evicted immediately, superseded file versions past `FS_EVICTABLE_MIN_AGE_NON_CURRENT` (default 1 hour), then LRU only while the cache is over `FS_MAX_BYTES`. Thumbnails of current files are never evicted, and local-only files (no indexer object) are never evicted in any pass.
+- SlotPool.acquire() accepts { priority, maxQueueDepth } options. Lower priority numbers are served first; same-priority waiters are LIFO; when maxQueueDepth is set, inserting past that many same-priority waiters evicts the oldest with AbortError.
+
+### Fixes
+
+- Pause uploads and the photo import scanner while the initial library sync is in progress, so sync-down isn't competing with the upload pipeline for the JS thread and the database.
+- Add raceWithTimeout helper and fix a pending-timer leak in the suspension manager's phase 4 DB drain.
+- Consolidate active-record filter helpers into a single `buildRecordFilter` with explicit opt-in flags; no behavior change.
+- Exclude encrypted metadata and signature columns from default object queries; full objects are loaded on demand for upload and download paths.
+- Library and device stat counts now match the visible library, excluding superseded file versions and thumbnails of files no longer in the library.
+- Extend the suspension manager with phase 4/5 timing and a time-boxed db.close(), add UploadManager.getDiagnostics() and SuspensionAdapters.uploader.getDiagnostics for suspend-time snapshots, and make AppService.optimize() also run wal_checkpoint(PASSIVE) and return { walFrames, checkpointed, busy }.
+- Scheduler-driven services that hold a DB handle now accept an AbortSignal so workers exit at loop boundaries before the suspension gate closes.
+- Resolve directories and tags in bulk during sync-down, replacing per-row lookups with a single SELECT and a bulk INSERT OR IGNORE per batch. Significantly speeds up large initial syncs.
+- Sync-down now applies all of each batch's database writes (files, objects, directories, tags, current-version) in a single transaction, so a mid-batch failure rolls back cleanly and the same batch retries on the next sync cycle. Filesystem cleanup and cache invalidations still run after the transaction commits.
+- Sync-up metadata progress now accumulates across batches instead of being overwritten by the current batch size on each tick, so the status sheet counts up smoothly toward the total instead of stalling at the batch size.
+
 ## 0.0.5 (2026-04-17)
 
 ### Features

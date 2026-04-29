@@ -2,6 +2,50 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.0 (2026-04-29)
+
+### Features
+
+- Split "Reset application" into two actions: `resetLocalDataAndResync` keeps the user signed in and re-downloads their library from the indexer, and `resetLocalDataAndSignOut` wipes everything and returns to onboarding.
+- Added a developer setting to clear the local file cache.
+- Added a Community section in Settings linking to the Sia website, Discord, X, GitHub, and support email.
+- Grouped destructive account actions into a Danger zone at the bottom of Settings: Clear local data and resync, Clear local data and sign out, and Delete account. Closes https://github.com/SiaFoundation/sia-storage-app/issues/545
+- Consolidated account, storage, photo sync, and stay-awake settings onto the main Settings page instead of nested sub-screens.
+
+### Fixes
+
+- Archive sync loading icon now spins.
+- Tapping a file now takes precedence over in-flight thumbnail downloads, so user-initiated downloads start immediately even under heavy background thumbnail activity.
+- Disabled WAL journaling by default while we resolve remaining iOS background reliability issues and finish the Files app integration. WAL can still be re-enabled under Settings → Advanced → Database.
+- Cache eviction now runs when the app resumes from suspension, in addition to cold launch and background fetch.
+- File viewer controls now start out visible on file open. Closes https://github.com/SiaFoundation/sia-storage-app/issues/534
+- Fixed Android back button navigating to the folder list instead of closing the file viewer. Closes https://github.com/SiaFoundation/sia-storage-app/issues/533
+- On Android, opening the camera, photo picker, share sheet, or anything else that suspends the app no longer triggers a suspension manager lifecycle. The suspension manager is now iOS-only.
+- Fixed an issue where files imported on this device could get stuck on "Press to download" after their local cache copy was evicted.
+- Fixed photo import folder dropping the slash when set to a nested path like `Media/iOS Sync`, which previously caused photos to land in a flattened `MediaiOS Sync` folder at the root.
+- Fixed an Android-only issue where photos from the camera or picker could fail to import when the app was resuming.
+- Fixed a blank screen when opening a shared file link from another app.
+- Fixed file viewer showing "no slabs" error for failed uploads instead of the local copy. Closes https://github.com/SiaFoundation/sia-storage-app/issues/535
+- Reduced iOS background crashes that could occur while the app was being suspended.
+- Reduced iOS crashes that could occur when the app's background work ran long.
+- Reduced iOS crashes that could occur while a photo scan or download was running when the app was suspended.
+- Replaced the Sia logo button in the top-left of the library with a standard menu icon, making it clearer how to open Settings.
+- Library status sheet now opens with a one-line activity indicator ("Online and synced", "Syncing metadata from indexer", "Uploading files", etc.) driven by the same hook as the toolbar status pill. Connectivity issues surface inline on that row with a Reconnect shortcut when the indexer is unreachable, replacing the separate banner. The redundant Sync metadata section has been removed.
+- Redesigned the library status sheet: library size and counts now lead, connectivity issues surface as a top banner only when offline or unreachable, and sync metadata moved to the bottom. Renamed "Lost" files to "Unavailable" in both the sheet and the Import screen.
+- Mobile uploads now use the platform's native `ReadableStream` with a BYOB file reader instead of a JS polyfill.
+- Pause uploads and the photo import scanner while the initial library sync is in progress, so sync-down isn't competing with the upload pipeline for the JS thread and the database.
+- Show an alert with an "Open Settings" button when camera or photo library permission is permanently denied.
+- Re-importing a photo that was previously deleted now reliably succeeds instead of silently failing. Closes https://github.com/SiaFoundation/sia-storage-app/issues/594
+- A brief toast appears when imported files replace existing ones as new versions.
+- Added optional log forwarding under Settings → Advanced — every log entry is sent as NDJSON to a user-supplied HTTP endpoint with optional Bearer auth, and resumes from a saved cursor after offline gaps.
+- Removed the Hosts list and map from Settings. Host information is no longer shown as a browsable list; individual file shard locations remain visible in file details.
+- Upgraded react-native-sia to 0.13.21: shard-based upload progress and a pull-based SDK download handle.
+- Moved Import and Logs under a single Advanced screen reachable from Settings.
+- Redesigned the Settings menu with a modern iOS inset-grouped card style. Section headers now appear as uppercased captions above rounded cards; rows show a chevron to indicate tapping will open another screen.
+- Cancelling a share-link download now stops it reliably, matching the behavior of regular file downloads.
+- Clearer startup and sync progress copy; sync screen shows only the percent bar without a file-count line.
+- Library and device stat counts now match the visible library, excluding superseded file versions and thumbnails of files no longer in the library.
+
 ## 1.10.0 (2026-04-17)
 
 ### Features
