@@ -156,3 +156,15 @@ jobs:
             bun scripts/releaseIos.ts appstore
           fi
         shell: bash
+
+      - name: Upload iOS dSYMs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-dsyms-${{ github.event.release.tag_name || github.run_id }}
+          path: |
+            apps/mobile/ios/build/**/*.dSYM
+            apps/mobile/ios/build/**/*.dSYM.zip
+            apps/mobile/ios/build/**/Symbols.zip
+          if-no-files-found: warn
+          retention-days: 90
