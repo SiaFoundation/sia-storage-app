@@ -7,7 +7,6 @@ import { delayWithSignal } from '../lib/delayWithSignal'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { runFsEvictionScanner } from './fsEvictionScanner'
-import { runFsOrphanScanner } from './fsOrphanScanner'
 import {
   getIsSuspended,
   registerBackgroundTaskLifecycle,
@@ -316,11 +315,11 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isConnected = app().connection.getState().isConnected
   log('app_ready', { connected: isConnected })
 
-  // Skip one-shot scanners if the app is foregrounded — startup already
-  // runs these. The upload polling loop below still runs regardless.
+  // Skip eviction if the app is foregrounded — startup already runs it.
+  // The upload polling loop below still runs regardless. The orphan
+  // scanner is not invoked from any background path; it only runs from
+  // the "Clear local files" settings action.
   if (AppState.currentState !== 'active') {
-    await runFsOrphanScanner({ signal })
-    if (signal.aborted) return
     await runFsEvictionScanner({ signal })
     if (signal.aborted) return
     await triggerRecentScanIfNeeded()
