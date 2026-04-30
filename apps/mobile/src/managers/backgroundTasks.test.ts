@@ -98,10 +98,6 @@ jest.mock('./fsEvictionScanner', () => ({
   runFsEvictionScanner: () => mockRunFsEvictionScanner(),
 }))
 
-jest.mock('./syncPhotosArchive', () => ({
-  triggerRecentScanIfNeeded: jest.fn(() => Promise.resolve(false)),
-}))
-
 jest.mock('./uploader', () => ({
   getUploadManager: jest.fn(() => ({
     packedCount: 0,
@@ -330,13 +326,15 @@ describe('backgroundTasks', () => {
       const processingTask = taskCallback('com.transistorsoft.processing')
       await flushPromises()
 
-      expect(getPendingDelayCount()).toBe(2)
+      // fetch parks one delay (upload poll). processing parks two: the
+      // upload poll and the deferred-scan settle delay.
+      expect(getPendingDelayCount()).toBe(3)
 
       // Timeout only affects its own task.
       timeoutCallback('com.transistorsoft.fetch')
       await fetchTask
 
-      expect(getPendingDelayCount()).toBe(1)
+      expect(getPendingDelayCount()).toBe(2)
 
       timeoutCallback('com.transistorsoft.processing')
       await processingTask
@@ -344,12 +342,45 @@ describe('backgroundTasks', () => {
   })
 
   describe('scanners', () => {
-    it('runs fsEvictionScanner during background work', async () => {
+    it('does not run fsEvictionScanner inside the BGAppRefreshTask budget', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       await taskCallback('com.transistorsoft.fetch')
 
+      expect(mockRunFsEvictionScanner).not.toHaveBeenCalled()
+    })
+
+    it('defers fsEvictionScanner behind the settle delay in BGProcessingTask', async () => {
+      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
+
+      const taskPromise = taskCallback('com.transistorsoft.processing')
+      await flushPromises()
+
+      // Eviction has not started — the settle delay is parked.
+      expect(mockRunFsEvictionScanner).not.toHaveBeenCalled()
+      expect(getPendingDelayCount()).toBeGreaterThanOrEqual(1)
+
+      // Resolve the settle delay so the scanner runs.
+      const settleDelay = mockPendingDelays[0]
+      settleDelay.resolve()
+      await taskPromise
+
       expect(mockRunFsEvictionScanner).toHaveBeenCalledTimes(1)
+    })
+
+    it('cancels the settle delay when the BG task aborts before it fires', async () => {
+      mockGetFileStatsLocal.mockResolvedValue({ count: 1, totalBytes: 100 })
+
+      const taskPromise = taskCallback('com.transistorsoft.processing')
+      await flushPromises()
+
+      // Both delays are parked: the upload poll's 10s and the scan settle 30s.
+      expect(getPendingDelayCount()).toBeGreaterThanOrEqual(1)
+
+      timeoutCallback('com.transistorsoft.processing')
+      await taskPromise
+
+      expect(mockRunFsEvictionScanner).not.toHaveBeenCalled()
     })
   })
 
