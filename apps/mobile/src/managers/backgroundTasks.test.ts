@@ -383,4 +383,26 @@ describe('backgroundTasks', () => {
       expect(BackgroundFetch.finish).toHaveBeenCalledWith('unknown-task-id')
     })
   })
+
+  describe('task constraints', () => {
+    it('BGProcessingTask is scheduled with charging + network constraints', () => {
+      expect(BackgroundFetch.scheduleTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'com.transistorsoft.processing',
+          requiresCharging: true,
+          requiresNetworkConnectivity: true,
+          requiresBatteryNotLow: true,
+        }),
+      )
+    })
+
+    it('BGAppRefreshTask (configure) is configured with charging + network + battery constraints', () => {
+      const configCall = (BackgroundFetch.configure as jest.Mock).mock.calls[0]
+      expect(configCall[0]).toMatchObject({
+        requiresCharging: true,
+        requiresBatteryNotLow: true,
+        requiredNetworkType: 2,
+      })
+    })
+  })
 })

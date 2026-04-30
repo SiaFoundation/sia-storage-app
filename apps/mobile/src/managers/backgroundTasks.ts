@@ -61,16 +61,24 @@ const taskConfigs: Record<TaskId, TaskConfig> = {
 }
 
 /**
- * Background fetch wakes up the app and runs with the suspended app state.
- * It runs when the following conditions are met:
- * - Unmetered network connection
- * - Battery is not low
- * - The app is NOT fully terminated
+ * Constraints applied to JS-side task scheduling. The library types/README
+ * label every field [Android only], but the iOS bridge maps a subset for
+ * BGProcessingTask (see scheduleTask call below). For BGAppRefreshTask
+ * (configure), Apple's API has no constraint properties — iOS ignores
+ * all four and picks fire times itself. See
+ * node_modules/react-native-background-fetch/ios/RNBackgroundFetch/RNBackgroundFetch.m.
  */
 const sharedConfig: BackgroundFetchConfig = {
+  // Android only. iOS BGProcessingTask uses requiresNetworkConnectivity (set per-task below).
   requiredNetworkType: BackgroundFetch.NETWORK_TYPE_UNMETERED,
+  // Android only. iOS has no equivalent on either task type.
   requiresBatteryNotLow: true,
-  requiresCharging: false,
+  // Android: WorkManager constraint. iOS BGProcessingTask: forwarded as
+  // BGProcessingTaskRequest.requiresExternalPower, which also disables
+  // iOS's 80%-CPU-over-60s monitor — fixes our cpu_resource_fatal crashes.
+  // iOS BGAppRefreshTask: ignored (no-op).
+  requiresCharging: true,
+  // Android only.
   requiresDeviceIdle: false,
 }
 
@@ -201,6 +209,10 @@ export async function initBackgroundTasks() {
         periodic: true,
         delay: minutesInMs(31),
         ...sharedConfig,
+        // iOS BGProcessingTask only — bridge forwards as
+        // BGProcessingTaskRequest.requiresNetworkConnectivity. Android's
+        // network constraint comes from requiredNetworkType in sharedConfig.
+        requiresNetworkConnectivity: true,
       })
       logger.info('backgroundTask', 'task_scheduled', {
         taskId: bgProcessingTaskConfig.id,
