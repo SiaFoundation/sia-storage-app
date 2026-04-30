@@ -61,11 +61,15 @@ console.log('Step 2/3: Building release AAB...')
 await $`bun scripts/androidGradleTask.ts bundleRelease`
 
 // Step 3: Upload to Play Store
-console.log(`Step 3/3: Uploading to Play Store (${track} track)...`)
-if (track === 'internal') {
-  await $`fastlane android distribute_internal`
+if (Bun.env.DRY_RUN === 'true') {
+  console.log('Step 3/3: DRY_RUN=true — skipping Play Store upload.')
 } else {
-  await $`fastlane android distribute_play_store`
+  console.log(`Step 3/3: Uploading to Play Store (${track} track)...`)
+  if (track === 'internal') {
+    await $`fastlane android distribute_internal`
+  } else {
+    await $`fastlane android distribute_play_store`
+  }
 }
 
 console.log('=== Android release complete! ===')
