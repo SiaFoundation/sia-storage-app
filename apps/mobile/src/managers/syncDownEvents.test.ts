@@ -1428,6 +1428,31 @@ describe('syncDownEvents', () => {
 
       await app().settings.setAutoSyncDownEvents(true)
     })
+
+    test("preserves 'active' gate when aborted mid-sync", async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const largeBatch = makeEvents(500)
+      const heartbeat = makeEvents(1, 500)
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(largeBatch).mockResolvedValueOnce(heartbeat),
+        appKey: () => mockAppKey,
+      } as any)
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('active')
+
+      const aborted = new AbortController()
+      aborted.abort()
+      await run(aborted.signal)
+      expect(app().sync.getState().syncGateStatus).toBe('active')
+    })
+
+    test("preserves 'pending' gate when aborted before any sync", async () => {
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const aborted = new AbortController()
+      aborted.abort()
+      await run(aborted.signal)
+      expect(app().sync.getState().syncGateStatus).toBe('pending')
+    })
   })
 
   test('delete event on already-tombstoned file preserves tombstone when no objects remain', async () => {

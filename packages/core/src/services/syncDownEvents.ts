@@ -180,7 +180,12 @@ export async function syncDownEventsBatch(
     logger.info('syncDownEvents', 'synced', { total: counts.total })
     const willContinue = totalEventsFetched > 1 && !signal.aborted
     const endGateStatus = app.sync.getState().syncGateStatus
-    const dismissGate = endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue)
+    // Preserve the gate on suspension abort: it must stay shown to the user
+    // and continue blocking other services across sessions until sync
+    // actually completes — never dismissed against an incomplete sync.
+    const dismissGate =
+      !signal.aborted &&
+      (endGateStatus === 'pending' || (endGateStatus === 'active' && !willContinue))
     app.sync.setState({
       isSyncingDown: willContinue,
       syncDownCount: counts.total,
