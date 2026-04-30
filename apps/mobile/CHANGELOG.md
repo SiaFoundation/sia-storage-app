@@ -2,6 +2,18 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.1 (2026-04-30)
+
+### Fixes
+
+- Background tasks now run only while the device is charging, fixing iOS CPU crashes during overnight uploads.
+- SWR refetches now mirror app foreground state — paused while in background (including during BG-task wakeups), enabled when the user is using the app.
+- Bump react-native-sia to 0.13.22.
+- Cache eviction during background tasks now waits 30 seconds before starting and runs only inside the longer iOS background processing task — the 30-second app-refresh wake stays focused on upload polling, and the longer wake gives the upload manager time to spin up before the scanner competes for the JS thread and database.
+- Hold off thumbnail generation, metadata sync-up, and new-photo ingestion for the full initial sync window so the library finishes catching up before background work resumes.
+- Stop LogForwarder HTTP shipping ticker on suspend so it doesn't compete with the DB drain.
+- Stop running the orphaned-file cleanup scan in the background and at startup; it now runs only from Settings → Advanced → Clear local files.
+
 ## 1.11.0 (2026-04-29)
 
 ### Features
