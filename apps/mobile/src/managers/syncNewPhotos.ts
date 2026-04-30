@@ -46,6 +46,12 @@ export async function run(signal?: AbortSignal): Promise<void> {
     logger.debug('syncNewPhotos', 'skipped', { reason: 'no_permission' })
     return
   }
+  // Hard gate: hold off ingesting new camera-roll photos during the
+  // initial sync window, just for resource coordination.
+  if (app().sync.getState().syncGateStatus === 'active') {
+    logger.debug('syncNewPhotos', 'skipped', { reason: 'sync_gate_active' })
+    return
+  }
   if (signal?.aborted) return
   const enabledAt = await getSyncNewPhotosEnabledAt()
 

@@ -30,6 +30,15 @@ export async function runThumbnailScanner(signal?: AbortSignal): Promise<Thumbna
 }
 
 async function run(signal: AbortSignal): Promise<void> {
+  // Hard gate: hold off for the entire initial sync window so we don't
+  // generate thumbs locally for files whose remote thumbnails are about
+  // to land in the same catch-up.
+  if (app().sync.getState().syncGateStatus === 'active') {
+    logger.debug('thumbnailScanner', 'skipped', { reason: 'sync_gate_active' })
+    return
+  }
+  // Per-tick gate: a sync-down batch is mid-flight — skip thumbnail
+  // generation while sync-down is writing, just for resource coordination.
   if (app().sync.getState().isSyncingDown) {
     logger.debug('thumbnailScanner', 'skipped', { reason: 'syncing_down' })
     return

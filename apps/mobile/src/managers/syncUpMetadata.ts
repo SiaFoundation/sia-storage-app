@@ -20,6 +20,14 @@ export async function runSyncUpMetadata(batchSize: number, signal?: AbortSignal)
 }
 
 async function run(signal: AbortSignal): Promise<void> {
+  // Hard gate: don't push metadata up during the initial sync-down
+  // window — wait for the library to fully land before pushing changes.
+  if (app().sync.getState().syncGateStatus === 'active') {
+    logger.debug('syncUpMetadata', 'skipped', { reason: 'sync_gate_active' })
+    return
+  }
+  // Per-tick gate: keep sync-up off the wire while a sync-down batch is
+  // writing, so the two cycles never overlap.
   if (app().sync.getState().isSyncingDown) {
     logger.debug('syncUpMetadata', 'skipped', { reason: 'syncing_down' })
     return
