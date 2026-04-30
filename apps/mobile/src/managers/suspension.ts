@@ -4,6 +4,7 @@ import {
   resumeAllServiceIntervals,
   waitForAllServiceIntervalsIdle,
 } from '@siastorage/core/lib/serviceInterval'
+import { stopLogForwarder } from '@siastorage/core/services/logForwarder'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus, Platform } from 'react-native'
@@ -90,7 +91,11 @@ const manager = createSuspensionManager({
   hooks: {
     onBeforeSuspend: async () => {
       await logSuspendDiagnostics()
+      // Drain JS log buffer to DB before halting the HTTP ticker;
+      // stopLogForwarder awaits any in-flight ship so its cursor
+      // UPDATE doesn't race the DB close.
       await stopLogAppender()
+      await stopLogForwarder()
       setSWREnabled(false)
       // Cancel in-flight downloads (disk I/O contention with SQLite fsync
       // is a known 0xdead10cc trigger) and pause the photo-archive walk

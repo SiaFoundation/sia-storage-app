@@ -38,7 +38,8 @@ type LogRowWire = {
  */
 export class LogForwarder {
   private snapshot: Snapshot
-  private inflight = false
+  private inflight: Promise<void> | null = null
+  private stopped = false
   private httpTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
@@ -84,18 +85,22 @@ export class LogForwarder {
    * backlog from a previous offline session ships without waiting for a tick. */
   start(intervalMs: number = REMOTE_LOG_INTERVAL_MS): void {
     if (this.httpTimer) return
+    this.stopped = false
     this.httpTimer = setInterval(() => {
       void this.shipPending()
     }, intervalMs)
     void this.shipPending()
   }
 
-  /** Stop the HTTP shipping ticker. The DB sink is unaffected. */
-  stop(): void {
+  /** Stop the HTTP ticker and await any in-flight ship. The DB appender is
+   * unaffected. Idempotent. */
+  async stop(): Promise<void> {
+    this.stopped = true
     if (this.httpTimer) {
       clearInterval(this.httpTimer)
       this.httpTimer = null
     }
+    if (this.inflight) await this.inflight
   }
 
   /** Persist config changes and refresh the snapshot used by the HTTP sink. */
@@ -138,8 +143,15 @@ export class LogForwarder {
    * Skip while a request is in flight to avoid fan-out on a degraded network.
    */
   async shipPending(): Promise<void> {
-    if (!this.snapshot.enabled || !this.snapshot.endpoint || this.inflight) return
-    this.inflight = true
+    if (this.stopped || this.inflight) return
+    if (!this.snapshot.enabled || !this.snapshot.endpoint) return
+    this.inflight = this.runShip().finally(() => {
+      this.inflight = null
+    })
+    await this.inflight
+  }
+
+  private async runShip(): Promise<void> {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), REMOTE_LOG_TIMEOUT_MS)
     try {
@@ -165,7 +177,6 @@ export class LogForwarder {
       console.warn('[logForwarder] ship failed:', error)
     } finally {
       clearTimeout(timeoutId)
-      this.inflight = false
     }
   }
 }
@@ -202,10 +213,17 @@ let instance: LogForwarder | null = null
 /** Initialize the singleton forwarder, register the DB appender, and start
  * the HTTP ticker. */
 export async function initLogForwarder(app: AppService): Promise<void> {
-  if (instance) instance.stop()
+  if (instance) await instance.stop()
   instance = await LogForwarder.create(app)
   setLogAppender(instance.appender)
   instance.start()
+}
+
+/** Stop the singleton HTTP ticker and await any in-flight ship. Called on
+ * suspend so the cursor UPDATE doesn't race the DB close. Idempotent. */
+export async function stopLogForwarder(): Promise<void> {
+  if (!instance) return
+  await instance.stop()
 }
 
 /** Re-register the appender and restart the HTTP ticker after suspension. */
