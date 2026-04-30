@@ -98,11 +98,6 @@ jest.mock('./fsEvictionScanner', () => ({
   runFsEvictionScanner: () => mockRunFsEvictionScanner(),
 }))
 
-const mockRunFsOrphanScanner = jest.fn(() => Promise.resolve(undefined))
-jest.mock('./fsOrphanScanner', () => ({
-  runFsOrphanScanner: () => mockRunFsOrphanScanner(),
-}))
-
 jest.mock('./syncPhotosArchive', () => ({
   triggerRecentScanIfNeeded: jest.fn(() => Promise.resolve(false)),
 }))
@@ -151,7 +146,6 @@ describe('backgroundTasks', () => {
     clearPendingDelays()
     mockGetFileStatsLocal.mockReset()
     mockRunFsEvictionScanner.mockReset().mockResolvedValue(undefined)
-    mockRunFsOrphanScanner.mockReset().mockResolvedValue(undefined)
     mockRegister.mockReset().mockResolvedValue(undefined)
     mockRelease.mockReset().mockResolvedValue(undefined)
     mockGetIsSuspended.mockReset().mockReturnValue(false)
@@ -350,14 +344,6 @@ describe('backgroundTasks', () => {
   })
 
   describe('scanners', () => {
-    it('runs fsOrphanScanner during background work', async () => {
-      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
-
-      await taskCallback('com.transistorsoft.fetch')
-
-      expect(mockRunFsOrphanScanner).toHaveBeenCalledTimes(1)
-    })
-
     it('runs fsEvictionScanner during background work', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 

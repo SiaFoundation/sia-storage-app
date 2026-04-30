@@ -17,7 +17,6 @@ import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
 import { runFsEvictionScanner } from './fsEvictionScanner'
-import { runFsOrphanScanner } from './fsOrphanScanner'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
@@ -107,7 +106,6 @@ export async function initApp(): Promise<void> {
       message: 'Tidying up your cache...',
       runner: async () => {
         await app().files.autoPurgeWithCleanup()
-        await runFsOrphanScanner()
         await runFsEvictionScanner()
       },
     })
