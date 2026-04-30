@@ -1,3 +1,14 @@
+## 0.0.7 (2026-04-30)
+
+### Features
+
+- Stop LogForwarder HTTP shipping ticker on suspend so it doesn't compete with the DB drain.
+- Add `onForegroundActive` optional hook to `createSuspensionManager`. Fires synchronously on every `setAppState('foreground')` call, including no-op calls — covers the case where the manager is already resumed (e.g. by a BG task) and the user subsequently foregrounds, where `onAfterResume` does not fire.
+
+### Fixes
+
+- Preserve the sync gate across suspension aborts so it stays up until sync actually completes.
+
 ## 0.0.6 (2026-04-29)
 
 ### Features
