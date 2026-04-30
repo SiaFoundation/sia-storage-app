@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "siastorage",
@@ -103,7 +102,7 @@
         "react-native-safe-area-context": "5.6.2",
         "react-native-screens": "4.23.0",
         "react-native-share": "12.2.5",
-        "react-native-sia": "0.13.21",
+        "react-native-sia": "0.13.22",
         "react-native-svg": "15.15.3",
         "react-native-webview": "13.16.0",
         "react-native-worklets": "0.7.2",
@@ -1858,7 +1857,7 @@
 
     "react-native-share": ["react-native-share@12.2.5", "", {}, "sha512-2uwd/PdlUyvpsSBfL7OMiL4sD0Ja51wu5m62JSIXjrtlF+uSTUOGsMrE49ncIRYziqAfYUeI195WwhpvqXB0ww=="],
 
-    "react-native-sia": ["react-native-sia@0.13.21", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-o8xV1+l2xLKNLvXbJiqODG5Ilm+L2VwXRWCHNs4H0z8e+OaL7rhbvDgEyFr/XL4Nl3IBtqT41uFFo+h6+sAi5A=="],
+    "react-native-sia": ["react-native-sia@0.13.22", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-hn20vxcKL6HURQdSCrQmAagv8JethFSCTSFi0nVCfe1A930QDW2o5ugo4SpeBnz7KaMk0sh6Ah7azLAl6yvyJA=="],
 
     "react-native-svg": ["react-native-svg@15.15.3", "", { "dependencies": { "css-select": "^5.1.0", "css-tree": "^1.1.3", "warn-once": "0.1.1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA=="],
 
