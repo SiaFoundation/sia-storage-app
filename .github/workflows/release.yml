@@ -22,6 +22,11 @@ on:
           - internal
           - production
         default: internal
+      dry_run:
+        description: 'Build only — skip store upload (for verifying CI changes)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -47,7 +52,16 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -78,6 +92,7 @@ jobs:
           SIA_RELEASE_KEY_PASSWORD: ${{ secrets.SIA_RELEASE_KEY_PASSWORD }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
           CI: true
         run: bun scripts/releaseAndroid.ts ${{ inputs.track || 'internal' }}
         shell: bash
@@ -147,6 +162,7 @@ jobs:
           RELEASE: 'true'
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
           CI: true
         run: |
           TRACK="${{ inputs.track || 'internal' }}"

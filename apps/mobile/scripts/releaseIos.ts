@@ -52,11 +52,15 @@ console.log('Step 2/3: Building release IPA...')
 await $`fastlane ios build_ipa`
 
 // Step 3: Upload to App Store Connect
-console.log(`Step 3/3: Uploading to App Store Connect (${track})...`)
-if (track === 'testflight') {
-  await $`fastlane ios distribute_testflight`
+if (Bun.env.DRY_RUN === 'true') {
+  console.log('Step 3/3: DRY_RUN=true — skipping App Store Connect upload.')
 } else {
-  await $`fastlane ios distribute_app_store`
+  console.log(`Step 3/3: Uploading to App Store Connect (${track})...`)
+  if (track === 'testflight') {
+    await $`fastlane ios distribute_testflight`
+  } else {
+    await $`fastlane ios distribute_app_store`
+  }
 }
 
 console.log('=== iOS release complete! ===')
