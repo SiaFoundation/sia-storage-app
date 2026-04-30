@@ -408,4 +408,108 @@ describe('LogForwarder', () => {
     const line = JSON.parse((fetchMock.mock.calls[0][1].body as string).trim())
     expect(line.data).toEqual({ device: 'devabc12', account: 'acct1234', extra: 1 })
   })
+
+  describe('stop()', () => {
+    it('clears the HTTP ticker so further intervals do not fire shipPending', async () => {
+      jest.useFakeTimers()
+      const state = makeApp()
+      const forwarder = new LogForwarder(state.app, snapshot(state))
+      forwarder.start(2000)
+
+      // start()'s immediate drain saw no rows; this row makes the next tick fetch.
+      state.rows.push({
+        id: 1,
+        timestamp: 't',
+        level: 'info',
+        scope: 's',
+        message: 'm',
+        data: null,
+      })
+      await jest.advanceTimersByTimeAsync(2000)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+
+      await forwarder.stop()
+
+      const before = fetchMock.mock.calls.length
+      state.rows.push({
+        id: 2,
+        timestamp: 't',
+        level: 'info',
+        scope: 's',
+        message: 'm',
+        data: null,
+      })
+      await jest.advanceTimersByTimeAsync(10000)
+      expect(fetchMock).toHaveBeenCalledTimes(before)
+      jest.useRealTimers()
+    })
+
+    it('awaits an in-flight shipPending before resolving', async () => {
+      const state = makeApp()
+      let resolveFetch: (v: Response) => void = () => {}
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((r) => {
+            resolveFetch = r
+          }),
+      )
+      state.rows.push({
+        id: 1,
+        timestamp: 't',
+        level: 'info',
+        scope: 's',
+        message: 'm',
+        data: null,
+      })
+      const forwarder = new LogForwarder(state.app, snapshot(state))
+
+      const shipP = forwarder.shipPending()
+      // Defer to microtasks so shipPending sets inflight before stop runs.
+      await Promise.resolve()
+      let stopResolved = false
+      const stopP = forwarder.stop().then(() => {
+        stopResolved = true
+      })
+      // stop() must NOT resolve while fetch is pending.
+      await Promise.resolve()
+      expect(stopResolved).toBe(false)
+
+      resolveFetch(new Response('', { status: 200 }))
+      await shipP
+      await stopP
+      expect(stopResolved).toBe(true)
+    })
+
+    it('is idempotent — calling twice does not throw', async () => {
+      const state = makeApp()
+      const forwarder = new LogForwarder(state.app, snapshot(state))
+      forwarder.start()
+
+      await forwarder.stop()
+      await forwarder.stop()
+    })
+
+    it('blocks future shipPending calls after stop until restart', async () => {
+      const state = makeApp()
+      state.rows.push({
+        id: 1,
+        timestamp: 't',
+        level: 'info',
+        scope: 's',
+        message: 'm',
+        data: null,
+      })
+      const forwarder = new LogForwarder(state.app, snapshot(state))
+
+      await forwarder.stop()
+      const before = fetchMock.mock.calls.length
+      await forwarder.shipPending()
+      expect(fetchMock).toHaveBeenCalledTimes(before)
+
+      forwarder.start(60_000)
+      await new Promise((r) => setTimeout(r, 0))
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(before)
+      await forwarder.stop()
+    })
+  })
 })
