@@ -407,6 +407,9 @@ describe('Suspension', () => {
     it('normal completion → auto-suspends when app is background', async () => {
       await app.setAppState('background')
       expect(app.isSuspended()).toBe(true)
+      // onBeforeSuspend fires once on the first auto-suspend; no foreground.
+      expect(app.hookCalls.onBeforeSuspend).toBe(1)
+      expect(app.hookCalls.onForegroundActive).toBe(0)
 
       await app.simulateBackgroundTask('bg-fetch', async () => {
         expect(app.isSuspended()).toBe(false) // register reopened DB
@@ -417,6 +420,11 @@ describe('Suspension', () => {
       // Release auto-suspended because appState=background and no more tasks.
       expect(app.isSuspended()).toBe(true)
       expect(app.getRunningBackgroundTaskIds()).toEqual([])
+      // BG task wake fired onAfterResume once; release re-triggered
+      // onBeforeSuspend. User never foregrounded.
+      expect(app.hookCalls.onAfterResume).toBe(1)
+      expect(app.hookCalls.onBeforeSuspend).toBe(2)
+      expect(app.hookCalls.onForegroundActive).toBe(0)
     }, 60_000)
 
     it('timeout path still releases and re-suspends (crash-1 regression guard)', async () => {
@@ -433,6 +441,9 @@ describe('Suspension', () => {
 
       expect(app.isSuspended()).toBe(true)
       expect(app.getRunningBackgroundTaskIds()).toEqual([])
+      // Same hook shape as normal completion — BG-task wake didn't fire
+      // onForegroundActive because AppState stayed 'background'.
+      expect(app.hookCalls.onForegroundActive).toBe(0)
     }, 60_000)
 
     it('overlapping tasks — DB stays open until last release', async () => {
@@ -454,6 +465,10 @@ describe('Suspension', () => {
       await app.releaseBackgroundTask('B')
       expect(app.isSuspended()).toBe(true) // only now
       expect(app.getRunningBackgroundTaskIds()).toEqual([])
+      // Two registers, but only the first triggers a real resume; second
+      // is a no-op (already active). Foreground hook must not fire.
+      expect(app.hookCalls.onAfterResume).toBe(1)
+      expect(app.hookCalls.onForegroundActive).toBe(0)
     }, 60_000)
 
     it('user foregrounds during BG task — release does not suspend', async () => {
@@ -462,10 +477,17 @@ describe('Suspension', () => {
 
       await app.registerBackgroundTask('bg-fetch')
       expect(app.isSuspended()).toBe(false)
+      // BG-task wake didn't fire onForegroundActive — appState still bg.
+      expect(app.hookCalls.onForegroundActive).toBe(0)
 
-      // User opens the app while the BG task is still registered.
+      // User opens the app while the BG task is still registered. The
+      // manager is already resumed, so onAfterResume does NOT fire a
+      // second time. onForegroundActive must fire here — that's the whole
+      // reason this hook exists.
       await app.setAppState('foreground')
       expect(app.isSuspended()).toBe(false)
+      expect(app.hookCalls.onForegroundActive).toBe(1)
+      expect(app.hookCalls.onAfterResume).toBe(1) // unchanged from BG-task wake
 
       await app.releaseBackgroundTask('bg-fetch')
       expect(app.isSuspended()).toBe(false) // user still has app open

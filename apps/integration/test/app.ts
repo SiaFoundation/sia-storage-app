@@ -159,6 +159,15 @@ export interface TestApp {
   /** Convenience: register → run fn → release (always releases even if
    * fn throws). Mirrors what backgroundTasks.ts does in production. */
   simulateBackgroundTask(id: string, fn: () => Promise<void>): Promise<void>
+  /** Cumulative call counts for the suspension manager hooks. Tests use
+   * this to assert that platform-level glue (e.g. SWR re-enable) fires
+   * correctly across the four BG-task lifecycle scenarios. Read-only —
+   * the harness owns the counters; tests should only inspect them. */
+  readonly hookCalls: Readonly<{
+    onBeforeSuspend: number
+    onAfterResume: number
+    onForegroundActive: number
+  }>
 
   app: AppService
   internal: AppServiceInternal
@@ -350,6 +359,12 @@ export function createTestApp(
     interval: DB_OPTIMIZE_INTERVAL,
   })
 
+  const hookCalls = {
+    onBeforeSuspend: 0,
+    onAfterResume: 0,
+    onForegroundActive: 0,
+  }
+
   const suspensionManager = createSuspensionManager({
     scheduler: {
       pause: () => scheduler.pause(),
@@ -369,6 +384,17 @@ export function createTestApp(
       waitForIdle: () => Promise.resolve(),
       close: async () => testDb.close(),
       reopen: () => testDb.open(),
+    },
+    hooks: {
+      onBeforeSuspend: () => {
+        hookCalls.onBeforeSuspend += 1
+      },
+      onAfterResume: () => {
+        hookCalls.onAfterResume += 1
+      },
+      onForegroundActive: () => {
+        hookCalls.onForegroundActive += 1
+      },
     },
     hardDeadlineMs: 15_000,
   })
@@ -440,6 +466,8 @@ export function createTestApp(
         await suspensionManager.releaseBackgroundTask(id)
       }
     },
+
+    hookCalls,
 
     triggerSyncDown() {
       syncDown.triggerNow()

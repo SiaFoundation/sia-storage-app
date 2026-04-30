@@ -102,20 +102,22 @@ const manager = createSuspensionManager({
       pauseArchiveSync()
     },
     onAfterResume: () => {
-      setSWREnabled(true)
+      // SWR re-enable lives in onForegroundActive, not here — onAfterResume
+      // also fires on BG-task wakes (AppState stays 'background'), where
+      // we want SWR to stay off.
       resumeLogger()
-      // Any SWR hook that mounted while we were paused got isLoading:false with
-      // no data and no error — isPaused gates revalidation events but doesn't
-      // trigger them when it flips back, so those hooks stay frozen. Force a
-      // global revalidation so newly-mounted (and any stale) keys refetch.
-      // Fires when iOS delivers a deep link before the app fully resumes, which
-      // mounts screens against a paused SWR.
-      void swrGlobalMutate(() => true)
       // Resume archive walk from the same cursor if it wasn't complete.
       void resumeArchiveSync()
       // Eviction's frequency gate short-circuits when it ran recently, so a
       // quick app-switch is cheap; a long suspension triggers a real pass.
       void runFsEvictionScanner()
+    },
+    onForegroundActive: () => {
+      // iOS-only path. The mobile AppState listener routes 'active'
+      // through manager.setAppState('foreground') which fires this hook;
+      // the Android branch in initSuspensionManager calls the helper
+      // directly because Android skips the manager's suspend flow.
+      reEnableSWROnForeground()
     },
   },
   hardDeadlineMs: HARD_DEADLINE_MS,
@@ -142,8 +144,28 @@ export function initSuspensionManager(): void {
     // so the flow only fires when the user actually leaves.
     if (Platform.OS === 'ios') {
       onAppStateChange(nextState)
+    } else if (nextState === 'active') {
+      // Android skips the manager's suspend flow because AppState
+      // 'background' fires for picker / share-sheet round-trips that
+      // aren't real backgrounding. Call the helper directly instead of
+      // routing through the manager hook.
+      reEnableSWROnForeground()
     }
   })
+}
+
+/** Flips SWR back on and forces revalidation of every subscribed hook.
+ * Two callers: the iOS path via the manager's onForegroundActive hook
+ * (integration-test covered) and the Android branch above (direct).
+ * The mutate is necessary because SWR's isPaused gates revalidation
+ * events but doesn't trigger them when the flag flips back — hooks that
+ * mounted against a paused SWR stay frozen until something kicks them.
+ * Covers the iOS deep-link case where a screen mounts during the resume
+ * race before SWR un-pauses. */
+function reEnableSWROnForeground(): void {
+  setSWREnabled(true)
+  void swrGlobalMutate(() => true)
+  logger.info('suspension', 'swr_enabled')
 }
 
 export function teardownSuspensionManager(): void {
@@ -177,6 +199,9 @@ function onAppStateChange(nextState: AppStateStatus): void {
     // until WAL checkpoint + close complete.
     void withIosExecutionTime(() => manager.setAppState('background'))
   } else if (nextState === 'active') {
+    // SWR re-enable now lives in the manager's onForegroundActive hook,
+    // which fires whenever appState transitions to foreground regardless
+    // of the manager's internal resume/suspended state.
     void manager.setAppState('foreground')
   }
 }

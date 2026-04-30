@@ -99,3 +99,56 @@ describe('createSuspensionManager deadline behavior', () => {
     expect(manager.isSuspended()).toBe(true)
   })
 })
+
+describe('createSuspensionManager onForegroundActive hook', () => {
+  it('fires on every setAppState(foreground) call, including no-ops', async () => {
+    const onForegroundActive = jest.fn()
+    const onAfterResume = jest.fn()
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager({
+      ...adapters,
+      hooks: { onForegroundActive, onAfterResume },
+    })
+
+    // Initial appState is 'foreground'. setAppState('foreground') with no
+    // transition still fires the hook — matches iOS 'inactive' → 'active'
+    // flicker semantics where 'active' events should refresh SWR even
+    // when the manager never thought we were 'background'.
+    await manager.setAppState('foreground')
+    expect(onForegroundActive).toHaveBeenCalledTimes(1)
+    expect(onAfterResume).not.toHaveBeenCalled()
+
+    // Real cycle: foreground → background → foreground.
+    await manager.setAppState('background')
+    expect(onForegroundActive).toHaveBeenCalledTimes(1)
+    await manager.setAppState('foreground')
+    expect(onForegroundActive).toHaveBeenCalledTimes(2)
+    expect(onAfterResume).toHaveBeenCalledTimes(1)
+
+    // BG-task wake from suspended fires onAfterResume but not the
+    // foreground hook — appState stays 'background'.
+    await manager.setAppState('background')
+    await manager.registerBackgroundTask('bg')
+    expect(onAfterResume).toHaveBeenCalledTimes(2)
+    expect(onForegroundActive).toHaveBeenCalledTimes(2)
+
+    // User foregrounds while BG task is still running. The manager is
+    // already resumed so onAfterResume does NOT fire again, but
+    // onForegroundActive must — that's the whole reason this hook exists.
+    await manager.setAppState('foreground')
+    expect(onAfterResume).toHaveBeenCalledTimes(2)
+    expect(onForegroundActive).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not fire on setAppState(background) calls', async () => {
+    const onForegroundActive = jest.fn()
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager({
+      ...adapters,
+      hooks: { onForegroundActive },
+    })
+    await manager.setAppState('background')
+    await manager.setAppState('background')
+    expect(onForegroundActive).not.toHaveBeenCalled()
+  })
+})

@@ -31,6 +31,17 @@ export type SuspensionAdapters = {
   hooks?: {
     onBeforeSuspend?(): void | Promise<void>
     onAfterResume?(): void
+    /**
+     * Fires synchronously on every `setAppState('foreground')` call,
+     * including no-op calls where appState was already 'foreground'.
+     * Matches iOS AppState semantics: any 'active' event from the OS is
+     * a "user is here" signal even if it didn't go through 'background'
+     * first (e.g. the brief 'active' → 'inactive' → 'active' flicker
+     * from a notification panel pull-down). Also covers the case where
+     * a BG task already resumed the manager and the user subsequently
+     * foregrounds — onAfterResume doesn't fire there.
+     */
+    onForegroundActive?(): void
   }
   hardDeadlineMs: number
 }
@@ -202,6 +213,13 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
      */
     setAppState(next: AppStateValue): Promise<void> {
       const prev = appState
+      // Foreground hook fires on every 'foreground' call, including
+      // no-ops, so flickers and BG-task overlaps both reach platform
+      // glue. Background has no equivalent — onBeforeSuspend already
+      // covers the only case that matters there (real suspension).
+      if (next === 'foreground') {
+        hooks?.onForegroundActive?.()
+      }
       if (prev === next) return Promise.resolve()
       appState = next
       const activeCount = runningTasks.size
