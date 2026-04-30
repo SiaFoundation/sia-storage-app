@@ -4,6 +4,7 @@ import { logger } from '@siastorage/logger'
 import { AppState, Platform } from 'react-native'
 import BackgroundFetch, { type BackgroundFetchConfig } from 'react-native-background-fetch'
 import { delayWithSignal } from '../lib/delayWithSignal'
+import { scheduleAfter } from '../lib/scheduleAfter'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { runFsEvictionScanner } from './fsEvictionScanner'
@@ -12,7 +13,6 @@ import {
   registerBackgroundTaskLifecycle,
   releaseBackgroundTaskLifecycle,
 } from './suspension'
-import { triggerRecentScanIfNeeded } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
 /**
@@ -315,15 +315,16 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isConnected = app().connection.getState().isConnected
   log('app_ready', { connected: isConnected })
 
-  // Skip eviction if the app is foregrounded — startup already runs it.
-  // The upload polling loop below still runs regardless. The orphan
-  // scanner is not invoked from any background path; it only runs from
-  // the "Clear local files" settings action.
-  if (AppState.currentState !== 'active') {
-    await runFsEvictionScanner({ signal })
-    if (signal.aborted) return
-    await triggerRecentScanIfNeeded()
-    if (signal.aborted) return
+  // Defer scanners past the upload manager's spin-up. Skip in the 30s
+  // BGAppRefreshTask — no headroom after the delay.
+  if (AppState.currentState !== 'active' && config.type !== 'BGAppRefreshTask') {
+    void scheduleAfter(secondsInMs(30), signal, async (s) => {
+      await runFsEvictionScanner({ signal: s })
+      if (s.aborted) return
+      // Disabled for now — need to evaluate how this works and what
+      // user-facing settings should gate it before re-enabling.
+      // await triggerRecentScanIfNeeded()
+    })
   }
 
   const manager = getUploadManager()!
