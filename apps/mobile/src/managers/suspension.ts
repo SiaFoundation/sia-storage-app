@@ -94,11 +94,12 @@ const manager = createSuspensionManager({
   hooks: {
     onBeforeSuspend: async () => {
       await logSuspendDiagnostics()
-      // Drain JS log buffer to DB before halting the HTTP ticker;
-      // stopLogForwarder awaits any in-flight ship so its cursor
-      // UPDATE doesn't race the DB close.
+      // Drain JS log buffer to DB before halting the HTTP ticker.
+      // stopLogForwarder doesn't await in-flight network work — the
+      // cursor only advances on success, so a request killed mid-flight
+      // by iOS suspension just re-ships next session.
       await stopLogAppender()
-      await stopLogForwarder()
+      stopLogForwarder()
       // Cancel in-flight downloads (disk I/O contention with SQLite fsync
       // is a known 0xdead10cc trigger) and pause the photo-archive walk
       // (an independent loop not driven by the service scheduler, so it

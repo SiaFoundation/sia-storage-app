@@ -350,6 +350,7 @@ describe('LogForwarder', () => {
     await forwarder.shipPending()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(state.cursor.current).toBe(2)
+    forwarder.stop()
   })
 
   it('persists token to secrets and clears it when set to empty', async () => {
@@ -428,7 +429,7 @@ describe('LogForwarder', () => {
       await jest.advanceTimersByTimeAsync(2000)
       expect(fetchMock).toHaveBeenCalledTimes(1)
 
-      await forwarder.stop()
+      forwarder.stop()
 
       const before = fetchMock.mock.calls.length
       state.rows.push({
@@ -444,7 +445,7 @@ describe('LogForwarder', () => {
       jest.useRealTimers()
     })
 
-    it('awaits an in-flight shipPending before resolving', async () => {
+    it('does not await in-flight shipPending — kills the timer immediately', async () => {
       const state = makeApp()
       let resolveFetch: (v: Response) => void = () => {}
       fetchMock.mockImplementationOnce(
@@ -466,27 +467,22 @@ describe('LogForwarder', () => {
       const shipP = forwarder.shipPending()
       // Defer to microtasks so shipPending sets inflight before stop runs.
       await Promise.resolve()
-      let stopResolved = false
-      const stopP = forwarder.stop().then(() => {
-        stopResolved = true
-      })
-      // stop() must NOT resolve while fetch is pending.
-      await Promise.resolve()
-      expect(stopResolved).toBe(false)
+      // stop() returns synchronously even with fetch pending.
+      forwarder.stop()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
 
+      // Settle the in-flight to avoid an unhandled promise.
       resolveFetch(new Response('', { status: 200 }))
       await shipP
-      await stopP
-      expect(stopResolved).toBe(true)
     })
 
-    it('is idempotent — calling twice does not throw', async () => {
+    it('is idempotent — calling twice does not throw', () => {
       const state = makeApp()
       const forwarder = new LogForwarder(state.app, snapshot(state))
       forwarder.start()
 
-      await forwarder.stop()
-      await forwarder.stop()
+      forwarder.stop()
+      forwarder.stop()
     })
 
     it('blocks future shipPending calls after stop until restart', async () => {
@@ -501,7 +497,7 @@ describe('LogForwarder', () => {
       })
       const forwarder = new LogForwarder(state.app, snapshot(state))
 
-      await forwarder.stop()
+      forwarder.stop()
       const before = fetchMock.mock.calls.length
       await forwarder.shipPending()
       expect(fetchMock).toHaveBeenCalledTimes(before)
@@ -509,7 +505,7 @@ describe('LogForwarder', () => {
       forwarder.start(60_000)
       await new Promise((r) => setTimeout(r, 0))
       expect(fetchMock.mock.calls.length).toBeGreaterThan(before)
-      await forwarder.stop()
+      forwarder.stop()
     })
   })
 })

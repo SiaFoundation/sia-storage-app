@@ -4,7 +4,7 @@ import type { AppService } from '../app/service'
 const REMOTE_LOG_TOKEN_KEY = 'remoteLogToken'
 const REMOTE_LOG_TIMEOUT_MS = 30_000
 const REMOTE_LOG_BATCH_SIZE = 200
-const REMOTE_LOG_INTERVAL_MS = 2000
+const REMOTE_LOG_INTERVAL_MS = 10_000
 const ID_PREFIX_LEN = 8
 
 type Snapshot = {
@@ -81,10 +81,13 @@ export class LogForwarder {
     }
   }
 
-  /** Start the HTTP shipping ticker. Idempotent. Drains immediately so any
-   * backlog from a previous offline session ships without waiting for a tick. */
+  /** Start the HTTP shipping ticker. Idempotent. No-op when remote logging
+   * isn't configured — no point ticking just to early-return in shipPending.
+   * Drains immediately so backlog from a previous offline session ships
+   * without waiting for a tick. */
   start(intervalMs: number = REMOTE_LOG_INTERVAL_MS): void {
     if (this.httpTimer) return
+    if (!this.snapshot.enabled || !this.snapshot.endpoint) return
     this.stopped = false
     this.httpTimer = setInterval(() => {
       void this.shipPending()
@@ -92,15 +95,16 @@ export class LogForwarder {
     void this.shipPending()
   }
 
-  /** Stop the HTTP ticker and await any in-flight ship. The DB appender is
+  /** Stop the HTTP ticker. Doesn't await in-flight network work — the
+   * cursor only advances on success, so a request killed mid-flight by
+   * iOS suspension just re-ships next session. The DB appender is
    * unaffected. Idempotent. */
-  async stop(): Promise<void> {
+  stop(): void {
     this.stopped = true
     if (this.httpTimer) {
       clearInterval(this.httpTimer)
       this.httpTimer = null
     }
-    if (this.inflight) await this.inflight
   }
 
   /** Persist config changes and refresh the snapshot used by the HTTP sink. */
@@ -121,6 +125,14 @@ export class LogForwarder {
         await this.app.secrets.setItem(REMOTE_LOG_TOKEN_KEY, update.token)
         this.snapshot.token = update.token
       }
+    }
+    // Re-evaluate ticker state — newly-enabled config should start
+    // shipping; newly-disabled should stop. start()/stop() are both
+    // idempotent.
+    if (this.snapshot.enabled && this.snapshot.endpoint) {
+      this.start()
+    } else {
+      this.stop()
     }
   }
 
@@ -213,17 +225,18 @@ let instance: LogForwarder | null = null
 /** Initialize the singleton forwarder, register the DB appender, and start
  * the HTTP ticker. */
 export async function initLogForwarder(app: AppService): Promise<void> {
-  if (instance) await instance.stop()
+  if (instance) instance.stop()
   instance = await LogForwarder.create(app)
   setLogAppender(instance.appender)
   instance.start()
 }
 
-/** Stop the singleton HTTP ticker and await any in-flight ship. Called on
- * suspend so the cursor UPDATE doesn't race the DB close. Idempotent. */
-export async function stopLogForwarder(): Promise<void> {
+/** Stop the singleton HTTP ticker. Doesn't await in-flight network work
+ * — the cursor only advances on success, so a request killed mid-flight
+ * by iOS suspension just re-ships next session. Idempotent. */
+export function stopLogForwarder(): void {
   if (!instance) return
-  await instance.stop()
+  instance.stop()
 }
 
 /** Re-register the appender and restart the HTTP ticker after suspension. */
