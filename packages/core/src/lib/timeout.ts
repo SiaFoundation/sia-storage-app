@@ -53,3 +53,41 @@ export async function raceWithTimeout<T>(
     if (timer !== undefined) clearTimeout(timer)
   }
 }
+
+/**
+ * Races a promise against an AbortSignal. Resolves to `{ ok: true, value }`
+ * if the promise fulfills first, or `{ ok: false }` when the signal fires.
+ * With no signal supplied, awaits the promise normally.
+ *
+ * Intended for uncancellable native ops (RNFS.hash, RNFS.copyFile, native
+ * thumbnail generators). The orphan keeps running on its native thread; a
+ * no-op catch is attached so a later rejection doesn't surface as unhandled.
+ */
+export async function raceWithAbort<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  if (!signal) {
+    return { ok: true, value: await promise }
+  }
+  if (signal.aborted) {
+    promise.catch(() => {})
+    return { ok: false }
+  }
+  let onAbort: (() => void) | undefined
+  try {
+    const result = await Promise.race([
+      promise.then((value) => ({ ok: true as const, value })),
+      new Promise<{ ok: false }>((resolve) => {
+        onAbort = () => resolve({ ok: false })
+        signal.addEventListener('abort', onAbort, { once: true })
+      }),
+    ])
+    if (!result.ok) {
+      promise.catch(() => {})
+    }
+    return result
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
