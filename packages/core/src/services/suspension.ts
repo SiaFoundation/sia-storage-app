@@ -101,11 +101,12 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       logger.debug('suspension', 'db_gated')
 
       // Phase 4: Drain queries already dispatched to the native queue.
-      // Use remaining budget from the hard deadline so a stuck query
-      // can't block suspension indefinitely.
+      // Floor of 300ms covers the rare case where Phase 2 ate the entire
+      // hard deadline; with reads rejecting on suspending, inflight is
+      // typically zero by the time we reach Phase 4.
       const dbDrainStart = Date.now()
       const elapsedMs = dbDrainStart - drainStart
-      const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 1000)
+      const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 300)
       const dbDrainResult = await raceWithTimeout(db.waitForIdle(), remainingMs)
       const dbDrainMs = Date.now() - dbDrainStart
       if (!dbDrainResult.ok) {
@@ -133,8 +134,9 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       // Phase 5: Checkpoint WAL to release file locks, then close. Race
       // against the remaining deadline — if native close hangs on fsync,
       // the OS kill is coming regardless, so we don't wait forever in JS.
+      // Floor of 500ms gives WAL truncate enough headroom on slow disks.
       const dbCloseStart = Date.now()
-      const closeBudget = Math.max(hardDeadlineMs - (dbCloseStart - drainStart), 1000)
+      const closeBudget = Math.max(hardDeadlineMs - (dbCloseStart - drainStart), 500)
       const closed = await raceWithTimeout(db.close(), closeBudget)
       const dbCloseMs = Date.now() - dbCloseStart
       if (closed.ok) {

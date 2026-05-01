@@ -54,15 +54,15 @@ async function logSuspendDiagnostics(): Promise<void> {
   }
 }
 
-// Hard deadline for service drain. iOS gives ~30s via beginBackgroundTask
-// before freezing the process. Production logs show real drain completes
-// in 0–1.4s, so 5s is ~3.5× the observed worst case with plenty of margin.
-// The remaining ~25s of the iOS window goes to Phase 4 (drain in-flight
-// native SQLite queries) and Phase 5 (WAL checkpoint + close) — which is
-// where the fsync-overrun that triggers 0xdead10cc actually happens.
-// Android doesn't enforce file-lock checks on suspend, but the sequence
-// runs harmlessly there.
-const HARD_DEADLINE_MS = 5_000
+// Hard deadline for Phase 2 service drain. Roughly the scale we expect
+// service drain to take — observed timings are well under 2s in normal
+// runs. Not sized against any iOS API budget: grace from
+// applicationDidEnterBackground is short, and beginBackgroundTask's
+// extended grant is discretionary and cannot extend a BGTask from
+// inside its expirationHandler (Apple DTS forum thread 126438).
+// Android doesn't enforce file-lock checks on suspend, but the
+// sequence runs harmlessly there.
+const HARD_DEADLINE_MS = 1_500
 
 const manager = createSuspensionManager({
   scheduler: {
@@ -151,9 +151,12 @@ export function teardownSuspensionManager(): void {
 }
 
 /**
- * Wrap an async operation with an iOS beginBackgroundTask grant so the
- * process isn't suspended while the operation is in flight. iOS gives
- * ~30s of additional execution time. On Android this is a no-op.
+ * Wrap an async operation with an iOS beginBackgroundTask assertion.
+ * Best-effort only: the assertion is granted at iOS's discretion and
+ * does NOT extend a BGTask from inside its expirationHandler (Apple
+ * DTS forum thread 126438). Cleanup is sized to fit inside the
+ * BGTask's wake window (see softDeadlineMs in backgroundTasks.ts)
+ * instead of relying on this. Android no-op.
  */
 async function withIosExecutionTime<T>(fn: () => Promise<T>): Promise<T> {
   await BackgroundTimer.start(0)

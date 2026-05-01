@@ -268,12 +268,31 @@ async function waitForInitialization(
  * allowing the app to continue already scheduled work. If we ever make the
  * work these tasks more explicit, we may want to take this into account.
  */
+// Soft deadline per task type, leaving headroom inside the OS budget for
+// release + suspend cleanup. iOS does NOT reliably extend a BGTask via
+// beginBackgroundTask from inside the expirationHandler (Apple DTS forum
+// thread 126438), so cleanup must complete inside the task's wake window.
+// BGAppRefreshTask: 30s hard cap (WWDC 2019 Session 707) → 5s reserved.
+// BGProcessingTask: no documented cap; ~5min is empirical convention →
+// 25s reserved. BackgroundTask (Android Worker): 10min hard cap → 30s.
+function softDeadlineMs(type: TaskConfig['type']): number {
+  switch (type) {
+    case 'BGAppRefreshTask':
+      return secondsInMs(25)
+    case 'BGProcessingTask':
+      return secondsInMs(270)
+    case 'BackgroundTask':
+      return minutesInMs(9) + secondsInMs(30)
+  }
+}
+
 async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const log = logTask(config, state)
 
   const controller = new AbortController()
   state.controller = controller
   const { signal } = controller
+  const deadlineMs = softDeadlineMs(config.type)
 
   // Register with the suspension manager. Ensures the DB is open before
   // we start querying. If the app was suspended, this triggers a resume.
@@ -341,6 +360,15 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   })
 
   while (!signal.aborted) {
+    // TODO: query UIApplication.backgroundTimeRemaining via a native
+    // module and self-abort when it dips below the cleanup budget,
+    // instead of using a fixed soft deadline. Lets us use whatever
+    // the OS is actually willing to give us this invocation.
+    if (Date.now() - state.startTime >= deadlineMs) {
+      log('soft_deadline_reached', { elapsedMs: Date.now() - state.startTime })
+      controller.abort()
+      break
+    }
     const stats = await getFileStatsLocal({ localOnly: true })
     if (signal.aborted) break
     log('still_uploading', {
