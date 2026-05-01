@@ -13,6 +13,7 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
       state = { uploads: { ...state.uploads, [entry.id]: entry } }
       debounced.flush('all')
       debounced.flush('counts')
+      debounced.flush('active')
       caches.uploads.invalidate(entry.id)
     },
     update: (id, patch) => {
@@ -21,6 +22,7 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
       state = { uploads: { ...state.uploads, [id]: { ...existing, ...patch } } }
       debounced.invalidate('all')
       debounced.invalidate('counts')
+      debounced.invalidate('active')
       caches.uploads.invalidate(id)
     },
     remove: (id) => {
@@ -28,6 +30,7 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
       state = { uploads: rest }
       debounced.flush('all')
       debounced.flush('counts')
+      debounced.flush('active')
       caches.uploads.invalidate(id)
     },
     removeMany: (ids) => {

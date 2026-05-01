@@ -62,14 +62,26 @@ export function useAppStatus(): AppStatus {
   }
 
   if (uploadsProgress.show) {
-    const remaining = uploadsProgress.remaining
-    const hint = compactUploadPercent(uploadsProgress.percentDecimal) ?? undefined
-    const plural = remaining === 1 ? 'file' : 'files'
+    const { packerCount, pendingCount, percentDecimal } = uploadsProgress
+    if (packerCount > 0) {
+      const plural = packerCount === 1 ? 'file' : 'files'
+      const isUploading = percentDecimal > 0
+      const verb = isUploading ? 'Uploading' : 'Encrypting'
+      const hint = isUploading ? (compactUploadPercent(percentDecimal) ?? undefined) : undefined
+      return {
+        visible: true,
+        icon: <CloudUploadIcon size={18} color={palette.blue[400]} />,
+        message: `${verb} ${packerCount.toLocaleString()} ${plural}`,
+        hint,
+        animate: true,
+        level: 'info',
+      }
+    }
+    const plural = pendingCount === 1 ? 'file' : 'files'
     return {
       visible: true,
       icon: <CloudUploadIcon size={18} color={palette.blue[400]} />,
-      message: `Uploading ${remaining.toLocaleString()} ${plural}`,
-      hint,
+      message: `Importing ${pendingCount.toLocaleString()} ${plural}`,
       animate: true,
       level: 'info',
     }

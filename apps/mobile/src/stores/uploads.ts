@@ -1,15 +1,9 @@
 import type { UploadEntry, UploadStatus } from '@siastorage/core/app'
 import { createProgressThrottle } from '@siastorage/core/lib/progressThrottle'
-import {
-  useAutoScanUploads,
-  useFileCountAll,
-  useFileStatsAll,
-  useUploadEntry,
-} from '@siastorage/core/stores'
+import { useAutoScanUploads, useUploadEntry } from '@siastorage/core/stores'
 import useSWR from 'swr'
-import { humanUploadPercent } from '../lib/uploadPercent'
 import { app } from './appService'
-import { useFileStatsLocal } from './files'
+import { useFileCountImporting, useFileStatsLocal } from './files'
 
 export type UploadState = UploadEntry
 
@@ -64,36 +58,28 @@ export function useActiveUploads(): UploadState[] {
 
 export function useUploadProgress(): {
   show: boolean
-  enabled: boolean
-  remaining: number
+  packerCount: number
+  pendingCount: number
   percentDecimal: number
-  percentComplete: string
-  total: number
 } {
-  const totalCount = useFileCountAll()
-  const totalStats = useFileStatsAll()
-  const localOnlyStats = useFileStatsLocal({ localOnly: true })
   const enabled = useAutoScanUploads()
   const activeUploads = useActiveUploads()
-  const totalFiles = totalCount.data ?? 0
-  const totalBytes = totalStats.data?.totalBytes ?? 0
-  const localOnlyBytes = localOnlyStats.data?.totalBytes ?? 0
-  const uploadedBytes = totalBytes - localOnlyBytes
+  const localOnlyStats = useFileStatsLocal({ localOnly: true })
+  const importingCountQuery = useFileCountImporting()
   const isEnabled = enabled.data ?? false
-  const activeCount = activeUploads.length
-  const activeWeightedProgress = activeUploads
-    .map((u) => u.progress * u.size)
-    .reduce((a, b) => a + b, 0)
-  const percentDecimal = totalBytes
-    ? Math.min((activeWeightedProgress + uploadedBytes) / totalBytes, 1)
-    : 0
+  const packerUploads = activeUploads.filter((u) => ACTIVE_STATUSES.includes(u.status))
+  const packerCount = packerUploads.length
+  const packerTotalBytes = packerUploads.reduce((s, u) => s + u.size, 0)
+  const packerWeightedProgress = packerUploads.reduce((s, u) => s + u.progress * u.size, 0)
+  const percentDecimal = packerTotalBytes > 0 ? packerWeightedProgress / packerTotalBytes : 0
+  const importingCount = importingCountQuery.data ?? 0
+  const localOnlyCount = localOnlyStats.data?.count ?? 0
+  const pendingCount = importingCount + localOnlyCount
 
   return {
-    show: isEnabled && activeCount > 0,
-    enabled: isEnabled,
-    remaining: activeCount,
+    show: isEnabled && (packerCount > 0 || pendingCount > 0),
+    packerCount,
+    pendingCount,
     percentDecimal,
-    percentComplete: humanUploadPercent(percentDecimal),
-    total: totalFiles,
   }
 }
