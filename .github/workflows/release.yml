@@ -173,14 +173,21 @@ jobs:
           fi
         shell: bash
 
+      - name: Sanitize dSYMs artifact name
+        if: always()
+        run: |
+          TAG="${{ github.event.release.tag_name || github.run_id }}"
+          echo "DSYM_ARTIFACT=ios-dsyms-${TAG//\//-}" >> "$GITHUB_ENV"
+        shell: bash
+
       - name: Upload iOS dSYMs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-dsyms-${{ github.event.release.tag_name || github.run_id }}
+          name: ${{ env.DSYM_ARTIFACT }}
           path: |
             apps/mobile/ios/build/**/*.dSYM
             apps/mobile/ios/build/**/*.dSYM.zip
             apps/mobile/ios/build/**/Symbols.zip
           if-no-files-found: warn
-          retention-days: 90
+          retention-days: 7
