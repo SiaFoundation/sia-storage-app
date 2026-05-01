@@ -33,6 +33,14 @@ import { getUploadManager } from './uploader'
 const FORCED_RESET_VERSION: string | null = '71936'
 
 export async function initApp(): Promise<void> {
+  // Attach the AppState listener first so foreground/background
+  // transitions during init are observed. Idempotent; safe to call on
+  // re-init from FORCED_RESET / OnboardingFinishedScreen. The suspend
+  // flow itself is gated on isInitializing inside onAppStateChange so
+  // an early 'background' event during init doesn't race the
+  // cleanup/services steps.
+  initSuspensionManager()
+
   // Tag every subsequent log with device + account before any subsystem
   // fires. Reading both here means initApp called after sign-in (e.g., from
   // OnboardingFinishedScreen) lands on the right context instead of wiping
@@ -141,7 +149,6 @@ export async function initApp(): Promise<void> {
   const success = await runSteps(steps)
   if (success) {
     endInitState()
-    initSuspensionManager()
   }
 }
 

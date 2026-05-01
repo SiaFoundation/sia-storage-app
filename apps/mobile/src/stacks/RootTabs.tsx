@@ -10,6 +10,9 @@ const Tab = createBottomTabNavigator<RootTabParamList>()
 
 export function RootTabs() {
   const hasOnboarded = useHasOnboarded()
+  if (hasOnboarded.data === undefined) {
+    return null
+  }
   if (!hasOnboarded.data) {
     return <OnboardingStack />
   }

@@ -10,7 +10,6 @@ import { logger, stopLogAppender } from '@siastorage/logger'
 import { AppState, type AppStateStatus, Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
-import { mutate as swrGlobalMutate } from 'swr'
 import {
   closeDb,
   dbInitialized,
@@ -21,7 +20,6 @@ import {
   suspendDb,
   waitForQueriesIdle,
 } from '../db'
-import { setSWREnabled } from '../lib/swr'
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
@@ -96,7 +94,6 @@ const manager = createSuspensionManager({
       // UPDATE doesn't race the DB close.
       await stopLogAppender()
       await stopLogForwarder()
-      setSWREnabled(false)
       // Cancel in-flight downloads (disk I/O contention with SQLite fsync
       // is a known 0xdead10cc trigger) and pause the photo-archive walk
       // (an independent loop not driven by the service scheduler, so it
@@ -107,22 +104,12 @@ const manager = createSuspensionManager({
       pauseArchiveSync()
     },
     onAfterResume: () => {
-      // SWR re-enable lives in onForegroundActive, not here — onAfterResume
-      // also fires on BG-task wakes (AppState stays 'background'), where
-      // we want SWR to stay off.
       resumeLogger()
       // Resume archive walk from the same cursor if it wasn't complete.
       void resumeArchiveSync()
       // Eviction's frequency gate short-circuits when it ran recently, so a
       // quick app-switch is cheap; a long suspension triggers a real pass.
       void runFsEvictionScanner()
-    },
-    onForegroundActive: () => {
-      // iOS-only path. The mobile AppState listener routes 'active'
-      // through manager.setAppState('foreground') which fires this hook;
-      // the Android branch in initSuspensionManager calls the helper
-      // directly because Android skips the manager's suspend flow.
-      reEnableSWROnForeground()
     },
   },
   hardDeadlineMs: HARD_DEADLINE_MS,
@@ -149,28 +136,8 @@ export function initSuspensionManager(): void {
     // so the flow only fires when the user actually leaves.
     if (Platform.OS === 'ios') {
       onAppStateChange(nextState)
-    } else if (nextState === 'active') {
-      // Android skips the manager's suspend flow because AppState
-      // 'background' fires for picker / share-sheet round-trips that
-      // aren't real backgrounding. Call the helper directly instead of
-      // routing through the manager hook.
-      reEnableSWROnForeground()
     }
   })
-}
-
-/** Flips SWR back on and forces revalidation of every subscribed hook.
- * Two callers: the iOS path via the manager's onForegroundActive hook
- * (integration-test covered) and the Android branch above (direct).
- * The mutate is necessary because SWR's isPaused gates revalidation
- * events but doesn't trigger them when the flag flips back — hooks that
- * mounted against a paused SWR stay frozen until something kicks them.
- * Covers the iOS deep-link case where a screen mounts during the resume
- * race before SWR un-pauses. */
-function reEnableSWROnForeground(): void {
-  setSWREnabled(true)
-  void swrGlobalMutate(() => true)
-  logger.info('suspension', 'swr_enabled')
 }
 
 export function teardownSuspensionManager(): void {
@@ -198,15 +165,23 @@ function onAppStateChange(nextState: AppStateStatus): void {
       logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
       return
     }
+    // Init's cleanup/services steps issue many DB queries; running the
+    // suspend gate concurrently with them races the close against
+    // in-flight queries. Defer until init completes — iOS may suspend
+    // us "naturally" without our cleanup, same as before this listener
+    // attached early.
+    if (app().init.getState().isInitializing) {
+      logger.debug('suspension', 'skipped', { reason: 'init_in_progress' })
+      return
+    }
     // Fire-and-forget; errors surface via the manager's own logging.
     // The setAppState Promise resolves after any enqueued doSuspend
     // settles, so BackgroundTimer keeps iOS from freezing the process
     // until WAL checkpoint + close complete.
     void withIosExecutionTime(() => manager.setAppState('background'))
   } else if (nextState === 'active') {
-    // SWR re-enable now lives in the manager's onForegroundActive hook,
-    // which fires whenever appState transitions to foreground regardless
-    // of the manager's internal resume/suspended state.
+    // Always safe — setAppState('foreground') enqueues doResume which
+    // is a no-op when state !== 'suspended'.
     void manager.setAppState('foreground')
   }
 }
