@@ -162,8 +162,6 @@ export class UploadManager {
   private _suspended = false
   /** Resolves to unblock the loop when resume() is called. */
   private _resumeResolve: (() => void) | null = null
-  /** Resolves to signal the caller of suspend() that the loop has parked. */
-  private _parkedResolve: (() => void) | null = null
   /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
   private wakeResolver: (() => void) | null = null
   /** Whether saveBatchObjects succeeded and invalidation is pending. */
@@ -314,10 +312,6 @@ export class UploadManager {
       this._resumeResolve()
       this._resumeResolve = null
     }
-    if (this._parkedResolve) {
-      this._parkedResolve()
-      this._parkedResolve = null
-    }
 
     if (this.packer) {
       logger.info('uploadManager', 'batch_cancel', {
@@ -365,27 +359,25 @@ export class UploadManager {
     this.wake()
   }
 
-  /** Cached promise so multiple suspend() calls return the same promise
-   * instead of overwriting _parkedResolve and leaving earlier callers hanging. */
-  private _suspendPromise: Promise<void> | null = null
-
+  // Non-blocking. Sets the flag and wakes the loop; the loop parks itself
+  // at the top of its next iteration. Return type stays Promise<void> for
+  // the SuspensionAdapters interface, but resolves immediately — Diff A's
+  // DB gate (reads reject, writes park during 'suspending'/'closed') is
+  // the synchronization primitive now, so we don't need to await the loop
+  // reaching its park point before proceeding with the rest of the suspend
+  // flow. Lets Phase 1 finish in milliseconds even when the loop is
+  // mid-iteration on a slow file.
   suspend(): Promise<void> {
-    if (this._suspendPromise) return this._suspendPromise
     logger.info('uploadManager', 'suspending')
     this._suspended = true
     this.wake()
-    if (!this.active) return Promise.resolve()
-    this._suspendPromise = new Promise<void>((resolve) => {
-      this._parkedResolve = resolve
-    })
-    return this._suspendPromise
+    return Promise.resolve()
   }
 
   resume(): void {
     if (!this._suspended) return
     logger.info('uploadManager', 'resuming')
     this._suspended = false
-    this._suspendPromise = null // Allow future suspend() calls to create a new promise.
     if (this._resumeResolve) {
       this._resumeResolve()
       this._resumeResolve = null
@@ -523,10 +515,6 @@ export class UploadManager {
   private async runLoop(): Promise<void> {
     while (this.active) {
       if (this._suspended) {
-        if (this._parkedResolve) {
-          this._parkedResolve()
-          this._parkedResolve = null
-        }
         await this.waitForResume()
         if (!this.active) break
         continue
