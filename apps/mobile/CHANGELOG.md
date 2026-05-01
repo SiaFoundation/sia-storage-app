@@ -2,6 +2,17 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.2 (2026-05-01)
+
+### Fixes
+
+- Fixed iOS background-transition crashes caused by races in SQLite handle teardown and query pile-up at the suspend boundary.
+- Made the remote log forwarder's stop non-blocking and skipped its ticker entirely when no remote endpoint is configured, so iOS suspension no longer waits on an in-flight log POST.
+- Removed a burst of database queries that fired on every resume from background.
+- Tightened the iOS background-suspension cleanup budget and added a self-deadline to background tasks so cleanup completes inside the task's allotted wake window instead of racing iOS's expiration callback.
+- Fixed an issue where the app could be stuck on the onboarding screen for a signed-in user until it was minimized and reopened.
+- Made the upload manager's suspend non-blocking so iOS suspension completes faster when the upload loop is mid-iteration.
+
 ## 1.11.1 (2026-04-30)
 
 ### Fixes
