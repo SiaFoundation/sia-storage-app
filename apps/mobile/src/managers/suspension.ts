@@ -13,6 +13,7 @@ import RNFS from 'react-native-fs'
 import {
   closeDb,
   dbInitialized,
+  getActiveJournalMode,
   getInflightCount,
   getWalPath,
   initializeDB,
@@ -33,11 +34,15 @@ import { getUploadManager } from './uploader'
  * All values are cheap in-memory reads except WAL size (one RNFS.stat call). */
 async function logSuspendDiagnostics(): Promise<void> {
   try {
-    const walPath = getWalPath()
-    const walStat = await RNFS.stat(walPath).catch((e) => {
-      logger.warn('suspension', 'wal_stat_failed', { error: e as Error })
-      return null
-    })
+    // Only stat the WAL file when it can exist; in DELETE journal mode
+    // there's no -wal sidecar and the stat would log a spurious warning.
+    const walStat =
+      getActiveJournalMode() === 'WAL'
+        ? await RNFS.stat(getWalPath()).catch((e) => {
+            logger.warn('suspension', 'wal_stat_failed', { error: e as Error })
+            return null
+          })
+        : null
     logger.info('suspension', 'diagnostics', {
       inflightQueries: getInflightCount(),
       uploader: getUploadManager()?.getDiagnostics() ?? null,

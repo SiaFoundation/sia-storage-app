@@ -70,8 +70,12 @@ describe('createSuspensionManager deadline behavior', () => {
     expect(db.close).toHaveBeenCalled()
   })
 
-  it('reaches suspended even when db.waitForIdle never resolves', async () => {
-    const { adapters, db } = createAdapters({
+  // Closing while inflight > 0 produces a UAF (TestFlight crash #29).
+  // If db drain times out, the manager aborts the suspend and ungates
+  // instead of proceeding to close. iOS may kill us for holding the lock,
+  // but a clean kill is cheaper than corruption.
+  it('aborts suspend when db.waitForIdle never resolves', async () => {
+    const { adapters, db, scheduler, uploader } = createAdapters({
       dbWaitForIdle: () => new Promise(() => {}),
       hardDeadlineMs: 100,
     })
@@ -81,8 +85,11 @@ describe('createSuspensionManager deadline behavior', () => {
     await jest.advanceTimersByTimeAsync(2000)
     await suspendPromise
 
-    expect(manager.isSuspended()).toBe(true)
-    expect(db.close).toHaveBeenCalled()
+    expect(manager.isSuspended()).toBe(false)
+    expect(db.close).not.toHaveBeenCalled()
+    expect(db.ungate).toHaveBeenCalled()
+    expect(scheduler.resume).toHaveBeenCalled()
+    expect(uploader.resume).toHaveBeenCalled()
   })
 
   it('reaches suspended even when db.close never resolves', async () => {
