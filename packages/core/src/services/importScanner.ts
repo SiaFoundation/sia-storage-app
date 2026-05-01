@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
 import { type BackoffEntry, BackoffTracker } from '../lib/backoffTracker'
+import { raceWithAbort } from '../lib/timeout'
 
 const MAX_PER_TICK = 20
 
@@ -27,8 +28,8 @@ export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<str
  * Suspension signal policy: accepts AbortSignal. DB-holding loop —
  * each tick processes placeholder files (hash: '') by hashing local
  * files or copying from media library. Checks signal at loop boundaries
- * (phase 1 file loop, phase 2 deferred loop) so workers exit before the
- * DB gate closes.
+ * and races the uncancellable native hash/copy ops against it so the
+ * loop exits fast even mid-file.
  */
 export class ImportScanner {
   private app: AppService | null = null
@@ -167,9 +168,12 @@ export class ImportScanner {
               result.skipped++
               continue
             }
-            // Exit early on suspension before starting CPU-intensive hash.
             if (signal?.aborted) break
-            const outcome = await this.hashExistingFile(file, localFileUri)
+            // Native hash is uncancellable; race against the signal and
+            // let the orphan finish on its thread.
+            const raced = await raceWithAbort(this.hashExistingFile(file, localFileUri), signal)
+            if (!raced.ok) break
+            const outcome = raced.value
             if (outcome.action === 'finalized') {
               updates.push({
                 id: file.id,
@@ -255,14 +259,21 @@ export class ImportScanner {
               }
 
               try {
-                // Exit early on suspension before starting file copy + hash.
                 if (signal?.aborted) break
-                // usedAt: 0 — imported files are evictable as soon as they're uploaded.
-                const uri = await app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri, {
-                  usedAt: 0,
-                })
-                if (signal?.aborted) break
-                const outcome = await this.hashExistingFile(file, uri)
+                // Native copy + hash are uncancellable; race against the
+                // signal and let orphans finish on their threads.
+                // usedAt: 0 — imported files are evictable once uploaded.
+                const copyRaced = await raceWithAbort(
+                  app.fs.copyFile({ id: file.id, type: file.type }, resolved.uri, {
+                    usedAt: 0,
+                  }),
+                  signal,
+                )
+                if (!copyRaced.ok) break
+                const uri = copyRaced.value
+                const hashRaced = await raceWithAbort(this.hashExistingFile(file, uri), signal)
+                if (!hashRaced.ok) break
+                const outcome = hashRaced.value
                 if (outcome.action === 'finalized') {
                   updates.push({
                     id: file.id,

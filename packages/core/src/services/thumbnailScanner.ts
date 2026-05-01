@@ -1,5 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
+import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
@@ -91,8 +92,9 @@ export function computeTargetDimensions(
  *
  * Suspension signal policy: accepts AbortSignal. DB-holding loop — each
  * tick queries candidate files and writes thumbnails via app().files /
- * app().thumbs. Checks signal at loop boundaries so straggler workers
- * don't issue queries after the gate and hit DatabaseSuspendedError.
+ * app().thumbs. Checks signal at loop boundaries and races the
+ * uncancellable native thumbnail generator against it so the loop exits
+ * fast even mid-generation.
  */
 export class ThumbnailScanner {
   private app: AppService | null = null
@@ -516,14 +518,21 @@ export class ThumbnailScanner {
               originalHash: c.hash,
               size,
             })
-            const outcome = await this.ensureThumbnailForSize({
-              fileId: c.id,
-              fileHash: c.hash,
-              fileType: c.type,
-              fileLocalId: c.localId,
-              size,
-              sourceUri,
-            })
+            // Native generator is uncancellable; race against the signal
+            // and let the orphan finish on its thread.
+            const raced = await raceWithAbort(
+              this.ensureThumbnailForSize({
+                fileId: c.id,
+                fileHash: c.hash,
+                fileType: c.type,
+                fileLocalId: c.localId,
+                size,
+                sourceUri,
+              }),
+              signal,
+            )
+            if (!raced.ok) break
+            const outcome = raced.value
             await yieldToEventLoop()
             if (outcome.status === 'produced') {
               producedCount++
