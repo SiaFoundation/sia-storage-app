@@ -59,35 +59,21 @@ describe('state transitions', () => {
 })
 
 describe('query gating', () => {
-  it('getAllAsync parks and resolves after resumeDb', async () => {
+  it('getAllAsync rejects during suspending', async () => {
     suspendDb()
-    const queryPromise = db().getAllAsync<{ v: number }>('SELECT 1 as v')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
-    resumeDb()
-    const rows = await queryPromise
-    expect(rows).toEqual([{ v: 1 }])
+    await expect(db().getAllAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
   })
 
-  it('getFirstAsync parks while suspended', async () => {
+  it('getFirstAsync rejects during suspending', async () => {
     suspendDb()
-    const queryPromise = db().getFirstAsync<{ v: number }>('SELECT 1 as v')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
-    resumeDb()
-    const row = await queryPromise
-    expect(row).toEqual({ v: 1 })
+    await expect(db().getFirstAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
   })
 
-  it('runAsync parks while suspended', async () => {
+  it('runAsync parks during suspending and resolves after resume', async () => {
     suspendDb()
     const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')
     let settled = false
@@ -100,7 +86,7 @@ describe('query gating', () => {
     await queryPromise
   })
 
-  it('execAsync parks while suspended', async () => {
+  it('execAsync parks during suspending and resolves after resume', async () => {
     suspendDb()
     const queryPromise = db().execAsync('SELECT 1')
     let settled = false
@@ -113,7 +99,7 @@ describe('query gating', () => {
     await queryPromise
   })
 
-  it('withTransactionAsync parks while suspended', async () => {
+  it('withTransactionAsync parks during suspending and resolves after resume', async () => {
     suspendDb()
     let txRan = false
     const queryPromise = db().withTransactionAsync(async () => {
@@ -131,7 +117,7 @@ describe('query gating', () => {
     expect(txRan).toBe(true)
   })
 
-  it('queries also park in closed state and drain after reopen+resume', async () => {
+  it('reads also park in closed state and drain after reopen+resume', async () => {
     await closeDb()
     const queryPromise = db().getAllAsync<{ v: number }>('SELECT 1 as v')
     let settled = false
@@ -146,11 +132,25 @@ describe('query gating', () => {
     expect(rows).toEqual([{ v: 1 }])
   })
 
-  it('parked query rejects with DatabaseSuspendedError after wait timeout', async () => {
+  it('writes park in closed state and drain after reopen+resume', async () => {
+    await closeDb()
+    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')
+    let settled = false
+    queryPromise.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    await initializeDB({ databaseName: ':memory:', reopen: true })
+    resumeDb()
+    await queryPromise
+  })
+
+  it('parked write rejects with DatabaseSuspendedError after wait timeout', async () => {
     jest.useFakeTimers()
     try {
       suspendDb()
-      const queryPromise = db().getAllAsync('SELECT 1')
+      const queryPromise = db().runAsync('SELECT 1')
       queryPromise.catch(() => {})
       jest.advanceTimersByTime(30_000)
       await expect(queryPromise).rejects.toThrow(DatabaseSuspendedError)
@@ -300,15 +300,49 @@ describe('closeDb', () => {
     expect(dbInitialized).toBe(false)
     expect(getDbState()).toBe('closed')
   })
+
+  // Closing while a query iterates the native handle produces a UAF in
+  // sqlite3_mutex_enter (TestFlight crash #29). closeDb must wait for the
+  // serial dispatch queue to be empty before destroying the handle.
+  it('waits for in-flight queries to finish before closeAsync', async () => {
+    let resolveQuery!: () => void
+    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          resolveQuery = r
+        }) as any,
+    )
+    const closeAsyncSpy = jest.spyOn(database, 'closeAsync')
+
+    const queryPromise = db().getAllAsync('SELECT 1')
+
+    let closeDone = false
+    const closePromise = closeDb().then(() => {
+      closeDone = true
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(closeDone).toBe(false)
+    expect(closeAsyncSpy).not.toHaveBeenCalled()
+
+    resolveQuery()
+    await queryPromise
+    await closePromise
+    expect(closeDone).toBe(true)
+    expect(closeAsyncSpy).toHaveBeenCalled()
+  })
 })
 
 describe('full suspend/resume cycle', () => {
-  it('queries parked during suspend/close drain after reopen+resume', async () => {
+  it('reads during suspending reject; reads during closed park and drain after reopen', async () => {
     const rows1 = await db().getAllAsync<{ v: number }>('SELECT 1 as v')
     expect(rows1).toEqual([{ v: 1 }])
 
     suspendDb()
-    const duringSuspend = db().getAllAsync<{ v: number }>('SELECT 1 as v')
+    await expect(db().getAllAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
 
     await closeDb()
     expect(dbInitialized).toBe(false)
@@ -317,24 +351,36 @@ describe('full suspend/resume cycle', () => {
     await initializeDB({ databaseName: ':memory:', reopen: true })
     resumeDb()
 
-    expect(await duringSuspend).toEqual([{ v: 1 }])
     expect(await duringClosed).toEqual([{ v: 2 }])
+  })
+
+  it('writes during suspending park and resolve after resume; native callback continuations preserved', async () => {
+    suspendDb()
+    const writeDuringSuspend = db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')
+    let settled = false
+    writeDuringSuspend.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resumeDb()
+    await writeDuringSuspend
   })
 
   it('in-flight query at suspend time completes, then drain resolves', async () => {
     let resolveQuery!: () => void
-    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(
+    jest.spyOn(database, 'runAsync').mockImplementationOnce(
       () =>
         new Promise<void>((r) => {
           resolveQuery = r
         }) as any,
     )
 
-    const queryPromise = db().getAllAsync('SELECT 1')
+    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS x (id TEXT)')
 
     suspendDb()
-    // A new query issued during suspend parks; it does not count toward inflight.
-    const parked = db().getAllAsync<{ v: number }>('SELECT 2 as v')
+    // A new write issued during suspend parks; it does not count toward inflight.
+    const parked = db().runAsync('CREATE TABLE IF NOT EXISTS y (id TEXT)')
     let parkedSettled = false
     parked.then(() => {
       parkedSettled = true
@@ -355,7 +401,7 @@ describe('full suspend/resume cycle', () => {
     expect(drained).toBe(true)
 
     resumeDb()
-    expect(await parked).toEqual([{ v: 2 }])
+    await parked
   })
 
   it('resetDb works after suspend → resume → reinit sequence', async () => {

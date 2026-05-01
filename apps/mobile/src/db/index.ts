@@ -18,20 +18,15 @@ export class DatabaseSuspendedError extends Error {
 }
 
 // Suspension lifecycle state (separate from dbInitialized).
-// - 'active':     queries flow normally through the adapter.
-// - 'suspending': new queries park on a waiter queue; in-flight queries drain.
-// - 'closed':     database handle is closed, WAL lock released; waiters park.
-//
-// When not active, queries WAIT instead of reject. This matters during the
-// ~80ms `db.reopen()` window on resume: native callbacks (image picker,
-// share intent) fire their continuation the moment the app foregrounds and
-// race our resume flow. If we rejected, a caller like importFiles would
-// lose its write. Waiters drain inside resumeDb(), so the queued query
-// dispatches to the newly-reopened handle.
-//
-// This preserves 0xdead10cc protection: queued waiters don't touch SQLite's
-// native GCD queue, so there's no fsync in flight when iOS freezes the
-// process. Waiters are just heap objects that drain post-resume.
+// - 'active':     queries flow normally.
+// - 'suspending': close in progress — reads reject (callers retry).
+//                 Writes still park to cover stragglers that didn't
+//                 complete in the Phase 2 service drain.
+// - 'closed':     handle destroyed, reopen imminent — both park.
+//                 This is the load-bearing case: native callbacks (image
+//                 picker, share intent) fire their continuation during the
+//                 ~80ms reopen window and need their INSERTs to land
+//                 against the new handle, since they have no retry path.
 type DbState = 'active' | 'suspending' | 'closed'
 
 let state: DbState = 'active'
@@ -45,8 +40,11 @@ let activeWaiters: Array<() => void> = []
 // or Android foreground transition.
 const WAIT_TIMEOUT_MS = 30_000
 
-function waitForActive(): Promise<void> {
+function waitForActive(intent: 'read' | 'write'): Promise<void> {
   if (state === 'active') return Promise.resolve()
+  if (state === 'suspending' && intent === 'read') {
+    return Promise.reject(new DatabaseSuspendedError())
+  }
   return new Promise<void>((resolve, reject) => {
     let settled = false
     const resolveOnce = () => {
@@ -281,6 +279,11 @@ export async function closeDb(): Promise<void> {
     // triggered by racing queries — sees the closed state and doesn't reopen.
     dbInitialized = false
     state = 'closed'
+    // Wait for in-flight native calls to finish before destroying the
+    // handle. Closing while a getAllAsync is mid-iteration produces a
+    // use-after-free in sqlite3_mutex_enter (TestFlight crash #29).
+    // The suspension manager owns the outer deadline; no timeout here.
+    await waitForQueriesIdle()
     try {
       // Zero the busy timeout so any straggler query blocked on the SQLite
       // mutex fails immediately instead of waiting up to 5 seconds.
@@ -348,13 +351,7 @@ export async function resetDb() {
 // query logging. Reads the module-level `database` variable on every call,
 // so connection swaps from initializeDB/resetDb/reopenDb are transparent.
 class MobileDbAdapter implements DatabaseAdapter {
-  private query<T>(method: string, args: unknown[]): Promise<T> {
-    // Park the call until state === 'active'. During suspend/close/reopen
-    // this blocks the caller rather than rejecting, so native callbacks
-    // that fire their continuation on app foreground (image picker,
-    // share intent) don't lose writes to the ~80ms reopen window. The
-    // common case (state === 'active') skips the microtask detour so
-    // trackStart runs synchronously and in-flight counting is exact.
+  private query<T>(method: string, intent: 'read' | 'write', args: unknown[]): Promise<T> {
     const dispatch = (): Promise<T> => {
       trackStart()
       return withRecovery(async () => {
@@ -373,23 +370,25 @@ class MobileDbAdapter implements DatabaseAdapter {
       }).finally(trackEnd)
     }
     if (state === 'active') return dispatch()
-    return waitForActive().then(dispatch)
+    return waitForActive(intent).then(dispatch)
   }
 
   getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
-    return this.query('getAllAsync', [sql, ...params])
+    return this.query('getAllAsync', 'read', [sql, ...params])
   }
 
   getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
-    return this.query('getFirstAsync', [sql, ...params])
+    return this.query('getFirstAsync', 'read', [sql, ...params])
   }
 
   runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult> {
-    return this.query('runAsync', [sql, ...params])
+    return this.query('runAsync', 'write', [sql, ...params])
   }
 
+  // 'write' because execAsync runs arbitrary SQL — used for PRAGMA + DDL
+  // during init/recovery. Defaulting to write is the safe lock-out.
   execAsync(sql: string): Promise<void> {
-    return this.query('execAsync', [sql])
+    return this.query('execAsync', 'write', [sql])
   }
 
   withTransactionAsync(fn: () => Promise<void>): Promise<void> {
@@ -400,7 +399,7 @@ class MobileDbAdapter implements DatabaseAdapter {
         .finally(trackEnd)
     }
     if (state === 'active') return dispatch()
-    return waitForActive().then(dispatch)
+    return waitForActive('write').then(dispatch)
   }
 }
 

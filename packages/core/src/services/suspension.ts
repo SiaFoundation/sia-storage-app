@@ -108,14 +108,27 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 1000)
       const dbDrainResult = await raceWithTimeout(db.waitForIdle(), remainingMs)
       const dbDrainMs = Date.now() - dbDrainStart
-      if (dbDrainResult.ok) {
-        logger.debug('suspension', 'db_drained', { dbDrainMs })
-      } else {
-        logger.warn('suspension', 'db_drain_timeout', {
+      if (!dbDrainResult.ok) {
+        // Closing while inflight > 0 races the close against in-flight
+        // statements and produces a UAF in sqlite3_mutex_enter. Bail
+        // instead — losing this suspend cycle is preferable to native
+        // corruption. iOS may kill the process for holding the lock,
+        // but a clean kill is cheaper than a use-after-free.
+        logger.warn('suspension', 'db_drain_timeout_aborted', {
           dbDrainMs,
           remainingMs,
         })
+        // TODO: services + uploader resume immediately here, queueing
+        // work behind the stuck inflight queries. Cleaner: defer
+        // resume until inflight drains (new 'recovering' state).
+        hooks?.onAfterResume?.()
+        db.ungate()
+        uploader.resume()
+        scheduler.resume()
+        state = 'active'
+        return
       }
+      logger.debug('suspension', 'db_drained', { dbDrainMs })
 
       // Phase 5: Checkpoint WAL to release file locks, then close. Race
       // against the remaining deadline — if native close hangs on fsync,
