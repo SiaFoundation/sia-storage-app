@@ -62,7 +62,7 @@ describe('logAppender', () => {
     expect(received[0].message).toBe('manual')
   })
 
-  it('stopLogAppender flushes remaining entries then clears appender', async () => {
+  it('stopLogAppender clears appender without flushing remaining entries', async () => {
     const received: LogEntry[] = []
     setLogAppender((entries) => {
       received.push(...entries)
@@ -73,13 +73,21 @@ describe('logAppender', () => {
 
     await stopLogAppender()
 
-    expect(received).toHaveLength(2)
-    expect(received[0].message).toBe('final1')
-    expect(received[1].message).toBe('final2')
+    // Buffered entries are NOT flushed inline — they remain in the buffer
+    // and will be flushed on the next setLogAppender call. Awaiting a DB
+    // flush here was the cause of iOS 0xdead10cc kills during suspension.
+    expect(received).toHaveLength(0)
 
     appendLog(makeEntry('after-stop'))
     flushLogs()
-    expect(received).toHaveLength(2)
+    expect(received).toHaveLength(0)
+
+    const received2: LogEntry[] = []
+    setLogAppender((entries) => {
+      received2.push(...entries)
+    })
+
+    expect(received2.map((e) => e.message)).toEqual(['final1', 'final2', 'after-stop'])
   })
 
   it('entries buffered after stop are flushed when appender is re-registered', async () => {

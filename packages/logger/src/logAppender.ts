@@ -34,18 +34,16 @@ export function flushLogs(): void {
 }
 
 /**
- * Gracefully stop the log appender: stop the flush interval, flush remaining
- * entries to the appender, then clear the appender. After this call no more
- * entries will be written.
+ * Stop the log appender: clear the flush interval and detach the appender.
+ * Does NOT flush buffered entries — they remain in the buffer and flush on
+ * the next setLogAppender call. Awaiting a DB flush here held iOS suspend
+ * past beginBackgroundTask's budget by queuing behind in-flight service
+ * queries on the expo-sqlite mutex (0xdead10cc).
  */
-export async function stopLogAppender(): Promise<void> {
+export function stopLogAppender(): void {
   if (flushTimer) {
     clearInterval(flushTimer)
     flushTimer = null
-  }
-  if (buffer.length > 0 && appender) {
-    const entries = buffer.splice(0)
-    await appender(entries)
   }
   appender = null
 }
