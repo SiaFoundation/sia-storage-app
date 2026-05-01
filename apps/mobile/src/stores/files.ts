@@ -96,3 +96,15 @@ export function useFileStatsLocal(params: { localOnly: boolean }, config?: SWRCo
   const key = app().caches.library.key('localStats')
   return useSWR([...key, params], () => getFileStatsLocal(params), config)
 }
+
+export async function getFileCountImporting() {
+  return app().files.queryCount({
+    order: 'ASC',
+    hashEmpty: true,
+  })
+}
+
+export function useFileCountImporting(config?: SWRConfiguration) {
+  const key = app().caches.library.key('importingCount')
+  return useSWR(key, getFileCountImporting, config)
+}
