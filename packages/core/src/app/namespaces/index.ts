@@ -87,9 +87,13 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     isReconnecting: false,
   }
 
+  // Default to true so the splash screen holds until startInitState
+  // explicitly flips it. Otherwise the very first render — which fires
+  // before initApp's useEffect runs — sees isInitializing=false and the
+  // splash gate falls through, mounting RootTabs against an unloaded DB.
   let initState: InitState = {
     steps: {},
-    isInitializing: false,
+    isInitializing: true,
     initializationError: null,
   }
 
