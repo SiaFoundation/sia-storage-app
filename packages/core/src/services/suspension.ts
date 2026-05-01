@@ -68,14 +68,18 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
     logger.info('suspension', 'starting')
 
     try {
+      // Phase 1a: Stop scheduler ticks and signal in-flight workers to
+      // abort. Done before Phase 0 so awaits inside onBeforeSuspend don't
+      // compete with fresh tick queries on the DB mutex — a 28s suspend
+      // was observed from this race.
+      scheduler.pause()
+      scheduler.abort()
+
       // Phase 0: Platform-specific pre-work (e.g. flush logs, disable SWR).
       await hooks?.onBeforeSuspend?.()
 
-      // Phase 1: Signal services to stop. pause() prevents new scheduler
-      // ticks, abort() tells in-flight workers to exit at their next
-      // signal.aborted check, upload manager parks its async loop.
-      scheduler.pause()
-      scheduler.abort()
+      // Phase 1b: Park the uploader's async loop. Non-blocking — the
+      // loop checks the flag at its next iteration boundary.
       await uploader.suspend()
       logger.debug('suspension', 'services_paused')
 

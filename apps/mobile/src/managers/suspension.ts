@@ -94,11 +94,9 @@ const manager = createSuspensionManager({
   hooks: {
     onBeforeSuspend: async () => {
       await logSuspendDiagnostics()
-      // Drain JS log buffer to DB before halting the HTTP ticker.
-      // stopLogForwarder doesn't await in-flight network work — the
-      // cursor only advances on success, so a request killed mid-flight
-      // by iOS suspension just re-ships next session.
-      await stopLogAppender()
+      // Non-blocking; awaiting the flush stalls suspend past iOS's
+      // BG-task budget. See stopLogAppender JSDoc.
+      stopLogAppender()
       stopLogForwarder()
       // Cancel in-flight downloads (disk I/O contention with SQLite fsync
       // is a known 0xdead10cc trigger) and pause the photo-archive walk
