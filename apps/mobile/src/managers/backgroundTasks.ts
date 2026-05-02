@@ -7,12 +7,9 @@ import { delayWithSignal } from '../lib/delayWithSignal'
 import { scheduleAfter } from '../lib/scheduleAfter'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
+import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import { runFsEvictionScanner } from './fsEvictionScanner'
-import {
-  getIsSuspended,
-  registerBackgroundTaskLifecycle,
-  releaseBackgroundTaskLifecycle,
-} from './suspension'
+import { registerBackgroundTaskLifecycle, releaseBackgroundTaskLifecycle } from './suspension'
 import { getUploadManager } from './uploader'
 
 /**
@@ -140,7 +137,10 @@ export async function initBackgroundTasks() {
       // lingering work from a previous invocation.
       resetTaskState(taskId as TaskId)
 
-      transitionTaskState(state, 'running')
+      transitionTaskState(state, 'running', config)
+      // Capture our invocation id so a later re-invocation that resets
+      // shared state can't trick us into finalizing on its behalf.
+      const myInvocationId = state.invocationId
       const log = logTask(config, state)
       log('handler_enter', { path: 'normal' })
       try {
@@ -148,16 +148,26 @@ export async function initBackgroundTasks() {
       } catch (error) {
         log('work_error', { error: error as Error })
       } finally {
-        transitionTaskState(state, 'finished')
-        // Always release — the suspension manager decides whether to
-        // actually suspend based on appState and other running tasks.
-        try {
-          await releaseBackgroundTaskLifecycle(config.id)
-        } catch (error) {
-          log('release_error', { error: error as Error })
+        if (state.invocationId !== myInvocationId) {
+          // A newer invocation has taken over this task slot; it owns
+          // its own finalization.
+          log('handler_exit', { path: 'normal', skipped: 'superseded' })
+        } else if (state.status === 'finished') {
+          // Timeout path already finalized this invocation — calling
+          // finish/release again logs an iOS warning and enqueues
+          // redundant suspend work.
+          log('handler_exit', { path: 'normal', skipped: 'already_finalized' })
+        } else {
+          transitionTaskState(state, 'finished', config)
+          // Release the iOS BG-task assertion BEFORE the wind-down so a
+          // slow lifecycle release can never push us past iOS's 5s
+          // expiration grace (= 0xDEAD10CC kill).
+          BackgroundFetch.finish(config.id)
+          log('handler_exit', { path: 'normal' })
+          void releaseBackgroundTaskLifecycle(config.id).catch((error) => {
+            log('release_error', { error: error as Error })
+          })
         }
-        log('handler_exit', { path: 'normal', didSuspend: getIsSuspended() })
-        BackgroundFetch.finish(config.id)
       }
     },
     (taskId: string) => {
@@ -169,31 +179,30 @@ export async function initBackgroundTasks() {
         return
       }
       const log = logTask(config, state)
+      // If the normal path already finalized this invocation (or none is
+      // running), there's nothing left to clean up — and finish() must
+      // not be called twice.
+      if (state.status !== 'running') {
+        log('timeout', { skipped: 'no_active_invocation' })
+        return
+      }
       log('handler_enter', { path: 'timeout' })
       log('timeout')
 
-      // Abort the work loop immediately — signal.aborted is sticky, so
-      // any subsequent await-point check inside runBackgroundWork will
-      // bail out even if no delayWithSignal is in flight right now.
+      // Abort the work loop. signal.aborted is sticky so the loop bails
+      // at its next await-point even if no delayWithSignal is in flight.
       state.controller?.abort()
-      transitionTaskState(state, 'finished')
+      transitionTaskState(state, 'finished', config)
       log('timeout_finished', { elapsedMs: Date.now() - state.startTime })
 
-      // iOS's timeout callback is void-returning (library can't await a
-      // Promise here), so drive release + finish through a fire-and-
-      // forget IIFE. releaseBackgroundTaskLifecycle acquires
-      // beginBackgroundTask slack internally, giving the WAL checkpoint
-      // + close enough time to complete before iOS freezes the process.
-      ;(async () => {
-        try {
-          await releaseBackgroundTaskLifecycle(config.id)
-        } catch (error) {
-          log('release_error', { error: error as Error })
-        } finally {
-          log('handler_exit', { path: 'timeout', didSuspend: getIsSuspended() })
-          BackgroundFetch.finish(config.id)
-        }
-      })()
+      // We're inside the expirationHandler — iOS gives ~5s before
+      // SIGKILL with 0xDEAD10CC if setTaskCompleted (= finish()) isn't
+      // called. Release first, fire-and-forget the wind-down.
+      BackgroundFetch.finish(config.id)
+      log('handler_exit', { path: 'timeout' })
+      void releaseBackgroundTaskLifecycle(config.id).catch((error) => {
+        log('release_error', { error: error as Error })
+      })
     },
   )
 
@@ -458,12 +467,18 @@ function logTask(config: TaskConfig, state: TaskState) {
   }
 }
 
-function transitionTaskState(state: TaskState, newStatus: 'running' | 'finished') {
+function transitionTaskState(
+  state: TaskState,
+  newStatus: 'running' | 'finished',
+  config: TaskConfig,
+) {
   if (newStatus === 'running') {
     state.startTime = Date.now()
     state.invocationId = Math.random().toString(36).substring(2, 8)
     state.status = 'running'
+    setActiveBgTask(config.id, config.type)
   } else if (newStatus === 'finished') {
     state.status = 'finished'
+    clearActiveBgTask(config.id)
   }
 }

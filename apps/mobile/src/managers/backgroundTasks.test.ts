@@ -1,4 +1,5 @@
 import BackgroundFetch from 'react-native-background-fetch'
+import { isBgTaskActive } from './bgTaskContext'
 import { initBackgroundTasks } from './backgroundTasks'
 
 // Capture the callbacks passed to BackgroundFetch.configure so we can simulate OS behavior
@@ -107,18 +108,13 @@ jest.mock('./uploader', () => ({
   })),
 }))
 
-// Mock the suspension lifecycle so tests can assert register/release calls
-// on both the normal and timeout paths.
 const mockRegister = jest.fn((_id: string) => Promise.resolve())
 const mockRelease = jest.fn((_id: string) => Promise.resolve())
-const mockGetIsSuspended = jest.fn(() => false)
 jest.mock('./suspension', () => ({
-  getIsSuspended: () => mockGetIsSuspended(),
   registerBackgroundTaskLifecycle: (id: string) => mockRegister(id),
   releaseBackgroundTaskLifecycle: (id: string) => mockRelease(id),
 }))
 
-// Helpers
 const flushPromises = () => new Promise(setImmediate)
 
 function completeNextDelay() {
@@ -144,13 +140,12 @@ describe('backgroundTasks', () => {
     mockRunFsEvictionScanner.mockReset().mockResolvedValue(undefined)
     mockRegister.mockReset().mockResolvedValue(undefined)
     mockRelease.mockReset().mockResolvedValue(undefined)
-    mockGetIsSuspended.mockReset().mockReturnValue(false)
 
     await initBackgroundTasks()
   })
 
   describe('suspension lifecycle', () => {
-    it('registers lifecycle at start of task', async () => {
+    it('registers lifecycle at task start', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       await taskCallback('com.transistorsoft.fetch')
@@ -159,34 +154,29 @@ describe('backgroundTasks', () => {
       expect(mockRegister).toHaveBeenCalledWith('com.transistorsoft.fetch')
     })
 
-    it('releases lifecycle after normal completion', async () => {
+    it('releases lifecycle on normal completion', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       await taskCallback('com.transistorsoft.fetch')
 
-      expect(mockRelease).toHaveBeenCalledTimes(1)
       expect(mockRelease).toHaveBeenCalledWith('com.transistorsoft.fetch')
     })
 
-    it('releases lifecycle after timeout — the critical crash-1 regression guard', async () => {
+    it('releases lifecycle on timeout', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
 
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
 
-      // Task is in a delay, holding the DB open. iOS fires expirationHandler.
       timeoutCallback('com.transistorsoft.fetch')
       await flushPromises()
       await flushPromises()
       await taskPromise
 
-      // Both the normal path (finally block) and the timeout path (IIFE)
-      // call release, resulting in 2 calls for the same invocation.
       expect(mockRelease).toHaveBeenCalledWith('com.transistorsoft.fetch')
-      expect(mockRelease.mock.calls.length).toBeGreaterThanOrEqual(1)
     })
 
-    it('releases lifecycle even when task throws', async () => {
+    it('releases lifecycle even when work throws', async () => {
       mockGetFileStatsLocal.mockRejectedValue(new Error('simulated db error'))
 
       await taskCallback('com.transistorsoft.fetch')
@@ -194,26 +184,127 @@ describe('backgroundTasks', () => {
       expect(mockRelease).toHaveBeenCalledWith('com.transistorsoft.fetch')
     })
 
-    it('releases lifecycle even when AppState.currentState is active', async () => {
-      // The manager decides whether to actually suspend; the handler
-      // just always calls release. Confirms the guard was removed.
+    it('calls BackgroundFetch.finish before lifecycle release on normal path', async () => {
+      // Pinning this order is the 0xDEAD10CC fix: a slow lifecycle release
+      // can never delay finish past iOS's 5s expiration grace.
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
+      const order: string[] = []
+      const finishMock = BackgroundFetch.finish as jest.MockedFunction<
+        typeof BackgroundFetch.finish
+      >
+      finishMock.mockImplementation((id) => {
+        order.push(`finish:${id}`)
+      })
+      mockRelease.mockImplementation(async (id) => {
+        order.push(`release:${id}`)
+      })
 
       await taskCallback('com.transistorsoft.fetch')
 
-      expect(mockRelease).toHaveBeenCalledWith('com.transistorsoft.fetch')
+      expect(order).toEqual(['finish:com.transistorsoft.fetch', 'release:com.transistorsoft.fetch'])
     })
 
-    it('logs handler_exit with didSuspend reading from getIsSuspended', async () => {
-      // After release, the suspension manager reports suspended.
+    it('calls BackgroundFetch.finish before lifecycle release on timeout path', async () => {
+      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
+      const order: string[] = []
+      const finishMock = BackgroundFetch.finish as jest.MockedFunction<
+        typeof BackgroundFetch.finish
+      >
+      finishMock.mockImplementation((id) => {
+        order.push(`finish:${id}`)
+      })
+      mockRelease.mockImplementation(async (id) => {
+        order.push(`release:${id}`)
+      })
+
+      const taskPromise = taskCallback('com.transistorsoft.fetch')
+      await flushPromises()
+
+      timeoutCallback('com.transistorsoft.fetch')
+      await flushPromises()
+      await flushPromises()
+      await taskPromise
+
+      const finishIdx = order.indexOf('finish:com.transistorsoft.fetch')
+      const releaseIdx = order.indexOf('release:com.transistorsoft.fetch')
+      expect(finishIdx).toBeGreaterThanOrEqual(0)
+      expect(releaseIdx).toBeGreaterThanOrEqual(0)
+      expect(finishIdx).toBeLessThan(releaseIdx)
+    })
+
+    it('does not double-call finish/release when timeout fires mid-work', async () => {
+      // Race the timeout against the normal callback. Both must converge
+      // on exactly one finish + one release for the same invocation.
+      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
+
+      const taskPromise = taskCallback('com.transistorsoft.fetch')
+      await flushPromises()
+
+      timeoutCallback('com.transistorsoft.fetch')
+      await flushPromises()
+      await flushPromises()
+      await taskPromise
+
+      expect(BackgroundFetch.finish).toHaveBeenCalledWith('com.transistorsoft.fetch')
+      expect(
+        (BackgroundFetch.finish as jest.MockedFunction<typeof BackgroundFetch.finish>).mock.calls
+          .length,
+      ).toBe(1)
+      expect(mockRelease).toHaveBeenCalledTimes(1)
+    })
+
+    it('treats a late timeout as a no-op when normal already finalized', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
-      mockGetIsSuspended.mockReturnValue(true)
 
       await taskCallback('com.transistorsoft.fetch')
+      expect(BackgroundFetch.finish).toHaveBeenCalledTimes(1)
 
-      // The handler asks the manager for suspended state. We don't
-      // introspect logger directly here — assert the read happened.
-      expect(mockGetIsSuspended).toHaveBeenCalled()
+      // Stray expirationHandler firing after we already completed.
+      timeoutCallback('com.transistorsoft.fetch')
+
+      expect(BackgroundFetch.finish).toHaveBeenCalledTimes(1)
+      expect(mockRelease).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('active BG task tracking', () => {
+    it.each([
+      ['com.transistorsoft.fetch', 'BGAppRefreshTask'],
+      ['com.transistorsoft.processing', 'BGProcessingTask'],
+    ] as const)('marks %s as active during the task and clears on exit', async (taskId, type) => {
+      let observed = false
+      mockGetFileStatsLocal.mockImplementation(async () => {
+        observed = isBgTaskActive(type)
+        return { count: 0, totalBytes: 0 }
+      })
+
+      await taskCallback(taskId)
+
+      expect(observed).toBe(true)
+      expect(isBgTaskActive(type)).toBe(false)
+    })
+
+    it('does not stomp fetch active state when a processing task overlaps', async () => {
+      // Cross-type overlap could happen if iOS schedules a processing
+      // task while a fetch task is still mid-flight. Each must stay
+      // independently tracked so finishing one doesn't clear the other.
+      mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
+
+      const fetchTask = taskCallback('com.transistorsoft.fetch')
+      await flushPromises()
+      const processingTask = taskCallback('com.transistorsoft.processing')
+      await flushPromises()
+      expect(isBgTaskActive('BGAppRefreshTask')).toBe(true)
+      expect(isBgTaskActive('BGProcessingTask')).toBe(true)
+
+      timeoutCallback('com.transistorsoft.processing')
+      await processingTask
+      expect(isBgTaskActive('BGAppRefreshTask')).toBe(true)
+      expect(isBgTaskActive('BGProcessingTask')).toBe(false)
+
+      timeoutCallback('com.transistorsoft.fetch')
+      await fetchTask
+      expect(isBgTaskActive('BGAppRefreshTask')).toBe(false)
     })
   })
 
@@ -342,7 +433,7 @@ describe('backgroundTasks', () => {
   })
 
   describe('scanners', () => {
-    it('does not run fsEvictionScanner inside the BGAppRefreshTask budget', async () => {
+    it('skips fsEvictionScanner inside BGAppRefreshTask budget', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       await taskCallback('com.transistorsoft.fetch')
@@ -350,31 +441,26 @@ describe('backgroundTasks', () => {
       expect(mockRunFsEvictionScanner).not.toHaveBeenCalled()
     })
 
-    it('defers fsEvictionScanner behind the settle delay in BGProcessingTask', async () => {
+    it('runs fsEvictionScanner after settle delay in BGProcessingTask', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
 
       const taskPromise = taskCallback('com.transistorsoft.processing')
       await flushPromises()
 
-      // Eviction has not started — the settle delay is parked.
       expect(mockRunFsEvictionScanner).not.toHaveBeenCalled()
       expect(getPendingDelayCount()).toBeGreaterThanOrEqual(1)
 
-      // Resolve the settle delay so the scanner runs.
-      const settleDelay = mockPendingDelays[0]
-      settleDelay.resolve()
+      mockPendingDelays[0].resolve()
       await taskPromise
 
       expect(mockRunFsEvictionScanner).toHaveBeenCalledTimes(1)
     })
 
-    it('cancels the settle delay when the BG task aborts before it fires', async () => {
+    it('cancels the settle delay when BG task aborts before it fires', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 1, totalBytes: 100 })
 
       const taskPromise = taskCallback('com.transistorsoft.processing')
       await flushPromises()
-
-      // Both delays are parked: the upload poll's 10s and the scan settle 30s.
       expect(getPendingDelayCount()).toBeGreaterThanOrEqual(1)
 
       timeoutCallback('com.transistorsoft.processing')
@@ -402,7 +488,7 @@ describe('backgroundTasks', () => {
   })
 
   describe('task constraints', () => {
-    it('BGProcessingTask is scheduled with charging + network constraints', () => {
+    it('schedules BGProcessingTask with charging + network constraints', () => {
       expect(BackgroundFetch.scheduleTask).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'com.transistorsoft.processing',
@@ -413,9 +499,12 @@ describe('backgroundTasks', () => {
       )
     })
 
-    it('BGAppRefreshTask (configure) is configured with charging + network + battery constraints', () => {
-      const configCall = (BackgroundFetch.configure as jest.Mock).mock.calls[0]
-      expect(configCall[0]).toMatchObject({
+    it('configures BGAppRefreshTask with charging + network + battery constraints', () => {
+      const configureMock = BackgroundFetch.configure as jest.MockedFunction<
+        typeof BackgroundFetch.configure
+      >
+      const [config] = configureMock.mock.calls[0]
+      expect(config).toMatchObject({
         requiresCharging: true,
         requiresBatteryNotLow: true,
         requiredNetworkType: 2,

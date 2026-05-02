@@ -6,6 +6,7 @@ import { calculateContentHash } from '../lib/contentHash'
 import { getMimeType } from '../lib/fileTypes'
 import { getMediaLibraryUri } from '../lib/mediaLibrary'
 import { app } from '../stores/appService'
+import { isBgTaskActive } from './bgTaskContext'
 
 const scanner = new ImportScanner()
 
@@ -51,6 +52,12 @@ export function getImportBackoffEntries() {
 }
 
 async function run(signal: AbortSignal): Promise<void> {
+  // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; hashing
+  // here can trip cpu_resource_fatal. See bgTaskContext.ts.
+  if (isBgTaskActive('BGAppRefreshTask')) {
+    logger.debug('importScanner', 'skipped', { reason: 'bg_app_refresh_no_cpu_budget' })
+    return
+  }
   if (app().sync.getState().syncGateStatus === 'active') {
     logger.debug('importScanner', 'skipped', { reason: 'sync_gate_active' })
     return
