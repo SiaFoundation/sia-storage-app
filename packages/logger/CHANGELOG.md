@@ -1,3 +1,9 @@
+## 0.0.4 (2026-05-02)
+
+### Fixes
+
+- Made the log appender's stop non-blocking and moved scheduler pause/abort before suspend pre-work, so iOS suspension no longer stalls on a DB flush behind still-ticking services.
+
 ## 0.0.3 (2026-04-29)
 
 ### Features
