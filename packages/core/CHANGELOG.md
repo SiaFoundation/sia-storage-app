@@ -1,3 +1,10 @@
+## 0.0.9 (2026-05-02)
+
+### Fixes
+
+- Made the log appender's stop non-blocking and moved scheduler pause/abort before suspend pre-work, so iOS suspension no longer stalls on a DB flush behind still-ticking services.
+- Made the import scanner and thumbnail scanner exit fast on suspend abort even when a large file is mid hash, copy, or thumbnail generation.
+
 ## 0.0.8 (2026-05-01)
 
 ### Fixes

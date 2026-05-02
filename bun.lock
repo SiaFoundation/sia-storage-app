@@ -49,7 +49,7 @@
     },
     "apps/mobile": {
       "name": "@siastorage/mobile",
-      "version": "1.11.2",
+      "version": "1.11.3",
       "dependencies": {
         "@azure/core-asynciterator-polyfill": "1.0.2",
         "@bacons/text-decoder": "0.0.0",
@@ -135,7 +135,7 @@
     },
     "packages/core": {
       "name": "@siastorage/core",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "dependencies": {
         "@siastorage/logger": "workspace:*",
         "zod": "4.3.6",
@@ -157,7 +157,7 @@
     },
     "packages/logger": {
       "name": "@siastorage/logger",
-      "version": "0.0.3",
+      "version": "0.0.4",
     },
     "packages/node-adapters": {
       "name": "@siastorage/node-adapters",
