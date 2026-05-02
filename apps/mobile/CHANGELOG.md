@@ -2,6 +2,14 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.4 (2026-05-02)
+
+### Fixes
+
+- Reduced background CPU and database load by pausing SWR revalidation while the app isn't foreground-active; data refreshes automatically on return to foreground.
+- Fixed iOS RunningBoard 0xDEAD10CC crashes by releasing the background-task assertion before the suspension wind-down, and removed the now-unused DB drain/close pipeline (DELETE-mode SQLite handles uncleanly-suspended connections without intervention).
+- Reduced background CPU usage on iOS by deferring import, orphan, eviction, and photo archive scans during BGAppRefreshTask wakes (where iOS still enforces the 80%-CPU-over-60s monitor with no requiresExternalPower opt-out); they still run during longer BGProcessingTask wakes.
+
 ## 1.11.3 (2026-05-02)
 
 ### Fixes
