@@ -1,161 +1,214 @@
 import { createSuspensionManager, type SuspensionAdapters } from './suspension'
 
-function createAdapters(overrides?: {
-  schedulerWaitForIdle?: () => Promise<void>
-  dbWaitForIdle?: () => Promise<void>
-  dbClose?: () => Promise<void>
-  hardDeadlineMs?: number
-}): {
-  adapters: SuspensionAdapters
-  scheduler: SuspensionAdapters['scheduler']
-  db: SuspensionAdapters['db']
-  uploader: SuspensionAdapters['uploader']
-} {
-  const scheduler: SuspensionAdapters['scheduler'] = {
-    pause: jest.fn(),
-    abort: jest.fn(),
-    resume: jest.fn(),
-    waitForIdle: jest.fn(overrides?.schedulerWaitForIdle ?? (() => Promise.resolve())),
-  }
-  const uploader: SuspensionAdapters['uploader'] = {
-    suspend: jest.fn(() => Promise.resolve()),
-    resume: jest.fn(),
-    adjustBatchForSuspension: jest.fn(),
-    getDiagnostics: jest.fn(() => ({
-      isSuspended: false,
-      batchId: null,
-      filesInBatch: 0,
-      hasPacker: false,
-      finalizing: false,
-    })),
-  }
-  const db: SuspensionAdapters['db'] = {
-    gate: jest.fn(),
-    ungate: jest.fn(),
-    waitForIdle: jest.fn(overrides?.dbWaitForIdle ?? (() => Promise.resolve())),
-    close: jest.fn(overrides?.dbClose ?? (() => Promise.resolve())),
-    reopen: jest.fn(() => Promise.resolve()),
-  }
-  const adapters: SuspensionAdapters = {
-    scheduler,
-    uploader,
-    db,
-    hardDeadlineMs: overrides?.hardDeadlineMs ?? 100,
-  }
-  return { adapters, scheduler, db, uploader }
+type Mocks = {
+  scheduler: { [K in keyof SuspensionAdapters['scheduler']]: jest.Mock }
+  uploader: { [K in keyof SuspensionAdapters['uploader']]: jest.Mock }
+  hooks: { [K in keyof NonNullable<SuspensionAdapters['hooks']>]: jest.Mock }
 }
 
-describe('createSuspensionManager deadline behavior', () => {
-  beforeEach(() => {
-    jest.useFakeTimers()
-  })
+function createAdapters(
+  opts: {
+    trace?: string[]
+    uploaderSuspend?: () => Promise<void> | void
+    onBeforeSuspend?: () => void | Promise<void>
+  } = {},
+): { adapters: SuspensionAdapters; mocks: Mocks } {
+  const trace = opts.trace
+  const recordEvent = (name: string) => () => {
+    if (trace) trace.push(name)
+  }
+  const mocks: Mocks = {
+    scheduler: {
+      pause: jest.fn(recordEvent('pause')),
+      abort: jest.fn(recordEvent('abort')),
+      resume: jest.fn(recordEvent('resume')),
+    },
+    uploader: {
+      suspend: jest.fn(opts.uploaderSuspend ?? recordEvent('uploader.suspend')),
+      resume: jest.fn(),
+      adjustBatchForSuspension: jest.fn(),
+    },
+    hooks: {
+      onBeforeSuspend: jest.fn(opts.onBeforeSuspend ?? recordEvent('onBeforeSuspend')),
+      onAfterResume: jest.fn(),
+      onForegroundActive: jest.fn(),
+    },
+  }
+  return {
+    adapters: { scheduler: mocks.scheduler, uploader: mocks.uploader, hooks: mocks.hooks },
+    mocks,
+  }
+}
 
-  afterEach(() => {
-    jest.useRealTimers()
-  })
-
-  it('reaches suspended even when scheduler.waitForIdle never resolves', async () => {
-    const { adapters, db } = createAdapters({
-      schedulerWaitForIdle: () => new Promise(() => {}),
-      hardDeadlineMs: 100,
-    })
+describe('doSuspend', () => {
+  it('runs flag flips + onBeforeSuspend in order, then marks suspended', async () => {
+    const trace: string[] = []
+    const { adapters, mocks } = createAdapters({ trace })
     const manager = createSuspensionManager(adapters)
 
-    const suspendPromise = manager.suspend()
-    await jest.advanceTimersByTimeAsync(500)
-    await suspendPromise
+    await manager.suspend()
 
+    expect(trace).toEqual(['pause', 'abort', 'uploader.suspend', 'onBeforeSuspend'])
     expect(manager.isSuspended()).toBe(true)
-    expect(db.gate).toHaveBeenCalled()
-    expect(db.close).toHaveBeenCalled()
+    expect(mocks.hooks.onBeforeSuspend).toHaveBeenCalledTimes(1)
   })
 
-  // Closing while inflight > 0 produces a UAF (TestFlight crash #29).
-  // If db drain times out, the manager aborts the suspend and ungates
-  // instead of proceeding to close. iOS may kill us for holding the lock,
-  // but a clean kill is cheaper than corruption.
-  it('aborts suspend when db.waitForIdle never resolves', async () => {
-    const { adapters, db, scheduler, uploader } = createAdapters({
-      dbWaitForIdle: () => new Promise(() => {}),
-      hardDeadlineMs: 100,
+  it('is a no-op when not active', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+    await manager.suspend()
+    mocks.scheduler.pause.mockClear()
+
+    await manager.suspend()
+
+    expect(mocks.scheduler.pause).not.toHaveBeenCalled()
+  })
+
+  it('rolls back to active when onBeforeSuspend throws', async () => {
+    const { adapters, mocks } = createAdapters({
+      onBeforeSuspend: () => {
+        throw new Error('boom')
+      },
     })
     const manager = createSuspensionManager(adapters)
 
-    const suspendPromise = manager.suspend()
-    await jest.advanceTimersByTimeAsync(2000)
-    await suspendPromise
+    await manager.suspend()
 
     expect(manager.isSuspended()).toBe(false)
-    expect(db.close).not.toHaveBeenCalled()
-    expect(db.ungate).toHaveBeenCalled()
-    expect(scheduler.resume).toHaveBeenCalled()
-    expect(uploader.resume).toHaveBeenCalled()
-  })
-
-  it('reaches suspended even when db.close never resolves', async () => {
-    const { adapters } = createAdapters({
-      dbClose: () => new Promise(() => {}),
-      hardDeadlineMs: 100,
-    })
-    const manager = createSuspensionManager(adapters)
-
-    const suspendPromise = manager.suspend()
-    await jest.advanceTimersByTimeAsync(5000)
-    await suspendPromise
-
-    expect(manager.isSuspended()).toBe(true)
+    expect(mocks.scheduler.resume).toHaveBeenCalledTimes(1)
+    expect(mocks.uploader.resume).toHaveBeenCalledTimes(1)
   })
 })
 
-describe('createSuspensionManager onForegroundActive hook', () => {
-  it('fires on every setAppState(foreground) call, including no-ops', async () => {
-    const onForegroundActive = jest.fn()
-    const onAfterResume = jest.fn()
-    const { adapters } = createAdapters()
-    const manager = createSuspensionManager({
-      ...adapters,
-      hooks: { onForegroundActive, onAfterResume },
-    })
+describe('doResume', () => {
+  it('restores services and runs onAfterResume', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+    await manager.suspend()
 
-    // Initial appState is 'foreground'. setAppState('foreground') with no
-    // transition still fires the hook — matches iOS 'inactive' → 'active'
-    // flicker semantics where 'active' events should refresh SWR even
-    // when the manager never thought we were 'background'.
+    await manager.resume()
+
+    expect(manager.isSuspended()).toBe(false)
+    expect(mocks.hooks.onAfterResume).toHaveBeenCalledTimes(1)
+    expect(mocks.uploader.adjustBatchForSuspension).toHaveBeenCalledTimes(1)
+    expect(mocks.uploader.resume).toHaveBeenCalledTimes(1)
+    expect(mocks.scheduler.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('only adjusts batch when not suspended', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.resume()
+
+    expect(mocks.uploader.adjustBatchForSuspension).toHaveBeenCalledTimes(1)
+    expect(mocks.hooks.onAfterResume).not.toHaveBeenCalled()
+    expect(mocks.uploader.resume).not.toHaveBeenCalled()
+    expect(mocks.scheduler.resume).not.toHaveBeenCalled()
+  })
+})
+
+describe('BG task gating', () => {
+  it('blocks suspend while a BG task is running', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.registerBackgroundTask('bg')
+    await manager.setAppState('background')
+
+    expect(manager.isSuspended()).toBe(false)
+    expect(mocks.scheduler.pause).not.toHaveBeenCalled()
+  })
+
+  it('suspends when the last BG task releases and app is backgrounded', async () => {
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.setAppState('background')
+    await manager.registerBackgroundTask('bg')
+    await manager.releaseBackgroundTask('bg')
+
+    expect(manager.isSuspended()).toBe(true)
+  })
+
+  it('does not suspend on release when app is foregrounded', async () => {
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.registerBackgroundTask('bg')
+    await manager.releaseBackgroundTask('bg')
+
+    expect(manager.isSuspended()).toBe(false)
+  })
+})
+
+describe('AppState transitions', () => {
+  it('cycles foreground → background → foreground cleanly', async () => {
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.setAppState('background')
+    expect(manager.isSuspended()).toBe(true)
+
     await manager.setAppState('foreground')
-    expect(onForegroundActive).toHaveBeenCalledTimes(1)
-    expect(onAfterResume).not.toHaveBeenCalled()
+    expect(manager.isSuspended()).toBe(false)
+  })
+
+  it('serializes a foreground that arrives mid-suspend via the queue', async () => {
+    let releaseHook: () => void = () => {}
+    const blocked = new Promise<void>((r) => {
+      releaseHook = r
+    })
+    const { adapters, mocks } = createAdapters({ onBeforeSuspend: () => blocked })
+    const manager = createSuspensionManager(adapters)
+
+    const suspendPromise = manager.setAppState('background')
+    const resumePromise = manager.setAppState('foreground')
+    releaseHook()
+    await suspendPromise
+    await resumePromise
+
+    expect(mocks.hooks.onAfterResume).toHaveBeenCalledTimes(1)
+    expect(manager.isSuspended()).toBe(false)
+  })
+})
+
+describe('onForegroundActive hook', () => {
+  it('fires on every foreground call, including no-ops and BG-task overlaps', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    // No-op foreground (already foreground): fires the hook anyway.
+    await manager.setAppState('foreground')
+    expect(mocks.hooks.onForegroundActive).toHaveBeenCalledTimes(1)
+    expect(mocks.hooks.onAfterResume).not.toHaveBeenCalled()
 
     // Real cycle: foreground → background → foreground.
     await manager.setAppState('background')
-    expect(onForegroundActive).toHaveBeenCalledTimes(1)
     await manager.setAppState('foreground')
-    expect(onForegroundActive).toHaveBeenCalledTimes(2)
-    expect(onAfterResume).toHaveBeenCalledTimes(1)
+    expect(mocks.hooks.onForegroundActive).toHaveBeenCalledTimes(2)
+    expect(mocks.hooks.onAfterResume).toHaveBeenCalledTimes(1)
 
-    // BG-task wake from suspended fires onAfterResume but not the
-    // foreground hook — appState stays 'background'.
+    // BG-task wake from suspended: onAfterResume fires, foreground hook does not (appState stays 'background').
     await manager.setAppState('background')
     await manager.registerBackgroundTask('bg')
-    expect(onAfterResume).toHaveBeenCalledTimes(2)
-    expect(onForegroundActive).toHaveBeenCalledTimes(2)
+    expect(mocks.hooks.onAfterResume).toHaveBeenCalledTimes(2)
+    expect(mocks.hooks.onForegroundActive).toHaveBeenCalledTimes(2)
 
-    // User foregrounds while BG task is still running. The manager is
-    // already resumed so onAfterResume does NOT fire again, but
-    // onForegroundActive must — that's the whole reason this hook exists.
+    // User foregrounds while BG task still running: onAfterResume does NOT
+    // fire again (manager is already resumed); onForegroundActive must.
     await manager.setAppState('foreground')
-    expect(onAfterResume).toHaveBeenCalledTimes(2)
-    expect(onForegroundActive).toHaveBeenCalledTimes(3)
+    expect(mocks.hooks.onAfterResume).toHaveBeenCalledTimes(2)
+    expect(mocks.hooks.onForegroundActive).toHaveBeenCalledTimes(3)
   })
 
-  it('does not fire on setAppState(background) calls', async () => {
-    const onForegroundActive = jest.fn()
-    const { adapters } = createAdapters()
-    const manager = createSuspensionManager({
-      ...adapters,
-      hooks: { onForegroundActive },
-    })
+  it('does not fire on background calls', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
     await manager.setAppState('background')
     await manager.setAppState('background')
-    expect(onForegroundActive).not.toHaveBeenCalled()
+
+    expect(mocks.hooks.onForegroundActive).not.toHaveBeenCalled()
   })
 })

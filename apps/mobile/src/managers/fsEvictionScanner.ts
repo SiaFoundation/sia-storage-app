@@ -4,6 +4,7 @@ import type { CacheEvictionResult } from '@siastorage/core/services'
 import { runCacheEviction } from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
+import { isBgTaskActive } from './bgTaskContext'
 
 const flight = new SingleInit()
 let activeController: AbortController | null = null
@@ -22,6 +23,13 @@ export function cancelFsEvictionScanner(): void {
 export async function runFsEvictionScanner(
   opts: { force?: boolean; signal?: AbortSignal } = {},
 ): Promise<CacheEvictionResult | undefined> {
+  // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; an
+  // eviction scan can trip cpu_resource_fatal. `force` (foreground /
+  // processing task) bypasses the gate. See bgTaskContext.ts.
+  if (!opts.force && isBgTaskActive('BGAppRefreshTask')) {
+    logger.debug('fsEvictionScanner', 'skipped', { reason: 'bg_app_refresh_no_cpu_budget' })
+    return
+  }
   if (!opts.force) {
     const lastRun = await app().settings.getFsEvictionLastRun()
     if (Date.now() - lastRun < FS_EVICTION_FREQUENCY) {

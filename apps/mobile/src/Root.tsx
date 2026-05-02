@@ -6,9 +6,10 @@ import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { useEffect } from 'react'
-import { Platform, StatusBar, StyleSheet } from 'react-native'
+import { AppState, Platform, StatusBar, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
+import { SWRConfig } from 'swr'
 import { AppSplash } from './components/AppSplash'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
@@ -27,6 +28,30 @@ const darkNavigationTheme = {
     background: palette.gray[950],
     card: palette.gray[950],
     primary: palette.blue[400],
+  },
+}
+
+// SWR config for React Native (per the official RN guide):
+//   isVisible: defaults check document.visibilityState (undefined in RN);
+//     without this override SWR treats the app as hidden.
+//   isPaused: skip fetcher dispatch when the app isn't foreground-active,
+//     so background invalidations from sync/upload services don't re-run
+//     fetchers against SQLite for non-rendered components.
+//   initFocus: bridge AppState background→active to SWR's focus signal
+//     (Window.focus doesn't exist in RN); fires after isPaused flips
+//     false, so deferred revalidations land on foreground.
+const swrConfig = {
+  isVisible: () => true,
+  isPaused: () => AppState.currentState !== 'active',
+  initFocus(callback: () => void) {
+    let prev: string = AppState.currentState
+    const sub = AppState.addEventListener('change', (next) => {
+      if ((prev === 'background' || prev === 'inactive') && next === 'active') {
+        callback()
+      }
+      prev = next
+    })
+    return () => sub.remove()
   },
 }
 
@@ -58,7 +83,9 @@ export function Root() {
                 })}
               />
               <AppProvider value={app()}>
-                <RootContent />
+                <SWRConfig value={swrConfig}>
+                  <RootContent />
+                </SWRConfig>
               </AppProvider>
             </SafeAreaView>
           </ToastProvider>

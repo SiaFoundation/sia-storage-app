@@ -5,14 +5,7 @@
  * phase ordering with real services, uploads, and DB operations.
  */
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import {
-  createTestApp,
-  DatabaseSuspendedError,
-  generateTestFiles,
-  sleep,
-  type TestApp,
-  waitForCondition,
-} from './app'
+import { createTestApp, generateTestFiles, sleep, type TestApp, waitForCondition } from './app'
 
 describe('Suspension', () => {
   let app: TestApp
@@ -298,20 +291,15 @@ describe('Suspension', () => {
     expect(app.sdk.getStoredObjects().length).toBe(5)
   }, 60_000)
 
-  it('DB queries are rejected after suspend and work after resume', async () => {
+  it('DB stays usable across suspend/resume', async () => {
     await app.addFiles(generateTestFiles(2, { startId: 1 }))
     await app.waitForNoActiveUploads()
 
     await app.suspend()
-
-    // DB is gated — queries should throw DatabaseSuspendedError.
-    await expect(app.app.files.queryCount({ order: 'ASC' })).rejects.toThrow(DatabaseSuspendedError)
+    expect(await app.app.files.queryCount({ order: 'ASC' })).toBe(2)
 
     await app.resumeFromSuspension()
-
-    // DB is open again — queries work.
-    const count = await app.app.files.queryCount({ order: 'ASC' })
-    expect(count).toBe(2)
+    expect(await app.app.files.queryCount({ order: 'ASC' })).toBe(2)
   }, 60_000)
 
   it('sync-down writes reach the DB during drain', async () => {

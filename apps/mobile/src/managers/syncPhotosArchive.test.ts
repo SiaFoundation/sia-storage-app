@@ -4,12 +4,15 @@ import {
 } from '@siastorage/core/config'
 import * as MediaLibrary from 'expo-media-library'
 import { catalogAssets } from '../lib/processAssets'
+import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import {
   getArchiveSyncCompletedAt,
   getLastRecentScanAt,
   getPhotosArchiveCursor,
   getPhotosArchiveDisplayDate,
+  isArchiveWalkActive,
   restartPhotosArchiveCursor,
+  resumeArchiveSync,
   run,
   setArchiveSyncCompletedAt,
   setLastRecentScanAt,
@@ -241,6 +244,21 @@ describe('syncPhotosArchive', () => {
       { addToImportDirectory: true },
       undefined,
     )
+  })
+
+  describe('resumeArchiveSync', () => {
+    it('does not start the walk during a BGAppRefreshTask', async () => {
+      // Cursor is non-DONE (set by restartPhotosArchiveCursor in beforeEach),
+      // so without the gate resume would kick off runArchiveWalk and set
+      // activeWalk. With the gate, the function returns before that.
+      setActiveBgTask('com.transistorsoft.fetch', 'BGAppRefreshTask')
+      try {
+        await resumeArchiveSync()
+        expect(isArchiveWalkActive()).toBe(false)
+      } finally {
+        clearActiveBgTask('com.transistorsoft.fetch')
+      }
+    })
   })
 
   describe('triggerRecentScanIfNeeded', () => {

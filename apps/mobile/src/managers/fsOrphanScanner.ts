@@ -5,6 +5,7 @@ import { runOrphanScanner } from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
 import { fsFileUriCache } from '../stores/fs'
+import { isBgTaskActive } from './bgTaskContext'
 
 const flight = new SingleInit()
 let activeController: AbortController | null = null
@@ -25,6 +26,13 @@ export async function runFsOrphanScanner(options?: {
   force?: boolean
   signal?: AbortSignal
 }): Promise<OrphanScannerResult | undefined> {
+  // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; an fs
+  // walk can trip cpu_resource_fatal. `force` (foreground / processing
+  // task) bypasses the gate. See bgTaskContext.ts.
+  if (!options?.force && isBgTaskActive('BGAppRefreshTask')) {
+    logger.debug('fsOrphanScanner', 'skipped', { reason: 'bg_app_refresh_no_cpu_budget' })
+    return
+  }
   if (!options?.force) {
     const lastRun = await app().settings.getFsOrphanLastRun()
     if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {

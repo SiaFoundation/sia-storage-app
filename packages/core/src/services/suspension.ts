@@ -1,5 +1,4 @@
 import { CoalescingQueue } from '../lib/coalescingQueue'
-import { raceWithTimeout } from '../lib/timeout'
 import { logger } from '@siastorage/logger'
 
 export type SuspensionAdapters = {
@@ -7,55 +6,40 @@ export type SuspensionAdapters = {
     pause(): void
     abort(): void
     resume(): void
-    waitForIdle(): Promise<void>
   }
   uploader: {
-    suspend(): Promise<void>
+    suspend(): Promise<void> | void
     resume(): void
     adjustBatchForSuspension(): void
-    getDiagnostics(): {
-      isSuspended: boolean
-      batchId: string | null
-      filesInBatch: number
-      hasPacker: boolean
-      finalizing: boolean
-    }
-  }
-  db: {
-    gate(): void
-    ungate(): void
-    waitForIdle(): Promise<void>
-    close(): Promise<void>
-    reopen(): Promise<void>
   }
   hooks?: {
     onBeforeSuspend?(): void | Promise<void>
     onAfterResume?(): void
     /**
-     * Fires synchronously on every `setAppState('foreground')` call,
-     * including no-op calls where appState was already 'foreground'.
-     * Matches iOS AppState semantics: any 'active' event from the OS is
-     * a "user is here" signal even if it didn't go through 'background'
-     * first (e.g. the brief 'active' → 'inactive' → 'active' flicker
-     * from a notification panel pull-down). Also covers the case where
-     * a BG task already resumed the manager and the user subsequently
-     * foregrounds — onAfterResume doesn't fire there.
+     * Fires on every `setAppState('foreground')` call, including no-ops.
+     * Lets platform glue refresh stale UI state on iOS 'inactive' →
+     * 'active' flickers and on foreground events that happen while a BG
+     * task already resumed the manager (where onAfterResume doesn't fire).
      */
     onForegroundActive?(): void
   }
-  hardDeadlineMs: number
 }
 
 type State = 'active' | 'suspending' | 'suspended' | 'resuming'
 type AppStateValue = 'foreground' | 'background'
 
 export function createSuspensionManager(adapters: SuspensionAdapters) {
-  const { scheduler, uploader, db, hooks, hardDeadlineMs } = adapters
+  const { scheduler, uploader, hooks } = adapters
   let state: State = 'active'
   let appState: AppStateValue = 'foreground'
   const runningTasks = new Set<string>()
   const queue = new CoalescingQueue()
 
+  // Suspend is intentionally just flag flips + one optional hook. iOS
+  // suspends with file handles, sockets, and SQLite mid-step preserved,
+  // so closing the DB / draining queries is unnecessary. The 0xDEAD10CC
+  // contract (release the BG-task assertion within iOS's 5s expiration
+  // grace) is satisfied at the BG-task call site, not here.
   async function doSuspend(): Promise<void> {
     if (state !== 'active') {
       logger.debug('suspension', 'skipped', {
@@ -68,93 +52,15 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
     logger.info('suspension', 'starting')
 
     try {
-      // Phase 1a: Stop scheduler ticks and signal in-flight workers to
-      // abort. Done before Phase 0 so awaits inside onBeforeSuspend don't
-      // compete with fresh tick queries on the DB mutex — a 28s suspend
-      // was observed from this race.
       scheduler.pause()
       scheduler.abort()
-
-      // Phase 0: Platform-specific pre-work (e.g. flush logs, disable SWR).
+      await uploader.suspend()
       await hooks?.onBeforeSuspend?.()
 
-      // Phase 1b: Park the uploader's async loop. Non-blocking — the
-      // loop checks the flag at its next iteration boundary.
-      await uploader.suspend()
-      logger.debug('suspension', 'services_paused')
-
-      // Phase 2: Drain services with a hard deadline. DB is still open so
-      // workers can complete their current unit of work (DB writes, cursor
-      // updates) without hitting DatabaseSuspendedError.
-      const drainStart = Date.now()
-      const drained = await raceWithTimeout(scheduler.waitForIdle(), hardDeadlineMs)
-
-      if (drained.ok) {
-        logger.debug('suspension', 'services_drained', {
-          drainMs: Date.now() - drainStart,
-        })
-      } else {
-        logger.warn('suspension', 'hard_deadline_reached', {
-          drainMs: Date.now() - drainStart,
-        })
-      }
-
-      // Phase 3: Gate the DB so straggler queries throw
-      // DatabaseSuspendedError instead of reaching the native queue.
-      db.gate()
-      logger.debug('suspension', 'db_gated')
-
-      // Phase 4: Drain queries already dispatched to the native queue.
-      // Floor of 300ms covers the rare case where Phase 2 ate the entire
-      // hard deadline; with reads rejecting on suspending, inflight is
-      // typically zero by the time we reach Phase 4.
-      const dbDrainStart = Date.now()
-      const elapsedMs = dbDrainStart - drainStart
-      const remainingMs = Math.max(hardDeadlineMs - elapsedMs, 300)
-      const dbDrainResult = await raceWithTimeout(db.waitForIdle(), remainingMs)
-      const dbDrainMs = Date.now() - dbDrainStart
-      if (!dbDrainResult.ok) {
-        // Closing while inflight > 0 races the close against in-flight
-        // statements and produces a UAF in sqlite3_mutex_enter. Bail
-        // instead — losing this suspend cycle is preferable to native
-        // corruption. iOS may kill the process for holding the lock,
-        // but a clean kill is cheaper than a use-after-free.
-        logger.warn('suspension', 'db_drain_timeout_aborted', {
-          dbDrainMs,
-          remainingMs,
-        })
-        // TODO: services + uploader resume immediately here, queueing
-        // work behind the stuck inflight queries. Cleaner: defer
-        // resume until inflight drains (new 'recovering' state).
-        hooks?.onAfterResume?.()
-        db.ungate()
-        uploader.resume()
-        scheduler.resume()
-        state = 'active'
-        return
-      }
-      logger.debug('suspension', 'db_drained', { dbDrainMs })
-
-      // Phase 5: Checkpoint WAL to release file locks, then close. Race
-      // against the remaining deadline — if native close hangs on fsync,
-      // the OS kill is coming regardless, so we don't wait forever in JS.
-      // Floor of 500ms gives WAL truncate enough headroom on slow disks.
-      const dbCloseStart = Date.now()
-      const closeBudget = Math.max(hardDeadlineMs - (dbCloseStart - drainStart), 500)
-      const closed = await raceWithTimeout(db.close(), closeBudget)
-      const dbCloseMs = Date.now() - dbCloseStart
-      if (closed.ok) {
-        logger.debug('suspension', 'db_closed', { dbCloseMs })
-      } else {
-        logger.warn('suspension', 'db_close_timeout', { dbCloseMs, closeBudget })
-      }
       state = 'suspended'
+      logger.info('suspension', 'suspended')
     } catch (e) {
-      // Unlikely — each phase handles its own errors internally.
-      // Try to undo partial suspension so the app remains usable.
       logger.error('suspension', 'suspend_error', { error: e as Error })
-      hooks?.onAfterResume?.()
-      db.ungate()
       uploader.resume()
       scheduler.resume()
       state = 'active'
@@ -170,32 +76,17 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
     state = 'resuming'
     logger.info('suspension', 'resuming')
 
-    try {
-      await db.reopen()
-    } catch (e) {
-      logger.error('suspension', 'resume_error', { error: e as Error })
-      state = 'suspended'
-      return
-    }
-
-    // Ungate after reopen so queries can't reach a closed handle.
-    // reopen() uses the raw database connection (not the gated adapter),
-    // so the gate being active during reopen is harmless.
-    db.ungate()
     hooks?.onAfterResume?.()
-    logger.debug('suspension', 'db_reopened')
-
     uploader.adjustBatchForSuspension()
     uploader.resume()
     scheduler.resume()
+
     state = 'active'
     logger.info('suspension', 'resumed')
   }
 
-  // Guarded wrapper: re-checks preconditions at the moment the queue runs
-  // it, not at enqueue time. Between enqueue and execution, another
-  // registerBackgroundTask could have added a task that should now block
-  // the suspend.
+  // Re-checks preconditions at queue execution time, not at enqueue time:
+  // a BG task may register between enqueue and run.
   async function maybeSuspend(trigger: string): Promise<void> {
     if (runningTasks.size > 0) {
       logger.debug('suspension', 'skipped', {
@@ -216,26 +107,19 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
   }
 
   return {
-    // Direct triggers — kept for manual control (e.g. tests that want to
-    // force a suspend without touching appState).
     suspend: () => queue.enqueue(doSuspend),
     resume: () => queue.enqueue(doResume),
     isSuspended: () => state === 'suspended',
 
     /**
-     * Record the app's current foreground/background state. When
-     * transitioning to background with no BG tasks running, enqueues a
-     * guarded suspend. When transitioning to foreground, enqueues a
-     * resume (no-op if not suspended). Returns a Promise that resolves
-     * when any enqueued work settles — callers that need to grant iOS
-     * extra execution time (via BackgroundTimer.start) should await it.
+     * Record the app's current foreground/background state. Background
+     * with no BG tasks running enqueues a guarded suspend; foreground
+     * enqueues a resume (no-op if not suspended).
      */
     setAppState(next: AppStateValue): Promise<void> {
       const prev = appState
-      // Foreground hook fires on every 'foreground' call, including
-      // no-ops, so flickers and BG-task overlaps both reach platform
-      // glue. Background has no equivalent — onBeforeSuspend already
-      // covers the only case that matters there (real suspension).
+      // Foreground hook fires on every 'foreground' call (including
+      // no-ops) so flickers and BG-task overlaps both reach platform glue.
       if (next === 'foreground') {
         hooks?.onForegroundActive?.()
       }
@@ -264,10 +148,7 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       return queue.enqueue(doResume)
     },
 
-    /**
-     * Register a BG task as running. Ensures the DB is open before
-     * returning so callers can safely query.
-     */
+    /** Register a BG task; resumes the manager so callers can run work. */
     async registerBackgroundTask(id: string): Promise<void> {
       runningTasks.add(id)
       logger.info('suspension', 'register_task', {
@@ -279,11 +160,7 @@ export function createSuspensionManager(adapters: SuspensionAdapters) {
       await queue.enqueue(doResume)
     },
 
-    /**
-     * Release a BG task. If this was the last running task AND the app
-     * is in background, await a guarded suspend. Otherwise return
-     * immediately.
-     */
+    /** Release a BG task; suspends if it was the last one and app is in background. */
     async releaseBackgroundTask(id: string): Promise<void> {
       runningTasks.delete(id)
       const activeCount = runningTasks.size

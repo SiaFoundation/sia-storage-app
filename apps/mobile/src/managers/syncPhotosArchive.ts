@@ -47,6 +47,7 @@ import useSWR from 'swr'
 import { getMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { catalogAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
+import { isBgTaskActive } from './bgTaskContext'
 
 const PAGE_SIZE = 500
 const CURSOR_DONE = 'done'
@@ -91,6 +92,10 @@ export function isArchiveWalkActive(): boolean {
 /** Restart the walk from where it left off if cursor isn't DONE. */
 export async function resumeArchiveSync(): Promise<void> {
   if (activeWalk) return
+  // Don't restart during a fetch wake — the loop would just spin against
+  // run()'s gate, hammering AsyncStorage every iteration. Walk will
+  // resume on the next foreground or processing-task wake.
+  if (isBgTaskActive('BGAppRefreshTask')) return
   const cursor = await getPhotosArchiveCursor()
   if (cursor === CURSOR_DONE) return
   walkAbortController = new AbortController()
@@ -113,6 +118,12 @@ async function runArchiveWalk(signal: AbortSignal): Promise<void> {
 export async function run(signal?: AbortSignal) {
   logger.debug('syncPhotosArchive', 'tick')
   if (signal?.aborted) return
+  // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; photo
+  // walks can trip cpu_resource_fatal. See bgTaskContext.ts.
+  if (isBgTaskActive('BGAppRefreshTask')) {
+    logger.debug('syncPhotosArchive', 'skipped', { reason: 'bg_app_refresh_no_cpu_budget' })
+    return
+  }
   if (!(await getMediaLibraryPermissions())) {
     logger.debug('syncPhotosArchive', 'skipped', { reason: 'no_permission' })
     return

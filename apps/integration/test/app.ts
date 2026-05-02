@@ -55,26 +55,15 @@ export {
   waitForCondition,
 } from './utils'
 
-export class DatabaseSuspendedError extends Error {
-  constructor() {
-    super('Database is suspended')
-    this.name = 'DatabaseSuspendedError'
-  }
-}
-
 /**
- * Mirrors the real mobile app's DB lifecycle (initializeDB / closeDb / reopen).
- * Uses a file-backed better-sqlite3 database with the same PRAGMAs
- * (WAL, busy_timeout, foreign_keys) and runs migrations on open.
- * The adapter delegates to the active connection; calls throw after close.
- * Supports a query gate that rejects queries while suspended.
+ * File-backed better-sqlite3 database with the same PRAGMAs as the mobile
+ * app (WAL, busy_timeout, foreign_keys). Stays open across suspension —
+ * the suspend pipeline no longer closes the DB.
  */
 function createTestDatabase(dbPath: string) {
   let inner: (DatabaseAdapter & { close(): void }) | null = null
-  let gated = false
 
   function requireOpen(): DatabaseAdapter & { close(): void } {
-    if (gated) throw new DatabaseSuspendedError()
     if (!inner) throw new Error('Database is closed')
     return inner
   }
@@ -104,8 +93,6 @@ function createTestDatabase(dbPath: string) {
       await inner.execAsync(
         'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON',
       )
-      // Run migrations on the raw connection (not the proxy) so open()
-      // works while the gate is active during resume.
       await runMigrations(inner, sortMigrations(coreMigrations))
     },
     close() {
@@ -113,12 +100,6 @@ function createTestDatabase(dbPath: string) {
         inner.close()
         inner = null
       }
-    },
-    gate() {
-      gated = true
-    },
-    ungate() {
-      gated = false
     },
     get isOpen() {
       return inner !== null
@@ -370,20 +351,11 @@ export function createTestApp(
       pause: () => scheduler.pause(),
       abort: () => scheduler.abortAll(),
       resume: () => scheduler.resume(),
-      waitForIdle: () => scheduler.waitForIdle(),
     },
     uploader: {
       suspend: () => uploadManager.suspend(),
       resume: () => uploadManager.resume(),
       adjustBatchForSuspension: () => uploadManager.adjustBatchForSuspension(),
-      getDiagnostics: () => uploadManager.getDiagnostics(),
-    },
-    db: {
-      gate: () => testDb.gate(),
-      ungate: () => testDb.ungate(),
-      waitForIdle: () => Promise.resolve(),
-      close: async () => testDb.close(),
-      reopen: () => testDb.open(),
     },
     hooks: {
       onBeforeSuspend: () => {
@@ -396,7 +368,6 @@ export function createTestApp(
         hookCalls.onForegroundActive += 1
       },
     },
-    hardDeadlineMs: 15_000,
   })
 
   return {
