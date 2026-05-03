@@ -145,7 +145,7 @@ export interface TestApp {
    * correctly across the four BG-task lifecycle scenarios. Read-only —
    * the harness owns the counters; tests should only inspect them. */
   readonly hookCalls: Readonly<{
-    onBeforeSuspend: number
+    onAfterSuspend: number
     onAfterResume: number
     onForegroundActive: number
   }>
@@ -341,11 +341,14 @@ export function createTestApp(
   })
 
   const hookCalls = {
-    onBeforeSuspend: 0,
+    onAfterSuspend: 0,
     onAfterResume: 0,
     onForegroundActive: 0,
   }
 
+  // Tests use a single better-sqlite3 connection that stays open across
+  // suspension; the iOS gate/interrupt machinery has nothing to gate or
+  // cancel here, so the adapter methods are no-ops.
   const suspensionManager = createSuspensionManager({
     scheduler: {
       pause: () => scheduler.pause(),
@@ -357,9 +360,20 @@ export function createTestApp(
       resume: () => uploadManager.resume(),
       adjustBatchForSuspension: () => uploadManager.adjustBatchForSuspension(),
     },
+    db: {
+      gate: () => {},
+      ungate: () => {},
+      waitForIdle: () => Promise.resolve(),
+      interrupt: () => {},
+      getInflightCount: () => 0,
+    },
+    // Test env has no iOS background-time concept; report "unbounded".
+    platform: {
+      getBackgroundTimeRemainingMs: () => Number.POSITIVE_INFINITY,
+    },
     hooks: {
-      onBeforeSuspend: () => {
-        hookCalls.onBeforeSuspend += 1
+      onAfterSuspend: () => {
+        hookCalls.onAfterSuspend += 1
       },
       onAfterResume: () => {
         hookCalls.onAfterResume += 1

@@ -1,4 +1,5 @@
 import { logger } from '@siastorage/logger'
+import type { DatabaseAdapter } from '../adapters/db'
 import type { Reader } from '../adapters/fs'
 import type { PackedUploadRef, PinnedObjectRef, ShardProgress } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
@@ -61,6 +62,14 @@ export function calculateAllFileProgress(
 export interface UploaderAdapters {
   createFileReader: (uri: string) => Reader
   progressScheduler?: (cb: () => void) => void
+  /**
+   * Optional gate handle for the underlying DB. If provided, multi-step
+   * operations like batch finalize will await the gate before doing DB
+   * work — avoiding fast-reject during iOS suspend that would otherwise
+   * drop network-side pin progress on the floor. Shaped as a subset of
+   * DatabaseAdapter so callers can pass the adapter directly.
+   */
+  db?: { waitForActive?: DatabaseAdapter['waitForActive'] }
 }
 
 /** A file queued for upload with its resolved URI and size. */
@@ -1027,6 +1036,16 @@ export class UploadManager {
 
     const sdk = this.internal.requireSdk()
     const indexerURL = await this.app.settings.getIndexerURL()
+
+    // Wait for the DB gate to open before any of the per-file pin/save
+    // work begins. saveBatchObjects can fire long after a slab upload
+    // completes — including across an iOS suspend cycle — and Phase 1's
+    // first call (getMetadata) would otherwise reject with
+    // DatabaseSuspendedError, dropping the network-side pin work on the
+    // floor. Calling waitForActive() here pauses finalize at the gate
+    // boundary instead of failing through it. No-op on adapters that
+    // don't implement the method (Node tests, web).
+    await this.adapters.db?.waitForActive?.()
 
     type PinResult =
       | {

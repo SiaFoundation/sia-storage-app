@@ -11,6 +11,7 @@ import {
   resumeDb,
   setJournalMode,
   suspendDb,
+  waitForDbActive,
   waitForQueriesIdle,
   withRecovery,
 } from '.'
@@ -73,48 +74,34 @@ describe('query gating', () => {
     )
   })
 
-  it('runAsync parks during suspending and resolves after resume', async () => {
+  it('runAsync rejects fast during suspending', async () => {
+    // Writes used to park here, but parking inside a transaction would
+    // deadlock with the suspension manager's drain. Now all queries
+    // reject during 'suspending' — callers that need wait-for-resume
+    // semantics must call waitForDbActive() BEFORE issuing the query.
     suspendDb()
-    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
+    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
     resumeDb()
-    await queryPromise
   })
 
-  it('execAsync parks during suspending and resolves after resume', async () => {
+  it('execAsync rejects fast during suspending', async () => {
     suspendDb()
-    const queryPromise = db().execAsync('SELECT 1')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
+    await expect(db().execAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
     resumeDb()
-    await queryPromise
   })
 
-  it('withTransactionAsync parks during suspending and resolves after resume', async () => {
+  it('withTransactionAsync rejects fast during suspending', async () => {
     suspendDb()
     let txRan = false
-    const queryPromise = db().withTransactionAsync(async () => {
-      txRan = true
-    })
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
+    await expect(
+      db().withTransactionAsync(async () => {
+        txRan = true
+      }),
+    ).rejects.toThrow(DatabaseSuspendedError)
     expect(txRan).toBe(false)
     resumeDb()
-    await queryPromise
-    expect(txRan).toBe(true)
   })
 
   it('reads also park in closed state and drain after reopen+resume', async () => {
@@ -146,16 +133,34 @@ describe('query gating', () => {
     await queryPromise
   })
 
-  it('parked write rejects with DatabaseSuspendedError after wait timeout', async () => {
+  it('waitForDbActive resolves immediately when active', async () => {
+    await waitForDbActive()
+  })
+
+  it('waitForDbActive parks during suspending and resolves on resume', async () => {
+    suspendDb()
+    let settled = false
+    const wait = waitForDbActive().then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resumeDb()
+    await wait
+    expect(settled).toBe(true)
+  })
+
+  it('waitForDbActive rejects after the safety-valve timeout', async () => {
     jest.useFakeTimers()
     try {
       suspendDb()
-      const queryPromise = db().runAsync('SELECT 1')
-      queryPromise.catch(() => {})
+      const wait = waitForDbActive()
+      wait.catch(() => {})
       jest.advanceTimersByTime(30_000)
-      await expect(queryPromise).rejects.toThrow(DatabaseSuspendedError)
+      await expect(wait).rejects.toThrow(DatabaseSuspendedError)
     } finally {
       jest.useRealTimers()
+      resumeDb()
     }
   })
 })
@@ -251,7 +256,14 @@ describe('in-flight tracking', () => {
     expect(idleDone).toBe(true)
   })
 
-  it('counter resets to 0 on resumeDb', async () => {
+  it('preserves inflight across resumeDb so late trackEnd does not drive count negative', async () => {
+    // The earlier impl reset inflightCount to 0 in resumeDb. Any query
+    // that started before the gate (trackStart fired) and finished after
+    // resume would then trigger trackEnd against count=0, going to -1.
+    // Once negative, waitForQueriesIdle (which checks `=== 0`) could
+    // never resolve again, pinning the next suspend's drain loop until
+    // MAX_DRAIN_MS. resumeDb must leave inflight alone and let the
+    // pending .finally(trackEnd) callbacks reach 0 naturally.
     let resolveQuery!: () => void
     jest.spyOn(database, 'getAllAsync').mockImplementationOnce(
       () =>
@@ -260,10 +272,24 @@ describe('in-flight tracking', () => {
         }) as any,
     )
 
-    db().getAllAsync('SELECT 1')
+    const queryPromise = db().getAllAsync('SELECT 1')
+    // Resume while the query is still in flight.
     resumeDb()
-    await waitForQueriesIdle()
+
+    // waitForQueriesIdle must NOT have resolved yet — query is in flight.
+    let idleDone = false
+    const idlePromise = waitForQueriesIdle().then(() => {
+      idleDone = true
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(idleDone).toBe(false)
+
+    // Resolve the query → trackEnd fires → inflight reaches 0 → waiters drain.
     resolveQuery()
+    await queryPromise
+    await idlePromise
+    expect(idleDone).toBe(true)
   })
 })
 
@@ -354,17 +380,26 @@ describe('full suspend/resume cycle', () => {
     expect(await duringClosed).toEqual([{ v: 2 }])
   })
 
-  it('writes during suspending park and resolve after resume; native callback continuations preserved', async () => {
+  it('writes during suspending reject fast; callers wait via waitForDbActive before issuing', async () => {
     suspendDb()
-    const writeDuringSuspend = db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')
-    let settled = false
-    writeDuringSuspend.then(() => {
-      settled = true
-    })
+    // Direct write during gate now rejects (used to park). Callers that
+    // need wait-for-resume must call waitForDbActive() first.
+    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
+
+    // Caller-side gate: wait, then issue. The write succeeds after resume.
+    let writeSettled = false
+    const guarded = (async () => {
+      await waitForDbActive()
+      await db().runAsync('CREATE TABLE IF NOT EXISTS t2 (id TEXT)')
+      writeSettled = true
+    })()
     await Promise.resolve()
-    expect(settled).toBe(false)
+    expect(writeSettled).toBe(false)
     resumeDb()
-    await writeDuringSuspend
+    await guarded
+    expect(writeSettled).toBe(true)
   })
 
   it('in-flight query at suspend time completes, then drain resolves', async () => {
@@ -379,14 +414,11 @@ describe('full suspend/resume cycle', () => {
     const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS x (id TEXT)')
 
     suspendDb()
-    // A new write issued during suspend parks; it does not count toward inflight.
-    const parked = db().runAsync('CREATE TABLE IF NOT EXISTS y (id TEXT)')
-    let parkedSettled = false
-    parked.then(() => {
-      parkedSettled = true
-    })
-    await Promise.resolve()
-    expect(parkedSettled).toBe(false)
+    // A new write issued during suspend now rejects fast (no longer parks).
+    // Inflight only counts the in-flight pre-gate query.
+    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS y (id TEXT)')).rejects.toThrow(
+      DatabaseSuspendedError,
+    )
 
     let drained = false
     waitForQueriesIdle().then(() => {
@@ -401,7 +433,6 @@ describe('full suspend/resume cycle', () => {
     expect(drained).toBe(true)
 
     resumeDb()
-    await parked
   })
 
   it('resetDb works after suspend → resume → reinit sequence', async () => {

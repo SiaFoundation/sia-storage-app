@@ -184,9 +184,11 @@ describe('backgroundTasks', () => {
       expect(mockRelease).toHaveBeenCalledWith('com.transistorsoft.fetch')
     })
 
-    it('calls BackgroundFetch.finish before lifecycle release on normal path', async () => {
-      // Pinning this order is the 0xDEAD10CC fix: a slow lifecycle release
-      // can never delay finish past iOS's 5s expiration grace.
+    it('awaits lifecycle release before BackgroundFetch.finish on normal path', async () => {
+      // Release runs the gate / interrupt-loop / drain so finish() lands
+      // once SQLite locks are released. The BG-task assertion stays held
+      // only as long as the drain genuinely has work to wait on. Fixes
+      // 0xDEAD10CC.
       mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
       const order: string[] = []
       const finishMock = BackgroundFetch.finish as jest.MockedFunction<
@@ -201,10 +203,10 @@ describe('backgroundTasks', () => {
 
       await taskCallback('com.transistorsoft.fetch')
 
-      expect(order).toEqual(['finish:com.transistorsoft.fetch', 'release:com.transistorsoft.fetch'])
+      expect(order).toEqual(['release:com.transistorsoft.fetch', 'finish:com.transistorsoft.fetch'])
     })
 
-    it('calls BackgroundFetch.finish before lifecycle release on timeout path', async () => {
+    it('awaits lifecycle release before BackgroundFetch.finish on timeout path', async () => {
       mockGetFileStatsLocal.mockResolvedValue({ count: 100, totalBytes: 100000 })
       const order: string[] = []
       const finishMock = BackgroundFetch.finish as jest.MockedFunction<
@@ -220,16 +222,17 @@ describe('backgroundTasks', () => {
       const taskPromise = taskCallback('com.transistorsoft.fetch')
       await flushPromises()
 
-      timeoutCallback('com.transistorsoft.fetch')
+      const timeoutPromise = Promise.resolve(timeoutCallback('com.transistorsoft.fetch'))
       await flushPromises()
       await flushPromises()
+      await timeoutPromise
       await taskPromise
 
       const finishIdx = order.indexOf('finish:com.transistorsoft.fetch')
       const releaseIdx = order.indexOf('release:com.transistorsoft.fetch')
       expect(finishIdx).toBeGreaterThanOrEqual(0)
       expect(releaseIdx).toBeGreaterThanOrEqual(0)
-      expect(finishIdx).toBeLessThan(releaseIdx)
+      expect(releaseIdx).toBeLessThan(finishIdx)
     })
 
     it('does not double-call finish/release when timeout fires mid-work', async () => {
