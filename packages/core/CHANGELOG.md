@@ -1,3 +1,9 @@
+## 0.0.11 (2026-05-03)
+
+### Fixes
+
+- Fixed an iOS crash that could occur when the app was suspended while a database operation was in flight.
+
 ## 0.0.10 (2026-05-02)
 
 ### Fixes

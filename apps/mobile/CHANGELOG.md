@@ -2,6 +2,12 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.5 (2026-05-03)
+
+### Fixes
+
+- Fixed an iOS crash that could occur when the app was suspended while a database operation was in flight.
+
 ## 1.11.4 (2026-05-02)
 
 ### Fixes
