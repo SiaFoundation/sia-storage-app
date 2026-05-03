@@ -47,6 +47,7 @@
     "@react-navigation/native-stack": "7.14.4",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
+    "background-time-remaining": "file:./modules/background-time-remaining",
     "expo": "55.0.5",
     "expo-audio": "55.0.8",
     "expo-constants": "55.0.7",

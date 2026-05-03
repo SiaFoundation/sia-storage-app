@@ -395,8 +395,8 @@ describe('Suspension', () => {
     it('normal completion → auto-suspends when app is background', async () => {
       await app.setAppState('background')
       expect(app.isSuspended()).toBe(true)
-      // onBeforeSuspend fires once on the first auto-suspend; no foreground.
-      expect(app.hookCalls.onBeforeSuspend).toBe(1)
+      // onAfterSuspend fires once on the first auto-suspend; no foreground.
+      expect(app.hookCalls.onAfterSuspend).toBe(1)
       expect(app.hookCalls.onForegroundActive).toBe(0)
 
       await app.simulateBackgroundTask('bg-fetch', async () => {
@@ -409,9 +409,9 @@ describe('Suspension', () => {
       expect(app.isSuspended()).toBe(true)
       expect(app.getRunningBackgroundTaskIds()).toEqual([])
       // BG task wake fired onAfterResume once; release re-triggered
-      // onBeforeSuspend. User never foregrounded.
+      // onAfterSuspend. User never foregrounded.
       expect(app.hookCalls.onAfterResume).toBe(1)
-      expect(app.hookCalls.onBeforeSuspend).toBe(2)
+      expect(app.hookCalls.onAfterSuspend).toBe(2)
       expect(app.hookCalls.onForegroundActive).toBe(0)
     }, 60_000)
 

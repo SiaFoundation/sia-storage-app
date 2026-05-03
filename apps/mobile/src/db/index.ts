@@ -4,12 +4,13 @@ import { runMigrations } from '@siastorage/core/db'
 import { Mutex } from '@siastorage/core/lib/mutex'
 import { logger } from '@siastorage/logger'
 import * as SQLite from 'expo-sqlite'
+import { Platform } from 'react-native'
 import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
 
-// Thrown by the adapter when a query has been waiting for the suspension
-// gate to reopen beyond WAIT_TIMEOUT_MS — this only happens if resume never
-// fires, which means the app is in a broken state.
+// Thrown by the adapter when a query is issued while the suspension gate
+// is closed. Reads and writes both reject — callers that want to wait for
+// the gate to open should call waitForDbActive() before issuing the query.
 export class DatabaseSuspendedError extends Error {
   constructor() {
     super('Database is suspended for background transition')
@@ -17,34 +18,45 @@ export class DatabaseSuspendedError extends Error {
   }
 }
 
-// Suspension lifecycle state (separate from dbInitialized).
+// Suspension lifecycle state. The DB connection is NEVER closed across
+// suspension; this flag only gates JS-side dispatch. iOS recognizes
+// SQLite databases by the file-header magic bytes and exempts processes
+// holding file locks on recognized SQLite files from the 0xDEAD10CC
+// kill — so leaving the connection open is safe as long as no write or
+// fsync is in flight at suspension time (which the suspension manager's
+// drain ensures).
+//
+// States:
 // - 'active':     queries flow normally.
-// - 'suspending': close in progress — reads reject (callers retry).
-//                 Writes still park to cover stragglers that didn't
-//                 complete in the Phase 2 service drain.
-// - 'closed':     handle destroyed, reopen imminent — both park.
-//                 This is the load-bearing case: native callbacks (image
-//                 picker, share intent) fire their continuation during the
-//                 ~80ms reopen window and need their INSERTs to land
-//                 against the new handle, since they have no retry path.
+// - 'suspending': all queries reject fast with DatabaseSuspendedError.
+//                 Callers that want to retry on resume should await
+//                 waitForDbActive() BEFORE issuing the query — never
+//                 inside an open transaction's fn (would deadlock with
+//                 the suspension manager waiting on the txMutex holder).
+// - 'closed':     handle destroyed, reopen imminent — both reads and
+//                 writes park on activeWaiters. This is the load-bearing
+//                 case for picker / share-intent callbacks that fire
+//                 during the ~80ms reopen window. The current suspend
+//                 flow does NOT close the DB, so this state is only
+//                 reachable from resetDb (manual reset from settings).
 type DbState = 'active' | 'suspending' | 'closed'
 
 let state: DbState = 'active'
 
-// Queue of callers parked inside waitForActive(). resumeDb() drains them
-// in FIFO order once the database handle is valid again.
+// Queue of callers parked inside waitForActive(). Drained by resumeDb()
+// when state returns to 'active'. Only populated under 'closed' state
+// (parking) or via the public waitForDbActive() helper.
 let activeWaiters: Array<() => void> = []
 
 // Safety valve: if resume never fires (app stuck in broken state), don't
-// let waiters pile up forever. 30s is well past any realistic iOS thaw
-// or Android foreground transition.
+// let parked waiters pile up forever. 30s is well past any realistic iOS
+// thaw or Android foreground transition.
 const WAIT_TIMEOUT_MS = 30_000
 
-function waitForActive(intent: 'read' | 'write'): Promise<void> {
-  if (state === 'active') return Promise.resolve()
-  if (state === 'suspending' && intent === 'read') {
-    return Promise.reject(new DatabaseSuspendedError())
-  }
+// Pushes resolveOnce onto activeWaiters and arms a 30s safety-valve
+// rejection. Used by both the internal 'closed'-state parking and the
+// public waitForDbActive helper.
+function parkUntilActive(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false
     const resolveOnce = () => {
@@ -63,9 +75,44 @@ function waitForActive(intent: 'read' | 'write'): Promise<void> {
   })
 }
 
+function waitForActive(_intent: 'read' | 'write'): Promise<void> {
+  if (state === 'active') return Promise.resolve()
+  // 'suspending': both intents reject fast. Parking writes here used to
+  // deadlock the suspension drain — a transaction's fn would park its
+  // inner write, fn would await forever, txMutex holder wouldn't release,
+  // and inflightCount stayed high so waitForQueriesIdle never resolved.
+  // Callers that need wait-for-resume semantics call waitForDbActive()
+  // BEFORE entering withTransactionAsync.
+  if (state === 'suspending') {
+    return Promise.reject(new DatabaseSuspendedError())
+  }
+  // 'closed': park both intents. Picker / share-intent callbacks during
+  // a reopen window need their INSERTs to land against the new handle.
+  // Only reachable today via resetDb (manual settings reset).
+  return parkUntilActive()
+}
+
+/**
+ * Resolves when the DB gate is open ('active'). Call this BEFORE issuing
+ * a sequence of queries that should run on the same side of the gate
+ * (e.g. upload finalize: getMetadata → pinObject → upsertMany).
+ *
+ * If state is already 'active', resolves synchronously. Otherwise, parks
+ * on activeWaiters until resumeDb() fires the queue. Bounded by the
+ * same 30s safety valve as the internal waitForActive.
+ *
+ * Do NOT call from inside withTransactionAsync's fn — by then the
+ * txMutex is held and the suspension manager can't drain. Wrap the
+ * whole logical operation (txn included) in waitForDbActive instead.
+ */
+export function waitForDbActive(): Promise<void> {
+  if (state === 'active') return Promise.resolve()
+  return parkUntilActive()
+}
+
 // Tracks how many queries are currently dispatched to native but haven't
-// resolved yet. The suspension manager waits for this to hit 0 before
-// closing the database, ensuring no in-progress queries hold the WAL lock.
+// resolved yet. The suspension manager's drain awaits this hitting 0 so
+// no SQL statement is mid-fsync at iOS suspension time (= 0xDEAD10CC).
 let inflightCount = 0
 let idleResolvers: Array<() => void> = []
 
@@ -100,32 +147,56 @@ export function getWalPath(): string {
 }
 
 // Called by the suspension manager as the first step when the app backgrounds.
-// After this, new queries through db() park on the waiter queue until resume.
+// After this, queries through db() reject fast with DatabaseSuspendedError.
+// Callers that need wait-for-resume semantics should await waitForDbActive()
+// BEFORE issuing the query.
 export function suspendDb(): void {
   state = 'suspending'
   logger.debug('db', 'suspended')
 }
 
-// Called by the suspension manager after initializeDB({ reopen: true })
-// succeeds. Flips state back to active and drains the waiter queue so any
-// queries parked during suspend/close/reopen dispatch to the valid handle.
+// Called by the suspension manager when the app foregrounds. Flips state
+// back to active and drains any waiters parked via waitForDbActive() (or,
+// in the dead-code-but-defensive 'closed' path, internal waitForActive
+// writes parked during reopen).
+//
+// Do NOT reset inflightCount here. Queries dispatched BEFORE the gate
+// already incremented inflight via trackStart; their .finally(trackEnd)
+// is still pending. Resetting here would let those late trackEnd calls
+// drive inflightCount negative, pinning waitForQueriesIdle non-zero and
+// making the next suspend's drain loop spin until MAX_DRAIN_MS.
 export function resumeDb(): void {
   state = 'active'
-  inflightCount = 0
-  idleResolvers = []
   const waiters = activeWaiters
   activeWaiters = []
   for (const w of waiters) w()
   logger.debug('db', 'resumed', { drained: waiters.length })
 }
 
-// Resolves when all in-flight queries have completed. Used by the suspension
-// manager to wait for the native GCD queue to drain before closing.
+// Resolves when all in-flight queries have completed. Used by the
+// suspension manager's drain loop to confirm no statement is currently
+// executing on the connection before iOS freezes the process.
 export function waitForQueriesIdle(): Promise<void> {
   if (inflightCount === 0) return Promise.resolve()
   return new Promise<void>((r) => {
     idleResolvers.push(r)
   })
+}
+
+// Cancels any statement currently executing on the active connection.
+// iOS only — the patch that adds interruptSync to NativeDatabase only ships
+// the Swift side. sqlite3_interrupt is documented thread-safe and signals
+// across threads, so this returns immediately and the running statement
+// fails with SQLITE_INTERRUPT, releasing the SQLite mutex and the WAL lock
+// — the actual mechanism behind 0xdead10cc on suspend.
+export function interruptDatabase(): void {
+  if (Platform.OS !== 'ios') return
+  if (!dbInitialized || !database) return
+  try {
+    database.nativeDatabase.interruptSync()
+  } catch (e) {
+    logger.debug('db', 'interrupt_error', { error: e as Error })
+  }
 }
 
 export let database: SQLite.SQLiteDatabase
@@ -203,8 +274,9 @@ export async function initializeDB(options?: {
 /**
  * Detects errors from an invalidated native database handle:
  * - Android NullPointerException: SharedObject lifecycle issue.
- * - "Access to closed resource": DB was closed for background suspension
- *   while a query was in-flight (e.g., from a SWR React hook).
+ * - "Access to closed resource": DB closed underneath a racing call —
+ *   today only reachable via resetDb (manual settings reset). The
+ *   suspension flow no longer closes the connection.
  * In both cases, reopening the connection and retrying resolves it.
  */
 function isNativeHandleError(error: unknown): boolean {
@@ -395,11 +467,27 @@ class MobileDbAdapter implements DatabaseAdapter {
     const dispatch = (): Promise<void> => {
       trackStart()
       return txMutex
-        .runExclusive(() => withRecovery(() => database.withTransactionAsync(fn)))
+        .runExclusive(async () => {
+          try {
+            await withRecovery(() => database.withTransactionAsync(fn))
+          } catch (e) {
+            // If expo-sqlite's own ROLLBACK got hit by our interrupt loop,
+            // the connection is left mid-transaction and the next BEGIN
+            // fails. One best-effort retry recovers it.
+            try {
+              await database.execAsync('ROLLBACK')
+            } catch {}
+            throw e
+          }
+        })
         .finally(trackEnd)
     }
     if (state === 'active') return dispatch()
     return waitForActive('write').then(dispatch)
+  }
+
+  waitForActive(): Promise<void> {
+    return waitForDbActive()
   }
 }
 

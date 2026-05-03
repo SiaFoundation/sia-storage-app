@@ -159,18 +159,24 @@ export async function initBackgroundTasks() {
           log('handler_exit', { path: 'normal', skipped: 'already_finalized' })
         } else {
           transitionTaskState(state, 'finished', config)
-          // Release the iOS BG-task assertion BEFORE the wind-down so a
-          // slow lifecycle release can never push us past iOS's 5s
-          // expiration grace (= 0xDEAD10CC kill).
+          // Run the suspension drain BEFORE releasing the iOS BG-task
+          // assertion. The drain caps itself on whatever budget iOS
+          // actually allocates this invocation (read via
+          // backgroundTimeRemaining), so finish() lands once SQLite locks
+          // are released — fixes 0xDEAD10CC. We're still inside the
+          // BGTask handler's runloop cycle here, so the drain has the
+          // task's full remaining wake window to work with.
+          try {
+            await releaseBackgroundTaskLifecycle(config.id)
+          } catch (error) {
+            log('release_error', { error: error as Error })
+          }
           BackgroundFetch.finish(config.id)
           log('handler_exit', { path: 'normal' })
-          void releaseBackgroundTaskLifecycle(config.id).catch((error) => {
-            log('release_error', { error: error as Error })
-          })
         }
       }
     },
-    (taskId: string) => {
+    async (taskId: string) => {
       const config = taskConfigs[taskId as TaskId]
       const state = taskStates[taskId as TaskId]
       if (!config || !state) {
@@ -195,14 +201,20 @@ export async function initBackgroundTasks() {
       transitionTaskState(state, 'finished', config)
       log('timeout_finished', { elapsedMs: Date.now() - state.startTime })
 
-      // We're inside the expirationHandler — iOS gives ~5s before
-      // SIGKILL with 0xDEAD10CC if setTaskCompleted (= finish()) isn't
-      // called. Release first, fire-and-forget the wind-down.
+      // Drain the DB before releasing the BG-task assertion. The drain
+      // reads UIApplication.backgroundTimeRemaining each iteration and
+      // bails before the iOS budget runs out, so finish() lands inside
+      // the ~5s expiration grace even under memory pressure. We can't
+      // wrap with withIosExecutionTime here — the await yields the
+      // runloop and per Apple DTS 126438 beginBackgroundTask is only
+      // reliably honored in the same runloop cycle as the wake.
+      try {
+        await releaseBackgroundTaskLifecycle(config.id)
+      } catch (error) {
+        log('release_error', { error: error as Error })
+      }
       BackgroundFetch.finish(config.id)
       log('handler_exit', { path: 'timeout' })
-      void releaseBackgroundTaskLifecycle(config.id).catch((error) => {
-        log('release_error', { error: error as Error })
-      })
     },
   )
 

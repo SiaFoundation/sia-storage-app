@@ -1,0 +1,61 @@
+diff --git a/ios/SQLiteModule.swift b/ios/SQLiteModule.swift
+index 15c784fb31629b1ab4b08a0f975b1f317985c433..3ea5df28d56665588d717eabb7a6ed87233a08d1 100644
+--- a/ios/SQLiteModule.swift
++++ b/ios/SQLiteModule.swift
+@@ -150,6 +150,15 @@ public final class SQLiteModule: Module {
+         }
+       }
+
++      // Cancels the in-flight statement on this connection. Runs on the JS
++      // thread (not moduleQueue) so the call doesn't queue behind the very
++      // statement it's trying to interrupt. exsqlite3_interrupt is documented
++      // as thread-safe and signals across threads — it returns immediately.
++      Function("interruptSync") { (database: NativeDatabase) in
++        guard !database.isClosed, let pointer = database.pointer else { return }
++        exsqlite3_interrupt(pointer)
++      }
++
+       AsyncFunction("execAsync") { (database: NativeDatabase, source: String) in
+         try exec(database: database, source: source)
+       }.runOnQueue(moduleQueue)
+@@ -467,7 +476,15 @@ public final class SQLiteModule: Module {
+   private func finalize(statement: NativeStatement, database: NativeDatabase) throws {
+     try maybeThrowForClosedDatabase(database)
+     try maybeThrowForFinalizedStatement(statement)
+-    if exsqlite3_finalize(statement.pointer) != SQLITE_OK {
++    let result = exsqlite3_finalize(statement.pointer)
++    // SQLITE_INTERRUPT (9) here re-reports a prior interruption of the
++    // statement's evaluation; per sqlite3_finalize() docs the statement is
++    // still finalized and resources released regardless of return code.
++    // Treating it as success prevents try/finally cleanup paths in
++    // SQLiteDatabase.{getAllAsync,runAsync,…} from masking the original
++    // interrupt rejection with a benign secondary error (which surfaces
++    // as an uncaught promise rejection during our suspension drain).
++    if result != SQLITE_OK && result != SQLITE_INTERRUPT {
+       throw SQLiteErrorException(convertSqlLiteErrorToString(database))
+     }
+     statement.isFinalized = true
+diff --git a/src/NativeDatabase.ts b/src/NativeDatabase.ts
+index 8f7e0411864a8988487cf40806dc3a8460a44ba7..7aa10578857c85e9043f2e4d152c3afbcb909bf1 100644
+--- a/src/NativeDatabase.ts
++++ b/src/NativeDatabase.ts
+@@ -25,6 +25,7 @@ export declare class NativeDatabase {
+   public initSync(): void;
+   public isInTransactionSync(): boolean;
+   public closeSync(): void;
++  public interruptSync(): void;
+   public execSync(source: string): void;
+   public serializeSync(databaseName: string): Uint8Array;
+   public prepareSync(nativeStatement: NativeStatement, source: string): NativeStatement;
+diff --git a/build/NativeDatabase.d.ts b/build/NativeDatabase.d.ts
+index f0537d1b83e0592fcce2a3b3eea3090db5e55cbb..49ac6344411f654310e4f94d3ff4cb9effa24e0f 100644
+--- a/build/NativeDatabase.d.ts
++++ b/build/NativeDatabase.d.ts
+@@ -16,6 +16,7 @@ export declare class NativeDatabase {
+     initSync(): void;
+     isInTransactionSync(): boolean;
+     closeSync(): void;
++    interruptSync(): void;
+     execSync(source: string): void;
+     serializeSync(databaseName: string): Uint8Array;
+     prepareSync(nativeStatement: NativeStatement, source: string): NativeStatement;
