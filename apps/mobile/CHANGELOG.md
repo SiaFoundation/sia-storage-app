@@ -2,6 +2,16 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.6 (2026-05-04)
+
+### Fixes
+
+- Upload status pill now reflects the current upload batch instead of library-wide totals, so the percent actually advances during uploads.
+- Treat iOS `inactive` AppState as a foreground sub-state (per Apple's docs) so SWR data fetches keep running through transient interruptions like notification banners and Face ID prompts instead of pausing.
+- Made iOS foreground/background event handling more deterministic by centralizing AppState reading and emitting transitions in a single fixed order.
+- Status pill no longer flashes "Online and synced" between upload batches; it reads "Importing N files" while work is pending.
+- Upload status reads "Encrypting N files" before the first shard uploads.
+
 ## 1.11.5 (2026-05-03)
 
 ### Fixes

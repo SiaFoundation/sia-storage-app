@@ -1,3 +1,11 @@
+## 0.0.12 (2026-05-04)
+
+### Fixes
+
+- Upload status pill now reflects the current upload batch instead of library-wide totals, so the percent actually advances during uploads.
+- Treat iOS `inactive` AppState as a foreground sub-state (per Apple's docs) so SWR data fetches keep running through transient interruptions like notification banners and Face ID prompts instead of pausing.
+- Made iOS foreground/background event handling more deterministic by centralizing AppState reading and emitting transitions in a single fixed order.
+
 ## 0.0.11 (2026-05-03)
 
 ### Fixes
