@@ -2,6 +2,12 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.7 (2026-05-04)
+
+### Fixes
+
+- Fixed an issue where the bottom toolbar and upload button could be obscured by the Android system navigation bar on devices with 3-button navigation. Closes https://github.com/SiaFoundation/sia-storage-app/issues/546
+
 ## 1.11.6 (2026-05-04)
 
 ### Fixes
