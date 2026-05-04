@@ -1,3 +1,4 @@
+import { __resetLifecycleForTesting } from '../managers/lifecycle'
 import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
 import { app, getMobileSdkAuth, internal } from './appService'
 import * as sdkStore from './sdk'
@@ -26,7 +27,15 @@ jest.mock('../lib/openAuthUrl', () => ({
   openAuthURL: jest.fn(),
   closeAuthBrowser: jest.fn(),
 }))
-jest.mock('@siastorage/logger', () => ({ logger: { log: jest.fn() } }))
+jest.mock('@siastorage/logger', () => ({
+  logger: {
+    log: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}))
 jest.mock('@siastorage/core/config', () => ({ APP_KEY: '0'.repeat(64) }))
 
 const mockOpenAuthURL = jest.mocked(openAuthURL)
@@ -98,6 +107,9 @@ describe('sdk store', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     sdkStore.resetSdk()
+    // Reset lifecycle module so its singleton AppState listener is
+    // re-attached against the fresh mockAppStateListeners array below.
+    __resetLifecycleForTesting()
 
     mockPlatform.OS = 'ios'
     mockAppStateListeners = []
@@ -619,7 +631,6 @@ describe('sdk store', () => {
 
           expect(error).toBeNull()
           expect(result?.alreadyConnected).toBe(false)
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
@@ -649,7 +660,6 @@ describe('sdk store', () => {
 
           expect(error).toBeNull()
           expect(result?.alreadyConnected).toBe(false)
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
@@ -675,7 +685,6 @@ describe('sdk store', () => {
           const [, error] = await promise
 
           expect(error?.type).toBe('cancelled')
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
@@ -707,7 +716,6 @@ describe('sdk store', () => {
 
           expect(error).toBeNull()
           expect(result?.alreadyConnected).toBe(false)
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
@@ -732,7 +740,6 @@ describe('sdk store', () => {
           const [, error] = await promise
 
           expect(error?.type).toBe('cancelled')
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
@@ -760,7 +767,6 @@ describe('sdk store', () => {
 
           expect(error?.type).toBe('cancelled')
           expect(mockCloseAuthBrowser).toHaveBeenCalled()
-          expect(mockAppStateSubscription.remove).toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()

@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import { useApp } from '../app/context'
+import { useHasOnboarded } from './settings'
 import { useSyncGateStatus } from './sync'
 
 /** Returns the full app initialization state including steps and errors. */
@@ -17,8 +18,12 @@ export function useIsInitializing() {
 /** Returns whether the splash screen should be shown during init or on error. */
 export function useShowSplash() {
   const { data } = useInitState()
+  const { data: hasOnboarded } = useHasOnboarded()
   const syncGateStatus = useSyncGateStatus()
-  if (!data) return true
+  // hasOnboarded undefined means the AsyncStorage-backed SWR slot hasn't
+  // resolved yet. Hold the splash so RootTabs never mounts against an
+  // undefined value (which would otherwise render a black screen).
+  if (!data || hasOnboarded === undefined) return true
   return (
     data.isInitializing ||
     !!data.initializationError ||

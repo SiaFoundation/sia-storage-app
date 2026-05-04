@@ -6,7 +6,7 @@ import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { useEffect } from 'react'
-import { AppState, Platform, StatusBar, StyleSheet } from 'react-native'
+import { Platform, StatusBar, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SWRConfig } from 'swr'
@@ -17,6 +17,7 @@ import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { ToastProvider } from './lib/toastContext'
 import { initApp, shutdownApp } from './managers/app'
+import { addForegroundFocusListener, getLifecycle } from './managers/lifecycle'
 import { RootTabs } from './stacks/RootTabs'
 import { app } from './stores/appService'
 import { palette } from './styles/colors'
@@ -34,24 +35,19 @@ const darkNavigationTheme = {
 // SWR config for React Native (per the official RN guide):
 //   isVisible: defaults check document.visibilityState (undefined in RN);
 //     without this override SWR treats the app as hidden.
-//   isPaused: skip fetcher dispatch when the app isn't foreground-active,
-//     so background invalidations from sync/upload services don't re-run
-//     fetchers against SQLite for non-rendered components.
-//   initFocus: bridge AppState background→active to SWR's focus signal
-//     (Window.focus doesn't exist in RN); fires after isPaused flips
-//     false, so deferred revalidations land on foreground.
+//   isPaused: skip fetcher dispatch when the app isn't foreground.
+//     Driven by the lifecycle module (lifecycle.ts), which treats iOS
+//     'inactive' as foreground — flickers from banners / Control Center /
+//     Face ID prompts no longer pause SWR.
+//   initFocus: subscribe to lifecycle's foreground-focus signal, which
+//     fires once per transition INTO foreground on a microtask after
+//     suspension manager listeners have run. Guarantees SWR refetches
+//     deferred fetchers on real foreground returns.
 const swrConfig = {
   isVisible: () => true,
-  isPaused: () => AppState.currentState !== 'active',
+  isPaused: () => getLifecycle() !== 'foreground',
   initFocus(callback: () => void) {
-    let prev: string = AppState.currentState
-    const sub = AppState.addEventListener('change', (next) => {
-      if ((prev === 'background' || prev === 'inactive') && next === 'active') {
-        callback()
-      }
-      prev = next
-    })
-    return () => sub.remove()
+    return addForegroundFocusListener(callback)
   },
 }
 

@@ -24,7 +24,8 @@ import { raceWithTimeout, withTimeout } from '@siastorage/core/lib/timeout'
 import { refreshLogAccount } from '@siastorage/core/services/logForwarder'
 import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
-import { AppState, Platform } from 'react-native'
+import { Platform } from 'react-native'
+import { addLifecycleListener } from '../managers/lifecycle'
 import type { SdkInterface } from 'react-native-sia'
 import { MobileSdkAdapter } from '../adapters/sdk'
 import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
@@ -326,15 +327,12 @@ function createAppStateDismissal() {
   const promise = new Promise<void>((r) => {
     resolve = r
   })
-  let wasBackground = false
-  const subscription = AppState.addEventListener('change', (state) => {
-    if (state === 'background') {
-      wasBackground = true
-    } else if (state === 'active' && wasBackground) {
+  const unsubscribe = addLifecycleListener((next, prev) => {
+    if (next === 'foreground' && prev === 'background') {
       resolve()
     }
   })
-  return { promise, subscription }
+  return { promise, unsubscribe }
 }
 
 /**
@@ -412,7 +410,7 @@ async function waitForUserApproval(responseUrl: string): Promise<Result<void, Au
     app().auth.builder.cancel()
     return err({ type: 'cancelled' })
   } finally {
-    androidDismissal?.subscription.remove()
+    androidDismissal?.unsubscribe()
   }
 }
 
