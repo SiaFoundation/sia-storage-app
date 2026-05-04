@@ -9,6 +9,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, overlay, palette, whiteA } from '../styles/colors'
 import { Gradient } from './Gradient'
 
@@ -28,10 +29,13 @@ export function BottomControlBar({
   variant = 'pill',
 }: Props) {
   const keyboardOffset = useKeyboardOffset(keyboardAware)
+  const bottomOffset = useBottomControlOffset()
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <View style={[styles.keyboardAwareContainer, { paddingBottom: 30 + keyboardOffset }]}>
+      <View
+        style={[styles.keyboardAwareContainer, { paddingBottom: bottomOffset + keyboardOffset }]}
+      >
         <Gradient
           fadeTo="bottom"
           overlayTopColor={overlay.gradientLight}
@@ -146,6 +150,18 @@ export const iconColors = {
   active: colors.accentActive,
   inactive: whiteA.a70,
   white: palette.gray[50],
+}
+
+/**
+ * Resolved bottom offset for floating bottom-anchored controls
+ * (BottomControlBar, BottomActionButton). On iOS we keep the historical
+ * 30dp literal; on Android we lift above the system nav bar's chin when
+ * 3-button navigation exposes a non-trivial bottom inset.
+ */
+export function useBottomControlOffset() {
+  const insets = useSafeAreaInsets()
+  if (Platform.OS !== 'android') return 30
+  return Math.max(30, insets.bottom + 12)
 }
 
 /** Returns the height of the keyboard when it is visible. */

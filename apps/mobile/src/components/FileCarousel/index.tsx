@@ -350,10 +350,7 @@ export function FileCarousel({
         </Pressable>
       )}
       {currentFile && (showChrome || isDetailView) && !isDismissing ? (
-        <View
-          style={[styles.controlBarOverlay, { paddingBottom: insets.bottom + 12 }]}
-          pointerEvents="box-none"
-        >
+        <View style={styles.controlBarOverlay} pointerEvents="box-none">
           <FileCarouselControlBar
             viewStyle={viewStyle}
             setViewStyle={setViewStyle}
@@ -411,10 +408,10 @@ const styles = StyleSheet.create({
   },
   controlBarOverlay: {
     position: 'absolute',
+    top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    alignItems: 'center',
     zIndex: 10,
   },
   accessibilityToggle: {
