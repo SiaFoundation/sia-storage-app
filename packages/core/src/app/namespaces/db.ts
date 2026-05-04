@@ -226,6 +226,7 @@ export function buildDbNamespaces(
         await ops.insertManyFiles(db, records, {
           conflictClause: opts?.conflictClause,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
+          directoryId: opts?.directoryId,
         })
         if (records.length > 0 && !opts?.skipCurrentRecalc) {
           invalidateLibrary()

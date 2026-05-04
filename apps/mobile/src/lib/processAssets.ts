@@ -128,16 +128,12 @@ async function parseAssetMetadata(
   }
 }
 
-async function moveMediaToImportDirectory(files: FileRecord[]): Promise<void> {
+// Resolved before createMany so the insert files rows into the directory atomically.
+async function resolveImportDirectoryId(): Promise<string | null> {
   const photoImportDir = await app().settings.getPhotoImportDirectory()
-  if (!photoImportDir) return
-  const mediaFileIds = files
-    .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
-    .map((f) => f.id)
-  if (mediaFileIds.length > 0) {
-    const dir = await app().directories.getOrCreateAtPath(photoImportDir)
-    await app().directories.moveFiles(mediaFileIds, dir.id)
-  }
+  if (!photoImportDir) return null
+  const dir = await app().directories.getOrCreateAtPath(photoImportDir)
+  return dir.id
 }
 
 type CandidateFileRecord = {
@@ -155,8 +151,7 @@ type CandidateFileRecord = {
 }
 
 type SyncAssetsOptions = {
-  /** Move newly imported media files into the configured photo import
-   * directory. Used by auto-sync. */
+  /** Place new files in the configured photo import directory. Used by auto-sync. */
   addToImportDirectory?: boolean
   /** Skip updating DB records for files that already exist. Prevents
    * spurious updatedAt bumps when the same assets are re-encountered
@@ -177,6 +172,9 @@ export async function syncAssets(
   { addToImportDirectory = false, skipExistingUpdates = false }: SyncAssetsOptions = {},
   signal?: AbortSignal,
 ) {
+  const importDirectoryId = addToImportDirectory ? await resolveImportDirectoryId() : null
+  const importedAt = Date.now()
+
   const candidateFiles: CandidateFileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
       const meta = await parseAssetMetadata(a, defaultFileName)
@@ -260,8 +258,9 @@ export async function syncAssets(
       localId: f.localId,
       name: f.name,
       createdAt: f.createdAt,
-      updatedAt: f.updatedAt,
-      addedAt: Date.now(),
+      // Bump updatedAt so (name, dir) collisions resolve to the freshly synced row.
+      updatedAt: addToImportDirectory ? importedAt : f.updatedAt,
+      addedAt: importedAt,
       type: f.type,
       kind: 'file' as const,
       size: f.size!,
@@ -298,12 +297,8 @@ export async function syncAssets(
       })),
     )
   }
-  await app().files.createMany(newFiles)
+  await app().files.createMany(newFiles, { directoryId: importDirectoryId })
   await app().optimize()
-
-  if (addToImportDirectory) {
-    await moveMediaToImportDirectory(newFiles)
-  }
 
   if (signal?.aborted) {
     return { files: newFiles, updatedFiles: existingFiles, warnings }
@@ -322,8 +317,7 @@ export async function syncAssets(
 }
 
 type CatalogAssetsOptions = {
-  /** Move newly imported media files into the configured photo import
-   * directory. Used by archive sync. */
+  /** Place new files in the configured photo import directory. Used by archive sync. */
   addToImportDirectory?: boolean
 }
 
@@ -340,6 +334,9 @@ export async function catalogAssets(
   { addToImportDirectory = false }: CatalogAssetsOptions = {},
   signal?: AbortSignal,
 ) {
+  const importDirectoryId = addToImportDirectory ? await resolveImportDirectoryId() : null
+  const importedAt = Date.now()
+
   const candidates: FileRecord[] = await Promise.all(
     (assets ?? []).map(async (a) => {
       const meta = await parseAssetMetadata(a, defaultFileName)
@@ -347,7 +344,9 @@ export async function catalogAssets(
         id: uniqueId(),
         localId: a.id ?? null,
         ...meta,
-        addedAt: Date.now(),
+        // Bump updatedAt so (name, dir) collisions resolve to the freshly synced row.
+        updatedAt: addToImportDirectory ? importedAt : meta.updatedAt,
+        addedAt: importedAt,
         kind: 'file' as const,
         size: 0,
         hash: '',
@@ -374,13 +373,11 @@ export async function catalogAssets(
 
   if (signal?.aborted) return { newCount: 0, existingCount: 0 }
 
-  await app().files.createMany(candidates, { conflictClause: 'OR IGNORE' })
+  await app().files.createMany(candidates, {
+    conflictClause: 'OR IGNORE',
+    directoryId: importDirectoryId,
+  })
   await app().optimize()
-
-  if (addToImportDirectory) {
-    const newFiles = candidates.filter((f) => !f.localId || !existingLocalIds.has(f.localId))
-    await moveMediaToImportDirectory(newFiles)
-  }
 
   triggerImportScanner()
 
@@ -447,7 +444,9 @@ export async function importFiles(
             localId: null,
             name,
             createdAt: ts,
-            updatedAt: ts,
+            // Bump updatedAt so a re-import wins the current-version recalc against
+            // an existing row with the same (name, directory).
+            updatedAt: now,
             addedAt: now,
             type,
             kind: 'file' as const,
@@ -477,14 +476,15 @@ export async function importFiles(
     0,
   )
 
-  await app().files.createMany(candidates.map((c) => c.placeholder))
+  await app().files.createMany(
+    candidates.map((c) => c.placeholder),
+    {
+      directoryId: destinationDirectoryId,
+    },
+  )
 
   const insertedCandidates = candidates
   const insertedIds = candidates.map((c) => c.placeholder.id)
-
-  if (destinationDirectoryId !== null && insertedIds.length > 0) {
-    await app().directories.moveFiles(insertedIds, destinationDirectoryId)
-  }
 
   if (assignTagName && insertedIds.length > 0) {
     await app().tags.addToFiles(insertedIds, assignTagName)
@@ -492,7 +492,6 @@ export async function importFiles(
 
   await app().optimize()
 
-  // Fetch post-move records so the caller sees the right directoryId.
   // Preserve candidate order in the returned array.
   let files: FileRecord[] = []
   if (insertedIds.length > 0) {

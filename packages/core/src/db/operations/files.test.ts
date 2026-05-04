@@ -151,6 +151,30 @@ describe('insertManyFiles', () => {
     const results = await queryFiles(db(), { order: 'ASC' })
     expect(results).toHaveLength(0)
   })
+
+  it('files all rows into directoryId when supplied', async () => {
+    const dir = await insertDirectory(db(), 'Media')
+    const records = [makeFileRecord('file-1'), makeFileRecord('file-2')]
+    await insertManyFiles(db(), records, { directoryId: dir.id })
+    const rows = await db().getAllAsync<{ id: string; directoryId: string | null }>(
+      'SELECT id, directoryId FROM files WHERE id IN (?, ?)',
+      'file-1',
+      'file-2',
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.directoryId === dir.id)).toBe(true)
+  })
+
+  it('leaves rows at root when directoryId is null or omitted', async () => {
+    await insertManyFiles(db(), [makeFileRecord('file-1')], { directoryId: null })
+    await insertManyFiles(db(), [makeFileRecord('file-2')])
+    const rows = await db().getAllAsync<{ id: string; directoryId: string | null }>(
+      'SELECT id, directoryId FROM files WHERE id IN (?, ?)',
+      'file-1',
+      'file-2',
+    )
+    expect(rows.every((r) => r.directoryId === null)).toBe(true)
+  })
 })
 
 describe('updateFile', () => {

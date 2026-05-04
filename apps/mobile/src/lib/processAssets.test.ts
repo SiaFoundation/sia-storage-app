@@ -851,6 +851,29 @@ describe('syncAssets — eager background sync for recent photos', () => {
       expect(dirs[0].path).toBe('Camera Roll')
     })
 
+    it('files non-media types into the import directory too', async () => {
+      await app().settings.setPhotoImportDirectory('Camera Roll')
+      const assets = [
+        {
+          id: undefined,
+          name: 'note.txt',
+          sourceUri: 'file:///note.txt',
+          type: 'text/plain',
+          timestamp: '2021-01-01',
+        },
+      ]
+      const { files } = await syncAssets(assets, 'file', {
+        addToImportDirectory: true,
+      })
+      expect(files).toHaveLength(1)
+      const row = await db().getFirstAsync<{ directoryId: string | null }>(
+        'SELECT directoryId FROM files WHERE id = ?',
+        files[0].id,
+      )
+      const dirs = await app().directories.getAll()
+      expect(row?.directoryId).toBe(dirs[0].id)
+    })
+
     it('places files into a nested import directory path with separators', async () => {
       await app().settings.setPhotoImportDirectory('Media/iOS Sync')
       const assets = [
@@ -991,5 +1014,27 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
     const dirs = await app().directories.getAll()
     expect(dirs).toHaveLength(1)
     expect(dirs[0].path).toBe('Camera Roll')
+  })
+
+  it('files non-media types into the import directory too', async () => {
+    await app().settings.setPhotoImportDirectory('Camera Roll')
+    const assets = [
+      {
+        id: 'local-1',
+        name: 'note.txt',
+        sourceUri: 'file:///note.txt',
+        type: 'text/plain',
+        timestamp: '2021-01-01',
+      },
+    ]
+    await catalogAssets(assets, 'file', { addToImportDirectory: true })
+    const rows = await app().files.query({ order: 'ASC' })
+    expect(rows).toHaveLength(1)
+    const row = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      rows[0].id,
+    )
+    const dirs = await app().directories.getAll()
+    expect(row?.directoryId).toBe(dirs[0].id)
   })
 })

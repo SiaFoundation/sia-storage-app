@@ -867,9 +867,13 @@ export async function readFilesByIds(db: DatabaseAdapter, ids: string[]): Promis
 export async function insertManyFiles(
   db: DatabaseAdapter,
   records: Omit<FileRecord, 'objects'>[],
-  options?: sql.InsertOptions & { skipCurrentRecalc?: boolean },
+  options?: sql.InsertOptions & {
+    skipCurrentRecalc?: boolean
+    directoryId?: string | null
+  },
 ): Promise<void> {
   if (records.length === 0) return
+  const directoryId = options?.directoryId ?? null
   await sql.insertMany(
     db,
     'files',
@@ -877,6 +881,7 @@ export async function insertManyFiles(
       id: r.id,
       name: r.name,
       nameSortKey: naturalSortKey(r.name),
+      directoryId,
       size: r.size,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
