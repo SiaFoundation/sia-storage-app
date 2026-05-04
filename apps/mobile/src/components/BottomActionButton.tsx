@@ -1,6 +1,7 @@
 import type React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { colors, palette } from '../styles/colors'
+import { useBottomControlOffset } from './BottomControlBar'
 
 type Props = {
   icon: React.ReactNode
@@ -10,8 +11,9 @@ type Props = {
 }
 
 export function BottomActionButton({ icon, label, onPress, disabled }: Props) {
+  const bottom = useBottomControlOffset()
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom }]} pointerEvents="box-none">
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
@@ -30,7 +32,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 30,
     alignItems: 'center',
   },
   button: {
