@@ -165,10 +165,14 @@ export interface AppService {
       localObject?: LocalObject,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
-    /** Creates multiple files. */
+    /** Creates multiple files. Optionally places them all in a directory in the same insert. */
     createMany(
       records: Omit<FileRecord, 'objects'>[],
-      opts?: { conflictClause?: 'OR IGNORE'; skipCurrentRecalc?: boolean },
+      opts?: {
+        conflictClause?: 'OR IGNORE'
+        skipCurrentRecalc?: boolean
+        directoryId?: string | null
+      },
     ): Promise<void>
     /** Upserts multiple files. */
     upsertMany(
