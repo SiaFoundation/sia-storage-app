@@ -1,7 +1,7 @@
 import { minutesInMs, secondsInMs } from '@siastorage/core'
 import { isAbortError } from '@siastorage/core/lib/errors'
 import { logger } from '@siastorage/logger'
-import { AppState, Platform } from 'react-native'
+import { Platform } from 'react-native'
 import BackgroundFetch, { type BackgroundFetchConfig } from 'react-native-background-fetch'
 import { delayWithSignal } from '../lib/delayWithSignal'
 import { scheduleAfter } from '../lib/scheduleAfter'
@@ -9,6 +9,7 @@ import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import { runFsEvictionScanner } from './fsEvictionScanner'
+import { getLifecycle } from './lifecycle'
 import { registerBackgroundTaskLifecycle, releaseBackgroundTaskLifecycle } from './suspension'
 import { getUploadManager } from './uploader'
 
@@ -357,7 +358,7 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
 
   // Defer scanners past the upload manager's spin-up. Skip in the 30s
   // BGAppRefreshTask — no headroom after the delay.
-  if (AppState.currentState !== 'active' && config.type !== 'BGAppRefreshTask') {
+  if (getLifecycle() === 'background' && config.type !== 'BGAppRefreshTask') {
     void scheduleAfter(secondsInMs(30), signal, async (s) => {
       await runFsEvictionScanner({ signal: s })
       if (s.aborted) return

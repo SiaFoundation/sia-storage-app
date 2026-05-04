@@ -7,7 +7,7 @@ import { stopLogForwarder } from '@siastorage/core/services/logForwarder'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import { logger, stopLogAppender } from '@siastorage/logger'
 import { getBackgroundTimeRemainingMs } from 'background-time-remaining'
-import { AppState, type AppStateStatus, Platform } from 'react-native'
+import { Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
 import {
@@ -24,6 +24,7 @@ import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
 import { cancelFsOrphanScanner } from './fsOrphanScanner'
+import { addLifecycleListener, getLifecycle } from './lifecycle'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -53,14 +54,6 @@ async function logSuspendDiagnostics(): Promise<void> {
   } catch (e) {
     logger.debug('suspension', 'diagnostics_failed', { error: e as Error })
   }
-}
-
-// 'inactive' / 'unknown' / 'extension' don't represent foreground use, and
-// iOS BG-task cold starts often surface 'unknown' before the first AppState
-// event — treating those as background prevents the manager from suspending
-// the moment the BG task releases its lifecycle.
-function toAppStateValue(s: AppStateStatus): 'foreground' | 'background' {
-  return s === 'active' ? 'foreground' : 'background'
 }
 
 const manager = createSuspensionManager(
@@ -104,11 +97,10 @@ const manager = createSuspensionManager(
       },
     },
   },
-  { initialAppState: toAppStateValue(AppState.currentState) },
+  { initialAppState: getLifecycle() },
 )
 
-let subscription: ReturnType<typeof AppState.addEventListener> | null = null
-let appStateRef: AppStateStatus = AppState.currentState
+let unsubscribeLifecycle: (() => void) | null = null
 
 /**
  * Wraps an async operation with a beginBackgroundTask grant on iOS so the
@@ -138,50 +130,45 @@ async function withIosExecutionTime<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export function initSuspensionManager(): void {
-  if (subscription) return
-  logger.info('appState', 'initial_state', { state: appStateRef })
+  if (unsubscribeLifecycle) return
+  const initial = getLifecycle()
+  logger.info('appState', 'initial_state', { state: initial })
   logger.info('suspension', 'init', {
-    state: appStateRef,
+    state: initial,
     platform: Platform.OS,
     // Foreground reads return ~Number.MAX_VALUE; logging this once at
     // startup confirms the native binding is wired and callable.
     iosBackgroundTimeRemainingMs: getBackgroundTimeRemainingMs(),
   })
-  subscription = AppState.addEventListener('change', (nextState) => {
-    logger.info('appState', 'state_changed', { from: appStateRef, to: nextState })
-    appStateRef = nextState
+  unsubscribeLifecycle = addLifecycleListener((next, prev) => {
+    logger.info('appState', 'state_changed', { from: prev, to: next })
     // Android fires 'background' for picker / share-sheet round-trips
     // that aren't real backgrounding; running the pipeline there degrades
     // the experience. iOS pickers don't background the app, so the flow
     // only fires when the user actually leaves.
-    if (Platform.OS === 'ios') {
-      onAppStateChange(nextState)
+    if (Platform.OS !== 'ios') return
+    if (next === 'background') {
+      if (!dbInitialized) {
+        logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
+        return
+      }
+      // Init's cleanup steps issue many DB queries; let init finish first.
+      if (app().init.getState().isInitializing) {
+        logger.debug('suspension', 'skipped', { reason: 'init_in_progress' })
+        return
+      }
+      // The setAppState Promise resolves after the enqueued doSuspend
+      // settles; withIosExecutionTime keeps iOS from freezing us mid-drain.
+      void withIosExecutionTime(() => manager.setAppState('background'))
+    } else {
+      void manager.setAppState('foreground')
     }
   })
 }
 
 export function teardownSuspensionManager(): void {
-  subscription?.remove()
-  subscription = null
-}
-
-function onAppStateChange(nextState: AppStateStatus): void {
-  if (nextState === 'background') {
-    if (!dbInitialized) {
-      logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
-      return
-    }
-    // Init's cleanup steps issue many DB queries; let init finish first.
-    if (app().init.getState().isInitializing) {
-      logger.debug('suspension', 'skipped', { reason: 'init_in_progress' })
-      return
-    }
-    // The setAppState Promise resolves after the enqueued doSuspend
-    // settles; withIosExecutionTime keeps iOS from freezing us mid-drain.
-    void withIosExecutionTime(() => manager.setAppState('background'))
-  } else if (nextState === 'active') {
-    void manager.setAppState('foreground')
-  }
+  unsubscribeLifecycle?.()
+  unsubscribeLifecycle = null
 }
 
 /** Called at the start of every BG task — resumes the manager if suspended. */
