@@ -361,4 +361,27 @@ describe('Sync Down', () => {
     const names = ids.map((id) => files.find((f) => f.id === id)?.name)
     expect(names).toEqual(['file1.jpg', 'file2.jpg', 'file10.jpg'])
   })
+
+  // A same-ms cluster larger than batchSize must sync completely — mirrors
+  // indexd's MigrateSector cascade, which UPDATEs many object_events rows
+  // with one shared transaction_timestamp().
+  it('syncs same-ms cluster larger than batchSize', async () => {
+    const N = 600
+    for (let i = 0; i < N; i++) {
+      app.sdk.injectObject({
+        metadata: generateMockFileMetadata(i, { name: `cluster-${i}.jpg`, size: 1 }),
+      })
+    }
+
+    const sharedUpdatedAt = new Date()
+    const storage = app.sdk.getStorage()
+    for (const event of storage.events) {
+      event.updatedAt = sharedUpdatedAt
+    }
+    for (const obj of storage.objects.values()) {
+      obj.updatedAt = sharedUpdatedAt
+    }
+
+    await app.waitForFileCount(N, 60_000)
+  })
 })
