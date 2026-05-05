@@ -1,6 +1,7 @@
 import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata, FileRecord } from '@siastorage/core/types'
+import { logger } from '@siastorage/logger'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
 import { initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
@@ -77,7 +78,6 @@ function makeObjectEvent(params: {
 const mockAppKey = { export_: () => new Uint8Array(32) }
 
 let removeFileSpy: jest.SpyInstance
-const cursorIncrement = 1
 
 describe('syncDownEvents', () => {
   const INDEXER_URL = 'indexer-url'
@@ -162,7 +162,7 @@ describe('syncDownEvents', () => {
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-2',
-      after: new Date(NOW_BASE + 1 + cursorIncrement),
+      after: new Date(NOW_BASE + 1),
     })
 
     const file1 = await app().files.getByObjectId('obj-1', INDEXER_URL)
@@ -209,7 +209,7 @@ describe('syncDownEvents', () => {
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-1',
-      after: new Date(NOW_BASE + cursorIncrement),
+      after: new Date(NOW_BASE),
     })
   })
 
@@ -596,7 +596,7 @@ describe('syncDownEvents', () => {
     const cursor = await app().sync.getSyncDownCursor()
     expect(cursor).toEqual({
       id: 'obj-2',
-      after: new Date(NOW_BASE + 2 + cursorIncrement),
+      after: new Date(NOW_BASE + 2),
     })
 
     const deletedFile = await app().files.getByObjectId('obj-1', INDEXER_URL)
@@ -752,14 +752,14 @@ describe('syncDownEvents', () => {
     const cursor1 = await app().sync.getSyncDownCursor()
     expect(cursor1).toEqual({
       id: 'obj-1',
-      after: new Date(NOW_BASE + cursorIncrement),
+      after: new Date(NOW_BASE),
     })
 
     await run(new AbortController().signal)
     const cursor2 = await app().sync.getSyncDownCursor()
     expect(cursor2).toEqual({
       id: 'obj-2',
-      after: new Date(NOW_BASE + 1 + cursorIncrement),
+      after: new Date(NOW_BASE + 1),
     })
   })
 
@@ -1570,5 +1570,165 @@ describe('syncDownEvents', () => {
     const fileRecord = await app().files.getById('file-1')
     expect(fileRecord).not.toBeNull()
     expect(fileRecord!.deletedAt).not.toBeNull()
+  })
+
+  describe('cursor advance and anti-spin', () => {
+    // Matches the production batchSize in packages/core/src/services/syncDownEvents.ts.
+    const BATCH_SIZE = 500
+    const mockLoggerWarn = logger.warn as jest.Mock
+
+    function makeBatch(count: number, baseTime: number, prefix: string): ObjectEvent[] {
+      return Array.from({ length: count }, (_, i) => {
+        const metadata: FileMetadata = {
+          id: `file-${prefix}-${i}`,
+          name: `${prefix}-${i}.jpg`,
+          type: 'image/jpeg',
+          kind: 'file',
+          size: 100,
+          hash: `hash-${prefix}-${i}`,
+          createdAt: baseTime,
+          updatedAt: baseTime,
+          thumbForId: undefined,
+          thumbSize: undefined,
+          trashedAt: null,
+        }
+        return makeObjectEvent({
+          id: `${prefix}-${i}`,
+          updatedAt: new Date(baseTime),
+          object: makeMockPinnedObject(metadata, `${prefix}-${i}`),
+        })
+      })
+    }
+
+    test('keeps looping on full batches, breaks on partial', async () => {
+      const fullBatch = makeBatch(BATCH_SIZE, NOW_BASE, 'a')
+      const partialBatch = makeBatch(1, NOW_BASE + 1, 'b')
+
+      const objectEvents = jest
+        .fn()
+        .mockResolvedValueOnce(fullBatch)
+        .mockResolvedValueOnce(partialBatch)
+      internal().setSdk({
+        objectEvents,
+        appKey: () => mockAppKey,
+      } as any)
+
+      const result = await run(new AbortController().signal)
+
+      expect(objectEvents).toHaveBeenCalledTimes(2)
+      // >1 events fetched → return 0 (poll immediately).
+      expect(result).toBe(0)
+    })
+
+    test('anti-spin breaks when a full batch leaves the cursor unchanged', async () => {
+      const fullBatch = makeBatch(BATCH_SIZE, NOW_BASE, 'spin')
+      const objectEvents = jest.fn().mockResolvedValue(fullBatch)
+      internal().setSdk({
+        objectEvents,
+        appKey: () => mockAppKey,
+      } as any)
+
+      mockLoggerWarn.mockClear()
+
+      const result = await run(new AbortController().signal)
+
+      // First call advances cursor; second sees it unchanged → guard breaks.
+      expect(objectEvents).toHaveBeenCalledTimes(2)
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        'syncDownEvents',
+        'cursor_did_not_advance',
+        expect.objectContaining({
+          id: `spin-${BATCH_SIZE - 1}`,
+          batchSize: BATCH_SIZE,
+        }),
+      )
+      expect(result).toBe(0)
+    })
+
+    test('heartbeat does not trigger anti-spin warning', async () => {
+      await app().sync.setSyncDownCursor({
+        id: 'obj-heartbeat',
+        after: new Date(NOW_BASE),
+      })
+
+      const heartbeatMetadata: FileMetadata = {
+        id: 'file-heartbeat',
+        name: 'heartbeat.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 1,
+        hash: 'hash-heartbeat',
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+        thumbForId: undefined,
+        thumbSize: undefined,
+        trashedAt: null,
+      }
+      const heartbeat: ObjectEvent[] = [
+        makeObjectEvent({
+          id: 'obj-heartbeat',
+          updatedAt: new Date(NOW_BASE),
+          object: makeMockPinnedObject(heartbeatMetadata, 'obj-heartbeat'),
+        }),
+      ]
+
+      const objectEvents = jest.fn().mockResolvedValueOnce(heartbeat)
+      internal().setSdk({
+        objectEvents,
+        appKey: () => mockAppKey,
+      } as any)
+
+      mockLoggerWarn.mockClear()
+
+      const result = await run(new AbortController().signal)
+
+      expect(objectEvents).toHaveBeenCalledTimes(1)
+      // Single event → return undefined (default interval).
+      expect(result).toBeUndefined()
+      // Partial-batch break runs before the anti-spin guard.
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+        'syncDownEvents',
+        'cursor_did_not_advance',
+        expect.anything(),
+      )
+    })
+
+    test('re-delivering the same batch produces no duplicates', async () => {
+      const metadata: FileMetadata = {
+        id: 'file-idem',
+        name: 'idem.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: 'hash-idem',
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+        thumbForId: undefined,
+        thumbSize: undefined,
+        trashedAt: null,
+      }
+      const events: ObjectEvent[] = [
+        makeObjectEvent({
+          id: 'obj-idem',
+          updatedAt: new Date(NOW_BASE),
+          object: makeMockPinnedObject(metadata, 'obj-idem'),
+        }),
+      ]
+
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events).mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      // Reset so the same batch is delivered again.
+      await app().sync.setSyncDownCursor(undefined)
+      await run(new AbortController().signal)
+
+      const file = await app().files.getByObjectId('obj-idem', INDEXER_URL)
+      expect(file).not.toBeNull()
+      const objects = await app().localObjects.getForFile(file!.id)
+      expect(objects).toHaveLength(1)
+    })
   })
 })

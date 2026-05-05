@@ -131,13 +131,14 @@ export async function syncDownEventsBatch(
           firstEventTime = events[0].updatedAt.getTime()
         }
 
-        // Update the cursor to the last event in the batch.
+        // The server's (updated_at, id) tuple-compare walks within a
+        // same-ms cluster via the id tiebreak, so the lastEvent's exact
+        // (updatedAt, id) is the correct cursor.
         const lastEvent = events[events.length - 1]
-        const nextTimestamp = lastEvent ? lastEvent.updatedAt.getTime() + 1 : 0
         if (lastEvent) {
           await app.sync.setSyncDownCursor({
             id: lastEvent.id,
-            after: new Date(nextTimestamp),
+            after: lastEvent.updatedAt,
           })
         }
 
@@ -164,6 +165,23 @@ export async function syncDownEventsBatch(
 
         // If the batch is not full, we're done for now.
         if (events.length < batchSize) {
+          break
+        }
+
+        // Unreachable on a correct server — a full batch's lastEvent is
+        // always strictly past the cursor. If a server bug or deploy
+        // mismatch ever lands here, break instead of spinning.
+        if (
+          cursor &&
+          lastEvent &&
+          lastEvent.id === cursor.id &&
+          lastEvent.updatedAt.getTime() === cursor.after.getTime()
+        ) {
+          logger.warn('syncDownEvents', 'cursor_did_not_advance', {
+            id: lastEvent.id,
+            after: lastEvent.updatedAt,
+            batchSize: events.length,
+          })
           break
         }
       } catch (e) {
