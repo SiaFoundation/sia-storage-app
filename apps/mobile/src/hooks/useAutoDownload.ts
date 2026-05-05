@@ -33,9 +33,8 @@ export function useAutoDownload(
     if (!isConnected) return
     if (!file) return
     if (!status.data) return
-    if (!status.data.isUploaded) return
-    if (status.data.isDownloaded) return
-    if (status.data.isDownloading) return
+    if (!status.data.canAutoFetch) return
+    if (status.data.download.state !== 'idle') return
     if (!shouldDownload(file)) return
     download()
   }, [isInitializing, isConnected, status.data, download, file, shouldDownload])
@@ -49,15 +48,14 @@ export function useAutoDownloadFromShareURL(
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const download = useDownloadFromShareURL()
-  const status = useFileStatus(file, true)
+  const status = useFileStatus(file, { isShared: true })
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return
     if (!file) return
     if (!status.data) return
-    if (!status.data.isUploaded) return
-    if (status.data.isDownloaded) return
-    if (status.data.isDownloading) return
+    if (!status.data.canAutoFetch) return
+    if (status.data.download.state !== 'idle') return
     if (!shouldDownload(file)) return
     download(file.id, shareUrl)
   }, [file.id, shareUrl, isInitializing, isConnected, status.data, download, file, shouldDownload])

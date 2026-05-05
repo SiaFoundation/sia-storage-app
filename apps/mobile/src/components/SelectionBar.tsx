@@ -9,7 +9,7 @@ import {
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
-import { fetchBulkCounts, fileHasASealedObject } from '../lib/file'
+import { fetchBulkCounts, getFileCapabilities } from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile } from '../managers/downloader'
 import { queueUploadForFileId } from '../managers/uploader'
@@ -50,9 +50,8 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
     if (!counts) return
     try {
       for (const file of counts.files) {
-        const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
-        if (hasSealed && !uri) {
+        if (getFileCapabilities(file, uri).canDownload) {
           void downloadFile(file, 0)
         }
       }
@@ -70,9 +69,8 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
     if (!counts) return
     try {
       for (const file of counts.files) {
-        const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
-        if (uri && !hasSealed) {
+        if (getFileCapabilities(file, uri).canUpload) {
           queueUploadForFileId(file.id)
         }
       }

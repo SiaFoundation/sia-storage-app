@@ -366,7 +366,7 @@ export function FileCarousel({
             onPressMore={handleMore}
             onToggleFavorite={handleToggleFavorite}
             isFavorite={favorite.data ?? false}
-            canShare={status.data?.isUploaded ?? false}
+            canShare={status.data?.canShare ?? false}
           />
         </View>
       ) : null}

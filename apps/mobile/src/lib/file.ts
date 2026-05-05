@@ -3,6 +3,8 @@ import type { LocalObjectRef } from '@siastorage/core/encoding/localObject'
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { useMemo } from 'react'
+import useSWR from 'swr'
+import { getMediaLibraryDisplayUri } from './mediaLibrary'
 import { app } from '../stores/appService'
 import { useFsFileUri } from '../stores/fs'
 import { type UploadState, useUploadState } from '../stores/uploads'
@@ -36,24 +38,198 @@ export function fileItemPropsAreEqual(prev: FileItemProps, next: FileItemProps):
   )
 }
 
+/**
+ * Result of a Photos-library asset lookup for a file with a localId:
+ * - 'unknown': SWR in flight, lookup not yet resolved
+ * - 'available': asset resolved with a URI a player can render (may be ph://)
+ * - 'unavailable': asset is deleted or temporarily unreachable (iCloud)
+ * - 'none': caller didn't opt in, or file has no localId — no fallback exists
+ */
+export type PhotosLookup = 'unknown' | 'available' | 'unavailable' | 'none'
+
+export type UploadActivity = {
+  state: 'idle' | 'queued' | 'packing' | 'uploading' | 'errored'
+  progress: number
+}
+
+export type DownloadActivity = {
+  state: 'idle' | 'queued' | 'downloading' | 'errored'
+  progress: number
+}
+
+/**
+ * Orthogonal observable facts about a file. Inputs to derivePhase and
+ * deriveCapabilities. No derived/aggregate booleans here.
+ */
+export type FileFacts = {
+  isProcessing: boolean
+  isImportFailed: boolean
+  isPinned: boolean
+  hasLocalCopy: boolean
+  photosLookup: PhotosLookup
+  isShared: boolean
+  upload: UploadActivity
+  download: DownloadActivity
+  errorText: string | null
+}
+
+/**
+ * Mutually exclusive lifecycle state of a file. Every input combination
+ * resolves to exactly one phase via derivePhase. Use `switch (phase.kind)`
+ * with assertNever to make consumers exhaustive.
+ *
+ * `importing.preview` is a sub-state that tells the viewer whether it can
+ * render a Photos-library preview yet — analogous to `uploading.isQueued`.
+ */
+export type FilePhase =
+  | { kind: 'importing'; preview: 'pending' | 'available' | 'none' }
+  | { kind: 'import-failed'; reason: string }
+  | { kind: 'uploading'; progress: number; isPacking: boolean; isQueued: boolean }
+  | { kind: 'upload-errored'; error: string | null }
+  | { kind: 'downloading'; progress: number; isQueued: boolean }
+  | { kind: 'pinned-and-local' }
+  | { kind: 'pinned-remote-only' }
+  | { kind: 'local-only' }
+  | { kind: 'unavailable' }
+
+/** Derived action gates. Computed from FileFacts; orthogonal to phase. */
+export type FileCapabilities = {
+  isOnNetwork: boolean
+  canShare: boolean
+  canDownload: boolean
+  canUpload: boolean
+  canPlay: boolean
+  canAutoFetch: boolean
+}
+
+/**
+ * Priority-ordered, total: every FileFacts maps to exactly one FilePhase.
+ * Order: errors first, then in-flight ops, then steady states.
+ */
+export function derivePhase(facts: FileFacts): FilePhase {
+  if (facts.isImportFailed) return { kind: 'import-failed', reason: facts.errorText ?? '' }
+  if (facts.isProcessing) {
+    return {
+      kind: 'importing',
+      preview:
+        facts.photosLookup === 'unknown'
+          ? 'pending'
+          : facts.photosLookup === 'available'
+            ? 'available'
+            : 'none',
+    }
+  }
+  if (facts.upload.state === 'errored' && !facts.isPinned)
+    return { kind: 'upload-errored', error: facts.errorText }
+  if (
+    facts.upload.state === 'queued' ||
+    facts.upload.state === 'packing' ||
+    facts.upload.state === 'uploading'
+  ) {
+    return {
+      kind: 'uploading',
+      progress: facts.upload.progress,
+      isPacking: facts.upload.state === 'packing',
+      isQueued: facts.upload.state === 'queued',
+    }
+  }
+  if (facts.download.state === 'queued' || facts.download.state === 'downloading') {
+    return {
+      kind: 'downloading',
+      progress: facts.download.progress,
+      isQueued: facts.download.state === 'queued',
+    }
+  }
+  if (facts.isPinned && facts.hasLocalCopy) return { kind: 'pinned-and-local' }
+  if (facts.isPinned && !facts.hasLocalCopy) return { kind: 'pinned-remote-only' }
+  if (facts.hasLocalCopy && !facts.isPinned) return { kind: 'local-only' }
+  // Terminal: hashed file with no local copy and no sealed objects. In
+  // healthy operation this is unreachable — cache eviction only touches
+  // pinned files (see queryEvictionCandidates) and trash/delete flows
+  // filter rows out before they reach here. If a bug or external mutation
+  // ever leaves a hashed file stranded, we route it here loudly. The
+  // viewer still shows the original from Photos via displayUri when the
+  // localId resolves, so the user can recover by re-importing.
+  return { kind: 'unavailable' }
+}
+
+export function deriveCapabilities(facts: FileFacts): FileCapabilities {
+  const isOnNetwork = facts.isPinned || facts.isShared
+  // Errored is treated like idle so the user can retry from the action
+  // sheet; only in-flight states (queued/uploading/downloading) block.
+  const downloadFree = facts.download.state === 'idle' || facts.download.state === 'errored'
+  const uploadFree = facts.upload.state === 'idle' || facts.upload.state === 'errored'
+  return {
+    isOnNetwork,
+    canShare: facts.isPinned,
+    canDownload: isOnNetwork && !facts.hasLocalCopy && downloadFree,
+    canUpload: facts.hasLocalCopy && !facts.isPinned && uploadFree,
+    canPlay: facts.hasLocalCopy || facts.photosLookup === 'available',
+    canAutoFetch: isOnNetwork && !facts.hasLocalCopy,
+  }
+}
+
+/**
+ * Pure capability resolver for bulk-op call sites that don't have an SWR
+ * context. Assumes idle upload/download state, no Photos backup, no share.
+ * Use useFileStatus where a hook is available — this is for loops that
+ * iterate raw FileRecords.
+ */
+export function getFileCapabilities(file: FileRecord, fileUri: string | null): FileCapabilities {
+  return deriveCapabilities({
+    isProcessing: file.hash === '',
+    isImportFailed: !!file.lostReason,
+    isPinned: fileHasASealedObject(file),
+    hasLocalCopy: !!fileUri,
+    photosLookup: 'none',
+    isShared: false,
+    upload: { state: 'idle', progress: 0 },
+    download: { state: 'idle', progress: 0 },
+    errorText: null,
+  })
+}
+
+/** Exhaustiveness guard for `switch (phase.kind)` consumers. */
+export function assertNever(value: never): never {
+  throw new Error(`Unhandled discriminant: ${JSON.stringify(value)}`)
+}
+
 export type FileStatus = {
   isProcessing: boolean
   isDeferredImport: boolean
   isImportFailed: boolean
-  isUploading: boolean
-  isDownloading: boolean
-  isUploaded: boolean
+  isPinned: boolean
+  isOnNetwork: boolean
   isDownloaded: boolean
-  isErrored: boolean
-  uploadProgress: number
-  downloadProgress: number
-  isUploadQueued: boolean
-  isDownloadQueued: boolean
-  isPacking: boolean
-  batchFileCount: number
+  /**
+   * Real file:// path inside app storage. Safe for fs operations: hash,
+   * copy, share, upload. Null until the file has been downloaded or the
+   * import scanner has copied it in.
+   */
   fileUri: string | null
-  fileIsGone: boolean
+  photosLookup: PhotosLookup
+  /**
+   * URI the Photos-library asset can be rendered with: file:// when an
+   * exported localUri is available, ph:// (iOS) or file:// (Android) as a
+   * display-only fallback. Display-only — never pass to fs operations,
+   * share, or upload; use fileUri for those.
+   */
+  photosDisplayUri: string | null
+  /**
+   * Best URI for a player: fileUri when present, else photosDisplayUri.
+   * May be ph:// — display-only, not safe for fs/share/upload. Consumers
+   * doing anything other than rendering must use fileUri.
+   */
+  displayUri: string | null
+  upload: UploadActivity
+  download: DownloadActivity
   errorText: string | null
+  phase: FilePhase
+  canShare: boolean
+  canDownload: boolean
+  canUpload: boolean
+  canPlay: boolean
+  canAutoFetch: boolean
 }
 
 export function computeFileStatus({
@@ -62,6 +238,8 @@ export function computeFileStatus({
   uploadState,
   downloadState,
   fileUri,
+  photosLookup = 'none',
+  photosDisplayUri = null,
   errorText,
 }: {
   file?: FileRecord
@@ -69,40 +247,83 @@ export function computeFileStatus({
   uploadState: UploadState | undefined
   downloadState: DownloadEntry | undefined
   fileUri: string | null
+  photosLookup?: PhotosLookup
+  photosDisplayUri?: string | null
   errorText: string | null
-}) {
+}): FileStatus {
   const isProcessing = !!file && file.hash === ''
   // Deferred import: placeholder created by archive sync with localId,
   // waiting for the scanner to copy from the media library.
   const isDeferredImport = isProcessing && !fileUri && !!file?.localId
   const isImportFailed = !!file?.lostReason
   const uploadStatus = uploadState?.status
-  const isUploading = ['queued', 'packing', 'packed', 'uploading'].includes(uploadStatus ?? '')
-  const isPacking = uploadStatus === 'packing' || uploadStatus === 'packed'
-  const isDownloading =
-    downloadState?.status === 'downloading' || downloadState?.status === 'queued'
   const hasSealedObject = fileHasASealedObject(file)
   const isDownloaded = !!fileUri
+  const isPinned = hasSealedObject
+
+  const upload: UploadActivity = {
+    state:
+      uploadStatus === 'queued'
+        ? 'queued'
+        : uploadStatus === 'packing' || uploadStatus === 'packed'
+          ? 'packing'
+          : uploadStatus === 'uploading'
+            ? 'uploading'
+            : uploadStatus === 'error'
+              ? 'errored'
+              : 'idle',
+    progress: uploadState?.progress ?? 0,
+  }
+  const download: DownloadActivity = {
+    state:
+      downloadState?.status === 'queued'
+        ? 'queued'
+        : downloadState?.status === 'downloading'
+          ? 'downloading'
+          : downloadState?.status === 'error'
+            ? 'errored'
+            : 'idle',
+    progress: downloadState?.progress ?? 0,
+  }
+  // Surface file.lostReason verbatim (e.g., "Source photo deleted from
+  // device") rather than collapsing it to "Import failed". The friendly
+  // label is hardcoded per phase in UploadStatusIcon; this carries detail.
+  const resolvedErrorText =
+    file?.lostReason ?? uploadState?.error ?? downloadState?.error ?? errorText
+  const facts: FileFacts = {
+    isProcessing,
+    isImportFailed,
+    isPinned,
+    hasLocalCopy: isDownloaded,
+    photosLookup,
+    isShared: !!isShared,
+    upload,
+    download,
+    errorText: resolvedErrorText,
+  }
+  const phase = derivePhase(facts)
+  const capabilities = deriveCapabilities(facts)
+
   return {
     isProcessing,
     isDeferredImport,
     isImportFailed,
-    isUploading,
-    isDownloading,
-    isUploadQueued: uploadStatus === 'queued',
-    isDownloadQueued: downloadState?.status === 'queued',
-    isPacking,
-    batchFileCount: uploadState?.batchFileCount ?? 0,
-    isUploaded: hasSealedObject || !!isShared,
+    isPinned,
+    isOnNetwork: capabilities.isOnNetwork,
     isDownloaded,
-    isErrored: isImportFailed || uploadStatus === 'error' || downloadState?.status === 'error',
-    uploadProgress: uploadState?.progress ?? 0,
-    downloadProgress: downloadState?.progress ?? 0,
     fileUri,
-    fileIsGone:
-      !!file?.lostReason ||
-      (!isProcessing && !isUploading && !isDownloading && !hasSealedObject && !fileUri),
-    errorText: isImportFailed ? 'Import failed' : errorText,
+    photosLookup,
+    photosDisplayUri,
+    displayUri: fileUri ?? photosDisplayUri ?? null,
+    upload,
+    download,
+    errorText: resolvedErrorText,
+    phase,
+    canShare: capabilities.canShare,
+    canDownload: capabilities.canDownload,
+    canUpload: capabilities.canUpload,
+    canPlay: capabilities.canPlay,
+    canAutoFetch: capabilities.canAutoFetch,
   }
 }
 
@@ -111,10 +332,44 @@ export type FileStatusResponse = {
   isLoading: boolean
 }
 
-export function useFileStatus(file?: FileRecord, isShared?: boolean): FileStatusResponse {
+export type UseFileStatusOptions = {
+  isShared?: boolean
+  /**
+   * Resolve the Photos-library backup for files with a localId. iOS
+   * MediaLibrary.getAssetInfoAsync can trigger an iCloud download, so
+   * gallery-style consumers must leave this off; only opt in for surfaces
+   * that actually need the fallback (e.g., FileViewer).
+   */
+  resolvePhotosLookup?: boolean
+}
+
+export function useFileStatus(
+  file?: FileRecord,
+  options: UseFileStatusOptions = {},
+): FileStatusResponse {
+  const { isShared, resolvePhotosLookup } = options
   const uploadState = useUploadState(file?.id || '')
   const { data: downloadState } = useDownloadEntry(file?.id || '')
   const fileUri = useFsFileUri(file)
+
+  // Only look up Photos when caller opts in AND the file has a localId AND
+  // there's no sealed-object fallback (network download is canonical when pinned).
+  const hasSealed = fileHasASealedObject(file)
+  const photosLocalId = resolvePhotosLookup && file?.localId && !hasSealed ? file.localId : null
+  const photosSwr = useSWR(photosLocalId ? ['mediaLibraryDisplayUri', photosLocalId] : null, () =>
+    getMediaLibraryDisplayUri(photosLocalId),
+  )
+
+  const photosLookup: PhotosLookup = !resolvePhotosLookup
+    ? 'none'
+    : !file?.localId || hasSealed
+      ? 'none'
+      : !photosSwr.data && !photosSwr.error
+        ? 'unknown'
+        : photosSwr.data?.status === 'resolved'
+          ? 'available'
+          : 'unavailable'
+  const photosDisplayUri = photosSwr.data?.status === 'resolved' ? photosSwr.data.uri : null
 
   const data = useMemo(() => {
     if (fileUri.isLoading) return undefined
@@ -124,9 +379,20 @@ export function useFileStatus(file?: FileRecord, isShared?: boolean): FileStatus
       uploadState,
       downloadState,
       fileUri: fileUri.data ?? null,
+      photosLookup,
+      photosDisplayUri,
       errorText: uploadState?.error || downloadState?.error || null,
     })
-  }, [file, isShared, uploadState, downloadState, fileUri.data, fileUri.isLoading])
+  }, [
+    file,
+    isShared,
+    uploadState,
+    downloadState,
+    fileUri.data,
+    fileUri.isLoading,
+    photosLookup,
+    photosDisplayUri,
+  ])
 
   return { data, isLoading: fileUri.isLoading }
 }
@@ -149,17 +415,11 @@ export async function fetchBulkCounts(fileIds: string[]): Promise<BulkCounts> {
     const file = await app().files.getById(id)
     if (file) {
       files.push(file)
-      const hasSealed = fileHasASealedObject(file)
       const uri = await app().fs.getFileUri(file)
-      if (hasSealed) {
-        onNetwork++
-      }
-      if (hasSealed && !uri) {
-        downloadable++
-      }
-      if (uri && !hasSealed) {
-        uploadable++
-      }
+      const caps = getFileCapabilities(file, uri)
+      if (caps.isOnNetwork) onNetwork++
+      if (caps.canDownload) downloadable++
+      if (caps.canUpload) uploadable++
     }
   }
 

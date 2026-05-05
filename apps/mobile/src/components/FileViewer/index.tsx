@@ -3,9 +3,8 @@ import type { FileRecord } from '@siastorage/core/types'
 import { ClockArrowUpIcon, ClockIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
-import { useFileStatus } from '../../lib/file'
+import { assertNever, useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
-import { useMediaLibraryDisplayUri } from '../../hooks/useMediaLibraryDisplayUri'
 import { useDownload } from '../../managers/downloader'
 import { colors } from '../../styles/colors'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
@@ -38,16 +37,16 @@ export function FileViewer({
   onSwipeRight,
 }: FileViewerProps) {
   const { type, name } = file
-  const status = useFileStatus(file, isShared)
-  const { fileUri, isDownloaded, isDownloading, isProcessing, isDeferredImport } = status.data ?? {}
+  const status = useFileStatus(file, { isShared, resolvePhotosLookup: true })
+  const phase = status.data?.phase
+  const importingPreview = phase?.kind === 'importing' ? phase.preview : null
+  const photosLookup = status.data?.photosLookup
+  const photosDisplayUri = status.data?.photosDisplayUri ?? null
+  const displayUri = status.data?.displayUri ?? null
+  const isDeferredImport = status.data?.isDeferredImport ?? false
+  const isDownloading = status.data?.download.state === 'downloading'
   const fileDownload = useDownload(file, 0)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
-
-  const {
-    uri: mediaLibraryUri,
-    isLoading: mediaLibraryLoading,
-    hasNoSealedObjects,
-  } = useMediaLibraryDisplayUri(file)
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset
@@ -66,20 +65,22 @@ export function FileViewer({
 
   const isQueued = fileDownloadState?.status === 'queued'
 
+  const UnavailablePanel = useMemo(() => {
+    return (
+      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 12 }]}>
+        <CloudDownloadIcon color={colors.textSecondary} size={40} />
+        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '600' }}>
+          File unavailable
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
+          This file was never uploaded and the local copy is unavailable.
+        </Text>
+      </View>
+    )
+    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
+  }, [])
+
   const DownloadPanel = useMemo(() => {
-    if (hasNoSealedObjects) {
-      return (
-        <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 12 }]}>
-          <CloudDownloadIcon color={colors.textSecondary} size={40} />
-          <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '600' }}>
-            File unavailable
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>
-            This file was never uploaded and the local copy is unavailable.
-          </Text>
-        </View>
-      )
-    }
     return (
       <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
         <TouchableHighlight onPress={onDownloadPress} disabled={isQueued}>
@@ -102,14 +103,7 @@ export function FileViewer({
       </View>
     )
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
-  }, [
-    isDownloading,
-    isQueued,
-    onDownloadPress,
-    fileDownloadState?.progress,
-    file.size,
-    hasNoSealedObjects,
-  ])
+  }, [isDownloading, isQueued, onDownloadPress, fileDownloadState?.progress, file.size])
 
   const ImportingPanel = useMemo(() => {
     return (
@@ -156,9 +150,6 @@ export function FileViewer({
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [isDeferredImport])
 
-  const displayUri = fileUri || mediaLibraryUri || null
-  const canDisplay = isDownloaded || !!mediaLibraryUri
-
   const LoadingPanel = useMemo(() => {
     return (
       <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -168,104 +159,134 @@ export function FileViewer({
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [])
 
-  const mediaContent = useMemo(() => {
-    if (isProcessing && mediaLibraryLoading) return LoadingPanel
-    if (isProcessing && !mediaLibraryUri) return ImportingPanel
-    if (!canDisplay || !displayUri) return DownloadPanel
+  const renderViewer = useCallback(
+    (uri: string) => {
+      if (type?.includes('image'))
+        return <ImageViewer uri={uri} style={baseMediaStyle} onZoomChange={onImageZoomChange} />
+      if (type?.includes('video'))
+        return (
+          <VideoPlayer
+            source={uri}
+            style={baseMediaStyle}
+            onViewerControlPress={onViewerControlPress}
+          />
+        )
+      if (type?.includes('audio'))
+        return (
+          <AudioPlayer
+            source={uri}
+            filename={name}
+            style={baseMediaStyle}
+            onViewerControlPress={onViewerControlPress}
+          />
+        )
+      if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf'))
+        return (
+          <PDFViewer
+            source={uri}
+            style={baseMediaStyle}
+            onSwipeLeft={onSwipeLeft}
+            onSwipeRight={onSwipeRight}
+          />
+        )
+      if (type?.includes('application/json') || lowerCasedFileName.endsWith('.json'))
+        return (
+          <JSONViewer
+            uri={uri}
+            fileSize={file.size}
+            style={baseMediaStyle}
+            topInset={textInsetValue}
+          />
+        )
+      if (
+        type?.includes('text/markdown') ||
+        lowerCasedFileName.endsWith('.md') ||
+        lowerCasedFileName.endsWith('.markdown')
+      )
+        return (
+          <MarkdownViewer
+            uri={uri}
+            style={textMediaStyle}
+            onViewerControlPress={onViewerControlPress}
+          />
+        )
+      if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt'))
+        return (
+          <TextViewer
+            uri={uri}
+            fileSize={file.size}
+            style={baseMediaStyle}
+            topInset={textInsetValue}
+          />
+        )
 
-    if (type?.includes('image'))
       return (
-        <ImageViewer uri={displayUri} style={baseMediaStyle} onZoomChange={onImageZoomChange} />
+        <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
+          <FileIcon color={colors.textPrimary} size={40} />
+          <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
+        </View>
       )
-    if (type?.includes('video'))
-      return (
-        <VideoPlayer
-          source={displayUri}
-          style={baseMediaStyle}
-          onViewerControlPress={onViewerControlPress}
-        />
-      )
-    if (type?.includes('audio')) {
-      return (
-        <AudioPlayer
-          source={displayUri}
-          filename={name}
-          style={baseMediaStyle}
-          onViewerControlPress={onViewerControlPress}
-        />
-      )
-    }
-    if (type?.includes('pdf') || lowerCasedFileName.endsWith('.pdf')) {
-      return (
-        <PDFViewer
-          source={displayUri}
-          style={baseMediaStyle}
-          onSwipeLeft={onSwipeLeft}
-          onSwipeRight={onSwipeRight}
-        />
-      )
-    }
-
-    if (type?.includes('application/json') || lowerCasedFileName.endsWith('.json')) {
-      return (
-        <JSONViewer
-          uri={displayUri}
-          fileSize={file.size}
-          style={baseMediaStyle}
-          topInset={textInsetValue}
-        />
-      )
-    }
-    if (
-      type?.includes('text/markdown') ||
-      lowerCasedFileName.endsWith('.md') ||
-      lowerCasedFileName.endsWith('.markdown')
-    ) {
-      return (
-        <MarkdownViewer
-          uri={displayUri}
-          style={textMediaStyle}
-          onViewerControlPress={onViewerControlPress}
-        />
-      )
-    }
-    if (type?.includes('text/plain') || lowerCasedFileName.endsWith('.txt')) {
-      return (
-        <TextViewer
-          uri={displayUri}
-          fileSize={file.size}
-          style={baseMediaStyle}
-          topInset={textInsetValue}
-        />
-      )
-    }
-
-    return (
-      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
-        <FileIcon color={colors.textPrimary} size={40} />
-        <Text style={{ color: colors.textPrimary }}>Preview not supported</Text>
-      </View>
-    )
+    },
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
+    [
+      type,
+      lowerCasedFileName,
+      name,
+      textInsetValue,
+      textMediaStyle,
+      file.size,
+      onViewerControlPress,
+      onSwipeLeft,
+      onSwipeRight,
+      onImageZoomChange,
+    ],
+  )
+
+  const mediaContent = useMemo(() => {
+    if (!phase) return LoadingPanel
+    switch (phase.kind) {
+      case 'importing':
+        switch (phase.preview) {
+          case 'pending':
+            return LoadingPanel
+          case 'available':
+            return displayUri ? renderViewer(displayUri) : ImportingPanel
+          case 'none':
+            return ImportingPanel
+        }
+        return ImportingPanel
+      case 'import-failed':
+        return UnavailablePanel
+      case 'unavailable':
+        // Edge case: hashed file with no local copy / no pinned objects.
+        // Effectively unreachable in healthy code (eviction skips unpinned
+        // files), but if it surfaces and Photos still has the original,
+        // render it so the user can recover via re-import.
+        return displayUri ? renderViewer(displayUri) : UnavailablePanel
+      case 'upload-errored':
+        return displayUri ? renderViewer(displayUri) : UnavailablePanel
+      case 'pinned-remote-only':
+      case 'downloading':
+        return DownloadPanel
+      case 'pinned-and-local':
+      case 'local-only':
+      case 'uploading':
+        return displayUri ? renderViewer(displayUri) : DownloadPanel
+      default:
+        return assertNever(phase)
+    }
+    // oxlint-disable-next-line react/exhaustive-deps -- depend on phase?.kind/preview not phase to avoid identity churn from progress ticks
   }, [
+    phase?.kind,
+    importingPreview,
+    photosLookup,
+    photosDisplayUri,
+    displayUri,
     LoadingPanel,
     ImportingPanel,
-    isProcessing,
-    mediaLibraryLoading,
-    mediaLibraryUri,
+    UnavailablePanel,
     DownloadPanel,
-    displayUri,
-    canDisplay,
-    lowerCasedFileName,
-    name,
-    textInsetValue,
-    textMediaStyle,
-    type,
-    file.size,
-    onViewerControlPress,
-    onSwipeLeft,
-    onSwipeRight,
-    onImageZoomChange,
+    renderViewer,
   ])
 
   return <View style={styles.container}>{mediaContent}</View>
