@@ -35,9 +35,8 @@ export function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 51
     if (isInitializing) return
     if (!isConnected) return
     if (!thumbRecord.data) return
-    if (!status.data?.isUploaded) return
-    if (status.data?.isDownloaded) return
-    if (status.data?.isDownloading) return
+    if (!status.data?.canAutoFetch) return
+    if (status.data.download.state !== 'idle') return
     download()
   }, [isInitializing, isConnected, thumbRecord.data, status.data, download])
 

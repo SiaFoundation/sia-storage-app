@@ -15,7 +15,7 @@ import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
-import { fetchBulkCounts, fileHasASealedObject, useFileStatus } from '../lib/file'
+import { fetchBulkCounts, getFileCapabilities, useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
 import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
@@ -156,7 +156,7 @@ function SingleFileActionsSheet({
       >
         Export file
       </ActionSheetButton>
-      {!status.data?.isDownloaded && !status.data?.isDownloading && !status.data?.fileIsGone && (
+      {status.data?.canDownload && (
         <ActionSheetButton
           variant="primary"
           icon={<ArrowDownToLineIcon size={18} />}
@@ -165,7 +165,7 @@ function SingleFileActionsSheet({
           Download to device
         </ActionSheetButton>
       )}
-      {!status.data?.isUploaded && !status.data?.isUploading && !status.data?.fileIsGone && (
+      {status.data?.canUpload && (
         <ActionSheetButton
           variant="primary"
           icon={<CloudUploadIcon size={18} />}
@@ -250,9 +250,8 @@ function BulkFileActionsSheet({
     if (!counts) return
     try {
       for (const file of counts.files) {
-        const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
-        if (hasSealed && !uri) {
+        if (getFileCapabilities(file, uri).canDownload) {
           void downloadFile(file, 0)
         }
       }
@@ -270,9 +269,8 @@ function BulkFileActionsSheet({
     try {
       let queued = 0
       for (const file of counts.files) {
-        const hasSealed = fileHasASealedObject(file)
         const uri = await app().fs.getFileUri(file)
-        if (uri && !hasSealed) {
+        if (getFileCapabilities(file, uri).canUpload) {
           queueUploadForFileId(file.id)
           queued++
         }

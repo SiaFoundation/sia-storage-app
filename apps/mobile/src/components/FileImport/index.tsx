@@ -189,7 +189,7 @@ export function FileImport({
     displayFile.type === 'application/octet-stream' ||
     !displayFile.hash
 
-  const fileStatus = useFileStatus(displayFile || undefined, true)
+  const fileStatus = useFileStatus(displayFile || undefined, { isShared: true })
 
   const [isAddingToDatabase, setIsAddingToDatabase] = useState(false)
   const handleAddToDatabase = useCallback(async () => {

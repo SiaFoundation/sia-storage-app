@@ -76,6 +76,32 @@ export async function getMediaLibraryUri(localId: string | null): Promise<Resolv
 }
 
 /**
+ * Resolve a media library local ID to a URI a player can render.
+ *
+ * Prefers asset.localUri (file://) when available, falls back to asset.uri
+ * (ph:// on iOS, file:// on Android). The ph:// fallback is what unblocks
+ * slow-mo / HEVC / iCloud videos on iOS where AVAssetExportSession can't
+ * produce a localUri, and any video on Android where expo-media-library's
+ * ExifInterface path is image-only. Video players resolve ph:// directly
+ * via PHImageManager — no file on disk required.
+ *
+ * Display only. ph:// has no readable bytes, so do not use this for
+ * hashing, copying, sharing, or upload — getMediaLibraryUri (above) is
+ * the function for that.
+ */
+export async function getMediaLibraryDisplayUri(
+  localId: string | null,
+): Promise<ResolveLocalIdResult> {
+  if (!localId) return deleted
+  const asset = await MediaLibrary.getAssetInfoAsync(localId, {
+    shouldDownloadFromNetwork: false,
+  }).catch(() => null)
+  if (!asset) return deleted
+  const uri = normalizeUri(asset.localUri) ?? asset.uri ?? null
+  return uri ? resolved(uri) : unavailable
+}
+
+/**
  * Normalize the URI for a file. Remove the hash index if it exists.
  * This is necessary because the MediaLibrary.getAssetInfoAsync() sometimes
  * returns a URI with a hash index that is not valid for the File system API.
