@@ -13,6 +13,8 @@ jest.mock('react-native-fs', () => ({
 
 const statMock = jest.mocked(RNFS.stat)
 const existsMock = jest.mocked(RNFS.exists)
+const unlinkMock = jest.mocked(RNFS.unlink)
+const copyFileMock = jest.mocked(RNFS.copyFile)
 
 function mockStatResult(size: number): RNFS.StatResult {
   return {
@@ -71,5 +73,55 @@ describe('fsIO adapter size()', () => {
     existsMock.mockResolvedValue(true)
     const result = await adapter.size('file1', 'image/jpeg')
     expect(result).toEqual({ value: null, error: 'stat_error' })
+  })
+})
+
+describe('fsIO adapter copy()', () => {
+  const adapter = createFsIOAdapter()
+  const file = { id: 'file1', type: 'image/png' }
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    existsMock.mockResolvedValue(false)
+    copyFileMock.mockResolvedValue(undefined)
+    statMock.mockResolvedValue(mockStatResult(1024))
+  })
+
+  // Regression for issue #610: iOS Document Picker hands us a
+  // percent-encoded file:// URL, but RNFS expects a real path.
+  it('decodes percent-encoded file:// URIs', async () => {
+    await adapter.copy(
+      file,
+      'file:///tmp/sia.storage-Inbox/Screenshot%202025-09-03%20at%2018.13.41.png',
+    )
+    expect(copyFileMock).toHaveBeenCalledWith(
+      '/tmp/sia.storage-Inbox/Screenshot 2025-09-03 at 18.13.41.png',
+      expect.any(String),
+    )
+  })
+
+  it('strips the file:// prefix from unencoded URIs', async () => {
+    await adapter.copy(file, 'file:///tmp/clean.png')
+    expect(copyFileMock).toHaveBeenCalledWith('/tmp/clean.png', expect.any(String))
+  })
+
+  it('passes non-file URIs through unchanged', async () => {
+    await adapter.copy(file, 'ph://abc123')
+    expect(copyFileMock).toHaveBeenCalledWith('ph://abc123', expect.any(String))
+  })
+
+  // A malformed file:// URI (literal % not part of an escape) shouldn't
+  // throw — fall back to the raw path so RNFS just reports the missing
+  // file as it would have before the decode.
+  it('falls back to the raw path when decoding fails', async () => {
+    await adapter.copy(file, 'file:///tmp/50% off.txt')
+    expect(copyFileMock).toHaveBeenCalledWith('/tmp/50% off.txt', expect.any(String))
+  })
+
+  it('removes an existing target before copying', async () => {
+    existsMock.mockResolvedValue(true)
+    await adapter.copy(file, 'file:///tmp/clean.png')
+    expect(unlinkMock).toHaveBeenCalledTimes(1)
+    expect(copyFileMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -10,6 +10,20 @@ function fsFileUri(fileId: string, type: string): string {
   return `${fsStorageDirectoryUri}/${fileId}${extFromMime(type)}`
 }
 
+// iOS pickers (Document Picker, share inbox) hand us percent-encoded
+// `file://` URLs — `Screenshot%202025-09-03.png` — but RNFS expects a
+// real filesystem path with literal spaces. Fall back to the raw path
+// if decoding throws on a malformed URI (literal `%` + non-hex).
+function fileUriToPath(uri: string): string {
+  if (!uri.startsWith('file://')) return uri
+  const path = uri.slice('file://'.length)
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
 export function createFsIOAdapter(): FsIOAdapter {
   return {
     uri(fileId, type) {
@@ -38,7 +52,7 @@ export function createFsIOAdapter(): FsIOAdapter {
       if (await RNFS.exists(targetUri)) {
         await RNFS.unlink(targetUri)
       }
-      await RNFS.copyFile(sourceUri.replace(/^file:\/\//, ''), targetUri)
+      await RNFS.copyFile(fileUriToPath(sourceUri), targetUri)
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },
