@@ -3,10 +3,9 @@ import type { FileRecord } from '@siastorage/core/types'
 import { ClockArrowUpIcon, ClockIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
-import useSWR from 'swr'
 import { useFileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
-import { getMediaLibraryUri } from '../../lib/mediaLibrary'
+import { useMediaLibraryDisplayUri } from '../../hooks/useMediaLibraryDisplayUri'
 import { useDownload } from '../../managers/downloader'
 import { colors } from '../../styles/colors'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
@@ -44,14 +43,11 @@ export function FileViewer({
   const fileDownload = useDownload(file, 0)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
-  const hasNoSealedObjects = Object.keys(file.objects).length === 0
-  const localId = (file.hash === '' || hasNoSealedObjects) && file.localId ? file.localId : null
-  const mediaLibrarySwr = useSWR(localId ? ['mediaLibraryUri', localId] : null, () =>
-    getMediaLibraryUri(localId),
-  )
-  const mediaLibraryUri =
-    mediaLibrarySwr.data?.status === 'resolved' ? mediaLibrarySwr.data.uri : null
-  const mediaLibraryLoading = localId ? !mediaLibrarySwr.data && !mediaLibrarySwr.error : false
+  const {
+    uri: mediaLibraryUri,
+    isLoading: mediaLibraryLoading,
+    hasNoSealedObjects,
+  } = useMediaLibraryDisplayUri(file)
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset
