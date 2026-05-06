@@ -9,6 +9,15 @@ import { app } from '../stores/appService'
 
 const scanner = new ThumbnailScanner()
 
+// After this many consecutive ticks with zero candidates, the scanner
+// slows its polling cadence. Reset on triggerNow / new imports.
+const IDLE_BACKOFF_THRESHOLD = 3
+const IDLE_BACKOFF_INTERVAL_MS = 30_000
+const IDLE_STEADY_INTERVAL_MS = 60_000
+const IDLE_STEADY_THRESHOLD = 6
+
+let consecutiveZeroTicks = 0
+
 export function getThumbnailScanner(): ThumbnailScanner {
   ensureInitialized()
   return scanner
@@ -17,6 +26,10 @@ export function getThumbnailScanner(): ThumbnailScanner {
 function ensureInitialized(): void {
   if (scanner.isInitialized()) return
   scanner.initialize(app())
+}
+
+export function resetThumbnailScannerBackoff(): void {
+  consecutiveZeroTicks = 0
 }
 
 export async function runThumbnailScanner(signal?: AbortSignal): Promise<ThumbnailScannerResult> {
@@ -29,7 +42,25 @@ export async function runThumbnailScanner(signal?: AbortSignal): Promise<Thumbna
   return result
 }
 
-async function run(signal: AbortSignal): Promise<void> {
+function resultSawWork(result: ThumbnailScannerResult): boolean {
+  return (
+    result.processedCandidates > 0 ||
+    result.produced.length > 0 ||
+    result.attempts.length > 0 ||
+    result.skippedNoSource.length > 0 ||
+    result.skippedFullyCovered.length > 0 ||
+    result.skippedErrorCooldown.length > 0 ||
+    result.errors.length > 0
+  )
+}
+
+export function nextIdleInterval(zeroTicks: number): number | undefined {
+  if (zeroTicks >= IDLE_STEADY_THRESHOLD) return IDLE_STEADY_INTERVAL_MS
+  if (zeroTicks >= IDLE_BACKOFF_THRESHOLD) return IDLE_BACKOFF_INTERVAL_MS
+  return undefined
+}
+
+async function run(signal: AbortSignal): Promise<number | void> {
   // Hard gate: hold off for the entire initial sync window so we don't
   // generate thumbs locally for files whose remote thumbnails are about
   // to land in the same catch-up.
@@ -43,11 +74,24 @@ async function run(signal: AbortSignal): Promise<void> {
     logger.debug('thumbnailScanner', 'skipped', { reason: 'syncing_down' })
     return
   }
-  await runThumbnailScanner(signal)
+  const result = await runThumbnailScanner(signal)
+  if (resultSawWork(result)) {
+    consecutiveZeroTicks = 0
+    return
+  }
+  consecutiveZeroTicks++
+  return nextIdleInterval(consecutiveZeroTicks)
 }
 
-export const { init: initThumbnailScanner } = createServiceInterval({
+const scannerInterval = createServiceInterval({
   name: 'thumbnailScanner',
   worker: run,
   interval: THUMBNAIL_SCANNER_INTERVAL,
 })
+
+export const initThumbnailScanner = scannerInterval.init
+
+export function triggerThumbnailScanner(): void {
+  resetThumbnailScannerBackoff()
+  scannerInterval.triggerNow()
+}
