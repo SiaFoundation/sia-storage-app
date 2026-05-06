@@ -1,4 +1,5 @@
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
+import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
   DirectoryWithCount,
@@ -364,20 +365,11 @@ export interface AppService {
     /** Returns overall thumbnail scan progress (count of originals and thumbs). */
     queryProgress(allowedTypes: readonly string[]): Promise<{ originals: number; thumbs: number }>
     /** Generates a single image thumbnail at the given size. */
-    generate(
-      sourcePath: string,
-      targetSize: number,
-    ): Promise<{ data: ArrayBuffer; mimeType: string }>
+    generate(sourcePath: string, targetSize: number): Promise<ThumbnailResult>
     /** Generates image thumbnails at multiple sizes in one pass. */
-    generateBatch(
-      sourcePath: string,
-      sizes: number[],
-    ): Promise<Map<number, { data: ArrayBuffer; mimeType: string }>>
+    generateBatch(sourcePath: string, sizes: number[]): Promise<Map<number, ThumbnailResult>>
     /** Generates a video thumbnail at the given size. */
-    generateVideo(
-      sourcePath: string,
-      targetSize: number,
-    ): Promise<{ data: ArrayBuffer; mimeType: string }>
+    generateVideo(sourcePath: string, targetSize: number): Promise<ThumbnailResult>
   }
   /** Local object (remote reference) CRUD for file-to-indexer mappings. */
   localObjects: {
@@ -454,6 +446,11 @@ export interface AppService {
     writeFileData(
       file: { id: string; type: string },
       data: ArrayBuffer,
+    ): Promise<{ uri: string; size: number; hash: string }>
+    /** Moves an existing file into managed storage, hashes it natively, and upserts metadata. */
+    adoptFile(
+      file: { id: string; type: string },
+      sourceUri: string,
     ): Promise<{ uri: string; size: number; hash: string }>
     /** Detects the MIME type of a file at the given path. */
     detectMimeType(path: string): Promise<string | null>

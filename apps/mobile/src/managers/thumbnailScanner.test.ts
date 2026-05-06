@@ -538,6 +538,35 @@ describe('thumbnailScanner', () => {
     expect(sizes).not.toContain(64)
   })
 
+  it('routes savedUri results through fs.adoptFile (no JS-side bytes)', async () => {
+    const now = Date.now()
+    await app().files.create({
+      id: 'file1',
+      name: 'test.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1000,
+      hash: 'hash1',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
+    })
+    await upsertFs('file1')
+    getFsFileUriMock.mockResolvedValue('file://test.jpg')
+    const adoptSpy = jest
+      .spyOn(app().fs, 'adoptFile')
+      .mockResolvedValue({ uri: 'file://target.webp', size: 200, hash: 'thumb-hash' })
+    generateMock.mockResolvedValue({ savedUri: 'file:///tmp/sized.webp', mimeType: 'image/webp' })
+
+    const result = await runThumbnailScanner()
+    const producedSizes = result.produced.map((p) => p.size).sort((a, b) => a - b)
+    expect(producedSizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
+    expect(adoptSpy).toHaveBeenCalledTimes(ThumbSizes.length)
+  })
+
   it('does not return metadata-only files (no fs row) as candidates', async () => {
     const now = Date.now()
     await app().files.create({

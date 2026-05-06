@@ -65,6 +65,19 @@ export function createFsIOAdapter(): FsIOAdapter {
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },
+    async adoptFile(file, sourceUri) {
+      const targetUri = fsFileUri(file.id, file.type)
+      if (!(await RNFS.exists(fsStorageDirectoryUri))) {
+        await RNFS.mkdir(fsStorageDirectoryUri)
+      }
+      if (await RNFS.exists(targetUri)) {
+        await RNFS.unlink(targetUri)
+      }
+      await RNFS.moveFile(fileUriToPath(sourceUri), targetUri)
+      const stat = await RNFS.stat(targetUri)
+      const hash = await RNFS.hash(targetUri, 'sha256')
+      return { uri: targetUri, size: stat.size, hash }
+    },
     async list() {
       if (!(await RNFS.exists(fsStorageDirectoryUri))) return []
       const entries = await RNFS.readDir(fsStorageDirectoryUri)

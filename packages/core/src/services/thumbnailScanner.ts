@@ -1,10 +1,22 @@
 import { logger } from '@siastorage/logger'
+import type { ThumbnailResult } from '../adapters/thumbnail'
 import type { AppService } from '../app/service'
 import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
 import { ThumbSizes } from '../types/files'
+
+async function writeThumbnailToStorage(
+  app: AppService,
+  thumbInfo: { id: string; type: string },
+  result: ThumbnailResult,
+): Promise<{ uri: string; size: number; hash: string }> {
+  if ('savedUri' in result) {
+    return app.fs.adoptFile(thumbInfo, result.savedUri)
+  }
+  return app.fs.writeFileData(thumbInfo, result.data)
+}
 
 export type ThumbnailCandidateRow = {
   id: string
@@ -234,7 +246,7 @@ export class ThumbnailScanner {
       detectedType,
     })
 
-    let result: { data: ArrayBuffer; mimeType: string }
+    let result: ThumbnailResult
     try {
       if (actualType?.startsWith('video/')) {
         result = await app.thumbnails.generateVideo(sourceUri, size)
@@ -261,7 +273,7 @@ export class ThumbnailScanner {
         id: thumbId,
         type: result.mimeType,
       }
-      const copied = await app.fs.writeFileData(thumbFileInfo, result.data)
+      const copied = await writeThumbnailToStorage(app, thumbFileInfo, result)
 
       const now = Date.now()
       // Thumb is on disk; gate so files.create can't fast-reject and
@@ -332,7 +344,7 @@ export class ThumbnailScanner {
       return
     }
 
-    let thumbnails: Map<number, { data: ArrayBuffer; mimeType: string }>
+    let thumbnails: Map<number, ThumbnailResult>
     try {
       thumbnails = await app.thumbnails.generateBatch(sourceUri, sizes)
     } catch (e) {
@@ -351,9 +363,10 @@ export class ThumbnailScanner {
       if (!result) continue
       try {
         const thumbId = uniqueId()
-        const copied = await app.fs.writeFileData(
+        const copied = await writeThumbnailToStorage(
+          app,
           { id: thumbId, type: result.mimeType },
-          result.data,
+          result,
         )
         const now = Date.now()
         // See ensureThumbnail above — gate the files.create that follows

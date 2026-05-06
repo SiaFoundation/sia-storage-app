@@ -118,6 +118,18 @@ export function buildDbNamespaces(
       })
       return { uri: result.uri, size: result.size, hash }
     },
+    adoptFile: async (file, sourceUri) => {
+      if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
+      const result = await fsIO.adoptFile(file, sourceUri)
+      const now = Date.now()
+      await ops.upsertFsMeta(db, {
+        fileId: file.id,
+        size: result.size,
+        addedAt: now,
+        usedAt: now,
+      })
+      return result
+    },
     listFiles: () => fsIO.list(),
     ensureStorageDirectory: () => fsIO.ensureDirectory(),
     detectMimeType: async (path) => {

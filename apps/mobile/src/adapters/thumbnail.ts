@@ -1,8 +1,6 @@
 import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
 import type { MimeType } from '@siastorage/core/lib/fileTypes'
 import type { ThumbSize } from '@siastorage/core/types'
-// oxlint-disable-next-line no-restricted-imports -- File constructor + .bytes() (async)
-import { File } from 'expo-file-system'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
@@ -29,7 +27,7 @@ async function resizeToWebP(
   inputUri: string,
   maxSize: number,
   skipOrientationDetection?: boolean,
-): Promise<{ result: ThumbnailResult; savedUri: string }> {
+): Promise<{ savedUri: string; mimeType: string }> {
   const ctx = ImageManipulator.manipulate(inputUri)
 
   let isPortrait: boolean
@@ -72,15 +70,7 @@ async function resizeToWebP(
     compress: 0.8,
     format: SaveFormat.WEBP,
   })
-  const file = new File(saved.uri)
-  const data = await file.bytes()
-  return {
-    result: {
-      data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-      mimeType: 'image/webp',
-    },
-    savedUri: saved.uri,
-  }
+  return { savedUri: saved.uri, mimeType: 'image/webp' }
 }
 
 // Image MIMEs that ImageIO (iOS) and BitmapFactory (Android) can decode.
@@ -121,8 +111,7 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
   return {
     thumbnailableTypes: MOBILE_THUMBNAILABLE_TYPES,
     async generateImageThumbnail(sourcePath: string, targetSize: number): Promise<ThumbnailResult> {
-      const { result } = await resizeToWebP(sourcePath, targetSize as ThumbSize)
-      return result
+      return resizeToWebP(sourcePath, targetSize as ThumbSize)
     },
 
     async generateImageThumbnails(
@@ -135,12 +124,12 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
       let inputUri = sourcePath
       let skipDetection = false
       for (const size of sorted) {
-        const { result, savedUri } = await resizeToWebP(inputUri, size, skipDetection)
+        const result = await resizeToWebP(inputUri, size, skipDetection)
         results.set(size, result)
         // Subsequent smaller sizes resize from the larger result.
         // That file is already correctly oriented and much smaller,
         // so decoding it is essentially free.
-        inputUri = savedUri
+        inputUri = result.savedUri
         skipDetection = true
       }
 
@@ -152,8 +141,7 @@ export function createMobileThumbnailAdapter(): ThumbnailAdapter {
         time: 1000,
         quality: 0.8,
       })
-      const { result } = await resizeToWebP(thumb.uri, targetSize as ThumbSize)
-      return result
+      return resizeToWebP(thumb.uri, targetSize as ThumbSize)
     },
   }
 }

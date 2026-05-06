@@ -6,15 +6,19 @@ jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
   unlink: jest.fn(),
   copyFile: jest.fn(),
+  moveFile: jest.fn(),
   writeFile: jest.fn(),
   mkdir: jest.fn(),
   readDir: jest.fn(),
+  hash: jest.fn(),
 }))
 
 const statMock = jest.mocked(RNFS.stat)
 const existsMock = jest.mocked(RNFS.exists)
 const unlinkMock = jest.mocked(RNFS.unlink)
 const copyFileMock = jest.mocked(RNFS.copyFile)
+const moveFileMock = jest.mocked(RNFS.moveFile)
+const hashMock = jest.mocked(RNFS.hash)
 
 function mockStatResult(size: number): RNFS.StatResult {
   return {
@@ -123,5 +127,43 @@ describe('fsIO adapter copy()', () => {
     await adapter.copy(file, 'file:///tmp/clean.png')
     expect(unlinkMock).toHaveBeenCalledTimes(1)
     expect(copyFileMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('fsIO adapter adoptFile()', () => {
+  const adapter = createFsIOAdapter()
+  const file = { id: 'file1', type: 'image/webp' }
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    existsMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/files')) return true
+      return false
+    })
+    moveFileMock.mockResolvedValue(undefined)
+    statMock.mockResolvedValue(mockStatResult(2048))
+    hashMock.mockResolvedValue('deadbeef')
+  })
+
+  it('moves the file natively, stats it, and returns a sha256 hash', async () => {
+    if (!adapter.adoptFile) throw new Error('adoptFile missing')
+    const result = await adapter.adoptFile(file, 'file:///tmp/abc.webp')
+    expect(moveFileMock).toHaveBeenCalledWith('/tmp/abc.webp', expect.any(String))
+    expect(hashMock).toHaveBeenCalledWith(expect.any(String), 'sha256')
+    expect(result).toMatchObject({ size: 2048, hash: 'deadbeef' })
+  })
+
+  it('removes an existing target before moving', async () => {
+    existsMock.mockResolvedValue(true)
+    if (!adapter.adoptFile) throw new Error('adoptFile missing')
+    await adapter.adoptFile(file, 'file:///tmp/abc.webp')
+    expect(unlinkMock).toHaveBeenCalledTimes(1)
+    expect(moveFileMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('decodes percent-encoded file:// source URIs', async () => {
+    if (!adapter.adoptFile) throw new Error('adoptFile missing')
+    await adapter.adoptFile(file, 'file:///tmp/some%20file.webp')
+    expect(moveFileMock).toHaveBeenCalledWith('/tmp/some file.webp', expect.any(String))
   })
 })
