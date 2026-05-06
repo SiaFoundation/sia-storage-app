@@ -55,6 +55,7 @@ const rnfsHash = jest.fn()
 const rnfsMkdir = jest.fn().mockResolvedValue(undefined)
 const rnfsWriteFile = jest.fn().mockResolvedValue(undefined)
 const rnfsCopyFile = jest.fn().mockResolvedValue(undefined)
+const rnfsMoveFile = jest.fn().mockResolvedValue(undefined)
 const rnfsUnlink = jest.fn().mockResolvedValue(undefined)
 jest.mock('react-native-fs', () => ({
   __esModule: true,
@@ -68,6 +69,7 @@ jest.mock('react-native-fs', () => ({
     mkdir: rnfsMkdir,
     writeFile: rnfsWriteFile,
     copyFile: rnfsCopyFile,
+    moveFile: rnfsMoveFile,
     unlink: rnfsUnlink,
   },
 }))
@@ -81,6 +83,7 @@ global.__rnfs = {
   rnfsMkdir,
   rnfsWriteFile,
   rnfsCopyFile,
+  rnfsMoveFile,
   rnfsUnlink,
 }
 

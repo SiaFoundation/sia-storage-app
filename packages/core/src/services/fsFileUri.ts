@@ -22,6 +22,10 @@ export type FsIOAdapter = FsFileUriAdapter & {
     file: { id: string; type: string },
     data: ArrayBuffer,
   ): Promise<{ uri: string; size: number }>
+  adoptFile?(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<{ uri: string; size: number; hash: string }>
   list(): Promise<string[]>
   ensureDirectory(): Promise<void>
 }
