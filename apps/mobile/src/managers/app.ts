@@ -17,6 +17,7 @@ import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
 import { runFsEvictionScanner } from './fsEvictionScanner'
+import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
@@ -76,6 +77,7 @@ export async function initApp(): Promise<void> {
         await app().fs.ensureStorageDirectory()
         await ensureTempFsStorageDirectory()
         await initKeepAwake()
+        initAutoKeepAwake()
         const maxDownloads = await app().settings.getMaxDownloads()
         await app().downloads.setMaxSlots(maxDownloads)
         const useWal = await getUseWalMode()
