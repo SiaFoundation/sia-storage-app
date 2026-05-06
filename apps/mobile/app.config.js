@@ -117,9 +117,7 @@ export default {
         },
       ],
     ],
-    runtimeVersion: {
-      policy: 'appVersion',
-    },
+    runtimeVersion: version,
     extra: {
       prod: RELEASE,
       appGroup: APP_GROUP,
