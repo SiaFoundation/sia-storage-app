@@ -1,6 +1,5 @@
 import { usePhotoImportDirectory } from '@siastorage/core/stores'
 import { useCallback, useState } from 'react'
-import { Linking } from 'react-native'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { toggleAutoSyncNewPhotos, useAutoSyncNewPhotos } from '../managers/syncNewPhotos'
 import { useArchiveSyncCompletedAt } from '../managers/syncPhotosArchive'
@@ -13,7 +12,7 @@ import { SelectDirectorySheet } from './SelectDirectorySheet'
 export function SettingsSyncPhotos() {
   const autoSyncNew = useAutoSyncNewPhotos()
   const archiveCompletedAt = useArchiveSyncCompletedAt()
-  const { isSomeAccess, accessLabel } = useMediaLibraryPermissions()
+  const { isSomeAccess, accessLabel, manageAccess } = useMediaLibraryPermissions()
   const photoImportDir = usePhotoImportDirectory()
   const [modalVisible, setModalVisible] = useState(false)
 
@@ -35,17 +34,13 @@ export function SettingsSyncPhotos() {
     void app().settings.setPhotoImportDirectory('')
   }, [])
 
-  const handleOpenPermissionSettings = useCallback(() => {
-    Linking.openSettings().catch(() => {})
-  }, [])
-
   return (
     <>
       <InsetGroupSection header="Photos" footer={photosFooter}>
         <InsetGroupLink
           label="Photo access"
           value={accessLabel}
-          onPress={handleOpenPermissionSettings}
+          onPress={manageAccess}
           showChevron={false}
         />
         <InsetGroupLink

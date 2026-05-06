@@ -15,9 +15,10 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
+import { initForegroundRefresh } from './lib/foregroundRefresh'
 import { ToastProvider } from './lib/toastContext'
 import { initApp, shutdownApp } from './managers/app'
-import { addForegroundFocusListener, getLifecycle } from './managers/lifecycle'
+import { getLifecycle } from './managers/lifecycle'
 import { RootTabs } from './stacks/RootTabs'
 import { app } from './stores/appService'
 import { palette } from './styles/colors'
@@ -32,23 +33,12 @@ const darkNavigationTheme = {
   },
 }
 
-// SWR config for React Native (per the official RN guide):
-//   isVisible: defaults check document.visibilityState (undefined in RN);
-//     without this override SWR treats the app as hidden.
-//   isPaused: skip fetcher dispatch when the app isn't foreground.
-//     Driven by the lifecycle module (lifecycle.ts), which treats iOS
-//     'inactive' as foreground — flickers from banners / Control Center /
-//     Face ID prompts no longer pause SWR.
-//   initFocus: subscribe to lifecycle's foreground-focus signal, which
-//     fires once per transition INTO foreground on a microtask after
-//     suspension manager listeners have run. Guarantees SWR refetches
-//     deferred fetchers on real foreground returns.
+// Treat iOS 'inactive' as foreground (per Apple's docs) so banners /
+// Face ID / Control Center don't pause SWR mid-render; pause only on
+// real backgrounding. Foreground refetch is handled by
+// `initForegroundRefresh`.
 const swrConfig = {
-  isVisible: () => true,
   isPaused: () => getLifecycle() !== 'foreground',
-  initFocus(callback: () => void) {
-    return addForegroundFocusListener(callback)
-  },
 }
 
 export function Root() {
@@ -58,6 +48,8 @@ export function Root() {
       shutdownApp()
     }
   }, [])
+
+  useEffect(() => initForegroundRefresh(), [])
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {

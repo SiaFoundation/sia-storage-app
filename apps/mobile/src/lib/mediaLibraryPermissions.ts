@@ -1,4 +1,3 @@
-import { useFocusEffect } from '@react-navigation/native'
 import { swrCache } from '@siastorage/core/stores'
 import * as MediaLibrary from 'expo-media-library'
 import { useCallback, useMemo } from 'react'
@@ -6,13 +5,21 @@ import { Linking, Platform } from 'react-native'
 import useSWR from 'swr'
 import { palette } from '../styles/colors'
 
+// Restrict the granular permission set to the media we actually use. With no
+// arg, expo-media-library on Android requires photo + video + audio to all
+// be granted before reporting `granted=true`. Android's "Photos and videos"
+// permission UI only controls photo+video; READ_MEDIA_AUDIO lives under a
+// separate "Music and audio" group the user is never prompted for, so it
+// stays denied and the combined check never flips to ALL.
+const GRANULAR: MediaLibrary.GranularPermission[] = ['photo', 'video']
+
 export async function ensureMediaLibraryPermission(): Promise<boolean> {
-  const res = await MediaLibrary.requestPermissionsAsync()
+  const res = await MediaLibrary.requestPermissionsAsync(false, GRANULAR)
   return res.granted === true
 }
 
 export async function getMediaLibraryPermissions(): Promise<boolean> {
-  const res = await MediaLibrary.getPermissionsAsync()
+  const res = await MediaLibrary.getPermissionsAsync(false, GRANULAR)
   return res.granted === true
 }
 
@@ -20,13 +27,8 @@ export async function getMediaLibraryPermissions(): Promise<boolean> {
 export const mediaLibraryPermissionsCache = swrCache()
 
 export function useMediaLibraryPermissions() {
-  const perms = useSWR(mediaLibraryPermissionsCache.key(), () => MediaLibrary.getPermissionsAsync())
-
-  useFocusEffect(
-    useCallback(() => {
-      void perms.mutate()
-      // oxlint-disable-next-line react/exhaustive-deps -- perms.mutate is stable per SWR, full perms object is not
-    }, [perms.mutate]),
+  const perms = useSWR(mediaLibraryPermissionsCache.key(), () =>
+    MediaLibrary.getPermissionsAsync(false, GRANULAR),
   )
 
   const photosAccess: 'all' | 'limited' | 'none' | 'unknown' = useMemo(() => {
@@ -57,8 +59,17 @@ export function useMediaLibraryPermissions() {
           : palette.gray[500]
 
   const manageAccess = useCallback(async () => {
-    // Open app settings to adjust photo access for this app.
-    // Try the URL scheme first on iOS, then generic openSettings as a fallback.
+    // First-time grant: trigger the OS permission prompt directly. iOS
+    // doesn't add the Photos row to an app's Settings page until the app
+    // has called requestPermissionsAsync at least once, so opening Settings
+    // before that lands on a page with no Photos row to toggle.
+    if (photosAccess === 'none' || photosAccess === 'unknown') {
+      const result = await MediaLibrary.requestPermissionsAsync(false, GRANULAR)
+      mediaLibraryPermissionsCache.invalidate()
+      if (result.granted || result.canAskAgain) return
+      // Permanently denied — fall through to open Settings so the user
+      // can flip the now-visible Photos row.
+    }
     if (Platform.OS === 'ios') {
       try {
         await Linking.openURL('app-settings:')
@@ -69,7 +80,7 @@ export function useMediaLibraryPermissions() {
       await Linking.openSettings()
       return
     } catch {}
-  }, [])
+  }, [photosAccess])
 
   return {
     photosAccess,
