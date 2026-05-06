@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
