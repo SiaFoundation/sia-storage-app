@@ -1,6 +1,6 @@
 import type { FileRecord } from '@siastorage/core/types'
 import { ArrowLeftIcon, XIcon } from 'lucide-react-native'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFileStatus } from '../../lib/file'
 import { overlay, palette } from '../../styles/colors'
@@ -12,9 +12,16 @@ type Props = {
   title: string
   navigation: { goBack: () => void }
   icon?: 'back' | 'close'
+  onPressTitle?: () => void
 }
 
-export function FileCarouselHeader({ file, title, navigation, icon = 'back' }: Props) {
+export function FileCarouselHeader({
+  file,
+  title,
+  navigation,
+  icon = 'back',
+  onPressTitle,
+}: Props) {
   const status = useFileStatus(file)
   const insets = useSafeAreaInsets()
   return (
@@ -27,9 +34,17 @@ export function FileCarouselHeader({ file, title, navigation, icon = 'back' }: P
             <XIcon color={palette.gray[50]} />
           )}
         </IconButton>
-        <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
-          {title}
-        </Text>
+        <Pressable
+          style={styles.titlePressable}
+          onPress={onPressTitle}
+          disabled={!onPressTitle}
+          accessibilityRole={onPressTitle ? 'button' : undefined}
+          accessibilityLabel={onPressTitle ? 'Toggle file details' : undefined}
+        >
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+            {title}
+          </Text>
+        </Pressable>
         {file && status.data ? <UploadStatusIcon status={status.data} size={16} /> : null}
       </View>
     </View>
@@ -44,11 +59,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  titlePressable: {
+    flex: 1,
+  },
   title: {
     color: palette.gray[50],
     fontSize: 18,
     fontWeight: '700',
-    flex: 1,
     textAlign: 'center',
   },
   headerIcon: { paddingHorizontal: 4 },
