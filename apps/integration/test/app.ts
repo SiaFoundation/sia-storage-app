@@ -607,6 +607,14 @@ export function createTestApp(
         localId: null,
         ...record,
       } as Parameters<AppService['files']['create']>[0])
+      if (record.kind === 'file') {
+        await appService.fs.upsertMeta({
+          fileId: record.id,
+          size: record.size,
+          addedAt: now,
+          usedAt: now,
+        })
+      }
     },
 
     async addFiles(fileFactories) {

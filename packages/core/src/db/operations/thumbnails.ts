@@ -122,6 +122,7 @@ export async function queryThumbnailCandidatePage(
   return db.getAllAsync<ThumbnailCandidateRow>(
     `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
      FROM files f
+     INNER JOIN fs fsm ON fsm.fileId = f.id
      LEFT JOIN files t
        ON t.thumbForId = f.id
       AND t.thumbSize IN (${ThumbSizes.join(',')})

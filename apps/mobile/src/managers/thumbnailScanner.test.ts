@@ -1,7 +1,17 @@
 import { ThumbSizes } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
-import { getThumbnailScanner, runThumbnailScanner } from './thumbnailScanner'
+import {
+  getThumbnailScanner,
+  nextIdleInterval,
+  resetThumbnailScannerBackoff,
+  runThumbnailScanner,
+} from './thumbnailScanner'
+
+async function upsertFs(id: string): Promise<void> {
+  const now = Date.now()
+  await app().fs.upsertMeta({ fileId: id, size: 1000, addedAt: now, usedAt: now })
+}
 
 let getFsFileUriMock: jest.SpyInstance
 let generateMock: jest.SpyInstance
@@ -51,6 +61,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue(null)
     const result = await runThumbnailScanner()
     expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
@@ -82,6 +93,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     for (const size of ThumbSizes) {
       await app().files.create({
         id: `thumb-${size}`,
@@ -133,6 +145,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     for (const size of ThumbSizes) {
       if (size === 64) continue
       await app().files.create({
@@ -193,6 +206,7 @@ describe('thumbnailScanner', () => {
         trashedAt: null,
         deletedAt: null,
       })
+      await upsertFs(id)
     }
 
     for (let i = 0; i < 10; i++) {
@@ -211,6 +225,7 @@ describe('thumbnailScanner', () => {
         trashedAt: null,
         deletedAt: null,
       })
+      await upsertFs(id)
       for (const size of ThumbSizes) {
         await app().files.create({
           id: `${id}-thumb-${size}`,
@@ -245,6 +260,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('eligible-1')
 
     getFsFileUriMock.mockImplementation(async ({ id }: { id: string }) => {
       if (noSourceIds.has(id)) return null
@@ -279,6 +295,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     await app().files.create({
       id: 'thumb-64',
       name: 'thumbnail.webp',
@@ -326,6 +343,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('video1')
 
     const result = await runThumbnailScanner()
 
@@ -394,6 +412,7 @@ describe('thumbnailScanner', () => {
         trashedAt: null,
         deletedAt: null,
       })
+      await upsertFs(`file${i}`)
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     const result = await runThumbnailScanner()
@@ -416,6 +435,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     generateMock.mockRejectedValue(new Error('Failed to get size'))
     const result = await runThumbnailScanner()
@@ -443,6 +463,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
 
     const ac = new AbortController()
@@ -470,6 +491,7 @@ describe('thumbnailScanner', () => {
         trashedAt: null,
         deletedAt: null,
       })
+      await upsertFs(`file${i}`)
     }
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
 
@@ -502,6 +524,7 @@ describe('thumbnailScanner', () => {
       trashedAt: null,
       deletedAt: null,
     })
+    await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
     generateMock.mockRejectedValue(new Error('Manipulation failed'))
     const result = await runThumbnailScanner()
@@ -513,5 +536,56 @@ describe('thumbnailScanner', () => {
     })
     const sizes = await app().thumbnails.getSizesForFile('file1')
     expect(sizes).not.toContain(64)
+  })
+
+  it('does not return metadata-only files (no fs row) as candidates', async () => {
+    const now = Date.now()
+    await app().files.create({
+      id: 'meta-only',
+      name: 'meta.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 1000,
+      hash: 'hash-meta',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: null,
+      trashedAt: null,
+      deletedAt: null,
+    })
+    // Note: no upsertFs — this is the metadata-only case.
+
+    const result = await runThumbnailScanner()
+
+    expect(result.processedCandidates).toBe(0)
+    expect(result.attempts).toHaveLength(0)
+    expect(result.skippedNoSource).toHaveLength(0)
+    expect(result.produced).toHaveLength(0)
+    // getFileUri is not consulted because the file never reaches the per-file loop.
+    expect(getFsFileUriMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('thumbnailScanner idle backoff', () => {
+  beforeEach(() => {
+    resetThumbnailScannerBackoff()
+  })
+
+  it('returns no override before the threshold', () => {
+    expect(nextIdleInterval(0)).toBeUndefined()
+    expect(nextIdleInterval(1)).toBeUndefined()
+    expect(nextIdleInterval(2)).toBeUndefined()
+  })
+
+  it('returns the backoff interval at 3 consecutive zero ticks', () => {
+    expect(nextIdleInterval(3)).toBe(30_000)
+    expect(nextIdleInterval(4)).toBe(30_000)
+    expect(nextIdleInterval(5)).toBe(30_000)
+  })
+
+  it('returns the steady interval at 6 consecutive zero ticks', () => {
+    expect(nextIdleInterval(6)).toBe(60_000)
+    expect(nextIdleInterval(50)).toBe(60_000)
   })
 })

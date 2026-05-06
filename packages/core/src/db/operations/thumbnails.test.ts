@@ -1,4 +1,5 @@
 import { insertFile } from './files'
+import { upsertFsMeta } from './fs'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   queryBestThumbnailByFileId,
@@ -28,6 +29,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
     deletedAt: null,
     ...overrides,
   })
+  await upsertFsMeta(db(), { fileId: id, size: 100, addedAt: 1000, usedAt: 1000 })
 }
 
 async function createThumbnail(id: string, parentId: string, thumbSize: 64 | 512) {

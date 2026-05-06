@@ -7,6 +7,7 @@ import { getMimeType } from '../lib/fileTypes'
 import { getMediaLibraryUri } from '../lib/mediaLibrary'
 import { app } from '../stores/appService'
 import { isBgTaskActive } from './bgTaskContext'
+import { triggerThumbnailScanner } from './thumbnailScanner'
 
 const scanner = new ImportScanner()
 
@@ -44,7 +45,11 @@ async function computeMaxDeferred(): Promise<number> {
 export async function runImportScanner(signal?: AbortSignal): Promise<ImportScannerResult> {
   ensureInitialized()
   const maxDeferred = await computeMaxDeferred()
-  return scanner.runScan(signal, getMediaLibraryUri, maxDeferred)
+  const result = await scanner.runScan(signal, getMediaLibraryUri, maxDeferred)
+  if (result.finalized > 0) {
+    triggerThumbnailScanner()
+  }
+  return result
 }
 
 export function getImportBackoffEntries() {
