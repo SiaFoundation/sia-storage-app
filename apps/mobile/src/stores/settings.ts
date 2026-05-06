@@ -23,7 +23,7 @@ export async function toggleAutoSyncDownEvents() {
 
 // Keep Awake (platform-specific: uses expo-keep-awake)
 
-const KEEP_AWAKE_TAG = 'sync'
+const KEEP_AWAKE_TAG = 'manual'
 
 export async function getKeepAwake(): Promise<boolean> {
   const raw = await app().storage.getItem('keepAwake')

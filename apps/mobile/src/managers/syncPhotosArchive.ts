@@ -48,6 +48,7 @@ import { getMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { catalogAssets } from '../lib/processAssets'
 import { app } from '../stores/appService'
 import { isBgTaskActive } from './bgTaskContext'
+import { acquireAutoKeepAwake, releaseAutoKeepAwake } from './autoKeepAwake'
 
 const PAGE_SIZE = 500
 const CURSOR_DONE = 'done'
@@ -67,21 +68,30 @@ export async function startArchiveSync(): Promise<void> {
   await setPhotosExistingCount(0)
   await restartPhotosArchiveCursor()
   walkAbortController = new AbortController()
+  acquireAutoKeepAwake('archive-walk')
   activeWalk = runArchiveWalk(walkAbortController.signal)
   activeWalk.finally(() => {
     activeWalk = null
     walkAbortController = null
+    releaseAutoKeepAwake('archive-walk')
   })
 }
 
 export async function stopArchiveSync(): Promise<void> {
   walkAbortController?.abort()
+  // Release immediately rather than waiting for the abort to propagate
+  // through runArchiveWalk; the release in activeWalk.finally is idempotent.
+  releaseAutoKeepAwake('archive-walk')
   await setPhotosArchiveCursor(CURSOR_DONE)
 }
 
 /** Abort the in-flight walk without clearing cursor so it resumes from the same page. */
 export function pauseArchiveSync(): void {
   walkAbortController?.abort()
+  // Release immediately on suspend so we don't wait for the abort to
+  // propagate through runArchiveWalk before the activeWalk.finally fires.
+  // The release in finally is then idempotent.
+  releaseAutoKeepAwake('archive-walk')
 }
 
 /** True while a walk is active (for diagnostic logging). */
@@ -99,10 +109,12 @@ export async function resumeArchiveSync(): Promise<void> {
   const cursor = await getPhotosArchiveCursor()
   if (cursor === CURSOR_DONE) return
   walkAbortController = new AbortController()
+  acquireAutoKeepAwake('archive-walk')
   activeWalk = runArchiveWalk(walkAbortController.signal)
   activeWalk.finally(() => {
     activeWalk = null
     walkAbortController = null
+    releaseAutoKeepAwake('archive-walk')
   })
 }
 
