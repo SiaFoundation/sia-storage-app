@@ -40,7 +40,7 @@ function FileGalleryItemComponent({ file, onPressItem, onLongPressItem }: Props)
           </>
         ) : status.data ? (
           <View style={styles.statusContainer}>
-            <UploadStatusIcon status={status.data} size={10} />
+            <UploadStatusIcon status={status.data} size={12} />
           </View>
         ) : null}
       </Pressable>

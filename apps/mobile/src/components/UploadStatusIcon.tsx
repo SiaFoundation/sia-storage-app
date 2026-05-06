@@ -6,8 +6,10 @@ import {
   CloudDownloadIcon,
   CloudUploadIcon,
 } from 'lucide-react-native'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
+import { Pressable } from 'react-native'
 import type { FileStatus } from '../lib/file'
+import { useToast } from '../lib/toastContext'
 import { overlay, palette } from '../styles/colors'
 import { CircularProgress } from './CircularProgress'
 import { ExpandableBadge } from './ExpandableBadge'
@@ -24,6 +26,7 @@ export function UploadStatusIcon({
   variant?: 'badge' | 'icon'
   color?: string
 }) {
+  const toast = useToast()
   const pillColor = status.isErrored || status.fileIsGone ? palette.red[500] : overlay.pill
   const iconColor = color ?? palette.gray[50]
 
@@ -34,7 +37,8 @@ export function UploadStatusIcon({
     if (status.isErrored) return status.errorText || 'Error'
     if (status.isUploadQueued) return 'Queued'
     if (status.isDownloadQueued) return 'Download queued'
-    if (status.isUploading || status.isPacking) return 'Uploading'
+    if (status.isPacking) return 'Encrypting'
+    if (status.isUploading) return 'Uploading'
     if (status.isDownloading) return 'Downloading'
     if (status.isUploaded && status.isDownloaded) return 'File on network and device'
     if (status.isUploaded && !status.isDownloaded) return 'File only on network'
@@ -74,36 +78,45 @@ export function UploadStatusIcon({
     <CloudUploadIcon color={iconColor} size={size} />
   )
 
+  const showLabel = useCallback(() => {
+    if (label) toast.show(label)
+  }, [label, toast])
+
   if (variant === 'icon') {
-    return iconEL
+    return (
+      <Pressable onPress={showLabel} hitSlop={8} accessibilityLabel={`Status: ${label}`}>
+        {iconEL}
+      </Pressable>
+    )
   }
 
   return (
-    <ExpandableBadge
-      label={label}
-      size={size}
-      interactive={false}
-      backgroundColor={pillColor}
-      borderColor={pillColor}
-      textColor={palette.gray[50]}
-      accessibilityLabel={`Status: ${label}`}
-      testID={`upload-status-${
-        status.isProcessing
-          ? 'processing'
-          : status.isErrored
-            ? 'error'
-            : status.isUploadQueued
-              ? 'queued'
-              : status.isPacking
-                ? 'packing'
-                : status.isUploading
-                  ? 'uploading'
-                  : status.isUploaded
-                    ? 'uploaded'
-                    : 'local'
-      }`}
-    >
-      {iconEL}
-    </ExpandableBadge>
+    <Pressable onPress={showLabel} hitSlop={8} accessibilityLabel={`Status: ${label}`}>
+      <ExpandableBadge
+        label={label}
+        size={size}
+        interactive={false}
+        backgroundColor={pillColor}
+        borderColor={pillColor}
+        textColor={palette.gray[50]}
+        testID={`upload-status-${
+          status.isProcessing
+            ? 'processing'
+            : status.isErrored
+              ? 'error'
+              : status.isUploadQueued
+                ? 'queued'
+                : status.isPacking
+                  ? 'packing'
+                  : status.isUploading
+                    ? 'uploading'
+                    : status.isUploaded
+                      ? 'uploaded'
+                      : 'local'
+        }`}
+      >
+        {iconEL}
+      </ExpandableBadge>
+    </Pressable>
   )
 }
