@@ -15,17 +15,19 @@ import { colors, palette } from '../styles/colors'
 
 type SectionProps = {
   header?: string
+  headerRight?: React.ReactNode
   footer?: string
   children: React.ReactNode
 }
 
-export function InsetGroupSection({ header, footer, children }: SectionProps) {
+export function InsetGroupSection({ header, headerRight, footer, children }: SectionProps) {
   const items = Children.toArray(children).filter(Boolean)
   return (
     <View style={styles.section}>
       {header ? (
         <View style={styles.headerRow}>
           <Text style={styles.header}>{header.toUpperCase()}</Text>
+          {headerRight}
         </View>
       ) : null}
       <View style={styles.card}>
@@ -241,6 +243,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 6,
   },

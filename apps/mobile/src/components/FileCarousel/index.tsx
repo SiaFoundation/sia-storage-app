@@ -78,6 +78,10 @@ export function FileCarousel({
     },
     [onViewStyleChange],
   )
+  const toggleViewStyle = useCallback(() => {
+    setViewStyle(viewStyle === 'consume' ? 'detail' : 'consume')
+  }, [viewStyle, setViewStyle])
+
   const [showChrome, setShowChrome] = useState(true)
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false)
   const [isZoomed, setIsZoomed] = useState(false)
@@ -273,6 +277,7 @@ export function FileCarousel({
             title={currentFile?.name ?? 'View'}
             navigation={navigationProxy}
             icon="close"
+            onPressTitle={toggleViewStyle}
           />
         </View>
       ) : null}
@@ -339,6 +344,7 @@ export function FileCarousel({
                   title={currentFile.name ?? 'Details'}
                   navigation={navigationProxy}
                   icon="close"
+                  onPressTitle={toggleViewStyle}
                 />
               }
             />

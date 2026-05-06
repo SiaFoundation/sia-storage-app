@@ -1,11 +1,10 @@
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import { useShowAdvanced, useTagsForFile } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import { PlusIcon } from 'lucide-react-native'
-import { Fragment, useMemo } from 'react'
+import { PencilIcon, PlusIcon } from 'lucide-react-native'
+import { Fragment, useCallback, useMemo } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import useSWR from 'swr'
-import { useInputValue } from '../../hooks/useInputValue'
 import { usePinnedObjects } from '../../hooks/usePinnedObjects'
 import type { FileStatus } from '../../lib/file'
 import { humanSize } from '../../lib/humanSize'
@@ -13,12 +12,8 @@ import { app } from '../../stores/appService'
 import { openSheet } from '../../stores/sheets'
 import { palette } from '../../styles/colors'
 import { BulkManageTagsSheet } from '../BulkManageTagsSheet'
-import {
-  InsetGroupCopyRow,
-  InsetGroupInputRow,
-  InsetGroupSection,
-  InsetGroupValueRow,
-} from '../InsetGroup'
+import { InsetGroupCopyRow, InsetGroupSection, InsetGroupValueRow } from '../InsetGroup'
+import { RenameSheet } from '../RenameSheet'
 import { TagPill } from '../TagPill'
 import { FileMap } from './FileMap'
 
@@ -29,12 +24,14 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
     return humanSize(file.size)
   }, [file.size])
 
-  const fileNameInputProps = useInputValue({
-    value: file.name ?? '',
-    save: (value) => {
-      app().files.update({ id: file.id, name: value })
+  const renameSheetName = `renameFile-${file.id}`
+
+  const handleRenameFile = useCallback(
+    async (newName: string) => {
+      await app().files.update({ id: file.id, name: newName })
     },
-  })
+    [file.id],
+  )
   const pinnedObjects = usePinnedObjects(file.id)
   const thumbnails = useSWR(
     showAdvanced.data ? app().caches.thumbnails.byFileId.key(file.id) : null,
@@ -54,13 +51,58 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
   const tagSheetName = `manageTags-${file.id}`
   return (
     <View style={styles.container}>
+      <InsetGroupSection
+        header="Tags"
+        headerRight={
+          <Pressable onPress={() => openSheet(tagSheetName)} hitSlop={8}>
+            <PlusIcon size={16} color={palette.blue[400]} />
+          </Pressable>
+        }
+      >
+        <View style={styles.tagsRow}>
+          {userTags && userTags.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tagsContainer}
+            >
+              {userTags.map((tag) => (
+                <TagPill
+                  key={tag.id}
+                  tag={tag}
+                  onRemove={() => app().tags.remove(file.id, tag.id)}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noTagsText}>No tags</Text>
+          )}
+        </View>
+      </InsetGroupSection>
+      <BulkManageTagsSheet sheetName={tagSheetName} fileIds={[file.id]} />
+
       <InsetGroupSection header="Details">
-        <InsetGroupInputRow label="Name" placeholder="Untitled file" {...fileNameInputProps} />
+        <Pressable style={styles.nameRow} onPress={() => openSheet(renameSheetName)}>
+          <Text numberOfLines={1} style={styles.nameLabel}>
+            Name
+          </Text>
+          <Text numberOfLines={1} style={styles.nameText}>
+            {file.name || 'Untitled file'}
+          </Text>
+          <PencilIcon size={14} color={palette.gray[400]} />
+        </Pressable>
         <InsetGroupValueRow label="Size" value={fileSize ?? '—'} />
         <InsetGroupValueRow label="Type" value={file.type ?? '—'} />
         <InsetGroupValueRow label="Created" value={new Date(file.createdAt).toLocaleString()} />
         <InsetGroupValueRow label="Updated" value={new Date(file.updatedAt).toLocaleString()} />
       </InsetGroupSection>
+      <RenameSheet
+        sheetName={renameSheetName}
+        title="Rename File"
+        placeholder="File name"
+        initialValue={file.name ?? ''}
+        onRename={handleRenameFile}
+      />
 
       {showAdvanced.data ? (
         <InsetGroupSection header="Identity">
@@ -70,29 +112,6 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
           {status.fileUri ? <InsetGroupCopyRow label="File URI" value={status.fileUri} /> : null}
         </InsetGroupSection>
       ) : null}
-
-      <InsetGroupSection header="Tags">
-        <View style={styles.tagsRow}>
-          {userTags && userTags.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tagsContainer}
-            >
-              {userTags.map((tag) => (
-                <TagPill key={tag.id} tag={tag} />
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={styles.noTagsText}>No tags</Text>
-          )}
-          <Pressable style={styles.addTagButton} onPress={() => openSheet(tagSheetName)}>
-            <PlusIcon size={14} color={palette.blue[400]} />
-            <Text style={styles.addTagText}>Add tag</Text>
-          </Pressable>
-        </View>
-      </InsetGroupSection>
-      <BulkManageTagsSheet sheetName={tagSheetName} fileIds={[file.id]} />
 
       <InsetGroupSection header="Storage locations">
         <View style={{ height: Math.round(windowHeight * 0.5) }}>
@@ -161,16 +180,24 @@ const styles = StyleSheet.create({
     color: palette.gray[400],
     fontSize: 14,
   },
-  addTagButton: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    minHeight: 44,
+    paddingVertical: 11,
+    gap: 8,
   },
-  addTagText: {
-    color: palette.blue[400],
-    fontSize: 14,
-    fontWeight: '500',
+  nameLabel: {
+    color: palette.gray[100],
+    fontSize: 16,
+    marginRight: 4,
+  },
+  nameText: {
+    flex: 1,
+    color: palette.gray[400],
+    fontSize: 15,
+    textAlign: 'right',
   },
   metadataBlock: {
     paddingHorizontal: 16,

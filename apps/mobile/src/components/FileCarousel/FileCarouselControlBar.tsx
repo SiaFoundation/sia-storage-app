@@ -1,11 +1,11 @@
 import {
   FolderIcon,
-  FullscreenIcon,
   HeartIcon,
+  ImageIcon,
+  InfoIcon,
   MoreVerticalIcon,
   ShareIcon,
   TagIcon,
-  TextAlignStart,
 } from 'lucide-react-native'
 import { useWindowDimensions, View } from 'react-native'
 import { palette } from '../../styles/colors'
@@ -73,12 +73,12 @@ export function FileCarouselControlBar({
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           {viewStyle === 'consume' ? (
-            <IconButton onPress={() => setViewStyle('detail')}>
-              <TextAlignStart color={iconColors.white} />
+            <IconButton onPress={() => setViewStyle('detail')} accessibilityLabel="File details">
+              <InfoIcon color={iconColors.white} />
             </IconButton>
           ) : (
-            <IconButton onPress={() => setViewStyle('consume')}>
-              <FullscreenIcon color={iconColors.white} />
+            <IconButton onPress={() => setViewStyle('consume')} accessibilityLabel="View file">
+              <ImageIcon color={iconColors.white} />
             </IconButton>
           )}
           <IconButton onPress={onPressMore}>
