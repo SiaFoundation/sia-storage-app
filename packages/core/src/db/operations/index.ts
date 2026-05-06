@@ -180,6 +180,7 @@ export {
   queryThumbnailByFileIdAndSize,
   queryThumbnailScanProgress,
   queryThumbnailSizesForFileId,
+  queryThumbnailSizesForFileIds,
   queryThumbnailsByFileId,
   type ThumbnailCandidateRow,
 } from './thumbnails'

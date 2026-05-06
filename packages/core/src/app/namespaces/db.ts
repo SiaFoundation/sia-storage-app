@@ -480,6 +480,7 @@ export function buildDbNamespaces(
       getByFileIdAndSize: (fileId, size) => ops.queryThumbnailByFileIdAndSize(db, fileId, size),
       getInfoForFiles: (fileIds) => ops.queryThumbnailFileInfoByFileIds(db, fileIds),
       getSizesForFile: (fileId) => ops.queryThumbnailSizesForFileId(db, fileId),
+      getSizesForFiles: (fileIds) => ops.queryThumbnailSizesForFileIds(db, fileIds),
       existsForFileAndSize: (fileId, size) =>
         ops.queryThumbnailExistsForFileIdAndSize(db, fileId, size),
       queryCandidatePage: (pageSize, cursor, allowedTypes) =>

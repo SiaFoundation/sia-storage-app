@@ -343,6 +343,8 @@ export interface AppService {
     ): Promise<{ id: string; type: string; localId: string | null }[]>
     /** Returns all available thumbnail sizes for a file. */
     getSizesForFile(fileId: string): Promise<ThumbSize[]>
+    /** Returns a map of fileId → available thumbnail sizes for a batch of files. */
+    getSizesForFiles(fileIds: string[]): Promise<Map<string, ThumbSize[]>>
     /** Returns whether a thumbnail exists for a given file and size. */
     existsForFileAndSize(fileId: string, size: ThumbSize): Promise<boolean>
     /** Returns a page of candidate originals that still need thumbnails generated. */
