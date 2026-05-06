@@ -41,6 +41,28 @@ export async function queryThumbnailSizesForFileId(
     .sort((a, b) => a - b)
 }
 
+export async function queryThumbnailSizesForFileIds(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<Map<string, ThumbSize[]>> {
+  const result = new Map<string, ThumbSize[]>()
+  if (fileIds.length === 0) return result
+  const ph = fileIds.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{ thumbForId: string; thumbSize: number | null }>(
+    `SELECT thumbForId, thumbSize FROM files WHERE thumbForId IN (${ph})`,
+    ...fileIds,
+  )
+  for (const id of fileIds) result.set(id, [])
+  for (const r of rows) {
+    if (typeof r.thumbSize !== 'number') continue
+    if (!ThumbSizes.includes(r.thumbSize as ThumbSize)) continue
+    const list = result.get(r.thumbForId)
+    if (list) list.push(r.thumbSize as ThumbSize)
+  }
+  for (const list of result.values()) list.sort((a, b) => a - b)
+  return result
+}
+
 export async function queryThumbnailExistsForFileIdAndSize(
   db: DatabaseAdapter,
   fileId: string,

@@ -8,6 +8,7 @@ import {
   queryThumbnailFileInfoByFileIds,
   queryThumbnailScanProgress,
   queryThumbnailSizesForFileId,
+  queryThumbnailSizesForFileIds,
   queryThumbnailsByFileId,
 } from './thumbnails'
 
@@ -87,6 +88,27 @@ describe('queryThumbnailSizesForFileId', () => {
     await createTestFile('f1')
     const sizes = await queryThumbnailSizesForFileId(db(), 'f1')
     expect(sizes).toEqual([])
+  })
+})
+
+describe('queryThumbnailSizesForFileIds', () => {
+  it('returns a map of fileId to sorted sizes for each file', async () => {
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await createTestFile('f3')
+    await createThumbnail('t1', 'f1', 512)
+    await createThumbnail('t2', 'f1', 64)
+    await createThumbnail('t3', 'f2', 64)
+
+    const sizes = await queryThumbnailSizesForFileIds(db(), ['f1', 'f2', 'f3'])
+    expect(sizes.get('f1')).toEqual([64, 512])
+    expect(sizes.get('f2')).toEqual([64])
+    expect(sizes.get('f3')).toEqual([])
+  })
+
+  it('returns an empty map when given no fileIds', async () => {
+    const sizes = await queryThumbnailSizesForFileIds(db(), [])
+    expect(sizes.size).toBe(0)
   })
 })
 

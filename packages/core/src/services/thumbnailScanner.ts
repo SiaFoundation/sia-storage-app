@@ -202,11 +202,6 @@ export class ThumbnailScanner {
     const app = this.getApp()
     const { fileId, fileHash, fileType, size, sourceUri } = params
 
-    const exactExists = await app.thumbnails.existsForFileAndSize(fileId, size)
-    if (exactExists) {
-      return { status: 'exists' }
-    }
-
     const detectedType = await app.fs.detectMimeType(sourceUri)
     const actualType = detectedType ?? fileType
 
@@ -476,6 +471,8 @@ export class ThumbnailScanner {
         const batch = await this.queryCandidateOriginals(25, processedThisRun)
         if (batch.length === 0) break
 
+        const sizesByFileId = await app.thumbnails.getSizesForFiles(batch.map((c) => c.id))
+
         for (const c of batch) {
           if (signal?.aborted) break
           if (producedCount >= MAX_THUMBS_PER_TICK) break
@@ -491,8 +488,7 @@ export class ThumbnailScanner {
           }
 
           summary.processedCandidates += 1
-          // Determine missing sizes for this original so we don't attempt existing ones.
-          const existingSizes = await app.thumbnails.getSizesForFile(c.id)
+          const existingSizes = sizesByFileId.get(c.id) ?? []
           const missingSizes = ThumbSizes.filter((s) => !existingSizes.includes(s))
           if (missingSizes.length === 0) {
             summary.skippedFullyCovered.push({ fileId: c.id, hash: c.hash })
