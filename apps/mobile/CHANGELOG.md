@@ -2,6 +2,18 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.11.8 (2026-05-07)
+
+### Fixes
+
+- Fixed Android photo access showing "No access" after granting "Allow all" in system Settings.
+- Fixed an issue where importing files with spaces (or other special characters) in their names would fail silently. Closes https://github.com/SiaFoundation/sia-storage-app/issues/610
+- SWR-driven UI now refreshes when the app returns to the foreground, so changes that happened while backgrounded (uploads completing, permission toggles, etc.) show up immediately on return.
+- Keep the screen awake while the initial library sync and the photo library import are running, so the device doesn't lock mid-progress.
+- Tapping "Photo access" on a fresh install now prompts for permission directly instead of opening to a Settings page with no Photos row.
+- Auto-imported photos reliably land in the configured Media folder, even if iOS suspends the app mid-import.
+- Photo sync places every imported file in the configured Media folder regardless of type.
+
 ## 1.11.7 (2026-05-04)
 
 ### Fixes

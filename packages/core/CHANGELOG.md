@@ -1,3 +1,10 @@
+## 0.0.13 (2026-05-07)
+
+### Features
+
+- Add `files.getByNameInDirectoryPath` facade method, `uploader.currentBatch` introspection, and `APP_META` config constant.
+- Add `directoryId` option to `files.createMany` / `insertManyFiles` to file inserted records into a directory atomically.
+
 ## 0.0.12 (2026-05-04)
 
 ### Fixes
