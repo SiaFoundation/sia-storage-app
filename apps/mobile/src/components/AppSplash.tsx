@@ -5,16 +5,14 @@ import {
   useSyncGateStatus,
   useSyncState,
 } from '@siastorage/core/stores'
-import { TriangleAlertIcon } from 'lucide-react-native'
 import { useEffect } from 'react'
-import { Alert, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { resetApp } from '../managers/app'
 import { acquireAutoKeepAwake, releaseAutoKeepAwake } from '../managers/autoKeepAwake'
 import { palette } from '../styles/colors'
+import { AppSplashError } from './AppSplashError'
 import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'
-import { Button } from './Button'
 
 function useSyncProgress() {
   const { data } = useSyncState()
@@ -50,36 +48,7 @@ export function AppSplash() {
       />
       <View style={[styles.centerWrap, { paddingTop: top + 12, paddingBottom: bottom + 12 }]}>
         {initializationError && currentStep ? (
-          <View style={styles.errorWrap}>
-            <View style={styles.errorIconWrap}>
-              <TriangleAlertIcon size={48} color={palette.red[500]} />
-            </View>
-            <Text style={styles.errorTitle}>{currentStep.label}</Text>
-            <Text style={styles.errorMessage}>{currentStep.message}</Text>
-            <Text style={styles.errorHint}>
-              Please report this issue to the team or restart the app to try again.
-            </Text>
-            <Button
-              variant="danger"
-              style={styles.resetButton}
-              onPress={() => {
-                Alert.alert(
-                  'Reset Application',
-                  'This will delete all local metadata. This cannot be undone.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Permanently reset',
-                      style: 'destructive',
-                      onPress: () => resetApp(),
-                    },
-                  ],
-                )
-              }}
-            >
-              Reset application
-            </Button>
-          </View>
+          <AppSplashError step={currentStep} />
         ) : (
           <View style={styles.waitingWrap}>
             <BlocksLoader colorStart={1} size={20} />
@@ -153,35 +122,5 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
     backgroundColor: palette.gray[400],
-  },
-  errorWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    maxWidth: '80%',
-  },
-  errorIconWrap: {
-    paddingBottom: 8,
-  },
-  errorTitle: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  errorMessage: {
-    color: palette.red[500],
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  errorHint: {
-    color: palette.gray[400],
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  resetButton: {
-    marginTop: 16,
-    alignSelf: 'stretch',
   },
 })
