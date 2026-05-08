@@ -92,7 +92,10 @@ export function DragToDismiss({
       const isDragged = event.translationY > dismissThreshold
       const isFlicked = event.velocityY > 800
       if (isDragged || isFlicked) {
-        translateY.value = withSpring(screenHeight, { damping: 20 })
+        // Spring past the screen edge so a hard flick (where translationY
+        // already exceeds screenHeight) can't reverse direction and bounce
+        // the content back into view before onDismiss completes.
+        translateY.value = withSpring(screenHeight * 1.2, { damping: 20 })
         runOnJS(onDismiss)()
       } else {
         translateY.value = withSpring(0)
