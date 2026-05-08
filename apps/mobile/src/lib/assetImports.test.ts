@@ -4,7 +4,7 @@ import { copyFileToFs } from '../stores/fs'
 import { calculateContentHash } from './contentHash'
 import { getMimeType } from './fileTypes'
 import { getMediaLibraryUri } from './mediaLibrary'
-import { catalogAssets, importFiles, syncAssets } from './processAssets'
+import { catalogAssets, importAssets, syncAssets } from './assetImports'
 
 jest.mock('./mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
@@ -35,7 +35,7 @@ afterEach(async () => {
   jest.clearAllMocks()
 })
 
-describe('importFiles — user-initiated manual import', () => {
+describe('importAssets — picker / camera / share intent', () => {
   describe('placeholder creation', () => {
     it('creates records with empty hash so UI shows files before copy completes', async () => {
       const assets = [
@@ -49,7 +49,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const { files, newVersionCount } = await importFiles(assets)
+      const { files, newVersionCount } = await importAssets(assets)
 
       expect(files).toHaveLength(1)
       expect(newVersionCount).toBe(0)
@@ -83,7 +83,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const { files } = await importFiles(assets)
+      const { files } = await importAssets(assets)
 
       expect(files).toHaveLength(1)
       const row = await app().files.getById(files[0].id)
@@ -124,7 +124,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const { files } = await importFiles(assets)
+      const { files } = await importAssets(assets)
       expect(files).toHaveLength(3)
 
       // Manual imports never set localId — that namespace belongs to auto-sync.
@@ -148,7 +148,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const { files } = await importFiles(assets)
+      const { files } = await importAssets(assets)
       expect(files).toHaveLength(0)
       expect(copyFileToFs).not.toHaveBeenCalled()
     })
@@ -171,7 +171,7 @@ describe('importFiles — user-initiated manual import', () => {
         deletedAt: null,
       })
 
-      const { files, newVersionCount } = await importFiles([
+      const { files, newVersionCount } = await importAssets([
         {
           id: 'ph://A',
           name: 'fresh-name.jpg',
@@ -206,7 +206,7 @@ describe('importFiles — user-initiated manual import', () => {
         deletedAt: null,
       })
 
-      const { files, newVersionCount } = await importFiles([
+      const { files, newVersionCount } = await importAssets([
         {
           id: undefined,
           name: 'else.jpg',
@@ -239,7 +239,7 @@ describe('importFiles — user-initiated manual import', () => {
         deletedAt: null,
       })
 
-      const { files, newVersionCount } = await importFiles([
+      const { files, newVersionCount } = await importAssets([
         {
           id: 'ph://Y',
           name: 'IMG.jpg',
@@ -279,7 +279,7 @@ describe('importFiles — user-initiated manual import', () => {
       })
       await app().directories.moveFiles(['existing'], dir.id)
 
-      const { files, newVersionCount } = await importFiles(
+      const { files, newVersionCount } = await importAssets(
         [
           {
             id: undefined,
@@ -328,7 +328,7 @@ describe('importFiles — user-initiated manual import', () => {
         deletedAt: null,
       })
 
-      const { files, newVersionCount } = await importFiles(
+      const { files, newVersionCount } = await importAssets(
         [
           {
             id: undefined,
@@ -356,7 +356,7 @@ describe('importFiles — user-initiated manual import', () => {
   describe('destination directory and tag context', () => {
     it('inserts directly into destinationDirectoryId', async () => {
       const dir = await app().directories.getOrCreateAtPath('Vacation')
-      const { files } = await importFiles(
+      const { files } = await importAssets(
         [
           {
             id: undefined,
@@ -377,7 +377,7 @@ describe('importFiles — user-initiated manual import', () => {
     })
 
     it('attaches assignTagName to every inserted file', async () => {
-      const { files } = await importFiles(
+      const { files } = await importAssets(
         [
           {
             id: undefined,
@@ -406,7 +406,7 @@ describe('importFiles — user-initiated manual import', () => {
 
     it('combines destination directory and tag in a single import', async () => {
       const dir = await app().directories.getOrCreateAtPath('Trip')
-      const { files } = await importFiles(
+      const { files } = await importAssets(
         [
           {
             id: undefined,
@@ -430,6 +430,158 @@ describe('importFiles — user-initiated manual import', () => {
     })
   })
 
+  describe('copyPromise', () => {
+    it('resolves only after every file is copied', async () => {
+      const releasers: Array<() => void> = []
+      jest.mocked(copyFileToFs).mockImplementation(() => {
+        return new Promise<string>((resolve) => {
+          releasers.push(() => resolve('/local/file'))
+        })
+      })
+
+      const assets = [
+        {
+          id: undefined,
+          name: 'a.txt',
+          size: 100,
+          sourceUri: 'file:///tmp/a.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'b.txt',
+          size: 200,
+          sourceUri: 'file:///tmp/b.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      const { copyPromise } = await importAssets(assets)
+
+      let settled = false
+      copyPromise.then(() => {
+        settled = true
+      })
+
+      await new Promise((r) => setTimeout(r, 0))
+      expect(settled).toBe(false)
+      expect(releasers).toHaveLength(1)
+
+      releasers[0]()
+      await new Promise((r) => setTimeout(r, 0))
+      expect(settled).toBe(false)
+      expect(releasers).toHaveLength(2)
+
+      releasers[1]()
+      const result = await copyPromise
+      expect(result).toEqual({ copied: 2, failed: 0 })
+    })
+
+    it('reports onCopyProgress once per file in order', async () => {
+      const events: number[] = []
+      const assets = [
+        {
+          id: undefined,
+          name: 'one.bin',
+          size: 11,
+          sourceUri: 'file:///tmp/one.bin',
+          type: 'application/octet-stream',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'two.bin',
+          size: 22,
+          sourceUri: 'file:///tmp/two.bin',
+          type: 'application/octet-stream',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'three.bin',
+          size: 33,
+          sourceUri: 'file:///tmp/three.bin',
+          type: 'application/octet-stream',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      const { copyPromise } = await importAssets(assets, 'file', {
+        onCopyProgress: (bytes) => events.push(bytes),
+      })
+      await copyPromise
+
+      expect(events).toEqual([11, 22, 33])
+    })
+
+    it('counts failures and continues past per-file errors', async () => {
+      jest
+        .mocked(copyFileToFs)
+        .mockResolvedValueOnce('/local/ok-1')
+        .mockRejectedValueOnce(new Error('disk full'))
+        .mockResolvedValueOnce('/local/ok-2')
+
+      const assets = [
+        {
+          id: undefined,
+          name: 'ok1.txt',
+          size: 1,
+          sourceUri: 'file:///tmp/ok1.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'bad.txt',
+          size: 2,
+          sourceUri: 'file:///tmp/bad.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'ok2.txt',
+          size: 3,
+          sourceUri: 'file:///tmp/ok2.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      const events: number[] = []
+      const { copyPromise } = await importAssets(assets, 'file', {
+        onCopyProgress: (bytes) => events.push(bytes),
+      })
+      const result = await copyPromise
+      expect(result).toEqual({ copied: 2, failed: 1 })
+      expect(events).toEqual([1, 3])
+    })
+
+    it('reports totalBytes as the sum of placeholder sizes', async () => {
+      const { totalBytes } = await importAssets([
+        {
+          id: undefined,
+          name: 'a',
+          size: 10,
+          sourceUri: 'file:///tmp/a',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'b',
+          size: 25,
+          sourceUri: 'file:///tmp/b',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ])
+      expect(totalBytes).toBe(35)
+    })
+  })
+
   describe('background copy', () => {
     it('fires a background copy to capture ephemeral source URIs', async () => {
       const assets = [
@@ -443,7 +595,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      const { files } = await importFiles(assets)
+      const { files } = await importAssets(assets)
 
       await new Promise((r) => setTimeout(r, 0))
 
@@ -469,7 +621,7 @@ describe('importFiles — user-initiated manual import', () => {
         },
       ]
 
-      await importFiles(assets)
+      await importAssets(assets)
       expect(triggerImportScanner).toHaveBeenCalled()
     })
   })

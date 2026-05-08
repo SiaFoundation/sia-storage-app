@@ -3,7 +3,7 @@ import {
   SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
 } from '@siastorage/core/config'
 import * as MediaLibrary from 'expo-media-library'
-import { catalogAssets } from '../lib/processAssets'
+import { catalogAssets } from '../lib/assetImports'
 import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import {
   getArchiveSyncCompletedAt,
@@ -39,7 +39,7 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
     set: jest.fn(),
   },
 }))
-jest.mock('../lib/processAssets', () => ({
+jest.mock('../lib/assetImports', () => ({
   catalogAssets: jest.fn(),
 }))
 jest.mock('../stores/files', () => ({}))

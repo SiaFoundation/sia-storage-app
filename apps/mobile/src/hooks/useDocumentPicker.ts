@@ -2,9 +2,9 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import * as DocumentPicker from 'expo-document-picker'
 import { useCallback, useRef } from 'react'
+import type { ImportFilesOptions } from '../lib/assetImports'
+import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
-import type { ImportFilesOptions } from '../lib/processAssets'
-import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 
 export function useDocumentPicker(options: ImportFilesOptions = {}) {

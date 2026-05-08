@@ -2,10 +2,10 @@ import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
+import type { ImportFilesOptions } from '../lib/assetImports'
+import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
 import { showPermissionDeniedAlert } from '../lib/permissionAlert'
-import type { ImportFilesOptions } from '../lib/processAssets'
-import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 
 export function useImagePicker(options: ImportFilesOptions = {}) {
