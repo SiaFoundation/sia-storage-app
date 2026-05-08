@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     display: 'flex',
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
 })
