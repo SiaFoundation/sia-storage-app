@@ -6,6 +6,7 @@ import {
   SYNC_UP_METADATA_INTERVAL,
   THUMBNAIL_SCANNER_INTERVAL,
   TRASH_AUTO_PURGE_INTERVAL,
+  WATCH_INTERVAL,
 } from '@siastorage/core/config'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
 import { LOG_ROTATION_INTERVAL, runLogRotation } from '@siastorage/core/services'
@@ -13,6 +14,7 @@ import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
 import type { CliApp } from '../app'
+import { watchWorker } from '../watch/service'
 
 /**
  * Builds and starts every background service the daemon runs on a timer.
@@ -72,6 +74,11 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       name: 'logRotation',
       interval: LOG_ROTATION_INTERVAL,
       worker: () => runLogRotation(app.service),
+    },
+    {
+      name: 'watchDirectories',
+      interval: WATCH_INTERVAL,
+      worker: (signal: AbortSignal) => watchWorker(app, signal),
     },
   ]
 
