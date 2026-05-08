@@ -15,8 +15,8 @@ import { SettingsSyncPhotos } from '../components/SettingsSyncPhotos'
 import { LINKS } from '../config/links'
 import { useMenuHeader } from '../hooks/useMenuHeader'
 import { openExternalURL } from '../lib/inAppBrowser'
+import { promptClearAndResync, promptClearAndSignOut } from '../lib/resetPrompts'
 import { useToast } from '../lib/toastContext'
-import { resetLocalDataAndResync, resetLocalDataAndSignOut } from '../managers/app'
 import type { MenuStackParamList } from '../stacks/types'
 import { reconnectIndexer, useIsConnected } from '../stores/sdk'
 import { toggleKeepAwake, useKeepAwake } from '../stores/settings'
@@ -42,36 +42,6 @@ function promptDeleteAccount(indexerURL: string) {
     { text: 'Cancel', style: 'cancel' },
     { text: 'Continue to Website', onPress: () => void openExternalURL(targetURL) },
   ])
-}
-
-function promptResync() {
-  Alert.alert(
-    'Clear local data and resync',
-    'This wipes your locally cached metadata and re-downloads everything from your indexer. Your account stays signed in.',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear and resync',
-        style: 'destructive',
-        onPress: () => void resetLocalDataAndResync(),
-      },
-    ],
-  )
-}
-
-function promptSignOut() {
-  Alert.alert(
-    'Clear local data and sign out',
-    'This wipes all local data and signs you out. You will need your recovery phrase to sign back in.',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear and sign out',
-        style: 'destructive',
-        onPress: () => void resetLocalDataAndSignOut(),
-      },
-    ],
-  )
 }
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'MenuHome'>
@@ -202,16 +172,16 @@ export function MenuScreen({ navigation }: Props) {
       <InsetGroupSection header="Danger zone">
         <InsetGroupLink
           label="Clear local data and resync"
-          description="Re-downloads metadata from your indexer. You stay signed in."
+          description="Rebuilds your library from your indexer. Pending uploads are lost. You stay signed in."
           destructive
-          onPress={promptResync}
+          onPress={promptClearAndResync}
           showChevron={false}
         />
         <InsetGroupLink
           label="Clear local data and sign out"
-          description="Signs you out. You'll need your recovery phrase to sign back in."
+          description="Signs you out and clears your library. Pending uploads are lost. You'll need your recovery phrase to sign back in."
           destructive
-          onPress={promptSignOut}
+          onPress={promptClearAndSignOut}
           showChevron={false}
         />
         <InsetGroupLink
