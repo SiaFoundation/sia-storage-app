@@ -100,7 +100,7 @@ export function LibraryHeader({
 const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 8,
     flex: 1,
   },
