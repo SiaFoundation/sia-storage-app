@@ -39,18 +39,17 @@ export function UploadStatusIcon({
   const pillColor = isErrorState ? palette.red[500] : overlay.pill
   const iconColor = color ?? palette.gray[50]
 
-  const label = useMemo(() => {
-    // Overlay an error summary when upload/download has an error on a
-    // non-error phase (e.g., a pinned file with a failed re-upload).
-    if (hasUploadError && phase.kind !== 'upload-errored') return 'Upload error'
-    if (hasDownloadError) return 'Download error'
+  // Label that describes the file's underlying phase, ignoring overlays.
+  // This is what the file IS, regardless of whether a transient upload or
+  // download error is also present.
+  const phaseLabel = useMemo(() => {
     switch (phase.kind) {
       case 'import-failed':
         return 'Import failed'
       case 'importing':
         return status.isDeferredImport ? 'Import queued' : 'Importing'
       case 'upload-errored':
-        return phase.error || 'Upload error'
+        return 'Upload error'
       case 'uploading':
         if (phase.isQueued) return 'Upload queued'
         return 'Uploading'
@@ -68,7 +67,20 @@ export function UploadStatusIcon({
       default:
         return assertNever(phase)
     }
-  }, [phase, hasUploadError, hasDownloadError, status.isDeferredImport])
+  }, [phase, status.isDeferredImport])
+
+  // Overlay summary fired only when an error layers on a non-error phase
+  // (e.g., a pinned file with a failed re-upload). Null otherwise.
+  const overlayLabel =
+    hasUploadError && phase.kind !== 'upload-errored'
+      ? 'Upload error'
+      : hasDownloadError
+        ? 'Download error'
+        : null
+
+  // Single visible label for accessibilityLabel and the icon-only badge:
+  // overlay wins when present (it's the more urgent signal), else phase.
+  const label = overlayLabel ?? phaseLabel
 
   const iconEL = useMemo(() => {
     // Overlay alert icon when an error layers on a non-error phase, so
@@ -115,11 +127,17 @@ export function UploadStatusIcon({
   }, [phase, iconColor, size, status.isDeferredImport, hasUploadError, hasDownloadError])
 
   const showLabel = useCallback(() => {
-    // In an error state, prefer the underlying error text over the friendly
-    // summary so the user can read what actually went wrong.
-    const message = isErrorState && status.errorText ? status.errorText : label
-    if (message) toast.show(message)
-  }, [isErrorState, status.errorText, label, toast])
+    // Compose a structured toast: phase · overlay (if any) · error detail.
+    // Preserves the context the icon-only badge can't show on its own.
+    const parts: string[] = []
+    if (overlayLabel) parts.push(phaseLabel, overlayLabel)
+    else parts.push(phaseLabel)
+    if (isErrorState && status.errorText && status.errorText !== phaseLabel) {
+      parts.push(status.errorText)
+    }
+    const message = parts.filter(Boolean).join(' · ')
+    if (message) toast.show(message, isErrorState ? { tone: 'error' } : undefined)
+  }, [phaseLabel, overlayLabel, isErrorState, status.errorText, toast])
 
   if (variant === 'icon') {
     return (
