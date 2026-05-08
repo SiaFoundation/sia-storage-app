@@ -1,6 +1,6 @@
 {
   "name": "@siastorage/mobile",
-  "version": "1.11.8",
+  "version": "1.12.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
