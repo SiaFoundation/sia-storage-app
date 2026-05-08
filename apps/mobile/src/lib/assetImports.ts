@@ -1,35 +1,26 @@
-// Three import paths for getting files into the database:
+// Three ways assets enter the file DB:
 //
-// importFiles — User-initiated (picker, camera, share intent). Creates
-//   placeholder records instantly so the UI updates, then copies files
-//   in the background. The import scanner finalizes each file once the
-//   local copy lands on disk. localId is intentionally NOT set on
-//   manual imports — that field is the auto-sync path's primitive for
-//   recognizing OS assets across ticks; using it for manual import
-//   would reserve the localId slot and break re-imports of previously
-//   deleted photos. Manual import takes the (name, directoryId) the
-//   user opened the picker from and lets the version system bump
-//   collisions via recalculateCurrentForGroup.
+// importAssets — picker / camera / share intent. Inserts placeholder
+//   rows (hash:'') immediately so the UI updates, then copies bytes in
+//   the background. The import scanner hashes and finalizes each row
+//   once the local copy lands. localId is intentionally null here —
+//   that namespace belongs to the auto-sync path, and reserving it
+//   would block re-imports of previously deleted photos. Name
+//   collisions in the destination directory bump a new version via
+//   recalculateCurrentForGroup.
 //
-// syncAssets — Background recent photo sync (syncNewPhotos). Copies
-//   files and computes content hashes inline so duplicates (by localId
-//   or content hash) are detected immediately, preventing re-importing
-//   files already tracked locally or synced from another device.
+// syncAssets — recent-photo poll (syncNewPhotos). Copies and hashes
+//   inline so duplicates are detected eagerly: by localId for same-
+//   device repeats, by content hash for assets synced from another
+//   device.
 //
-// catalogAssets — Archive library walk (syncPhotosArchive). Creates
-//   placeholder records in bulk via INSERT OR IGNORE (no copy, no hash).
-//   The import scanner finalizes these in the background with
-//   backpressure based on the upload backlog.
+// catalogAssets — archive walk (syncPhotosArchive). Bulk INSERT OR
+//   IGNORE placeholders only. No copy, no hash. The import scanner
+//   finalizes these later with backpressure on the upload backlog.
 //
-// Suspension signal policy:
-//   processInBatches and processFileContent accept a signal and check at
-//   loop boundaries / step boundaries. The signal is NOT plumbed into
-//   the per-file leaves (copyFileToFs, calculateContentHash,
-//   getMediaLibraryUri) because those wrap single native calls that
-//   can't be cancelled mid-flight in JS. Leaf-level checks would only
-//   duplicate the loop-level skip one statement earlier. copyImportedFiles
-//   is fire-and-forget: the user-initiated import path doesn't block
-//   shutdown, and native copies ride the iOS freeze/thaw naturally.
+// Signal is checked at loop/step boundaries only — leaf native calls
+// (copyFileToFs, calculateContentHash, getMediaLibraryUri) aren't
+// cancellable mid-flight, and iOS freezes them with the process anyway.
 
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
@@ -389,39 +380,38 @@ export type ImportFilesOptions = {
   destinationDirectoryId?: string | null
   /** Tag to attach to every newly imported file. Used when the picker was opened from a tag's view. */
   assignTagName?: string
+  /** Called once per file as the background copy completes, with the
+   * source size in bytes. Drives the import-progress modal. */
+  onCopyProgress?: (bytes: number) => void
 }
 
-export type ImportFilesResult = {
+export type ImportAssetsResult = {
   /** Files that landed in the library, in candidate order. */
   files: FileRecord[]
-  /**
-   * How many of the picked files share a name with an existing current
-   * file in the destination directory and therefore became a new version
-   * of it. Used by the caller to surface a one-line toast.
-   */
+  /** How many picks share a name with an existing current file in the
+   * destination directory and therefore became a new version of it. */
   newVersionCount: number
+  /** Sum of source sizes across the picked assets. */
+  totalBytes: number
+  /** Resolves once every file's bytes are persisted in app FS. */
+  copyPromise: Promise<{ copied: number; failed: number }>
 }
 
 /**
- * Import for manual flows (document picker, camera, share intent, etc.).
+ * Insert placeholder rows immediately, then copy bytes in the background.
+ * The import scanner finalizes each row (hash + size) once the copy lands.
  *
- * Creates placeholder FileRecords with hash: '' immediately so the UI
- * updates, then fires a background copy for each file. The import scanner
- * finalizes each file by hashing once the local copy lands on disk.
- *
- * Manual imports always succeed: they don't reserve the localId slot
- * (auto-sync owns that namespace) and don't dedup by content hash.
- * Versioning happens automatically — if a pick shares (name, directoryId)
- * with an existing current file, recalculateCurrentForGroup bumps it as
- * a new version. The pre-check just counts how many will do that, so
- * the caller can tell the user.
+ * localId stays null — that namespace belongs to auto-sync, and using it
+ * here would block re-imports of previously deleted photos. Versioning
+ * is handled by recalculateCurrentForGroup at insert time; the
+ * newVersionCount in the result lets the caller surface a toast.
  */
-export async function importFiles(
+export async function importAssets(
   assets: Asset[] | undefined,
   defaultFileName: string = 'file',
   options: ImportFilesOptions = {},
-): Promise<ImportFilesResult> {
-  const { destinationDirectoryId = null, assignTagName } = options
+): Promise<ImportAssetsResult> {
+  const { destinationDirectoryId = null, assignTagName, onCopyProgress } = options
   const now = Date.now()
 
   type Candidate = { placeholder: FileRecord; sourceUri: string }
@@ -462,8 +452,20 @@ export async function importFiles(
   )
 
   if (candidates.length === 0) {
-    return { files: [], newVersionCount: 0 }
+    return {
+      files: [],
+      newVersionCount: 0,
+      totalBytes: 0,
+      copyPromise: Promise.resolve({ copied: 0, failed: 0 }),
+    }
   }
+
+  // parseAssetMetadata can be slow (large picker batches, share-extension
+  // files); an iOS background landing mid-flight would fast-reject the
+  // first DB read. Gate so the import resumes after the gate reopens.
+  // The per-file copy below is safe by construction (app.fs.copyFile
+  // gates internally).
+  await app().db.waitUntilActive()
 
   const uniqueNames = Array.from(new Set(candidates.map((c) => c.placeholder.name)))
   const existingCurrent = await app().files.getCurrentByNamesInDirectory(
@@ -483,7 +485,6 @@ export async function importFiles(
     },
   )
 
-  const insertedCandidates = candidates
   const insertedIds = candidates.map((c) => c.placeholder.id)
 
   if (assignTagName && insertedIds.length > 0) {
@@ -500,38 +501,48 @@ export async function importFiles(
     files = insertedIds.map((id) => byId.get(id)).filter((f): f is FileRecord => !!f)
   }
 
-  // Fire-and-forget: each copy dispatches to a native RNFS thread that
-  // holds the source URI open once it starts reading, so ephemeral
-  // picker/share URIs are captured by the native call before the caller
-  // can do anything else. The native thread freezes with the process on
-  // iOS suspension and thaws on resume. If iOS terminates (rather than
-  // suspends) the import is lost — same as before.
-  void copyImportedFiles(
-    insertedCandidates.map((c) => ({
+  // Each copy dispatches to a native RNFS thread that holds the source
+  // URI open once it starts reading, so ephemeral picker/share URIs are
+  // captured before the caller can do anything else. The native thread
+  // freezes with the process on iOS suspension and thaws on resume. If
+  // iOS terminates rather than suspends, the import is lost — the
+  // import-progress modal warns the user not to close the app.
+  const copyPromise = copyAssets(
+    candidates.map((c) => ({
       id: c.placeholder.id,
       type: c.placeholder.type,
+      size: c.placeholder.size,
       sourceUri: c.sourceUri,
     })),
+    onCopyProgress,
   )
 
   triggerImportScanner()
-  return { files, newVersionCount }
+  const totalBytes = candidates.reduce((s, c) => s + c.placeholder.size, 0)
+  return { files, newVersionCount, totalBytes, copyPromise }
 }
 
-async function copyImportedFiles(
-  copies: { id: string; type: string; sourceUri: string }[],
-): Promise<void> {
-  for (const { id, type, sourceUri } of copies) {
+async function copyAssets(
+  copies: { id: string; type: string; size: number; sourceUri: string }[],
+  onProgress?: (bytes: number) => void,
+): Promise<{ copied: number; failed: number }> {
+  let copied = 0
+  let failed = 0
+  for (const { id, type, size, sourceUri } of copies) {
     try {
       await copyFileToFs({ id, type }, sourceUri)
+      copied += 1
+      onProgress?.(size)
     } catch (e) {
-      logger.warn('importFiles', 'copy_failed', {
+      failed += 1
+      logger.warn('importAssets', 'copy_failed', {
         fileId: id,
         error: e as Error,
       })
     }
   }
   triggerImportScanner()
+  return { copied, failed }
 }
 
 async function getFileSize(fileUri: string) {

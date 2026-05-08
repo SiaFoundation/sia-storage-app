@@ -12,6 +12,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SWRConfig } from 'swr'
 import { AppSplash } from './components/AppSplash'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ImportProgressModal } from './components/ImportProgressModal'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
@@ -116,6 +117,7 @@ function RootContent() {
             <NavigationContainer ref={navigationRef} theme={darkNavigationTheme}>
               <RootTabs />
             </NavigationContainer>
+            <ImportProgressModal />
           </>
         )}
       </BottomSheetModalProvider>

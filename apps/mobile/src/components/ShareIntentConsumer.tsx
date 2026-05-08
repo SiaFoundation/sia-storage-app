@@ -2,8 +2,8 @@ import { useHasOnboarded } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { useShareIntentContext } from 'expo-share-intent'
 import { useEffect } from 'react'
+import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
-import { importFiles } from '../lib/processAssets'
 import { useToast } from '../lib/toastContext'
 
 export function ShareIntentConsumer() {

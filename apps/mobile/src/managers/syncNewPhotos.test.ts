@@ -1,7 +1,7 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import * as MediaLibrary from 'expo-media-library'
-import { syncAssets } from '../lib/processAssets'
+import { syncAssets } from '../lib/assetImports'
 import { app } from '../stores/appService'
 import {
   initSyncNewPhotos,
@@ -29,7 +29,7 @@ jest.mock('../lib/mediaLibraryPermissions', () => ({
     set: jest.fn(),
   },
 }))
-jest.mock('../lib/processAssets', () => ({
+jest.mock('../lib/assetImports', () => ({
   syncAssets: jest.fn(),
 }))
 
@@ -174,7 +174,7 @@ describe('syncNewPhotos', () => {
     expect(enabledAt).toBe(1_700_000_000_000)
   })
 
-  it('aborts before processAssets when shutdown is called mid-tick', async () => {
+  it('aborts before syncAssets when shutdown is called mid-tick', async () => {
     const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
     const syncAssetsMock = jest.mocked(syncAssets)
 

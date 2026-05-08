@@ -32,7 +32,7 @@ import {
   getMediaLibraryPermissions,
   mediaLibraryPermissionsCache,
 } from '../lib/mediaLibraryPermissions'
-import { syncAssets } from '../lib/processAssets'
+import { syncAssets } from '../lib/assetImports'
 import { app } from '../stores/appService'
 
 const PAGE_SIZE = 50
