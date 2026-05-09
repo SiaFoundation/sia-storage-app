@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "resolveJsonModule": true,
     "paths": {
       "@siastorage/core": ["../../packages/core/src/index.ts"],
       "@siastorage/core/*": ["../../packages/core/src/*"],

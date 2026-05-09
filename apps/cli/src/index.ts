@@ -2,6 +2,7 @@
 import { resolve } from 'node:path'
 import { Command } from 'commander'
 import { isDaemonRunning, readDaemonPid, getDataDir, getPaths } from '@siastorage/node-adapters'
+import pkg from '../package.json'
 import { c } from './lib/format'
 
 // Hidden entry points for daemon mode and shell completion
@@ -23,7 +24,7 @@ if (process.env.SIA_DAEMON_MODE === '1') {
   const program = new Command()
     .name('sia')
     .description('Sia decentralized storage CLI')
-    .version('0.0.1')
+    .version(pkg.version)
     .option('-d, --data-dir <path>', 'Data directory (overrides SIA_DATA_DIR)')
 
   function resolveDataDir(): string {
