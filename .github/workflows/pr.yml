@@ -97,30 +97,15 @@ jobs:
       - run: bun --cwd apps/cli test:e2e
 
   build-cli:
-    # Verify each release target builds cleanly on its native runner. We
-    # match the release workflow's matrix so PR runs catch the same failure
-    # modes the release would hit.
-    runs-on: ${{ matrix.runs-on }}
+    # Smoke-test the CLI compile on the cheapest runner. Per-platform builds
+    # are reserved for the release workflow — PRs only need to catch obvious
+    # source-level breakage, not platform-specific bugs.
+    runs-on: ubuntu-latest
     if: github.event.action != 'closed'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: darwin-arm64
-            runs-on: macos-latest
-          - name: darwin-x64
-            runs-on: macos-13
-          - name: linux-x64
-            runs-on: ubuntu-latest
-          - name: linux-arm64
-            runs-on: ubuntu-24.04-arm
-          - name: windows-x64
-            runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
         with:
           bun_version: 1.2.19
       - working-directory: apps/cli
-        shell: bash
-        run: bun run build:${{ matrix.name }}
+        run: bun run build:linux-x64
