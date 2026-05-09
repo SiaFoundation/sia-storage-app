@@ -36,7 +36,6 @@
     "cli:test:all": "bun --cwd apps/cli test:all",
     "cli:build": "bun --cwd apps/cli build",
     "cli:build:darwin-arm64": "bun --cwd apps/cli build:darwin-arm64",
-    "cli:build:darwin-x64": "bun --cwd apps/cli build:darwin-x64",
     "cli:build:linux-x64": "bun --cwd apps/cli build:linux-x64",
     "cli:build:linux-arm64": "bun --cwd apps/cli build:linux-arm64",
     "cli:build:windows-x64": "bun --cwd apps/cli build:windows-x64",
