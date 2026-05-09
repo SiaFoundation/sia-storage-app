@@ -20,21 +20,31 @@ jobs:
     # Run on every cli/v* release and on every manual dispatch. Skip mobile/*
     # releases so this workflow doesn't fire alongside the mobile build.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/')) }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
+      # Each target builds on a runner whose OS/arch matches it natively, so
+      # `bun install` pulls in the matching `@siafoundation/sia-storage-*`
+      # native NAPI addon and `bun build --compile` embeds it. Cross-compiling
+      # to a foreign platform would leave the addon out of node_modules and
+      # produce a binary that throws `Native addon not found` at runtime.
       matrix:
         include:
           - name: darwin-arm64
             target: bun-darwin-arm64
+            runs-on: macos-latest
           - name: darwin-x64
             target: bun-darwin-x64
+            runs-on: macos-13
           - name: linux-x64
             target: bun-linux-x64
+            runs-on: ubuntu-latest
           - name: linux-arm64
             target: bun-linux-arm64
+            runs-on: ubuntu-24.04-arm
           - name: windows-x64
             target: bun-windows-x64
+            runs-on: windows-latest
             ext: .exe
     steps:
       - name: Checkout
@@ -47,16 +57,12 @@ jobs:
 
       - name: Build sia-storage-${{ matrix.name }}${{ matrix.ext }}
         working-directory: apps/cli
-        # The trailing chmod works around a bun cross-compile quirk: Windows
-        # `.exe` outputs land on Linux with a restrictive mode that fails
-        # `actions/upload-artifact`'s read with EACCES. chmod is harmless on
-        # the four other targets.
+        shell: bash
         run: |
           bun build src/index.ts \
             --compile \
             --target=${{ matrix.target }} \
             --outfile dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
-          chmod 0755 dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

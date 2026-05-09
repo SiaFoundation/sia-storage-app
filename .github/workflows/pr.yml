@@ -97,26 +97,30 @@ jobs:
       - run: bun --cwd apps/cli test:e2e
 
   build-cli:
-    # Verify the cross-compile produces a binary for every release target on
-    # every PR — keeps platform-specific breakage out of the release pipeline.
-    runs-on: ubuntu-latest
+    # Verify each release target builds cleanly on its native runner. We
+    # match the release workflow's matrix so PR runs catch the same failure
+    # modes the release would hit.
+    runs-on: ${{ matrix.runs-on }}
     if: github.event.action != 'closed'
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: darwin-arm64
+            runs-on: macos-latest
           - name: darwin-x64
+            runs-on: macos-13
           - name: linux-x64
+            runs-on: ubuntu-latest
           - name: linux-arm64
+            runs-on: ubuntu-24.04-arm
           - name: windows-x64
+            runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
         with:
           bun_version: 1.2.19
-      # `bun --cwd <dir> run <script>` is broken when the script name contains
-      # a colon — bun prints its usage help and exits 0, so the build silently
-      # no-ops. Use working-directory + a plain `bun run` instead.
       - working-directory: apps/cli
+        shell: bash
         run: bun run build:${{ matrix.name }}
