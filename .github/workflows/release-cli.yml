@@ -47,11 +47,16 @@ jobs:
 
       - name: Build sia-storage-${{ matrix.name }}${{ matrix.ext }}
         working-directory: apps/cli
+        # The trailing chmod works around a bun cross-compile quirk: Windows
+        # `.exe` outputs land on Linux with a restrictive mode that fails
+        # `actions/upload-artifact`'s read with EACCES. chmod is harmless on
+        # the four other targets.
         run: |
           bun build src/index.ts \
             --compile \
             --target=${{ matrix.target }} \
             --outfile dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
+          chmod 0755 dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
