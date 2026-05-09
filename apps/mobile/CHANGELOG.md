@@ -2,6 +2,21 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.12.0 (2026-05-09)
+
+### Features
+
+- Improved file detail discoverability in the viewer with a clearer info icon toggle, tappable title, inline tag management, and a rename sheet for the file name. Closes https://github.com/SiaFoundation/sia-storage-app/issues/532
+
+### Fixes
+
+- Fixed a brief upward bounce of the file viewer at the bottom of the screen when dismissing it with a hard downward flick.
+- Fixed a brief "File unavailable" flash that appeared in the file viewer right after a Photos-library import finished hashing, while the asset was still resolving against iCloud.
+- Fixed right-side header buttons sitting higher than left-side icons across all standard headers
+- Tapping a file status icon now shows a toast with the status label and error details. Fixed status pill alignment with the Select button in the library header. Closes https://github.com/SiaFoundation/sia-storage-app/issues/538
+- Status toasts now wrap multi-line, dismiss on tap, and stay longer for errors.
+- Fixed videos in importing state not loading in the file viewer by falling back to the asset's content URI when the local file URI is unavailable. Closes https://github.com/SiaFoundation/sia-storage-app/issues/536
+
 ## 1.11.8 (2026-05-07)
 
 ### Fixes
