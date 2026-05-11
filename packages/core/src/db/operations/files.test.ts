@@ -6,6 +6,7 @@ import {
   deleteManyFilesByIds,
   insertFile,
   insertManyFiles,
+  tombstoneFiles,
   queryFileByContentHash,
   queryFileByObjectId,
   queryFiles,
@@ -24,7 +25,12 @@ import {
 } from './files'
 import { insertDirectory } from './directories'
 import { upsertFsMeta } from './fs'
-import { insertObject } from './localObjects'
+import {
+  clearObjectIfUnchanged,
+  clearObjectsNeedsSyncUp,
+  insertObject,
+  markAllObjectsNeedsSyncUp,
+} from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 function makeFileRecord(id: string, overrides?: Partial<any>) {
@@ -62,6 +68,22 @@ function makeLocalObject(fileId: string, overrides?: Partial<any>) {
   }
 }
 
+const INDEXER_URL = 'https://indexer.example.com'
+
+/** Reads a file's object dirty flag (0 if the file has no object). */
+async function objectFlag(fileId: string): Promise<number> {
+  const row = await db().getFirstAsync<{ needsSyncUp: number }>(
+    'SELECT needsSyncUp FROM objects WHERE fileId = ?',
+    fileId,
+  )
+  return row?.needsSyncUp ?? 0
+}
+
+/** Clears a file's object dirty flag directly (test setup for "M flags it"). */
+async function clearObjectFlag(fileId: string): Promise<void> {
+  await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', fileId)
+}
+
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
 
@@ -74,6 +96,97 @@ describe('insertFile', () => {
     expect(result!.id).toBe('file-1')
     expect(result!.name).toBe('file-1.jpg')
     expect(result!.size).toBe(100)
+  })
+})
+
+describe('needsSyncUp dirty flag (on objects)', () => {
+  it('insertFile alone creates no object, so there is nothing to sync up', async () => {
+    // A never-uploaded file has no object row and no dirty flag; the uploader
+    // discovers it separately (queryUnuploadedFiles), not via needsSyncUp.
+    await insertFile(db(), makeFileRecord('file-1'))
+    const row = await db().getFirstAsync<{ id: string }>(
+      'SELECT id FROM objects WHERE fileId = ?',
+      'file-1',
+    )
+    expect(row).toBeNull()
+  })
+
+  it('insertObject creates the object flagged dirty', async () => {
+    // The freshly pinned object carries the pushed metadata; needsSyncUp=1
+    // reconciles it on the next pass and covers an edit that raced the upload.
+    await insertFile(db(), makeFileRecord('file-1'))
+    await insertObject(db(), makeLocalObject('file-1'))
+    expect(await objectFlag('file-1')).toBe(1)
+  })
+
+  it('updateFile re-flags a clean object', async () => {
+    await insertFile(db(), makeFileRecord('file-1', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('file-1'))
+    await clearObjectFlag('file-1')
+    expect(await objectFlag('file-1')).toBe(0)
+    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' })
+    expect(await objectFlag('file-1')).toBe(1)
+  })
+
+  it('clearObjectIfUnchanged clears only when files.updatedAt matches (CAS)', async () => {
+    await insertFile(db(), makeFileRecord('file-1', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('file-1'))
+    expect(await objectFlag('file-1')).toBe(1)
+    // Stale expectation: a concurrent edit moved files.updatedAt, so the clear must no-op.
+    await clearObjectIfUnchanged(db(), 'obj-file-1', INDEXER_URL, 999)
+    expect(await objectFlag('file-1')).toBe(1)
+    await clearObjectIfUnchanged(db(), 'obj-file-1', INDEXER_URL, 1000)
+    expect(await objectFlag('file-1')).toBe(0)
+  })
+
+  it('tombstoneFiles flags local deletes but leaves remote-driven deletes clean', async () => {
+    await insertFile(db(), makeFileRecord('local-del', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('local-del'))
+    await clearObjectFlag('local-del')
+    await tombstoneFiles(db(), ['local-del'], Date.now())
+    expect(await objectFlag('local-del')).toBe(1)
+
+    await insertFile(db(), makeFileRecord('remote-del', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('remote-del'))
+    await clearObjectFlag('remote-del')
+    await tombstoneFiles(db(), ['remote-del'], Date.now(), { setNeedsSyncUp: false })
+    expect(await objectFlag('remote-del')).toBe(0)
+  })
+
+  it('tombstoneFiles flags the objects of every passed file id', async () => {
+    // tombstoneFiles flags only the ids it is given; thumbForId-based thumbnail
+    // flagging is tombstoneFilesAndThumbnails' job (covered in trash.test.ts).
+    await insertFile(db(), makeFileRecord('a', { updatedAt: 1000 }))
+    await insertFile(db(), makeFileRecord('b', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('a', { id: 'obj-a' }))
+    await insertObject(db(), makeLocalObject('b', { id: 'obj-b' }))
+    await clearObjectFlag('a')
+    await clearObjectFlag('b')
+    await tombstoneFiles(db(), ['a', 'b'], Date.now())
+    expect(await objectFlag('a')).toBe(1)
+    expect(await objectFlag('b')).toBe(1)
+  })
+
+  it('clearObjectsNeedsSyncUp clears the flag unconditionally (no CAS)', async () => {
+    await insertFile(db(), makeFileRecord('uncond', { updatedAt: 1000 }))
+    await insertObject(db(), makeLocalObject('uncond', { id: 'obj-uncond' }))
+    expect(await objectFlag('uncond')).toBe(1)
+    await clearObjectsNeedsSyncUp(db(), INDEXER_URL, ['obj-uncond'])
+    expect(await objectFlag('uncond')).toBe(0)
+  })
+
+  it('markAllObjectsNeedsSyncUp re-flags every object', async () => {
+    await insertManyFiles(db(), [
+      makeFileRecord('a', { updatedAt: 1000 }),
+      makeFileRecord('b', { updatedAt: 1000 }),
+    ])
+    await insertObject(db(), makeLocalObject('a', { id: 'obj-a' }))
+    await insertObject(db(), makeLocalObject('b', { id: 'obj-b' }))
+    await clearObjectFlag('a')
+    await clearObjectFlag('b')
+    await markAllObjectsNeedsSyncUp(db())
+    expect(await objectFlag('a')).toBe(1)
+    expect(await objectFlag('b')).toBe(1)
   })
 })
 

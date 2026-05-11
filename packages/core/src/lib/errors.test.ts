@@ -3,8 +3,30 @@ import {
   DatabaseSuspendedError,
   getErrorMessage,
   isAbortError,
+  isObjectNotFoundError,
   isSuspendedDbError,
 } from './errors'
+
+describe('isObjectNotFoundError', () => {
+  it('matches the indexer "object not found" message', () => {
+    expect(isObjectNotFoundError(new Error('object not found'))).toBe(true)
+  })
+
+  it('is case-insensitive and matches an embedded substring', () => {
+    expect(isObjectNotFoundError(new Error('Object Not Found'))).toBe(true)
+    expect(isObjectNotFoundError(new Error('AppClient: 404: object not found'))).toBe(true)
+  })
+
+  it('returns false for unrelated errors', () => {
+    expect(isObjectNotFoundError(new Error('network timeout'))).toBe(false)
+  })
+
+  it('returns false for null, undefined, and non-error inputs', () => {
+    expect(isObjectNotFoundError(null)).toBe(false)
+    expect(isObjectNotFoundError(undefined)).toBe(false)
+    expect(isObjectNotFoundError(42)).toBe(false)
+  })
+})
 
 describe('AbortError', () => {
   it('has name AbortError and default message', () => {

@@ -1,10 +1,11 @@
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileRecord } from '@siastorage/core/types'
-import { initializeDB, resetDb } from '../db'
+import { db, initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
 import { runSyncUpMetadata } from './syncUpMetadata'
 
 jest.mock('@siastorage/core/encoding/fileMetadata', () => ({
+  ...jest.requireActual('@siastorage/core/encoding/fileMetadata'),
   decodeFileMetadata: jest.fn(),
   encodeFileMetadata: jest.fn(),
 }))
@@ -31,6 +32,35 @@ function makeLocalObject(params: {
   }
 }
 
+function makeFile(params: {
+  id: string
+  name?: string
+  hash?: string
+  size?: number
+  createdAt?: number
+  updatedAt?: number
+  trashedAt?: number | null
+  deletedAt?: number | null
+}): Omit<FileRecord, 'objects'> {
+  const ts = params.updatedAt ?? params.createdAt ?? 100
+  return {
+    id: params.id,
+    name: params.name ?? `${params.id}.jpg`,
+    type: 'image/jpeg',
+    kind: 'file',
+    size: params.size ?? 100,
+    hash: params.hash ?? `hash-${params.id}`,
+    createdAt: params.createdAt ?? 100,
+    updatedAt: ts,
+    localId: null,
+    addedAt: params.createdAt ?? 100,
+    thumbForId: undefined,
+    thumbSize: undefined,
+    trashedAt: params.trashedAt ?? null,
+    deletedAt: params.deletedAt ?? null,
+  }
+}
+
 describe('syncUpMetadata', () => {
   const meta = require('@siastorage/core/encoding/fileMetadata') as jest.Mocked<any>
   const INDEXER_URL = 'indexer-url'
@@ -43,7 +73,6 @@ describe('syncUpMetadata', () => {
     await initializeDB()
     jest.clearAllMocks()
     await app().settings.setIndexerURL(INDEXER_URL)
-    await app().sync.setSyncUpCursor(undefined)
     app().connection.setState({ isConnected: true })
     internal().setSdk({
       updateObjectMetadata: mockUpdateObjectMetadata,
@@ -57,26 +86,18 @@ describe('syncUpMetadata', () => {
     await resetDb()
   })
 
-  test('updates files where local is newer, skips files where remote is newer', async () => {
-    app().connection.setState({ isConnected: true })
+  // The sync-up dirty flag lives on the object row, keyed by (indexerURL, id).
+  async function flagFor(objectId: string, indexerURL = INDEXER_URL): Promise<0 | 1> {
+    const row = await db().getFirstAsync<{ needsSyncUp: number }>(
+      'SELECT needsSyncUp FROM objects WHERE id = ? AND indexerURL = ?',
+      objectId,
+      indexerURL,
+    )
+    return (row?.needsSyncUp ?? 0) as 0 | 1
+  }
 
-    // File A: local updatedAt=200, remote updatedAt=150 -> LOCAL NEWER -> should UPDATE
-    const localA: Omit<FileRecord, 'objects'> = {
-      id: 'file-a',
-      name: 'a.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-a',
-      createdAt: 100,
-      updatedAt: 200, // local newer
-      localId: null,
-      addedAt: 100,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
+  test('updates files where local is newer, skips files where remote is newer', async () => {
+    const localA = makeFile({ id: 'file-a', updatedAt: 200 })
     await app().files.create(
       localA,
       makeLocalObject({
@@ -88,23 +109,7 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    // File B: local updatedAt=100, remote updatedAt=200 -> REMOTE NEWER -> should SKIP
-    const localB: Omit<FileRecord, 'objects'> = {
-      id: 'file-b',
-      name: 'b.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 200,
-      hash: 'hash-b',
-      createdAt: 110,
-      updatedAt: 100, // local older
-      localId: null,
-      addedAt: 110,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
+    const localB = makeFile({ id: 'file-b', size: 200, hash: 'hash-b', updatedAt: 100 })
     await app().files.create(
       localB,
       makeLocalObject({
@@ -116,27 +121,28 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    mockGetPinnedObject.mockImplementation(async (_objectId: string) => {
-      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
-    })
+    mockGetPinnedObject.mockImplementation(async () => ({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    }))
 
     const remoteA = {
-      name: 'a.jpg',
+      name: 'file-a.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'hash-a',
+      hash: 'hash-file-a',
       createdAt: 100,
-      updatedAt: 150, // remote older -> local should win
+      updatedAt: 150,
       thumbForId: undefined,
       thumbSize: undefined,
     }
     const remoteB = {
-      name: 'b.jpg',
+      name: 'file-b.jpg',
       type: 'image/jpeg',
       size: 200,
       hash: 'hash-b',
       createdAt: 110,
-      updatedAt: 200, // remote newer -> remote should win, skip update
+      updatedAt: 200,
       thumbForId: undefined,
       thumbSize: undefined,
     }
@@ -144,400 +150,44 @@ describe('syncUpMetadata', () => {
 
     await runSyncUpMetadata(5)
 
-    // Only file A should be updated, file B should be skipped.
+    // Only file A pushes; file B's remote was newer.
     expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
-    expect(meta.encodeFileMetadata).toHaveBeenCalledTimes(1)
-    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(expect.objectContaining(localA))
+    // Both objects get their flag cleared: A via successful push, B via the
+    // remote-newer CAS clear (no point re-walking until something changes).
+    expect(await flagFor('obj-a')).toBe(0)
+    expect(await flagFor('obj-b')).toBe(0)
   })
 
-  test('early exit when disconnected', async () => {
-    app().connection.setState({ isConnected: false })
-    await runSyncUpMetadata(5)
-    expect(true).toBe(true)
-  })
-
-  test('cursor reset when no items', async () => {
-    app().connection.setState({ isConnected: true })
-    await runSyncUpMetadata(5)
-    const cur = await app().sync.getSyncUpCursor()
-    expect(cur).toBeUndefined()
-  })
-
-  test('advances cursor when full batch processed', async () => {
-    const batchSize = 5
-    for (let i = 0; i < batchSize; i++) {
-      const file: Omit<FileRecord, 'objects'> = {
-        id: `file-${i}`,
-        name: `name-${i}`,
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 100 + i,
-        hash: `hash-${i}`,
-        createdAt: NOW_BASE + i,
-        updatedAt: NOW_BASE + i,
-        localId: null,
-        addedAt: NOW_BASE + i,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      }
-      await app().files.create(
-        file,
-        makeLocalObject({
-          fileId: file.id,
-          objectId: `obj-${i}`,
-          indexerURL: INDEXER_URL,
-          createdAt: NOW_BASE + i,
-          updatedAt: NOW_BASE + i,
-        }),
-      )
-    }
-
-    mockGetPinnedObject.mockResolvedValue({
-      metadata: () => new ArrayBuffer(0),
-      updateMetadata: jest.fn(),
-    })
-    meta.decodeFileMetadata.mockImplementation(() => ({
-      name: 'name',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-    }))
-
-    await runSyncUpMetadata(batchSize)
-
-    const cur = await app().sync.getSyncUpCursor()
-    expect(cur).toEqual({
-      updatedAt: NOW_BASE + (batchSize - 1),
-      id: `file-${batchSize - 1}`,
-    })
-  })
-
-  test('advances cursor past partial batch', async () => {
-    const batchSize = 5
-    const count = 3
-    for (let i = 0; i < count; i++) {
-      const file: Omit<FileRecord, 'objects'> = {
-        id: `file-${i}`,
-        name: `name-${i}`,
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 100 + i,
-        hash: `hash-${i}`,
-        createdAt: NOW_BASE + i,
-        updatedAt: NOW_BASE + i,
-        localId: null,
-        addedAt: NOW_BASE + i,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      }
-      await app().files.create(
-        file,
-        makeLocalObject({
-          fileId: file.id,
-          objectId: `obj-${i}`,
-          indexerURL: INDEXER_URL,
-          createdAt: NOW_BASE + i,
-          updatedAt: NOW_BASE + i,
-        }),
-      )
-    }
-
-    mockGetPinnedObject.mockResolvedValue({
-      metadata: () => new ArrayBuffer(0),
-      updateMetadata: jest.fn(),
-    })
-    meta.decodeFileMetadata.mockImplementation(() => ({
-      name: 'name',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-    }))
-
-    await runSyncUpMetadata(batchSize)
-
-    const cur = await app().sync.getSyncUpCursor()
-    expect(cur).toEqual({
-      updatedAt: NOW_BASE + count,
-      id: `file-${count - 1}`,
-    })
-  })
-  test('skips files at or before cursor updatedAt', async () => {
-    app().connection.setState({ isConnected: true })
-    const batchSize = 10
-
-    const records: Omit<FileRecord, 'objects'>[] = [
-      {
-        id: 'file-0',
-        name: 'name-0',
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 101,
-        hash: 'hash-0',
-        createdAt: NOW_BASE,
-        updatedAt: NOW_BASE,
-        localId: null,
-        addedAt: NOW_BASE,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      {
-        id: 'file-1',
-        name: 'name-1',
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 102,
-        hash: 'hash-1',
-        createdAt: NOW_BASE + 1,
-        updatedAt: NOW_BASE + 1,
-        localId: null,
-        addedAt: NOW_BASE + 1,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      },
-      {
-        id: 'file-2',
-        name: 'name-2',
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 103,
-        hash: 'hash-2',
-        createdAt: NOW_BASE + 2,
-        updatedAt: NOW_BASE + 2,
-        localId: null,
-        addedAt: NOW_BASE + 2,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      },
-    ]
-
-    for (const record of records) {
-      await app().files.create(
-        record,
-        makeLocalObject({
-          fileId: record.id,
-          objectId: `obj-${record.id}`,
-          indexerURL: INDEXER_URL,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-        }),
-      )
-    }
-
-    await app().sync.setSyncUpCursor({ updatedAt: NOW_BASE + 1, id: 'file-1' })
-
-    const remoteNewer = {
-      name: 'name-2',
-      type: 'image/jpeg',
-      size: 103,
-      hash: 'hash-2',
-      createdAt: NOW_BASE + 2,
-      updatedAt: NOW_BASE + 1,
-      thumbForId: undefined,
-      thumbSize: undefined,
-    }
-
-    meta.decodeFileMetadata.mockReturnValue(remoteNewer)
-
-    await runSyncUpMetadata(batchSize)
-
-    expect(mockGetPinnedObject).toHaveBeenCalledTimes(1)
-    expect(mockGetPinnedObject).toHaveBeenCalledWith('obj-file-2')
-  })
-
-  test('pushes local id when remote id differs', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const localFile: Omit<FileRecord, 'objects'> = {
-      id: 'local-id',
-      name: 'photo.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-a',
-      createdAt: 100,
-      updatedAt: 200,
-      localId: null,
-      addedAt: 100,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
-    await app().files.create(
-      localFile,
-      makeLocalObject({
-        fileId: localFile.id,
-        objectId: 'obj-a',
-        indexerURL: INDEXER_URL,
-        createdAt: 100,
-        updatedAt: 200,
-      }),
-    )
-
-    mockGetPinnedObject.mockResolvedValue({
-      metadata: () => new ArrayBuffer(0),
-      updateMetadata: jest.fn(),
-    })
-
-    meta.decodeFileMetadata.mockReturnValue({
-      id: 'remote-id',
-      name: 'photo.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-a',
-      createdAt: 100,
-      updatedAt: 200,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-    })
-
-    await runSyncUpMetadata(5)
-
-    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
-    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'local-id' }),
-    )
-  })
-
-  test('skips all work when signal is already aborted', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-0',
-      name: 'a.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-0',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
+  test('skips objects with needsSyncUp = 0 even if pinned', async () => {
+    const file = makeFile({ id: 'clean', updatedAt: NOW_BASE })
     await app().files.create(
       file,
       makeLocalObject({
         fileId: file.id,
-        objectId: 'obj-0',
+        objectId: 'obj-clean',
         indexerURL: INDEXER_URL,
         createdAt: NOW_BASE,
         updatedAt: NOW_BASE,
       }),
     )
+    // A freshly uploaded object starts dirty; simulate an already-synced (clean)
+    // object by clearing its flag.
+    await app().localObjects.clearMany(INDEXER_URL, ['obj-clean'])
+    expect(await flagFor('obj-clean')).toBe(0)
 
-    const ac = new AbortController()
-    ac.abort()
-    await runSyncUpMetadata(5, ac.signal)
+    await runSyncUpMetadata(5)
 
     expect(mockGetPinnedObject).not.toHaveBeenCalled()
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
   })
 
-  test('stops fetching objects when signal is aborted mid-batch', async () => {
-    app().connection.setState({ isConnected: true })
-
-    for (let i = 0; i < 5; i++) {
-      const file: Omit<FileRecord, 'objects'> = {
-        id: `file-${i}`,
-        name: `name-${i}`,
-        type: 'image/jpeg',
-        kind: 'file',
-        size: 100 + i,
-        hash: `hash-${i}`,
-        createdAt: NOW_BASE + i,
-        updatedAt: NOW_BASE + i,
-        localId: null,
-        addedAt: NOW_BASE + i,
-        thumbForId: undefined,
-        thumbSize: undefined,
-        trashedAt: null,
-        deletedAt: null,
-      }
-      await app().files.create(
-        file,
-        makeLocalObject({
-          fileId: file.id,
-          objectId: `obj-${i}`,
-          indexerURL: INDEXER_URL,
-          createdAt: NOW_BASE + i,
-          updatedAt: NOW_BASE + i,
-        }),
-      )
-    }
-
-    const ac = new AbortController()
-    let callCount = 0
-    mockGetPinnedObject.mockImplementation(async () => {
-      callCount++
-      if (callCount >= 2) ac.abort()
-      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
-    })
-    meta.decodeFileMetadata.mockReturnValue({
-      name: 'name',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-    })
-
-    await runSyncUpMetadata(5, ac.signal)
-
-    expect(mockGetPinnedObject).toHaveBeenCalledTimes(2)
-  })
-
-  test('pushes local id when pushing field changes with different remote id', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const localFile: Omit<FileRecord, 'objects'> = {
-      id: 'local-id',
-      name: 'renamed.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-a',
-      createdAt: 100,
-      updatedAt: 300,
-      localId: null,
-      addedAt: 100,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
+  test('successful push clears the flag via CAS', async () => {
+    const file = makeFile({ id: 'pushme', updatedAt: 300 })
     await app().files.create(
-      localFile,
+      file,
       makeLocalObject({
-        fileId: localFile.id,
-        objectId: 'obj-a',
+        fileId: file.id,
+        objectId: 'obj-pushme',
         indexerURL: INDEXER_URL,
         createdAt: 100,
         updatedAt: 300,
@@ -548,46 +198,136 @@ describe('syncUpMetadata', () => {
       metadata: () => new ArrayBuffer(0),
       updateMetadata: jest.fn(),
     })
-
     meta.decodeFileMetadata.mockReturnValue({
-      id: 'remote-id',
-      name: 'original.jpg',
+      name: 'pushme.jpg',
       type: 'image/jpeg',
-      kind: 'file',
       size: 100,
-      hash: 'hash-a',
+      hash: 'wrong-hash',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
       thumbSize: undefined,
     })
 
+    expect(await flagFor('obj-pushme')).toBe(1)
     await runSyncUpMetadata(5)
 
-    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'local-id', name: 'renamed.jpg' }),
-    )
+    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
+    expect(await flagFor('obj-pushme')).toBe(0)
   })
 
-  test('syncUp calls deleteObject for tombstoned files', async () => {
-    app().connection.setState({ isConnected: true })
+  test('failed push leaves the flag set', async () => {
+    const file = makeFile({ id: 'failpush', updatedAt: 300 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-fail',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
 
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-tomb',
-      name: 'photo.jpg',
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'failpush.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'remote-hash',
+      createdAt: 100,
+      updatedAt: 200,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+    mockUpdateObjectMetadata.mockRejectedValue(new Error('network'))
+
+    await runSyncUpMetadata(5)
+
+    expect(await flagFor('obj-fail')).toBe(1)
+  })
+
+  test('CAS clear is no-op when a local edit lands after the metadata snapshot', async () => {
+    const file = makeFile({ id: 'concurrent', updatedAt: 300 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-concurrent',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
+
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'concurrent.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'remote-hash',
+      createdAt: 100,
+      updatedAt: 200,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+    // The edit lands during the push — AFTER getMetadata captured the snapshot —
+    // so it is not in the pushed payload. The CAS (against the snapshot's
+    // updatedAt) must fail, leaving the object flagged for the next pass.
+    mockUpdateObjectMetadata.mockImplementation(async () => {
+      await app().files.update({ id: 'concurrent', name: 'edited.jpg' })
+    })
+
+    await runSyncUpMetadata(5)
+
+    expect(await flagFor('obj-concurrent')).toBe(1)
+  })
+
+  test('no-diff case clears the flag', async () => {
+    const file = makeFile({ id: 'nodiff', updatedAt: 200 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-nodiff',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 200,
+      }),
+    )
+
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      id: 'nodiff',
+      name: 'nodiff.jpg',
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'hash-tomb',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
+      hash: 'hash-nodiff',
+      createdAt: 100,
+      updatedAt: 200,
       thumbForId: undefined,
       thumbSize: undefined,
       trashedAt: null,
-      deletedAt: null,
-    }
+    })
+
+    await runSyncUpMetadata(5)
+
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
+    expect(await flagFor('obj-nodiff')).toBe(0)
+  })
+
+  test('tombstoned file: deleteObject success removes the object row', async () => {
+    const file = makeFile({ id: 'file-tomb', updatedAt: NOW_BASE })
     await app().files.create(
       file,
       makeLocalObject({
@@ -598,179 +338,77 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
+    // Tombstoning bumps updatedAt and re-flags the file's objects.
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      {
-        includeUpdatedAt: false,
-        skipInvalidation: true,
-      },
+      { includeUpdatedAt: false, skipInvalidation: true },
     )
-
     mockDeleteObject.mockResolvedValue(undefined)
 
     await runSyncUpMetadata(5)
 
+    // The dirty flag lives on the object row, so deleting the row clears it.
     expect(mockDeleteObject).toHaveBeenCalledWith('obj-tomb')
-  })
-
-  test('syncUp advances cursor after successful deleteObject for tombstoned files', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-tomb2',
-      name: 'photo2.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-tomb2',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
-    await app().files.create(
-      file,
-      makeLocalObject({
-        fileId: file.id,
-        objectId: 'obj-tomb2',
-        indexerURL: INDEXER_URL,
-        createdAt: NOW_BASE,
-        updatedAt: NOW_BASE,
-      }),
-    )
-    await app().files.update(
-      { id: file.id, deletedAt: Date.now() },
-      {
-        includeUpdatedAt: false,
-        skipInvalidation: true,
-      },
-    )
-
-    mockDeleteObject.mockResolvedValue(undefined)
-
-    await runSyncUpMetadata(5)
-
-    const cur = await app().sync.getSyncUpCursor()
-    expect(cur).toBeDefined()
-  })
-
-  test('syncUp stalls on network error for tombstoned file', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-tomb3',
-      name: 'photo3.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-tomb3',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
-    await app().files.create(
-      file,
-      makeLocalObject({
-        fileId: file.id,
-        objectId: 'obj-tomb3',
-        indexerURL: INDEXER_URL,
-        createdAt: NOW_BASE,
-        updatedAt: NOW_BASE,
-      }),
-    )
-    await app().files.update(
-      { id: file.id, deletedAt: Date.now() },
-      {
-        includeUpdatedAt: false,
-        skipInvalidation: true,
-      },
-    )
-
-    mockDeleteObject.mockRejectedValue(new Error('network error'))
-
-    await runSyncUpMetadata(5)
-
-    const cur = await app().sync.getSyncUpCursor()
-    expect(cur).toBeUndefined()
-  })
-
-  test('syncUp skips metadata path and only calls deleteObject for tombstoned files', async () => {
-    app().connection.setState({ isConnected: true })
-
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-tomb4',
-      name: 'photo4.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-tomb4',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
-    await app().files.create(
-      file,
-      makeLocalObject({
-        fileId: file.id,
-        objectId: 'obj-tomb4',
-        indexerURL: INDEXER_URL,
-        createdAt: NOW_BASE,
-        updatedAt: NOW_BASE,
-      }),
-    )
-    await app().files.update(
-      { id: file.id, deletedAt: Date.now() },
-      {
-        includeUpdatedAt: false,
-        skipInvalidation: true,
-      },
-    )
-
-    mockDeleteObject.mockResolvedValue(undefined)
-
-    await runSyncUpMetadata(5)
-
+    expect(await app().localObjects.getForFile('file-tomb')).toHaveLength(0)
     expect(mockGetPinnedObject).not.toHaveBeenCalled()
     expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
-    expect(mockDeleteObject).toHaveBeenCalledWith('obj-tomb4')
+  })
+
+  test('tombstoned file: deleteObject network error keeps the object row flagged', async () => {
+    const file = makeFile({ id: 'file-tomb-fail', updatedAt: NOW_BASE })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb-fail',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      { includeUpdatedAt: false, skipInvalidation: true },
+    )
+    mockDeleteObject.mockRejectedValue(new Error('network'))
+
+    await runSyncUpMetadata(5)
+
+    // The remote delete failed, so the object row (and its flag) survive for retry.
+    expect(await app().localObjects.getForFile('file-tomb-fail')).toHaveLength(1)
+    expect(await flagFor('obj-tomb-fail')).toBe(1)
+  })
+
+  test('tombstoned file: deleteObject "object not found" is treated as success', async () => {
+    const file = makeFile({ id: 'file-gone', updatedAt: NOW_BASE })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-gone',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    await app().files.update(
+      { id: file.id, deletedAt: Date.now() },
+      { includeUpdatedAt: false, skipInvalidation: true },
+    )
+    // Remote object already gone (e.g. a prior session deleted it but crashed
+    // before local cleanup). The delete is idempotently done, so the dangling
+    // local object row must be removed — otherwise we'd re-issue this doomed
+    // delete every tick forever.
+    mockDeleteObject.mockRejectedValue(new Error('object not found'))
+
+    await runSyncUpMetadata(5)
+
+    expect(await app().localObjects.getForFile('file-gone')).toHaveLength(0)
   })
 
   test('tombstoned file with object on another indexer leaves that object row dangling', async () => {
-    app().connection.setState({ isConnected: true })
     const OTHER_INDEXER = 'other-indexer-url'
-
-    const file: Omit<FileRecord, 'objects'> = {
-      id: 'file-multi-idx',
-      name: 'multi.jpg',
-      type: 'image/jpeg',
-      kind: 'file',
-      size: 100,
-      hash: 'hash-multi-idx',
-      createdAt: NOW_BASE,
-      updatedAt: NOW_BASE,
-      localId: null,
-      addedAt: NOW_BASE,
-      thumbForId: undefined,
-      thumbSize: undefined,
-      trashedAt: null,
-      deletedAt: null,
-    }
-
-    // Create file with objects on both the current indexer and another indexer.
+    const file = makeFile({ id: 'file-multi-idx', updatedAt: NOW_BASE })
     await app().files.create(
       file,
       makeLocalObject({
@@ -790,30 +428,260 @@ describe('syncUpMetadata', () => {
         updatedAt: NOW_BASE,
       }),
     )
-
-    // Tombstone the file.
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      {
-        includeUpdatedAt: false,
-        skipInvalidation: true,
-      },
+      { includeUpdatedAt: false, skipInvalidation: true },
     )
 
     mockDeleteObject.mockResolvedValue(undefined)
     await runSyncUpMetadata(5)
 
-    // syncUp only deletes the current indexer's object.
+    // Sync-up only walks the current indexer, so only its object is deleted; the
+    // other indexer's object row (still flagged) persists until that indexer
+    // connects.
     expect(mockDeleteObject).toHaveBeenCalledTimes(1)
     expect(mockDeleteObject).toHaveBeenCalledWith('obj-current')
 
-    // The other indexer's object row persists locally. This is a known
-    // limitation: we can only connect to one indexer at a time, so we
-    // can't delete objects on other indexers. A future cleanup service
-    // is needed to handle this (see TODO in syncUpMetadata.ts).
     const remaining = await app().localObjects.getForFile(file.id)
     expect(remaining).toHaveLength(1)
     expect(remaining[0].id).toBe('obj-other')
     expect(remaining[0].indexerURL).toBe(OTHER_INDEXER)
+    expect(await flagFor('obj-other', OTHER_INDEXER)).toBe(1)
+  })
+
+  test('early exit when disconnected', async () => {
+    app().connection.setState({ isConnected: false })
+    const file = makeFile({ id: 'unreachable', updatedAt: 200 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-unreachable',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 200,
+      }),
+    )
+    await runSyncUpMetadata(5)
+    expect(mockGetPinnedObject).not.toHaveBeenCalled()
+    expect(await flagFor('obj-unreachable')).toBe(1)
+  })
+
+  test('skips all work when signal is already aborted', async () => {
+    const file = makeFile({ id: 'aborted', updatedAt: NOW_BASE })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-aborted',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    const ac = new AbortController()
+    ac.abort()
+    await runSyncUpMetadata(5, ac.signal)
+    expect(mockGetPinnedObject).not.toHaveBeenCalled()
+    expect(await flagFor('obj-aborted')).toBe(1)
+  })
+
+  test('stops fetching objects when signal is aborted mid-batch', async () => {
+    for (let i = 0; i < 5; i++) {
+      const file = makeFile({ id: `file-${i}`, updatedAt: NOW_BASE + i })
+      await app().files.create(
+        file,
+        makeLocalObject({
+          fileId: file.id,
+          objectId: `obj-${i}`,
+          indexerURL: INDEXER_URL,
+          createdAt: NOW_BASE + i,
+          updatedAt: NOW_BASE + i,
+        }),
+      )
+    }
+    const ac = new AbortController()
+    let callCount = 0
+    mockGetPinnedObject.mockImplementation(async () => {
+      callCount++
+      if (callCount >= 2) ac.abort()
+      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'name',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+    })
+    await runSyncUpMetadata(5, ac.signal)
+    expect(mockGetPinnedObject).toHaveBeenCalledTimes(2)
+  })
+
+  test('pushes local id when remote id differs', async () => {
+    const localFile = makeFile({ id: 'local-id', name: 'photo.jpg', updatedAt: 200 })
+    await app().files.create(
+      localFile,
+      makeLocalObject({
+        fileId: localFile.id,
+        objectId: 'obj-a',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 200,
+      }),
+    )
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      id: 'remote-id',
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'wrong-hash',
+      createdAt: 100,
+      updatedAt: 200,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+    })
+    await runSyncUpMetadata(5)
+    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
+    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'local-id' }),
+    )
+  })
+
+  test('skips and clears the flag when remote metadata version exceeds MAX_SUPPORTED_VERSION', async () => {
+    const file = makeFile({ id: 'newer-ver', updatedAt: 300 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-newer-ver',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
+
+    const futureMeta = new TextEncoder().encode(
+      JSON.stringify({ version: 99, id: 'newer-ver' }),
+    ).buffer
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => futureMeta,
+      updateMetadata: jest.fn(),
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'newer-ver.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'hash-newer-ver',
+      createdAt: 100,
+      updatedAt: 300,
+    })
+
+    await runSyncUpMetadata(5)
+
+    // Don't clobber a newer-schema remote; just stop re-walking it.
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
+    expect(await flagFor('obj-newer-ver')).toBe(0)
+  })
+
+  test('pushes a tag-only change detected via live getMetadata', async () => {
+    const file = makeFile({ id: 'tagonly', updatedAt: 300 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tagonly',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
+    // Real tag add: only the separate file_tags table changes (plus updatedAt).
+    await app().tags.add('tagonly', 'trip')
+    const updatedAt = (await app().files.getById('tagonly'))!.updatedAt
+
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    // Every scalar field matches remote; only the tag differs (remote has none).
+    meta.decodeFileMetadata.mockReturnValue({
+      id: 'tagonly',
+      name: 'tagonly.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tagonly',
+      createdAt: 100,
+      updatedAt,
+      trashedAt: null,
+    })
+
+    await runSyncUpMetadata(5)
+
+    // getMetadata pulled the tag in, diffFileMetadata flagged it, and it reached
+    // the pushed payload even though every scalar field matched remote.
+    expect(mockUpdateObjectMetadata).toHaveBeenCalledTimes(1)
+    expect(meta.encodeFileMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ tags: ['trip'] }),
+    )
+    expect(await flagFor('obj-tagonly')).toBe(0)
+  })
+
+  test('a tombstone landing during the round-trip is not pushed as a metadata update', async () => {
+    const file = makeFile({ id: 'race-tomb', updatedAt: 300 })
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-race',
+        indexerURL: INDEXER_URL,
+        createdAt: 100,
+        updatedAt: 300,
+      }),
+    )
+
+    // The file is tombstoned mid-round-trip (during getPinnedObject), after the
+    // batch snapshot saw it live. The live deletedAt re-check must catch it.
+    mockGetPinnedObject.mockImplementationOnce(async () => {
+      await app().files.tombstone(['race-tomb'])
+      return { metadata: () => new ArrayBuffer(0), updateMetadata: jest.fn() }
+    })
+    meta.decodeFileMetadata.mockReturnValue({
+      name: 'race-tomb.jpg',
+      type: 'image/jpeg',
+      size: 100,
+      hash: 'remote-hash',
+      createdAt: 100,
+      updatedAt: 200,
+    })
+
+    await runSyncUpMetadata(5)
+
+    // Must NOT push metadata for a now-deleted file, and must leave the object
+    // flagged (the local tombstone set it) so the next pass deletes the remote
+    // object.
+    expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
+    expect(await flagFor('obj-race')).toBe(1)
+
+    // Next pass: the snapshot now shows the tombstone, so it deletes the object
+    // and the row (and its flag) is removed.
+    mockGetPinnedObject.mockResolvedValue({
+      metadata: () => new ArrayBuffer(0),
+      updateMetadata: jest.fn(),
+    })
+    await runSyncUpMetadata(5)
+    expect(mockDeleteObject).toHaveBeenCalledTimes(1)
+    expect(await app().localObjects.getForFile('race-tomb')).toHaveLength(0)
   })
 })

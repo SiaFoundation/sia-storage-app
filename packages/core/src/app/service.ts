@@ -6,12 +6,12 @@ import type {
   FileQueryOpts,
   FsMetaRow,
   LibraryQueryParams,
+  SyncUpObjectRow,
   Tag,
   TagWithCount,
   UploadStats,
 } from '../db/operations'
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
-import type { SyncUpCursor } from '../services/syncUpMetadata'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
   ConnectionState,
@@ -201,14 +201,29 @@ export interface AppService {
     ): Promise<void>
     /** Returns full metadata for a file, including tags and directory. */
     getMetadata(id: string): Promise<FileMetadata | null>
+    /**
+     * Returns the push metadata plus the row's deletedAt in a single read, so
+     * sync-up can detect a tombstone that landed mid-round-trip without a
+     * second readFile.
+     */
+    getMetadataForSync(
+      id: string,
+    ): Promise<{ metadata: FileMetadata; deletedAt: number | null } | null>
     /** Returns file rows by IDs (no objects join). */
     getRowsByIds(ids: string[]): Promise<Map<string, FileRecordRow>>
     /** Returns file rows by object IDs and indexer URL (no objects join). */
     getRowsByObjectIds(objectIds: string[], indexerURL: string): Promise<Map<string, FileRecordRow>>
     /** Returns distinct directory IDs for the given file IDs. */
     getDirectoryIdsForFiles(fileIds: string[]): Promise<string[]>
-    /** Tombstones files (sets deletedAt and trashedAt). */
-    tombstone(fileIds: string[], opts?: { skipInvalidation?: boolean }): Promise<void>
+    /**
+     * Tombstones files (sets deletedAt and trashedAt). `setNeedsSyncUp` defaults
+     * to true so the file's objects are flagged and sync-up deletes them remotely;
+     * sync-down passes false because the delete is already remote-originated.
+     */
+    tombstone(
+      fileIds: string[],
+      opts?: { skipInvalidation?: boolean; setNeedsSyncUp?: boolean },
+    ): Promise<void>
     /** Updates a file. */
     update(
       update: Partial<FileRecordRow> & { id: string },
@@ -402,8 +417,15 @@ export interface AppService {
     deleteForFile(fileId: string, opts?: { skipInvalidation?: boolean }): Promise<void>
     /** Deletes all local objects for multiple files. */
     deleteManyForFiles(fileIds: string[]): Promise<void>
-    /** Creates or updates multiple local objects. */
-    upsertMany(objects: LocalObject[], opts?: { skipInvalidation?: boolean }): Promise<void>
+    /**
+     * Creates or updates multiple local objects. `setNeedsSyncUp` controls the
+     * dirty flag: upload passes true; sync-down omits it to preserve a pending
+     * flag while refreshing the object metadata.
+     */
+    upsertMany(
+      objects: LocalObject[],
+      opts?: { skipInvalidation?: boolean; setNeedsSyncUp?: boolean },
+    ): Promise<void>
     /** Returns the count of local objects for a file. */
     countForFile(fileId: string): Promise<number>
     /** Deletes local objects by object IDs for a given indexer. */
@@ -414,6 +436,24 @@ export interface AppService {
     ): Promise<void>
     /** Returns file IDs that have no remaining objects. */
     queryFilesWithNoObjects(fileIds: string[]): Promise<string[]>
+    /** Dirty objects pinned to an indexer — the sync-up work list (one per object). */
+    getSyncUpBatch(indexerURL: string, limit: number): Promise<SyncUpObjectRow[]>
+    /** Count of dirty objects pinned to an indexer (sync-up progress total). */
+    countSyncUp(indexerURL: string): Promise<number>
+    /**
+     * Compare-and-swap clear: clears an object's flag only if the file's edit
+     * clock is unchanged since `expectedFileUpdatedAt`, so an edit landing
+     * mid-round-trip stays flagged for the next pass.
+     */
+    clearIfUnchanged(
+      objectId: string,
+      indexerURL: string,
+      expectedFileUpdatedAt: number,
+    ): Promise<void>
+    /** Clears the flag on the given objects (sync-down remote-newer winners). */
+    clearMany(indexerURL: string, objectIds: string[]): Promise<void>
+    /** Flags every object dirty (the advanced "resync metadata" escape hatch). */
+    markAllNeedsSyncUp(): Promise<void>
   }
   /** Local file system operations: metadata tracking, caching, and file I/O. */
   fs: {
@@ -695,10 +735,6 @@ export interface AppService {
     getSyncDownCursor(): Promise<ObjectsCursor | undefined>
     /** Persists the sync-down cursor (pass undefined to clear). */
     setSyncDownCursor(cursor: ObjectsCursor | undefined): Promise<void>
-    /** Reads the persisted sync-up cursor. */
-    getSyncUpCursor(): Promise<SyncUpCursor | undefined>
-    /** Persists the sync-up cursor (pass undefined to clear). */
-    setSyncUpCursor(cursor: SyncUpCursor | undefined): Promise<void>
   }
   /** Upload entry tracking: register, update, and clear in-progress uploads. */
   uploads: {

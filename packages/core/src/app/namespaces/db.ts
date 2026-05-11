@@ -144,6 +144,23 @@ export function buildDbNamespaces(
     },
   }
 
+  // Returns the push metadata plus the row's deletedAt (getMetadata's type omits
+  // it); sync-up needs deletedAt to catch a tombstone that landed mid-round-trip.
+  const readMetadataWithDeleted = async (
+    id: string,
+  ): Promise<{ metadata: FileMetadata; deletedAt: number | null } | null> => {
+    const record = await ops.readFile(db, id)
+    if (!record) return null
+    let metadata: FileMetadata = record
+    if (record.kind === 'file') {
+      const tags = await ops.queryTagNamesForFile(db, id)
+      if (tags && tags.length > 0) metadata = { ...metadata, tags }
+      const directory = await ops.queryDirectoryPathForFile(db, id)
+      if (directory) metadata = { ...metadata, directory }
+    }
+    return { metadata, deletedAt: record.deletedAt }
+  }
+
   return {
     tags: {
       getAll: () => ops.queryAllTagsWithCounts(db),
@@ -211,18 +228,8 @@ export function buildDbNamespaces(
     },
     files: {
       getById: (id) => ops.readFile(db, id),
-      getMetadata: async (id) => {
-        const record = await ops.readFile(db, id)
-        if (!record) return null
-        let metadata: FileMetadata = record
-        if (record.kind === 'file') {
-          const tags = await ops.queryTagNamesForFile(db, id)
-          if (tags && tags.length > 0) metadata = { ...metadata, tags }
-          const directory = await ops.queryDirectoryPathForFile(db, id)
-          if (directory) metadata = { ...metadata, directory }
-        }
-        return metadata
-      },
+      getMetadata: async (id) => (await readMetadataWithDeleted(id))?.metadata ?? null,
+      getMetadataForSync: (id) => readMetadataWithDeleted(id),
       getByIds: (ids) => ops.readFilesByIds(db, ids),
       getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
       getByLocalIds: (localIds) => ops.readFilesByLocalIds(db, localIds),
@@ -273,7 +280,9 @@ export function buildDbNamespaces(
         ops.queryFilesByObjectIds(db, objectIds, indexerURL),
       getDirectoryIdsForFiles: (fileIds) => ops.queryDirectoryIdsForFiles(db, fileIds),
       tombstone: async (fileIds, opts) => {
-        await ops.tombstoneFiles(db, fileIds, Date.now())
+        await ops.tombstoneFiles(db, fileIds, Date.now(), {
+          setNeedsSyncUp: opts?.setNeedsSyncUp,
+        })
         if (!opts?.skipInvalidation) {
           invalidateLibrary()
         }
@@ -555,7 +564,7 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
       },
       upsertMany: async (objects, opts) => {
-        await ops.insertManyObjects(db, objects)
+        await ops.upsertManyObjects(db, objects, { setNeedsSyncUp: opts?.setNeedsSyncUp })
         if (!opts?.skipInvalidation) {
           await caches.library.invalidateAll()
           caches.libraryVersion.invalidate()
@@ -570,6 +579,12 @@ export function buildDbNamespaces(
         }
       },
       queryFilesWithNoObjects: (fileIds) => ops.queryFilesWithNoObjects(db, fileIds),
+      getSyncUpBatch: (indexerURL, limit) => ops.querySyncUpObjects(db, indexerURL, limit),
+      countSyncUp: (indexerURL) => ops.countSyncUpObjects(db, indexerURL),
+      clearIfUnchanged: (objectId, indexerURL, expectedFileUpdatedAt) =>
+        ops.clearObjectIfUnchanged(db, objectId, indexerURL, expectedFileUpdatedAt),
+      clearMany: (indexerURL, objectIds) => ops.clearObjectsNeedsSyncUp(db, indexerURL, objectIds),
+      markAllNeedsSyncUp: () => ops.markAllObjectsNeedsSyncUp(db),
     },
     fs: fsNamespace,
     library: {

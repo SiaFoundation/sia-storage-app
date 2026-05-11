@@ -84,10 +84,10 @@ type PreparedDelete = {
 type PreparedEvent = PreparedCreate | PreparedUpdate | PreparedDelete
 
 /**
- * Syncs down events from the indexer to the local database. The service works by
- * starting with a cursor saved in secure store. It iterates until there are no
- * more events to sync and saves the cursor to secure store after each batch.
- * The service runs again every SYNC_EVENTS_INTERVAL milliseconds.
+ * Syncs down events from the indexer to the local database. It starts from the
+ * sync-DOWN cursor (persisted via the storage adapter; unrelated to the removed
+ * sync-up cursor), iterates until there are no more events, and persists the
+ * cursor after each batch. Runs again every SYNC_EVENTS_INTERVAL milliseconds.
  *
  * Returns 0 when multiple events were fetched (run again immediately),
  * or void to use the default interval.
@@ -366,6 +366,11 @@ async function processBatch(
       const localObject = sealPinnedObject(existing.id, indexerURL, object, appKey)
       // Heal a wrong stored size from the SDK's size (local-only, no sync-up).
       const realSize = Number(object.size())
+      // Ties favor remote here (>=); sync-up's isLocalNewer favors local (also
+      // >=). The opposite directions are intentional: on an equal-updatedAt
+      // collision sync-down takes remote and sync-up pushes local, so one edit
+      // can't both win and lose. A genuine local edit bumps updatedAt to now, so
+      // it is strictly newer and never hits this tie.
       const isRemoteNewer = metadata.updatedAt >= existing.updatedAt
       const mergedMetadata = isRemoteNewer ? toFileRecordFields(metadata) : {}
       prepared.push({
@@ -454,26 +459,35 @@ async function processBatch(
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
 
   await internal.withTransaction(async () => {
-    // Upsert files for creates + isRemoteNewer updates. ON CONFLICT(id) only
-    // touches metadata fields — addedAt, localId, deletedAt, lostReason are
-    // preserved from the existing row, so tombstones can't be cleared by sync.
+    // Apply remote metadata only for creates and remote-newer, non-tombstoned
+    // updates. ON CONFLICT(id) preserves addedAt/localId/deletedAt/lostReason, and
+    // a locally-tombstoned row is skipped so a delete-in-progress isn't reverted
+    // by a stale remote edit (delete wins).
+    const remoteWins = updates.filter((e) => e.isRemoteNewer && !e.fileRecord.deletedAt)
     const fileUpserts = [
       ...creates.map((e) => e.fileRecord),
-      ...updates.filter((e) => e.isRemoteNewer).map((e) => e.fileRecord),
+      ...remoteWins.map((e) => e.fileRecord),
     ]
     if (fileUpserts.length > 0) {
       await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true })
     }
 
-    // Upsert all local objects (creates + updates).
+    // Refresh every object's sealed metadata (creates + all updates), but leave
+    // the dirty flag untouched: a locally-newer object keeps its pending push,
+    // and a create's new row defaults to clean.
     const allLocalObjects = [
       ...creates.map((e) => e.localObject),
       ...updates.map((e) => e.localObject),
     ]
     if (allLocalObjects.length > 0) {
-      await app.localObjects.upsertMany(allLocalObjects, {
-        skipInvalidation: true,
-      })
+      await app.localObjects.upsertMany(allLocalObjects, { skipInvalidation: true })
+    }
+
+    // Remote won the metadata, so clear the flag on those objects (locally-newer
+    // and tombstoned objects are excluded above).
+    const remoteWonObjectIds = remoteWins.map((e) => e.localObject.id)
+    if (remoteWonObjectIds.length > 0) {
+      await app.localObjects.clearMany(indexerURL, remoteWonObjectIds)
     }
 
     // Apply deletes: drop localObjects, tombstone files that aren't already
@@ -487,7 +501,10 @@ async function processBatch(
 
       toTombstone = deletes.filter((e) => !e.fileRecord.deletedAt).map((e) => e.fileId)
       if (toTombstone.length > 0) {
-        await app.files.tombstone(toTombstone, { skipInvalidation: true })
+        // Remote-originated delete: don't flag the objects (setNeedsSyncUp:false).
+        // They were just dropped locally and removed remotely, so there is
+        // nothing to push.
+        await app.files.tombstone(toTombstone, { skipInvalidation: true, setNeedsSyncUp: false })
       }
 
       const deleteFileIdSet = [...new Set(deletes.map((e) => e.fileId))]

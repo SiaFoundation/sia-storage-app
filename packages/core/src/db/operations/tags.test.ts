@@ -1,4 +1,5 @@
 import { insertFile } from './files'
+import { insertObject } from './localObjects'
 import {
   addTagToFile,
   addTagToFiles,
@@ -12,6 +13,7 @@ import {
   queryTagsByPrefix,
   queryTagsForFile,
   removeTagFromFile,
+  removeTagFromFiles,
   renameTag,
   SYSTEM_TAGS,
   syncManyTagsFromMetadata,
@@ -37,8 +39,99 @@ async function createTestFile(id: string) {
   })
 }
 
+// The dirty flag lives on objects, so a file needs an object before a mutation
+// can flag it. Insert one with the flag cleared to observe a mutation set it.
+async function createTestFileWithObject(id: string) {
+  await createTestFile(id)
+  await insertObject(db(), {
+    fileId: id,
+    indexerURL: 'https://idx.example.com',
+    id: `obj-${id}`,
+    slabs: [],
+    encryptedDataKey: new ArrayBuffer(1),
+    encryptedMetadataKey: new ArrayBuffer(1),
+    encryptedMetadata: new ArrayBuffer(1),
+    dataSignature: new ArrayBuffer(1),
+    metadataSignature: new ArrayBuffer(1),
+    createdAt: new Date(1000),
+    updatedAt: new Date(1000),
+  })
+  await clearSyncUpFlag(id)
+}
+
+async function clearSyncUpFlag(fileId: string): Promise<void> {
+  await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', fileId)
+}
+
+async function syncUpFlag(fileId: string): Promise<number> {
+  return (
+    (
+      await db().getFirstAsync<{ needsSyncUp: number }>(
+        'SELECT needsSyncUp FROM objects WHERE fileId = ?',
+        fileId,
+      )
+    )?.needsSyncUp ?? 0
+  )
+}
+
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
+
+describe('needsSyncUp flagging', () => {
+  it('addTagToFile, toggleFavorite, and removeTagFromFile each flag the file object', async () => {
+    await createTestFileWithObject('f1')
+    expect(await syncUpFlag('f1')).toBe(0)
+
+    await addTagToFile(db(), 'f1', 'vacation')
+    expect(await syncUpFlag('f1')).toBe(1)
+
+    const tags = await queryTagsForFile(db(), 'f1')
+    const vacation = tags.find((t) => t.name === 'vacation')!
+    await clearSyncUpFlag('f1')
+    await removeTagFromFile(db(), 'f1', vacation.id)
+    expect(await syncUpFlag('f1')).toBe(1)
+
+    await clearSyncUpFlag('f1')
+    await toggleFavorite(db(), 'f1')
+    expect(await syncUpFlag('f1')).toBe(1)
+  })
+
+  it('addTagToFiles and removeTagFromFiles flag every targeted file object', async () => {
+    await createTestFileWithObject('a')
+    await createTestFileWithObject('b')
+
+    await addTagToFiles(db(), ['a', 'b'], 'trip')
+    expect(await syncUpFlag('a')).toBe(1)
+    expect(await syncUpFlag('b')).toBe(1)
+
+    const tagId = (await queryTagsForFile(db(), 'a')).find((t) => t.name === 'trip')!.id
+    await clearSyncUpFlag('a')
+    await clearSyncUpFlag('b')
+    await removeTagFromFiles(db(), ['a', 'b'], tagId)
+    expect(await syncUpFlag('a')).toBe(1)
+    expect(await syncUpFlag('b')).toBe(1)
+  })
+
+  it('renameTag flags objects of every file carrying the tag', async () => {
+    await createTestFileWithObject('f1')
+    const tag = await insertTag(db(), 'OldName')
+    await addTagToFile(db(), 'f1', 'OldName')
+    await clearSyncUpFlag('f1')
+
+    await renameTag(db(), tag.id, 'NewName')
+    expect(await syncUpFlag('f1')).toBe(1)
+  })
+
+  it('deleteTag flags objects of every file carrying the tag', async () => {
+    await createTestFileWithObject('f1')
+    const tag = await insertTag(db(), 'Doomed')
+    await addTagToFile(db(), 'f1', 'Doomed')
+    await clearSyncUpFlag('f1')
+
+    await deleteTag(db(), tag.id)
+    expect(await syncUpFlag('f1')).toBe(1)
+  })
+})
 
 describe('ensureSystemTags', () => {
   it('creates Favorites system tag', async () => {
