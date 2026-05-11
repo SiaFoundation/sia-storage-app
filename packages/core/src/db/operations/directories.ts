@@ -3,9 +3,14 @@ import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import { recalculateCurrentForGroup, recalculateCurrentForGroups, transformRow } from './files'
+import {
+  FILE_ROW_COLUMNS_F,
+  recalculateCurrentForGroup,
+  recalculateCurrentForGroups,
+  transformRow,
+} from './files'
 import { buildRecordFilter } from './library'
-import { queryObjectRefsForFile } from './localObjects'
+import { flagObjectsForFiles, queryObjectRefsForFile } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 
 export type Directory = {
@@ -392,7 +397,10 @@ export async function moveFileToDirectory(
     name: string
     directoryId: string | null
   }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-  await sql.update(db, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
+  await db.withTransactionAsync(async () => {
+    await sql.update(db, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(db, [fileId])
+  })
   if (row) {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
     await recalculateCurrentForGroup(db, row.name, dirId)
@@ -411,12 +419,15 @@ export async function moveFilesToDirectory(
     ...fileIds,
   )
   const now = Date.now()
-  await db.runAsync(
-    `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${ph})`,
-    dirId,
-    now,
-    ...fileIds,
-  )
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${ph})`,
+      dirId,
+      now,
+      ...fileIds,
+    )
+    await flagObjectsForFiles(db, fileIds)
+  })
   await recalculateCurrentForGroups(db, groups)
   const newGroups = new Map<string, { name: string; directoryId: string | null }>()
   for (const g of groups) {
@@ -447,16 +458,27 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
     ...dirIds,
   )
 
-  await db.runAsync(
-    `UPDATE files SET directoryId = NULL WHERE directoryId IN (${dirPh})`,
+  const now = Date.now()
+  // Capture ids before the UPDATE nulls directoryId — the object flag can't
+  // re-derive them afterward.
+  const affected = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM files WHERE directoryId IN (${dirPh})`,
     ...dirIds,
   )
-
-  await db.runAsync(
-    `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
-    dir.path,
-    escaped,
-  )
+  const affectedIds = affected.map((f) => f.id)
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE files SET directoryId = NULL, updatedAt = ? WHERE directoryId IN (${dirPh})`,
+      now,
+      ...dirIds,
+    )
+    await flagObjectsForFiles(db, affectedIds)
+    await db.runAsync(
+      `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
+      dir.path,
+      escaped,
+    )
+  })
 
   for (const g of groups) {
     await recalculateCurrentForGroup(db, g.name, null)
@@ -576,8 +598,7 @@ export async function queryFileByNameInDirectory(
 ): Promise<FileRecordRow | null> {
   if (!fileName) return null
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind,
-            f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
+    `SELECT ${FILE_ROW_COLUMNS_F}
      FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE f.name = ? AND ${buildRecordFilter('f')}
@@ -605,8 +626,7 @@ export async function queryFilesByDirectoryPath(
   directoryPath: string,
 ): Promise<FileRecordRow[]> {
   return db.getAllAsync<FileRecordRow>(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind,
-            f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt
+    `SELECT ${FILE_ROW_COLUMNS_F}
      FROM files f
      INNER JOIN directories d ON f.directoryId = d.id
      WHERE d.path = ? AND ${buildRecordFilter('f')}
@@ -729,6 +749,15 @@ async function rebaseDirectoryTree(
         SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
       )`,
       now,
+      newPath,
+      newEscaped,
+    )
+    await db.runAsync(
+      `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (
+        SELECT id FROM files WHERE directoryId IN (
+          SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
+        )
+      )`,
       newPath,
       newEscaped,
     )

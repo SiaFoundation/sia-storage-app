@@ -1,4 +1,5 @@
 import { insertFile } from './files'
+import { insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   autoPurgeOldTrashedFiles,
@@ -25,6 +26,29 @@ function makeFileRecord(id: string, overrides?: Record<string, any>) {
   }
 }
 
+function makeLocalObject(fileId: string, objectId: string) {
+  return {
+    fileId,
+    indexerURL: 'https://idx.example.com',
+    id: objectId,
+    slabs: [],
+    encryptedDataKey: new Uint8Array([1]).buffer,
+    encryptedMetadataKey: new Uint8Array([1]).buffer,
+    encryptedMetadata: new Uint8Array([1]).buffer,
+    dataSignature: new Uint8Array([1]).buffer,
+    metadataSignature: new Uint8Array([1]).buffer,
+    createdAt: new Date(1000),
+    updatedAt: new Date(1000),
+  }
+}
+
+// Create an object for the file and clear its dirty flag (insertObject sets it),
+// so a later assertion proves the mutation under test re-flagged the object.
+async function createCleanObject(fileId: string, objectId: string) {
+  await insertObject(db(), makeLocalObject(fileId, objectId))
+  await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', fileId)
+}
+
 async function getFile(id: string) {
   return db().getFirstAsync<{
     trashedAt: number | null
@@ -33,8 +57,38 @@ async function getFile(id: string) {
   }>('SELECT trashedAt, deletedAt, updatedAt FROM files WHERE id = ?', id)
 }
 
+async function syncUpFlag(fileId: string): Promise<number> {
+  return (
+    (
+      await db().getFirstAsync<{ needsSyncUp: number }>(
+        'SELECT needsSyncUp FROM objects WHERE fileId = ?',
+        fileId,
+      )
+    )?.needsSyncUp ?? 0
+  )
+}
+
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
+
+describe('needsSyncUp flagging', () => {
+  it('trash, restore, and tombstone each re-flag the file object for sync-up', async () => {
+    await insertFile(db(), makeFileRecord('f1', { updatedAt: 1000 }))
+    await createCleanObject('f1', 'obj-f1')
+    expect(await syncUpFlag('f1')).toBe(0)
+
+    await trashFilesAndThumbnails(db(), ['f1'])
+    expect(await syncUpFlag('f1')).toBe(1)
+
+    await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', 'f1')
+    await restoreFilesAndThumbnails(db(), ['f1'])
+    expect(await syncUpFlag('f1')).toBe(1)
+
+    await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', 'f1')
+    await tombstoneFilesAndThumbnails(db(), ['f1'])
+    expect(await syncUpFlag('f1')).toBe(1)
+  })
+})
 
 describe('trashFilesAndThumbnails', () => {
   it('sets trashedAt on files', async () => {
@@ -49,14 +103,20 @@ describe('trashFilesAndThumbnails', () => {
     expect(f2!.trashedAt).not.toBeNull()
   })
 
-  it('trashes thumbnails for the given files', async () => {
+  it('trashes thumbnails but flags only the parent object (not the thumb object)', async () => {
     await insertFile(db(), makeFileRecord('f1'))
     await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
+    await createCleanObject('f1', 'obj-f1')
+    await createCleanObject('t1', 'obj-t1')
 
     await trashFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.trashedAt).not.toBeNull()
+    // The parent's object is flagged; the thumbnail's trashedAt isn't pushed, so
+    // its object stays clean.
+    expect(await syncUpFlag('f1')).toBe(1)
+    expect(await syncUpFlag('t1')).toBe(0)
   })
 
   it('bumps updatedAt', async () => {
@@ -84,15 +144,19 @@ describe('restoreFilesAndThumbnails', () => {
     expect(f1!.trashedAt).toBeNull()
   })
 
-  it('restores thumbnails for the given files', async () => {
+  it('restores thumbnails but flags only the parent object (not the thumb object)', async () => {
     await insertFile(db(), makeFileRecord('f1'))
     await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
     await trashFilesAndThumbnails(db(), ['f1'])
+    await createCleanObject('f1', 'obj-f1')
+    await createCleanObject('t1', 'obj-t1')
 
     await restoreFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.trashedAt).toBeNull()
+    expect(await syncUpFlag('f1')).toBe(1)
+    expect(await syncUpFlag('t1')).toBe(0)
   })
 
   it('no-ops on empty array', async () => {
@@ -120,15 +184,20 @@ describe('tombstoneFilesAndThumbnails', () => {
     expect(f1!.trashedAt).toBe(2000)
   })
 
-  it('tombstones thumbnails', async () => {
+  it('tombstones thumbnails and flags both the parent and thumb objects', async () => {
     await insertFile(db(), makeFileRecord('f1'))
     await insertFile(db(), makeFileRecord('t1', { kind: 'thumb', thumbForId: 'f1', thumbSize: 64 }))
+    await createCleanObject('f1', 'obj-f1')
+    await createCleanObject('t1', 'obj-t1')
 
     await tombstoneFilesAndThumbnails(db(), ['f1'])
 
     const thumb = await getFile('t1')
     expect(thumb!.deletedAt).not.toBeNull()
     expect(thumb!.trashedAt).not.toBeNull()
+    // Tombstone deletes both remote objects, so both are flagged.
+    expect(await syncUpFlag('f1')).toBe(1)
+    expect(await syncUpFlag('t1')).toBe(1)
   })
 
   it('no-ops on empty array', async () => {

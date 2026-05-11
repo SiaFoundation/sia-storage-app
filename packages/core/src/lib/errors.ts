@@ -55,3 +55,24 @@ export function getErrorMessage(e: unknown, fallback = 'An unknown error occurre
   if (typeof e === 'number' || typeof e === 'boolean') return String(e)
   return fallback
 }
+
+/**
+ * Detects the indexer's "object not found" error. indexd returns HTTP 404
+ * with the body `object not found` when deleting an object that no longer
+ * exists (api/app/app.go → slabs.ErrObjectNotFound). The Rust SDK and the
+ * uniffi FFI boundary both collapse non-2xx responses into an opaque error
+ * string (sia-sdk-rs app_client.rs: `Error::Api(body)`), so the only signal
+ * that survives to JS is the message text — there is no typed variant or
+ * status code. Match on that substring.
+ *
+ * This is intentionally a deleting-an-already-deleted-object check: such a
+ * delete is idempotently "successful" (the desired end state — no object —
+ * already holds), so callers should treat it like success rather than a
+ * retryable failure.
+ *
+ * FRAGILE: depends on indexd's error text staying stable. The durable fix is
+ * a typed not-found variant exposed through the FFI; see sia_storage_ffi.
+ */
+export function isObjectNotFoundError(e: unknown): boolean {
+  return getErrorMessage(e, '').toLowerCase().includes('object not found')
+}

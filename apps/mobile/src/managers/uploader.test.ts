@@ -344,6 +344,7 @@ describe('UploadManager', () => {
 
     it('file record remains in DB after upload completes', async () => {
       const entry = await createTestFile('file1')
+      const before = await app().files.getById('file1')
       manager.initialize(app(), internal(), defaultAdapters())
       mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
@@ -354,6 +355,13 @@ describe('UploadManager', () => {
       const file = await app().files.getById('file1')
       expect(file).not.toBeNull()
       expect(file?.id).toBe('file1')
+      // Upload leaves the file's updatedAt untouched — it is not an edit.
+      expect(file?.updatedAt).toBe(before?.updatedAt)
+      // The dirty flag lives on the object: the uploaded object is flagged so its
+      // metadata reconciles on the next sync-up pass.
+      const dirty = await app().localObjects.getSyncUpBatch(TEST_INDEXER_URL, 10)
+      expect(dirty.map((o) => o.fileId)).toContain('file1')
+      expect(await app().localObjects.countSyncUp(TEST_INDEXER_URL)).toBe(1)
     })
 
     it('sets error on all files when finalize fails', async () => {
@@ -507,7 +515,7 @@ describe('UploadManager', () => {
     })
 
     describe('iOS suspend gates', () => {
-      it('waits for the DB gate before each post-pin finalize write', async () => {
+      it('waits for the DB gate before the post-pin localObject upsert', async () => {
         const entry = await createTestFile('gate-order')
         manager.initialize(app(), internal(), defaultAdapters())
         mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
@@ -521,32 +529,23 @@ describe('UploadManager', () => {
           .mockImplementation(async () => void events.push('upsert'))
         jest
           .spyOn(app().files, 'updateMany')
-          .mockImplementation(async () => void events.push('update'))
+          .mockImplementation(async () => void events.push('sizeHeal'))
 
         await manager.__testProcessFiles([entry])
         await manager.flush()
 
-        // entry gate, [pin pool], gate, upsert, gate, update. Removing
-        // either post-pool gate lets a mid-finalize suspend orphan the
-        // updatedAt bump.
-        expect(events).toEqual(['wait', 'wait', 'upsert', 'wait', 'update'])
+        // entry gate, [pin pool], gate, upsert, gate, size heal. Each post-pin
+        // DB write is preceded by its own gate so a mid-finalize suspend can't
+        // orphan it.
+        expect(events).toEqual(['wait', 'wait', 'upsert', 'wait', 'sizeHeal'])
       })
 
-      it('still bumps updatedAt when the DB suspends after the localObject upsert', async () => {
+      it('persists the localObject even when the DB suspends right after the upsert', async () => {
         const entry = await createTestFile('mid-finalize-suspend')
-        // Anchor updatedAt to 1 so the bump's Date.now() is unambiguously
-        // greater — fake-timer ticks would otherwise collide.
-        const originalUpdatedAt = 1
-        await app().files.update(
-          { id: entry.fileId, updatedAt: originalUpdatedAt },
-          { includeUpdatedAt: true, skipInvalidation: true },
-        )
         manager.initialize(app(), internal(), defaultAdapters())
         mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
 
         // Suspend the moment upsertMany lands, resume on a real timer.
-        // Without the gate before files.updateMany, the bump would
-        // fast-reject and the file would stay at updatedAt=1.
         const originalUpsert = app().localObjects.upsertMany.bind(app().localObjects)
         jest.spyOn(app().localObjects, 'upsertMany').mockImplementation(async (...args) => {
           const result = await originalUpsert(...args)
@@ -560,8 +559,6 @@ describe('UploadManager', () => {
         await jest.advanceTimersByTimeAsync(10)
         await flushPromise
 
-        const after = await app().files.getById(entry.fileId)
-        expect(after?.updatedAt).toBeGreaterThan(originalUpdatedAt)
         const localObjects = await app().localObjects.getForFile(entry.fileId)
         expect(localObjects).toHaveLength(1)
         // Entry only clears on a successful finalize.

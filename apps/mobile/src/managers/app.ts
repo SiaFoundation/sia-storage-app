@@ -170,7 +170,6 @@ export async function shutdownApp() {
 export async function resetData() {
   await resetDb()
   await app().sync.setSyncDownCursor(undefined)
-  await app().sync.setSyncUpCursor(undefined)
   await cancelAllTransfers()
   await app().caches.library.invalidateAll()
   app().caches.libraryVersion.invalidate()

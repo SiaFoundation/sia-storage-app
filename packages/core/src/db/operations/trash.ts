@@ -2,6 +2,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import { TRASH_AUTO_PURGE_AGE } from '../../config'
 import { processInBatches } from '../sql'
 import { recalculateCurrentForGroups } from './files'
+import { flagObjectsForFiles } from './localObjects'
 
 async function getGroupsForFileIds(
   db: DatabaseAdapter,
@@ -10,6 +11,21 @@ async function getGroupsForFileIds(
   const ph = fileIds.map(() => '?').join(',')
   return db.getAllAsync<{ name: string; directoryId: string | null }>(
     `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
+    ...fileIds,
+  )
+}
+
+// Flag the objects of these files and their thumbnails so sync-up deletes both
+// remotely. (Trash/restore flag only files — a thumb's trashedAt isn't pushed.)
+// Thumb ids aren't in hand, so reach them via thumbForId.
+async function flagObjectsForTombstonedFilesAndThumbnails(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<void> {
+  await flagObjectsForFiles(db, fileIds)
+  const ph = fileIds.map(() => '?').join(',')
+  await db.runAsync(
+    `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (SELECT id FROM files WHERE thumbForId IN (${ph}))`,
     ...fileIds,
   )
 }
@@ -35,6 +51,7 @@ export async function trashFilesAndThumbnails(
       now,
       ...fileIds,
     )
+    await flagObjectsForFiles(db, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }
@@ -58,6 +75,7 @@ export async function restoreFilesAndThumbnails(
       now,
       ...fileIds,
     )
+    await flagObjectsForFiles(db, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }
@@ -85,6 +103,7 @@ export async function tombstoneFilesAndThumbnails(
       now,
       ...fileIds,
     )
+    await flagObjectsForTombstonedFilesAndThumbnails(db, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }

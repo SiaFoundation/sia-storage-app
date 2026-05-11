@@ -2,6 +2,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import { uniqueId } from '../../lib/uniqueId'
 import * as sql from '../sql'
 import { buildRecordFilter } from './library'
+import { flagObjectsForFiles } from './localObjects'
 
 export const SYSTEM_TAGS = {
   favorites: { id: 'sys:favorites', name: 'Favorites' },
@@ -274,12 +275,15 @@ export async function toggleFavorite(db: DatabaseAdapter, fileId: string): Promi
     tagId,
   )
 
-  if (existing) {
-    await sql.del(db, 'file_tags', { fileId, tagId })
-  } else {
-    await sql.insert(db, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
-  }
-  await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+  await db.withTransactionAsync(async () => {
+    if (existing) {
+      await sql.del(db, 'file_tags', { fileId, tagId })
+    } else {
+      await sql.insert(db, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
+    }
+    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(db, [fileId])
+  })
 }
 
 export async function queryIsFavorite(db: DatabaseAdapter, fileId: string): Promise<boolean> {
@@ -289,6 +293,24 @@ export async function queryIsFavorite(db: DatabaseAdapter, fileId: string): Prom
     SYSTEM_TAGS.favorites.id,
   )
   return !!row
+}
+
+// Bump updatedAt and flag the objects of every file carrying this tag, so a tag
+// rename/delete re-pushes those files' metadata.
+async function flagFilesCarryingTag(
+  db: DatabaseAdapter,
+  tagId: string,
+  now: number,
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE files SET updatedAt = ? WHERE id IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
+    now,
+    tagId,
+  )
+  await db.runAsync(
+    'UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
+    tagId,
+  )
 }
 
 export async function renameTag(db: DatabaseAdapter, tagId: string, name: string): Promise<void> {
@@ -316,12 +338,10 @@ export async function renameTag(db: DatabaseAdapter, tagId: string, name: string
   }
 
   const now = Date.now()
-  await sql.update(db, 'tags', { name: trimmed }, { id: tagId })
-  await db.runAsync(
-    'UPDATE files SET updatedAt = ? WHERE id IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
-    now,
-    tagId,
-  )
+  await db.withTransactionAsync(async () => {
+    await sql.update(db, 'tags', { name: trimmed }, { id: tagId })
+    await flagFilesCarryingTag(db, tagId, now)
+  })
 }
 
 export async function deleteTag(db: DatabaseAdapter, tagId: string): Promise<void> {
@@ -334,6 +354,8 @@ export async function deleteTag(db: DatabaseAdapter, tagId: string): Promise<voi
     throw new Error('System tags cannot be deleted')
   }
   await db.withTransactionAsync(async () => {
+    // Flag before deleting the file_tags links — flagFilesCarryingTag reads them.
+    await flagFilesCarryingTag(db, tagId, Date.now())
     await sql.del(db, 'file_tags', { tagId })
     await sql.del(db, 'tags', { id: tagId })
   })
@@ -348,6 +370,7 @@ export async function addTagToFile(
     const tag = await getOrCreateTag(db, tagName)
     await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(db, [fileId])
   })
 }
 
@@ -365,6 +388,7 @@ export async function addTagToFiles(
     const now = Date.now()
     const ph = fileIds.map(() => '?').join(',')
     await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
+    await flagObjectsForFiles(db, fileIds)
   })
 }
 
@@ -376,6 +400,7 @@ export async function removeTagFromFile(
   await db.withTransactionAsync(async () => {
     await sql.del(db, 'file_tags', { fileId, tagId })
     await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(db, [fileId])
   })
 }
 
@@ -394,5 +419,6 @@ export async function removeTagFromFiles(
       ...fileIds,
     )
     await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
+    await flagObjectsForFiles(db, fileIds)
   })
 }

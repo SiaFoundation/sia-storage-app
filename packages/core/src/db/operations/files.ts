@@ -6,7 +6,12 @@ import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
 import { buildRecordFilter } from './library'
-import { insertObject, queryObjectRefsForFile, queryObjectsForFile } from './localObjects'
+import {
+  flagObjectsForFiles,
+  insertObject,
+  queryObjectRefsForFile,
+  queryObjectsForFile,
+} from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 
 export async function recalculateCurrentForGroup(
@@ -83,8 +88,12 @@ export async function recalculateCurrentForFileIds(
   )
 }
 
-const FILE_ROW_COLUMNS =
+export const FILE_ROW_COLUMNS =
   'id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason'
+
+export const FILE_ROW_COLUMNS_F = FILE_ROW_COLUMNS.split(', ')
+  .map((c) => `f.${c}`)
+  .join(', ')
 
 export async function queryFilesByIds(
   db: DatabaseAdapter,
@@ -112,7 +121,7 @@ export async function queryFilesByObjectIds(
   if (objectIds.length === 0) return result
   const ph = objectIds.map(() => '?').join(',')
   const rows = await db.getAllAsync<FileRecordRow & { objectId: string }>(
-    `SELECT o.id AS objectId, f.${FILE_ROW_COLUMNS.split(', ').join(', f.')}
+    `SELECT o.id AS objectId, ${FILE_ROW_COLUMNS_F}
      FROM objects o
      JOIN files f ON f.id = o.fileId
      WHERE o.indexerURL = ? AND o.id IN (${ph})`,
@@ -379,7 +388,7 @@ export async function queryFiles(db: DatabaseAdapter, opts: FileQueryOpts): Prom
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
+    `SELECT ${FILE_ROW_COLUMNS_F},
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId,
             o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
      FROM files f
@@ -421,7 +430,7 @@ export async function queryFileByObjectId(
   indexerURL: string,
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
+    `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE id IN (SELECT fileId FROM objects WHERE id = ? AND indexerURL = ?) LIMIT 1`,
     objectId,
     indexerURL,
   )
@@ -480,7 +489,7 @@ export async function queryFileByContentHash(
   hash: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?',
+    `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?`,
     hash,
   )
   if (!row) {
@@ -494,7 +503,7 @@ export async function queryFileById(
   id: string,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    'SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason FROM files WHERE id = ?',
+    `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE id = ?`,
     id,
   )
   if (!row) {
@@ -504,6 +513,19 @@ export async function queryFileById(
 }
 
 export async function updateFile(
+  db: DatabaseAdapter,
+  update: Partial<FileRecordRow> & { id: string },
+  options: {
+    includeUpdatedAt?: boolean
+    skipCurrentRecalc?: boolean
+  } = { includeUpdatedAt: false },
+): Promise<void> {
+  // Commit the file write and the object flag in one transaction. Callers already
+  // inside a transaction use updateFileInner.
+  await db.withTransactionAsync(() => updateFileInner(db, update, options))
+}
+
+async function updateFileInner(
   db: DatabaseAdapter,
   update: Partial<FileRecordRow> & { id: string },
   options: {
@@ -546,10 +568,6 @@ export async function updateFile(
     assignments.updatedAt = Date.now()
   }
 
-  if (!Object.keys(assignments).length) {
-    return
-  }
-
   const needsRecalc =
     !options.skipCurrentRecalc &&
     (update.name !== undefined ||
@@ -566,29 +584,14 @@ export async function updateFile(
   }
 
   await sql.update(db, 'files', assignments, { id })
+  // Flag the file's objects so sync-up pushes the edit.
+  await flagObjectsForFiles(db, [id])
 
   if (oldRow) {
     await recalculateCurrentForGroup(db, oldRow.name, oldRow.directoryId)
     if (update.name !== undefined && update.name !== oldRow.name) {
       await recalculateCurrentForGroup(db, update.name, oldRow.directoryId)
     }
-  }
-}
-
-export async function updateFileDirectory(
-  db: DatabaseAdapter,
-  fileId: string,
-  dirId: string,
-): Promise<void> {
-  const row = await db.getFirstAsync<{
-    name: string
-    directoryId: string | null
-  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-  const now = Date.now()
-  await sql.update(db, 'files', { directoryId: dirId, updatedAt: now }, { id: fileId })
-  if (row) {
-    await recalculateCurrentForGroup(db, row.name, row.directoryId)
-    await recalculateCurrentForGroup(db, row.name, dirId)
   }
 }
 
@@ -600,6 +603,7 @@ export async function tombstoneFiles(
   db: DatabaseAdapter,
   fileIds: string[],
   now: number,
+  opts?: { setNeedsSyncUp?: boolean },
 ): Promise<void> {
   if (fileIds.length === 0) return
   const ph = fileIds.map(() => '?').join(',')
@@ -611,6 +615,11 @@ export async function tombstoneFiles(
     now,
     ...fileIds,
   )
+  // Flag the objects so sync-up deletes them remotely. Sync-down passes
+  // setNeedsSyncUp:false — the delete is already remote.
+  if (opts?.setNeedsSyncUp !== false) {
+    await flagObjectsForFiles(db, fileIds)
+  }
 }
 
 export async function deleteThumbnailsByFileId(
@@ -758,7 +767,7 @@ export async function updateFileWithLocalObject(
   options?: { includeUpdatedAt?: boolean },
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
-    await updateFile(db, update, options)
+    await updateFileInner(db, update, options)
     await insertObject(db, localObject)
   })
 }
@@ -857,7 +866,7 @@ export async function readFilesByIds(db: DatabaseAdapter, ids: string[]): Promis
         objectUpdatedAt: number
       }
   >(
-    `SELECT f.id, f.name, f.size, f.createdAt, f.updatedAt, f.type, f.kind, f.localId, f.hash, f.addedAt, f.thumbForId, f.thumbSize, f.trashedAt, f.deletedAt, f.lostReason,
+    `SELECT ${FILE_ROW_COLUMNS_F},
             o.fileId as fileId, o.indexerURL as indexerURL, o.id as objectId,
             o.createdAt as objectCreatedAt, o.updatedAt as objectUpdatedAt
      FROM files f
@@ -952,6 +961,8 @@ const FILE_UPSERT_UPDATE_COLUMNS = [
   'trashedAt',
 ]
 
+// Sync-down ingest for remote-originated file rows. The dirty flag is on objects,
+// so this doesn't touch sync-up state.
 export async function upsertManyFiles(
   db: DatabaseAdapter,
   records: Omit<FileRecord, 'objects'>[],
@@ -1010,7 +1021,7 @@ export async function updateManyFiles(
   if (updates.length === 0) return
   await db.withTransactionAsync(async () => {
     for (const update of updates) {
-      await updateFile(db, update, options)
+      await updateFileInner(db, update, options)
     }
   })
 }
@@ -1031,7 +1042,7 @@ export async function queryFileByName(
   name: string,
 ): Promise<FileRecordRow | null> {
   return db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+    `SELECT ${FILE_ROW_COLUMNS}
      FROM files f WHERE f.name = ? AND ${buildRecordFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC`,
     name,
@@ -1053,7 +1064,7 @@ export async function readFileByNameInUnfiled(
   name: string,
 ): Promise<FileRecord | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+    `SELECT ${FILE_ROW_COLUMNS}
      FROM files f
      WHERE f.name = ? AND f.directoryId IS NULL AND ${buildRecordFilter('f')}
      ORDER BY f.updatedAt DESC, f.id DESC
@@ -1144,7 +1155,7 @@ export async function queryFileVersions(
 ): Promise<FileRecordRow[]> {
   if (directoryId === null) {
     return db.getAllAsync<FileRecordRow>(
-      `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+      `SELECT ${FILE_ROW_COLUMNS}
        FROM files
        WHERE name = ?
          AND directoryId IS NULL
@@ -1155,7 +1166,7 @@ export async function queryFileVersions(
     )
   }
   return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason
+    `SELECT ${FILE_ROW_COLUMNS}
      FROM files
      WHERE name = ?
        AND directoryId = ?
@@ -1192,6 +1203,10 @@ export async function renameAllFileVersions(
         versions[i].id,
       )
     }
+    await flagObjectsForFiles(
+      db,
+      versions.map((v) => v.id),
+    )
   })
   await recalculateCurrentForGroup(db, newName, directoryId)
   return versions.map((v) => v.id)
@@ -1219,6 +1234,10 @@ export async function moveAllFileVersions(
         versions[i].id,
       )
     }
+    await flagObjectsForFiles(
+      db,
+      versions.map((v) => v.id),
+    )
   })
   await recalculateCurrentForGroup(db, name, toDirectoryId)
   return versions.map((v) => v.id)

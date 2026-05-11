@@ -4,7 +4,7 @@ import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata, FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import type { ObjectEvent, PinnedObjectInterface } from 'react-native-sia'
-import { initializeDB, resetDb } from '../db'
+import { db, initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
 import { run } from './syncDownEvents'
 
@@ -77,6 +77,17 @@ function makeObjectEvent(params: {
 }
 
 const mockAppKey = { export_: () => new Uint8Array(32) }
+
+// The dirty flag lives on the object row, not the file. Read it directly since
+// the localObjects facade doesn't surface needsSyncUp on its return shape.
+async function objectFlag(objectId: string, indexerURL: string): Promise<number> {
+  const row = await db().getFirstAsync<{ needsSyncUp: number }>(
+    'SELECT needsSyncUp FROM objects WHERE id = ? AND indexerURL = ?',
+    objectId,
+    indexerURL,
+  )
+  return row?.needsSyncUp ?? 0
+}
 
 let removeFileSpy: jest.SpyInstance
 
@@ -438,6 +449,200 @@ describe('syncDownEvents', () => {
         }),
       ]),
     )
+  })
+
+  test('remote-newer update clears a pending needsSyncUp flag', async () => {
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'flag-rn',
+      name: 'local.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-rn',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-rn',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    // Local creation leaves the object dirty. After a remote-newer sync-down the
+    // object matches remote, so its flag must clear.
+    expect(await objectFlag('obj-rn', INDEXER_URL)).toBe(1)
+
+    const newerRemote: FileMetadata = {
+      id: 'flag-rn',
+      name: 'remote.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-rn',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE + 100,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+    }
+    internal().setSdk({
+      objectEvents: jest.fn().mockResolvedValueOnce([
+        makeObjectEvent({
+          id: 'obj-rn',
+          updatedAt: new Date(NOW_BASE + 100),
+          object: makeMockPinnedObject(newerRemote, 'obj-rn'),
+        }),
+      ]),
+      appKey: () => mockAppKey,
+    } as any)
+
+    await run(new AbortController().signal)
+
+    expect(await objectFlag('obj-rn', INDEXER_URL)).toBe(0)
+  })
+
+  test('remote-newer update does not clear a locally-tombstoned row’s delete flag', async () => {
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'flag-tomb',
+      name: 'local.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-tomb',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE,
+      }),
+    )
+    // Locally delete: tombstone sets deletedAt and flags the object dirty so
+    // sync-up will delete the remote object.
+    await app().files.tombstone(['flag-tomb'])
+    const tombAt = (await app().files.getById('flag-tomb'))!.updatedAt
+    expect(await objectFlag('obj-tomb', INDEXER_URL)).toBe(1)
+
+    // Another device edits the metadata with a strictly-newer timestamp before
+    // our delete syncs up — this is a remote-newer (non-delete) update event.
+    const newerRemote: FileMetadata = {
+      id: 'flag-tomb',
+      name: 'remote-edit.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-tomb',
+      createdAt: NOW_BASE,
+      updatedAt: tombAt + 1000,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+    }
+    internal().setSdk({
+      objectEvents: jest.fn().mockResolvedValueOnce([
+        makeObjectEvent({
+          id: 'obj-tomb',
+          updatedAt: new Date(tombAt + 1000),
+          object: makeMockPinnedObject(newerRemote, 'obj-tomb'),
+        }),
+      ]),
+      appKey: () => mockAppKey,
+    } as any)
+
+    await run(new AbortController().signal)
+
+    // The remote-newer update must NOT clear the pending delete flag on the
+    // object; the local tombstone wins and sync-up still has to delete the
+    // remote object.
+    expect(await objectFlag('obj-tomb', INDEXER_URL)).toBe(1)
+    const row = await app().files.getById('flag-tomb')
+    expect(row?.deletedAt).not.toBeNull()
+  })
+
+  test('local-newer (remote-older) update preserves a pending needsSyncUp flag', async () => {
+    const file: Omit<FileRecord, 'objects'> = {
+      id: 'flag-ln',
+      name: 'local-newer.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-ln',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE + 100,
+      localId: null,
+      addedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+      deletedAt: null,
+    }
+    await app().files.create(
+      file,
+      makeLocalObject({
+        fileId: file.id,
+        objectId: 'obj-ln',
+        indexerURL: INDEXER_URL,
+        createdAt: NOW_BASE,
+        updatedAt: NOW_BASE + 100,
+      }),
+    )
+    // Object has a pending local edit (flag=1). A remote-OLDER event must NOT
+    // clear it — otherwise the local edit would never be pushed (the exact
+    // data-loss this flag exists to prevent).
+    expect(await objectFlag('obj-ln', INDEXER_URL)).toBe(1)
+
+    const olderRemote: FileMetadata = {
+      id: 'flag-ln',
+      name: 'remote-older.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 100,
+      hash: 'hash-ln',
+      createdAt: NOW_BASE,
+      updatedAt: NOW_BASE,
+      thumbForId: undefined,
+      thumbSize: undefined,
+      trashedAt: null,
+    }
+    internal().setSdk({
+      objectEvents: jest.fn().mockResolvedValueOnce([
+        makeObjectEvent({
+          id: 'obj-ln',
+          updatedAt: new Date(NOW_BASE),
+          object: makeMockPinnedObject(olderRemote, 'obj-ln'),
+        }),
+      ]),
+      appKey: () => mockAppKey,
+    } as any)
+
+    await run(new AbortController().signal)
+
+    // The object flag is preserved through a remote-older ingest.
+    expect(await objectFlag('obj-ln', INDEXER_URL)).toBe(1)
+    const result = await app().files.getById('flag-ln')
+    // The local (newer) name is preserved, not overwritten by the older remote.
+    expect(result?.name).toBe('local-newer.jpg')
   })
 
   test('does not merge metadata when remote is older', async () => {

@@ -142,6 +142,20 @@ export function decodeFileMetadata(buffer?: ArrayBuffer): FileMetadata {
   }
 }
 
+/**
+ * Read just the `version` field from raw object metadata without a full decode.
+ * Returns 0 when the buffer is absent, unparseable, or has no numeric version.
+ * Sync-up uses this to detect a newer-than-supported schema and skip the push.
+ */
+export function readMetadataVersion(buffer?: ArrayBuffer): number {
+  try {
+    const raw = JSON.parse(new TextDecoder().decode(buffer))
+    return typeof raw.version === 'number' ? raw.version : 0
+  } catch {
+    return 0
+  }
+}
+
 export function hasCompleteFileMetadata(metadata: FileMetadata): boolean {
   return (
     !!metadata.id &&

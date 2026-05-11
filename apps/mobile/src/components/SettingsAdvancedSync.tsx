@@ -4,22 +4,22 @@ import { app } from '../stores/appService'
 import { toggleAutoScanUploads, toggleAutoSyncDownEvents } from '../stores/settings'
 import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
 
-function confirmResetCursor(kind: 'down' | 'up') {
-  const title = kind === 'down' ? 'Reset Sync Down Cursor' : 'Reset Sync Up Cursor'
+function confirmAdvancedSyncAction(action: 'resetDownCursor' | 'resyncMetadata') {
+  const title = action === 'resetDownCursor' ? 'Reset Sync Down Cursor' : 'Resync Metadata'
   const message =
-    kind === 'down'
+    action === 'resetDownCursor'
       ? 'This will reset the sync down cursor and cause the app to resync all events from the beginning. Continue?'
-      : 'This will reset the sync up cursor and cause the app to re-push metadata for all files. Continue?'
+      : 'This will mark every file as needing a metadata sync and re-walk them all on the next sync-up pass. Continue?'
   Alert.alert(title, message, [
     { text: 'Cancel', style: 'cancel' },
     {
       text: 'Reset',
       style: 'destructive',
       onPress: () => {
-        if (kind === 'down') {
+        if (action === 'resetDownCursor') {
           app().sync.setSyncDownCursor(undefined)
         } else {
-          app().sync.setSyncUpCursor(undefined)
+          app().localObjects.markAllNeedsSyncUp()
         }
       },
     },
@@ -52,14 +52,14 @@ export function SettingsAdvancedSync() {
           label="Reset sync down cursor"
           description="Re-downloads all events from the indexer. Can be slow on large libraries."
           destructive
-          onPress={() => confirmResetCursor('down')}
+          onPress={() => confirmAdvancedSyncAction('resetDownCursor')}
           showChevron={false}
         />
         <InsetGroupLink
-          label="Reset sync up cursor"
-          description="Re-pushes local metadata to the indexer. Can be slow on large libraries."
+          label="Resync metadata"
+          description="Re-pushes local metadata for every file to the indexer. Can be slow on large libraries."
           destructive
-          onPress={() => confirmResetCursor('up')}
+          onPress={() => confirmAdvancedSyncAction('resyncMetadata')}
           showChevron={false}
         />
       </InsetGroupSection>

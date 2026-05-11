@@ -23,7 +23,10 @@ import {
   syncManyDirectoriesFromMetadata,
 } from './directories'
 import { insertFile, queryFileById } from './files'
+import { clearObjectsNeedsSyncUp, insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
+
+const INDEXER = 'https://idx.example.com'
 
 async function createTestFile(id: string) {
   await insertFile(db(), {
@@ -42,8 +45,88 @@ async function createTestFile(id: string) {
   })
 }
 
+// Give a file an object so it has a sync-up flag to assert on, then clear the
+// flag (insertObject sets it to 1) so the mutation under test is what re-flags.
+async function createUploadedFile(id: string) {
+  await createTestFile(id)
+  await insertObject(db(), {
+    fileId: id,
+    indexerURL: INDEXER,
+    id: `obj-${id}`,
+    slabs: [],
+    encryptedDataKey: new Uint8Array([1]).buffer,
+    encryptedMetadataKey: new Uint8Array([1]).buffer,
+    encryptedMetadata: new Uint8Array([1]).buffer,
+    dataSignature: new Uint8Array([1]).buffer,
+    metadataSignature: new Uint8Array([1]).buffer,
+    createdAt: new Date(1000),
+    updatedAt: new Date(1000),
+  })
+  await clearObjectsNeedsSyncUp(db(), INDEXER, [`obj-${id}`])
+}
+
+async function objectFlag(fileId: string): Promise<number> {
+  return (
+    (
+      await db().getFirstAsync<{ needsSyncUp: number }>(
+        'SELECT needsSyncUp FROM objects WHERE fileId = ?',
+        fileId,
+      )
+    )?.needsSyncUp ?? 0
+  )
+}
+
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
+
+describe('needsSyncUp flagging', () => {
+  it('moveFileToDirectory flags the file object for sync-up', async () => {
+    await createUploadedFile('f1')
+    expect(await objectFlag('f1')).toBe(0)
+    const dir = await getOrCreateDirectory(db(), 'Photos')
+    await moveFileToDirectory(db(), 'f1', dir.id)
+    expect(await objectFlag('f1')).toBe(1)
+  })
+
+  it('deleteDirectory flags reparented files objects for sync-up', async () => {
+    // Deleting a directory moves its files to root, changing their synced
+    // `directory` field — they must re-sync, else the move never propagates
+    // and the directory resurrects from another device.
+    await createUploadedFile('f1')
+    const dir = await getOrCreateDirectory(db(), 'Photos')
+    await moveFileToDirectory(db(), 'f1', dir.id)
+    await clearObjectsNeedsSyncUp(db(), INDEXER, ['obj-f1'])
+    expect(await objectFlag('f1')).toBe(0)
+
+    await deleteDirectory(db(), dir.id)
+
+    const reparented = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      'f1',
+    )
+    expect(reparented!.directoryId).toBeNull()
+    expect(await objectFlag('f1')).toBe(1)
+  })
+
+  it('moveFilesToDirectory flags every moved file object', async () => {
+    await createUploadedFile('m1')
+    await createUploadedFile('m2')
+    const dir = await getOrCreateDirectory(db(), 'Album')
+    await moveFilesToDirectory(db(), ['m1', 'm2'], dir.id)
+    expect(await objectFlag('m1')).toBe(1)
+    expect(await objectFlag('m2')).toBe(1)
+  })
+
+  it('renameDirectory flags objects of files in the renamed subtree', async () => {
+    await createUploadedFile('r1')
+    const dir = await getOrCreateDirectory(db(), 'Old')
+    await moveFileToDirectory(db(), 'r1', dir.id)
+    await clearObjectsNeedsSyncUp(db(), INDEXER, ['obj-r1'])
+    expect(await objectFlag('r1')).toBe(0)
+    await renameDirectory(db(), dir.id, 'New')
+    expect(await objectFlag('r1')).toBe(1)
+  })
+})
 
 describe('directoryDisplayName', () => {
   it('returns full string for root', () => {

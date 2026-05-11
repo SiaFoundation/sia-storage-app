@@ -871,15 +871,7 @@ export class UploadManager {
     return cap
   }
 
-  /**
-   * Query DB for local-only files not yet being uploaded. Excludes files
-   * already registered as active uploads at the SQL level so the LIMIT
-   * returns actually-available files rather than re-fetching active ones.
-   * Returns files ordered by createdAt ASC so photos are processed before
-   * their thumbnails, naturally mixing sizes for efficient slab packing.
-   *
-   * @returns Number of new files added to the polledFiles queue.
-   */
+  /** Returns true if the account has no remaining storage. */
   private async isStorageFull(): Promise<boolean> {
     if (!this.app.connection.getState().isConnected) return false
     try {
@@ -894,6 +886,15 @@ export class UploadManager {
     }
   }
 
+  /**
+   * Query DB for local-only files not yet being uploaded. Excludes files
+   * already registered as active uploads at the SQL level so the LIMIT
+   * returns actually-available files rather than re-fetching active ones.
+   * Returns files ordered by createdAt ASC so photos are processed before
+   * their thumbnails, naturally mixing sizes for efficient slab packing.
+   *
+   * @returns Number of new files added to the polledFiles queue.
+   */
   private async pollDB(): Promise<number> {
     if (!this.app.connection.getState().isConnected) return 0
 
@@ -1139,13 +1140,15 @@ export class UploadManager {
 
     // Phase 2: Batch DB write. Re-gate: Phase 1's pin pool yields
     // across pinObject awaits, so the entry gate can be stale before
-    // we reach these writes. Same for the updatedAt bump below.
+    // we reach these writes.
     const localObjects = results
       .filter((r): r is Extract<PinResult, { type: 'success' }> => r.type === 'success')
       .map((r) => r.localObject)
     await this.app.db.waitUntilActive()
+    // Insert dirty so the next sync-up pass reconciles the uploaded metadata.
     await this.app.localObjects.upsertMany(localObjects, {
       skipInvalidation: true,
+      setNeedsSyncUp: true,
     })
 
     for (const r of results) {
@@ -1155,29 +1158,30 @@ export class UploadManager {
       }
     }
 
-    // Bump updatedAt on successfully uploaded files so sync-up picks them
-    // up even if the cursor already advanced past their previous updatedAt
-    // (e.g., file was assigned to a directory before upload finished).
     const successfulFileIds = results
       .filter((r) => r.type !== 'error' && r.type !== 'missing')
       .map((r) => r.fileId)
     if (successfulFileIds.length > 0) {
-      // Re-gate (see upsert above): the bump and the upsert must
-      // commit on the same side of the suspend gate.
+      // Re-gate (see upsert above): the size heal and the upsert must commit on
+      // the same side of the suspend gate.
       await this.app.db.waitUntilActive()
-      const now = Date.now()
-      // Persist the SDK size in the same bump so the local row matches what we
-      // sent up.
+      // Persist the SDK size so the local row matches what we uploaded. Pass
+      // includeUpdatedAt with no updatedAt to leave the timestamp untouched — the
+      // upload is not an edit. The object was already flagged when it was
+      // inserted, so sync-up pushes the corrected size on the next pass.
       const sizeByFileId = new Map(
         results.flatMap((r) => (r.type === 'success' ? [[r.fileId, r.size] as const] : [])),
       )
-      await this.app.files.updateMany(
-        successfulFileIds.map((id) => {
-          const size = sizeByFileId.get(id)
-          return size === undefined ? { id, updatedAt: now } : { id, updatedAt: now, size }
-        }),
-        { includeUpdatedAt: true, skipCurrentRecalc: true },
-      )
+      const sizeUpdates = successfulFileIds.flatMap((id) => {
+        const size = sizeByFileId.get(id)
+        return size === undefined ? [] : [{ id, size }]
+      })
+      if (sizeUpdates.length > 0) {
+        await this.app.files.updateMany(sizeUpdates, {
+          includeUpdatedAt: true,
+          skipCurrentRecalc: true,
+        })
+      }
     }
 
     // Phase 3: Invalidate cache then remove completed uploads.

@@ -5,7 +5,6 @@ import type { ObjectsCursor, SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
-import type { SyncUpCursor } from '../../services/syncUpMetadata'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { swrCacheBy } from '../../stores/swr'
 import { createLibraryVersionCache } from '../libraryVersionCache'
@@ -177,18 +176,6 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
               after: cursor.after.getTime(),
             }),
           )
-        }
-      },
-      getSyncUpCursor: async () => {
-        const raw = await adapters.storage.getItem('syncUpCursor')
-        if (!raw) return undefined
-        return JSON.parse(raw) as SyncUpCursor
-      },
-      setSyncUpCursor: async (cursor: SyncUpCursor | undefined) => {
-        if (!cursor) {
-          await adapters.storage.setItem('syncUpCursor', '')
-        } else {
-          await adapters.storage.setItem('syncUpCursor', JSON.stringify(cursor))
         }
       },
     },
