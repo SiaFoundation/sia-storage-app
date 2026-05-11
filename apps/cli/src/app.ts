@@ -16,8 +16,8 @@ import {
   createNodeFsIO,
   createNodeSdkAdapter,
   createNodeSdkAuthAdapter,
+  createBunThumbnailAdapter,
   createNodeUploaderAdapters,
-  createSharpThumbnailAdapter,
   ensureDataDir,
   getDataDir,
   getPaths,
@@ -106,7 +106,7 @@ export async function createCliAppService(
   const fsIO = createNodeFsIO(p.filesDir)
   const uploaderAdapters = createNodeUploaderAdapters()
   const detectMimeType = createNodeDetectMimeType()
-  const thumbnail = createSharpThumbnailAdapter()
+  const thumbnail = createBunThumbnailAdapter()
 
   const bootstrap = await buildBootstrap()
 

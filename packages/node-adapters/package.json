@@ -14,6 +14,7 @@
     "./uploader": "./src/uploader.ts",
     "./detectMimeType": "./src/detectMimeType.ts",
     "./thumbnail": "./src/thumbnail.ts",
+    "./thumbnail-sharp": "./src/thumbnail-sharp.ts",
     "./bunDatabase": "./src/bunDatabase.ts",
     "./lock": "./src/lock.ts",
     "./ipc": "./src/ipc.ts",
@@ -28,15 +29,16 @@
     "test": "jest"
   },
   "dependencies": {
-    "@siafoundation/sia-storage": "0.0.9",
+    "@siafoundation/sia-storage": "0.0.10",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
-    "better-sqlite3": "12.6.2",
-    "sharp": "0.33.5"
+    "better-sqlite3": "12.6.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",
+    "@types/sharp": "0.32.0",
     "jest": "29.7.0",
+    "sharp": "0.33.5",
     "ts-jest": "29.4.6",
     "typescript": "5.9.3"
   }

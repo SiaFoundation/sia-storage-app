@@ -22,8 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun run lint
 
   knip:
@@ -32,8 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun run knip
 
   typecheck:
@@ -42,8 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun run typecheck
 
   test-core:
@@ -52,8 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun --cwd packages/core test
 
   test-mobile:
@@ -62,8 +54,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun --cwd apps/mobile test
 
   test-integration:
@@ -72,8 +62,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun --cwd apps/integration test
 
   test-cli:
@@ -82,8 +70,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun --cwd apps/cli test
 
   test-cli-e2e:
@@ -92,8 +78,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - run: bun --cwd apps/cli test:e2e
 
   build-cli:
@@ -105,7 +89,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-        with:
-          bun_version: 1.2.19
       - working-directory: apps/cli
         run: bun run build:linux-x64

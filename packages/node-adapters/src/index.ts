@@ -7,7 +7,7 @@ export { getDataDir, getPaths, ensureDataDir } from './paths'
 export { createNodeFsIO } from './fsIO'
 export { createNodeUploaderAdapters } from './uploader'
 export { createNodeDetectMimeType } from './detectMimeType'
-export { createSharpThumbnailAdapter } from './thumbnail'
+export { createBunThumbnailAdapter } from './thumbnail'
 
 // Daemon infrastructure
 export { acquireLock, isDaemonRunning, readDaemonPid } from './lock'

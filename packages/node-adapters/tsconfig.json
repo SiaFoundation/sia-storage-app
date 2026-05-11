@@ -1,11 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "paths": {
-      "@siafoundation/sia-storage": [
-        "../../node_modules/@siafoundation/sia-storage/dist/index.node.d.ts"
-      ]
-    }
+    "customConditions": ["node"]
   },
   "include": ["src", "test"]
 }

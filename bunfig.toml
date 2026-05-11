@@ -1,3 +1,13 @@
 [install]
 minimumReleaseAge = 259200
-minimumReleaseAgeExcludes = ["@siafoundation/*", "react-native-sia"]
+minimumReleaseAgeExcludes = [
+  "@siafoundation/sia-storage",
+  "@siafoundation/sia-storage-darwin-arm64",
+  "@siafoundation/sia-storage-darwin-x64",
+  "@siafoundation/sia-storage-linux-x64-gnu",
+  "@siafoundation/sia-storage-linux-arm64-gnu",
+  "@siafoundation/sia-storage-win32-x64-msvc",
+  "react-native-sia",
+  "@types/bun",
+  "bun-types",
+]
