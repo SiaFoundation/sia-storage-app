@@ -1,14 +1,14 @@
 import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
+import sharp from 'sharp'
 
 const WEBP_QUALITY = 80
 
 async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailResult> {
   const path = filePath.replace(/^file:\/\//, '')
-  const buf = await Bun.file(path)
-    .image()
+  const buf = await sharp(path)
     .resize(size, size, { fit: 'inside', withoutEnlargement: true })
     .webp({ quality: WEBP_QUALITY })
-    .buffer()
+    .toBuffer()
   return {
     data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
     mimeType: 'image/webp',
@@ -16,10 +16,11 @@ async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailRe
 }
 
 /**
- * Thumbnail adapter backed by `Bun.Image`. Bun bundles libvips directly, so
- * `bun build --compile` produces a single binary with no native-addon dance.
+ * Sharp-backed thumbnail adapter for Node consumers (jest workers, integration
+ * tests). The CLI uses `createBunThumbnailAdapter` — sharp's libvips dlopen
+ * can't survive `bun build --compile`.
  */
-export function createBunThumbnailAdapter(): ThumbnailAdapter {
+export function createSharpThumbnailAdapter(): ThumbnailAdapter {
   return {
     generateImageThumbnail(sourcePath: string, targetSize: number) {
       return resizeToWebp(sourcePath, targetSize)

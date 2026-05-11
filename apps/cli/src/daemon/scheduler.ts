@@ -14,12 +14,7 @@ import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
 import type { CliApp } from '../app'
 
-/**
- * Builds and starts every background service the daemon runs on a timer.
- * The {@link ThumbnailScanner} is held as a closure variable — its in-memory
- * state (processing/error sets) lives only as long as the scheduler does, and
- * `process.exit` reclaims it on shutdown.
- */
+/** Builds and starts every background service the daemon runs on a timer. */
 export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler } {
   const scheduler = new ServiceScheduler()
   const thumbnailScanner = new ThumbnailScanner()

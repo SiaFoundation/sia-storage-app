@@ -1,6 +1,8 @@
 import type { ThumbnailAdapter } from '@siastorage/core/adapters'
 
-export { createSharpThumbnailAdapter } from '@siastorage/node-adapters/thumbnail'
+// Subpath import; the package barrel exposes the Bun adapter so the CLI binary
+// doesn't pull sharp.
+export { createSharpThumbnailAdapter } from '@siastorage/node-adapters/thumbnail-sharp'
 
 export function createMockThumbnailAdapter(
   overrides?: Partial<ThumbnailAdapter>,
