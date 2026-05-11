@@ -223,8 +223,10 @@ async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
   // Reset cursor caches.
   await resetPhotosArchiveCursor()
 
-  // Clear SWR cache last; must come after store resets to avoid races where
-  // hooks re-read stale data into a fresh cache.
+  // Pin every SWR slot to `undefined` for the reset window so useShowSplash
+  // holds via its `hasOnboarded === undefined` clause — without this, sign-out
+  // briefly remounts RootTabs against the stale cached `true` before the
+  // post-init refetch (in runResetFlow) lands the wiped value.
   await mutate(() => true, undefined, { revalidate: false })
 }
 
@@ -269,6 +271,13 @@ async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: bool
 
   // Re-initialize the app from clean state.
   await initApp()
+
+  // Refetch every SWR slot now that the rebuilt app is healthy. Keys
+  // preserved across resync (hasOnboarded, indexerURL) were pinned to
+  // `undefined` by clearAppState and aren't touched by initApp, so without
+  // this useShowSplash strands the splash on "Getting things ready..." until
+  // the user suspends and reopens the app (which fires the same broadcast).
+  await mutate(() => true)
 }
 
 function resetAllStores() {
