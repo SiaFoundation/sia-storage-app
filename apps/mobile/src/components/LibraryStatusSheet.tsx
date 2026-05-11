@@ -153,7 +153,11 @@ export function LibraryStatusSheet() {
 
         <InsetGroupSection
           header="Upload progress"
-          footer="Upload progress across all files in the library."
+          footer={
+            mode === 'size' && importingCount > 0
+              ? `Sizes do not include the ${importingCount === 1 ? 'file' : `${importingCount.toLocaleString()} files`} still pending import.`
+              : 'Upload progress across all files in the library.'
+          }
         >
           {categories.map(([label, cat]) => {
             const value = categoryValue(mode, cat)
