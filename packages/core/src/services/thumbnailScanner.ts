@@ -269,6 +269,9 @@ export class ThumbnailScanner {
       const copied = await app.fs.writeFileData(thumbFileInfo, result.data)
 
       const now = Date.now()
+      // Thumb is on disk; gate so files.create can't fast-reject and
+      // leave a thumb with fsMeta but no files row.
+      await app.db.waitUntilActive()
       await app.files.create({
         id: thumbId,
         name: 'thumbnail.webp',
@@ -358,6 +361,9 @@ export class ThumbnailScanner {
           result.data,
         )
         const now = Date.now()
+        // See ensureThumbnail above — gate the files.create that follows
+        // an on-disk commit.
+        await app.db.waitUntilActive()
         await app.files.create({
           id: thumbId,
           name: 'thumbnail.webp',

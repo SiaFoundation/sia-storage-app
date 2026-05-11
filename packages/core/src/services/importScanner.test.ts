@@ -22,6 +22,9 @@ function createMockApp(): MockHelper {
   }
 
   const app: any = {
+    db: {
+      waitUntilActive: jest.fn(async () => {}),
+    },
     files: {
       query: jest.fn(async (opts: any) => {
         const excludeSet = new Set(opts.excludeIds ?? [])

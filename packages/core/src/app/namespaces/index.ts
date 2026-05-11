@@ -133,6 +133,9 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     optimize: async () => {
       await adapters.db.execAsync('PRAGMA optimize')
     },
+    db: {
+      waitUntilActive: () => adapters.db.waitUntilActive?.() ?? Promise.resolve(),
+    },
     ...buildDbNamespaces(adapters.db, caches, uploadsNamespace, adapters.fsIO, {
       crypto: adapters.crypto,
       thumbnail: adapters.thumbnail,

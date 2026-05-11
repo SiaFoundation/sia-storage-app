@@ -211,6 +211,9 @@ export function FileImport({
       logger.info('FileImport', 'importing_file', { id: sharedFile.data.id })
 
       const localObject = await app().shares.pin(shareUrl, sharedFile.data.id)
+      // Indexer pin is done; gate so files.create can't fast-reject and
+      // leave the user's share missing from their library.
+      await app().db.waitUntilActive()
       await app().files.create(sharedFile.data, localObject)
 
       toast.show('File added')

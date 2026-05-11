@@ -68,6 +68,9 @@ async function tryWithLog<T>(
  * Suspension signal policy: accepts AbortSignal. DB-holding loop —
  * reads remote metadata and writes local DB. Checks signal at exit
  * points so a mid-batch abort doesn't issue queries after the gate.
+ * Waits for the DB gate before the first remote call so a tombstone
+ * delete that already succeeded on the indexer doesn't lose its
+ * local cleanup write.
  */
 export async function syncUpMetadataBatch(
   batchSize: number,
@@ -81,6 +84,8 @@ export async function syncUpMetadataBatch(
     app.sync.setState({ isSyncingUp: false })
     return
   }
+  if (signal.aborted) return
+  await app.db.waitUntilActive()
   if (signal.aborted) return
 
   const sdk = internal.requireSdk()
