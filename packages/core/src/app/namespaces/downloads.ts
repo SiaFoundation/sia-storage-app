@@ -111,6 +111,9 @@ export function buildDownloadsNamespace(
 
       if (controller.signal.aborted) return
 
+      // Bytes are on disk; gate so the fsMeta upsert doesn't fast-reject
+      // and leave the file invisible to the cache-eviction LRU.
+      await db.waitUntilActive?.()
       await ops.upsertFsMeta(db, {
         fileId,
         size: file.size,

@@ -326,7 +326,11 @@ export class ImportScanner {
         }
       }
 
+      // Per-file disk copies are done; gate the batch DB writes so
+      // suspend in the gap can't leave a finalized-on-disk file stuck
+      // with an empty hash/size/type row that no scanner re-picks up.
       if (updates.length > 0) {
+        await app.db.waitUntilActive()
         await app.files.updateMany(
           updates.map((u) => ({
             id: u.id,
@@ -338,6 +342,7 @@ export class ImportScanner {
       }
 
       if (lostUpdates.length > 0) {
+        await app.db.waitUntilActive()
         await app.files.updateMany(
           lostUpdates.map((u) => ({
             id: u.id,

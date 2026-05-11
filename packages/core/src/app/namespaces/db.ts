@@ -57,9 +57,13 @@ export function buildDbNamespaces(
   | 'hosts'
   | 'account'
   | 'optimize'
+  | 'db'
 > {
   async function removeFile(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
+    // Disk delete is done; gate so the fsMeta delete doesn't fast-reject
+    // and leave a row pointing at a missing file.
+    await db.waitUntilActive?.()
     await ops.deleteFsMeta(db, file.id)
   }
 
@@ -85,6 +89,9 @@ export function buildDbNamespaces(
     removeFile,
     copyFile: async (file, sourceUri, opts) => {
       const result = await fsIO.copy(file, sourceUri)
+      // Disk copy is done; gate so the read+upsert below can't leave
+      // the file invisible to cache eviction.
+      await db.waitUntilActive?.()
       const previous = await ops.readFsMeta(db, file.id)
       await ops.upsertFsMeta(db, {
         fileId: file.id,
@@ -101,6 +108,8 @@ export function buildDbNamespaces(
       if (adapters?.crypto) {
         hash = await adapters.crypto.sha256(data)
       }
+      // See copyFile above — disk write is done; gate the fsMeta upsert.
+      await db.waitUntilActive?.()
       await ops.upsertFsMeta(db, {
         fileId: file.id,
         size: result.size,

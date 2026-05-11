@@ -11,7 +11,7 @@ import {
   resumeDb,
   setJournalMode,
   suspendDb,
-  waitForDbActive,
+  waitUntilDbActive,
   waitForQueriesIdle,
   withRecovery,
 } from '.'
@@ -75,10 +75,8 @@ describe('query gating', () => {
   })
 
   it('runAsync rejects fast during suspending', async () => {
-    // Writes used to park here, but parking inside a transaction would
-    // deadlock with the suspension manager's drain. Now all queries
-    // reject during 'suspending' — callers that need wait-for-resume
-    // semantics must call waitForDbActive() BEFORE issuing the query.
+    // Parking writes here would deadlock the drain via the txMutex —
+    // callers that need wait-for-resume call waitUntilDbActive() first.
     suspendDb()
     await expect(db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')).rejects.toThrow(
       DatabaseSuspendedError,
@@ -133,14 +131,14 @@ describe('query gating', () => {
     await queryPromise
   })
 
-  it('waitForDbActive resolves immediately when active', async () => {
-    await waitForDbActive()
+  it('waitUntilDbActive resolves immediately when active', async () => {
+    await waitUntilDbActive()
   })
 
-  it('waitForDbActive parks during suspending and resolves on resume', async () => {
+  it('waitUntilDbActive parks during suspending and resolves on resume', async () => {
     suspendDb()
     let settled = false
-    const wait = waitForDbActive().then(() => {
+    const wait = waitUntilDbActive().then(() => {
       settled = true
     })
     await Promise.resolve()
@@ -150,11 +148,11 @@ describe('query gating', () => {
     expect(settled).toBe(true)
   })
 
-  it('waitForDbActive rejects after the safety-valve timeout', async () => {
+  it('waitUntilDbActive rejects after the safety-valve timeout', async () => {
     jest.useFakeTimers()
     try {
       suspendDb()
-      const wait = waitForDbActive()
+      const wait = waitUntilDbActive()
       wait.catch(() => {})
       jest.advanceTimersByTime(30_000)
       await expect(wait).rejects.toThrow(DatabaseSuspendedError)
@@ -380,10 +378,8 @@ describe('full suspend/resume cycle', () => {
     expect(await duringClosed).toEqual([{ v: 2 }])
   })
 
-  it('writes during suspending reject fast; callers wait via waitForDbActive before issuing', async () => {
+  it('writes during suspending reject fast; callers wait via waitUntilDbActive before issuing', async () => {
     suspendDb()
-    // Direct write during gate now rejects (used to park). Callers that
-    // need wait-for-resume must call waitForDbActive() first.
     await expect(db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')).rejects.toThrow(
       DatabaseSuspendedError,
     )
@@ -391,7 +387,7 @@ describe('full suspend/resume cycle', () => {
     // Caller-side gate: wait, then issue. The write succeeds after resume.
     let writeSettled = false
     const guarded = (async () => {
-      await waitForDbActive()
+      await waitUntilDbActive()
       await db().runAsync('CREATE TABLE IF NOT EXISTS t2 (id TEXT)')
       writeSettled = true
     })()

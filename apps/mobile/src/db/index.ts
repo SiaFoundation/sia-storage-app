@@ -8,9 +8,8 @@ import { Platform } from 'react-native'
 import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
 
-// Thrown by the adapter when a query is issued while the suspension gate
-// is closed. Reads and writes both reject — callers that want to wait for
-// the gate to open should call waitForDbActive() before issuing the query.
+// Thrown when a query is issued while the suspension gate is closed.
+// Callers that need to wait for resume call waitUntilDbActive() first.
 export class DatabaseSuspendedError extends Error {
   constructor() {
     super('Database is suspended for background transition')
@@ -18,44 +17,29 @@ export class DatabaseSuspendedError extends Error {
   }
 }
 
-// Suspension lifecycle state. The DB connection is NEVER closed across
-// suspension; this flag only gates JS-side dispatch. iOS recognizes
-// SQLite databases by the file-header magic bytes and exempts processes
-// holding file locks on recognized SQLite files from the 0xDEAD10CC
-// kill — so leaving the connection open is safe as long as no write or
-// fsync is in flight at suspension time (which the suspension manager's
-// drain ensures).
+// Suspension lifecycle state. The DB connection stays open across
+// suspension; iOS exempts SQLite files (recognized by magic bytes) from
+// the 0xDEAD10CC kill as long as no write/fsync is mid-flight — the
+// drain ensures that.
 //
-// States:
 // - 'active':     queries flow normally.
-// - 'suspending': all queries reject fast with DatabaseSuspendedError.
-//                 Callers that want to retry on resume should await
-//                 waitForDbActive() BEFORE issuing the query — never
-//                 inside an open transaction's fn (would deadlock with
-//                 the suspension manager waiting on the txMutex holder).
-// - 'closed':     handle destroyed, reopen imminent — both reads and
-//                 writes park on activeWaiters. This is the load-bearing
-//                 case for picker / share-intent callbacks that fire
-//                 during the ~80ms reopen window. The current suspend
-//                 flow does NOT close the DB, so this state is only
-//                 reachable from resetDb (manual reset from settings).
+// - 'suspending': queries fast-reject; callers that need to wait for
+//                 resume call waitUntilDbActive() BEFORE the query.
+//                 Calling it inside withTransactionAsync's fn deadlocks
+//                 the drain (txMutex held while waiting).
+// - 'closed':     handle destroyed, reopen imminent — queries park.
+//                 Today only reachable via resetDb (manual reset).
 type DbState = 'active' | 'suspending' | 'closed'
 
 let state: DbState = 'active'
 
-// Queue of callers parked inside waitForActive(). Drained by resumeDb()
-// when state returns to 'active'. Only populated under 'closed' state
-// (parking) or via the public waitForDbActive() helper.
+// Callers parked inside enterGate() or waitUntilDbActive(). Drained by
+// resumeDb() when state returns to 'active'.
 let activeWaiters: Array<() => void> = []
 
-// Safety valve: if resume never fires (app stuck in broken state), don't
-// let parked waiters pile up forever. 30s is well past any realistic iOS
-// thaw or Android foreground transition.
+// Safety valve for a resume that never fires.
 const WAIT_TIMEOUT_MS = 30_000
 
-// Pushes resolveOnce onto activeWaiters and arms a 30s safety-valve
-// rejection. Used by both the internal 'closed'-state parking and the
-// public waitForDbActive helper.
 function parkUntilActive(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false
@@ -75,37 +59,30 @@ function parkUntilActive(): Promise<void> {
   })
 }
 
-function waitForActive(_intent: 'read' | 'write'): Promise<void> {
+// Per-query gate. Fast-rejects during 'suspending' so in-flight
+// transactions release the txMutex and let the drain finish; parking
+// here would deadlock (fn awaits the parked write → mutex never
+// releases → inflightCount stays high).
+function enterGate(_intent: 'read' | 'write'): Promise<void> {
   if (state === 'active') return Promise.resolve()
-  // 'suspending': both intents reject fast. Parking writes here used to
-  // deadlock the suspension drain — a transaction's fn would park its
-  // inner write, fn would await forever, txMutex holder wouldn't release,
-  // and inflightCount stayed high so waitForQueriesIdle never resolved.
-  // Callers that need wait-for-resume semantics call waitForDbActive()
-  // BEFORE entering withTransactionAsync.
   if (state === 'suspending') {
     return Promise.reject(new DatabaseSuspendedError())
   }
-  // 'closed': park both intents. Picker / share-intent callbacks during
-  // a reopen window need their INSERTs to land against the new handle.
-  // Only reachable today via resetDb (manual settings reset).
+  // 'closed': park so picker / share-intent callbacks land their
+  // INSERTs against the new handle after reopen.
   return parkUntilActive()
 }
 
 /**
- * Resolves when the DB gate is open ('active'). Call this BEFORE issuing
- * a sequence of queries that should run on the same side of the gate
- * (e.g. upload finalize: getMetadata → pinObject → upsertMany).
+ * Resolves when state returns to 'active'. Call BEFORE any sequence of
+ * reads/writes that must land on the same side of the suspend gate —
+ * typically right after an irrecoverable network or filesystem commit.
  *
- * If state is already 'active', resolves synchronously. Otherwise, parks
- * on activeWaiters until resumeDb() fires the queue. Bounded by the
- * same 30s safety valve as the internal waitForActive.
- *
- * Do NOT call from inside withTransactionAsync's fn — by then the
- * txMutex is held and the suspension manager can't drain. Wrap the
- * whole logical operation (txn included) in waitForDbActive instead.
+ * Do NOT call from inside withTransactionAsync's fn — the txMutex is
+ * held by then and the drain can't finish. Gate the whole logical
+ * operation (txn included) instead.
  */
-export function waitForDbActive(): Promise<void> {
+export function waitUntilDbActive(): Promise<void> {
   if (state === 'active') return Promise.resolve()
   return parkUntilActive()
 }
@@ -146,25 +123,21 @@ export function getWalPath(): string {
   return `${dbDirectory}/${dbName}-wal`
 }
 
-// Called by the suspension manager as the first step when the app backgrounds.
-// After this, queries through db() reject fast with DatabaseSuspendedError.
-// Callers that need wait-for-resume semantics should await waitForDbActive()
-// BEFORE issuing the query.
+// First step when the app backgrounds. Queries through db() then
+// fast-reject; callers that want to wait for resume call
+// waitUntilDbActive() BEFORE issuing the query.
 export function suspendDb(): void {
   state = 'suspending'
   logger.debug('db', 'suspended')
 }
 
-// Called by the suspension manager when the app foregrounds. Flips state
-// back to active and drains any waiters parked via waitForDbActive() (or,
-// in the dead-code-but-defensive 'closed' path, internal waitForActive
-// writes parked during reopen).
+// Called on foreground. Drains waiters parked via waitUntilDbActive()
+// or the 'closed'-state enterGate path.
 //
-// Do NOT reset inflightCount here. Queries dispatched BEFORE the gate
-// already incremented inflight via trackStart; their .finally(trackEnd)
-// is still pending. Resetting here would let those late trackEnd calls
-// drive inflightCount negative, pinning waitForQueriesIdle non-zero and
-// making the next suspend's drain loop spin until MAX_DRAIN_MS.
+// Do NOT reset inflightCount: queries dispatched BEFORE the gate already
+// incremented inflight, and their pending trackEnd calls would drive
+// the count negative — pinning waitForQueriesIdle and stalling the next
+// drain until MAX_DRAIN_MS.
 export function resumeDb(): void {
   state = 'active'
   const waiters = activeWaiters
@@ -442,7 +415,7 @@ class MobileDbAdapter implements DatabaseAdapter {
       }).finally(trackEnd)
     }
     if (state === 'active') return dispatch()
-    return waitForActive(intent).then(dispatch)
+    return enterGate(intent).then(dispatch)
   }
 
   getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
@@ -483,11 +456,11 @@ class MobileDbAdapter implements DatabaseAdapter {
         .finally(trackEnd)
     }
     if (state === 'active') return dispatch()
-    return waitForActive('write').then(dispatch)
+    return enterGate('write').then(dispatch)
   }
 
-  waitForActive(): Promise<void> {
-    return waitForDbActive()
+  waitUntilActive(): Promise<void> {
+    return waitUntilDbActive()
   }
 }
 
