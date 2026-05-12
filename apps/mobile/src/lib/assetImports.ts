@@ -354,21 +354,81 @@ export async function catalogAssets(
 
   if (signal?.aborted) return { newCount: 0, existingCount: 0 }
 
-  const localIds = candidates.filter((f) => f.localId).map((f) => f.localId!)
+  // Catch-up dedup for rows that arrived via sync-down (no localId) or
+  // had their localId nulled by a re-sync (reinstall, restore, sign out
+  // and back in). When the archive walk later sees the same photo on
+  // the camera roll, the existing row has no localId to match against,
+  // so localId-based dedup misses.
+  // (name, createdAt) is the cheapest stable identity available without
+  // reading bytes; the query is directory-scoped via getCurrentByNames-
+  // InDirectory, so the same photo in a different folder is unaffected.
+  //
+  // Same-name files in the same folder collapse to one visible row
+  // elsewhere in the app, so distinct files that share a filename end
+  // up as a single entry regardless of what this dedup decides. See
+  // "Known limits" below for the future-work shape.
+  //
+  // Asymmetric: only fires against rows where existing.localId IS NULL,
+  // so same-device siblings sharing (name, captureTime) — e.g., OEM
+  // camera bursts that reuse filenames at second precision — aren't
+  // blocked by this rule. (They still collapse downstream via the
+  // existing (name, dir) version-grouping; not changed here.)
+  //
+  // Known limits — two separate problems that both need future work:
+  //  (1) Identity — recognizing the same file across devices or after
+  //      a re-sync. (name, createdAt) is what we can compute upfront
+  //      without reading bytes. It misses for iOS assets whose
+  //      filenames are storage UUIDs that differ per device (common
+  //      for iCloud-restored or shared assets).
+  //  (2) Name collisions on insert — once a file is decided to be
+  //      new, it's stored under the filename the OS reported. If two
+  //      distinct files happen to share that filename in the same
+  //      folder (counter wraparound, AirDrop name clashes, OEM burst
+  //      siblings), they collapse to one visible row downstream even
+  //      though identity correctly flagged them as different.
+  //
+  // (1) takes stronger upfront identity — native modules surfacing
+  // stable cloud IDs or fingerprints. (2) takes uniquifying the name
+  // at import time so distinct files don't merge in storage. SHA-256
+  // hashes are computed at finalize but aren't used for dedup yet;
+  // they'd address (1), not (2).
+  const namesToCheck = Array.from(new Set(candidates.map((c) => c.name)))
+  const existingByName =
+    namesToCheck.length > 0
+      ? await app().files.getCurrentByNamesInDirectory(namesToCheck, importDirectoryId)
+      : []
+  const syncedDownKeys = new Set<string>()
+  for (const f of existingByName) {
+    if (f.localId === null) {
+      syncedDownKeys.add(`${f.name}\x00${f.createdAt}`)
+    }
+  }
+  const dedupedCandidates = candidates.filter(
+    (c) => !syncedDownKeys.has(`${c.name}\x00${c.createdAt}`),
+  )
+  const syncedDownDuplicateCount = candidates.length - dedupedCandidates.length
+
+  const localIds = dedupedCandidates.filter((f) => f.localId).map((f) => f.localId!)
   const existingFiles = localIds.length > 0 ? await app().files.getByLocalIds(localIds) : []
-  const existingLocalIds = new Set(existingFiles.map((f) => f.localId))
-  const existingCount = existingLocalIds.size
+  const localIdDuplicateCount = new Set(existingFiles.map((f) => f.localId)).size
+  const existingCount = localIdDuplicateCount + syncedDownDuplicateCount
   const newCount = candidates.length - existingCount
 
   logger.debug('catalogAssets', 'result', {
     count: candidates.length,
     newCount,
     existingCount,
+    syncedDownDuplicateCount,
   })
+  if (syncedDownDuplicateCount > 0) {
+    logger.info('catalogAssets', 'dedup_by_name_and_time', {
+      count: syncedDownDuplicateCount,
+    })
+  }
 
   if (signal?.aborted) return { newCount: 0, existingCount: 0 }
 
-  await app().files.createMany(candidates, {
+  await app().files.createMany(dedupedCandidates, {
     conflictClause: 'OR IGNORE',
     directoryId: importDirectoryId,
   })

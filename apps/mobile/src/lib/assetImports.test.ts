@@ -1307,4 +1307,185 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
     const dirs = await app().directories.getAll()
     expect(row?.directoryId).toBe(dirs[0].id)
   })
+
+  describe('dedup against synced-down rows (localId=NULL)', () => {
+    async function setupImportDir() {
+      await app().settings.setPhotoImportDirectory('Camera Roll')
+      const dir = await app().directories.getOrCreateAtPath('Camera Roll')
+      return dir.id
+    }
+
+    async function seedInDir(
+      dirId: string,
+      fields: {
+        id: string
+        name: string
+        createdAt: number
+        localId: string | null
+        trashedAt?: number | null
+      },
+    ) {
+      await app().files.create({
+        id: fields.id,
+        name: fields.name,
+        size: 0,
+        createdAt: fields.createdAt,
+        updatedAt: fields.createdAt,
+        type: 'image/jpeg',
+        kind: 'file',
+        localId: fields.localId,
+        hash: '',
+        addedAt: fields.createdAt,
+        trashedAt: fields.trashedAt ?? null,
+        deletedAt: null,
+      })
+      await app().directories.moveFiles([fields.id], dirId)
+    }
+
+    function asset(name: string, createdAt: number, id?: string) {
+      return {
+        id,
+        name,
+        sourceUri: `file:///${name}`,
+        type: 'image/jpeg',
+        timestamp: new Date(createdAt).toISOString(),
+      }
+    }
+
+    it('dedups a candidate that matches a synced-down row by (name, createdAt)', async () => {
+      const dirId = await setupImportDir()
+      await seedInDir(dirId, {
+        id: 'synced-down',
+        name: 'IMG_0042.HEIC',
+        createdAt: 1_710_000_000_000,
+        localId: null,
+      })
+      const { newCount, existingCount } = await catalogAssets(
+        [asset('IMG_0042.HEIC', 1_710_000_000_000, 'L_new')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(0)
+      expect(existingCount).toBe(1)
+      const rows = await app().files.query({ order: 'ASC' })
+      expect(rows.map((r) => r.id)).toEqual(['synced-down'])
+    })
+
+    // Asymmetric rule: when the existing row already has a localId, the
+    // new dedup doesn't fire. Same-device siblings sharing (name, time)
+    // — e.g., OEM camera bursts that reuse filenames at second precision
+    // — insert as distinct rows. (Same-name files in the same folder
+    // still collapse to a single visible row downstream; not changed by
+    // this dedup.)
+    it('does not block same-device siblings when the existing row has a localId', async () => {
+      const dirId = await setupImportDir()
+      await seedInDir(dirId, {
+        id: 'sibling-1',
+        name: '20240115_142345.jpg',
+        createdAt: 1_710_000_000_000,
+        localId: 'local_1',
+      })
+      const siblings = Array.from({ length: 4 }, (_, i) =>
+        asset('20240115_142345.jpg', 1_710_000_000_000, `local_${i + 2}`),
+      )
+      const { newCount } = await catalogAssets(siblings, 'file', { addToImportDirectory: true })
+      expect(newCount).toBe(4)
+      const rows = await app().files.query({ order: 'ASC', includeOldVersions: true })
+      expect(rows.map((r) => r.localId).sort()).toEqual([
+        'local_1',
+        'local_2',
+        'local_3',
+        'local_4',
+        'local_5',
+      ])
+    })
+
+    // Same captureTime, different filenames (e.g. an iPhone Live Photo's
+    // .HEIC + .MOV pair): both import — name disambiguates.
+    it('imports both when names differ at the same captureTime', async () => {
+      await setupImportDir()
+      const ts = 1_710_000_000_000
+      const { newCount } = await catalogAssets(
+        [asset('IMG_0042.HEIC', ts, 'still'), asset('IMG_0042.MOV', ts, 'motion')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(2)
+    })
+
+    // Same name, different captureTime (AirDrop name clash, iPhone
+    // counter wraparound): import proceeds — createdAt disambiguates.
+    it('imports as distinct when name matches but createdAt differs', async () => {
+      const dirId = await setupImportDir()
+      await seedInDir(dirId, {
+        id: 'mine',
+        name: 'IMG_0042.HEIC',
+        createdAt: 1_700_000_000_000,
+        localId: 'mine_localId',
+      })
+      const { newCount } = await catalogAssets(
+        [asset('IMG_0042.HEIC', 1_710_000_000_000, 'other_localId')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(1)
+    })
+
+    it('does not block re-import when the matching synced-down row is trashed', async () => {
+      const dirId = await setupImportDir()
+      await seedInDir(dirId, {
+        id: 'synced-down-trashed',
+        name: 'IMG_0042.HEIC',
+        createdAt: 1_710_000_000_000,
+        localId: null,
+        trashedAt: 1_710_000_500_000,
+      })
+      const { newCount } = await catalogAssets(
+        [asset('IMG_0042.HEIC', 1_710_000_000_000, 'L_new')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(1)
+    })
+
+    it('does not match synced-down rows in a different directory', async () => {
+      await setupImportDir()
+      const otherDir = await app().directories.getOrCreateAtPath('Trip 2024')
+      await seedInDir(otherDir.id, {
+        id: 'in-other-dir',
+        name: 'IMG_0042.HEIC',
+        createdAt: 1_710_000_000_000,
+        localId: null,
+      })
+      const { newCount } = await catalogAssets(
+        [asset('IMG_0042.HEIC', 1_710_000_000_000, 'L_new')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(1)
+    })
+
+    // Documents a known limitation: when both rows carry non-null
+    // localIds (e.g. Android factory reset rotated the MediaStore id),
+    // the asymmetric rule doesn't fire and a duplicate row inserts.
+    // Hashes are computed at scanner finalize but aren't used for
+    // dedup today — a future hash-dedup pass there could recover this.
+    it('inserts a duplicate when both rows have non-null but rotated localIds', async () => {
+      const dirId = await setupImportDir()
+      await seedInDir(dirId, {
+        id: 'pre-rotation',
+        name: '20240115_142345.jpg',
+        createdAt: 1_710_000_000_000,
+        localId: 'old_id',
+      })
+      const { newCount } = await catalogAssets(
+        [asset('20240115_142345.jpg', 1_710_000_000_000, 'new_id')],
+        'file',
+        { addToImportDirectory: true },
+      )
+      expect(newCount).toBe(1)
+      const rows = await app().files.query({ order: 'ASC', includeOldVersions: true })
+      expect(rows).toHaveLength(2)
+    })
+  })
 })
