@@ -1,3 +1,9 @@
+## 0.0.14 (2026-05-12)
+
+### Fixes
+
+- Fixed an issue where sync-down dropped events when a same-millisecond cluster of indexer events spanned a batch boundary.
+
 ## 0.0.13 (2026-05-07)
 
 ### Features
