@@ -256,9 +256,9 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
 
 /**
  * Unified MIME type detection with priority chain:
- * 1. providedType if recognized
+ * 1. Magic bytes (ground truth — wins over a misleading extension)
  * 2. Extension from fileName
- * 3. Magic bytes
+ * 3. providedType if recognized
  * 4. Fallback: application/octet-stream
  *
  * Synchronous, pure, no I/O. Callers read bytes themselves.
@@ -268,8 +268,9 @@ export function detectMimeType(opts: {
   fileName?: string | null
   bytes?: Uint8Array | null
 }): string {
-  if (opts.providedType && isMimeType(opts.providedType)) {
-    return opts.providedType
+  if (opts.bytes) {
+    const fromBytes = detectMimeTypeFromBytes(opts.bytes)
+    if (fromBytes) return fromBytes
   }
 
   if (opts.fileName) {
@@ -277,9 +278,8 @@ export function detectMimeType(opts: {
     if (fromExt) return fromExt
   }
 
-  if (opts.bytes) {
-    const fromBytes = detectMimeTypeFromBytes(opts.bytes)
-    if (fromBytes) return fromBytes
+  if (opts.providedType && isMimeType(opts.providedType)) {
+    return opts.providedType
   }
 
   return 'application/octet-stream'

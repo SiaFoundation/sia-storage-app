@@ -130,6 +130,7 @@ export function buildDbNamespaces(
       })
       return result
     },
+    renameToType: (file, newType) => fsIO.renameToType(file, newType),
     listFiles: () => fsIO.list(),
     ensureStorageDirectory: () => fsIO.ensureDirectory(),
     detectMimeType: async (path) => {

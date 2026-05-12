@@ -10,6 +10,9 @@ export function createMockFsIO(overrides?: Partial<FsIOAdapter>): FsIOAdapter {
       uri: 'file://thumb.webp',
       size: data.byteLength,
     }),
+    renameToType: async (file, newType) => ({
+      uri: `file://${file.id}.${newType.split('/').pop()}`,
+    }),
     list: async () => [],
     ensureDirectory: async () => {},
     ...overrides,

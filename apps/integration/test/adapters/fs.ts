@@ -44,6 +44,24 @@ export function createFsAdapter(params: { tempDir: string }) {
       nodeFs.writeFileSync(fp, buf)
       return { uri: `file://${fp}`, size: buf.byteLength }
     },
+    async renameToType(file, newType) {
+      const oldFp = fsFilePath(file.id, file.type)
+      const newFp = fsFilePath(file.id, newType)
+      if (oldFp === newFp) return { uri: `file://${oldFp}` }
+      if (!nodeFs.existsSync(oldFp)) {
+        if (nodeFs.existsSync(newFp)) return { uri: `file://${newFp}` }
+        throw new Error(`renameToType: neither ${oldFp} nor ${newFp} exists`)
+      }
+      if (nodeFs.existsSync(newFp)) {
+        try {
+          nodeFs.unlinkSync(newFp)
+        } catch {
+          // Best effort; rename below will throw if newFp still exists.
+        }
+      }
+      nodeFs.renameSync(oldFp, newFp)
+      return { uri: `file://${newFp}` }
+    },
     async list() {
       if (!nodeFs.existsSync(tempDir)) return []
       return nodeFs.readdirSync(tempDir) as string[]

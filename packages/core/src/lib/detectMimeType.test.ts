@@ -41,16 +41,19 @@ describe('detectMimeType', () => {
     expect(detectMimeType({ bytes: pdfBytes })).toBe('application/pdf')
   })
 
-  it('prioritizes providedType over extension', () => {
-    expect(detectMimeType({ providedType: 'image/png', fileName: 'photo.jpg' })).toBe('image/png')
-  })
-
-  it('prioritizes extension over bytes', () => {
+  it('prioritizes bytes over a misleading extension', () => {
+    // .heic filename, JPEG bytes — common iOS export case where the
+    // file was auto-converted to JPEG but the filename kept .heic.
     const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
-    expect(detectMimeType({ fileName: 'image.png', bytes: jpegBytes })).toBe('image/png')
+    expect(detectMimeType({ fileName: 'photo.heic', bytes: jpegBytes })).toBe('image/jpeg')
   })
 
-  it('prioritizes providedType over extension over bytes', () => {
+  it('prioritizes bytes over a misleading providedType', () => {
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    expect(detectMimeType({ providedType: 'image/jpeg', bytes: pngBytes })).toBe('image/png')
+  })
+
+  it('prioritizes bytes over extension over providedType', () => {
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     expect(
       detectMimeType({
@@ -58,7 +61,18 @@ describe('detectMimeType', () => {
         fileName: 'photo.jpg',
         bytes: pngBytes,
       }),
-    ).toBe('video/mp4')
+    ).toBe('image/png')
+  })
+
+  it('falls back to extension when bytes are unrecognized', () => {
+    const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03])
+    expect(detectMimeType({ fileName: 'doc.pdf', bytes: garbage })).toBe('application/pdf')
+  })
+
+  it('falls back to providedType when bytes and extension fail', () => {
+    expect(detectMimeType({ providedType: 'image/jpeg', fileName: 'no-extension' })).toBe(
+      'image/jpeg',
+    )
   })
 
   it('returns application/octet-stream when no signals are provided', () => {

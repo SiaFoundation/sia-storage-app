@@ -49,6 +49,32 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       return { uri: target, size: buf.byteLength }
     },
 
+    async renameToType(file, newType) {
+      const oldPath = filePath(file.id, file.type)
+      const newPath = filePath(file.id, newType)
+      if (oldPath === newPath) return { uri: oldPath }
+      try {
+        await fs.access(oldPath)
+      } catch {
+        // oldPath missing — only treat as success if newPath exists
+        // (idempotent retry after a partial rename), otherwise the
+        // caller will record a DB type for which no file is on disk.
+        try {
+          await fs.access(newPath)
+          return { uri: newPath }
+        } catch {
+          throw new Error(`renameToType: neither ${oldPath} nor ${newPath} exists`)
+        }
+      }
+      try {
+        await fs.unlink(newPath)
+      } catch (e: any) {
+        if (e?.code !== 'ENOENT') throw e
+      }
+      await fs.rename(oldPath, newPath)
+      return { uri: newPath }
+    },
+
     async list() {
       try {
         return await fs.readdir(filesDir)

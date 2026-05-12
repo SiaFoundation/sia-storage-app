@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type { AppService } from '../app/service'
+import { extFromMime, isMimeType } from '../lib/fileTypes'
 import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
@@ -16,6 +17,78 @@ async function writeThumbnailToStorage(
     return app.fs.adoptFile(thumbInfo, result.savedUri)
   }
   return app.fs.writeFileData(thumbInfo, result.data)
+}
+
+/**
+ * True when a magic-byte sniff should overwrite the stored `type`.
+ * Blocks rewrites between MIMEs that share an extension to avoid
+ * sniffer-drift flapping (e.g. image/dng vs image/x-adobe-dng).
+ */
+export function shouldReplaceType(declared: string, detected: string): boolean {
+  if (declared === detected) return false
+  if (!isMimeType(detected)) return false
+  if (declared === 'application/octet-stream') return true
+  if (!isMimeType(declared)) return true
+  const declaredExt = extFromMime(declared)
+  const detectedExt = extFromMime(detected)
+  // Defensive: if either side falls back to `.bin` (extFromMime's default
+  // for any MIME without an explicit case), we don't know if they collide
+  // on disk — err on the side of rewriting to the recognized type.
+  if (declaredExt === '.bin' || detectedExt === '.bin') return true
+  return declaredExt !== detectedExt
+}
+
+/**
+ * Apply a type correction: update the DB first, then rename the on-disk
+ * file (storage path is derived from `type`). Returns the new URI.
+ *
+ * DB-first ordering: the SQL write is the cheap, atomic step; the FS
+ * rename is the risky one. If the rename throws, we roll the DB back to
+ * the old type so the on-disk file (still at the old path) stays
+ * findable by the next scan, which can retry the correction cleanly.
+ */
+async function correctType(
+  app: AppService,
+  fileId: string,
+  oldType: string,
+  newType: string,
+): Promise<string> {
+  logger.info('thumbnailer', 'type_corrected', {
+    fileId,
+    storedType: oldType,
+    detectedType: newType,
+  })
+  await app.files.update({ id: fileId, type: newType })
+  try {
+    const renamed = await app.fs.renameToType({ id: fileId, type: oldType }, newType)
+    return renamed.uri
+  } catch (e) {
+    // Best-effort rollback so the DB stays consistent with disk.
+    await app.files.update({ id: fileId, type: oldType }).catch(() => {})
+    throw e
+  }
+}
+
+/**
+ * Detect + correct (if needed) once per file, before iterating sizes.
+ * Returns the post-correction type and source URI for per-size calls,
+ * so they don't redundantly re-detect or re-correct.
+ */
+async function prepareForCandidate(
+  app: AppService,
+  fileId: string,
+  fileType: string,
+  sourceUri: string,
+): Promise<{ actualType: string; effectiveSourceUri: string }> {
+  const detectedType = await app.fs.detectMimeType(sourceUri)
+  let effectiveSourceUri = sourceUri
+  if (detectedType && shouldReplaceType(fileType, detectedType)) {
+    effectiveSourceUri = await correctType(app, fileId, fileType, detectedType)
+  }
+  return {
+    actualType: detectedType ?? fileType,
+    effectiveSourceUri,
+  }
 }
 
 export type ThumbnailCandidateRow = {
@@ -184,24 +257,34 @@ export class ThumbnailScanner {
         missingSizes,
       })
 
-      if (fileRecord.type?.startsWith('image/') && missingSizes.length > 1) {
+      // Detect + self-heal type once per file, before iterating sizes,
+      // so subsequent per-size calls don't redundantly re-detect and
+      // re-correct (which would log + write to the DB N times).
+      const { actualType, effectiveSourceUri } = await prepareForCandidate(
+        app,
+        fileRecord.id,
+        fileRecord.type,
+        sourceUri,
+      )
+
+      if (actualType.startsWith('image/') && missingSizes.length > 1) {
         await this.ensureThumbnailsBatch({
           fileId: fileRecord.id,
           fileHash: fileRecord.hash,
-          fileType: fileRecord.type,
+          fileType: actualType,
           fileLocalId: fileRecord.localId,
           sizes: missingSizes,
-          sourceUri,
+          sourceUri: effectiveSourceUri,
         })
       } else {
         for (const size of missingSizes) {
           await this.ensureThumbnailForSize({
             fileId: fileRecord.id,
             fileHash: fileRecord.hash,
-            fileType: fileRecord.type,
+            fileType: actualType,
             fileLocalId: fileRecord.localId,
             size,
-            sourceUri,
+            sourceUri: effectiveSourceUri,
           })
         }
       }
@@ -214,25 +297,17 @@ export class ThumbnailScanner {
     const app = this.getApp()
     const { fileId, fileHash, fileType, size, sourceUri } = params
 
-    const detectedType = await app.fs.detectMimeType(sourceUri)
-    const actualType = detectedType ?? fileType
-
-    if (detectedType && detectedType !== fileType) {
-      logger.warn('thumbnailer', 'type_mismatch', {
-        fileId,
-        storedType: fileType,
-        detectedType,
-        sourceUri,
-      })
-    }
+    // Caller (runScan / generateThumbnailsForFile) is responsible for
+    // running detect+correct via prepareForCandidate, so `fileType` here
+    // is already the post-correction type.
+    const actualType = fileType
 
     if (!actualType || !app.thumbnails.allowedTypes.includes(actualType)) {
       logger.error('thumbnailer', 'unsupported_format', {
         fileId,
         fileHash,
         size,
-        storedType: fileType,
-        detectedType,
+        type: actualType,
         sourceUri,
       })
       this.markFileErrored(fileId)
@@ -242,8 +317,7 @@ export class ThumbnailScanner {
     logger.debug('thumbnailer', 'source_uri', {
       fileId,
       uri: sourceUri,
-      storedType: fileType,
-      detectedType,
+      type: actualType,
     })
 
     let result: ThumbnailResult
@@ -258,8 +332,7 @@ export class ThumbnailScanner {
         fileId,
         fileHash,
         size,
-        storedType: fileType,
-        detectedType,
+        type: actualType,
         sourceUri,
         error: e as Error,
       })
@@ -315,8 +388,7 @@ export class ThumbnailScanner {
         fileId,
         fileHash,
         size,
-        storedType: fileType,
-        detectedType,
+        type: actualType,
         sourceUri,
         error: e as Error,
       })
@@ -336,10 +408,9 @@ export class ThumbnailScanner {
     const app = this.getApp()
     const { fileId, fileHash, fileType, sizes, sourceUri } = params
 
-    const detectedType = await app.fs.detectMimeType(sourceUri)
-    const actualType = detectedType ?? fileType
-
-    if (!actualType || !app.thumbnails.allowedTypes.includes(actualType)) {
+    // Caller is responsible for running detect+correct via prepareForCandidate,
+    // so `fileType` here is already the post-correction type.
+    if (!fileType || !app.thumbnails.allowedTypes.includes(fileType)) {
       this.markFileErrored(fileId)
       return
     }
@@ -528,6 +599,15 @@ export class ThumbnailScanner {
             missingSizes: missingSizes.join(','),
           })
 
+          // Detect + self-heal type once per candidate, before the size
+          // loop, so we don't redundantly re-correct on every size.
+          const { actualType, effectiveSourceUri } = await prepareForCandidate(
+            app,
+            c.id,
+            c.type,
+            sourceUri,
+          )
+
           for (const size of missingSizes) {
             // Exit early on suspension so the DB can close promptly.
             if (signal?.aborted || producedCount >= MAX_THUMBS_PER_TICK) break
@@ -543,10 +623,10 @@ export class ThumbnailScanner {
               this.ensureThumbnailForSize({
                 fileId: c.id,
                 fileHash: c.hash,
-                fileType: c.type,
+                fileType: actualType,
                 fileLocalId: c.localId,
                 size,
-                sourceUri,
+                sourceUri: effectiveSourceUri,
               }),
               signal,
             )
