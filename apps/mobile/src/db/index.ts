@@ -1,21 +1,13 @@
 import type { DatabaseAdapter, SQLParam, SQLRunResult } from '@siastorage/core/adapters'
 import type { MigrationProgressHandler } from '@siastorage/core/db'
 import { runMigrations } from '@siastorage/core/db'
+import { DatabaseSuspendedError } from '@siastorage/core/lib/errors'
 import { Mutex } from '@siastorage/core/lib/mutex'
 import { logger } from '@siastorage/logger'
 import * as SQLite from 'expo-sqlite'
 import { Platform } from 'react-native'
 import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
-
-// Thrown when a query is issued while the suspension gate is closed.
-// Callers that need to wait for resume call waitUntilDbActive() first.
-export class DatabaseSuspendedError extends Error {
-  constructor() {
-    super('Database is suspended for background transition')
-    this.name = 'DatabaseSuspendedError'
-  }
-}
 
 // Suspension lifecycle state. The DB connection stays open across
 // suspension; iOS exempts SQLite files (recognized by magic bytes) from

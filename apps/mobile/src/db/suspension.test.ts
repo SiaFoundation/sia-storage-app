@@ -1,6 +1,6 @@
+import { DatabaseSuspendedError } from '@siastorage/core/lib/errors'
 import {
   closeDb,
-  DatabaseSuspendedError,
   database,
   db,
   dbInitialized,

@@ -1,4 +1,10 @@
-import { AbortError, getErrorMessage, isAbortError } from './errors'
+import {
+  AbortError,
+  DatabaseSuspendedError,
+  getErrorMessage,
+  isAbortError,
+  isSuspendedDbError,
+} from './errors'
 
 describe('AbortError', () => {
   it('has name AbortError and default message', () => {
@@ -47,6 +53,43 @@ describe('isAbortError', () => {
     expect(isAbortError(undefined)).toBe(false)
     expect(isAbortError('AbortError')).toBe(false)
     expect(isAbortError(42)).toBe(false)
+  })
+})
+
+describe('DatabaseSuspendedError', () => {
+  it('has name DatabaseSuspendedError and a fixed message', () => {
+    const e = new DatabaseSuspendedError()
+    expect(e.name).toBe('DatabaseSuspendedError')
+    expect(e.message).toBe('Database is suspended for background transition')
+    expect(e).toBeInstanceOf(Error)
+  })
+})
+
+describe('isSuspendedDbError', () => {
+  it('true for our DatabaseSuspendedError class', () => {
+    expect(isSuspendedDbError(new DatabaseSuspendedError())).toBe(true)
+  })
+
+  // IPC-reconstructed copies lose the prototype chain but keep `name`.
+  it('true for plain Error with name DatabaseSuspendedError', () => {
+    const e = new Error('reconstructed across IPC')
+    e.name = 'DatabaseSuspendedError'
+    expect(isSuspendedDbError(e)).toBe(true)
+  })
+
+  it('false for an unrelated Error', () => {
+    expect(isSuspendedDbError(new Error('boom'))).toBe(false)
+  })
+
+  it('false for AbortError', () => {
+    expect(isSuspendedDbError(new AbortError())).toBe(false)
+  })
+
+  it('false for null, undefined, strings, numbers', () => {
+    expect(isSuspendedDbError(null)).toBe(false)
+    expect(isSuspendedDbError(undefined)).toBe(false)
+    expect(isSuspendedDbError('DatabaseSuspendedError')).toBe(false)
+    expect(isSuspendedDbError(42)).toBe(false)
   })
 })
 

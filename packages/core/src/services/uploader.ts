@@ -19,7 +19,7 @@ import {
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
-import { getErrorMessage } from '../lib/errors'
+import { getErrorMessage, isSuspendedDbError } from '../lib/errors'
 import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
@@ -297,7 +297,7 @@ export class UploadManager {
       })
 
       for (const entry of batch.files) {
-        this.app.uploads.setError(entry.fileId, message)
+        this.failEntry(entry.fileId, e, message)
       }
     } finally {
       this.uploadingBatch = null
@@ -415,6 +415,19 @@ export class UploadManager {
     return new Promise<void>((resolve) => {
       this._resumeResolve = resolve
     })
+  }
+
+  /**
+   * Real failure → setError (shown on the status pill). DB suspension →
+   * remove the entry so pollDB can re-register it on resume (getActiveIds
+   * would otherwise exclude it).
+   */
+  private failEntry(fileId: string, error: unknown, message: string): void {
+    if (isSuspendedDbError(error)) {
+      this.app.uploads.remove(fileId)
+    } else {
+      this.app.uploads.setError(fileId, message)
+    }
   }
 
   get currentBatch(): {
@@ -684,7 +697,7 @@ export class UploadManager {
         fileId: entry.fileId,
         error: e as Error,
       })
-      this.app.uploads.setError(entry.fileId, message)
+      this.failEntry(entry.fileId, e, message)
       // Keep this.packer / this.batch alive — the SDK leaves the packer
       // usable after add() errors, so subsequent entries continue in the
       // same batch instead of orphaning already-successful adds.
@@ -803,7 +816,7 @@ export class UploadManager {
           fileId: entry.fileId,
           error: e as Error,
         })
-        this.app.uploads.setError(entry.fileId, message)
+        this.failEntry(entry.fileId, e, message)
         // Abandon the rest of this window on first error; the loop below
         // attaches .catch so skipped in-flight promises don't surface as
         // unhandled rejections. Keep this.packer / this.batch alive — the
@@ -1102,7 +1115,7 @@ export class UploadManager {
               fileId: entry.fileId,
               error: e as Error,
             })
-            this.app.uploads.setError(entry.fileId, message)
+            this.failEntry(entry.fileId, e, message)
             return { type: 'error', fileId: entry.fileId }
           }
         }),

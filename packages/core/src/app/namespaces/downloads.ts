@@ -4,7 +4,7 @@ import type { StorageAdapter } from '../../adapters/storage'
 import { DEFAULT_MAX_DOWNLOADS, MAX_AUTO_DOWNLOAD_QUEUE } from '../../config'
 import * as ops from '../../db/operations'
 import type { LocalObject } from '../../encoding/localObject'
-import { getErrorMessage, isAbortError } from '../../lib/errors'
+import { getErrorMessage, isAbortError, isSuspendedDbError } from '../../lib/errors'
 import { SlotPool } from '../../lib/slotPool'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { AppCaches, AppService } from '../service'
@@ -123,6 +123,13 @@ export function buildDownloadsNamespace(
       update(fileId, { status: 'done', progress: 1 })
     } catch (e) {
       if (isAbortError(e)) return
+      if (isSuspendedDbError(e)) {
+        // Unlike abort (where cancel() pre-cleans), suspension leaves a
+        // stale 'downloading' entry — clear it so the indicator falls
+        // back, and rethrow so the caller can retry on resume.
+        remove(fileId)
+        throw e
+      }
       if (!controller.signal.aborted) {
         update(fileId, { status: 'error', error: getErrorMessage(e) })
       }
@@ -156,6 +163,11 @@ export function buildDownloadsNamespace(
       remove(id)
     } catch (e) {
       if (isAbortError(e)) return
+      if (isSuspendedDbError(e)) {
+        // See execute() above — clear the stale entry, rethrow for retry.
+        remove(id)
+        throw e
+      }
       if (!controller.signal.aborted) {
         update(id, { status: 'error', error: getErrorMessage(e) })
       }
