@@ -78,6 +78,29 @@ export function createFsIOAdapter(): FsIOAdapter {
       const hash = await RNFS.hash(targetUri, 'sha256')
       return { uri: targetUri, size: stat.size, hash }
     },
+    async renameToType(file, newType) {
+      const oldUri = fsFileUri(file.id, file.type)
+      const newUri = fsFileUri(file.id, newType)
+      if (oldUri === newUri) return { uri: oldUri }
+      if (!(await RNFS.exists(oldUri))) {
+        // oldUri missing — only treat as success if newUri exists
+        // (idempotent retry), otherwise the caller will record a DB
+        // type for which no file is on disk.
+        if (await RNFS.exists(newUri)) return { uri: newUri }
+        throw new Error(`renameToType: neither ${oldUri} nor ${newUri} exists`)
+      }
+      if (await RNFS.exists(newUri)) {
+        // Swallow ENOENT if a concurrent scanner pass dropped the
+        // destination between our exists check and unlink.
+        try {
+          await RNFS.unlink(newUri)
+        } catch {
+          // Best effort; rename below will fail loudly if newUri remains.
+        }
+      }
+      await RNFS.moveFile(oldUri, newUri)
+      return { uri: newUri }
+    },
     async list() {
       if (!(await RNFS.exists(fsStorageDirectoryUri))) return []
       const entries = await RNFS.readDir(fsStorageDirectoryUri)

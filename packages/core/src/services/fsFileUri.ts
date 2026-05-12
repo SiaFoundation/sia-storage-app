@@ -26,6 +26,15 @@ export type FsIOAdapter = FsFileUriAdapter & {
     file: { id: string; type: string },
     sourceUri: string,
   ): Promise<{ uri: string; size: number; hash: string }>
+  /**
+   * Move a file's on-disk path to match a new mime type. No-op when
+   * extensions match. **Overwrites** any existing file at the destination
+   * — callers must ensure the destination is safe to replace. The
+   * scanner's self-heal path guarantees this because the destination is
+   * derived from file ID + new type, which only collides for files being
+   * explicitly corrected.
+   */
+  renameToType(file: { id: string; type: string }, newType: string): Promise<{ uri: string }>
   list(): Promise<string[]>
   ensureDirectory(): Promise<void>
 }

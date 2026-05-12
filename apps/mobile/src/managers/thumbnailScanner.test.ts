@@ -596,6 +596,67 @@ describe('thumbnailScanner', () => {
   })
 })
 
+describe('thumbnailScanner type write-back', () => {
+  it('updates files.type when the magic-byte sniff disagrees with the declared type', async () => {
+    const now = Date.now()
+    await app().files.create({
+      id: 'file1',
+      name: 'photo.heic',
+      type: 'image/heic',
+      kind: 'file',
+      size: 1000,
+      hash: 'hash1',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
+    })
+    await upsertFs('file1')
+    jest.spyOn(app().fs, 'detectMimeType').mockResolvedValue('image/jpeg')
+    const updateSpy = jest.spyOn(app().files, 'update')
+
+    await runThumbnailScanner()
+
+    const correction = updateSpy.mock.calls.find(([arg]) => arg.id === 'file1')
+    expect(correction).toBeDefined()
+    expect(correction?.[0]).toMatchObject({ id: 'file1', type: 'image/jpeg' })
+
+    const updated = await app().files.getById('file1')
+    expect(updated?.type).toBe('image/jpeg')
+  })
+
+  it('does not rewrite when declared and detected map to the same extension', async () => {
+    // image/dng and image/x-adobe-dng both -> .dng. Both are recognized
+    // MIMEs AND image/dng is in MOBILE_THUMBNAILABLE_TYPES, so the file
+    // reaches the per-candidate loop where shouldReplaceType runs.
+    const now = Date.now()
+    await app().files.create({
+      id: 'file1',
+      name: 'photo.dng',
+      type: 'image/dng',
+      kind: 'file',
+      size: 1000,
+      hash: 'hash1',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      localId: 'local-file1',
+      trashedAt: null,
+      deletedAt: null,
+    })
+    await upsertFs('file1')
+    jest.spyOn(app().fs, 'detectMimeType').mockResolvedValue('image/x-adobe-dng')
+    const updateSpy = jest.spyOn(app().files, 'update')
+
+    await runThumbnailScanner()
+
+    const correction = updateSpy.mock.calls.find(([arg]) => arg.id === 'file1')
+    expect(correction).toBeUndefined()
+  })
+})
+
 describe('thumbnailScanner idle backoff', () => {
   beforeEach(() => {
     resetThumbnailScannerBackoff()

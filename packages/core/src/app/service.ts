@@ -452,6 +452,8 @@ export interface AppService {
       file: { id: string; type: string },
       sourceUri: string,
     ): Promise<{ uri: string; size: number; hash: string }>
+    /** Renames the on-disk path to match a new mime type. Call before persisting `type`. */
+    renameToType(file: { id: string; type: string }, newType: string): Promise<{ uri: string }>
     /** Detects the MIME type of a file at the given path. */
     detectMimeType(path: string): Promise<string | null>
     /** Lists all filenames in the managed storage directory. */
