@@ -24,6 +24,22 @@ export function isAbortError(e: unknown): boolean {
   return false
 }
 
+/** Thrown by the mobile DB adapter when the suspension gate is closed. */
+export class DatabaseSuspendedError extends Error {
+  constructor() {
+    super('Database is suspended for background transition')
+    this.name = 'DatabaseSuspendedError'
+  }
+}
+
+/**
+ * True for DatabaseSuspendedError. Name-matched (not instanceof) so it
+ * survives reconstruction across the AppService IPC boundary.
+ */
+export function isSuspendedDbError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'DatabaseSuspendedError'
+}
+
 /**
  * Best-effort human-readable message extraction from an unknown thrown value.
  * Returns Error.message for Error instances, string values as-is, and the
