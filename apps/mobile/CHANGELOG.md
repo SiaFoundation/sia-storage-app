@@ -2,6 +2,12 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.12.1 (2026-05-12)
+
+### Fixes
+
+- Fixed an issue where the splash could get stuck on "Getting things ready..." after a resync until the app was suspended and reopened.
+
 ## 1.12.0 (2026-05-08)
 
 ### Features
