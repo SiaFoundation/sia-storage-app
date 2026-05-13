@@ -1,3 +1,9 @@
+## 0.0.3 (2026-05-13)
+
+### Features
+
+- The compiled CLI binary now generates image thumbnails (Bun.Image). Sharp moves to a `./thumbnail-sharp` subpath of `@siastorage/node-adapters` for Node consumers.
+
 ## 0.0.2 (2026-05-08)
 
 ### Features
