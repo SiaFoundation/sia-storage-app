@@ -1,4 +1,6 @@
 jest.setTimeout(60_000)
+import * as fs from 'fs'
+import * as path from 'path'
 import { createE2eContext } from './helpers'
 
 let ctx: ReturnType<typeof createE2eContext>
@@ -74,5 +76,40 @@ describe('file operations', () => {
 
     const r = await ctx.sia('ls')
     expect(r.stdout).not.toContain('orphan.txt')
+  })
+
+  it('download writes the file to --output', async () => {
+    const content = 'hello from the download e2e test'
+    const file = ctx.createTempFile('greeting.txt', content)
+    await ctx.sia('add', file)
+
+    const outputPath = path.join(ctx.dataDir, 'out', 'greeting.txt')
+    const r = await ctx.sia('download', 'greeting.txt', '--output', outputPath)
+
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toContain('Downloaded')
+    expect(r.stdout).toContain('greeting.txt')
+    expect(fs.existsSync(outputPath)).toBe(true)
+    expect(fs.readFileSync(outputPath, 'utf-8')).toBe(content)
+  })
+
+  it('download by dir/filename writes the file', async () => {
+    const content = Buffer.from('binary\x00payload\x01here', 'utf-8')
+    const file = ctx.createTempFile('photo.bin', content)
+    await ctx.sia('mkdir', 'media')
+    await ctx.sia('add', file, '--dir', 'media')
+
+    const outputPath = path.join(ctx.dataDir, 'recovered.bin')
+    const r = await ctx.sia('download', 'media/photo.bin', '--output', outputPath)
+
+    expect(r.exitCode).toBe(0)
+    expect(fs.existsSync(outputPath)).toBe(true)
+    expect(fs.readFileSync(outputPath).equals(content)).toBe(true)
+  })
+
+  it('download fails clearly when the file does not exist', async () => {
+    const r = await ctx.sia('download', 'does-not-exist.txt', '--output', '/tmp/nope')
+    expect(r.exitCode).not.toBe(0)
+    expect(r.stderr).toContain('File not found')
   })
 })

@@ -1,6 +1,7 @@
 import { registerAppServiceIpc } from '@siastorage/core/app'
 import { startIpcServer } from '@siastorage/node-adapters'
 import type { CliApp } from '../../app'
+import { registerDownloadHandlers } from './download'
 import { registerStatusHandlers } from './status'
 import { registerUploadHandlers } from './upload'
 
@@ -24,6 +25,7 @@ export function startIpcDispatcher(
 
   registerStatusHandlers(handlers, app, onShutdown)
   registerUploadHandlers(handlers, app)
+  registerDownloadHandlers(handlers, app)
 
   registerAppServiceIpc(
     {
