@@ -5,8 +5,8 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Build only — skip release upload (for verifying CI changes)'
+      upload_to_latest_release:
+        description: 'Attach the built binaries to the latest cli/ release (semver). Off = build only, artifacts stay on the run.'
         required: false
         type: boolean
         default: false
@@ -68,9 +68,11 @@ jobs:
           retention-days: 7
 
   upload:
-    # Only attach to the GitHub release on real release events (not dispatch),
-    # and skip when the operator is dry-running CI changes.
-    if: ${{ github.event_name == 'release' && !inputs.dry_run }}
+    # Attach binaries on real release events, or on manual dispatch when the
+    # operator opts in. Lets us re-attach assets to the latest release after a
+    # failed/edited build without cutting a new tag (the original workflow run
+    # can't be re-run once its artifacts expire).
+    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_latest_release) }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -82,10 +84,36 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Resolve target release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            TAG="$EVENT_TAG"
+          else
+            # Highest semver among cli/v* releases. `gh release list --latest`
+            # would pick the newest release of any kind (including mobile/).
+            TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+              --json tagName \
+              --jq '.[] | .tagName | select(startswith("cli/v"))' \
+              | sort -V | tail -n1)
+            if [ -z "$TAG" ]; then
+              echo "No cli/v* release found to upload to."
+              exit 1
+            fi
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null \
+            || { echo "Release $TAG not found."; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $TAG"
+
       - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ steps.tag.outputs.tag }}
         # --clobber lets re-runs replace assets cleanly if the workflow
         # is restarted after a partial upload. --repo is required because
         # this job has no checkout, so gh can't infer the repo from git.
