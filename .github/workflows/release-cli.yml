@@ -87,5 +87,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         # --clobber lets re-runs replace assets cleanly if the workflow
-        # is restarted after a partial upload.
-        run: gh release upload "$TAG" dist/sia-storage-* --clobber
+        # is restarted after a partial upload. --repo is required because
+        # this job has no checkout, so gh can't infer the repo from git.
+        run: gh release upload "$TAG" dist/sia-storage-* --clobber --repo "$GITHUB_REPOSITORY"
