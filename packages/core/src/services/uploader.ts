@@ -1122,10 +1122,13 @@ export class UploadManager {
       ),
     )
 
-    // Phase 2: Batch DB write
+    // Phase 2: Batch DB write. Re-gate: Phase 1's pin pool yields
+    // across pinObject awaits, so the entry gate can be stale before
+    // we reach these writes. Same for the updatedAt bump below.
     const localObjects = results
       .filter((r): r is Extract<PinResult, { type: 'success' }> => r.type === 'success')
       .map((r) => r.localObject)
+    await this.app.db.waitUntilActive()
     await this.app.localObjects.upsertMany(localObjects, {
       skipInvalidation: true,
     })
@@ -1144,6 +1147,9 @@ export class UploadManager {
       .filter((r) => r.type !== 'error' && r.type !== 'missing')
       .map((r) => r.fileId)
     if (successfulFileIds.length > 0) {
+      // Re-gate (see upsert above): the bump and the upsert must
+      // commit on the same side of the suspend gate.
+      await this.app.db.waitUntilActive()
       const now = Date.now()
       await this.app.files.updateMany(
         successfulFileIds.map((id) => ({ id, updatedAt: now })),
