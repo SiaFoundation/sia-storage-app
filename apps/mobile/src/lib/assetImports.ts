@@ -27,7 +27,11 @@ import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import RNFS from 'react-native-fs'
-import { triggerImportScanner } from '../managers/importScanner'
+import {
+  markImportCopyComplete,
+  markImportCopyStarted,
+  triggerImportScanner,
+} from '../managers/importScanner'
 import { generateThumbnails } from '../managers/thumbnailer'
 import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
@@ -486,46 +490,61 @@ export async function importAssets(
   )
 
   const insertedIds = candidates.map((c) => c.placeholder.id)
+  // Register synchronously, before the next await. The scanner runs on
+  // its own 3s tick and would otherwise see these placeholders with no
+  // fs row and no localId during the tag/optimize/getByIds awaits below
+  // and mark them lost. copyAssets clears each ID in its per-file finally.
+  for (const id of insertedIds) markImportCopyStarted(id)
 
-  if (assignTagName && insertedIds.length > 0) {
-    await app().tags.addToFiles(insertedIds, assignTagName)
+  let copyDispatched = false
+  try {
+    if (assignTagName && insertedIds.length > 0) {
+      await app().tags.addToFiles(insertedIds, assignTagName)
+    }
+
+    await app().optimize()
+
+    // Preserve candidate order in the returned array.
+    let files: FileRecord[] = []
+    if (insertedIds.length > 0) {
+      const fetched = await app().files.getByIds(insertedIds)
+      const byId = new Map(fetched.map((f) => [f.id, f]))
+      files = insertedIds.map((id) => byId.get(id)).filter((f): f is FileRecord => !!f)
+    }
+
+    // Each copy dispatches to a native RNFS thread that holds the source
+    // URI open once it starts reading, so ephemeral picker/share URIs are
+    // captured before the caller can do anything else. The native thread
+    // freezes with the process on iOS suspension and thaws on resume. If
+    // iOS terminates rather than suspends, the import is lost — the
+    // import-progress modal warns the user not to close the app.
+    const copyPromise = copyAssets(
+      candidates.map((c) => ({
+        id: c.placeholder.id,
+        type: c.placeholder.type,
+        size: c.placeholder.size,
+        sourceUri: c.sourceUri,
+      })),
+      onCopyProgress,
+    )
+    copyDispatched = true
+
+    triggerImportScanner()
+    const totalBytes = candidates.reduce((s, c) => s + c.placeholder.size, 0)
+    return { files, newVersionCount, totalBytes, copyPromise }
+  } finally {
+    if (!copyDispatched) {
+      for (const id of insertedIds) markImportCopyComplete(id)
+    }
   }
-
-  await app().optimize()
-
-  // Preserve candidate order in the returned array.
-  let files: FileRecord[] = []
-  if (insertedIds.length > 0) {
-    const fetched = await app().files.getByIds(insertedIds)
-    const byId = new Map(fetched.map((f) => [f.id, f]))
-    files = insertedIds.map((id) => byId.get(id)).filter((f): f is FileRecord => !!f)
-  }
-
-  // Each copy dispatches to a native RNFS thread that holds the source
-  // URI open once it starts reading, so ephemeral picker/share URIs are
-  // captured before the caller can do anything else. The native thread
-  // freezes with the process on iOS suspension and thaws on resume. If
-  // iOS terminates rather than suspends, the import is lost — the
-  // import-progress modal warns the user not to close the app.
-  const copyPromise = copyAssets(
-    candidates.map((c) => ({
-      id: c.placeholder.id,
-      type: c.placeholder.type,
-      size: c.placeholder.size,
-      sourceUri: c.sourceUri,
-    })),
-    onCopyProgress,
-  )
-
-  triggerImportScanner()
-  const totalBytes = candidates.reduce((s, c) => s + c.placeholder.size, 0)
-  return { files, newVersionCount, totalBytes, copyPromise }
 }
 
 async function copyAssets(
   copies: { id: string; type: string; size: number; sourceUri: string }[],
   onProgress?: (bytes: number) => void,
 ): Promise<{ copied: number; failed: number }> {
+  // IDs are already registered by importAssets right after createMany;
+  // we only clear them here as each copy resolves.
   let copied = 0
   let failed = 0
   for (const { id, type, size, sourceUri } of copies) {
@@ -539,6 +558,8 @@ async function copyAssets(
         fileId: id,
         error: e as Error,
       })
+    } finally {
+      markImportCopyComplete(id)
     }
   }
   triggerImportScanner()

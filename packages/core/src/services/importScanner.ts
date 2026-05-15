@@ -34,6 +34,11 @@ export type GetMimeType = (opts: { name?: string; uri?: string }) => Promise<str
 export class ImportScanner {
   private app: AppService | null = null
   private processingFiles = new Set<string>()
+  // IDs whose bytes are mid-copy by importAssets's copyAssets. Phase 2's
+  // orphan branch would otherwise mark these lost while the copy is still
+  // streaming. The set is empty on restart, so a placeholder whose copy
+  // never resumed is correctly surfaced as lost on the next tick.
+  private inFlightCopies = new Set<string>()
   private backoff = new BackoffTracker()
   private _calculateContentHash: CalculateContentHash | null = null
   private _getMimeType: GetMimeType | null = null
@@ -53,6 +58,7 @@ export class ImportScanner {
     this._calculateContentHash = null
     this._getMimeType = null
     this.processingFiles.clear()
+    this.inFlightCopies.clear()
     this.backoff.reset()
   }
 
@@ -62,6 +68,14 @@ export class ImportScanner {
 
   isFileBeingProcessed(fileId: string): boolean {
     return this.processingFiles.has(fileId)
+  }
+
+  markCopyStarted(fileId: string): void {
+    this.inFlightCopies.add(fileId)
+  }
+
+  markCopyComplete(fileId: string): void {
+    this.inFlightCopies.delete(fileId)
   }
 
   /** Returns all backoff entries for UI display. */
@@ -102,7 +116,9 @@ export class ImportScanner {
    * on subsequent ticks until their backoff expires (5m → 15m → 60m cap).
    *
    * Files that cannot be recovered (deleted from device, no local file
-   * and no localId) are marked with lostReason for the UI.
+   * and no localId) are marked with lostReason for the UI. Placeholders
+   * registered in inFlightCopies are skipped — picker imports are still
+   * streaming their bytes there.
    */
   async runScan(
     signal?: AbortSignal,
@@ -303,6 +319,14 @@ export class ImportScanner {
                 fileId: file.id,
               })
               this.backoff.recordSkip(file.id, 'No resolver available')
+              result.skipped++
+              continue
+            }
+
+            if (this.inFlightCopies.has(file.id)) {
+              logger.debug('importScanner', 'orphan_inflight', {
+                fileId: file.id,
+              })
               result.skipped++
               continue
             }

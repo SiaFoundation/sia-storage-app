@@ -80,3 +80,11 @@ export function retryAllImportFiles(): void {
   scanner.clearAllBackoff()
   triggerImportScanner()
 }
+
+export function markImportCopyStarted(fileId: string): void {
+  scanner.markCopyStarted(fileId)
+}
+
+export function markImportCopyComplete(fileId: string): void {
+  scanner.markCopyComplete(fileId)
+}
