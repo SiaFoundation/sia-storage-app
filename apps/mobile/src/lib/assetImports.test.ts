@@ -1,4 +1,5 @@
 import { db, initializeDB, resetDb } from '../db'
+import { markImportCopyComplete, markImportCopyStarted } from '../managers/importScanner'
 import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
 import { calculateContentHash } from './contentHash'
@@ -17,6 +18,8 @@ jest.mock('../managers/thumbnailer', () => ({
 }))
 jest.mock('../managers/importScanner', () => ({
   triggerImportScanner: jest.fn(),
+  markImportCopyStarted: jest.fn(),
+  markImportCopyComplete: jest.fn(),
 }))
 jest.mock('./fileTypes', () => {
   const actual = jest.requireActual('./fileTypes')
@@ -557,6 +560,121 @@ describe('importAssets — picker / camera / share intent', () => {
       const result = await copyPromise
       expect(result).toEqual({ copied: 2, failed: 1 })
       expect(events).toEqual([1, 3])
+    })
+
+    it('registers every placeholder before any await after createMany', async () => {
+      // Regression: the scanner runs on a 3s autotick and can fire while
+      // importAssets is still awaiting tag assignment, optimize, or
+      // getByIds. If marks are placed only inside copyAssets, the scanner
+      // sees the placeholders with no fs row and no localId during that
+      // window and writes lostReason permanently. Registration must happen
+      // synchronously after createMany resolves.
+      const optimizeSpy = jest.spyOn(app(), 'optimize')
+
+      const assets = [
+        {
+          id: undefined,
+          name: 'a.txt',
+          size: 1,
+          sourceUri: 'file:///tmp/a.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'b.txt',
+          size: 2,
+          sourceUri: 'file:///tmp/b.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      const { files, copyPromise } = await importAssets(assets)
+      await copyPromise
+
+      const startedIds = jest.mocked(markImportCopyStarted).mock.calls.map((c) => c[0])
+      expect(startedIds).toEqual(files.map((f) => f.id))
+
+      // Every mark must precede optimize (the first await after createMany).
+      const optimizeOrder = optimizeSpy.mock.invocationCallOrder[0]
+      for (const markOrder of jest.mocked(markImportCopyStarted).mock.invocationCallOrder) {
+        expect(markOrder).toBeLessThan(optimizeOrder)
+      }
+    })
+
+    it('releases marks when setup fails between createMany and copyAssets', async () => {
+      // If anything between the mark and the copy dispatch throws,
+      // copyAssets never runs and its per-file finally cannot release
+      // the marks. importAssets must release them itself so future
+      // scanner ticks can clean up the now-orphaned placeholders.
+      jest.spyOn(app(), 'optimize').mockRejectedValueOnce(new Error('boom'))
+
+      const assets = [
+        {
+          id: undefined,
+          name: 'a.txt',
+          size: 1,
+          sourceUri: 'file:///tmp/a.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      await expect(importAssets(assets)).rejects.toThrow('boom')
+
+      const startedIds = jest
+        .mocked(markImportCopyStarted)
+        .mock.calls.map((c) => c[0])
+        .sort()
+      const completedIds = jest
+        .mocked(markImportCopyComplete)
+        .mock.calls.map((c) => c[0])
+        .sort()
+      expect(startedIds.length).toBe(1)
+      expect(completedIds).toEqual(startedIds)
+    })
+
+    it('clears each registration as its copy resolves (success and failure both unregister)', async () => {
+      jest
+        .mocked(copyFileToFs)
+        .mockResolvedValueOnce('/local/ok')
+        .mockRejectedValueOnce(new Error('disk full'))
+
+      const assets = [
+        {
+          id: undefined,
+          name: 'ok.txt',
+          size: 1,
+          sourceUri: 'file:///tmp/ok.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+        {
+          id: undefined,
+          name: 'bad.txt',
+          size: 2,
+          sourceUri: 'file:///tmp/bad.txt',
+          type: 'text/plain',
+          timestamp: '2024-06-01',
+        },
+      ]
+
+      const { files, copyPromise } = await importAssets(assets)
+      await copyPromise
+
+      const startedIds = jest
+        .mocked(markImportCopyStarted)
+        .mock.calls.map((c) => c[0])
+        .sort()
+      const completedIds = jest
+        .mocked(markImportCopyComplete)
+        .mock.calls.map((c) => c[0])
+        .sort()
+      const expectedIds = files.map((f) => f.id).sort()
+
+      expect(startedIds).toEqual(expectedIds)
+      expect(completedIds).toEqual(expectedIds)
     })
 
     it('reports totalBytes as the sum of placeholder sizes', async () => {

@@ -325,8 +325,31 @@ describe('ImportScanner', () => {
       expect(mock.app.files.updateMany).not.toHaveBeenCalled()
     })
 
-    it('marks orphan file (no local file, no localId) as lost', async () => {
+    it('does not mark orphan files as lost while their copy is in flight (picker import race)', async () => {
+      // Regression: Phase 2 used to mark every freshly-inserted picker
+      // placeholder lost because it saw "no local file + no localId". The
+      // partial DB update path never clears lostReason, so the file was
+      // permanently stuck behind a red "File unavailable" icon even after
+      // the copy completed. copyAssets now registers each ID before its
+      // first await, and Phase 2 skips in-flight IDs.
+      mock.addFile('inflight-picker')
+      scanner.markCopyStarted('inflight-picker')
+
+      const result = await scanner.runScan()
+
+      expect(result.lost).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(mock.app.files.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('marks orphan file as lost once its in-flight copy clears (genuine orphan)', async () => {
+      // After copyAssets finishes (success or failure) it calls
+      // markCopyComplete. If the placeholder still has no local copy and
+      // no localId at that point, no recovery path remains and the file
+      // is surfaced to the UI on a subsequent scanner tick.
       mock.addFile('f7')
+      scanner.markCopyStarted('f7')
+      scanner.markCopyComplete('f7')
 
       const result = await scanner.runScan()
 
@@ -334,6 +357,23 @@ describe('ImportScanner', () => {
       expect(mock.app.files.updateMany).toHaveBeenCalledWith([
         expect.objectContaining({
           id: 'f7',
+          lostReason: 'No local file or source available',
+        }),
+      ])
+    })
+
+    it('marks orphan file as lost when never registered (app-killed-mid-import)', async () => {
+      // If the app crashed before copyAssets could mark the ID, the
+      // in-flight set is empty on next launch. The scanner cleans up the
+      // unrecoverable placeholder so the user sees the failure.
+      mock.addFile('f-crashed')
+
+      const result = await scanner.runScan()
+
+      expect(result.lost).toBe(1)
+      expect(mock.app.files.updateMany).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'f-crashed',
           lostReason: 'No local file or source available',
         }),
       ])
