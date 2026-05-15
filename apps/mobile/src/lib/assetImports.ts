@@ -32,6 +32,7 @@ import {
   markImportCopyStarted,
   triggerImportScanner,
 } from '../managers/importScanner'
+import { triggerOsThumbCapture } from '../managers/osThumbCapture'
 import { generateThumbnails } from '../managers/thumbnailer'
 import { app } from '../stores/appService'
 import { copyFileToFs } from '../stores/fs'
@@ -375,6 +376,7 @@ export async function catalogAssets(
   await app().optimize()
 
   triggerImportScanner()
+  triggerOsThumbCapture()
 
   return { newCount, existingCount }
 }

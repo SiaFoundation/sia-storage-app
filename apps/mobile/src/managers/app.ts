@@ -20,6 +20,7 @@ import { runFsEvictionScanner } from './fsEvictionScanner'
 import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
+import { initOsThumbCapture } from './osThumbCapture'
 import { initPerfMonitor } from './perfMonitor'
 import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
@@ -128,6 +129,7 @@ export async function initApp(): Promise<void> {
         initDbOptimize()
         await activateSyncGate(app())
         initImportScanner()
+        initOsThumbCapture()
         initSyncDownEvents()
         triggerSyncDownEvents()
         initSyncNewPhotos()

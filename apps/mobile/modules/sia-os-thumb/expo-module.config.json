@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["SiaOsThumbModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.siaosthumb.SiaOsThumbModule"]
+  }
+}

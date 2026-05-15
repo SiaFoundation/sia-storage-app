@@ -133,6 +133,7 @@
         "react-native-svg": "15.15.3",
         "react-native-webview": "13.16.0",
         "react-native-worklets": "0.7.2",
+        "sia-os-thumb": "file:./modules/sia-os-thumb",
         "swr": "2.4.1",
         "zod": "4.3.6",
       },
@@ -2369,6 +2370,8 @@
     "@react-native/community-cli-plugin/metro-core": ["metro-core@0.83.5", "", { "dependencies": { "flow-enums-runtime": "^0.0.6", "lodash.throttle": "^4.1.1", "metro-resolver": "0.83.5" } }, "sha512-YcVcLCrf0ed4mdLa82Qob0VxYqfhmlRxUS8+TO4gosZo/gLwSvtdeOjc/Vt0pe/lvMNrBap9LlmvZM8FIsMgJQ=="],
 
     "@siastorage/mobile/background-time-remaining": ["background-time-remaining@file:apps/mobile/modules/background-time-remaining", {}],
+
+    "@siastorage/mobile/sia-os-thumb": ["sia-os-thumb@file:apps/mobile/modules/sia-os-thumb", {}],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.9.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" }, "bundled": true }, "sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA=="],
 

@@ -498,18 +498,20 @@ export function buildDbNamespaces(
         ops.queryThumbnailExistsForFileIdAndSize(db, fileId, size),
       queryCandidatePage: (pageSize, cursor, allowedTypes) =>
         ops.queryThumbnailCandidatePage(db, pageSize, cursor, allowedTypes),
+      queryMissingOsThumbCandidates: (limit, allowedTypes, excludeIds) =>
+        ops.queryMissingOsThumbCandidates(db, limit, allowedTypes, excludeIds),
       queryProgress: (allowedTypes) => ops.queryThumbnailScanProgress(db, allowedTypes),
-      generate: (sourcePath, targetSize) => {
+      generate: (sourcePath, targetSize, opts) => {
         if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
-        return adapters.thumbnail.generateImageThumbnail(sourcePath, targetSize)
+        return adapters.thumbnail.generateImageThumbnail(sourcePath, targetSize, opts)
       },
-      generateBatch: (sourcePath, sizes) => {
+      generateBatch: (sourcePath, sizes, opts) => {
         if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
-        return adapters.thumbnail.generateImageThumbnails(sourcePath, sizes)
+        return adapters.thumbnail.generateImageThumbnails(sourcePath, sizes, opts)
       },
-      generateVideo: (sourcePath, targetSize) => {
+      generateVideo: (sourcePath, targetSize, opts) => {
         if (!adapters?.thumbnail) throw new Error('Thumbnail adapter not configured')
-        return adapters.thumbnail.generateVideoThumbnail(sourcePath, targetSize)
+        return adapters.thumbnail.generateVideoThumbnail(sourcePath, targetSize, opts)
       },
     },
     localObjects: {

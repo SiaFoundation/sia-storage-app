@@ -58,6 +58,19 @@ export const IMPORT_SCANNER_INTERVAL = secondsInMs(3) // 3 seconds
 export const IMPORT_SCANNER_BACKLOG_LIMIT = 50
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
+// OS thumbnail capture scanner interval. Runs ahead of the body-copy
+// backpressure so archive-walk placeholders pick up their PHImageManager /
+// ContentResolver.loadThumbnail tiles immediately after cataloging.
+export const OS_THUMB_CAPTURE_INTERVAL = secondsInMs(1) // 1 second
+// Files processed per OS-thumb capture tick. The work is OS-IPC bound, not
+// CPU-bound, so the batch can be much wider than the import scanner's
+// body-copy throughput.
+export const OS_THUMB_CAPTURE_BATCH = 200
+// Concurrent (file × size) native calls in flight. Each call waits on
+// photolibraryd / MediaProvider IPC; in-process cost is a small JPEG encode
+// + disk write on a native background queue. Keeps the JS thread idle and
+// SQLite writer comfortable.
+export const OS_THUMB_CAPTURE_CONCURRENCY = 20
 // Maximum number of bytes to retain in the local file system before evicting.
 export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.

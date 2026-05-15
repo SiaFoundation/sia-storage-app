@@ -174,6 +174,7 @@ export {
 } from './tags'
 export {
   queryBestThumbnailByFileId,
+  queryMissingOsThumbCandidates,
   queryThumbnailCandidatePage,
   queryThumbnailExistsForFileIdAndSize,
   queryThumbnailFileInfoByFileIds,
@@ -182,6 +183,7 @@ export {
   queryThumbnailSizesForFileId,
   queryThumbnailSizesForFileIds,
   queryThumbnailsByFileId,
+  type OsThumbCandidateRow,
   type ThumbnailCandidateRow,
 } from './thumbnails'
 export {

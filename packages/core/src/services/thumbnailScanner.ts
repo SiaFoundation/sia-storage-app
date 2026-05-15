@@ -323,9 +323,13 @@ export class ThumbnailScanner {
     let result: ThumbnailResult
     try {
       if (actualType?.startsWith('video/')) {
-        result = await app.thumbnails.generateVideo(sourceUri, size)
+        result = await app.thumbnails.generateVideo(sourceUri, size, {
+          localId: params.fileLocalId,
+        })
       } else {
-        result = await app.thumbnails.generate(sourceUri, size)
+        result = await app.thumbnails.generate(sourceUri, size, {
+          localId: params.fileLocalId,
+        })
       }
     } catch (e) {
       logger.error('thumbnailer', 'source_prepare_error', {
@@ -417,7 +421,9 @@ export class ThumbnailScanner {
 
     let thumbnails: Map<number, ThumbnailResult>
     try {
-      thumbnails = await app.thumbnails.generateBatch(sourceUri, sizes)
+      thumbnails = await app.thumbnails.generateBatch(sourceUri, sizes, {
+        localId: params.fileLocalId,
+      })
     } catch (e) {
       logger.error('thumbnailer', 'batch_generate_error', {
         fileId,

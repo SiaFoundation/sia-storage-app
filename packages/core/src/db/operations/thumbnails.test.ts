@@ -3,6 +3,7 @@ import { upsertFsMeta } from './fs'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 import {
   queryBestThumbnailByFileId,
+  queryMissingOsThumbCandidates,
   queryThumbnailCandidatePage,
   queryThumbnailExistsForFileIdAndSize,
   queryThumbnailFileInfoByFileIds,
@@ -199,6 +200,51 @@ describe('queryThumbnailCandidatePage allowlist', () => {
     await createThumbnail('thumb64', 'jpeg', 64)
     await createThumbnail('thumb512', 'jpeg', 512)
     const rows = await queryThumbnailCandidatePage(db(), 10, undefined, DEFAULT_ALLOWED)
+    expect(rows).toEqual([])
+  })
+})
+
+describe('queryMissingOsThumbCandidates', () => {
+  it('returns files missing one or more ThumbSizes', async () => {
+    await createTestFile('partial')
+    await createThumbnail('partial-64', 'partial', 64)
+    await createTestFile('none')
+    await createTestFile('complete')
+    await createThumbnail('complete-64', 'complete', 64)
+    await createThumbnail('complete-512', 'complete', 512)
+
+    const rows = await queryMissingOsThumbCandidates(db(), 10, DEFAULT_ALLOWED)
+    expect(rows.map((r) => r.id).sort()).toEqual(['none', 'partial'])
+  })
+
+  it('skips files without a localId', async () => {
+    await createTestFile('hasLocal')
+    await createTestFile('noLocal', { localId: null })
+
+    const rows = await queryMissingOsThumbCandidates(db(), 10, DEFAULT_ALLOWED)
+    expect(rows.map((r) => r.id)).toEqual(['hasLocal'])
+  })
+
+  it('honours the type allowlist', async () => {
+    await createTestFile('jpeg', { type: 'image/jpeg' })
+    await createTestFile('mp4', { type: 'video/mp4' })
+    await createTestFile('raw', { type: 'image/x-canon-cr3' })
+
+    const rows = await queryMissingOsThumbCandidates(db(), 10, ['image/jpeg'])
+    expect(rows.map((r) => r.id)).toEqual(['jpeg'])
+  })
+
+  it('respects excludeIds', async () => {
+    await createTestFile('keep')
+    await createTestFile('skip')
+
+    const rows = await queryMissingOsThumbCandidates(db(), 10, DEFAULT_ALLOWED, ['skip'])
+    expect(rows.map((r) => r.id)).toEqual(['keep'])
+  })
+
+  it('returns empty when allowedTypes is empty', async () => {
+    await createTestFile('jpeg')
+    const rows = await queryMissingOsThumbCandidates(db(), 10, [])
     expect(rows).toEqual([])
   })
 })

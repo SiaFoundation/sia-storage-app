@@ -160,6 +160,53 @@ export async function queryThumbnailCandidatePage(
   )
 }
 
+export type OsThumbCandidateRow = {
+  id: string
+  type: string
+  localId: string
+  createdAt: number
+}
+
+/**
+ * Files with a `localId` that are still missing one or more `ThumbSizes`
+ * thumbnails, including archive-walk placeholders (hash=''). Drives the
+ * OS-thumb capture scanner, which can produce thumbnails ahead of the
+ * import-scanner body copy.
+ */
+export async function queryMissingOsThumbCandidates(
+  db: DatabaseAdapter,
+  limit: number,
+  allowedTypes: readonly string[],
+  excludeIds?: readonly string[],
+): Promise<OsThumbCandidateRow[]> {
+  if (allowedTypes.length === 0) return []
+  const typePlaceholders = allowedTypes.map(() => '?').join(',')
+  const params: (string | number)[] = [...allowedTypes]
+  let excludeClause = ''
+  if (excludeIds && excludeIds.length > 0) {
+    const excludePlaceholders = excludeIds.map(() => '?').join(',')
+    excludeClause = `AND f.id NOT IN (${excludePlaceholders})`
+    params.push(...excludeIds)
+  }
+  params.push(limit)
+  return db.getAllAsync<OsThumbCandidateRow>(
+    `SELECT f.id, f.type, f.localId, f.createdAt
+     FROM files f
+     LEFT JOIN files t
+       ON t.thumbForId = f.id
+      AND t.thumbSize IN (${ThumbSizes.join(',')})
+     WHERE f.localId IS NOT NULL
+       AND f.type IN (${typePlaceholders})
+       AND ${buildRecordFilter('f')}
+       ${excludeClause}
+     GROUP BY f.id
+     HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}
+     ORDER BY f.createdAt DESC, f.id DESC
+     LIMIT ?`,
+    ...params,
+  )
+}
+
 export async function queryThumbnailScanProgress(
   db: DatabaseAdapter,
   allowedTypes: readonly string[],

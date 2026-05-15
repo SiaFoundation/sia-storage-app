@@ -4,6 +4,7 @@ import type { ThumbSize } from '@siastorage/core/types'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { Image } from 'react-native'
+import { getOsThumbnail } from 'sia-os-thumb'
 
 function getImageSize(uri: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -107,23 +108,52 @@ const MOBILE_THUMBNAILABLE_TYPES: readonly string[] = [
   ...MOBILE_THUMBNAILABLE_VIDEO_TYPES,
 ]
 
+async function tryOsThumb(
+  localId: string | null | undefined,
+  size: number,
+): Promise<ThumbnailResult | null> {
+  if (!localId) return null
+  const r = await getOsThumbnail(localId, size)
+  if (!r) return null
+  return { savedUri: r.uri, mimeType: r.mimeType }
+}
+
 export function createMobileThumbnailAdapter(): ThumbnailAdapter {
   return {
     thumbnailableTypes: MOBILE_THUMBNAILABLE_TYPES,
-    async generateImageThumbnail(sourcePath: string, targetSize: number): Promise<ThumbnailResult> {
+    async generateImageThumbnail(
+      sourcePath: string,
+      targetSize: number,
+      opts?: { localId?: string | null },
+    ): Promise<ThumbnailResult> {
+      const os = await tryOsThumb(opts?.localId, targetSize)
+      if (os) return os
       return resizeToWebP(sourcePath, targetSize as ThumbSize)
     },
 
     async generateImageThumbnails(
       sourcePath: string,
       sizes: number[],
+      opts?: { localId?: string | null },
     ): Promise<Map<number, ThumbnailResult>> {
       const sorted = [...sizes].sort((a, b) => b - a)
       const results = new Map<number, ThumbnailResult>()
 
+      // First try every size via the OS path in parallel. Anything that
+      // returns null falls through to the resize cascade below.
+      const osResults = await Promise.all(
+        sorted.map((size) => tryOsThumb(opts?.localId, size).then((r) => ({ size, r }))),
+      )
+      const missing: number[] = []
+      for (const { size, r } of osResults) {
+        if (r) results.set(size, r)
+        else missing.push(size)
+      }
+      if (missing.length === 0) return results
+
       let inputUri = sourcePath
       let skipDetection = false
-      for (const size of sorted) {
+      for (const size of missing) {
         const result = await resizeToWebP(inputUri, size, skipDetection)
         results.set(size, result)
         // Subsequent smaller sizes resize from the larger result.

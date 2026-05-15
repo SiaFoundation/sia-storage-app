@@ -1,0 +1,30 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'expo.modules.siaosthumb'
+version = '0.0.0'
+
+android {
+  namespace 'expo.modules.siaosthumb'
+
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdk rootProject.ext.minSdkVersion
+    targetSdk rootProject.ext.targetSdkVersion
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:${rootProject.ext.kotlinVersion}"
+}

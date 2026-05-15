@@ -362,14 +362,45 @@ export interface AppService {
         createdAt: number
       }[]
     >
+    /**
+     * Returns files with a localId still missing one or more `ThumbSizes`
+     * thumbnails. Drives the OS-thumb capture scanner — includes archive-walk
+     * placeholders (hash='') so thumbnails can be produced ahead of the
+     * import scanner's body-copy backpressure. `excludeIds` lets callers
+     * skip files currently in backoff.
+     */
+    queryMissingOsThumbCandidates(
+      limit: number,
+      allowedTypes: readonly string[],
+      excludeIds?: readonly string[],
+    ): Promise<
+      {
+        id: string
+        type: string
+        localId: string
+        createdAt: number
+      }[]
+    >
     /** Returns overall thumbnail scan progress (count of originals and thumbs). */
     queryProgress(allowedTypes: readonly string[]): Promise<{ originals: number; thumbs: number }>
     /** Generates a single image thumbnail at the given size. */
-    generate(sourcePath: string, targetSize: number): Promise<ThumbnailResult>
+    generate(
+      sourcePath: string,
+      targetSize: number,
+      opts?: { localId?: string | null },
+    ): Promise<ThumbnailResult>
     /** Generates image thumbnails at multiple sizes in one pass. */
-    generateBatch(sourcePath: string, sizes: number[]): Promise<Map<number, ThumbnailResult>>
+    generateBatch(
+      sourcePath: string,
+      sizes: number[],
+      opts?: { localId?: string | null },
+    ): Promise<Map<number, ThumbnailResult>>
     /** Generates a video thumbnail at the given size. */
-    generateVideo(sourcePath: string, targetSize: number): Promise<ThumbnailResult>
+    generateVideo(
+      sourcePath: string,
+      targetSize: number,
+      opts?: { localId?: string | null },
+    ): Promise<ThumbnailResult>
   }
   /** Local object (remote reference) CRUD for file-to-indexer mappings. */
   localObjects: {
