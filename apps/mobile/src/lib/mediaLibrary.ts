@@ -78,12 +78,21 @@ export async function getMediaLibraryUri(localId: string | null): Promise<Resolv
 /**
  * Resolve a media library local ID to a URI a player can render.
  *
- * Prefers asset.localUri (file://) when available, falls back to asset.uri
- * (ph:// on iOS, file:// on Android). The ph:// fallback is what unblocks
- * slow-mo / HEVC / iCloud videos on iOS where AVAssetExportSession can't
- * produce a localUri, and any video on Android where expo-media-library's
+ * Two-step: first request with shouldDownloadFromNetwork to materialize
+ * a real file:// localUri (pulls iCloud-only assets on demand). If that
+ * throws or returns no localUri, retry without download and fall back to
+ * asset.uri (ph:// on iOS, file:// on Android).
+ *
+ * The eager step is what restores iOS image preview during import for
+ * iCloud-only photos. RN's stock <Image> (which ImageZoom wraps as
+ * Animated.Image) has no ph:// URL loader registered, so it needs a
+ * real file:// — libraries like expo-image / react-native-fast-image
+ * ship a PHAsset loader and would accept ph:// directly, but we don't
+ * use them today. The ph:// fallback below is what still unblocks
+ * slow-mo / HEVC / iCloud videos on iOS where AVAssetExportSession
+ * throws, and any video on Android where expo-media-library's
  * ExifInterface path is image-only. Video players resolve ph:// directly
- * via PHImageManager — no file on disk required.
+ * via PHImageManager.
  *
  * Display only. ph:// has no readable bytes, so do not use this for
  * hashing, copying, sharing, or upload — getMediaLibraryUri (above) is
@@ -93,9 +102,20 @@ export async function getMediaLibraryDisplayUri(
   localId: string | null,
 ): Promise<ResolveLocalIdResult> {
   if (!localId) return deleted
-  const asset = await MediaLibrary.getAssetInfoAsync(localId, {
-    shouldDownloadFromNetwork: false,
-  }).catch(() => null)
+  try {
+    return resolveAssetDisplay(
+      await MediaLibrary.getAssetInfoAsync(localId, { shouldDownloadFromNetwork: true }),
+    )
+  } catch {
+    return resolveAssetDisplay(
+      await MediaLibrary.getAssetInfoAsync(localId, {
+        shouldDownloadFromNetwork: false,
+      }).catch(() => null),
+    )
+  }
+}
+
+function resolveAssetDisplay(asset: MediaLibrary.AssetInfo | null): ResolveLocalIdResult {
   if (!asset) return deleted
   const uri = normalizeUri(asset.localUri) ?? asset.uri ?? null
   return uri ? resolved(uri) : unavailable
