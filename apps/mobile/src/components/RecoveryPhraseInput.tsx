@@ -18,7 +18,7 @@ export function RecoveryPhraseInput({
   normalizedValue,
   validationError,
   editable = true,
-  placeholder = 'Enter your 12 or 24 word recovery phrase',
+  placeholder = '12 word recovery phrase',
 }: RecoveryPhraseInputProps) {
   return (
     <>
