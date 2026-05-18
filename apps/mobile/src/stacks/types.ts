@@ -31,7 +31,7 @@ export type MenuStackParamList = {
 
 export type OnboardingStackParamList = {
   Welcome: undefined
-  ChooseIndexer: undefined
+  AdvancedIndexer: undefined
   RecoveryPhrase: { indexerURL: string }
   FinishedOnboarding: { indexerURL: string }
 }

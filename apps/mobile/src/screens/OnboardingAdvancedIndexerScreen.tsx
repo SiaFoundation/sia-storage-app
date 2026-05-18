@@ -2,37 +2,35 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ArrowLeftIcon } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { KeyboardAwareScrollView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksLoader from '../components/BlocksLoader'
 import BlocksShape from '../components/BlocksShape'
 import { Button } from '../components/Button'
-import { IndexerSelector } from '../components/IndexerSelector'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import type { OnboardingStackParamList } from '../stacks/types'
 import { cancelAuth } from '../stores/sdk'
-import { palette } from '../styles/colors'
+import { colors, palette } from '../styles/colors'
 
-export default function OnboardingIndexerScreen() {
+export default function OnboardingAdvancedIndexerScreen() {
   const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
   const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } = useChangeIndexer()
   const [isNavigating, setIsNavigating] = useState(false)
 
-  // Reset after navigating back from a later screen (e.g. RecoveryPhrase).
   useFocusEffect(
     useCallback(() => {
       setIsNavigating(false)
-    }, []),
+      newIndexerInputProps.onChangeText('')
+    }, [newIndexerInputProps]),
   )
 
   const trimmedValue = newIndexerInputProps.value.trim()
   const isInputEmpty = trimmedValue.length === 0
   const showWaiting = isWaiting || isNavigating
 
-  // Abort any in-flight auth poll before leaving.
   const handleBack = () => {
     cancelAuth()
     nav.goBack()
@@ -48,14 +46,13 @@ export default function OnboardingIndexerScreen() {
       setIsNavigating(true)
       nav.navigate('RecoveryPhrase', { indexerURL })
     }
-    // If error, stay on screen (error already shown via toast).
   }
 
   return (
     <KeyboardProvider>
       <SafeAreaView style={styles.screen}>
         <Pressable
-          testID="indexer-back-button"
+          testID="advanced-indexer-back-button"
           onPress={handleBack}
           style={[styles.backButton, { top: top + 12 }]}
           accessibilityRole="button"
@@ -84,7 +81,7 @@ export default function OnboardingIndexerScreen() {
           {showWaiting ? (
             <View style={styles.waitingWrap}>
               <BlocksLoader colorStart={1} size={20} />
-              <Text testID="indexer-connecting-text" style={styles.waitingText}>
+              <Text testID="advanced-indexer-connecting-text" style={styles.waitingText}>
                 {isNavigating ? 'Connected' : 'Connecting...'}
               </Text>
             </View>
@@ -100,20 +97,40 @@ export default function OnboardingIndexerScreen() {
                     style={styles.titleIconGlyph}
                   />
                 </View>
-                <Text testID="indexer-title" style={styles.title}>
-                  Connect to an indexer
+                <Text testID="advanced-indexer-title" style={styles.title}>
+                  Custom Indexer
                 </Text>
               </View>
+
               <Text style={styles.subtitle}>
-                An indexer backs up your encrypted file metadata and syncs it across devices. It
-                cannot access your files. Files are stored on and retrieved directly from the Sia
-                network. Use ours or connect your own.
+                An indexer stores encrypted file metadata and syncs it across devices. You can run
+                your own using{' '}
+                <Text
+                  style={styles.link}
+                  onPress={() => Linking.openURL('https://github.com/siafoundation/indexd')}
+                >
+                  indexd
+                </Text>
+                .
               </Text>
 
-              <IndexerSelector
+              {hasErrored ? (
+                <Text style={styles.errorText}>
+                  Could not connect. Check the URL and try again.
+                </Text>
+              ) : null}
+
+              <Text style={styles.inputLabel}>Your Indexer URL</Text>
+              <TextInput
+                testID="advanced-indexer-url-input"
+                style={styles.textInput}
+                placeholder="https://"
+                placeholderTextColor={palette.gray[400]}
+                keyboardType="url"
+                autoCorrect={false}
+                autoCapitalize="none"
                 value={newIndexerInputProps.value}
                 onChangeText={newIndexerInputProps.onChangeText}
-                hasErrored={hasErrored}
               />
             </View>
           )}
@@ -121,11 +138,11 @@ export default function OnboardingIndexerScreen() {
         {!showWaiting ? (
           <View style={[styles.footer, { paddingBottom: bottom + 12 }]}>
             <Button
-              testID="indexer-authorize-button"
+              testID="advanced-indexer-continue-button"
               onPress={handleContinue}
               disabled={isInputEmpty}
             >
-              Authorize
+              Continue
             </Button>
           </View>
         ) : null}
@@ -151,7 +168,7 @@ const styles = StyleSheet.create({
 
   content: {
     width: '100%',
-    gap: 16,
+    gap: 12,
     backgroundColor: '#000',
     paddingHorizontal: 20,
     paddingVertical: 28,
@@ -190,6 +207,31 @@ const styles = StyleSheet.create({
   },
 
   subtitle: { color: palette.gray[300], fontSize: 14 },
+
+  link: {
+    color: palette.blue[400],
+    textDecorationLine: 'underline',
+  },
+
+  inputLabel: {
+    color: palette.gray[300],
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  textInput: {
+    color: colors.textPrimary,
+    backgroundColor: palette.gray[950],
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+
+  errorText: {
+    color: palette.red[500],
+    fontSize: 12,
+  },
 
   waitingText: { color: 'white', fontSize: 14 },
 
