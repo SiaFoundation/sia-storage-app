@@ -33,7 +33,6 @@ export type OnboardingStackParamList = {
   Welcome: undefined
   AdvancedIndexer: undefined
   RecoveryPhrase: { indexerURL: string }
-  FinishedOnboarding: { indexerURL: string }
 }
 
 export type ImportStackParamList = {

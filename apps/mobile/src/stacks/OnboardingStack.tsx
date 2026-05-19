@@ -1,6 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import OnboardingAdvancedIndexerScreen from '../screens/OnboardingAdvancedIndexerScreen'
-import OnboardingFinishedScreen from '../screens/OnboardingFinishedScreen'
 import OnboardingRecoveryPhraseScreen from '../screens/OnboardingRecoveryPhraseScreen'
 import OnboardingWelcomeScreen from '../screens/OnboardingWelcomeScreen'
 import type { OnboardingStackParamList } from './types'
@@ -18,12 +17,6 @@ export function OnboardingStack() {
       </Stack.Screen>
       <Stack.Screen name="RecoveryPhrase" options={{ headerShown: false, gestureEnabled: false }}>
         {() => <OnboardingRecoveryPhraseScreen />}
-      </Stack.Screen>
-      <Stack.Screen
-        name="FinishedOnboarding"
-        options={{ headerShown: false, gestureEnabled: false }}
-      >
-        {() => <OnboardingFinishedScreen />}
       </Stack.Screen>
     </Stack.Navigator>
   )
