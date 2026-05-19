@@ -13,6 +13,7 @@ import type { FileRecord } from '@siastorage/core/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
+import { ArchiveSyncModal } from '../components/ArchiveSyncModal'
 import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
 import { CreateTagSheet } from '../components/CreateTagSheet'
 import { DirectoriesGrid } from '../components/DirectoriesGrid'
@@ -67,7 +68,7 @@ export function LibraryScreen({ route, navigation }: Props) {
   const fileCount = useLibraryCount()
   const mediaCount = useMediaCount()
   const activeTabSetting = useActiveLibraryTab()
-  const activeTab: ActiveLibraryTab = activeTabSetting.data ?? 'files'
+  const activeTab: ActiveLibraryTab = activeTabSetting.data ?? 'media'
   const handleChangeTab = useCallback((tab: ActiveLibraryTab) => {
     void app().settings.setActiveLibraryTab(tab)
   }, [])
@@ -77,6 +78,7 @@ export function LibraryScreen({ route, navigation }: Props) {
     return files.data?.find((f) => f.id === openFileId) ?? null
   })
   const [isCarouselZoomed, setIsCarouselZoomed] = useState(false)
+  const [archiveModalVisible, setArchiveModalVisible] = useState(false)
   const [isCarouselDetail, setIsCarouselDetail] = useState(false)
   const [isDraggingToDismiss, setIsDraggingToDismiss] = useState(false)
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -315,11 +317,16 @@ export function LibraryScreen({ route, navigation }: Props) {
       ) : (
         <EmptyState
           image={require('../../assets/image-stack.png')}
-          title="Add files to get started"
-          message="Files are sharded and encrypted and synced directly to the Sia host network."
+          title="No files yet"
+          message="Add files to start building your library."
+          action={{ label: 'Import Photo Library', onPress: () => setArchiveModalVisible(true) }}
         />
       )}
       <AddFileActionSheet />
+      <ArchiveSyncModal
+        visible={archiveModalVisible}
+        onRequestClose={() => setArchiveModalVisible(false)}
+      />
       <CreateDirectorySheet onCreated={handleDirectoryCreated} />
       <CreateTagSheet />
       <LibraryStatusSheet />
