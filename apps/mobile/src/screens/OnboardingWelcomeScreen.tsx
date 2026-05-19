@@ -9,7 +9,9 @@ import BlocksLoader from '../components/BlocksLoader'
 import { SHAPES } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import { initApp } from '../managers/app'
 import type { OnboardingStackParamList } from '../stacks/types'
+import { app } from '../stores/appService'
 import { palette } from '../styles/colors'
 
 const typeFadeDurationMs = 500
@@ -67,7 +69,9 @@ export default function OnboardingWelcomeScreen() {
     const result = await connectToIndexer()
     if (result.status === 'connected') {
       setIsNavigating(true)
-      nav.navigate('FinishedOnboarding', { indexerURL })
+      app().init.setState({ isInitializing: true })
+      await app().settings.setHasOnboarded(true)
+      await initApp()
     } else if (result.status === 'needsMnemonic') {
       setIsNavigating(true)
       nav.navigate('RecoveryPhrase', { indexerURL })

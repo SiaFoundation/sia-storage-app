@@ -13,6 +13,7 @@ import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
 import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistration'
+import { initApp } from '../managers/app'
 import { useRecoveryPhraseValidation } from '../hooks/useRecoveryPhraseValidation'
 import { useToast } from '../lib/toastContext'
 import type { OnboardingStackParamList } from '../stacks/types'
@@ -61,7 +62,9 @@ export default function OnboardingRecoveryPhraseScreen() {
       const phrase = mode === 'generated' ? recoveryPhrase : normalizedManualPhrase
       const { success } = await register(phrase, indexerURL)
       if (success) {
-        nav.navigate('FinishedOnboarding', { indexerURL })
+        app().init.setState({ isInitializing: true })
+        await app().settings.setHasOnboarded(true)
+        await initApp()
       }
     } catch (err) {
       logger.error('onboarding', 'recovery_phrase_error', {

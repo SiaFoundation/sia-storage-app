@@ -10,7 +10,9 @@ import BlocksLoader from '../components/BlocksLoader'
 import BlocksShape from '../components/BlocksShape'
 import { Button } from '../components/Button'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
+import { initApp } from '../managers/app'
 import type { OnboardingStackParamList } from '../stacks/types'
+import { app } from '../stores/appService'
 import { cancelAuth } from '../stores/sdk'
 import { colors, palette } from '../styles/colors'
 
@@ -41,7 +43,9 @@ export default function OnboardingAdvancedIndexerScreen() {
     const result = await connectToIndexer()
     if (result.status === 'connected') {
       setIsNavigating(true)
-      nav.navigate('FinishedOnboarding', { indexerURL })
+      app().init.setState({ isInitializing: true })
+      await app().settings.setHasOnboarded(true)
+      await initApp()
     } else if (result.status === 'needsMnemonic') {
       setIsNavigating(true)
       nav.navigate('RecoveryPhrase', { indexerURL })
