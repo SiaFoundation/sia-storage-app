@@ -24,7 +24,7 @@ type Props = {
 }
 
 const INSET = 4
-const TABS: ActiveLibraryTab[] = ['files', 'tags', 'media']
+const TABS: ActiveLibraryTab[] = ['media', 'files', 'tags']
 
 export function LibraryTabBar({
   activeTab,
@@ -74,6 +74,14 @@ export function LibraryTabBar({
         ) : null}
         <Pressable
           accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'media' }}
+          onPress={() => onChangeTab('media')}
+          style={styles.segment}
+        >
+          <ImageIcon size={20} color={mediaColor} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'files' }}
           onPress={() => onChangeTab('files')}
           style={styles.segment}
@@ -87,14 +95,6 @@ export function LibraryTabBar({
           style={styles.segment}
         >
           <TagIcon size={20} color={tagsColor} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'media' }}
-          onPress={() => onChangeTab('media')}
-          style={styles.segment}
-        >
-          <ImageIcon size={20} color={mediaColor} />
         </Pressable>
       </View>
       <FloatingPill style={styles.actions}>

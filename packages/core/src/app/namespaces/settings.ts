@@ -51,7 +51,7 @@ export function buildSettingsNamespace(
     setStatusDisplayMode: (v) => setStr('statusDisplayMode', v),
     getPhotoImportDirectory: () => getStr('photoImportDirectory', 'Media'),
     setPhotoImportDirectory: (v) => setStr('photoImportDirectory', v),
-    getActiveLibraryTab: () => getStr('activeLibraryTab', 'files'),
+    getActiveLibraryTab: () => getStr('activeLibraryTab', 'media'),
     setActiveLibraryTab: async (v) => {
       caches.settings.set(v, 'activeLibraryTab')
       await storage.setItem('activeLibraryTab', v)
