@@ -562,14 +562,13 @@ describe('importAssets — picker / camera / share intent', () => {
       expect(events).toEqual([1, 3])
     })
 
-    it('registers every placeholder before any await after createMany', async () => {
-      // Regression: the scanner runs on a 3s autotick and can fire while
-      // importAssets is still awaiting tag assignment, optimize, or
-      // getByIds. If marks are placed only inside copyAssets, the scanner
-      // sees the placeholders with no fs row and no localId during that
-      // window and writes lostReason permanently. Registration must happen
-      // synchronously after createMany resolves.
-      const optimizeSpy = jest.spyOn(app(), 'optimize')
+    it('registers every placeholder before createMany commits the rows', async () => {
+      // insertManyFiles commits its INSERTs individually; a scanner tick
+      // that lands mid-INSERT could see a row with no fs row, no localId,
+      // and no in-flight marker, and flag it lost. markImportCopyStarted
+      // must run before createMany so every committed row is protected
+      // from the first instant it becomes visible.
+      const createManySpy = jest.spyOn(app().files, 'createMany')
 
       const assets = [
         {
@@ -596,10 +595,9 @@ describe('importAssets — picker / camera / share intent', () => {
       const startedIds = jest.mocked(markImportCopyStarted).mock.calls.map((c) => c[0])
       expect(startedIds).toEqual(files.map((f) => f.id))
 
-      // Every mark must precede optimize (the first await after createMany).
-      const optimizeOrder = optimizeSpy.mock.invocationCallOrder[0]
+      const createOrder = createManySpy.mock.invocationCallOrder[0]
       for (const markOrder of jest.mocked(markImportCopyStarted).mock.invocationCallOrder) {
-        expect(markOrder).toBeLessThan(optimizeOrder)
+        expect(markOrder).toBeLessThan(createOrder)
       }
     })
 

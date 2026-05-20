@@ -238,6 +238,13 @@ export type FileQueryOpts = {
   includeDeleted?: boolean
   hashEmpty?: boolean
   hashNotEmpty?: boolean
+  /**
+   * Restrict to rows whose lostReason is NULL. Default: no filter.
+   * importScanner sets this to keep terminally-lost placeholders out of
+   * its candidate pool — they're already surfaced in the UI's Unavailable
+   * tab and never become hashable without external action.
+   */
+  lostReasonIsNull?: boolean
 }
 
 function buildFileRecordsQuery(
@@ -263,6 +270,7 @@ function buildFileRecordsQuery(
     includeDeleted,
     hashEmpty,
     hashNotEmpty,
+    lostReasonIsNull,
   } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
@@ -283,6 +291,10 @@ function buildFileRecordsQuery(
 
   if (hashNotEmpty) {
     whereClauses.push(`${tableAlias}.hash != ''`)
+  }
+
+  if (lostReasonIsNull) {
+    whereClauses.push(`${tableAlias}.lostReason IS NULL`)
   }
 
   if (after) {

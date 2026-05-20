@@ -34,8 +34,10 @@ function createMockApp(): MockHelper {
           if (!opts.includeTrashed && file.trashedAt) continue
           if (!opts.includeDeleted && file.deletedAt) continue
           if (opts.hashEmpty && file.hash !== '') continue
+          if (opts.hashNotEmpty && file.hash === '') continue
           if (opts.fileExistsLocally === true && !fsFiles.has(file.id)) continue
           if (opts.fileExistsLocally === false && fsFiles.has(file.id)) continue
+          if (opts.lostReasonIsNull && file.lostReason != null) continue
           results.push({ ...file, objects: {} })
         }
         results.sort((a: any, b: any) =>
@@ -375,6 +377,91 @@ describe('ImportScanner', () => {
         expect.objectContaining({
           id: 'f-crashed',
           lostReason: 'No local file or source available',
+        }),
+      ])
+    })
+
+    it('rechecks the fs row before marking lost (query/await race)', async () => {
+      // Phase 2's candidate query captures state at query-start; a copy
+      // can land between then and the orphan check (fs row written,
+      // in-flight marker cleared). The recheck via app.fs.readMeta
+      // catches that and Phase 1 finalizes the file next tick.
+      mock.addFile('f-late')
+      // No in-flight marker (cleared during the await) and no fsFiles
+      // entry (query saw the row as no-local-file), but fsMeta is set —
+      // the just-completed copy wrote the fs row.
+      mock.fsMeta.set('f-late', { fileId: 'f-late', size: 100, addedAt: 1, usedAt: 1 })
+
+      const result = await scanner.runScan()
+
+      expect(result.lost).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(mock.app.files.updateMany).not.toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ lostReason: expect.any(String) })]),
+      )
+    })
+
+    it('does not re-pick deleted placeholders on subsequent ticks', async () => {
+      // Regression for the loop that wrote 18,687 localId_not_resolved
+      // logs over 937 ticks (~20/tick) on a device with 20 lost rows.
+      // After tick 1 marks them lost, the placeholder selector must
+      // exclude them via lostReason IS NULL.
+      for (let i = 0; i < 20; i++) {
+        mock.addFile(`d${i}`, { localId: `ph://gone-${i}` })
+      }
+      const resolveLocalId = jest.fn(
+        async (): Promise<ResolveLocalIdResult> => ({ status: 'deleted' }),
+      )
+
+      const r1 = await scanner.runScan(undefined, resolveLocalId)
+      expect(r1.lost).toBe(20)
+      expect(resolveLocalId).toHaveBeenCalledTimes(20)
+      expect(mock.caches.library.invalidateAll).toHaveBeenCalledTimes(1)
+
+      jest.clearAllMocks()
+      const r2 = await scanner.runScan(undefined, resolveLocalId)
+      expect(r2.lost).toBe(0)
+      expect(r2.skipped).toBe(0)
+      expect(r2.failed).toBe(0)
+      expect(resolveLocalId).not.toHaveBeenCalled()
+      expect(mock.app.files.updateMany).not.toHaveBeenCalled()
+      expect(mock.caches.library.invalidateAll).not.toHaveBeenCalled()
+    })
+
+    it('does not re-pick orphan placeholders on subsequent ticks', async () => {
+      // Same loop, orphan branch: no localId and the in-flight set is
+      // empty. After tick 1 marks them lost, tick 2 must be a no-op.
+      mock.addFile('orphan-1')
+      mock.addFile('orphan-2')
+
+      const r1 = await scanner.runScan()
+      expect(r1.lost).toBe(2)
+
+      jest.clearAllMocks()
+      const r2 = await scanner.runScan()
+      expect(r2.lost).toBe(0)
+      expect(r2.skipped).toBe(0)
+      expect(r2.failed).toBe(0)
+      expect(mock.app.files.updateMany).not.toHaveBeenCalled()
+      expect(mock.caches.library.invalidateAll).not.toHaveBeenCalled()
+    })
+
+    it('clears lostReason when a previously-lost row finalizes via phase 1', async () => {
+      // Recovery: a row marked lost on a prior tick later gains a local
+      // file (no flow does this today, but defense in depth). Phase 1
+      // does not filter on lostReason, so it finalizes the row and
+      // clears the marker on the same pass — the row leaves the
+      // Unavailable tab without any external intervention.
+      mock.addFile('recovered', { lostReason: 'No local file or source available' })
+      mock.addLocalFile('recovered', '/local/recovered.jpg')
+
+      const result = await scanner.runScan()
+
+      expect(result.finalized).toBe(1)
+      expect(mock.app.files.updateMany).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'recovered',
+          lostReason: null,
         }),
       ])
     })
