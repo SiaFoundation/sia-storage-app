@@ -56,7 +56,7 @@ export function getImportBackoffEntries() {
   return scanner.getBackoffEntries()
 }
 
-async function run(signal: AbortSignal): Promise<void> {
+async function run(signal: AbortSignal): Promise<number | undefined> {
   // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; hashing
   // here can trip cpu_resource_fatal. See bgTaskContext.ts.
   if (isBgTaskActive('BGAppRefreshTask')) {
@@ -67,7 +67,14 @@ async function run(signal: AbortSignal): Promise<void> {
     logger.debug('importScanner', 'skipped', { reason: 'sync_gate_active' })
     return
   }
-  await runImportScanner(signal)
+  const result = await runImportScanner(signal)
+  // Drain mode: if this tick finalized files (or files are mid-copy,
+  // surfaced as skipped via the in-flight set), more work is likely
+  // pending — re-run immediately instead of waiting the full interval.
+  if (result.finalized > 0 || result.skipped > 0) {
+    return 0
+  }
+  return undefined
 }
 
 export const { init: initImportScanner, triggerNow: triggerImportScanner } = createServiceInterval({
