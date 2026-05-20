@@ -63,6 +63,10 @@ export interface AppCaches {
     best: SwrCacheBy
     byFileId: SwrCacheBy
   }
+  /** Per-fileId local URI (`file://…` when on disk, null when not).
+   *  Primed by useFileList from the LEFT JOIN flag so list-row
+   *  useFsFileUri hooks short-circuit. */
+  fsFileUri: SwrCacheBy<string | null>
   libraryVersion: LibraryVersionCache
   settings: SwrCacheBy
   sync: SwrCacheBy
@@ -168,10 +172,13 @@ export interface AppService {
     queryCount(opts: FileQueryOpts): Promise<number>
     /** Returns count and total size for files matching the query. */
     queryStats(opts: FileQueryOpts): Promise<{ count: number; totalBytes: number }>
-    /** Queries file rows for library display. */
+    /** Queries file rows for library display. Each row includes
+     *  isFavorite and fsExists flags (0|1) computed via LEFT JOINs so
+     *  list-row hooks short-circuit instead of issuing one SELECT
+     *  per visible row. */
     queryLibrary(
       opts: LibraryQueryParams & { limit?: number; offset?: number },
-    ): Promise<FileRecordRow[]>
+    ): Promise<Array<FileRecordRow & { isFavorite: number; fsExists: number }>>
     /** Creates a file, optionally with a local object. */
     create(
       record: Omit<FileRecord, 'objects'>,
@@ -438,6 +445,11 @@ export interface AppService {
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
     /** Returns the local file URI if the file exists on disk, or null. */
     getFileUri(file: { id: string; type: string }): Promise<string | null>
+    /** Returns the predicted local file URI for an id+type pair, with
+     *  no disk check or side effects. Callers that already know the file
+     *  is on disk (e.g., the library fetcher priming the fs URI cache)
+     *  use this to avoid the stat round trip getFileUri performs. */
+    uri(file: { id: string; type: string }): string
     /** Removes a local file from disk. */
     removeFile(file: { id: string; type: string }): Promise<void>
     /** Copies a file from the source URI into managed storage; returns the new URI. */

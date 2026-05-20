@@ -56,6 +56,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       best: swrCacheBy(),
       byFileId: swrCacheBy(),
     },
+    fsFileUri: swrCacheBy<string | null>(),
     libraryVersion: createLibraryVersionCache(),
     settings: swrCacheBy(),
     sync: swrCacheBy(),

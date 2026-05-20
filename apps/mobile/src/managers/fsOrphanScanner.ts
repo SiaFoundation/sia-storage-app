@@ -4,7 +4,6 @@ import type { OrphanScannerResult } from '@siastorage/core/services'
 import { runOrphanScanner } from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
-import { fsFileUriCache } from '../stores/fs'
 import { isBgTaskActive } from './bgTaskContext'
 
 const flight = new SingleInit()
@@ -46,7 +45,7 @@ export async function runFsOrphanScanner(options?: {
     options?.signal?.addEventListener('abort', onExternalAbort)
     try {
       const result = await runOrphanScanner(app(), options?.onProgress, activeController.signal)
-      fsFileUriCache.invalidateAll()
+      app().caches.fsFileUri.invalidateAll()
       // Don't advance lastRun on abort — the scan didn't complete, so the
       // throttle gate should let the next attempt through instead of skipping it.
       if (activeController.signal.aborted) {

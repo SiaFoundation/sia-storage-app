@@ -121,6 +121,7 @@ export function createRemoteAppService(
       best: swrCacheBy(),
       byFileId: swrCacheBy(),
     },
+    fsFileUri: swrCacheBy<string | null>(),
     libraryVersion: createLibraryVersionCache(),
     settings: swrCacheBy(),
     sync: swrCacheBy(),

@@ -86,6 +86,7 @@ export function buildDbNamespaces(
     trashedCachedFiles: (limit) => ops.queryTrashedCachedFiles(db, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
+    uri: (file) => fsIO.uri(file.id, file.type),
     removeFile,
     copyFile: async (file, sourceUri, opts) => {
       const result = await fsIO.copy(file, sourceUri)

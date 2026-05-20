@@ -1,12 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
+import type { AppService } from '../app/service'
 import { useApp } from '../app/context'
 import type { LibraryQueryParams, SortBy, SortDir } from '../db/operations'
 import { transformRow } from '../db/operations'
-import type { FileRecord } from '../types/files'
+import type { FileRecord, FileRecordRow } from '../types/files'
 
 const PAGE_SIZE = 40
+
+type LibraryRow = FileRecordRow & { isFavorite: number; fsExists: number }
+
+/**
+ * Populate per-row SWR caches from the joined columns returned by
+ * `queryLibrary`. Each list row component then renders its
+ * `useIsFavorite` and `useFsFileUri` from cache instead of firing its
+ * own query. `fsExists` priming trusts the DB row; `useFsFileUri`'s
+ * fetcher self-heals on disk drift, and the staleness window is at
+ * most one library invalidation cycle.
+ */
+export function primeListRowCaches(app: AppService, rows: LibraryRow[]): void {
+  for (const row of rows) {
+    app.caches.tags.set(!!row.isFavorite, `favorite/${row.id}`)
+    app.caches.fsFileUri.set(
+      row.fsExists ? app.fs.uri({ id: row.id, type: row.type }) : null,
+      row.id,
+    )
+  }
+}
 
 /** Parameters for querying a paginated, sortable, and filterable file list. */
 export type FileListParams = {
@@ -68,6 +89,8 @@ export function useFileList(params: FileListParams) {
       limit: PAGE_SIZE,
       offset: pageIndex * PAGE_SIZE,
     })
+
+    primeListRowCaches(app, rows)
 
     const fileIds = rows.map((r) => r.id)
     const objectsByFile = await app.localObjects.getRefsForFiles(fileIds)
