@@ -542,22 +542,24 @@ export async function importAssets(
     0,
   )
 
-  await app().files.createMany(
-    candidates.map((c) => c.placeholder),
-    {
-      directoryId: destinationDirectoryId,
-    },
-  )
-
   const insertedIds = candidates.map((c) => c.placeholder.id)
-  // Register synchronously, before the next await. The scanner runs on
-  // its own 3s tick and would otherwise see these placeholders with no
-  // fs row and no localId during the tag/optimize/getByIds awaits below
-  // and mark them lost. copyAssets clears each ID in its per-file finally.
+  // Mark in-flight BEFORE createMany. insertManyFiles commits its INSERTs
+  // individually, so a scanner tick mid-INSERT would otherwise see
+  // partially-committed placeholders with no fs row, no localId, and no
+  // in-flight marker, and mark them lost. copyAssets clears each ID in
+  // its per-file finally; the finally below releases all of them if
+  // setup aborts before the copy loop takes ownership.
   for (const id of insertedIds) markImportCopyStarted(id)
 
   let copyDispatched = false
   try {
+    await app().files.createMany(
+      candidates.map((c) => c.placeholder),
+      {
+        directoryId: destinationDirectoryId,
+      },
+    )
+
     if (assignTagName && insertedIds.length > 0) {
       await app().tags.addToFiles(insertedIds, assignTagName)
     }

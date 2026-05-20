@@ -150,6 +150,9 @@ export class ImportScanner {
 
       // Phase 1: files already on disk, just need hashing.
       if (!signal?.aborted) {
+        // No lostReasonIsNull filter: a row with local bytes but a stale
+        // lostReason (no flow today, but defense in depth) should finalize
+        // here and clear the marker on the same pass.
         const localCandidates = await app.files.query({
           hashEmpty: true,
           fileExistsLocally: true,
@@ -227,6 +230,7 @@ export class ImportScanner {
         const deferredCandidates = await app.files.query({
           hashEmpty: true,
           fileExistsLocally: false,
+          lostReasonIsNull: true,
           includeThumbnails: true,
           includeOldVersions: true,
           limit: deferredLimit,
@@ -331,7 +335,26 @@ export class ImportScanner {
               continue
             }
 
-            logger.debug('importScanner', 'orphan', { fileId: file.id })
+            // Phase 2's query captured state at query-start time. A
+            // file's copy can finish during that await: fs row gets
+            // written and markImportCopyComplete fires, so we'd mark a
+            // succeeded file as lost. Recheck the fs row freshly and
+            // let Phase 1 pick it up on the next tick.
+            const freshMeta = await app.fs.readMeta(file.id)
+            if (freshMeta) {
+              logger.debug('importScanner', 'orphan_recheck_safe', {
+                fileId: file.id,
+              })
+              result.skipped++
+              continue
+            }
+
+            logger.warn('importScanner', 'orphan_lost', {
+              fileId: file.id,
+              name: file.name,
+              type: file.type,
+              localId: file.localId,
+            })
             lostUpdates.push({
               id: file.id,
               lostReason: 'No local file or source available',
@@ -353,6 +376,9 @@ export class ImportScanner {
       // Per-file disk copies are done; gate the batch DB writes so
       // suspend in the gap can't leave a finalized-on-disk file stuck
       // with an empty hash/size/type row that no scanner re-picks up.
+      // lostReason: null clears any prior terminal marker so a row that
+      // becomes recoverable (no flow does this today) leaves the
+      // Unavailable tab without external intervention.
       if (updates.length > 0) {
         await app.db.waitUntilActive()
         await app.files.updateMany(
@@ -361,6 +387,10 @@ export class ImportScanner {
             hash: u.hash,
             size: u.size,
             type: u.type,
+            // A file we just hashed isn't lost. Clear any stale
+            // lostReason left by a prior tick's orphan branch racing a
+            // mid-flight copy.
+            lostReason: null,
           })),
         )
       }

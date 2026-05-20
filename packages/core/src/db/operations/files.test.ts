@@ -479,6 +479,49 @@ describe('queryFiles', () => {
     })
     expect(all).toHaveLength(3)
   })
+
+  it('filters by lostReasonIsNull when set', async () => {
+    await insertFile(db(), makeFileRecord('clean'))
+    await insertFile(
+      db(),
+      makeFileRecord('lost', { lostReason: 'Source photo deleted from device' }),
+    )
+    const results = await queryFiles(db(), {
+      order: 'ASC',
+      lostReasonIsNull: true,
+    })
+    expect(results.map((r) => r.id)).toEqual(['clean'])
+  })
+
+  it('does not filter lostReason by default', async () => {
+    await insertFile(db(), makeFileRecord('clean'))
+    await insertFile(
+      db(),
+      makeFileRecord('lost', { lostReason: 'Source photo deleted from device' }),
+    )
+    const results = await queryFiles(db(), { order: 'ASC' })
+    expect(results.map((r) => r.id).sort()).toEqual(['clean', 'lost'])
+  })
+
+  it('combines lostReasonIsNull with hashEmpty for the placeholder selector', async () => {
+    // Mirrors importScanner Phase 2: hash='' AND lostReason IS NULL —
+    // terminally lost placeholders must not re-enter the candidate pool.
+    await insertFile(db(), makeFileRecord('placeholder', { hash: '' }))
+    await insertFile(
+      db(),
+      makeFileRecord('placeholder-lost', {
+        hash: '',
+        lostReason: 'Source photo deleted from device',
+      }),
+    )
+    await insertFile(db(), makeFileRecord('finalized', { hash: 'sha256:abc' }))
+    const results = await queryFiles(db(), {
+      order: 'ASC',
+      hashEmpty: true,
+      lostReasonIsNull: true,
+    })
+    expect(results.map((r) => r.id)).toEqual(['placeholder'])
+  })
 })
 
 describe('updateFile edge cases', () => {
