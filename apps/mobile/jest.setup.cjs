@@ -14,6 +14,12 @@ jest.mock('@siastorage/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   },
+  setLogContext: jest.fn(),
+  addAppender: jest.fn(),
+  removeAppender: jest.fn(),
+  flushAllAppenders: jest.fn(),
+  createConsoleAppender: jest.fn(() => ({ write: jest.fn() })),
+  serializeData: jest.fn((v) => (v == null ? null : JSON.stringify(v))),
 }))
 
 // Ensure expo-constants is available for transitive expo modules (expo-asset/SQLite).

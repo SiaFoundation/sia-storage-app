@@ -1,6 +1,16 @@
-import { initLogForwarder, resumeLogForwarder } from '@siastorage/core/services/logForwarder'
+import { initDbLogAppender, resumeDbLogAppender } from '@siastorage/core/services/dbLogAppender'
+import {
+  initRemoteLogShipper,
+  resumeRemoteLogShipper,
+} from '@siastorage/core/services/remoteLogShipper'
 import { swrCacheBy } from '@siastorage/core/stores'
-import { type LogEntry, type LogLevel, logger } from '@siastorage/logger'
+import {
+  addAppender,
+  createConsoleAppender,
+  type LogEntry,
+  type LogLevel,
+  logger,
+} from '@siastorage/logger'
 import useSWR from 'swr'
 import { app } from './appService'
 
@@ -15,7 +25,10 @@ export async function initLogger(): Promise<void> {
     return
   }
 
-  await initLogForwarder(app())
+  // DB sink first so the pre-registration buffer drains into durable storage.
+  await initDbLogAppender(app())
+  addAppender(createConsoleAppender())
+  await initRemoteLogShipper(app())
   logger.info('logs', 'init')
 
   const [storedLevel, storedScopes] = await Promise.all([
@@ -30,10 +43,10 @@ export async function initLogger(): Promise<void> {
   hasInit = true
 }
 
-/** Re-register the log appender after suspension without re-reading
- * settings. initLogger() can't be reused due to its hasInit guard. */
+/** Resume DB drain + HTTP shipping after suspension. */
 export function resumeLogger(): void {
-  resumeLogForwarder()
+  resumeDbLogAppender()
+  resumeRemoteLogShipper()
 }
 
 export function useAvailableScopes() {

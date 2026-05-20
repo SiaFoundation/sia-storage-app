@@ -1,4 +1,3 @@
-export { appendLog, flushLogs, setLogAppender, stopLogAppender } from './logAppender'
 export {
   ANSI_BOLD,
   ANSI_RESET,
@@ -9,5 +8,18 @@ export {
   LEVEL_COLORS,
   SCOPE_COLORS,
 } from './logColors'
-export type { LogData, LogEntry, LogLevel } from './logger'
-export { formatDataPairs, logger, rustLogger, serializeData, setLogContext } from './logger'
+export type { Appender, LogData, LogEntry, LogLevel } from './logger'
+export {
+  addAppender,
+  clearAppenders,
+  flushAllAppenders,
+  formatDataPairs,
+  formatPlainLog,
+  formatTerminalLog,
+  logger,
+  removeAppender,
+  rustLogger,
+  serializeData,
+  setLogContext,
+} from './logger'
+export { createConsoleAppender } from './appenders/console'

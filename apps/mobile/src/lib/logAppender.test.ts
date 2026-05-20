@@ -1,157 +1,152 @@
 jest.unmock('@siastorage/logger')
 
 import {
-  appendLog,
-  flushLogs,
+  addAppender,
+  type Appender,
+  clearAppenders,
+  flushAllAppenders,
   type LogEntry,
-  setLogAppender,
-  stopLogAppender,
+  logger,
+  removeAppender,
 } from '@siastorage/logger'
 
-function makeEntry(msg: string): LogEntry {
-  return {
-    timestamp: new Date().toISOString(),
-    level: 'info',
-    scope: 'test',
-    message: msg,
-  }
+type RecordingAppender = Appender & {
+  written: LogEntry[]
+  flushed: number
 }
 
-describe('logAppender', () => {
-  afterEach(async () => {
-    await stopLogAppender()
+function createRecordingAppender(
+  opts: { onWrite?: (entry: LogEntry) => void } = {},
+): RecordingAppender {
+  const written: LogEntry[] = []
+  let flushed = 0
+  return {
+    write(entry) {
+      opts.onWrite?.(entry)
+      written.push(entry)
+    },
+    flush() {
+      flushed += 1
+    },
+    get written() {
+      return written
+    },
+    get flushed() {
+      return flushed
+    },
+  } as RecordingAppender
+}
+
+describe('appender registry', () => {
+  beforeEach(() => {
+    clearAppenders()
   })
 
-  it('buffers entries before appender is set', () => {
-    appendLog(makeEntry('before'))
-    appendLog(makeEntry('before2'))
+  it('buffers entries logged before any appender is registered and drains on add', () => {
+    logger.info('test', 'before-1')
+    logger.info('test', 'before-2')
 
-    const received: LogEntry[] = []
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
+    const a = createRecordingAppender()
+    addAppender(a)
 
-    expect(received).toHaveLength(2)
-    expect(received[0].message).toBe('before')
-    expect(received[1].message).toBe('before2')
+    expect(a.written.map((e) => e.message)).toEqual(['before-1', 'before-2'])
+    // The drain calls flush() once so async appenders can persist immediately.
+    expect(a.flushed).toBe(1)
   })
 
-  it('flushes buffered entries when appender is registered', () => {
-    appendLog(makeEntry('buffered'))
+  it('fans out each entry to every registered appender', () => {
+    const a = createRecordingAppender()
+    const b = createRecordingAppender()
+    addAppender(a)
+    addAppender(b)
 
-    const received: LogEntry[] = []
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
+    logger.warn('scope', 'broadcast')
 
-    expect(received).toHaveLength(1)
-    expect(received[0].message).toBe('buffered')
+    expect(a.written).toHaveLength(1)
+    expect(b.written).toHaveLength(1)
+    expect(a.written[0].message).toBe('broadcast')
+    expect(b.written[0].message).toBe('broadcast')
   })
 
-  it('flushLogs writes buffered entries immediately', () => {
-    const received: LogEntry[] = []
-    setLogAppender((entries) => {
-      received.push(...entries)
+  it('a throwing appender does not stop other appenders or crash producers', () => {
+    const a = createRecordingAppender({
+      onWrite: () => {
+        throw new Error('boom')
+      },
     })
+    const b = createRecordingAppender()
+    addAppender(a)
+    addAppender(b)
 
-    appendLog(makeEntry('manual'))
-    expect(received).toHaveLength(0)
-
-    flushLogs()
-    expect(received).toHaveLength(1)
-    expect(received[0].message).toBe('manual')
+    expect(() => logger.error('scope', 'still-fires')).not.toThrow()
+    expect(b.written.map((e) => e.message)).toEqual(['still-fires'])
   })
 
-  it('stopLogAppender clears appender without flushing remaining entries', async () => {
-    const received: LogEntry[] = []
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
+  it('removeAppender stops further writes from reaching that appender', () => {
+    const a = createRecordingAppender()
+    addAppender(a)
+    logger.info('test', 'first')
+    removeAppender(a)
+    logger.info('test', 'second')
 
-    appendLog(makeEntry('final1'))
-    appendLog(makeEntry('final2'))
-
-    await stopLogAppender()
-
-    // Buffered entries are NOT flushed inline — they remain in the buffer
-    // and will be flushed on the next setLogAppender call. Awaiting a DB
-    // flush here was the cause of iOS 0xdead10cc kills during suspension.
-    expect(received).toHaveLength(0)
-
-    appendLog(makeEntry('after-stop'))
-    flushLogs()
-    expect(received).toHaveLength(0)
-
-    const received2: LogEntry[] = []
-    setLogAppender((entries) => {
-      received2.push(...entries)
-    })
-
-    expect(received2.map((e) => e.message)).toEqual(['final1', 'final2', 'after-stop'])
+    expect(a.written.map((e) => e.message)).toEqual(['first'])
   })
 
-  it('entries buffered after stop are flushed when appender is re-registered', async () => {
-    const received1: LogEntry[] = []
-    setLogAppender((entries) => {
-      received1.push(...entries)
-    })
+  it('flushAllAppenders calls flush() on every appender', async () => {
+    const a = createRecordingAppender()
+    const b = createRecordingAppender()
+    addAppender(a)
+    addAppender(b)
 
-    await stopLogAppender()
-
-    appendLog(makeEntry('during-suspension'))
-    appendLog(makeEntry('during-suspension-2'))
-
-    const received2: LogEntry[] = []
-    setLogAppender((entries) => {
-      received2.push(...entries)
-    })
-
-    expect(received2).toHaveLength(2)
-    expect(received2[0].message).toBe('during-suspension')
-    expect(received2[1].message).toBe('during-suspension-2')
+    // Add drains pre-install buffer (none here) and calls flush once each;
+    // baseline is 1 from that path.
+    const before = { a: a.flushed, b: b.flushed }
+    await flushAllAppenders()
+    expect(a.flushed).toBe(before.a + 1)
+    expect(b.flushed).toBe(before.b + 1)
   })
 
-  it('preserves timestamps from when entries were created', async () => {
-    const before = new Date().toISOString()
-    const entry = makeEntry('timestamped')
-    const after = new Date().toISOString()
+  it('clearAppenders resets both the registry and the pre-install buffer', () => {
+    logger.info('test', 'orphaned')
+    clearAppenders()
 
-    await stopLogAppender()
-    appendLog(entry)
-
-    const received: LogEntry[] = []
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
-
-    expect(received[0].timestamp).toBe(entry.timestamp)
-    expect(received[0].timestamp >= before).toBe(true)
-    expect(received[0].timestamp <= after).toBe(true)
+    const a = createRecordingAppender()
+    addAppender(a)
+    expect(a.written).toHaveLength(0)
   })
 
-  it('multiple stop/resume cycles preserve buffer', async () => {
-    const received: LogEntry[] = []
-
-    setLogAppender((entries) => {
-      received.push(...entries)
+  it('an appender that logs from within write() does not corrupt the dispatch', () => {
+    const a = createRecordingAppender({
+      onWrite: (entry) => {
+        if (entry.message === 'outer') {
+          // Recursive logger call must not throw or duplicate the outer entry.
+          logger.debug('test', 'nested')
+        }
+      },
     })
-    appendLog(makeEntry('cycle1'))
-    await stopLogAppender()
+    addAppender(a)
 
-    appendLog(makeEntry('between'))
+    logger.info('test', 'outer')
 
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
-    appendLog(makeEntry('cycle2'))
-    await stopLogAppender()
+    const messages = a.written.map((e) => e.message)
+    expect(messages).toContain('outer')
+    expect(messages).toContain('nested')
+    // Exactly one occurrence of each — no recursive amplification.
+    expect(messages.filter((m) => m === 'outer')).toHaveLength(1)
+    expect(messages.filter((m) => m === 'nested')).toHaveLength(1)
+  })
 
-    appendLog(makeEntry('between2'))
+  it('entries logged after the last appender is removed land in the pre-install buffer', () => {
+    const a = createRecordingAppender()
+    addAppender(a)
+    removeAppender(a)
 
-    setLogAppender((entries) => {
-      received.push(...entries)
-    })
+    logger.info('test', 'after-detach')
 
-    expect(received.map((e) => e.message)).toEqual(['cycle1', 'between', 'cycle2', 'between2'])
+    // The pre-install buffer is internal; the only way to assert on it is
+    // to add a new appender and confirm the entry drains.
+    const b = createRecordingAppender()
+    addAppender(b)
+    expect(b.written.map((e) => e.message)).toEqual(['after-detach'])
   })
 })

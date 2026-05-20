@@ -1,6 +1,6 @@
-import { getRemoteLogToken, setRemoteLogConfig } from '@siastorage/core/services/logForwarder'
+import { getRemoteLogToken, setRemoteLogConfig } from '@siastorage/core/services/remoteLogShipper'
 import { useRemoteLogEnabled, useRemoteLogEndpoint } from '@siastorage/core/stores'
-import { flushLogs, logger } from '@siastorage/logger'
+import { flushAllAppenders, logger } from '@siastorage/logger'
 import { useEffect, useState } from 'react'
 import { Alert } from 'react-native'
 import { useToast } from '../lib/toastContext'
@@ -95,7 +95,7 @@ export function SettingsAdvancedLogs({ onViewLogs }: Props) {
           showChevron={false}
           onPress={() => {
             logger.info('remoteLog', 'test', { source: 'settings' })
-            flushLogs()
+            void flushAllAppenders()
             toast.show('Sent test log')
           }}
         />

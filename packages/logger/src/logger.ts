@@ -1,30 +1,6 @@
-import { appendLog } from './logAppender'
 import { ANSI_BOLD, ANSI_DIM, ANSI_RESET, getLevelColorAnsi, getScopeColorAnsi } from './logColors'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-
-function getEnvVar(name: string): string | undefined {
-  const proc = (globalThis as Record<string, unknown>).process as
-    | { env: Record<string, string | undefined> }
-    | undefined
-  return proc?.env?.[name]
-}
-
-function getLogLevelFromEnv(): LogLevel {
-  const level = getEnvVar('EXPO_PUBLIC_LOG_LEVEL')?.toLowerCase()
-  if (level === 'debug' || level === 'info' || level === 'warn' || level === 'error') {
-    return level
-  }
-  return 'debug'
-}
-
-function getScopeFilterFromEnv(): string[] | null {
-  const filter = getEnvVar('EXPO_PUBLIC_LOG_SCOPES')
-  if (filter) {
-    return filter.split(',').map((s: string) => s.trim())
-  }
-  return null
-}
 
 function formatTimestamp(): string {
   const now = new Date()
@@ -36,24 +12,6 @@ function formatTimestamp(): string {
   const seconds = String(now.getSeconds()).padStart(2, '0')
   const millis = String(now.getMilliseconds()).padStart(3, '0')
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`
-}
-
-function shouldLogToTerminal(level: LogLevel, scope: string): boolean {
-  const envLevel = getLogLevelFromEnv()
-  const levelOrder: LogLevel[] = ['debug', 'info', 'warn', 'error']
-  const envLevelIndex = levelOrder.indexOf(envLevel)
-  const logLevelIndex = levelOrder.indexOf(level)
-
-  if (logLevelIndex < envLevelIndex) {
-    return false
-  }
-
-  const scopeFilter = getScopeFilterFromEnv()
-  if (scopeFilter && scopeFilter.length > 0) {
-    return scopeFilter.includes(scope)
-  }
-
-  return true
 }
 
 /** Serialize a data value for storage, converting Errors to plain objects. */
@@ -122,38 +80,54 @@ export function formatDataPairs(data?: LogData): string {
   return pairs.join(' ')
 }
 
+const CONTEXT_KEYS = ['device', 'account'] as const
 const NO_ACCOUNT_PLACEHOLDER = '--------'
 
-function formatTerminalLog(
-  level: LogLevel,
-  scope: string,
-  timestamp: string,
-  msg: string,
-  data?: LogData,
-  context?: Record<string, unknown>,
-): string {
-  const levelColor = getLevelColorAnsi(level)
-  const scopeColor = getScopeColorAnsi(scope)
-  const levelUpper = level.toUpperCase().padEnd(5)
-  const contextPart = formatContextTags(context)
-  const dataPart = formatDataPairs(data)
-  const messagePart = dataPart ? `${msg} ${dataPart}` : msg
-  return `${timestamp} ${levelColor}${ANSI_BOLD}${levelUpper}${ANSI_RESET} ${contextPart}${scopeColor}${ANSI_BOLD}[${scope}]${ANSI_RESET} ${messagePart}`
+function pickContext(data?: LogData): { device?: string; account?: string } {
+  if (!data) return {}
+  return {
+    device: typeof data.device === 'string' ? data.device : undefined,
+    account: typeof data.account === 'string' ? data.account : undefined,
+  }
 }
 
-function formatContextTags(context?: Record<string, unknown>): string {
-  if (!context?.device) return ''
-  const account = context.account ? String(context.account) : NO_ACCOUNT_PLACEHOLDER
-  return `${ANSI_DIM}[${String(context.device)}][${account}]${ANSI_RESET}`
+function excludeContextKeys(data?: LogData): LogData | undefined {
+  if (!data || !CONTEXT_KEYS.some((k) => k in data)) return data
+  const out: LogData = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (!(CONTEXT_KEYS as readonly string[]).includes(k)) out[k] = v
+  }
+  return out
+}
+
+/** ANSI-colored single-line format. */
+export function formatTerminalLog(entry: LogEntry): string {
+  const levelColor = getLevelColorAnsi(entry.level)
+  const scopeColor = getScopeColorAnsi(entry.scope)
+  const levelUpper = entry.level.toUpperCase().padEnd(5)
+  const { device, account } = pickContext(entry.data)
+  const contextPart = device
+    ? `${ANSI_DIM}[${device}][${account ?? NO_ACCOUNT_PLACEHOLDER}]${ANSI_RESET}`
+    : ''
+  const dataPart = formatDataPairs(excludeContextKeys(entry.data))
+  const messagePart = dataPart ? `${entry.message} ${dataPart}` : entry.message
+  return `${entry.timestamp} ${levelColor}${ANSI_BOLD}${levelUpper}${ANSI_RESET} ${contextPart}${scopeColor}${ANSI_BOLD}[${entry.scope}]${ANSI_RESET} ${messagePart}`
+}
+
+/** Plain-text single-line format (no ANSI). */
+export function formatPlainLog(entry: LogEntry): string {
+  const levelUpper = entry.level.toUpperCase().padEnd(5)
+  const { device, account } = pickContext(entry.data)
+  const contextPart = device ? `[${device}][${account ?? NO_ACCOUNT_PLACEHOLDER}] ` : ''
+  const dataPart = formatDataPairs(excludeContextKeys(entry.data))
+  const messagePart = dataPart ? `${entry.message} ${dataPart}` : entry.message
+  return `${entry.timestamp} ${levelUpper} ${contextPart}[${entry.scope}] ${messagePart}`
 }
 
 let logContext: Record<string, unknown> = {}
 
-/** Set per-process context fields (e.g., device id, account id) merged into
- * the data field of every subsequent log entry. The merged data flows into
- * the buffer, the DB sink, the terminal output, and the wire format. The
- * in-app log viewer is responsible for hiding these keys when displaying
- * entries on-device. Caller-supplied data keys win on conflict. */
+/** Set fields merged into the data of every subsequent entry (device id,
+ * account id). Caller-supplied data keys win on conflict. */
 export function setLogContext(ctx: Record<string, unknown>): void {
   logContext = ctx
 }
@@ -161,6 +135,68 @@ export function setLogContext(ctx: Record<string, unknown>): void {
 function mergeContext(data?: LogData): LogData | undefined {
   if (Object.keys(logContext).length === 0) return data
   return { ...(logContext as LogData), ...(data ?? {}) }
+}
+
+/**
+ * Output sink for log entries. Errors from `write` are swallowed so one
+ * misbehaving appender cannot starve others. Batching appenders own
+ * their own queue + timer. `pause` is sync and must keep accepting
+ * writes; `stop` is hard teardown with no flush guarantee.
+ */
+export type Appender = {
+  write(entry: LogEntry): void
+  flush?(): Promise<void> | void
+  stop?(): Promise<void> | void
+  pause?(): void
+  resume?(): void
+}
+
+const appenders = new Set<Appender>()
+const noAppenderBuffer: LogEntry[] = []
+
+/** Register an appender. Drains any pre-registration entries into it. */
+export function addAppender(a: Appender): void {
+  appenders.add(a)
+  if (noAppenderBuffer.length > 0) {
+    const drain = noAppenderBuffer.splice(0)
+    for (const entry of drain) {
+      try {
+        a.write(entry)
+      } catch {}
+    }
+    try {
+      void a.flush?.()
+    } catch {}
+  }
+}
+
+/** Unregister an appender. Does not call `stop` — caller owns teardown. */
+export function removeAppender(a: Appender): void {
+  appenders.delete(a)
+}
+
+/** Flush every registered appender. Resolves after all settle. */
+export async function flushAllAppenders(): Promise<void> {
+  await Promise.allSettled(Array.from(appenders).map((a) => Promise.resolve(a.flush?.())))
+}
+
+/** Reset the registry. For test setup/teardown only. */
+export function clearAppenders(): void {
+  appenders.clear()
+  noAppenderBuffer.length = 0
+}
+
+function dispatch(entry: LogEntry): void {
+  if (appenders.size === 0) {
+    noAppenderBuffer.push(entry)
+    return
+  }
+  // Snapshot so an appender's `write` can call add/removeAppender mid-iteration.
+  for (const a of [...appenders]) {
+    try {
+      a.write(entry)
+    } catch {}
+  }
 }
 
 function createLogger(level: LogLevel) {
@@ -175,14 +211,7 @@ function createLogger(level: LogLevel) {
       data: merged,
     }
 
-    appendLog(entry)
-
-    if (shouldLogToTerminal(level, scope)) {
-      // Pass original data (without context) plus the context separately so
-      // the formatter can render device/account as front tags rather than
-      // mixing them into the trailing key=value data part.
-      console.log(formatTerminalLog(level, scope, timestamp, msg, data, logContext))
-    }
+    dispatch(entry)
   }
 }
 

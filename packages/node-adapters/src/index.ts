@@ -22,3 +22,6 @@ export { createNodeSdkAdapter } from './sdk'
 export { createNodeSdkAuthAdapter } from './auth'
 export type { NodeSdkAuthResult } from './auth'
 export { createNodeDownloadAdapter } from './download'
+
+// Logging
+export { createNodeFileLogAppender } from './logFileAppender'
