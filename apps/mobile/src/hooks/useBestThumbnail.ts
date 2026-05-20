@@ -40,7 +40,7 @@ export function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 51
     download()
   }, [isInitializing, isConnected, thumbRecord.data, status.data, download])
 
-  // Get the URI via fsFileUriCache which receives synchronous pushes from
+  // Get the URI via app.caches.fsFileUri which receives synchronous pushes from
   // copyFileToFs — no async gap between download completing and URI appearing.
   return useFsFileUri(thumbRecord.data ?? undefined)
 }

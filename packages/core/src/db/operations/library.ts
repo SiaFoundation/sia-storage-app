@@ -1,5 +1,6 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecordRow } from '../../types/files'
+import { SYSTEM_TAGS } from './tags'
 
 export type SortBy = 'NAME' | 'DATE' | 'ADDED' | 'SIZE'
 export type SortDir = 'ASC' | 'DESC'
@@ -323,7 +324,7 @@ export async function querySortedFileIds(
 export async function queryLibraryFiles(
   db: DatabaseAdapter,
   opts: LibraryQueryParams & { limit?: number; offset?: number },
-): Promise<FileRecordRow[]> {
+): Promise<Array<FileRecordRow & { isFavorite: number; fsExists: number }>> {
   const { limit, offset, ...queryOpts } = opts
   const {
     where,
@@ -341,11 +342,22 @@ export async function queryLibraryFiles(
     pageClause = ` LIMIT ${limit | 0}`
   }
 
-  return db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt
+  // LEFT JOINs surface flags per row without per-row fan-out during list
+  // render. useFileList primes the per-fileId favorites and fs URI caches
+  // from these flags so list-row useIsFavorite and useFsFileUri hooks
+  // short-circuit instead of issuing one SELECT per visible row.
+  return db.getAllAsync<FileRecordRow & { isFavorite: number; fsExists: number }>(
+    `SELECT files.id, files.name, files.size, files.createdAt, files.updatedAt, files.type, files.kind,
+            files.localId, files.hash, files.addedAt, files.thumbForId, files.thumbSize,
+            files.trashedAt, files.deletedAt,
+            (file_tags.fileId IS NOT NULL) AS isFavorite,
+            (fs.fileId IS NOT NULL) AS fsExists
      FROM files
+     LEFT JOIN file_tags ON file_tags.fileId = files.id AND file_tags.tagId = ?
+     LEFT JOIN fs ON fs.fileId = files.id
      ${where}
      ORDER BY ${orderExpr}${pageClause}`,
+    SYSTEM_TAGS.favorites.id,
     ...queryParams,
   )
 }
