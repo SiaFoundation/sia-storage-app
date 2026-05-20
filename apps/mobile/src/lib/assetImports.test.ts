@@ -724,7 +724,7 @@ describe('importAssets — picker / camera / share intent', () => {
   })
 
   describe('scanner integration', () => {
-    it('triggers the import scanner so hashing starts promptly', async () => {
+    it('triggers the import scanner once the copy loop finishes', async () => {
       const { triggerImportScanner } = require('../managers/importScanner')
       const assets = [
         {
@@ -737,7 +737,8 @@ describe('importAssets — picker / camera / share intent', () => {
         },
       ]
 
-      await importAssets(assets)
+      const { copyPromise } = await importAssets(assets)
+      await copyPromise
       expect(triggerImportScanner).toHaveBeenCalled()
     })
   })

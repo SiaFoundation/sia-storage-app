@@ -42,6 +42,7 @@ export class ServiceScheduler {
     triggerNow: () => void
   } {
     let running = false
+    let rerunRequested = false
     let runTick: (() => void) | null = null
 
     const init = () => {
@@ -56,6 +57,7 @@ export class ServiceScheduler {
       // Increment the token to invalidate any previously scheduled or in-flight ticks.
       const token = (existing?.token ?? 0) + 1
       running = false
+      rerunRequested = false
       this.schedulerStateMap.set(name, {
         token,
         timeoutId: null,
@@ -90,7 +92,15 @@ export class ServiceScheduler {
           }
         } finally {
           running = false
-          scheduleNextRun(nextInterval)
+          // A triggerNow that arrived while we were running deferred
+          // itself instead of being dropped — honor it now, bypassing
+          // the interval delay (unless the scheduler is paused).
+          if (rerunRequested && !this.paused) {
+            rerunRequested = false
+            runTick!()
+          } else {
+            scheduleNextRun(nextInterval)
+          }
         }
       }
 
@@ -115,7 +125,13 @@ export class ServiceScheduler {
 
     const triggerNow = () => {
       const current = this.schedulerStateMap.get(name)
-      if (!current || !runTick || running) return
+      if (!current || !runTick) return
+      if (running) {
+        // Defer; the finally above will honor the flag immediately
+        // after the in-flight tick completes.
+        rerunRequested = true
+        return
+      }
       if (current.timeoutId) {
         clearTimeout(current.timeoutId)
         current.timeoutId = null

@@ -591,7 +591,12 @@ export async function importAssets(
     )
     copyDispatched = true
 
-    triggerImportScanner()
+    // No scanner trigger here. copyAssets dispatches copies in parallel
+    // with bounded concurrency; a tick now would find no fs rows to
+    // finalize and only contend with the placeholder INSERT and the first
+    // wave of RNFS.copyFile calls. copyAssets triggers the scanner once
+    // at the end of its loop, and the regular interval picks up files as
+    // they land.
     const totalBytes = candidates.reduce((s, c) => s + c.placeholder.size, 0)
     return { files, newVersionCount, totalBytes, copyPromise }
   } finally {
