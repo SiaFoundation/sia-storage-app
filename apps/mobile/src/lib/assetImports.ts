@@ -606,29 +606,67 @@ export async function importAssets(
   }
 }
 
+// Bounded concurrency for picker copies.
+//
+// Each content:// URI takes ~500-1000ms of ContentResolver round-trip
+// (on Drive, the on-demand cloud fetch dominates) regardless of file
+// size, so a serial loop spends most of its time waiting. File sizes
+// are known upfront from the picker, so we run multiple copies in
+// parallel gated by both count and total bytes in flight. A single
+// file larger than the byte budget runs alone (no deadlock).
+const COPY_MAX_CONCURRENCY = 4
+const COPY_MAX_BYTES_IN_FLIGHT = 16 * 1024 * 1024
+
 async function copyAssets(
   copies: { id: string; type: string; size: number; sourceUri: string }[],
   onProgress?: (bytes: number) => void,
 ): Promise<{ copied: number; failed: number }> {
-  // IDs are already registered by importAssets right after createMany;
-  // we only clear them here as each copy resolves.
+  // IDs are already registered by importAssets before createMany; we
+  // only clear them here as each copy resolves (success or failure).
   let copied = 0
   let failed = 0
-  for (const { id, type, size, sourceUri } of copies) {
+
+  const runOne = async (entry: (typeof copies)[number]) => {
     try {
-      await copyFileToFs({ id, type }, sourceUri)
+      await copyFileToFs({ id: entry.id, type: entry.type }, entry.sourceUri)
       copied += 1
-      onProgress?.(size)
+      onProgress?.(entry.size)
     } catch (e) {
       failed += 1
       logger.warn('importAssets', 'copy_failed', {
-        fileId: id,
+        fileId: entry.id,
         error: e as Error,
       })
     } finally {
-      markImportCopyComplete(id)
+      markImportCopyComplete(entry.id)
     }
   }
+
+  let nextIndex = 0
+  let bytesInFlight = 0
+  const inFlight = new Map<number, Promise<void>>()
+
+  while (nextIndex < copies.length || inFlight.size > 0) {
+    while (nextIndex < copies.length && inFlight.size < COPY_MAX_CONCURRENCY) {
+      const next = copies[nextIndex]
+      // Allow the first concurrent file regardless of size; otherwise a
+      // single oversized file would deadlock.
+      if (inFlight.size > 0 && bytesInFlight + next.size > COPY_MAX_BYTES_IN_FLIGHT) {
+        break
+      }
+      const i = nextIndex++
+      bytesInFlight += next.size
+      const p = runOne(next).finally(() => {
+        inFlight.delete(i)
+        bytesInFlight -= next.size
+      })
+      inFlight.set(i, p)
+    }
+    if (inFlight.size > 0) {
+      await Promise.race(inFlight.values())
+    }
+  }
+
   triggerImportScanner()
   return { copied, failed }
 }
