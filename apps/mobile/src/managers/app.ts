@@ -2,8 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
-import { applyLogContext } from '@siastorage/core/services/logForwarder'
-import { stopLogAppender } from '@siastorage/logger'
+import { shutdownDbLogAppender } from '@siastorage/core/services/dbLogAppender'
+import { applyLogContext } from '@siastorage/core/services/logContext'
+import { shutdownRemoteLogShipper } from '@siastorage/core/services/remoteLogShipper'
 import { mutate } from 'swr'
 import { initializeDB, resetDb, setJournalMode } from '../db'
 import { app } from '../stores/appService'
@@ -196,9 +197,10 @@ async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
   // Cancel uploads and downloads (side-effect cleanup).
   await cancelAllTransfers()
 
-  // Stop the log appender before resetting the DB so it can't write to a
-  // replaced connection.
-  await stopLogAppender()
+  // Stop sinks before resetting the DB so neither writes to a replaced
+  // connection; next initLogger() rebuilds against the new DB.
+  shutdownDbLogAppender()
+  shutdownRemoteLogShipper()
 
   // Drop and recreate all database tables.
   await resetDb()

@@ -1,4 +1,4 @@
-import { logger } from '@siastorage/logger'
+import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
 import { writeState } from '@siastorage/node-adapters'
 import { connectSdk, createCliAppService } from '../app'
 import { startIpcDispatcher } from './ipc'
@@ -22,6 +22,10 @@ export type DaemonContext = ShutdownContext & {
  * returned context with an HTTP server.
  */
 export async function startServices(dataDir?: string): Promise<DaemonContext> {
+  // Daemon stdio is captured to daemon.log by spawnDaemon — the console
+  // appender's output flows there.
+  addAppender(createConsoleAppender({ ansi: true }))
+
   const app = await createCliAppService(dataDir)
   const lock = acquireLockOrExit(app.paths)
 

@@ -46,6 +46,10 @@ export type SuspensionAdapters = {
     getBackgroundTimeRemainingMs(): number
   }
   hooks?: {
+    /** Called sync before `db.gate()`. Fire queries here without
+     * awaiting — they enter the adapter's in-flight set and are covered
+     * by drainDb's interrupt loop. Errors are caught and logged. */
+    onBeforeSuspend?(): void
     /**
      * Fired (fire-and-forget) once the manager has marked itself
      * suspended. Use for battery-hygiene work (stop forwarders, cancel
@@ -237,6 +241,11 @@ export function createSuspensionManager(
     logger.info('suspension', 'starting')
 
     try {
+      try {
+        hooks?.onBeforeSuspend?.()
+      } catch (error) {
+        logger.error('suspension', 'before_suspend_error', { error: error as Error })
+      }
       db.gate()
       scheduler.pause()
       scheduler.abort()

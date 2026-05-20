@@ -1,7 +1,14 @@
 #!/usr/bin/env bun
 import { resolve } from 'node:path'
 import { Command } from 'commander'
-import { isDaemonRunning, readDaemonPid, getDataDir, getPaths } from '@siastorage/node-adapters'
+import { addAppender, flushAllAppenders } from '@siastorage/logger'
+import {
+  createNodeFileLogAppender,
+  isDaemonRunning,
+  readDaemonPid,
+  getDataDir,
+  getPaths,
+} from '@siastorage/node-adapters'
 import pkg from '../package.json'
 import { c } from './lib/format'
 
@@ -32,6 +39,19 @@ if (process.env.SIA_DAEMON_MODE === '1') {
     if (opts.dataDir) return resolve(opts.dataDir)
     return getDataDir()
   }
+
+  // File appender only — no console appender means no terminal log output.
+  // Lazy install via preAction so `--data-dir` is parsed first.
+  let logAppenderInstalled = false
+  program.hook('preAction', () => {
+    if (logAppenderInstalled) return
+    logAppenderInstalled = true
+    addAppender(createNodeFileLogAppender(getPaths(resolveDataDir()).logPath))
+  })
+  // `process.exit` skips 'beforeExit', so flush explicitly.
+  process.on('exit', () => {
+    if (logAppenderInstalled) void flushAllAppenders()
+  })
 
   program.action(async () => {
     const p = getPaths(resolveDataDir())

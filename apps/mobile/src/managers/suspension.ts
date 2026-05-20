@@ -3,9 +3,13 @@ import {
   pauseAllServiceIntervals,
   resumeAllServiceIntervals,
 } from '@siastorage/core/lib/serviceInterval'
-import { stopLogForwarder } from '@siastorage/core/services/logForwarder'
+import {
+  flushDbLogAppenderBeforeSuspend,
+  pauseDbLogAppender,
+} from '@siastorage/core/services/dbLogAppender'
+import { pauseRemoteLogShipper } from '@siastorage/core/services/remoteLogShipper'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
-import { logger, stopLogAppender } from '@siastorage/logger'
+import { logger } from '@siastorage/logger'
 import { getBackgroundTimeRemainingMs } from 'background-time-remaining'
 import { Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
@@ -79,10 +83,12 @@ const manager = createSuspensionManager(
       getBackgroundTimeRemainingMs,
     },
     hooks: {
+      onBeforeSuspend: flushDbLogAppenderBeforeSuspend,
       onAfterSuspend: async () => {
         await logSuspendDiagnostics()
-        stopLogAppender()
-        stopLogForwarder()
+        // Pause (not stop) so foreground resume restarts both timers.
+        pauseDbLogAppender()
+        pauseRemoteLogShipper()
         app().downloads.cancelAll()
         cancelFsEvictionScanner()
         cancelFsOrphanScanner()

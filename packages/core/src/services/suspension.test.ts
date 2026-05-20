@@ -12,6 +12,7 @@ function createAdapters(
   opts: {
     trace?: string[]
     uploaderSuspend?: () => Promise<void> | void
+    onBeforeSuspend?: () => void
     onAfterSuspend?: () => void | Promise<void>
     waitForIdle?: () => Promise<void>
     /** Returns iOS remaining ms; defaults to Infinity (no cap). */
@@ -52,6 +53,7 @@ function createAdapters(
       ),
     },
     hooks: {
+      onBeforeSuspend: jest.fn(opts.onBeforeSuspend ?? recordEvent('onBeforeSuspend')),
       onAfterSuspend: jest.fn(opts.onAfterSuspend ?? recordEvent('onAfterSuspend')),
       onAfterResume: jest.fn(),
       onForegroundActive: jest.fn(),
@@ -87,6 +89,7 @@ describe('doSuspend', () => {
     await flushMicrotasks()
 
     expect(trace).toEqual([
+      'onBeforeSuspend',
       'gate',
       'pause',
       'abort',
@@ -126,6 +129,21 @@ describe('doSuspend', () => {
     expect(mocks.db.ungate).toHaveBeenCalledTimes(1)
     expect(mocks.scheduler.resume).toHaveBeenCalledTimes(1)
     expect(mocks.uploader.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('swallows onBeforeSuspend errors and still completes the suspend', async () => {
+    const { adapters, mocks } = createAdapters({
+      onBeforeSuspend: () => {
+        throw new Error('flush boom')
+      },
+    })
+    const manager = createSuspensionManager(adapters)
+
+    await manager.suspend()
+    await flushMicrotasks()
+
+    expect(manager.isSuspended()).toBe(true)
+    expect(mocks.db.gate).toHaveBeenCalledTimes(1)
   })
 
   it('still marks suspended when onAfterSuspend throws (fire-and-forget)', async () => {
