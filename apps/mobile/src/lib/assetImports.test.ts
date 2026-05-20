@@ -468,14 +468,14 @@ describe('importAssets — picker / camera / share intent', () => {
         settled = true
       })
 
+      // Both copies dispatch in parallel up to the concurrency cap.
       await new Promise((r) => setTimeout(r, 0))
       expect(settled).toBe(false)
-      expect(releasers).toHaveLength(1)
+      expect(releasers).toHaveLength(2)
 
       releasers[0]()
       await new Promise((r) => setTimeout(r, 0))
       expect(settled).toBe(false)
-      expect(releasers).toHaveLength(2)
 
       releasers[1]()
       const result = await copyPromise
@@ -695,6 +695,102 @@ describe('importAssets — picker / camera / share intent', () => {
         },
       ])
       expect(totalBytes).toBe(35)
+    })
+  })
+
+  describe('bounded concurrency', () => {
+    const MB = 1024 * 1024
+
+    function makeAssets(count: number, sizeBytes: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: undefined as string | undefined,
+        name: `f${i}.bin`,
+        size: sizeBytes,
+        sourceUri: `file:///tmp/f${i}.bin`,
+        type: 'application/octet-stream',
+        timestamp: '2024-06-01',
+      }))
+    }
+
+    /**
+     * Stubs `copyFileToFs` with deferred promises, tracks peak
+     * concurrency, and drains pending copies in waves. Each invocation
+     * parks on a promise resolved by the next `releaseNext()` call.
+     */
+    function deferredCopyStub() {
+      const pending: Array<() => void> = []
+      let inFlight = 0
+      let peakInFlight = 0
+      jest.mocked(copyFileToFs).mockImplementation(() => {
+        inFlight++
+        if (inFlight > peakInFlight) peakInFlight = inFlight
+        return new Promise<string>((resolve) => {
+          pending.push(() => {
+            inFlight--
+            resolve('/local/x')
+          })
+        })
+      })
+      return {
+        pending,
+        peak: () => peakInFlight,
+        async drain() {
+          // Release whatever is currently pending and yield so the
+          // dispatcher can fill in the next wave. Repeat until empty.
+          while (pending.length > 0) {
+            const wave = pending.splice(0)
+            for (const r of wave) r()
+            await new Promise((r) => setTimeout(r, 0))
+          }
+        },
+      }
+    }
+
+    it('caps concurrent copies at 4 even with a large queue', async () => {
+      const stub = deferredCopyStub()
+      const { copyPromise } = await importAssets(makeAssets(10, 1 * MB))
+
+      // Drain microtasks so the dispatcher fills up to its cap.
+      await new Promise((r) => setTimeout(r, 0))
+      expect(copyFileToFs).toHaveBeenCalledTimes(4)
+      expect(stub.peak()).toBe(4)
+
+      await stub.drain()
+      await copyPromise
+      // Final peak across the whole run is still bounded by the cap.
+      expect(stub.peak()).toBe(4)
+      expect(copyFileToFs).toHaveBeenCalledTimes(10)
+    })
+
+    it('blocks new dispatch when adding the next file would exceed the byte budget', async () => {
+      // Each 6 MB; budget is 16 MB. The first file dispatches regardless
+      // (deadlock guard). The second adds to 12 MB. A third would push to
+      // 18 MB > 16 MB, so the dispatcher must wait. Peak in flight = 2.
+      const stub = deferredCopyStub()
+      const { copyPromise } = await importAssets(makeAssets(5, 6 * MB))
+
+      await new Promise((r) => setTimeout(r, 0))
+      expect(stub.peak()).toBe(2)
+      expect(copyFileToFs).toHaveBeenCalledTimes(2)
+
+      await stub.drain()
+      await copyPromise
+      expect(stub.peak()).toBe(2)
+      expect(copyFileToFs).toHaveBeenCalledTimes(5)
+    })
+
+    it('runs a single oversized file alone without deadlocking', async () => {
+      // 50 MB > 16 MB budget; the "first file regardless of size" carve-out
+      // must let it run alone, otherwise it'd never start.
+      const stub = deferredCopyStub()
+      const { copyPromise } = await importAssets(makeAssets(1, 50 * MB))
+
+      await new Promise((r) => setTimeout(r, 0))
+      expect(copyFileToFs).toHaveBeenCalledTimes(1)
+      expect(stub.peak()).toBe(1)
+
+      await stub.drain()
+      await copyPromise
     })
   })
 
