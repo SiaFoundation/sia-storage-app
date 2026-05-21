@@ -1,3 +1,10 @@
+## 0.0.4 (2026-05-21)
+
+### Fixes
+
+- Add download command for retrieving files to disk. Defaults to the current directory using the file's original name; pass `--output <path>` to choose a destination.
+- Logging dispatches each entry to a registry of appenders. Available sinks: a console appender (logger pkg), a Node file appender (node-adapters), and a SQLite appender (`DbLogAppender` in core). Remote log shipping is a separate service that reads from the `logs` table — its toggle does not affect local persistence. Appenders support `pause` / `resume` for iOS suspension and a synchronous pre-suspend RAM flush.
+
 ## 0.0.3 (2026-05-13)
 
 ### Features

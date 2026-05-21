@@ -2,6 +2,35 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.13.0 (2026-05-21)
+
+### Features
+
+- User-initiated file imports (document picker, photo picker, camera, share extension) now show a progress modal that stays open until every file is fully copied. Previously, large imports could be interrupted by the user closing the app, leaving incomplete files in the library.
+
+### Fixes
+
+- Photo archive sync no longer re-imports photos already in your library, including ones uploaded from another device or restored by re-syncing this device.
+- Upgrade `react-native-sia` to 0.14.0.
+- Picker imports copy files in parallel (up to 4 at a time, bounded by total bytes in flight) instead of one at a time. Cloud sources like Google Drive in particular finish significantly faster.
+- Fixed iCloud-only photos failing to preview in the file viewer with a "No suitable image URL loader" error. The file viewer now pulls them from iCloud on demand when opened.
+- Fixed an upload race that could leave some files unsynced. Helps with https://github.com/SiaFoundation/sia-storage-app/issues/688.
+- Fixed an issue where file status indicators showed a "Database is suspended" error after the app was backgrounded during an upload or download.
+- Fixed picker imports occasionally getting permanently marked as "File unavailable" right after a successful import. The import scanner could race the background copy and mark just-inserted placeholders lost before their bytes had landed.
+- Imports finish faster — the import scanner now drains pending hashes back-to-back instead of waiting 3 seconds between batches of 20.
+- Redesign the initialization error screen with clearer recovery options: restart, clear and re-sync local data, email the team, and a separated clear-and-sign-out at the bottom. Pre-onboarding the recovery options collapse to a single "Clear local data" action.
+- `queryLibrary` now returns an `fsExists` flag per row via LEFT JOIN, and the file-list fetcher primes the per-fileId fs URI cache. List-row `useFsFileUri` hooks no longer fan out into one SELECT + `RNFS.stat` per visible row.
+- Recognize files by their magic bytes instead of trusting a misleading filename extension, so a `.heic`-named file that's actually JPEG is identified as JPEG everywhere `type` is surfaced.
+- Picker imports no longer race the scanner's orphan branch during the initial INSERT, preventing files that copied successfully from being marked with a stale "lost" reason.
+- Many more file types are now recognized — including AVI, MKV, and WebM videos; FLAC, OGG, Opus, AIFF, and Voice Memos (CAF) audio; and BMP, AVIF, and HEIC Live Photo images.
+- The library status sheet's upload progress section now notes when its size totals exclude files still pending import.
+- Fixed iOS suspend-time races that could leave an upload, sync-up, download, import, thumbnail, or share-sheet add half-applied.
+- YAML, TOML, and common source-code files (Python, TypeScript, Ruby, Go, Rust, shell scripts, and others) now open in the text viewer instead of falling back to "Preview not supported".
+- Reduced battery use during idle gallery viewing by skipping thumbnail-scanner work for files whose originals aren't yet downloaded and slowing the scanner's polling cadence after several quiet ticks.
+- Thumbnail generation is now faster and uses less memory, especially when processing many images at once.
+- The thumbnail scanner now self-heals files whose recorded type disagrees with their actual content: the file is renamed on disk and the record updated, so other devices receive the fix on the next sync.
+- Files in formats the platform can't decode (proprietary camera RAW, JPEG XL, PSD, HEIC sequence, MKV and WebM on iOS, WMV, FLV, OGV, MIDI, WMA) now show the "Preview not supported" panel instead of routing to a viewer that silently fails to render.
+
 ## 1.12.1 (2026-05-12)
 
 ### Fixes
