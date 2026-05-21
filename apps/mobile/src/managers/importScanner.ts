@@ -68,10 +68,11 @@ async function run(signal: AbortSignal): Promise<number | undefined> {
     return
   }
   const result = await runImportScanner(signal)
-  // Drain mode: if this tick finalized files (or files are mid-copy,
-  // surfaced as skipped via the in-flight set), more work is likely
-  // pending — re-run immediately instead of waiting the full interval.
-  if (result.finalized > 0 || result.skipped > 0) {
+  // Drain mode: if this tick finalized files, more work is likely
+  // pending behind MAX_PER_TICK — re-run immediately. Skip-only ticks
+  // (e.g., waiting on in-flight picker copies) fall back to the
+  // regular interval.
+  if (result.finalized > 0) {
     return 0
   }
   return undefined
