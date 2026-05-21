@@ -1,3 +1,30 @@
+## 0.0.15 (2026-05-21)
+
+### Features
+
+- Add empty directory cleanup operation with cascading parent deletion and sync-down integration. `queryDirectoryChildren` and `queryAllDirectoriesWithCounts` now report `fileCount` recursively (this directory plus all descendants), so a parent that holds files only in subdirectories shows the total instead of zero.
+- Logging dispatches each entry to a registry of appenders. Available sinks: a console appender (logger pkg), a Node file appender (node-adapters), and a SQLite appender (`DbLogAppender` in core). Remote log shipping is a separate service that reads from the `logs` table — its toggle does not affect local persistence. Appenders support `pause` / `resume` for iOS suspension and a synchronous pre-suspend RAM flush.
+
+### Fixes
+
+- Batch thumbnail-size lookups in the scanner from one query per candidate to one per page.
+- Add MIME and extension support for many more video (AVI, MKV, WebM, 3GP, MPEG, WMV, FLV, OGV), image (BMP, AVIF, JXL, HEIC sequence, AVCI, PSD, Canon/Nikon/Sony/Fuji/Olympus/Panasonic/Pentax RAW), audio (FLAC, OGG, Opus, AIFF, CAF, AMR, WMA, MIDI), Office/iWork/OpenDocument, ebook, archive, and installer formats, plus YAML, TOML, and common source-code extensions that resolve to `text/plain`.
+- Fixed an upload race that could leave some files unsynced. Helps with https://github.com/SiaFoundation/sia-storage-app/issues/688.
+- Fixed an issue where file status indicators showed a "Database is suspended" error after the app was backgrounded during an upload or download.
+- Fixed picker imports occasionally getting permanently marked as "File unavailable" right after a successful import. The import scanner could race the background copy and mark just-inserted placeholders lost before their bytes had landed.
+- Import scanner re-checks the fs row before marking a placeholder lost, and clears any stale "lost" reason when a file is successfully hashed.
+- Fix the import scanner re-selecting `lostReason`-marked placeholders on every tick, which caused a cascade of library-cache invalidations. `FileQueryOpts` gains a `lostReasonIsNull` flag used by the scanner's phase 2 query; successful finalize clears `lostReason` so a recovered row can leave the Unavailable tab.
+- `queryLibrary` now returns an `fsExists` flag per row via LEFT JOIN, and the file-list fetcher primes the per-fileId fs URI cache. List-row `useFsFileUri` hooks no longer fan out into one SELECT + `RNFS.stat` per visible row.
+- `queryLibrary` now returns an `isFavorite` flag per row via LEFT JOIN, and the file-list fetcher primes the per-fileId favorites cache. List-row `useIsFavorite` hooks no longer fan out into one `SELECT FROM file_tags` per visible row.
+- Recognize files by their magic bytes instead of trusting a misleading filename extension, so a `.heic`-named file that's actually JPEG is identified as JPEG everywhere `type` is surfaced.
+- Detect AVI, MKV, FLAC, OGG, AIFF, 7z, bzip2, xz, RAR, ZIP, and gzip from magic bytes so files with missing or wrong extensions still resolve to the correct MIME instead of `application/octet-stream`.
+- `ServiceScheduler.triggerNow()` no longer drops requests that arrive while a tick is running — the request defers to fire immediately after the in-flight tick completes.
+- Fixed iOS suspend-time races that could leave an upload, sync-up, download, import, thumbnail, or share-sheet add half-applied.
+- Reduced battery use during idle gallery viewing by skipping thumbnail-scanner work for files whose originals aren't yet downloaded and slowing the scanner's polling cadence after several quiet ticks.
+- Thumbnail generation is now faster and uses less memory, especially when processing many images at once.
+- The thumbnail scanner now self-heals files whose recorded type disagrees with their actual content: the file is renamed on disk and the record updated, so other devices receive the fix on the next sync.
+- The thumbnail scanner now consults a `thumbnailableTypes` allowlist declared by each adapter, skipping formats the platform can't decode (proprietary RAW, JPEG XL, PSD, SVG, HEIC sequence, TIFF on mobile) instead of retrying on every cold start.
+
 ## 0.0.14 (2026-05-12)
 
 ### Fixes
