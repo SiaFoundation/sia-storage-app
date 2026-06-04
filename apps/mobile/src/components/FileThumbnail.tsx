@@ -1,4 +1,5 @@
 import type { FileRecord, ThumbSize } from '@siastorage/core/types'
+import { Image } from 'expo-image'
 import {
   FileAudioIcon,
   FileIcon,
@@ -7,8 +8,8 @@ import {
   ImageIcon,
   PlayIcon,
 } from 'lucide-react-native'
-import { Image, StyleSheet, View } from 'react-native'
-import { useBestThumbnailUri } from '../hooks/useBestThumbnail'
+import { StyleSheet, View } from 'react-native'
+import { useThumbnailUri } from '../hooks/useBestThumbnail'
 import { palette } from '../styles/colors'
 
 export function FileThumbnail({
@@ -22,12 +23,21 @@ export function FileThumbnail({
   iconSize?: number
   iconColor?: string
 }) {
-  const bestThumb = useBestThumbnailUri(file, thumbSize)
+  // Real cached thumb when present, else the device photo-library tile while
+  // importing. onError fires only for the OS fallback, which marks the asset
+  // unrenderable so the cell drops to the icon and stops retrying.
+  const { uri, isOsFallback, onOsError } = useThumbnailUri(file, thumbSize)
 
   if (file.type?.includes('image')) {
-    const thumbUri = bestThumb.data
-    if (thumbUri) {
-      return <Image source={{ uri: thumbUri }} style={styles.thumbnailImage} />
+    if (uri) {
+      return (
+        <Image
+          source={uri}
+          style={styles.thumbnailImage}
+          recyclingKey={file.id}
+          onError={isOsFallback ? onOsError : undefined}
+        />
+      )
     }
     return (
       <View style={styles.thumbnailImage}>
@@ -43,13 +53,14 @@ export function FileThumbnail({
     )
   }
   if (file.type?.includes('video')) {
-    const thumbUri = bestThumb.data
     return (
       <View style={styles.thumbnailImage}>
-        {thumbUri ? (
+        {uri ? (
           <Image
-            source={{ uri: thumbUri }}
+            source={uri}
             style={[{ position: 'absolute' }, styles.thumbnailImage]}
+            recyclingKey={file.id}
+            onError={isOsFallback ? onOsError : undefined}
           />
         ) : null}
         <PlayIcon size={iconSize} color={iconColor} />
