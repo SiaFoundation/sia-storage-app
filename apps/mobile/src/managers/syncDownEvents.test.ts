@@ -1,3 +1,4 @@
+import { SYNC_GATE_HYDRATION_MIN } from '@siastorage/core/config'
 import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata, FileRecord } from '@siastorage/core/types'
@@ -1451,6 +1452,140 @@ describe('syncDownEvents', () => {
       const aborted = new AbortController()
       aborted.abort()
       await run(aborted.signal)
+      expect(app().sync.getState().syncGateStatus).toBe('pending')
+    })
+
+    // Re-push existing seeded files (same metadata.id) with a newer updatedAt so
+    // they classify as updates (repairs), not creates.
+    function makeUpdateEvents(count: number, startId = 0) {
+      return Array.from({ length: count }, (_, i) => {
+        const id = `obj-gate-${startId + i}`
+        const metadata: FileMetadata = {
+          id: `file-gate-${startId + i}`,
+          name: `gate-${startId + i}.jpg`,
+          type: 'image/jpeg',
+          kind: 'file',
+          size: 100,
+          hash: `hash-gate-${startId + i}`,
+          createdAt: NOW_BASE + startId + i,
+          updatedAt: NOW_BASE + startId + i + 100_000,
+          thumbForId: undefined,
+          thumbSize: undefined,
+          trashedAt: null,
+        }
+        return makeObjectEvent({
+          id,
+          updatedAt: new Date(NOW_BASE + startId + i + 100_000),
+          object: makeMockPinnedObject(metadata, id),
+        })
+      })
+    }
+
+    function makeThumbEvents(count: number, startId = 0) {
+      return Array.from({ length: count }, (_, i) => {
+        const id = `obj-thumb-${startId + i}`
+        const metadata: FileMetadata = {
+          id: `thumb-${startId + i}`,
+          name: `thumb-${startId + i}.jpg`,
+          type: 'image/jpeg',
+          kind: 'thumb',
+          size: 100,
+          hash: `hash-thumb-${startId + i}`,
+          createdAt: NOW_BASE + startId + i,
+          updatedAt: NOW_BASE + startId + i,
+          thumbForId: `file-gate-${startId + i}`,
+          thumbSize: 64,
+          trashedAt: null,
+        }
+        return makeObjectEvent({
+          id,
+          updatedAt: new Date(NOW_BASE + startId + i),
+          object: makeMockPinnedObject(metadata, id),
+        })
+      })
+    }
+
+    // Populate the local library so subsequent runs see an established (not
+    // hydrating) library. Runs with the gate idle so seeding doesn't gate.
+    async function seedLibrary(count: number) {
+      app().sync.setState({ syncGateStatus: 'idle' })
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(makeEvents(count)),
+        appKey: () => mockAppKey,
+      } as any)
+      await run(new AbortController().signal)
+      expect(await app().library.fileCount()).toBeGreaterThanOrEqual(SYNC_GATE_HYDRATION_MIN)
+    }
+
+    test('established library: repair-only catch-up dismisses without gating', async () => {
+      await seedLibrary(60)
+      app().sync.setState({ syncGateStatus: 'pending' })
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(makeUpdateEvents(60)),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('established library: create-light batch dismisses past the old event threshold', async () => {
+      await seedLibrary(60)
+      app().sync.setState({ syncGateStatus: 'pending' })
+      // 5 new files + 30 repairs = 35 events. The old gate keyed on total events
+      // (>= 10) would activate; the new gate keys on the 5 creates and dismisses.
+      const events = [...makeEvents(5, 1000), ...makeUpdateEvents(30)]
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('established library: a real influx of new files still gates', async () => {
+      await seedLibrary(60)
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const events = makeEvents(15, 2000)
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(events),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('active')
+    })
+
+    test('established library: thumbnail creates do not count toward the gate', async () => {
+      await seedLibrary(60)
+      app().sync.setState({ syncGateStatus: 'pending' })
+      // 20 thumbnail creates, no new files — must not gate.
+      internal().setSdk({
+        objectEvents: jest.fn().mockResolvedValueOnce(makeThumbEvents(20)),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(new AbortController().signal)
+      expect(app().sync.getState().syncGateStatus).toBe('dismissed')
+    })
+
+    test('aborted mid-batch leaves the gate pending instead of dismissing', async () => {
+      await seedLibrary(60)
+      app().sync.setState({ syncGateStatus: 'pending' })
+      const controller = new AbortController()
+      // Abort during the fetch so the batch never commits: counts.fileCreates
+      // stays 0 and would read as create-light. The gate must stay 'pending'
+      // for the next run, not dismiss against an incomplete sync.
+      internal().setSdk({
+        objectEvents: jest.fn().mockImplementationOnce(async () => {
+          controller.abort()
+          return makeEvents(20, 3000)
+        }),
+        appKey: () => mockAppKey,
+      } as any)
+
+      await run(controller.signal)
       expect(app().sync.getState().syncGateStatus).toBe('pending')
     })
   })
