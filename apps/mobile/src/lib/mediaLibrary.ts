@@ -1,6 +1,7 @@
 import type { ResolveLocalIdResult } from '@siastorage/core/services/importScanner'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
+import { Platform } from 'react-native'
 
 const resolved = (uri: string): ResolveLocalIdResult => ({ status: 'resolved', uri })
 const deleted: ResolveLocalIdResult = { status: 'deleted' }
@@ -119,6 +120,38 @@ function resolveAssetDisplay(asset: MediaLibrary.AssetInfo | null): ResolveLocal
   if (!asset) return deleted
   const uri = normalizeUri(asset.localUri) ?? asset.uri ?? null
   return uri ? resolved(uri) : unavailable
+}
+
+/**
+ * Resolve a media-library localId to a URI that expo-image can render as a
+ * thumbnail, without triggering an iCloud download.
+ *
+ * iOS: the PHAsset localIdentifier wrapped as a `ph://` URI. expo-image's
+ * PhotoKit loader serves a cache-sized tile sized to the view — no full
+ * decode, no network. Built synchronously, no native round-trip.
+ *
+ * Android: MediaStore only exposes a renderable URI via getAssetInfoAsync.
+ * The options are ignored on Android (no network occurs), so this is a
+ * local MediaStore query returning a `content://` (or `file://`) URI.
+ *
+ * Returns null when there is no localId or the asset can't be resolved.
+ * Display only — these URIs are not readable bytes; use getMediaLibraryUri
+ * for hashing/copying/upload.
+ */
+export async function getOsThumbnailUri(localId: string | null): Promise<string | null> {
+  if (!localId) return null
+  if (Platform.OS === 'ios') {
+    return localId.startsWith('ph://') ? localId : `ph://${localId}`
+  }
+  try {
+    const asset = await MediaLibrary.getAssetInfoAsync(localId, {
+      shouldDownloadFromNetwork: false,
+    })
+    return asset?.uri ?? null
+  } catch (e) {
+    logger.debug('mediaLibrary', 'os_thumb_uri_failed', { localId, error: e as Error })
+    return null
+  }
 }
 
 /**
