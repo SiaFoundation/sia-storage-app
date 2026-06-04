@@ -462,8 +462,11 @@ describe('Version Sync', () => {
     await appA.start()
     await appB.start()
 
-    // Device A creates v1 and v2 via app flow — both devices sync
+    // Device A creates v1 then v2 via app flow. Each is uploaded while it's the
+    // current version (the uploader skips superseded versions), so both reach
+    // the indexer and sync to B.
     await addVersionFile(appA, 'conc-v1', 'shared.txt')
+    await appA.waitForNoActiveUploads()
     await addVersionFile(appA, 'conc-v2', 'shared.txt')
     await appA.waitForNoActiveUploads()
     await waitForCondition(async () => (await appB.getFiles()).length === 2, {
@@ -476,9 +479,10 @@ describe('Version Sync', () => {
     await appB.app.files.trashFile('conc-v1')
     expect(await appB.app.library.fileCount()).toBe(0)
 
-    // Device A creates v3 and v4 through the full app flow
-    // (create record + write file data + fs metadata → upload manager → sync-up)
+    // Device A creates v3 then v4 through the full app flow, uploading each
+    // while current so both reach the indexer.
     await addVersionFile(appA, 'conc-v3', 'shared.txt')
+    await appA.waitForNoActiveUploads()
     await addVersionFile(appA, 'conc-v4', 'shared.txt')
     await appA.waitForNoActiveUploads()
     await waitForCondition(async () => (await appA.getFiles()).length === 4, {
@@ -527,8 +531,10 @@ describe('Version Sync', () => {
     await appB.start()
     await appC.start()
 
-    // Device A creates v1 and v2 via app flow — all three sync
+    // Device A creates v1 then v2 via app flow, uploading each while current so
+    // both reach the indexer and sync to all three devices.
     await addVersionFile(appA, 'tri-v1', 'notes.txt')
+    await appA.waitForNoActiveUploads()
     await addVersionFile(appA, 'tri-v2', 'notes.txt')
     await appA.waitForNoActiveUploads()
     await waitForCondition(async () => (await appC.getFiles()).length === 2, {
@@ -583,5 +589,45 @@ describe('Version Sync', () => {
     await appA.shutdown()
     await appB.shutdown()
     await appC.shutdown()
+  }, 60_000)
+
+  it('superseded-before-upload version stays local; only the current version converges', async () => {
+    // The uploader backs up current versions only. A version superseded before
+    // it uploads never reaches the indexer: it stays a local-only history entry
+    // on the device that made it, while every device still converges on the
+    // same current version.
+    const indexerStorage = createEmptyIndexerStorage()
+    const appA = createTestApp(indexerStorage)
+    const appB = createTestApp(indexerStorage)
+    await appA.start()
+    await appB.start()
+
+    // A creates v1 then v2 while disconnected, so v1 is superseded before any
+    // upload runs (the uploader's pollDB skips work while disconnected).
+    appA.setConnected(false)
+    await addVersionFile(appA, 'loc-v1', 'doc.txt')
+    await addVersionFile(appA, 'loc-v2', 'doc.txt')
+    appA.setConnected(true)
+
+    // Only the current version (v2) uploads and reaches B.
+    await appA.waitForNoActiveUploads()
+    await waitForCondition(async () => (await appB.getFileById('loc-v2')) != null, {
+      timeout: 15_000,
+      message: 'B sees the current version',
+    })
+
+    // B converged on the current version only — it never saw the superseded v1.
+    expect(await appB.getFileById('loc-v1')).toBeNull()
+    expect(await appB.app.library.fileCount()).toBe(1)
+    const histB = await appB.app.files.getVersionHistory('doc.txt', null)
+    expect(histB.map((f) => f.id)).toEqual(['loc-v2'])
+
+    // A keeps v1 as a local-only history entry. Version history is
+    // newest-first, so v1 is ordered after the current v2.
+    const histA = await appA.app.files.getVersionHistory('doc.txt', null)
+    expect(histA.map((f) => f.id)).toEqual(['loc-v2', 'loc-v1'])
+
+    await appA.shutdown()
+    await appB.shutdown()
   }, 60_000)
 })

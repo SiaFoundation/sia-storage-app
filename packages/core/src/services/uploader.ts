@@ -899,6 +899,10 @@ export class UploadManager {
     try {
       const activeIds = this.app.uploads.getActiveIds()
       const indexerURL = await this.app.settings.getIndexerURL()
+      // Back up current versions only. Omitting includeOldVersions excludes
+      // superseded (current=0) files and orphan thumbnails (whose original is no
+      // longer current), so we don't re-upload stale duplicates — and the
+      // uploader's scope matches the stats sheet, which counts current=1 only.
       const candidateFiles = await this.app.files.query({
         limit: 200,
         order: 'ASC',
@@ -907,7 +911,6 @@ export class UploadManager {
         hashNotEmpty: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
         includeThumbnails: true,
-        includeOldVersions: true,
       })
 
       const newEntries: FileEntry[] = []
