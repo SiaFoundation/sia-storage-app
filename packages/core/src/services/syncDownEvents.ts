@@ -364,11 +364,17 @@ async function processBatch(
         })
       }
       const localObject = sealPinnedObject(existing.id, indexerURL, object, appKey)
+      // Heal a wrong stored size from the SDK's size (local-only, no sync-up).
+      const realSize = Number(object.size())
       const isRemoteNewer = metadata.updatedAt >= existing.updatedAt
       const mergedMetadata = isRemoteNewer ? toFileRecordFields(metadata) : {}
       prepared.push({
         kind: 'update',
-        fileRecord: { ...existing, ...mergedMetadata },
+        fileRecord: {
+          ...existing,
+          ...mergedMetadata,
+          ...(realSize > 0 ? { size: realSize } : {}),
+        },
         localObject,
         fileId: existing.id,
         tags: metadata.tags,
@@ -386,10 +392,12 @@ async function processBatch(
         })
       }
       const localObject = sealPinnedObject(fileId, indexerURL, object, appKey)
+      const realSize = Number(object.size())
       prepared.push({
         kind: 'create',
         fileRecord: {
           ...toFileRecordFields(metadata),
+          ...(realSize > 0 ? { size: realSize } : {}),
           id: fileId,
           localId: null,
           addedAt: Date.now(),

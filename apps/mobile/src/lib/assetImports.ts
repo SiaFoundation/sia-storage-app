@@ -504,6 +504,8 @@ export async function importAssets(
             addedAt: now,
             type,
             kind: 'file' as const,
+            // Provisional: Android often reports the wrong size at import.
+            // Corrected after copy (fs.copyFile) and again from the SDK at upload.
             size: a.size ?? 0,
             hash: '',
             trashedAt: null,
