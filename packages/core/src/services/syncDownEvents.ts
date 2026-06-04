@@ -1,7 +1,8 @@
 import { logger } from '@siastorage/logger'
 import type { PinnedObjectRef } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
-import { SYNC_GATE_THRESHOLD } from '../config'
+import type { SyncGateStatus } from '../app/stores'
+import { SYNC_GATE_CREATE_THRESHOLD, SYNC_GATE_HYDRATION_MIN } from '../config'
 import {
   decodeFileMetadata,
   hasCompleteFileMetadata,
@@ -27,6 +28,26 @@ const batchSize = 500
 
 type Counts = {
   total: number
+  // New files only (thumbnails excluded); a metadata-repair wave is updates,
+  // so this stays low.
+  fileCreates: number
+}
+
+/**
+ * Gate status for a just-classified batch. Keyed on new files, not event count,
+ * so a catch-up that's only metadata repairs doesn't block a returning user.
+ * Latches once it leaves 'pending':
+ *   - established library: decided on the first batch
+ *   - near-empty library: keep holding while few new files have arrived
+ */
+function nextGateStatus(
+  current: SyncGateStatus,
+  fileCreates: number,
+  hydrating: boolean,
+): SyncGateStatus {
+  if (current !== 'pending') return current
+  if (fileCreates >= SYNC_GATE_CREATE_THRESHOLD) return 'active'
+  return hydrating ? 'pending' : 'dismissed'
 }
 
 // A "create" means no existing file record matches this object.
@@ -85,12 +106,21 @@ export async function syncDownEventsBatch(
 
   const sdk = internal.requireSdk()
 
-  const counts: Counts = { total: 0 }
+  const counts: Counts = { total: 0, fileCreates: 0 }
   let totalEventsFetched = 0
   let firstEventTime: number | undefined
   const now = Date.now()
 
   try {
+    // A near-empty library is being filled for the first time, so hold the gate
+    // until the catch-up finishes instead of dismissing early on a low new-file
+    // count. Only checked while the gate is pending. Computed inside the try so
+    // a fileCount() throw still reaches the finally that restores isSyncingDown.
+    const hydrating =
+      app.sync.getState().syncGateStatus === 'pending'
+        ? (await app.library.fileCount()) < SYNC_GATE_HYDRATION_MIN
+        : false
+
     while (true) {
       if (signal.aborted) break
       try {
@@ -110,11 +140,6 @@ export async function syncDownEventsBatch(
           })
         }
 
-        const gateStatus = app.sync.getState().syncGateStatus
-        if (gateStatus === 'pending' && totalEventsFetched >= SYNC_GATE_THRESHOLD) {
-          app.sync.setState({ syncGateStatus: 'active' })
-        }
-
         // If the batch size is 1, we are probably synced and repeatedly polling the last event.
         if (events.length === 1) {
           logger.debug('syncDownEvents', 'batch', { size: events.length })
@@ -125,6 +150,15 @@ export async function syncDownEventsBatch(
         const prevTotal = counts.total
         await processBatch(events, counts, signal, app, internal)
         const batchChanged = counts.total > prevTotal
+
+        // Move the gate now this batch is classified. Skip empty/aborted
+        // batches: fileCreates is final only after the commit, and an aborted
+        // run leaves the gate to `finally`, which preserves it across suspension.
+        if (!signal.aborted && totalEventsFetched > 1) {
+          const current = app.sync.getState().syncGateStatus
+          const next = nextGateStatus(current, counts.fileCreates, hydrating)
+          if (next !== current) app.sync.setState({ syncGateStatus: next })
+        }
 
         // Track the first event's timestamp for progress estimation.
         if (firstEventTime === undefined && events.length > 0) {
@@ -512,6 +546,7 @@ async function processBatch(
   // withTransaction can rerun the closure after reopening the DB handle,
   // and an in-closure `+=` would double-count on retry.
   counts.total += creates.length + updates.length + deletedFileIds.length
+  counts.fileCreates += creates.filter((e) => e.isFile).length
 
   // Filesystem cleanup runs after the transaction commits. FS isn't
   // transactional, and an orphan-on-disk after a committed delete is

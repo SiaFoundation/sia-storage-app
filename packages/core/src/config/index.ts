@@ -84,8 +84,12 @@ export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
 export const DB_OPTIMIZE_INTERVAL = secondsInMs(60) // 60 seconds
 // Performance monitor logging interval.
 export const PERF_MONITOR_INTERVAL = secondsInMs(15)
-// Minimum events to activate the sync gate overlay during initial catch-up.
-export const SYNC_GATE_THRESHOLD = 10
+// New-file creates needed to show the sync gate for an established library.
+// A repair-only catch-up is all updates, so it stays under this.
+export const SYNC_GATE_CREATE_THRESHOLD = 10
+// Below this library size, a catch-up is treated as first-time hydration: the
+// gate holds until the queue drains instead of dismissing on a low create count.
+export const SYNC_GATE_HYDRATION_MIN = 50
 // Max concurrent pinObject calls during save phase.
 export const SAVE_BATCH_CONCURRENCY = 20
 // Delay before removing upload state after save, so cache invalidation
