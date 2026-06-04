@@ -1098,7 +1098,13 @@ export class UploadManager {
               })
               return { type: 'deleted', fileId: entry.fileId }
             }
-            pinnedObject.updateMetadata(encodeFileMetadata(metadata))
+            // Prefer the SDK's calculated size as the source of truth, in case
+            // it differs from the recorded file-system size.
+            const sdkSize = Number(pinnedObject.size())
+            const size = sdkSize > 0 ? sdkSize : metadata.size
+            pinnedObject.updateMetadata(
+              encodeFileMetadata(size === metadata.size ? metadata : { ...metadata, size }),
+            )
             await retry('pinObject', () => sdk.pinObject(pinnedObject), 3, 1000)
 
             const appKey = sdk.appKey()
@@ -1109,7 +1115,7 @@ export class UploadManager {
             return {
               type: 'success',
               fileId: entry.fileId,
-              size: entry.size,
+              size,
               localObject,
             }
           } catch (e) {
@@ -1154,8 +1160,16 @@ export class UploadManager {
       // commit on the same side of the suspend gate.
       await this.app.db.waitUntilActive()
       const now = Date.now()
+      // Persist the SDK size in the same bump so the local row matches what we
+      // sent up.
+      const sizeByFileId = new Map(
+        results.flatMap((r) => (r.type === 'success' ? [[r.fileId, r.size] as const] : [])),
+      )
       await this.app.files.updateMany(
-        successfulFileIds.map((id) => ({ id, updatedAt: now })),
+        successfulFileIds.map((id) => {
+          const size = sizeByFileId.get(id)
+          return size === undefined ? { id, updatedAt: now } : { id, updatedAt: now, size }
+        }),
         { includeUpdatedAt: true, skipCurrentRecalc: true },
       )
     }

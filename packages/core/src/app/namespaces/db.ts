@@ -100,6 +100,10 @@ export function buildDbNamespaces(
         addedAt: previous?.addedAt ?? Date.now(),
         usedAt: opts?.usedAt ?? Date.now(),
       })
+      // Android often reports the wrong size at import; correct it to the real
+      // on-disk length after the copy. updatedAt is preserved so this size fix
+      // can't trip sync-up.
+      await ops.updateFile(db, { id: file.id, size: result.size }, { includeUpdatedAt: true })
       return result.uri
     },
     writeFileData: async (file, data) => {
