@@ -2,6 +2,18 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.13.1 (2026-06-05)
+
+### Fixes
+
+- Added import photo library and add files buttons to the library empty state, defaulted to media tab, and reordered tab bar
+- Photo and video thumbnails now appear immediately from your device's photo library while files are still importing, instead of a blank placeholder until each file finishes copying.
+- File sizes now reflect the real file length. The size read at import is often wrong on Android; it's corrected to the real on-disk size after copy, then again from the size the SDK reports when the upload finishes, and any already-wrong sizes heal as files sync down.
+- Improved recovery phrase onboarding with softer tone, distinct new vs returning user experience, and fixed 24-word placeholder
+- Removed onboarding finished screen and moved app initialization directly into the recovery phrase and sign-in flows
+- The launch sync screen now stays hidden when it detects a catch-up is mostly file migrations rather than new files, so returning users don't wait through it.
+- Overhauled onboarding welcome screen with logo and direct sign-in flow
+
 ## 1.13.0 (2026-05-21)
 
 ### Features
