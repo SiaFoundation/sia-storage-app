@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "siastorage",
@@ -73,7 +74,7 @@
     },
     "apps/mobile": {
       "name": "@siastorage/mobile",
-      "version": "1.13.0",
+      "version": "1.13.1",
       "dependencies": {
         "@azure/core-asynciterator-polyfill": "1.0.2",
         "@bacons/text-decoder": "0.0.0",
@@ -162,7 +163,7 @@
     },
     "packages/core": {
       "name": "@siastorage/core",
-      "version": "0.0.15",
+      "version": "0.0.16",
       "dependencies": {
         "@siastorage/logger": "workspace:*",
         "zod": "4.3.6",

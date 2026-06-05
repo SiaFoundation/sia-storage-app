@@ -1,3 +1,11 @@
+## 0.0.16 (2026-06-05)
+
+### Fixes
+
+- File sizes now reflect the real file length. The size read at import is often wrong on Android; it's corrected to the real on-disk size after copy, then again from the size the SDK reports when the upload finishes, and any already-wrong sizes heal as files sync down.
+- The launch sync screen now stays hidden when it detects a catch-up is mostly file migrations rather than new files, so returning users don't wait through it.
+- Upload only current versions. Superseded versions and their thumbnails are no longer uploaded, matching the upload stats counts which already track current versions only.
+
 ## 0.0.15 (2026-05-21)
 
 ### Features
