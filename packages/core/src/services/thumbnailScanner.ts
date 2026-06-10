@@ -354,7 +354,7 @@ export class ThumbnailScanner {
       await app.db.waitUntilActive()
       await app.files.create({
         id: thumbId,
-        name: 'thumbnail.webp',
+        name: `thumbnail${extFromMime(result.mimeType)}`,
         type: result.mimeType,
         kind: 'thumb',
         size: copied.size,
@@ -445,7 +445,7 @@ export class ThumbnailScanner {
         await app.db.waitUntilActive()
         await app.files.create({
           id: thumbId,
-          name: 'thumbnail.webp',
+          name: `thumbnail${extFromMime(result.mimeType)}`,
           type: result.mimeType,
           kind: 'thumb',
           size: copied.size,
