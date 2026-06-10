@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ThumbnailerModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.thumbnailer.ThumbnailerModule"]
+  }
+}

@@ -1,0 +1,19 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.thumbnailer'
+version = '0.0.0'
+
+android {
+  namespace "expo.modules.thumbnailer"
+  defaultConfig {
+    versionCode 1
+    versionName "0.0.0"
+  }
+}
+
+dependencies {
+  api "androidx.exifinterface:exifinterface:1.4.1"
+}
