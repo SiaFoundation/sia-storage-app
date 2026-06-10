@@ -7,6 +7,7 @@ import {
   FolderIcon,
   HeartIcon,
   LinkIcon,
+  SaveIcon,
   ShareIcon,
   TagIcon,
   Trash2Icon,
@@ -87,9 +88,10 @@ function SingleFileActionsSheet({
   const status = useFileStatus(file ?? undefined)
   const isOpen = useSheetOpen(sheetName)
 
-  const { handleShareFile, handleShareURL, canShare } = useShareAction({
-    fileId,
-  })
+  const { handleShareFile, handleShareURL, handleSaveToDevice, canShare, canSaveToDevice } =
+    useShareAction({
+      fileId,
+    })
   const favorite = useIsFavorite(isOpen ? fileId : null)
 
   const handleToggleFavorite = useCallback(async () => {
@@ -156,6 +158,15 @@ function SingleFileActionsSheet({
       >
         Export file
       </ActionSheetButton>
+      {canSaveToDevice && (
+        <ActionSheetButton
+          variant="primary"
+          icon={<SaveIcon size={18} />}
+          onPress={handlePressAndClose(handleSaveToDevice)}
+        >
+          Save to device
+        </ActionSheetButton>
+      )}
       {status.data?.canDownload && (
         <ActionSheetButton
           variant="primary"
