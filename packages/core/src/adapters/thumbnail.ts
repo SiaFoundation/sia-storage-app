@@ -1,8 +1,8 @@
 // Adapters return one of two shapes:
 //   - `data`: bytes in memory (e.g. node-adapters/sharp), written via
 //     `app.fs.writeFileData`.
-//   - `savedUri`: a path to the thumbnail already on disk (e.g. mobile/
-//     expo-image-manipulator), moved into managed storage via `app.fs.adoptFile`.
+//   - `savedUri`: a path to the thumbnail already on disk (e.g. the mobile
+//     native thumbnailer), moved into managed storage via `app.fs.adoptFile`.
 // Any FsIOAdapter paired with a thumbnail adapter that can return `savedUri`
 // MUST implement `adoptFile`; the scanner throws at runtime if it doesn't.
 export type ThumbnailResult =
