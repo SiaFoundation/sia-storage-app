@@ -2,6 +2,12 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.13.2 (2026-06-10)
+
+### Fixes
+
+- Generate photo and video thumbnails natively, so rotated photos preview upright across formats and platforms.
+
 ## 1.13.1 (2026-06-05)
 
 ### Fixes
