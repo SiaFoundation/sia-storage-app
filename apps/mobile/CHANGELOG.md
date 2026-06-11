@@ -2,6 +2,12 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.13.3 (2026-06-11)
+
+### Fixes
+
+- Android now has a "Save to device" option in the file actions menu. It opens the system folder picker so you can choose where the file is saved — the Android share sheet has no built-in save target like the iOS "Save to Files" option.
+
 ## 1.13.2 (2026-06-10)
 
 ### Fixes
