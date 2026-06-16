@@ -206,7 +206,9 @@ export class UploadManager {
 
   /** Add files to the explicit queue and wake the loop. */
   enqueue(files: FileEntry[]): void {
-    this.app.uploads.registerMany(files.map((f) => ({ id: f.fileId, size: f.size })))
+    this.app.uploads.registerMany(
+      files.map((f) => ({ id: f.fileId, size: f.size, kind: f.file.kind })),
+    )
     this.explicitQueue.push(...files)
     this.wake()
   }
@@ -490,7 +492,9 @@ export class UploadManager {
    * async loop. Allows deterministic control over file order and timing.
    */
   async __testProcessFiles(files: FileEntry[]): Promise<void> {
-    this.app.uploads.registerMany(files.map((f) => ({ id: f.fileId, size: f.size })))
+    this.app.uploads.registerMany(
+      files.map((f) => ({ id: f.fileId, size: f.size, kind: f.file.kind })),
+    )
     for (const file of files) {
       await this.processEntry(file)
     }
@@ -921,7 +925,9 @@ export class UploadManager {
       }
 
       if (newEntries.length > 0) {
-        this.app.uploads.registerMany(newEntries.map((e) => ({ id: e.fileId, size: e.size })))
+        this.app.uploads.registerMany(
+          newEntries.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
+        )
         this.polledFiles.push(...newEntries)
       }
 

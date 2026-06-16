@@ -62,26 +62,37 @@ export function useAppStatus(): AppStatus {
   }
 
   if (uploadsProgress.show) {
-    const { packerCount, pendingCount, percentDecimal } = uploadsProgress
+    const { packerCount, packerFileCount, pendingFileCount, percentDecimal } = uploadsProgress
     if (packerCount > 0) {
-      const plural = packerCount === 1 ? 'file' : 'files'
       const isUploading = percentDecimal > 0
       const verb = isUploading ? 'Uploading' : 'Encrypting'
       const hint = isUploading ? (compactUploadPercent(percentDecimal) ?? undefined) : undefined
+      // When real files are in flight, show the count. When only thumbnails
+      // remain (packerFileCount === 0), keep the state but drop the number —
+      // thumbnails still upload, but counting them confuses the user.
+      const plural = packerFileCount === 1 ? 'file' : 'files'
+      const message =
+        packerFileCount > 0 ? `${verb} ${packerFileCount.toLocaleString()} ${plural}` : verb
       return {
         visible: true,
         icon: <CloudUploadIcon size={18} color={palette.blue[400]} />,
-        message: `${verb} ${packerCount.toLocaleString()} ${plural}`,
+        message,
         hint,
         animate: true,
         level: 'info',
       }
     }
-    const plural = pendingCount === 1 ? 'file' : 'files'
+    // Pending branch: same treatment — number excludes thumbnails, but the
+    // state stays visible while only thumbnails are pending.
+    const plural = pendingFileCount === 1 ? 'file' : 'files'
+    const message =
+      pendingFileCount > 0
+        ? `Importing ${pendingFileCount.toLocaleString()} ${plural}`
+        : 'Importing'
     return {
       visible: true,
       icon: <CloudUploadIcon size={18} color={palette.blue[400]} />,
-      message: `Importing ${pendingCount.toLocaleString()} ${plural}`,
+      message,
       animate: true,
       level: 'info',
     }

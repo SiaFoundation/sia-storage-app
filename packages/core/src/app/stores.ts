@@ -1,3 +1,5 @@
+import type { FileKind } from '../types/files'
+
 /** Lifecycle stage of the sync gate overlay shown during initial catch-up. */
 export type SyncGateStatus = 'idle' | 'pending' | 'active' | 'dismissed'
 
@@ -24,6 +26,13 @@ export type UploadStatus = 'queued' | 'packing' | 'packed' | 'uploading' | 'done
 export type UploadEntry = {
   id: string
   name?: string
+  /**
+   * Record kind: 'file' for a real user file, 'thumb' for a generated
+   * thumbnail. Thumbnails are still uploaded, but they're excluded from
+   * user-facing file counts (the status line) since counting them inflates
+   * the number in a way that confuses users.
+   */
+  kind?: FileKind
   /** File size in bytes. */
   size: number
   /** Upload progress from 0 to 1. */
