@@ -44,7 +44,7 @@ export async function mvCommand(dataDir: string, source: string, destination: st
 
   const destDir = await app.directories.getByPath(dst)
   if (destDir) {
-    await app.directories.moveFile(record.id, destDir.id)
+    await app.files.moveFile(record.id, destDir.id)
     console.log(`Moved ${c.green(record.name)} → ${c.cyan(dst)}`)
   } else {
     await app.files.renameFile(record.id, dst)

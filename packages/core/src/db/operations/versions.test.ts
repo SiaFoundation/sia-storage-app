@@ -5,10 +5,12 @@ import {
   insertFile,
   insertManyFiles,
   moveAllFileVersions,
+  moveFilesAllVersions,
   queryFileByName,
   queryFileVersions,
   recalculateCurrentForGroup,
   renameAllFileVersions,
+  tombstoneAllFileVersions,
   trashAllFileVersions,
 } from './files'
 import {
@@ -423,6 +425,89 @@ describe('move-all with staggered timestamps', () => {
   })
 })
 
+describe('batch move moves every selected stack in full', () => {
+  test('moving one id carries its whole version stack', async () => {
+    await createDirectory('dir-a', 'Source')
+    await createDirectory('dir-b', 'Dest')
+    await createFile('v1', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base })
+    await createFile('v2', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base + 100 })
+
+    // Only the current row's id is passed (what a selection UI has on hand).
+    const ids = await moveFilesAllVersions(db(), ['v2'], 'dir-b')
+    expect(ids.sort()).toEqual(['v1', 'v2'])
+
+    expect(await queryFileVersions(db(), 'file.txt', 'dir-a')).toHaveLength(0)
+    const moved = await queryFileVersions(db(), 'file.txt', 'dir-b')
+    expect(moved).toHaveLength(2)
+    expect(moved[0].id).toBe('v2')
+    expect(moved[1].id).toBe('v1')
+  })
+
+  test('moves multiple distinct stacks together, including an unfiled one', async () => {
+    await createDirectory('dir-a', 'Source')
+    await createDirectory('dir-b', 'Dest')
+    await createFile('a1', { name: 'a.txt', directoryId: 'dir-a', updatedAt: base })
+    await createFile('a2', { name: 'a.txt', directoryId: 'dir-a', updatedAt: base + 100 })
+    // b.txt lives unfiled (null directory) — the dominant "move to folder" path, and
+    // the case that needs the null-safe stack match to be found at all.
+    await createFile('b1', { name: 'b.txt', updatedAt: base + 50 })
+
+    const ids = await moveFilesAllVersions(db(), ['a2', 'b1'], 'dir-b')
+    expect(ids).toHaveLength(3)
+
+    expect(await queryDirectoryFileCount(db(), 'dir-a')).toBe(0)
+    expect(await queryFileVersions(db(), 'b.txt', null)).toHaveLength(0)
+    expect(await queryDirectoryFileCount(db(), 'dir-b')).toBe(2)
+    expect(await queryFileVersions(db(), 'a.txt', 'dir-b')).toHaveLength(2)
+    expect(await queryFileVersions(db(), 'b.txt', 'dir-b')).toHaveLength(1)
+  })
+
+  test('duplicate ids from the same stack do not double-move', async () => {
+    await createDirectory('dir-a', 'Source')
+    await createDirectory('dir-b', 'Dest')
+    await createFile('v1', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base })
+    await createFile('v2', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base + 100 })
+
+    // Both versions of one stack selected — the distinct-group resolve collapses them.
+    const ids = await moveFilesAllVersions(db(), ['v1', 'v2'], 'dir-b')
+    expect(ids.sort()).toEqual(['v1', 'v2'])
+    expect(await queryFileVersions(db(), 'file.txt', 'dir-b')).toHaveLength(2)
+  })
+
+  test('moving to null unfiles every version', async () => {
+    await createDirectory('dir-a', 'Source')
+    await createFile('v1', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base })
+    await createFile('v2', { name: 'file.txt', directoryId: 'dir-a', updatedAt: base + 100 })
+
+    await moveFilesAllVersions(db(), ['v2'], null)
+
+    expect(await queryFileVersions(db(), 'file.txt', 'dir-a')).toHaveLength(0)
+    expect(await queryFileVersions(db(), 'file.txt', null)).toHaveLength(2)
+    expect(await queryUnfiledFileCount(db())).toBe(1)
+  })
+
+  test('merging same-named stacks into one dir is deterministic — newest wins current', async () => {
+    await createDirectory('dir-a', 'A')
+    await createDirectory('dir-b', 'B')
+    await createDirectory('dir-c', 'C')
+    await createFile('a-old', { name: 'r.txt', directoryId: 'dir-a', updatedAt: base })
+    await createFile('a-new', { name: 'r.txt', directoryId: 'dir-a', updatedAt: base + 300 })
+    await createFile('b-mid', { name: 'r.txt', directoryId: 'dir-b', updatedAt: base + 100 })
+
+    // One id from each same-named stack, moved into a third directory where they merge.
+    await moveFilesAllVersions(db(), ['a-new', 'b-mid'], 'dir-c')
+
+    const merged = await queryFileVersions(db(), 'r.txt', 'dir-c')
+    expect(merged).toHaveLength(3)
+    // Globally-newest original (a-new) becomes current, regardless of group order.
+    expect(merged[0].id).toBe('a-new')
+  })
+
+  test('empty id list is a no-op', async () => {
+    await expect(moveFilesAllVersions(db(), [], 'dir-b')).resolves.toEqual([])
+  })
+})
+
 describe('trash cascades to all versions', () => {
   test('trashAllFileVersions trashes all versions', async () => {
     await createFile('v1', { name: 'file.txt', updatedAt: base })
@@ -437,6 +522,25 @@ describe('trash cascades to all versions', () => {
 
     const versions = await queryFileVersions(db(), 'file.txt', null)
     expect(versions).toHaveLength(0)
+  })
+
+  test('tombstoneAllFileVersions tombstones all versions', async () => {
+    await createFile('v1', { name: 'file.txt', updatedAt: base })
+    await createFile('v2', { name: 'file.txt', updatedAt: base + 100 })
+    await createFile('v3', { name: 'file.txt', updatedAt: base + 200 })
+
+    const ids = await tombstoneAllFileVersions(db(), 'file.txt', null)
+    expect(ids).toHaveLength(3)
+
+    expect(await queryLibraryFileCount(db())).toBe(0)
+    expect(await queryFileVersions(db(), 'file.txt', null)).toHaveLength(0)
+
+    const rows = await db().getAllAsync<{ deletedAt: number | null }>(
+      'SELECT deletedAt FROM files WHERE name = ?',
+      'file.txt',
+    )
+    expect(rows).toHaveLength(3)
+    expect(rows.every((r) => r.deletedAt !== null)).toBe(true)
   })
 })
 

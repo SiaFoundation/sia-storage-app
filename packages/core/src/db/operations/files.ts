@@ -12,7 +12,7 @@ import {
   queryObjectRefsForFile,
   queryObjectsForFile,
 } from './localObjects'
-import { trashFilesAndThumbnails } from './trash'
+import { tombstoneFilesAndThumbnails, trashFilesAndThumbnails } from './trash'
 
 export async function recalculateCurrentForGroup(
   db: DatabaseAdapter,
@@ -510,6 +510,22 @@ export async function queryFileById(
     logger.debug('db', 'file_not_found', { id })
   }
   return row
+}
+
+/**
+ * Returns the (name, directoryId) that identifies a file's version stack, or
+ * null if the id is unknown. The stack-wide rename/move/trash/tombstone facade
+ * methods use this to resolve which stack a given id belongs to before acting
+ * on every version in it.
+ */
+export async function queryFileStackKey(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<{ name: string; directoryId: string | null } | null> {
+  return db.getFirstAsync<{ name: string; directoryId: string | null }>(
+    'SELECT name, directoryId FROM files WHERE id = ?',
+    id,
+  )
 }
 
 export async function updateFile(
@@ -1243,6 +1259,59 @@ export async function moveAllFileVersions(
   return versions.map((v) => v.id)
 }
 
+/**
+ * Moves every version of each given file's stack to a new directory in a single
+ * transaction. Each id identifies its stack by (name, directoryId); all versions
+ * sharing that identity move together, so a bulk move can never split a version
+ * history — the same whole-stack guarantee as moveAllFileVersions, batched over
+ * the distinct stacks the ids belong to.
+ *
+ * One null-safe join fetches every version of every selected stack at once (no
+ * SELECT-per-stack), and `current` is recomputed for all affected groups in one
+ * bulk pass — both inside the transaction. Versions are stamped with strictly-
+ * decreasing updatedAt in a single global newest-first order, so each stack keeps
+ * its internal ordering and a same-name merge deterministically makes the
+ * globally-newest version current.
+ */
+export async function moveFilesAllVersions(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  toDirectoryId: string | null,
+): Promise<string[]> {
+  if (fileIds.length === 0) return []
+  const ph = fileIds.map(() => '?').join(',')
+  const movedIds: string[] = []
+  await db.withTransactionAsync(async () => {
+    // Every active version of every selected stack, newest-first, in one query.
+    // `f.directoryId IS g.directoryId` is null-safe, so unfiled stacks match too.
+    const versions = await db.getAllAsync<{ id: string }>(
+      `SELECT f.id FROM files f
+       JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file') g
+         ON f.name = g.name AND f.directoryId IS g.directoryId
+       WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       ORDER BY f.updatedAt DESC, f.id DESC`,
+      ...fileIds,
+    )
+    let stamp = Date.now()
+    for (const v of versions) {
+      await db.runAsync(
+        'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
+        toDirectoryId,
+        stamp--,
+        v.id,
+      )
+      movedIds.push(v.id)
+    }
+    // The directory change must propagate to the indexer, so mark the moved
+    // files' objects dirty for sync-up.
+    await flagObjectsForFiles(db, movedIds)
+    // The moved rows now all sit in toDirectoryId; recompute current per
+    // destination group in a single bulk pass (handles merges by name+dir).
+    await recalculateCurrentForFileIds(db, movedIds)
+  })
+  return movedIds
+}
+
 export async function trashAllFileVersions(
   db: DatabaseAdapter,
   name: string,
@@ -1251,6 +1320,25 @@ export async function trashAllFileVersions(
   const versions = await queryFileVersions(db, name, directoryId)
   if (versions.length === 0) return []
   await trashFilesAndThumbnails(
+    db,
+    versions.map((v) => v.id),
+  )
+  return versions.map((v) => v.id)
+}
+
+/**
+ * Tombstones every version of a file's stack — sets deletedAt while keeping the
+ * rows, per the tombstone invariant. Mirrors trashAllFileVersions so the whole
+ * stack is tombstoned together rather than leaving older versions behind.
+ */
+export async function tombstoneAllFileVersions(
+  db: DatabaseAdapter,
+  name: string,
+  directoryId: string | null,
+): Promise<string[]> {
+  const versions = await queryFileVersions(db, name, directoryId)
+  if (versions.length === 0) return []
+  await tombstoneFilesAndThumbnails(
     db,
     versions.map((v) => v.id),
   )

@@ -9,7 +9,6 @@ import {
   getOrCreateDirectoryAtPath,
   insertDirectory,
   moveDirectory,
-  moveFilesToDirectory,
   moveFileToDirectory,
   queryAllDirectoriesWithCounts,
   queryCountFilesWithDirectories,
@@ -22,7 +21,7 @@ import {
   syncDirectoryFromMetadata,
   syncManyDirectoriesFromMetadata,
 } from './directories'
-import { insertFile, queryFileById } from './files'
+import { insertFile, moveFilesAllVersions, queryFileById } from './files'
 import { clearObjectsNeedsSyncUp, insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
@@ -108,11 +107,11 @@ describe('needsSyncUp flagging', () => {
     expect(await objectFlag('f1')).toBe(1)
   })
 
-  it('moveFilesToDirectory flags every moved file object', async () => {
+  it('moveFilesAllVersions flags every moved file object', async () => {
     await createUploadedFile('m1')
     await createUploadedFile('m2')
     const dir = await getOrCreateDirectory(db(), 'Album')
-    await moveFilesToDirectory(db(), ['m1', 'm2'], dir.id)
+    await moveFilesAllVersions(db(), ['m1', 'm2'], dir.id)
     expect(await objectFlag('m1')).toBe(1)
     expect(await objectFlag('m2')).toBe(1)
   })
@@ -929,25 +928,6 @@ describe('moveFileToDirectory', () => {
 
     const file = await queryFileById(db(), 'f1')
     expect(file!.updatedAt).toBeGreaterThan(1000)
-  })
-})
-
-describe('moveFilesToDirectory', () => {
-  it('moves multiple files to a nested directory', async () => {
-    await insertDirectory(db(), 'Photos')
-    const vacation = await insertDirectory(db(), 'Vacation', 'Photos')
-    await createTestFile('f1')
-    await createTestFile('f2')
-    await moveFilesToDirectory(db(), ['f1', 'f2'], vacation.id)
-
-    const path1 = await queryDirectoryPathForFile(db(), 'f1')
-    const path2 = await queryDirectoryPathForFile(db(), 'f2')
-    expect(path1).toBe('Photos/Vacation')
-    expect(path2).toBe('Photos/Vacation')
-  })
-
-  it('handles empty array', async () => {
-    await expect(moveFilesToDirectory(db(), [], null)).resolves.toBeUndefined()
   })
 })
 

@@ -38,7 +38,7 @@ export async function rmCommand(
   }
 
   if (opts?.permanent) {
-    await app.files.tombstone([record.id])
+    await app.files.tombstoneFile(record.id)
     console.log(`Permanently deleted ${c.red(record.name)}`)
   } else {
     await app.files.trashFile(record.id)
