@@ -1,4 +1,4 @@
-import { StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Pdf from 'react-native-pdf'
 import Animated, { runOnJS } from 'react-native-reanimated'
@@ -37,17 +37,30 @@ export function PDFViewer({ source, style, onSwipeLeft, onSwipeRight }: Props) {
     .activeOffsetX(-15)
     .failOffsetY([-15, 15])
 
+  const pdf = (
+    <Pdf
+      fitPolicy={2}
+      maxScale={8}
+      minScale={1}
+      source={{ uri: source }}
+      style={styles.pdf}
+      trustAllCerts={false}
+      enableAntialiasing
+    />
+  )
+
   return (
     <View style={[styles.container, style]}>
-      <Pdf
-        fitPolicy={2}
-        maxScale={8}
-        minScale={1}
-        source={{ uri: source }}
-        style={styles.pdf}
-        trustAllCerts={false}
-        enableAntialiasing
-      />
+      {/* Android: wrap the native PDF view in Gesture.Native() so it can claim
+          vertical scroll/pan touches alongside the carousel's horizontal pan
+          gesture. Without it, RNGH swallows the touches at the root and the PDF
+          won't scroll. Not needed on iOS, where native scroll cooperation works
+          out of the box. */}
+      {Platform.OS === 'android' ? (
+        <GestureDetector gesture={Gesture.Native()}>{pdf}</GestureDetector>
+      ) : (
+        pdf
+      )}
       {/* Left edge swipe zone */}
       <GestureDetector gesture={leftEdgeGesture}>
         <Animated.View style={[styles.edgeZone, styles.leftEdge]} />
