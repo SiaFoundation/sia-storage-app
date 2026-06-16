@@ -26,7 +26,7 @@ const contentFadeDurationMs = 600
 export default function OnboardingWelcomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
-  const { newIndexerInputProps, connectToIndexer, isWaiting } = useChangeIndexer()
+  const { connectToIndexer, indexerURL, isWaiting } = useChangeIndexer()
   const [isNavigating, setIsNavigating] = useState(false)
 
   const gridOpacity = useRef(new Animated.Value(1)).current
@@ -65,7 +65,6 @@ export default function OnboardingWelcomeScreen() {
   }, [gridOpacity, contentOpacity])
 
   const handleSignIn = async () => {
-    const indexerURL = newIndexerInputProps.value.trim()
     const result = await connectToIndexer()
     if (result.status === 'connected') {
       setIsNavigating(true)
