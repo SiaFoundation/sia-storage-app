@@ -58,28 +58,50 @@ export function useActiveUploads(): UploadState[] {
 
 export function useUploadProgress(): {
   show: boolean
+  /** Total active uploads, including thumbnails — drives whether to show a state. */
   packerCount: number
+  /** Active uploads that are real files (excludes thumbnails) — drives the count. */
+  packerFileCount: number
+  /** Total pending (importing + local-only) including thumbnails — drives show. */
   pendingCount: number
+  /** Pending real files (excludes thumbnails) — drives the count. */
+  pendingFileCount: number
   percentDecimal: number
 } {
   const enabled = useAutoScanUploads()
-  const activeUploads = useActiveUploads()
-  const localOnlyStats = useFileStatsLocal({ localOnly: true })
-  const importingCountQuery = useFileCountImporting()
   const isEnabled = enabled.data ?? false
+  // When auto-scan is off the status line never shows, so skip the DB queries
+  // entirely rather than fetching counts we'll discard.
+  const pausedWhenDisabled = { isPaused: () => !isEnabled }
+  const activeUploads = useActiveUploads()
+  // Total local-only count includes thumbnails (keeps the indicator visible
+  // while only thumbnails remain); the files-only count drives the number.
+  const localOnlyStats = useFileStatsLocal({ localOnly: true }, pausedWhenDisabled)
+  const localOnlyFileStats = useFileStatsLocal(
+    { localOnly: true, includeThumbnails: false },
+    pausedWhenDisabled,
+  )
+  const importingCountQuery = useFileCountImporting(pausedWhenDisabled)
   const packerUploads = activeUploads.filter((u) => ACTIVE_STATUSES.includes(u.status))
   const packerCount = packerUploads.length
+  const packerFileCount = packerUploads.filter((u) => u.kind !== 'thumb').length
   const packerTotalBytes = packerUploads.reduce((s, u) => s + u.size, 0)
   const packerWeightedProgress = packerUploads.reduce((s, u) => s + u.progress * u.size, 0)
   const percentDecimal = packerTotalBytes > 0 ? packerWeightedProgress / packerTotalBytes : 0
+  // importingCount (empty-hash records) is already files-only — thumbnails are
+  // generated with their hash, so they never sit in the importing state.
   const importingCount = importingCountQuery.data ?? 0
   const localOnlyCount = localOnlyStats.data?.count ?? 0
+  const localOnlyFileCount = localOnlyFileStats.data?.count ?? 0
   const pendingCount = importingCount + localOnlyCount
+  const pendingFileCount = importingCount + localOnlyFileCount
 
   return {
     show: isEnabled && (packerCount > 0 || pendingCount > 0),
     packerCount,
+    packerFileCount,
     pendingCount,
+    pendingFileCount,
     percentDecimal,
   }
 }

@@ -46,8 +46,8 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
     },
     registerMany: (entries) => {
       const next = { ...state.uploads }
-      for (const { id, size } of entries) {
-        next[id] = { id, size, status: 'queued', progress: 0 }
+      for (const { id, size, kind } of entries) {
+        next[id] = { id, size, kind, status: 'queued', progress: 0 }
       }
       state = { uploads: next }
       caches.uploads.invalidateAll()

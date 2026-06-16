@@ -12,7 +12,7 @@ import type {
 } from '../db/operations'
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { SyncUpCursor } from '../services/syncUpMetadata'
-import type { FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
+import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
   ConnectionState,
   DownloadEntry,
@@ -717,7 +717,7 @@ export interface AppService {
     /** Removes all upload entries. */
     clear(): void
     /** Registers multiple upload entries as queued. */
-    registerMany(entries: Array<{ id: string; size: number }>): void
+    registerMany(entries: Array<{ id: string; size: number; kind?: FileKind }>): void
     /** Sets upload status, clearing any previous error. No-op if entry does not exist. */
     setStatus(id: string, status: UploadStatus): void
     /** Marks an upload as failed with an error message. */

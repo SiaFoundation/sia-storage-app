@@ -79,7 +79,16 @@ export function useFileCountLocal(params: { localOnly: boolean }, config?: SWRCo
   return useSWR([...key, params], () => getFileCountLocal(params), config)
 }
 
-export async function getFileStatsLocal(params: { localOnly: boolean }) {
+export async function getFileStatsLocal(params: {
+  localOnly: boolean
+  /**
+   * Whether to count thumbnails. Defaults to true so storage/backup surfaces
+   * (the library status sheet, the background-upload work-remaining gate) keep
+   * counting thumbnails as pending work. Pass false for user-facing file
+   * counts that should exclude thumbnails (the status line).
+   */
+  includeThumbnails?: boolean
+}) {
   const currentIndexerURL = await app().settings.getIndexerURL()
   return app().files.queryStats({
     order: 'ASC',
@@ -88,11 +97,14 @@ export async function getFileStatsLocal(params: { localOnly: boolean }) {
       isPinned: !params.localOnly,
     },
     fileExistsLocally: true,
-    includeThumbnails: true,
+    includeThumbnails: params.includeThumbnails ?? true,
   })
 }
 
-export function useFileStatsLocal(params: { localOnly: boolean }, config?: SWRConfiguration) {
+export function useFileStatsLocal(
+  params: { localOnly: boolean; includeThumbnails?: boolean },
+  config?: SWRConfiguration,
+) {
   const key = app().caches.library.key('localStats')
   return useSWR([...key, params], () => getFileStatsLocal(params), config)
 }
