@@ -12,22 +12,22 @@ import { palette } from '../styles/colors'
 type Props = NativeStackScreenProps<SwitchIndexerStackParamList, 'SwitchIndexerHome'>
 
 export function SwitchIndexerScreen({ navigation }: Props) {
-  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } = useChangeIndexer()
+  const { newIndexerInputProps, connectToIndexer, indexerURL, isWaiting, hasErrored } =
+    useChangeIndexer()
 
-  const trimmedValue = newIndexerInputProps.value.trim()
-  const isInputEmpty = trimmedValue.length === 0
+  const isInputEmpty = newIndexerInputProps.value.trim().length === 0
 
   const handleContinue = useCallback(async () => {
     const result = await connectToIndexer()
     if (result.status === 'connected') {
       // Already registered with this indexer, skip to finished.
-      navigation.navigate('SwitchFinished', { indexerURL: trimmedValue })
+      navigation.navigate('SwitchFinished', { indexerURL })
     } else if (result.status === 'needsMnemonic') {
       // Need mnemonic entry.
-      navigation.navigate('SwitchRecoveryPhrase', { indexerURL: trimmedValue })
+      navigation.navigate('SwitchRecoveryPhrase', { indexerURL })
     }
     // If error, stay on screen, error already shown via toast.
-  }, [connectToIndexer, trimmedValue, navigation])
+  }, [connectToIndexer, indexerURL, navigation])
 
   if (isWaiting) {
     return (

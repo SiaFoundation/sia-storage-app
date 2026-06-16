@@ -1,5 +1,7 @@
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
+import { LockIcon } from 'lucide-react-native'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { stripProtocol } from '../lib/indexerURL'
 import { colors, palette } from '../styles/colors'
 import { InfoCard } from './InfoCard'
 
@@ -9,12 +11,16 @@ type IndexerSelectorProps = {
   hasErrored?: boolean
 }
 
+// The protocol is locked to https, so values here are host-only — compare and
+// select against the default with its protocol stripped to match.
+const DEFAULT_INDEXER_HOST = stripProtocol(DEFAULT_INDEXER_URL)
+
 export function IndexerSelector({ value, onChangeText, hasErrored = false }: IndexerSelectorProps) {
   const trimmedValue = value.trim()
-  const isUsingCustomProvider = trimmedValue !== DEFAULT_INDEXER_URL
+  const isUsingCustomProvider = trimmedValue !== DEFAULT_INDEXER_HOST
 
   const handleSelectDefault = () => {
-    onChangeText(DEFAULT_INDEXER_URL)
+    onChangeText(DEFAULT_INDEXER_HOST)
   }
 
   const handleUseCustom = () => {
@@ -64,16 +70,22 @@ export function IndexerSelector({ value, onChangeText, hasErrored = false }: Ind
         {isUsingCustomProvider ? (
           <View style={styles.inputWrap}>
             <Text style={styles.inputLabel}>Indexer URL</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="https://sia.storage"
-              placeholderTextColor={palette.gray[400]}
-              keyboardType="url"
-              autoCorrect={false}
-              autoCapitalize="none"
-              value={value}
-              onChangeText={onChangeText}
-            />
+            <View style={styles.inputRow}>
+              <View style={styles.inputPrefix}>
+                <LockIcon color={palette.gray[400]} size={13} />
+                <Text style={styles.inputPrefixText}>https://</Text>
+              </View>
+              <TextInput
+                style={styles.textInputField}
+                placeholder="your-indexer.com"
+                placeholderTextColor={palette.gray[400]}
+                keyboardType="url"
+                autoCorrect={false}
+                autoCapitalize="none"
+                value={value}
+                onChangeText={onChangeText}
+              />
+            </View>
           </View>
         ) : null}
       </InfoCard>
@@ -131,11 +143,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  textInput: {
-    color: colors.textPrimary,
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: palette.gray[950],
     borderRadius: 8,
     paddingHorizontal: 12,
+  },
+  inputPrefix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingRight: 8,
+    marginRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: palette.gray[800],
+  },
+  inputPrefixText: {
+    color: palette.gray[400],
+    fontSize: 16,
+  },
+  textInputField: {
+    flex: 1,
+    color: colors.textPrimary,
     paddingVertical: 12,
     fontSize: 16,
   },

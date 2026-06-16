@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { ArrowLeftIcon } from 'lucide-react-native'
+import { ArrowLeftIcon, LockIcon } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
 import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { KeyboardAwareScrollView, KeyboardProvider } from 'react-native-keyboard-controller'
@@ -19,14 +19,19 @@ import { colors, palette } from '../styles/colors'
 export default function OnboardingAdvancedIndexerScreen() {
   const nav = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>()
   const { top, bottom } = useSafeAreaInsets()
-  const { newIndexerInputProps, connectToIndexer, isWaiting, hasErrored } = useChangeIndexer()
+  const { newIndexerInputProps, connectToIndexer, indexerURL, isWaiting, hasErrored } =
+    useChangeIndexer()
   const [isNavigating, setIsNavigating] = useState(false)
 
+  // Reset the field each time the screen is focused so the user starts fresh.
+  // Depend on the stable onChangeText only — depending on the whole props object
+  // re-ran this on every keystroke, clearing the input as the user typed.
+  const resetInput = newIndexerInputProps.onChangeText
   useFocusEffect(
     useCallback(() => {
       setIsNavigating(false)
-      newIndexerInputProps.onChangeText('')
-    }, [newIndexerInputProps]),
+      resetInput('')
+    }, [resetInput]),
   )
 
   const trimmedValue = newIndexerInputProps.value.trim()
@@ -39,7 +44,6 @@ export default function OnboardingAdvancedIndexerScreen() {
   }
 
   const handleContinue = async () => {
-    const indexerURL = newIndexerInputProps.value.trim()
     const result = await connectToIndexer()
     if (result.status === 'connected') {
       setIsNavigating(true)
@@ -125,17 +129,23 @@ export default function OnboardingAdvancedIndexerScreen() {
               ) : null}
 
               <Text style={styles.inputLabel}>Your Indexer URL</Text>
-              <TextInput
-                testID="advanced-indexer-url-input"
-                style={styles.textInput}
-                placeholder="https://"
-                placeholderTextColor={palette.gray[400]}
-                keyboardType="url"
-                autoCorrect={false}
-                autoCapitalize="none"
-                value={newIndexerInputProps.value}
-                onChangeText={newIndexerInputProps.onChangeText}
-              />
+              <View style={styles.inputRow}>
+                <View style={styles.inputPrefix}>
+                  <LockIcon color={palette.gray[400]} size={13} />
+                  <Text style={styles.inputPrefixText}>https://</Text>
+                </View>
+                <TextInput
+                  testID="advanced-indexer-url-input"
+                  style={styles.textInputField}
+                  placeholder="your-indexer.com"
+                  placeholderTextColor={palette.gray[400]}
+                  keyboardType="url"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  value={newIndexerInputProps.value}
+                  onChangeText={newIndexerInputProps.onChangeText}
+                />
+              </View>
             </View>
           )}
         </KeyboardAwareScrollView>
@@ -223,11 +233,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  textInput: {
-    color: colors.textPrimary,
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: palette.gray[950],
     borderRadius: 8,
     paddingHorizontal: 12,
+  },
+
+  inputPrefix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingRight: 8,
+    marginRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: palette.gray[800],
+  },
+
+  inputPrefixText: {
+    color: palette.gray[400],
+    fontSize: 16,
+  },
+
+  textInputField: {
+    flex: 1,
+    color: colors.textPrimary,
     paddingVertical: 12,
     fontSize: 16,
   },
