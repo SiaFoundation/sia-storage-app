@@ -299,8 +299,12 @@ export interface AppService {
     renameFile(id: string, newName: string): Promise<void>
     /** Moves all versions of a file to a directory. */
     moveFile(id: string, dirId: string | null): Promise<void>
+    /** Moves all versions of every given file to a directory (null to unfile). */
+    moveFiles(fileIds: string[], dirId: string | null): Promise<void>
     /** Trashes all versions of a file by ID. */
     trashFile(id: string): Promise<void>
+    /** Tombstones all versions of a file by ID. */
+    tombstoneFile(id: string): Promise<void>
     /** Trashes all versions of a file by name and directory. */
     trashAllVersions(name: string, directoryId: string | null): Promise<string[]>
   }
@@ -332,10 +336,12 @@ export interface AppService {
     rename(id: string, name: string): Promise<Directory>
     /** Moves a directory under a new parent (null for root). */
     moveDirectory(directoryId: string, newParentPath: string | null): Promise<void>
-    /** Moves a file into a directory, or removes it from all directories if null. */
+    /**
+     * Files a single brand-new record into a directory (one version, e.g. fresh
+     * import/ingest). For moving an existing file use files.moveFile, which moves
+     * the whole version stack — this single-row move would split a version history.
+     */
     moveFile(fileId: string, dirId: string | null): Promise<void>
-    /** Moves multiple files into a directory. */
-    moveFiles(fileIds: string[], dirId: string | null): Promise<void>
     /** Returns how many of the given files belong to a directory. */
     countFilesWithDirectories(fileIds: string[]): Promise<number>
     /** Reconciles a file's directory assignment with metadata. */

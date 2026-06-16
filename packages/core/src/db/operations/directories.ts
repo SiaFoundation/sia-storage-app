@@ -3,12 +3,7 @@ import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
-import {
-  FILE_ROW_COLUMNS_F,
-  recalculateCurrentForGroup,
-  recalculateCurrentForGroups,
-  transformRow,
-} from './files'
+import { FILE_ROW_COLUMNS_F, recalculateCurrentForGroup, transformRow } from './files'
 import { buildRecordFilter } from './library'
 import { flagObjectsForFiles, queryObjectRefsForFile } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
@@ -404,38 +399,6 @@ export async function moveFileToDirectory(
   if (row) {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
     await recalculateCurrentForGroup(db, row.name, dirId)
-  }
-}
-
-export async function moveFilesToDirectory(
-  db: DatabaseAdapter,
-  fileIds: string[],
-  dirId: string | null,
-): Promise<void> {
-  if (fileIds.length === 0) return
-  const ph = fileIds.map(() => '?').join(',')
-  const groups = await db.getAllAsync<{ name: string; directoryId: string | null }>(
-    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
-    ...fileIds,
-  )
-  const now = Date.now()
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `UPDATE files SET directoryId = ?, updatedAt = ? WHERE id IN (${ph})`,
-      dirId,
-      now,
-      ...fileIds,
-    )
-    await flagObjectsForFiles(db, fileIds)
-  })
-  await recalculateCurrentForGroups(db, groups)
-  const newGroups = new Map<string, { name: string; directoryId: string | null }>()
-  for (const g of groups) {
-    const key = `${g.name}|${dirId ?? ''}`
-    newGroups.set(key, { name: g.name, directoryId: dirId })
-  }
-  for (const g of newGroups.values()) {
-    await recalculateCurrentForGroup(db, g.name, g.directoryId)
   }
 }
 

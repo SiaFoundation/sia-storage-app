@@ -394,31 +394,34 @@ export function buildDbNamespaces(
         return rows.map((r) => ops.transformRow(r))
       },
       renameFile: async (id, newName) => {
-        const file = await db.getFirstAsync<{
-          name: string
-          directoryId: string | null
-        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
-        if (!file) return
-        await ops.renameAllFileVersions(db, file.name, file.directoryId, newName)
+        const stack = await ops.queryFileStackKey(db, id)
+        if (!stack) return
+        await ops.renameAllFileVersions(db, stack.name, stack.directoryId, newName)
         invalidateLibrary()
       },
       moveFile: async (id, dirId) => {
-        const file = await db.getFirstAsync<{
-          name: string
-          directoryId: string | null
-        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
-        if (!file) return
-        await ops.moveAllFileVersions(db, file.name, file.directoryId, dirId)
+        const stack = await ops.queryFileStackKey(db, id)
+        if (!stack) return
+        await ops.moveAllFileVersions(db, stack.name, stack.directoryId, dirId)
+        caches.directories.invalidateAll()
+        invalidateLibrary()
+      },
+      moveFiles: async (fileIds, dirId) => {
+        await ops.moveFilesAllVersions(db, fileIds, dirId)
         caches.directories.invalidateAll()
         invalidateLibrary()
       },
       trashFile: async (id) => {
-        const file = await db.getFirstAsync<{
-          name: string
-          directoryId: string | null
-        }>('SELECT name, directoryId FROM files WHERE id = ?', id)
-        if (!file) return
-        const ids = await ops.trashAllFileVersions(db, file.name, file.directoryId)
+        const stack = await ops.queryFileStackKey(db, id)
+        if (!stack) return
+        const ids = await ops.trashAllFileVersions(db, stack.name, stack.directoryId)
+        uploads.removeMany(ids)
+        invalidateLibrary()
+      },
+      tombstoneFile: async (id) => {
+        const stack = await ops.queryFileStackKey(db, id)
+        if (!stack) return
+        const ids = await ops.tombstoneAllFileVersions(db, stack.name, stack.directoryId)
         uploads.removeMany(ids)
         invalidateLibrary()
       },
@@ -475,14 +478,6 @@ export function buildDbNamespaces(
         await ops.moveFileToDirectory(db, fileId, dirId)
         caches.directories.invalidateAll()
         caches.directories.invalidate(`file/${fileId}`)
-        caches.libraryVersion.invalidate()
-      },
-      moveFiles: async (fileIds, dirId) => {
-        await ops.moveFilesToDirectory(db, fileIds, dirId)
-        caches.directories.invalidateAll()
-        for (const id of fileIds) {
-          caches.directories.invalidate(`file/${id}`)
-        }
         caches.libraryVersion.invalidate()
       },
       countFilesWithDirectories: (fileIds) => ops.queryCountFilesWithDirectories(db, fileIds),

@@ -48,13 +48,19 @@ describe('rm command logic', () => {
     }
   })
 
-  it('tombstones file for permanent delete', async () => {
+  it('permanently deletes all versions of a file', async () => {
     const app = await createTestApp(tempDir)
     try {
-      await createTestFile(app, 'file-1', 'test.txt')
-      await app.service.files.tombstone(['file-1'])
-      const file = await app.service.files.getById('file-1')
-      expect(file?.deletedAt).not.toBeNull()
+      // Two versions of the same file (same name, same — unfiled — directory).
+      await createTestFile(app, 'v-old', 'test.txt')
+      await createTestFile(app, 'v-new', 'test.txt')
+
+      await app.service.files.tombstoneFile('v-new')
+
+      const oldVersion = await app.service.files.getById('v-old')
+      const newVersion = await app.service.files.getById('v-new')
+      expect(newVersion?.deletedAt).not.toBeNull()
+      expect(oldVersion?.deletedAt).not.toBeNull()
     } finally {
       app.db.close?.()
     }

@@ -67,7 +67,7 @@ export function MoveToDirectorySheet({
       setLoadingDirId(directoryId)
       try {
         const targetDir = dirs.find((d) => d.id === directoryId)
-        await app().directories.moveFiles(fileIds, directoryId)
+        await app().files.moveFiles(fileIds, directoryId)
         closeSheet()
         toast.show(
           targetDir
@@ -86,7 +86,7 @@ export function MoveToDirectorySheet({
   const handleRemoveFromDirectory = useCallback(async () => {
     setLoadingDirId('none')
     try {
-      await app().directories.moveFiles(fileIds, null)
+      await app().files.moveFiles(fileIds, null)
       closeSheet()
       toast.show('Removed from folder')
       onComplete?.()

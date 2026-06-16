@@ -187,12 +187,12 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       },
     },
     {
-      name: 'moveFilesToDirectory:1k',
+      name: 'moveFilesAllVersions:1k',
       category: 'write',
       run: async () => {
         const ids = Array.from({ length: 1000 }, (_, i) => `f-${i}`)
-        await ops.moveFilesToDirectory(db, ids, 'dir-0049')
-        await ops.moveFilesToDirectory(db, ids, sampleDirId)
+        await ops.moveFilesAllVersions(db, ids, 'dir-0049')
+        await ops.moveFilesAllVersions(db, ids, sampleDirId)
       },
     },
     {
@@ -222,12 +222,12 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       }),
     },
     {
-      name: 'moveFilesToDirectory:10k',
+      name: 'moveFilesAllVersions:10k',
       category: 'write',
       run: async () => {
         const ids = await getLargeDir10kIds()
-        await ops.moveFilesToDirectory(db, ids, 'dir-0049')
-        await ops.moveFilesToDirectory(db, ids, sampleDirId)
+        await ops.moveFilesAllVersions(db, ids, 'dir-0049')
+        await ops.moveFilesAllVersions(db, ids, sampleDirId)
       },
     },
     {

@@ -280,7 +280,7 @@ describe('importAssets — picker / camera / share intent', () => {
         trashedAt: null,
         deletedAt: null,
       })
-      await app().directories.moveFiles(['existing'], dir.id)
+      await app().files.moveFiles(['existing'], dir.id)
 
       const { files, newVersionCount } = await importAssets(
         [
@@ -1434,7 +1434,7 @@ describe('catalogAssets — deferred bulk catalog for archive sync', () => {
         trashedAt: fields.trashedAt ?? null,
         deletedAt: null,
       })
-      await app().directories.moveFiles([fields.id], dirId)
+      await app().files.moveFiles([fields.id], dirId)
     }
 
     function asset(name: string, createdAt: number, id?: string) {
