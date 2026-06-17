@@ -107,6 +107,7 @@
         "expo-video": "55.0.10",
         "lucide-react-native": "0.543.0",
         "markdown-it": "14.1.1",
+        "media-observer": "file:./modules/media-observer",
         "react": "19.2.0",
         "react-native": "0.83.2",
         "react-native-background-fetch": "4.3.0",
@@ -2378,6 +2379,8 @@
     "@react-native/community-cli-plugin/metro-core": ["metro-core@0.83.5", "", { "dependencies": { "flow-enums-runtime": "^0.0.6", "lodash.throttle": "^4.1.1", "metro-resolver": "0.83.5" } }, "sha512-YcVcLCrf0ed4mdLa82Qob0VxYqfhmlRxUS8+TO4gosZo/gLwSvtdeOjc/Vt0pe/lvMNrBap9LlmvZM8FIsMgJQ=="],
 
     "@siastorage/mobile/background-time-remaining": ["background-time-remaining@file:apps/mobile/modules/background-time-remaining", {}],
+
+    "@siastorage/mobile/media-observer": ["media-observer@file:apps/mobile/modules/media-observer", {}],
 
     "@siastorage/mobile/thumbnailer": ["thumbnailer@file:apps/mobile/modules/thumbnailer", {}],
 

@@ -48,10 +48,6 @@ export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
 // Resume fetching archive photos when pending local-only bytes drop below this threshold.
 export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
-// Minimum interval between bounded recent re-scans of the archive.
-export const SYNC_ARCHIVE_RECENT_SCAN_INTERVAL = minutesInMs(180) // 3 hours
-// How far back the bounded recent re-scan walks.
-export const SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK = daysInMs(14) // 14 days
 // Import scanner interval.
 export const IMPORT_SCANNER_INTERVAL = secondsInMs(3) // 3 seconds
 // Max files requiring copy and hash allowed in the upload backlog before throttling.

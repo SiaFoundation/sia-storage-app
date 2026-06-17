@@ -8,6 +8,9 @@ expo-env.d.ts
 /android/
 /ios/
 .kotlin/
+# Gradle build output. Git already ignores it via the root .gitignore; repeated
+# here so oxfmt — which reads only this directory's .gitignore — skips it too.
+modules/*/android/build/
 
 # Build cache
 .build-cache/

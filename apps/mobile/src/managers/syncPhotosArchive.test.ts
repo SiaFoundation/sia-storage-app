@@ -1,13 +1,8 @@
-import {
-  SYNC_ARCHIVE_RECENT_SCAN_INTERVAL,
-  SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK,
-} from '@siastorage/core/config'
 import * as MediaLibrary from 'expo-media-library'
 import { catalogAssets } from '../lib/assetImports'
 import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import {
   getArchiveSyncCompletedAt,
-  getLastRecentScanAt,
   getPhotosArchiveCursor,
   getPhotosArchiveDisplayDate,
   isArchiveWalkActive,
@@ -15,9 +10,7 @@ import {
   resumeArchiveSync,
   run,
   setArchiveSyncCompletedAt,
-  setLastRecentScanAt,
   setPhotosArchiveCursor,
-  triggerRecentScanIfNeeded,
 } from './syncPhotosArchive'
 
 jest.useFakeTimers()
@@ -94,7 +87,6 @@ describe('syncPhotosArchive', () => {
     jest.clearAllMocks()
     jest.setSystemTime(new Date(NOW))
     getAssetsAsyncMock.mockReset()
-    await setLastRecentScanAt(0)
     await setArchiveSyncCompletedAt(0)
     await restartPhotosArchiveCursor()
     mockProcessAssetsSuccess()
@@ -261,71 +253,8 @@ describe('syncPhotosArchive', () => {
     })
   })
 
-  describe('triggerRecentScanIfNeeded', () => {
-    it('triggers when archive is done, previously completed, and interval elapsed', async () => {
-      await setPhotosArchiveCursor('done')
-      await setArchiveSyncCompletedAt(NOW - 1_000_000)
-      await setLastRecentScanAt(0)
-      const triggered = await triggerRecentScanIfNeeded()
-      expect(triggered).toBe(true)
-      expect(await getPhotosArchiveCursor()).toBe('start')
-    })
-
-    it('skips when archive has never completed', async () => {
-      await setPhotosArchiveCursor('done')
-      await setArchiveSyncCompletedAt(0)
-      await setLastRecentScanAt(0)
-      const triggered = await triggerRecentScanIfNeeded()
-      expect(triggered).toBe(false)
-      expect(await getPhotosArchiveCursor()).toBe('done')
-    })
-
-    it('skips when archive is mid-walk', async () => {
-      await setPhotosArchiveCursor('some-ref')
-      await setArchiveSyncCompletedAt(NOW - 1_000_000)
-      await setLastRecentScanAt(0)
-      const triggered = await triggerRecentScanIfNeeded()
-      expect(triggered).toBe(false)
-      expect(await getPhotosArchiveCursor()).toBe('some-ref')
-    })
-
-    it('skips when last scan was recent', async () => {
-      await setPhotosArchiveCursor('done')
-      await setArchiveSyncCompletedAt(NOW - 1_000_000)
-      await setLastRecentScanAt(NOW - SYNC_ARCHIVE_RECENT_SCAN_INTERVAL + 1_000)
-      const triggered = await triggerRecentScanIfNeeded()
-      expect(triggered).toBe(false)
-      expect(await getPhotosArchiveCursor()).toBe('done')
-    })
-  })
-
-  describe('bounded recent scan', () => {
-    it('stops at boundary during recent scan', async () => {
-      await setPhotosArchiveCursor('done')
-      await setArchiveSyncCompletedAt(NOW - 1_000_000)
-      await setLastRecentScanAt(0)
-      await triggerRecentScanIfNeeded()
-
-      const boundary = NOW - SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK
-
-      getAssetsAsyncMock.mockResolvedValueOnce(
-        page(
-          [
-            asset('a1', '1.jpg', { modificationTime: NOW - 1_000 }),
-            asset('a2', '2.jpg', { modificationTime: boundary - 1_000 }),
-          ],
-          'ref1',
-        ),
-      )
-      await run()
-
-      expect(catalogAssetsMock).toHaveBeenCalledTimes(1)
-      expect(await getPhotosArchiveCursor()).toBe('done')
-      expect(await getPhotosArchiveDisplayDate()).toBe(0)
-      expect(await getLastRecentScanAt()).toBe(NOW)
-    })
-
-    it('continues normally when not in recent scan mode', async () => {
+  describe('walk', () => {
+    it('advances the cursor and display date through a page', async () => {
       await setPhotosArchiveCursor('start')
 
       getAssetsAsyncMock.mockResolvedValueOnce(
@@ -341,33 +270,6 @@ describe('syncPhotosArchive', () => {
 
       expect(await getPhotosArchiveCursor()).toBe('ref2')
       expect(await getPhotosArchiveDisplayDate()).toBe(1_000)
-    })
-
-    it('processes the boundary-crossing batch before stopping', async () => {
-      await setPhotosArchiveCursor('done')
-      await setArchiveSyncCompletedAt(NOW - 1_000_000)
-      await setLastRecentScanAt(0)
-      await triggerRecentScanIfNeeded()
-
-      const boundary = NOW - SYNC_ARCHIVE_RECENT_SCAN_LOOKBACK
-
-      getAssetsAsyncMock.mockResolvedValueOnce(
-        page(
-          [
-            asset('a1', '1.jpg', { modificationTime: boundary + 5_000 }),
-            asset('a2', '2.jpg', { modificationTime: boundary - 5_000 }),
-          ],
-          'ref1',
-        ),
-      )
-      await run()
-
-      expect(catalogAssetsMock).toHaveBeenCalledWith(
-        [expect.objectContaining({ id: 'a1' }), expect.objectContaining({ id: 'a2' })],
-        'file',
-        { addToImportDirectory: true },
-        undefined,
-      )
     })
   })
 })
