@@ -1,203 +1,168 @@
 import { SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import * as MediaLibrary from 'expo-media-library'
+import * as mediaObserver from 'media-observer'
 import { syncAssets } from '../lib/assetImports'
 import { app } from '../stores/appService'
-import {
-  initSyncNewPhotos,
-  run,
-  setAutoSyncNewPhotos,
-  setSyncNewPhotosEnabledAt,
-} from './syncNewPhotos'
+import { initSyncNewPhotos, run, setAutoSyncNewPhotos } from './syncNewPhotos'
 
 jest.useFakeTimers()
 
 jest.mock('expo-media-library', () => ({
-  getAssetsAsync: jest.fn(),
-  SortBy: {
-    creationTime: 'creationTime',
-    modificationTime: 'modificationTime',
-  },
+  getAssetInfoAsync: jest.fn(),
   MediaType: { photo: 'photo', video: 'video' },
+}))
+jest.mock('media-observer', () => ({
+  currentCursor: jest.fn(async () => 'v1:now'),
+  changesSince: jest.fn(async () => ({ inserted: [], cursor: 'v1:now' })),
 }))
 jest.mock('../lib/mediaLibraryPermissions', () => ({
   ensureMediaLibraryPermission: jest.fn(),
   getMediaLibraryPermissions: jest.fn().mockResolvedValue(true),
-  mediaLibraryPermissionsCache: {
-    key: jest.fn(() => ['mediaLibraryPermissions']),
-    invalidate: jest.fn(),
-    set: jest.fn(),
-  },
+  mediaLibraryPermissionsCache: { invalidate: jest.fn() },
 }))
-jest.mock('../lib/assetImports', () => ({
-  syncAssets: jest.fn(),
-}))
+jest.mock('../lib/assetImports', () => ({ syncAssets: jest.fn() }))
 
-const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
+const getAssetInfoAsyncMock = jest.mocked(MediaLibrary.getAssetInfoAsync)
 const syncAssetsMock = jest.mocked(syncAssets)
+const currentCursorMock = jest.mocked(mediaObserver.currentCursor)
+const changesSinceMock = jest.mocked(mediaObserver.changesSince)
 
-function asset(
-  id: string,
-  name: string,
-  opts: { creationTime?: number; modificationTime?: number },
-): MediaLibrary.Asset {
+const CURSOR_KEY = 'syncNewPhotosCursor'
+
+function asset(id: string, name = `${id}.jpg`): MediaLibrary.AssetInfo {
   return {
     id,
     filename: name,
     uri: `file://${id}`,
     mediaType: MediaLibrary.MediaType.photo,
-    creationTime: opts.creationTime ?? 0,
-    modificationTime: opts.modificationTime ?? 0,
+    creationTime: 1_000,
+    modificationTime: 0,
     width: 1,
     height: 1,
     duration: 0,
   }
 }
 
-function page(
-  assets: MediaLibrary.Asset[],
-  endCursor = '',
-): MediaLibrary.PagedInfo<MediaLibrary.Asset> {
-  return {
-    assets,
-    endCursor,
-    hasNextPage: false,
-    totalCount: assets.length,
-  }
-}
-
-function mockProcessAssetsSuccess() {
-  syncAssetsMock.mockResolvedValue({
-    files: [{ id: '1' }] as never,
-    updatedFiles: [],
-    warnings: [],
-  })
-}
+const storedCursor = () => app().storage.getItem(CURSOR_KEY)
 
 describe('syncNewPhotos', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
-    getAssetsAsyncMock.mockReset()
+    currentCursorMock.mockResolvedValue('v1:now')
+    changesSinceMock.mockResolvedValue({ inserted: [], cursor: 'v1:now' })
+    getAssetInfoAsyncMock.mockImplementation(async (id) => asset(String(id)))
+    syncAssetsMock.mockResolvedValue({ files: [], updatedFiles: [], warnings: [] })
+    await app().storage.setItem('autoSyncNewPhotos', 'true')
+    await app().storage.setItem(CURSOR_KEY, 'v1:saved')
+  })
+
+  it('anchors the cursor at enable-time', async () => {
+    currentCursorMock.mockResolvedValue('v1:anchored')
     await setAutoSyncNewPhotos(true)
-    await setSyncNewPhotosEnabledAt(0)
-    mockProcessAssetsSuccess()
+    expect(await storedCursor()).toBe('v1:anchored')
   })
 
-  it('sorts by creationTime DESC', async () => {
-    getAssetsAsyncMock.mockResolvedValueOnce(page([asset('a1', '1.jpg', { creationTime: 5_000 })]))
-    await run()
-    expect(getAssetsAsyncMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sortBy: [['creationTime', false]],
-      }),
-    )
-  })
+  it('imports the inserted assets and advances the cursor', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['a1', 'a2'], cursor: 'v1:next' })
 
-  it('does not pass createdBefore or createdAfter', async () => {
-    getAssetsAsyncMock.mockResolvedValueOnce(page([asset('a1', '1.jpg', { creationTime: 5_000 })]))
     await run()
-    const opts = getAssetsAsyncMock.mock.calls[0][0]
-    expect(opts).not.toHaveProperty('createdAfter')
-    expect(opts).not.toHaveProperty('createdBefore')
-  })
 
-  it('only processes assets with creationTime >= enabledAt', async () => {
-    await setSyncNewPhotosEnabledAt(3_000)
-    getAssetsAsyncMock.mockResolvedValueOnce(
-      page([
-        asset('a1', 'new1.jpg', { creationTime: 5_000 }),
-        asset('a2', 'new2.jpg', { creationTime: 4_000 }),
-        asset('a3', 'exact.jpg', { creationTime: 3_000 }),
-        asset('a4', 'old.jpg', { creationTime: 2_000 }),
-      ]),
-    )
-    await run()
+    expect(changesSinceMock).toHaveBeenCalledWith('v1:saved')
     expect(syncAssetsMock).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({ id: 'a1', name: 'new1.jpg' }),
-        expect.objectContaining({ id: 'a2', name: 'new2.jpg' }),
-        expect.objectContaining({ id: 'a3', name: 'exact.jpg' }),
-      ],
+      [expect.objectContaining({ id: 'a1' }), expect.objectContaining({ id: 'a2' })],
+      'file',
+      { addToImportDirectory: true, skipExistingUpdates: true },
+      undefined,
+    )
+    expect(await storedCursor()).toBe('v1:next')
+  })
+
+  it('stamps an Android no-date photo with modificationTime, not 1970', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['a1'], cursor: 'v1:next' })
+    getAssetInfoAsyncMock.mockResolvedValue({
+      ...asset('a1'),
+      creationTime: 0,
+      modificationTime: 5_000,
+    })
+
+    await run()
+
+    expect(syncAssetsMock).toHaveBeenCalledWith(
+      [expect.objectContaining({ timestamp: new Date(5_000).toISOString() })],
       'file',
       { addToImportDirectory: true, skipExistingUpdates: true },
       undefined,
     )
   })
 
-  it('skips processing when all photos are before enabledAt', async () => {
-    await setSyncNewPhotosEnabledAt(10_000)
-    getAssetsAsyncMock.mockResolvedValueOnce(
-      page([
-        asset('a1', '1.jpg', { creationTime: 5_000 }),
-        asset('a2', '2.jpg', { creationTime: 3_000 }),
-      ]),
-    )
+  it('advances the cursor when there are no inserts', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: [], cursor: 'v1:next' })
+
     await run()
+
     expect(syncAssetsMock).not.toHaveBeenCalled()
+    expect(await storedCursor()).toBe('v1:next')
   })
 
-  it('no photos returns early without processing', async () => {
-    getAssetsAsyncMock.mockResolvedValueOnce(page([]))
+  it('does NOT advance the cursor when ingest fails, so the ids replay', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['a1'], cursor: 'v1:next' })
+    syncAssetsMock.mockRejectedValueOnce(new Error('boom'))
+
     await run()
-    expect(syncAssetsMock).not.toHaveBeenCalled()
+
+    expect(await storedCursor()).toBe('v1:saved')
   })
 
-  it('does not paginate even when page is full', async () => {
-    const fullPage = Array.from({ length: 50 }, (_, i) =>
-      asset(`a${i}`, `${i}.jpg`, { creationTime: 10_000 - i }),
+  it('resolves assets without forcing an iCloud network download', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['a1'], cursor: 'v1:next' })
+
+    await run()
+
+    expect(getAssetInfoAsyncMock).toHaveBeenCalledWith('a1', { shouldDownloadFromNetwork: false })
+  })
+
+  it('drops ids that no longer resolve, still advancing the cursor', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['present', 'gone'], cursor: 'v1:next' })
+    getAssetInfoAsyncMock.mockImplementation(async (id) => {
+      if (String(id) === 'gone') throw new Error('deleted')
+      return asset(String(id))
+    })
+
+    await run()
+
+    expect(syncAssetsMock).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'present' })],
+      'file',
+      { addToImportDirectory: true, skipExistingUpdates: true },
+      undefined,
     )
-    getAssetsAsyncMock.mockResolvedValueOnce(page(fullPage, 'cursor-page-1'))
+    expect(await storedCursor()).toBe('v1:next')
+  })
+
+  it('skips when disabled', async () => {
+    await app().storage.setItem('autoSyncNewPhotos', 'false')
     await run()
-    expect(getAssetsAsyncMock).toHaveBeenCalledTimes(1)
-    expect(syncAssetsMock).toHaveBeenCalledTimes(1)
-    expect(syncAssetsMock.mock.calls[0][0]).toHaveLength(50)
+    expect(changesSinceMock).not.toHaveBeenCalled()
   })
 
-  it('excludes old photo with AI-bumped modificationTime', async () => {
-    await setSyncNewPhotosEnabledAt(10_000)
-    getAssetsAsyncMock.mockResolvedValueOnce(
-      page([
-        asset('a1', 'ai-bumped.jpg', {
-          creationTime: 1_000,
-          modificationTime: 20_000,
-        }),
-      ]),
-    )
-    await run()
-    expect(syncAssetsMock).not.toHaveBeenCalled()
-  })
-
-  it('setAutoSyncNewPhotos saves enablement timestamp', async () => {
-    jest.setSystemTime(new Date(1_700_000_000_000))
-    await setAutoSyncNewPhotos(true)
-    const enabledAt = Number(await app().storage.getItem('syncNewPhotosEnabledAt'))
-    expect(enabledAt).toBe(1_700_000_000_000)
-  })
-
-  it('aborts before syncAssets when shutdown is called mid-tick', async () => {
-    const getAssetsAsyncMock = jest.mocked(MediaLibrary.getAssetsAsync)
-    const syncAssetsMock = jest.mocked(syncAssets)
-
-    await setAutoSyncNewPhotos(true)
-
-    let resolveGetAssets: ((v: any) => void) | null = null
-    getAssetsAsyncMock.mockReturnValue(
+  it('does not advance the cursor when aborted mid-tick', async () => {
+    let resolveChanges: ((v: { inserted: string[]; cursor: string }) => void) | null = null
+    changesSinceMock.mockReturnValue(
       new Promise((resolve) => {
-        resolveGetAssets = resolve
+        resolveChanges = resolve
       }),
     )
 
     initSyncNewPhotos()
     await jest.advanceTimersByTimeAsync(SYNC_NEW_PHOTOS_INTERVAL)
 
-    // Worker is now blocked on getAssetsAsync.
-    const shutdownPromise = shutdownAllServiceIntervals()
-
-    // Resolve getAssetsAsync — worker will see signal.aborted and return.
-    resolveGetAssets!(page([asset('a1', '1.jpg', { modificationTime: 1000 })]))
+    const shutdown = shutdownAllServiceIntervals()
+    resolveChanges!({ inserted: ['a1'], cursor: 'v1:next' })
     await jest.advanceTimersByTimeAsync(0)
-    await shutdownPromise
+    await shutdown
 
     expect(syncAssetsMock).not.toHaveBeenCalled()
+    expect(await storedCursor()).toBe('v1:saved')
   })
 })

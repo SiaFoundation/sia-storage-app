@@ -361,10 +361,6 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   if (getLifecycle() === 'background' && config.type !== 'BGAppRefreshTask') {
     void scheduleAfter(secondsInMs(30), signal, async (s) => {
       await runFsEvictionScanner({ signal: s })
-      if (s.aborted) return
-      // Disabled for now — need to evaluate how this works and what
-      // user-facing settings should gate it before re-enabling.
-      // await triggerRecentScanIfNeeded()
     })
   }
 

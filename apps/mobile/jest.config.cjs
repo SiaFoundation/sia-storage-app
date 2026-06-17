@@ -24,6 +24,7 @@ module.exports = {
     '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
     '^react-native-sia$': '<rootDir>/test/mocks/react-native-sia.ts',
     '^thumbnailer$': '<rootDir>/test/mocks/thumbnailer.ts',
+    '^media-observer$': '<rootDir>/test/mocks/media-observer.ts',
     '^\\.\\./lib/sharedContainer$': '<rootDir>/test/mocks/sharedContainer.ts',
     '^\\.\\./\\.\\./lib/sharedContainer$': '<rootDir>/test/mocks/sharedContainer.ts',
   },
