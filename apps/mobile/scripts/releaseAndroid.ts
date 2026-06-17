@@ -8,16 +8,18 @@
  * Usage:
  *   bun scripts/releaseAndroid.ts [internal|production]
  *
- * Required environment variables:
- *   SIA_RELEASE_STORE_FILE             - Path to release keystore
- *   SIA_RELEASE_STORE_PASSWORD         - Keystore password
- *   SIA_RELEASE_KEY_ALIAS              - Key alias
- *   SIA_RELEASE_KEY_PASSWORD           - Key password
+ * Environment variables:
+ *   APP_VARIANT                          - Which app to build: beta | prod (default prod)
+ *   SIA_RELEASE_STORE_FILE               - Path to release keystore
+ *   SIA_RELEASE_STORE_PASSWORD           - Keystore password
+ *   SIA_RELEASE_KEY_ALIAS                - Key alias
+ *   SIA_RELEASE_KEY_PASSWORD             - Key password
  *   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON - Google Play service account key
  */
 
 import path from 'node:path'
 import { $ } from 'bun'
+import { resolveVariant } from '../variants'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 
@@ -30,6 +32,10 @@ if (track !== 'internal' && track !== 'production') {
   console.error('  production - Upload to production track')
   process.exit(1)
 }
+
+// Which app identity to build. CI sets APP_VARIANT per matrix leg; default to
+// prod so a bare `release:android:*` invocation builds the public app.
+const variant = resolveVariant(Bun.env.APP_VARIANT || 'prod')
 
 // Verify required environment variables
 const requiredVars = [
@@ -47,14 +53,19 @@ if (missingVars.length > 0) {
   process.exit(1)
 }
 
+// Export the resolved identity so `expo prebuild` (app.config.js) and Fastlane
+// (Appfile) target the same app. variants.js is the one source of truth.
+process.env.APP_VARIANT = variant.key
+process.env.ANDROID_PACKAGE = variant.bundleId
+
 $.cwd(projectRoot)
 
-console.log(`=== Android Release Build (${track}) ===`)
+console.log(`=== Android Release Build (${variant.name} / ${track}) ===`)
 
 // Step 1: Clean and prebuild
 console.log('Step 1/3: Cleaning and prebuilding...')
 await $`bunx rimraf .expo android`
-await $`RELEASE=true bunx expo prebuild --platform android`
+await $`bunx expo prebuild --platform android`
 
 // Step 2: Build AAB
 console.log('Step 2/3: Building release AAB...')

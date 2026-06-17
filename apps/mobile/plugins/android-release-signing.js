@@ -16,8 +16,9 @@ const DEFAULTS = {
 const SIGNING_TAG = '// Added by android-release-signing plugin.'
 
 function isReleaseBuild() {
-  if (process.env.RELEASE) {
-    return process.env.RELEASE === 'true'
+  // beta and prod are release-signed; dev is debug-signed. See variants.js.
+  if (process.env.APP_VARIANT) {
+    return process.env.APP_VARIANT !== 'dev'
   }
 
   const easProfile = process.env.EAS_BUILD_PROFILE

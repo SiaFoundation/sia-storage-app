@@ -45,8 +45,9 @@ export function getTargetPaths(target: BuildTarget) {
  * Same files used for both dev and E2E to ensure consistency.
  */
 export function computeBuildHash(): string {
-  // Core config files that affect native builds
-  const coreFiles = ['package.json', 'bun.lock', 'app.config.js', 'eas.json']
+  // Core config files that affect native builds. variants.js feeds app.config.js
+  // (app identity per build variant), so a change there must bust the cache too.
+  const coreFiles = ['package.json', 'bun.lock', 'app.config.js', 'variants.js', 'eas.json']
 
   // Find all plugin files (custom native code)
   const pluginGlob = new Glob('plugins/*.js')

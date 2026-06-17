@@ -14,6 +14,15 @@ on:
           - ios
           - both
         default: both
+      variant:
+        description: 'App variant to release'
+        required: true
+        type: choice
+        options:
+          - both
+          - prod
+          - beta
+        default: both
       track:
         description: 'Release track'
         required: true
@@ -33,9 +42,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # On a published `mobile/` release, both variants build from the SAME commit:
+  #   prod (sia.storage)      → TestFlight + Play internal — promoted to the store manually
+  #   beta (sia.storage.beta) → TestFlight + Play internal — never promoted
+  # Manual dispatch can target a single variant via the `variant` input.
   release-android:
-    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both' }}
+    if: ${{ ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both') && (github.event_name == 'release' || inputs.variant == 'both' || inputs.variant == matrix.variant) }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [prod, beta]
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -77,6 +94,8 @@ jobs:
       - name: Install Fastlane
         run: gem install fastlane
 
+      # The beta app reuses the same upload keystore as prod (Play allows one
+      # upload key across apps), so no separate keystore secret is needed.
       - name: Decode Android keystore
         run: |
           printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/mobile/android-release.keystore
@@ -85,7 +104,7 @@ jobs:
       - name: Release Android
         working-directory: apps/mobile
         env:
-          RELEASE: 'true'
+          APP_VARIANT: ${{ matrix.variant }}
           SIA_RELEASE_STORE_FILE: ${{ github.workspace }}/apps/mobile/android-release.keystore
           SIA_RELEASE_STORE_PASSWORD: ${{ secrets.SIA_RELEASE_STORE_PASSWORD }}
           SIA_RELEASE_KEY_ALIAS: ${{ secrets.SIA_RELEASE_KEY_ALIAS }}
@@ -98,8 +117,12 @@ jobs:
         shell: bash
 
   release-ios:
-    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both' }}
+    if: ${{ ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both') && (github.event_name == 'release' || inputs.variant == 'both' || inputs.variant == matrix.variant) }}
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [prod, beta]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -123,6 +146,7 @@ jobs:
       - name: Install Fastlane
         run: gem install fastlane
 
+      # The distribution certificate is team-wide, so both variants reuse it.
       - name: Install Apple certificate
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
@@ -146,10 +170,13 @@ jobs:
           # Add keychain to search list (prepend to existing list)
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
 
+      # Provisioning profiles are per-app-id, so each variant installs its own.
+      # Xcode matches profiles by their internal name (set in the Fastfile), not
+      # the filename, so the on-disk names can stay constant.
       - name: Install provisioning profiles
         env:
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          IOS_PROVISIONING_PROFILE_EXTENSION_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_EXTENSION_BASE64 }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ matrix.variant == 'beta' && secrets.IOS_PROVISIONING_PROFILE_BETA_BASE64 || secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_PROVISIONING_PROFILE_EXTENSION_BASE64: ${{ matrix.variant == 'beta' && secrets.IOS_PROVISIONING_PROFILE_EXTENSION_BETA_BASE64 || secrets.IOS_PROVISIONING_PROFILE_EXTENSION_BASE64 }}
         run: |
           PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
           mkdir -p "$PROFILES_DIR"
@@ -159,7 +186,7 @@ jobs:
       - name: Release iOS
         working-directory: apps/mobile
         env:
-          RELEASE: 'true'
+          APP_VARIANT: ${{ matrix.variant }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
@@ -177,7 +204,7 @@ jobs:
         if: always()
         run: |
           TAG="${{ github.event.release.tag_name || github.run_id }}"
-          echo "DSYM_ARTIFACT=ios-dsyms-${TAG//\//-}" >> "$GITHUB_ENV"
+          echo "DSYM_ARTIFACT=ios-dsyms-${{ matrix.variant }}-${TAG//\//-}" >> "$GITHUB_ENV"
         shell: bash
 
       - name: Upload iOS dSYMs

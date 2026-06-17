@@ -23,6 +23,8 @@
     "release:android:production": "bun scripts/releaseAndroid.ts production",
     "release:ios:internal": "bun scripts/releaseIos.ts testflight",
     "release:ios:production": "bun scripts/releaseIos.ts appstore",
+    "release:beta:android:internal": "APP_VARIANT=beta bun scripts/releaseAndroid.ts internal",
+    "release:beta:ios:internal": "APP_VARIANT=beta bun scripts/releaseIos.ts testflight",
     "lint": "oxlint . && oxfmt --check .",
     "lint:fix": "oxlint --fix . && oxfmt --write .",
     "typecheck": "tsc --noEmit",
