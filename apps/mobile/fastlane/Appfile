@@ -1,10 +1,14 @@
 # Appfile for iOS and Android app configuration
+#
+# Identifiers are driven by the build variant (see variants.js); the release
+# scripts export IOS_BUNDLE_ID / ANDROID_PACKAGE. They default to the prod app so
+# manual `fastlane` invocations and bare npm scripts still target it.
 
 # iOS App Store Connect
-app_identifier("sia.storage")
+app_identifier(ENV["IOS_BUNDLE_ID"] || "sia.storage")
 apple_id(ENV["APPLE_ID"] || "")
 team_id(ENV["APPLE_TEAM_ID"] || "")
 
 # Android Google Play
-package_name("sia.storage")
+package_name(ENV["ANDROID_PACKAGE"] || "sia.storage")
 

@@ -86,6 +86,14 @@ platform :ios do
       UI.user_error!("APPLE_TEAM_ID environment variable is required")
     end
 
+    # Bundle ids and provisioning-profile names are driven by the build variant
+    # (see variants.js); the release script exports them. Default to the prod app
+    # so a bare `fastlane ios build_ipa` still builds the public app.
+    main_bundle_id = ENV["IOS_BUNDLE_ID"] || "sia.storage"
+    share_ext_bundle_id = ENV["IOS_SHARE_EXTENSION_BUNDLE_ID"] || "sia.storage.share-extension"
+    main_profile = ENV["IOS_PROFILE_NAME"] || "Sia Storage Distribution"
+    share_ext_profile = ENV["IOS_SHARE_EXTENSION_PROFILE_NAME"] || "Sia Storage Share Extension Distribution"
+
     # Set per-target signing settings before building.
     # expo prebuild regenerates the project, so we must configure signing here.
     # This sets PROVISIONING_PROFILE_SPECIFIER for each target in the Xcode project.
@@ -94,7 +102,7 @@ platform :ios do
       use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "iPhone Distribution",
-      profile_name: "Sia Storage Distribution",
+      profile_name: main_profile,
       targets: ["SiaStorage"]
     )
 
@@ -103,7 +111,7 @@ platform :ios do
       use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "iPhone Distribution",
-      profile_name: "Sia Storage Share Extension Distribution",
+      profile_name: share_ext_profile,
       targets: ["ShareExtension"]
     )
 
@@ -124,8 +132,8 @@ platform :ios do
         method: "app-store",
         signingStyle: "manual",
         provisioningProfiles: {
-          "sia.storage" => "Sia Storage Distribution",
-          "sia.storage.share-extension" => "Sia Storage Share Extension Distribution"
+          main_bundle_id => main_profile,
+          share_ext_bundle_id => share_ext_profile
         }
       },
       include_bitcode: false,
