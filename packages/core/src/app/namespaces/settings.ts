@@ -93,6 +93,8 @@ export function buildSettingsNamespace(
     setFsEvictionLastRun: (v) => setNum('fsEvictionLastRun', v),
     getFsOrphanLastRun: () => getNum('fsOrphanLastRun', 0),
     setFsOrphanLastRun: (v) => setNum('fsOrphanLastRun', v),
+    getPruneSlabsLastRun: () => getNum('pruneSlabsLastRun', 0),
+    setPruneSlabsLastRun: (v) => setNum('pruneSlabsLastRun', v),
     getViewSettings: async () => {
       const raw = await storage.getItem('viewSettings')
       if (!raw) return {}

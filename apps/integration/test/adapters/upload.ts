@@ -20,6 +20,7 @@ export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter
     downloadByObjectId: (id) => sdk.downloadByObjectId(id),
     hosts: async () => [],
     account: async () => ({ publicKey: '', storage: BigInt(0), app: null }) as any,
+    pruneSlabs: () => sdk.pruneSlabs(),
   }
 }
 

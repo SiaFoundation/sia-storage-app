@@ -29,6 +29,7 @@ import { resumeLogger } from '../stores/logs'
 import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
 import { cancelFsOrphanScanner } from './fsOrphanScanner'
 import { addLifecycleListener, getLifecycle } from './lifecycle'
+import { maybePruneSlabs } from './pruneSlabs'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
 import { getUploadManager } from './uploader'
 
@@ -100,6 +101,9 @@ const manager = createSuspensionManager(
         // Eviction's frequency gate short-circuits if it ran recently, so a
         // quick app-switch is cheap; a long suspension triggers a real pass.
         void runFsEvictionScanner()
+        // Prune unreferenced slabs on foreground (throttled to once per
+        // interval, no-op server-side when there's nothing to reclaim).
+        void maybePruneSlabs()
       },
     },
   },

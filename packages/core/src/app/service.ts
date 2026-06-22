@@ -664,6 +664,10 @@ export interface AppService {
     getFsOrphanLastRun(): Promise<number>
     /** Sets the timestamp of the last orphan cleanup run. */
     setFsOrphanLastRun(value: number): Promise<void>
+    /** Returns the timestamp of the last slab-prune run. */
+    getPruneSlabsLastRun(): Promise<number>
+    /** Sets the timestamp of the last slab-prune run. */
+    setPruneSlabsLastRun(value: number): Promise<void>
     /** Returns the persisted view settings (sort, layout, etc.). */
     getViewSettings(): Promise<Record<string, unknown>>
     /** Sets the view settings. */

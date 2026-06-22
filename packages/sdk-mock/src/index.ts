@@ -202,6 +202,7 @@ class MockPacker implements PackedUploadRef {
 export class MockSdk implements SdkAdapter {
   private storage: MockIndexerStorage
   private connected = true
+  pruneSlabsCallCount = 0
 
   constructor(storage?: MockIndexerStorage) {
     this.storage = storage ?? createEmptyIndexerStorage()
@@ -368,6 +369,11 @@ export class MockSdk implements SdkAdapter {
       },
       lastUsed: new Date(),
     }
+  }
+
+  async pruneSlabs(): Promise<void> {
+    if (!this.connected) throw new Error('Network unavailable')
+    this.pruneSlabsCallCount++
   }
 
   injectMetadataChange(objectId: string, changes: Partial<FileMetadata>): void {
