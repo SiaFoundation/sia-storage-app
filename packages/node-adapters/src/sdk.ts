@@ -364,5 +364,9 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
         lastUsed: info.lastUsed,
       }
     },
+
+    async pruneSlabs(): Promise<void> {
+      await sdk.pruneSlabs()
+    },
   }
 }

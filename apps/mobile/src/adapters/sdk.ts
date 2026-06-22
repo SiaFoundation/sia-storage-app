@@ -107,4 +107,8 @@ export class MobileSdkAdapter implements SdkAdapter {
   async account(): Promise<Account> {
     return this.sdk.account() as Promise<Account>
   }
+
+  async pruneSlabs(): Promise<void> {
+    await this.sdk.pruneSlabs()
+  }
 }

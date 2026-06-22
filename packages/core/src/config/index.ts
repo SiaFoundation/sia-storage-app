@@ -76,6 +76,9 @@ export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
 // How often to check for trashed files to auto-purge.
 export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
+// How often to prune unreferenced slabs. Pruning is a slow indexer operation,
+// and even a no-op call runs a scan server-side, so keep the cadence slow.
+export const PRUNE_SLABS_INTERVAL = daysInMs(1)
 // SQLite PRAGMA optimize interval.
 export const DB_OPTIMIZE_INTERVAL = secondsInMs(60) // 60 seconds
 // Performance monitor logging interval.

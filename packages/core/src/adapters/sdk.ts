@@ -168,4 +168,10 @@ export interface SdkAdapter {
   downloadByObjectId(objectId: string): Promise<ArrayBuffer>
   hosts(): Promise<Host[]>
   account(): Promise<Account>
+  /**
+   * Unpins slabs no longer referenced by any object on the account,
+   * reclaiming the storage held by deleted objects. Blocks on a single
+   * indexer round-trip and resolves with no data on success.
+   */
+  pruneSlabs(): Promise<void>
 }

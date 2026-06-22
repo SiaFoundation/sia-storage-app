@@ -22,6 +22,7 @@ import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
+import { maybePruneSlabs, resetPruneThrottle } from './pruneSlabs'
 import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
@@ -135,6 +136,7 @@ export async function initApp(): Promise<void> {
         initBackgroundTasks()
         initSyncUpMetadata()
         initThumbnailScanner()
+        void maybePruneSlabs()
       },
     })
   }
@@ -223,6 +225,7 @@ async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
 
   // Reset cursor caches.
   await resetPhotosArchiveCursor()
+  await resetPruneThrottle()
 
   // Pin every SWR slot to `undefined` for the reset window so useShowSplash
   // holds via its `hasOnboarded === undefined` clause — without this, sign-out
