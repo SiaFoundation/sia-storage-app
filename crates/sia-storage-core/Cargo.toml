@@ -1,0 +1,14 @@
+[package]
+name = "sia-storage-core"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+# No doc examples; the doctest pass is a full rustdoc recompile for nothing. Re-enable if doc examples are added.
+doctest = false
