@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["sia-storage-core"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unused_imports = "warn"
