@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["sia-storage-core"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unused_imports = "warn"
+
+[workspace.lints.clippy]
+module_inception = "allow"
+too_many_arguments = "allow"
