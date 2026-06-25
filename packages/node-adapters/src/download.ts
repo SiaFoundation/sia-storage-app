@@ -1,6 +1,5 @@
 import type { DownloadLikeRef } from '@siastorage/core/adapters'
 import type { DownloadObjectAdapter } from '@siastorage/core/app'
-import { DOWNLOAD_MAX_INFLIGHT } from '@siastorage/core/config'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { createWriteStream } from 'fs'
 import { unlink } from 'fs/promises'
@@ -65,7 +64,6 @@ export function createNodeDownloadAdapter(deps: {
       const pinnedObject = sdk.openPinnedObject(appKey, object)
 
       const dl = await sdk.download(pinnedObject, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
         offset: BigInt(0),
         length: undefined,
       })
@@ -76,7 +74,6 @@ export function createNodeDownloadAdapter(deps: {
     async downloadFromShareUrl({ file, url, sdk, onProgress, signal }) {
       const sharedObject = await sdk.sharedObject(url)
       const dl = await sdk.download(sharedObject, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
         offset: BigInt(0),
         length: undefined,
       })

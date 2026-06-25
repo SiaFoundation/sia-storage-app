@@ -4,7 +4,6 @@ const MOCK_SLAB_SIZE = 4 * 1024 * 1024 * 10 // 40 MiB (SECTOR_SIZE * DATA_SHARDS
 
 jest.mock('@siastorage/core/config', () => ({
   __esModule: true,
-  UPLOAD_MAX_INFLIGHT: 15,
   UPLOAD_DATA_SHARDS: 10,
   UPLOAD_PARITY_SHARDS: 0,
   SECTOR_SIZE: 4 * 1024 * 1024,
@@ -185,7 +184,6 @@ describe('UploadManager packing efficiency', () => {
   const realConfig = jest.requireActual('@siastorage/core/config') as Record<string, any>
   const savedConfig: Record<string, any> = {}
   const configPatches: Record<string, any> = {
-    UPLOAD_MAX_INFLIGHT: 15,
     UPLOAD_DATA_SHARDS: 10,
     UPLOAD_PARITY_SHARDS: 0,
     SECTOR_SIZE: 4 * 1024 * 1024,

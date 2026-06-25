@@ -267,7 +267,6 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
     ): Promise<DownloadLikeRef> {
       const native = requireNativePinnedObject(pinnedObject)
       const stream = sdk.download(native, {
-        maxInflight: options.maxInflight,
         offset: options.offset,
         length: options.length,
         onShardDownloaded: bridgeShardCallback(options.shardDownloaded),
@@ -277,7 +276,6 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
 
     async uploadPacked(options: UploadOptions): Promise<PackedUploadRef> {
       const packed = sdk.uploadPacked({
-        maxInflight: options.maxInflight,
         dataShards: options.dataShards,
         parityShards: options.parityShards,
         onShardUploaded: bridgeShardCallback(options.shardUploaded),
@@ -327,7 +325,7 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
      */
     async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
       const obj = await sdk.object(objectId)
-      const stream = sdk.download(obj, { maxInflight: 1, offset: BigInt(0), length: undefined })
+      const stream = sdk.download(obj, { offset: BigInt(0), length: undefined })
       return consumeStreamToBuffer(stream)
     },
 

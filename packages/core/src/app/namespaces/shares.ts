@@ -1,6 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { SdkAdapter } from '../../adapters/sdk'
-import { DOWNLOAD_MAX_INFLIGHT } from '../../config'
 import * as ops from '../../db/operations'
 import { sealPinnedObject } from '../../lib/localObjects'
 import type { AppService } from '../service'
@@ -34,7 +33,6 @@ export function buildSharesNamespace(
       const sdk = requireSdk()
       const obj = await sdk.sharedObject(url)
       const dl = await sdk.download(obj, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
         offset: BigInt(0),
         length: BigInt(byteCount),
       })

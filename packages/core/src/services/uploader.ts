@@ -14,7 +14,6 @@ import {
   SLAB_SIZE,
   STORAGE_FULL_POLL_INTERVAL,
   UPLOAD_DATA_SHARDS,
-  UPLOAD_MAX_INFLIGHT,
   UPLOAD_PARITY_SHARDS,
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
@@ -644,7 +643,6 @@ export class UploadManager {
         }
         this.batch = batch
         this.packer = await sdk.uploadPacked({
-          maxInflight: UPLOAD_MAX_INFLIGHT,
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
           shardUploaded: {

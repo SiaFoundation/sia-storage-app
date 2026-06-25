@@ -72,7 +72,6 @@ export interface ShardProgress {
 }
 
 export interface UploadOptions {
-  maxInflight: number
   dataShards: number
   parityShards: number
   shardUploaded?: {
@@ -81,7 +80,6 @@ export interface UploadOptions {
 }
 
 export interface DownloadOptions {
-  maxInflight: number
   offset: bigint
   length: bigint | undefined
   shardDownloaded?: {

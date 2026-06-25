@@ -29,7 +29,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@siafoundation/sia-storage": "0.0.10",
+    "@siafoundation/sia-storage": "0.0.13",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
     "better-sqlite3": "12.6.2"
