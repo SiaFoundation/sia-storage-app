@@ -1,5 +1,4 @@
 import type { DownloadObjectAdapter } from '@siastorage/core/app'
-import { DOWNLOAD_MAX_INFLIGHT } from '@siastorage/core/config'
 import { PinnedObject } from 'react-native-sia'
 import { streamToCache } from '../lib/streamToCache'
 import { getAppKeyForIndexer } from '../stores/appKey'
@@ -13,7 +12,6 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
 
       const pinnedObject = PinnedObject.open(appKey, object)
       const dl = await sdk.download(pinnedObject, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
         offset: BigInt(0),
         length: undefined,
       })
@@ -33,7 +31,6 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
       const sharedObject = await sdk.sharedObject(url)
       const totalSize = Number(sharedObject.size())
       const dl = await sdk.download(sharedObject, {
-        maxInflight: DOWNLOAD_MAX_INFLIGHT,
         offset: BigInt(0),
         length: undefined,
       })

@@ -40,7 +40,6 @@ export class MobileSdkAdapter implements SdkAdapter {
   async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
     const obj = await this.sdk.object(objectId)
     const dl = this.sdk.download(obj, {
-      maxInflight: 1,
       offset: 0n,
       length: undefined,
     })

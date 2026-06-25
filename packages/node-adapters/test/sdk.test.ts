@@ -182,7 +182,6 @@ describe('createNodeSdkAdapter', () => {
     // First get a pinned object through the adapter so it's registered in WeakMap
     const obj = await adapter.getPinnedObject('test')
     const dl = await adapter.download(obj, {
-      maxInflight: 1,
       offset: BigInt(0),
       length: undefined,
     })
@@ -202,7 +201,6 @@ describe('createNodeSdkAdapter', () => {
     const mockSdk = createMockSdk()
     const adapter = createNodeSdkAdapter(mockSdk as any)
     const packed = await adapter.uploadPacked({
-      maxInflight: 10,
       dataShards: 10,
       parityShards: 3,
     })
@@ -215,7 +213,6 @@ describe('createNodeSdkAdapter', () => {
     const mockSdk = createMockSdk()
     const adapter = createNodeSdkAdapter(mockSdk as any)
     const packed = await adapter.uploadPacked({
-      maxInflight: 10,
       dataShards: 10,
       parityShards: 3,
     })
