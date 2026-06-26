@@ -1,3 +1,14 @@
+## 0.0.18 (2026-06-26)
+
+### Features
+
+- Replace the sync-up watermark cursor with a per-object needsSyncUp dirty flag. Sync-up now pushes only changed objects, fixing both the redundant re-pushes after a large sync-down and the race where an edit could slip past the advancing cursor and never sync.
+
+### Fixes
+
+- Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
+- Remove the `maxInflight` transfer-concurrency option from the SDK adapter and the `DOWNLOAD_MAX_INFLIGHT`/`UPLOAD_MAX_INFLIGHT` config constants. Transfer concurrency is now managed by the SDK.
+
 ## 0.0.17 (2026-06-10)
 
 ### Fixes
