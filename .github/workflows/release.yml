@@ -47,12 +47,12 @@ jobs:
   #   beta (sia.storage.beta) → TestFlight + Play internal — never promoted
   # Manual dispatch can target a single variant via the `variant` input.
   release-android:
-    if: ${{ ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both') && (github.event_name == 'release' || inputs.variant == 'both' || inputs.variant == matrix.variant) }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        variant: [prod, beta]
+        variant: ${{ (github.event_name == 'workflow_dispatch' && inputs.variant != 'both') && fromJSON(format('["{0}"]', inputs.variant)) || fromJSON('["prod", "beta"]') }}
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -117,12 +117,12 @@ jobs:
         shell: bash
 
   release-ios:
-    if: ${{ ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both') && (github.event_name == 'release' || inputs.variant == 'both' || inputs.variant == matrix.variant) }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both' }}
     runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
-        variant: [prod, beta]
+        variant: ${{ (github.event_name == 'workflow_dispatch' && inputs.variant != 'both') && fromJSON(format('["{0}"]', inputs.variant)) || fromJSON('["prod", "beta"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
