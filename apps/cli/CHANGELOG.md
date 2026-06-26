@@ -1,3 +1,9 @@
+## 0.0.5 (2026-06-26)
+
+### Fixes
+
+- Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
+
 ## 0.0.4 (2026-05-21)
 
 ### Fixes

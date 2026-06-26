@@ -2,6 +2,16 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.13.4 (2026-06-26)
+
+### Fixes
+
+- Fix a white screen on launch on some 32-bit Android devices by restoring the 32-bit ARM build.
+- Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
+- Automatic photo sync now detects new photos by what the system actually added to your library instead of inferring from photo dates. Photos that arrive with an old date — saved, AirDropped, or synced from another device or iCloud — and photos with no capture date on Android are no longer missed.
+- Faster, more reliable Sia transfers: large downloads now ramp up and route around slow hosts to cut latency, transfer concurrency adapts to network conditions, and crashes under heavy parallel load are fixed.
+- Catching up a large library after sign-in no longer re-uploads metadata for files that already match the server, so the initial sync settles faster and uses less network.
+
 ## 1.13.3 (2026-06-11)
 
 ### Fixes
