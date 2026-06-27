@@ -1,6 +1,7 @@
 // Build-variant identity — the single source of truth for app naming, bundle
-// identifiers, icons, app groups, and iOS provisioning-profile names. Consumed
-// by app.config.js (Expo), the release scripts, and (indirectly) Fastlane.
+// identifiers, icons, app groups, iOS provisioning-profile names, and the
+// generated Xcode project name. Consumed by app.config.js (Expo), the release
+// scripts, and (indirectly) Fastlane.
 //
 // Selected via the APP_VARIANT env var (dev | beta | prod); defaults to `dev`.
 //
@@ -14,8 +15,13 @@
 // side by side on one device.
 
 const VARIANTS = {
+  // xcodeName must equal the project `expo prebuild` generates from `name`
+  // (the display name with spaces stripped); it names the .xcworkspace,
+  // .xcodeproj, scheme, main target, and IPA. The Fastfile reads it via
+  // IOS_PROJECT_NAME (exported by releaseIos.ts).
   dev: {
     name: 'Sia Storage Dev',
+    xcodeName: 'SiaStorageDev',
     slug: 'siastoragedev',
     bundleId: 'sia.storage.dev',
     iosIcon: './assets/app-icon-ios-dev.png',
@@ -23,6 +29,7 @@ const VARIANTS = {
   },
   beta: {
     name: 'Sia Storage Beta',
+    xcodeName: 'SiaStorageBeta',
     slug: 'siastoragebeta',
     bundleId: 'sia.storage.beta',
     iosIcon: './assets/app-icon-ios-beta.png',
@@ -30,6 +37,7 @@ const VARIANTS = {
   },
   prod: {
     name: 'Sia Storage',
+    xcodeName: 'SiaStorage',
     slug: 'siastorage',
     bundleId: 'sia.storage',
     iosIcon: './assets/app-icon-ios.png',

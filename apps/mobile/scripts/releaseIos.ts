@@ -48,6 +48,7 @@ if (missingVars.length > 0) {
 // (Appfile + build_ipa) all target the same app. variants.js is the one source
 // of truth for these values.
 process.env.APP_VARIANT = variant.key
+process.env.IOS_PROJECT_NAME = variant.xcodeName
 process.env.IOS_BUNDLE_ID = variant.bundleId
 process.env.IOS_SHARE_EXTENSION_BUNDLE_ID = variant.shareExtBundleId
 process.env.IOS_PROFILE_NAME = variant.iosProfileName

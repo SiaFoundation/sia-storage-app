@@ -2,11 +2,16 @@
 
 default_platform(:ios)
 
-# Path to the iOS workspace
-IOS_WORKSPACE_PATH = File.expand_path("../ios/SiaStorage.xcworkspace", __dir__)
+# Xcode names are variant-driven: expo prebuild generates the project from the
+# variant display name, so the workspace, project, scheme, main target, and IPA
+# all carry that name. releaseIos.ts exports it as IOS_PROJECT_NAME; default to
+# the prod app so a bare `fastlane ios build_ipa` still works.
+IOS_PROJECT_NAME = ENV["IOS_PROJECT_NAME"] || "SiaStorage"
+IOS_WORKSPACE_PATH = File.expand_path("../ios/#{IOS_PROJECT_NAME}.xcworkspace", __dir__)
+IOS_XCODEPROJ_PATH = File.expand_path("../ios/#{IOS_PROJECT_NAME}.xcodeproj", __dir__)
 
 # iOS IPA path for releases
-IOS_RELEASE_IPA_NAME = "SiaStorage.ipa"
+IOS_RELEASE_IPA_NAME = "#{IOS_PROJECT_NAME}.ipa"
 IOS_RELEASE_IPA_PATH = File.expand_path("../ios/build/#{IOS_RELEASE_IPA_NAME}", __dir__)
 
 # Path to the Android AAB file
@@ -78,7 +83,7 @@ platform :ios do
   desc "Build and export iOS IPA for App Store"
   lane :build_ipa do
     # This does the same as:
-    # 1. Product > Archive (builds both SiaStorage and ShareExtension)
+    # 1. Product > Archive (builds both the app and ShareExtension targets)
     # 2. Export > App Store Connect (creates signed IPA)
 
     team_id = ENV["APPLE_TEAM_ID"]
@@ -98,16 +103,16 @@ platform :ios do
     # expo prebuild regenerates the project, so we must configure signing here.
     # This sets PROVISIONING_PROFILE_SPECIFIER for each target in the Xcode project.
     update_code_signing_settings(
-      path: File.expand_path("../ios/SiaStorage.xcodeproj", __dir__),
+      path: IOS_XCODEPROJ_PATH,
       use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "iPhone Distribution",
       profile_name: main_profile,
-      targets: ["SiaStorage"]
+      targets: [IOS_PROJECT_NAME]
     )
 
     update_code_signing_settings(
-      path: File.expand_path("../ios/SiaStorage.xcodeproj", __dir__),
+      path: IOS_XCODEPROJ_PATH,
       use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "iPhone Distribution",
@@ -117,11 +122,11 @@ platform :ios do
 
     build_app(
       workspace: IOS_WORKSPACE_PATH,
-      scheme: "SiaStorage",
+      scheme: IOS_PROJECT_NAME,
       configuration: "Release",
       export_method: "app-store",
       output_directory: File.expand_path("../ios/build", __dir__),
-      output_name: "SiaStorage.ipa",
+      output_name: IOS_RELEASE_IPA_NAME,
       export_team_id: team_id,
       xcargs: [
         "DEVELOPMENT_TEAM=#{team_id}",
