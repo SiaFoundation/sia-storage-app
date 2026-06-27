@@ -2,6 +2,7 @@
 
 ### Fixes
 
+- Periodically reclaim account storage left behind by deleted files. A background task calls the indexer's prune endpoint about once a day (and on app start/foreground, throttled).
 - Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
 
 ## 0.0.4 (2026-05-21)

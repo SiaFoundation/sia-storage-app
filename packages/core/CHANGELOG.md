@@ -6,8 +6,10 @@
 
 ### Fixes
 
+- Periodically reclaim account storage left behind by deleted files. A background task calls the indexer's prune endpoint about once a day (and on app start/foreground, throttled).
 - Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
 - Remove the `maxInflight` transfer-concurrency option from the SDK adapter and the `DOWNLOAD_MAX_INFLIGHT`/`UPLOAD_MAX_INFLIGHT` config constants. Transfer concurrency is now managed by the SDK.
+- Exclude thumbnails from the file count in the status line. "Encrypting N files" / "Uploading N files" / "Importing N files" now count only real files, not the thumbnails generated alongside them. Thumbnails still upload — when only thumbnails remain, the status line keeps showing the state without a number.
 
 ## 0.0.17 (2026-06-10)
 

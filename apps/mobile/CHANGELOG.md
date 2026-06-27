@@ -7,9 +7,12 @@ All notable changes to Sia Storage will be documented in this file.
 ### Fixes
 
 - Fix a white screen on launch on some 32-bit Android devices by restoring the 32-bit ARM build.
+- Periodically reclaim account storage left behind by deleted files. A background task calls the indexer's prune endpoint about once a day (and on app start/foreground, throttled).
+- Fix the custom indexer field clearing itself as you typed, and lock the protocol to https. The URL field now shows a fixed `https://` prefix so you only enter the host, and any pasted protocol is stripped.
 - Moving or permanently deleting a file now affects its entire version history, not just the current version, so older versions no longer get left behind in the original folder.
 - Automatic photo sync now detects new photos by what the system actually added to your library instead of inferring from photo dates. Photos that arrive with an old date — saved, AirDropped, or synced from another device or iCloud — and photos with no capture date on Android are no longer missed.
 - Faster, more reliable Sia transfers: large downloads now ramp up and route around slow hosts to cut latency, transfer concurrency adapts to network conditions, and crashes under heavy parallel load are fixed.
+- Exclude thumbnails from the file count in the status line. "Encrypting N files" / "Uploading N files" / "Importing N files" now count only real files, not the thumbnails generated alongside them. Thumbnails still upload — when only thumbnails remain, the status line keeps showing the state without a number.
 - Catching up a large library after sign-in no longer re-uploads metadata for files that already match the server, so the initial sync settles faster and uses less network.
 
 ## 1.13.3 (2026-06-11)
