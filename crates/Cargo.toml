@@ -10,6 +10,7 @@ publish = false
 
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+getrandom = "0.3"
 hex = "0.4"
 rusqlite = { version = "0.32", features = ["bundled", "array"] }
 serde = { version = "1", features = ["derive"] }
