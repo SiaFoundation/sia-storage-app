@@ -1694,6 +1694,7 @@ dependencies = [
  "chrono",
  "getrandom 0.3.4",
  "hex",
+ "indexmap 2.14.0",
  "rusqlite",
  "serde",
  "serde_json",
