@@ -7,6 +7,7 @@ export interface ResolvedVariant {
   key: VariantKey
   name: string
   slug: string
+  xcodeName: string
   bundleId: string
   iosIcon: string
   androidIcon: string
