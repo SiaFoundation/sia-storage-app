@@ -1,3 +1,4 @@
+pub mod config;
 pub mod db;
 pub mod encoding;
 pub mod lib_utils;

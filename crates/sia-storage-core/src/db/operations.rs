@@ -5,3 +5,4 @@ pub mod filter;
 pub mod local_objects;
 pub mod logs;
 pub mod tags;
+pub mod trash;
