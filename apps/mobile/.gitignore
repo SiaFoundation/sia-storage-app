@@ -25,6 +25,9 @@ modules/*/android/build/
 *.pem
 android-release.keystore
 
+# Fastlane: releaseAndroid.ts generates the Play "What's new" changelog per release
+fastlane/metadata/android/*/changelogs/
+
 # Metro
 .metro-health-check*
 

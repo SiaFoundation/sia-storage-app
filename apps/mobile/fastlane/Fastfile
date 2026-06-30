@@ -176,11 +176,18 @@ platform :ios do
     
     app_store_connect_api_key(api_key_params)
     
+    # External tester groups for this build, passed by releaseIos.ts; an empty
+    # list means internal testers only.
+    external_groups = ENV["IOS_EXTERNAL_GROUPS"] ? JSON.parse(ENV["IOS_EXTERNAL_GROUPS"]) : []
+    has_external = !external_groups.empty?
+
     upload_to_testflight(
       ipa: IOS_RELEASE_IPA_PATH,
       skip_waiting_for_build_processing: false, # Wait for processing - ensures build is ready before command completes (takes 10-30 min)
-      distribute_external: false, # Don't auto-distribute externally - we manually manage tester groups in TestFlight
-      notify_external_testers: false # Don't notify testers - we control when to send notifications manually
+      changelog: ENV["IOS_WHATS_NEW"], # "What to Test" - releaseIos.ts sets it to the version's release-notes link
+      distribute_external: has_external, # External groups go through Beta App Review; internal testers always auto-receive
+      groups: has_external ? external_groups : nil,
+      notify_external_testers: has_external
     )
   end
 end
@@ -281,16 +288,23 @@ platform :android do
     if !File.exist?(ANDROID_AAB_PATH)
       UI.user_error!("AAB file not found at #{ANDROID_AAB_PATH}. Run 'bun run release:android:build' first.")
     end
-    
+
+    # releaseAndroid.ts writes this before calling the lane; invoking the lane
+    # on its own (not via the script) leaves it absent, so skip changelogs then.
+    metadata_path = File.expand_path("metadata/android", __dir__)
+    changelog_present = File.exist?(File.join(metadata_path, "en-US/changelogs/default.txt"))
+
     upload_to_play_store(
       track: "internal", # Internal track - for testing
       aab: ANDROID_AAB_PATH,
-      release_status: "draft", # Use draft status until app is published in Play Console
+      release_status: "completed", # Activate on the internal track - no manual Play Console step
       skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
       skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
-      skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console
+      skip_upload_metadata: true, # Don't upload listing metadata - we manage descriptions, etc. manually in Play Console
+      skip_upload_changelogs: !changelog_present, # Upload "What's new" when releaseAndroid.ts generated it
       skip_upload_images: true, # Don't upload images - we manage app icons and feature graphics manually
       skip_upload_screenshots: true, # Don't upload screenshots - we manage them manually in Play Console
+      metadata_path: metadata_path,
       json_key_data: google_play_service_account_key
     )
   end

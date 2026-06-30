@@ -15,6 +15,7 @@ export interface ResolvedVariant {
   appGroup: string
   iosProfileName: string
   shareExtProfileName: string
+  testflightExternalGroups: string[]
   isReleaseVariant: boolean
 }
 
