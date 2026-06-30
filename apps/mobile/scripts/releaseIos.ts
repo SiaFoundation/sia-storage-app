@@ -16,7 +16,9 @@
 
 import path from 'node:path'
 import { $ } from 'bun'
+import pkg from '../package.json'
 import { resolveVariant } from '../variants'
+import { whatsNewText } from './releaseNotes'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 
@@ -73,6 +75,10 @@ if (Bun.env.DRY_RUN === 'true') {
 } else {
   console.log(`Step 3/3: Uploading to App Store Connect (${track})...`)
   if (track === 'testflight') {
+    // Fastfile reads both via ENV: the "What to Test" link and the variant's
+    // external tester groups.
+    process.env.IOS_WHATS_NEW = whatsNewText(pkg.version)
+    process.env.IOS_EXTERNAL_GROUPS = JSON.stringify(variant.testflightExternalGroups)
     await $`fastlane ios distribute_testflight`
   } else {
     await $`fastlane ios distribute_app_store`
