@@ -9,9 +9,11 @@ license = "Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.32", features = ["bundled", "array"] }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tracing = "0.1"
 
 [workspace.lints.rust]
 unused_imports = "warn"
