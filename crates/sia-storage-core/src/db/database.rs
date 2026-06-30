@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rusqlite::{Connection, InterruptHandle, Transaction};
 use tokio::sync::Mutex;
 
-use crate::db::DbError;
+use crate::db::{DbError, MigrationProgressFn, migrations, runner};
 
 /// The SQLite database: one connection plus a thread-safe interrupt handle.
 ///
@@ -16,18 +16,30 @@ pub struct Db {
 }
 
 impl Db {
-    /// Open the database at `path`, creating if absent. WAL mode, foreign keys on.
-    pub async fn open(path: &str) -> Result<Self, DbError> {
+    /// Open the database at `path`, creating if absent. WAL mode, foreign keys on. Runs any
+    /// pending migrations; `on_progress` fires per migration so a startup screen can show
+    /// which one is running.
+    pub async fn open(
+        path: &str,
+        on_progress: Option<MigrationProgressFn>,
+    ) -> Result<Self, DbError> {
         let path = path.to_string();
-        tokio::task::spawn_blocking(move || Self::from_conn(Connection::open(path)?)).await?
+        tokio::task::spawn_blocking(move || {
+            Self::from_conn(Connection::open(path)?, on_progress.as_ref())
+        })
+        .await?
     }
 
-    /// Open a private in-memory database with the same pragmas. For tests and ephemeral use.
+    /// Open a private in-memory database with the same pragmas and migrations. For tests and
+    /// ephemeral use.
     pub async fn open_in_memory() -> Result<Self, DbError> {
-        tokio::task::spawn_blocking(|| Self::from_conn(Connection::open_in_memory()?)).await?
+        tokio::task::spawn_blocking(|| Self::from_conn(Connection::open_in_memory()?, None)).await?
     }
 
-    fn from_conn(conn: Connection) -> Result<Self, DbError> {
+    fn from_conn(
+        mut conn: Connection,
+        on_progress: Option<&MigrationProgressFn>,
+    ) -> Result<Self, DbError> {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         // Drops the per-commit fsync (the slowest part of a write); the cost is that a
         // full-OS crash can lose the newest commits, though never corrupt the database.
@@ -41,6 +53,7 @@ impl Db {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         // Registers rarray() so `WHERE col IN rarray(?)` can bind an id list as one parameter.
         rusqlite::vtab::array::load_module(&conn)?;
+        runner::run_migrations(&mut conn, migrations::CORE_MIGRATIONS, on_progress)?;
         let interrupt = conn.get_interrupt_handle();
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),

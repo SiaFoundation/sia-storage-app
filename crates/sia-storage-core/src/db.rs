@@ -1,9 +1,15 @@
 //! The SQLite layer: the [`Db`](database::Db) handle and a few SQL utilities. Operations take a
 //! `&Connection` (reads and writes) or `&mut Transaction` (to open a savepoint) and run inside
-//! the transaction that `Db::transaction` opens for them.
+//! the transaction that `Db::transaction` opens for them. Migrations are internal: opening the
+//! database runs them.
 
 pub mod database;
+mod migrations;
+mod runner;
 pub mod sql;
+mod types;
+
+pub use types::{MigrationProgress, MigrationProgressFn};
 
 /// A database-layer error: a SQLite failure, a blocking-thread join failure, or an ad-hoc message.
 #[derive(Debug, thiserror::Error)]
