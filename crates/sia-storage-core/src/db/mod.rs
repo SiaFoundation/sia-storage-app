@@ -4,6 +4,7 @@
 
 pub mod database;
 pub mod migrations;
+pub mod operations;
 pub mod runner;
 pub mod sql;
 pub mod types;
