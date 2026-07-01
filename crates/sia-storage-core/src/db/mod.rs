@@ -3,6 +3,7 @@
 //! inside the transaction `Db::write` opens for them.
 
 pub mod database;
+pub mod migrations;
 pub mod runner;
 pub mod sql;
 pub mod types;
