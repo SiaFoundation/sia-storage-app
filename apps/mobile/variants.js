@@ -42,6 +42,8 @@ const VARIANTS = {
     bundleId: 'sia.storage',
     iosIcon: './assets/app-icon-ios.png',
     androidIcon: './assets/app-icon-android.png',
+    // Must match the TestFlight external group names in App Store Connect exactly.
+    testflightExternalGroups: ['Beacons', 'Hackers', 'Marketing'],
   },
 }
 
@@ -61,6 +63,7 @@ function resolveVariant(name = process.env.APP_VARIANT) {
     // Developer portal — derived from the display name so they stay in lockstep.
     iosProfileName: `${variant.name} Distribution`,
     shareExtProfileName: `${variant.name} Share Extension Distribution`,
+    testflightExternalGroups: variant.testflightExternalGroups || [],
     // dev builds are debug-signed; beta and prod are release-signed.
     isReleaseVariant: key !== 'dev',
   }

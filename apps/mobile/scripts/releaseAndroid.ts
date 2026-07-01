@@ -17,9 +17,12 @@
  *   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON - Google Play service account key
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { $ } from 'bun'
+import pkg from '../package.json'
 import { resolveVariant } from '../variants'
+import { whatsNewText } from './releaseNotes'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
 
@@ -77,6 +80,11 @@ if (Bun.env.DRY_RUN === 'true') {
 } else {
   console.log(`Step 3/3: Uploading to Play Store (${track} track)...`)
   if (track === 'internal') {
+    // supply has no inline release-notes option; it reads "What's new" from a
+    // per-locale changelog file. default.txt applies to any versionCode.
+    const changelogDir = path.join(projectRoot, 'fastlane/metadata/android/en-US/changelogs')
+    mkdirSync(changelogDir, { recursive: true })
+    writeFileSync(path.join(changelogDir, 'default.txt'), whatsNewText(pkg.version))
     await $`fastlane android distribute_internal`
   } else {
     await $`fastlane android distribute_play_store`
