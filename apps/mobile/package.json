@@ -6,6 +6,10 @@
   "scripts": {
     "fresh": "bunx rimraf .expo android ios node_modules && bun install",
     "start": "bun scripts/start.ts",
+    "test:native": "bun run test:native:ios && bun run test:native:android",
+    "test:native:ios": "bun scripts/nativeTest.ts ios",
+    "test:native:android": "bun scripts/nativeTest.ts android",
+    "test:native:ios:sim": "bun scripts/nativeTest.ts ios --simulator",
     "dev:ios:simulator": "bun scripts/dev.ts ios:simulator",
     "dev:ios:device": "bun scripts/dev.ts ios:device",
     "dev:android:emulator": "bun scripts/dev.ts android:emulator",
@@ -66,6 +70,7 @@
     "expo-sqlite": "55.0.10",
     "expo-updates": "55.0.12",
     "expo-video": "55.0.10",
+    "import-sources": "file:./modules/import-sources",
     "lucide-react-native": "0.543.0",
     "markdown-it": "14.1.1",
     "media-observer": "file:./modules/media-observer",
