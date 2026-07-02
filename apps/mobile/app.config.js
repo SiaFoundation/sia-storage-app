@@ -33,6 +33,10 @@ export default {
       },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        // Without this, UIDocumentPickerViewController(asCopy: false) still
+        // delivers purgeable tmp copies instead of the originals, so the
+        // bookmarks taken at pick time die as soon as iOS purges the copy.
+        LSSupportsOpeningDocumentsInPlace: true,
         NSPhotoLibraryUsageDescription:
           'Photos and videos from your library are uploaded to your Sia decentralized cloud storage. For example, you can select photos to back up manually, or enable automatic sync to continuously back up new photos as you take them.',
         NSCameraUsageDescription:

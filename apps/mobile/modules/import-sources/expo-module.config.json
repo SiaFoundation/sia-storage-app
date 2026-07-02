@@ -1,0 +1,12 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ImportSourceRefsModule", "MediaAssetReaderModule"]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.importsources.ImportSourceRefsModule",
+      "expo.modules.importsources.MediaAssetReaderModule"
+    ]
+  }
+}
