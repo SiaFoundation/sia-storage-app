@@ -17,20 +17,22 @@ const unavailable: ResolveLocalIdResult = { status: 'unavailable' }
  * yet. We distinguish "temporarily unavailable" from "permanently
  * deleted" so the import scanner doesn't mark iCloud files as lost.
  *
- * On Android, getAssetInfoAsync only queries MediaStore — the options
+ * On Android, getAssetInfoAsync only queries MediaStore. The options
  * parameter is ignored and no network download occurs. localUri is
- * only set when ExifInterface can read the file on disk (images only),
- * so cloud-only files (Google Photos "Free up space") return with
- * localUri undefined and we return unavailable. This is an
- * expo-media-library limitation — it uses file:// paths from the
- * deprecated DATA column instead of content:// URIs that could
- * trigger an on-demand download via ContentResolver.
+ * only set via the image-only ExifInterface branch (videos never get
+ * it), while asset.uri is usually the file:// path from MediaStore's
+ * DATA column but can be a content:// provider uri, so the fallback
+ * to asset.uri is scheme-guarded. Bytes can still be absent behind
+ * that path (Google Photos "Free up space"); that surfaces as a copy
+ * failure instead of a resolve failure.
  *
  * The three return states drive the import scanner's behavior:
  * - resolved: file is available, proceed with copy and hash
  * - unavailable: file exists but can't be accessed right now, skip
  *   without marking as lost (retry on next scan)
- * - deleted: file is gone from the device, mark as lost
+ * - deleted: the asset row is verifiably gone (null return); never set on
+ *   fetch errors, so a transient Photos-DB failure can't permanently mark
+ *   a row lost
  *
  * Suspension signal policy: does NOT accept a signal. Wraps a single
  * native MediaLibrary.getAssetInfoAsync call (which itself may invoke
@@ -48,10 +50,16 @@ export async function getMediaLibraryUri(localId: string | null): Promise<Resolv
       logger.debug('mediaLibrary', 'asset_deleted', { localId })
       return deleted
     }
-    const uri = normalizeUri(asset.localUri)
+    // The import copier reads bytes off the returned path, so this resolver
+    // only ever hands back a file:// uri. localUri is expo's local copy
+    // (downloaded or exported); asset.uri is the file:// DATA path on Android
+    // but ph:// on iOS. Take the first candidate that is a real file path; a
+    // ph:// or a content:// uri is unavailable, not a resolve.
+    const uri = fileUri(asset.localUri) ?? fileUri(asset.uri)
     if (uri) return resolved(uri)
-    // Asset exists but localUri is null — iCloud content that hasn't
-    // finished downloading or can't be exported.
+    // Asset exists but has neither a localUri nor a readable file:// uri:
+    // typically iOS iCloud content that hasn't finished downloading or
+    // can't be exported.
     logger.debug('mediaLibrary', 'asset_no_local_uri', { localId })
     return unavailable
   } catch (e) {
@@ -71,7 +79,9 @@ export async function getMediaLibraryUri(localId: string | null): Promise<Resolv
         localId,
         error: fallbackError as Error,
       })
-      return deleted
+      // Both fetches threw: a transient Photos-DB error, not proof of deletion.
+      // A truly deleted asset returns null (not throw) on the no-download retry.
+      return unavailable
     }
   }
 }
@@ -163,4 +173,13 @@ function normalizeUri(uri: string | null | undefined): string | null {
   if (!uri) return null
   const hashIndex = uri.indexOf('#')
   return hashIndex >= 0 ? uri.slice(0, hashIndex) : uri
+}
+
+/**
+ * A normalized file:// path, or null for any other scheme (iOS ph://, a
+ * content:// provider uri) or an absent value.
+ */
+function fileUri(uri: string | null | undefined): string | null {
+  const normalized = normalizeUri(uri)
+  return normalized?.startsWith('file://') ? normalized : null
 }
