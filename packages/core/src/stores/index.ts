@@ -50,4 +50,4 @@ export {
 export { useSyncGateGuard, useSyncGateStatus, useSyncState } from './sync'
 export { useAllTags, useIsFavorite, useTagSearch, useTagsForFile } from './tags'
 export { invalidateThumbnailsForFileId } from './thumbnails'
-export { type UploadCounts, useUploadCounts, useUploadEntry } from './uploads'
+export { type UploadCounts, useUploadCounts, useUploadEntry, useUploadSpeed } from './uploads'

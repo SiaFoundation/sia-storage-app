@@ -1,10 +1,11 @@
+import { useUploadSpeed } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { FlatList, StyleSheet, Text } from 'react-native'
 import useSWR from 'swr'
 import { FileThumbnail } from '../components/FileThumbnail'
 import { StatusFileRow } from '../components/StatusFileRow'
 import { useNow } from '../hooks/useNow'
-import { humanSize } from '../lib/humanSize'
+import { humanBitrate, humanSize } from '../lib/humanSize'
 import { relativeTimePhrase } from '../lib/relativeTime'
 import { app } from '../stores/appService'
 import { type UploadState, useActiveUploads } from '../stores/uploads'
@@ -62,6 +63,8 @@ function UploadRow({
 export function UploadsScreen() {
   const now = useNow()
   const uploads = useActiveUploads()
+  const speedQuery = useUploadSpeed()
+  const speed = speedQuery.data ?? null
   const files = uploads.filter((u) => u.kind !== 'thumb')
   const thumbCount = uploads.length - files.length
   const ids = files.map((u) => u.id)
@@ -84,6 +87,13 @@ export function UploadsScreen() {
       renderItem={({ item, index }) => (
         <UploadRow upload={item} record={recordById.get(item.id)} now={now} first={index === 0} />
       )}
+      ListHeaderComponent={
+        <Text style={styles.speed}>
+          {speed
+            ? `Average upload speed ${humanBitrate(speed.rawBps)}`
+            : 'Calculating upload speed…'}
+        </Text>
+      }
       ListEmptyComponent={<Text style={styles.empty}>No active uploads.</Text>}
       ListFooterComponent={
         thumbCount > 0 ? (
@@ -109,6 +119,12 @@ const styles = StyleSheet.create({
   status: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  speed: {
+    color: palette.gray[500],
+    fontSize: 13,
+    textAlign: 'center',
+    paddingBottom: 12,
   },
   empty: {
     color: palette.gray[400],

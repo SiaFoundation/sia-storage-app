@@ -61,6 +61,9 @@ export function buildUploaderNamespace(
     isRunning() {
       return manager.packedCount > 0 || manager.uploadedCount > 0
     },
+    uploadSpeed() {
+      return manager.uploadSpeed()
+    },
     currentBatch() {
       return manager.currentBatch
     },
