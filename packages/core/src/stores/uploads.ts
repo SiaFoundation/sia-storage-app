@@ -31,3 +31,16 @@ export function useUploadEntry(id: string) {
   const app = useApp()
   return useSWR(app.caches.uploads.key(id), () => app.uploads.getEntry(id))
 }
+
+/**
+ * Running-average upload throughput (fileBps of user data, rawBps on the
+ * wire), or null until enough transfer has been measured. Updated by
+ * upload events the SWR cache never sees, so it polls while mounted
+ * instead of relying on cache invalidation.
+ */
+export function useUploadSpeed() {
+  const app = useApp()
+  return useSWR(app.caches.uploads.key('speed'), () => app.uploader.uploadSpeed(), {
+    refreshInterval: 1_000,
+  })
+}

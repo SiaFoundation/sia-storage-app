@@ -50,6 +50,14 @@ export type UploadsState = {
   uploads: Record<string, UploadEntry>
 }
 
+/** Upload throughput snapshot, measured over in-flight upload time. */
+export type UploadSpeed = {
+  /** Bytes/sec of user file data (parity overhead excluded). */
+  fileBps: number
+  /** Bytes/sec of encoded data on the wire, including parity overhead. */
+  rawBps: number
+}
+
 /** Lifecycle stage of a single download. */
 export type DownloadStatus = 'queued' | 'downloading' | 'done' | 'error'
 

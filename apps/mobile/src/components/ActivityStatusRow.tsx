@@ -1,6 +1,8 @@
+import { useUploadSpeed } from '@siastorage/core/stores'
 import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useAppStatus } from '../hooks/useAppStatus'
+import { humanBitrate } from '../lib/humanSize'
 import { colors, palette } from '../styles/colors'
 
 /**
@@ -8,9 +10,13 @@ import { colors, palette } from '../styles/colors'
  * "Online and synced", "Syncing metadata from indexer", "No internet
  * connection", etc. Driven by the same `useAppStatus` hook as the
  * toolbar pill, so the two surfaces always agree on the current state.
+ * A subline shows the measured upload speed whenever one exists, whatever
+ * state the row itself is in.
  */
 export function ActivityStatusRow() {
   const status = useAppStatus()
+  const speedQuery = useUploadSpeed()
+  const speed = speedQuery.data ?? null
   if (!status.visible) return null
 
   return (
@@ -28,6 +34,9 @@ export function ActivityStatusRow() {
           </Pressable>
         ) : null}
       </View>
+      {speed ? (
+        <Text style={styles.speed}>Average upload speed {humanBitrate(speed.rawBps)}</Text>
+      ) : null}
     </View>
   )
 }
@@ -74,6 +83,12 @@ const styles = StyleSheet.create({
   hint: {
     color: palette.gray[400],
     fontSize: 13,
+  },
+  speed: {
+    color: palette.gray[500],
+    fontSize: 12,
+    paddingHorizontal: 14,
+    paddingTop: 6,
   },
   action: {
     color: palette.blue[400],

@@ -19,6 +19,7 @@ export type {
   InitStep,
   SyncState,
   UploadEntry,
+  UploadSpeed,
   UploadStatus,
   UploadsState,
 } from './stores'

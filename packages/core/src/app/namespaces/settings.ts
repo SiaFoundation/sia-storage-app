@@ -95,6 +95,21 @@ export function buildSettingsNamespace(
     setFsOrphanLastRun: (v) => setNum('fsOrphanLastRun', v),
     getPruneSlabsLastRun: () => getNum('pruneSlabsLastRun', 0),
     setPruneSlabsLastRun: (v) => setNum('pruneSlabsLastRun', v),
+    getUploadSpeedStats: async () => {
+      const raw = await storage.getItem('uploadSpeedStats')
+      if (!raw) return null
+      try {
+        const v = JSON.parse(raw)
+        const nums = [v.totalBytes, v.activeMs, v.sampleCount]
+        if (nums.some((n) => typeof n !== 'number' || !Number.isFinite(n) || n < 0)) return null
+        return { totalBytes: v.totalBytes, activeMs: v.activeMs, sampleCount: v.sampleCount }
+      } catch {
+        return null
+      }
+    },
+    setUploadSpeedStats: async (v) => {
+      await storage.setItem('uploadSpeedStats', JSON.stringify(v))
+    },
     getViewSettings: async () => {
       const raw = await storage.getItem('viewSettings')
       if (!raw) return {}

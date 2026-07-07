@@ -18,6 +18,7 @@ import type {
   UploadStats,
 } from '../db/operations'
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
+import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
 import type { ImportCopyResult } from '../services/fsFileUri'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -28,6 +29,7 @@ import type {
   InitStep,
   SyncState,
   UploadEntry,
+  UploadSpeed,
   UploadStatus,
   UploadsState,
 } from './stores'
@@ -811,6 +813,10 @@ export interface AppService {
     getPruneSlabsLastRun(): Promise<number>
     /** Sets the timestamp of the last slab-prune run. */
     setPruneSlabsLastRun(value: number): Promise<void>
+    /** Returns the persisted upload-speed running totals, or null if none. */
+    getUploadSpeedStats(): Promise<TransferSpeedSnapshot | null>
+    /** Persists the upload-speed running totals. */
+    setUploadSpeedStats(value: TransferSpeedSnapshot): Promise<void>
     /** Returns the persisted view settings (sort, layout, etc.). */
     getViewSettings(): Promise<Record<string, unknown>>
     /** Sets the view settings. */
@@ -978,6 +984,13 @@ export interface AppService {
     shutdown(): Promise<void>
     /** Returns whether the upload manager is actively processing. */
     isRunning(): boolean
+    /**
+     * Returns the running-average upload throughput, measured over
+     * in-flight upload time only (queue and packing gaps excluded) and
+     * persisted across sessions, or null until enough transfer has been
+     * measured.
+     */
+    uploadSpeed(): UploadSpeed | null
     /** Returns the current batch being packed, or null if idle. */
     currentBatch(): {
       batchId: string

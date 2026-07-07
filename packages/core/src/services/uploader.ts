@@ -2,6 +2,7 @@ import { logger } from '@siastorage/logger'
 import type { Reader } from '../adapters/fs'
 import type { PackedUploadRef, PinnedObjectRef, ShardProgress } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
+import type { UploadSpeed } from '../app/stores'
 import {
   PACKER_IDLE_TIMEOUT,
   PACKER_MAX_BATCH_DURATION,
@@ -22,6 +23,7 @@ import { getErrorMessage, isSuspendedDbError } from '../lib/errors'
 import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
+import { TransferSpeedTracker } from '../lib/transferSpeed'
 import { uniqueId } from '../lib/uniqueId'
 import type { FileRecordRow } from '../types/files'
 
@@ -175,12 +177,27 @@ export class UploadManager {
   private _uploadedCount = 0
   /** Cumulative bytes successfully pinned and saved. */
   private _uploadedBytes = 0
+  /** Upload throughput, fed per shard (raw encoded bytes) across all active batches. */
+  private speed = new TransferSpeedTracker()
+  /** When resume() last ran; shards already in flight then carry suspension time. */
+  private resumedAt = 0
+  /** Last time the speed totals were persisted; throttles the per-shard write. */
+  private speedPersistedAt = 0
 
   /** Connect dependencies and start the async processing loop. */
   initialize(app: AppService, internal: AppServiceInternal, adapters: UploaderAdapters): void {
     this.app = app
     this.internal = internal
     this.adapters = adapters
+    this.speedPersistedAt = Date.now()
+    // Seed the speed average from the previous session's totals. seed()
+    // merges, so shards that complete before this resolves are kept.
+    void this.app.settings
+      .getUploadSpeedStats()
+      .then((stats) => {
+        if (stats) this.speed.seed(stats)
+      })
+      .catch(() => {})
     this.progressThrottle = adapters.progressScheduler
       ? (() => {
           const pending = new Map<string, number>()
@@ -371,6 +388,9 @@ export class UploadManager {
   suspend(): Promise<void> {
     logger.info('uploadManager', 'suspending')
     this._suspended = true
+    // Checkpoint the speed totals: backgrounding is when the OS may kill
+    // the process, and the settings store is key-value, not the gated DB.
+    this.persistSpeedStats(true)
     this.wake()
     return Promise.resolve()
   }
@@ -378,6 +398,7 @@ export class UploadManager {
   resume(): void {
     if (!this._suspended) return
     logger.info('uploadManager', 'resuming')
+    this.resumedAt = Date.now()
     this._suspended = false
     if (this._resumeResolve) {
       this._resumeResolve()
@@ -466,6 +487,32 @@ export class UploadManager {
     return this._uploadedBytes
   }
 
+  /**
+   * Running-average upload throughput over in-flight upload time (queue
+   * and packing gaps excluded), persisted across sessions, or null until
+   * enough transfer has been measured. rawBps counts encoded bytes on the
+   * wire; fileBps scales down by the parity overhead to match the file
+   * sizes the user sees.
+   */
+  uploadSpeed(): UploadSpeed | null {
+    const rawBps = this.speed.bytesPerSecond()
+    if (rawBps == null) return null
+    return {
+      rawBps,
+      fileBps: (rawBps * UPLOAD_DATA_SHARDS) / (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS),
+    }
+  }
+
+  /** Persist the speed totals, throttled unless force is set. */
+  private persistSpeedStats(force = false): void {
+    // Suspension can run before initialize() wires the app (pre-auth).
+    if (!this.app) return
+    const now = Date.now()
+    if (!force && now - this.speedPersistedAt < 30_000) return
+    this.speedPersistedAt = now
+    void this.app.settings.setUploadSpeedStats(this.speed.snapshot()).catch(() => {})
+  }
+
   /** Full state reset for test isolation. */
   reset(): void {
     this.active = false
@@ -484,6 +531,8 @@ export class UploadManager {
     this._packedBytes = 0
     this._uploadedCount = 0
     this._uploadedBytes = 0
+    this.speed.reset()
+    this.resumedAt = 0
   }
 
   /**
@@ -1029,6 +1078,15 @@ export class UploadManager {
    */
   private onShardUploaded(batch: BatchState, p: ShardProgress): void {
     batch.uploadedShardBytes += Number(p.shardSize)
+    const elapsedMs = Number(p.elapsedMs)
+    // elapsedMs brackets the host RPC with a clock that keeps ticking while
+    // the OS freezes the process, so a shard in flight across a suspension
+    // reports frozen time as upload time. Skip shards that started before
+    // the last resume.
+    if (Date.now() - elapsedMs >= this.resumedAt) {
+      this.speed.addSample(Number(p.shardSize), elapsedMs)
+      this.persistSpeedStats()
+    }
     const slabs = Math.ceil(batch.totalSize / SLAB_SIZE)
     const expectedEncoded = slabs * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS) * SECTOR_SIZE
     const batchProgress = expectedEncoded > 0 ? batch.uploadedShardBytes / expectedEncoded : 0

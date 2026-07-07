@@ -200,6 +200,9 @@ describe('UploadManager', () => {
 
     internal().setSdk(mockSdk as any)
     await app().settings.setIndexerURL(TEST_INDEXER_URL)
+    // initialize() reloads speed totals the uploader saved to settings;
+    // zero them so one test's totals don't leak into the next.
+    await app().settings.setUploadSpeedStats({ totalBytes: 0, activeMs: 0, sampleCount: 0 })
     app().connection.setState({ isConnected: true })
   })
 
@@ -842,6 +845,88 @@ describe('UploadManager', () => {
         prevProgress = entry?.progress ?? 0
       }
       expect(prevProgress).toBeGreaterThan(0)
+    })
+
+    function sectorShard(shardIndex: number, elapsedMs: number): ShardProgress {
+      return {
+        hostKey: 'h-0',
+        shardSize: BigInt(SECTOR_SIZE),
+        shardIndex,
+        slabIndex: 0,
+        elapsedMs: BigInt(elapsedMs),
+      }
+    }
+
+    it('tracks upload speed from shard completions and keeps it across suspend', async () => {
+      manager.initialize(app(), internal(), {
+        createFileReader: jest.fn(() => ({
+          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        })),
+        progressScheduler: (cb) => cb(),
+      })
+
+      let shardProgress: ((p: ShardProgress) => void) | null = null
+      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+        shardProgress = opts.shardUploaded.progress
+        return mockPacker
+      })
+
+      await manager.__testProcessFiles([createFileEntry('speed-file', SLAB_SIZE)])
+      expect(manager.uploadSpeed()).toBeNull()
+
+      // Twelve SECTOR_SIZE shards, each measured at 500ms in flight,
+      // arriving 1s apart: 6s of in-flight time spread over 12s of wall
+      // clock. The first few shards report null, the warm-up gate.
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(1000)
+        shardProgress!(sectorShard(i, 500))
+        if (i === 3) expect(manager.uploadSpeed()).toBeNull()
+      }
+
+      // Raw speed counts encoded bytes over in-flight time only (12 shards
+      // over 6s); file speed scales by the data fraction of the (mocked)
+      // shard config.
+      const speed = manager.uploadSpeed()
+      const dataFraction = UPLOAD_DATA_SHARDS / (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS)
+      expect(speed?.rawBps).toBeCloseTo(SECTOR_SIZE * 2, 0)
+      expect(speed?.fileBps).toBeCloseTo(SECTOR_SIZE * 2 * dataFraction, 0)
+
+      // The session average survives a suspend/resume cycle.
+      await manager.suspend()
+      expect(manager.uploadSpeed()?.rawBps).toBe(speed?.rawBps)
+    })
+
+    it('excludes shards that were in flight across a suspension', async () => {
+      manager.initialize(app(), internal(), {
+        createFileReader: jest.fn(() => ({
+          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        })),
+        progressScheduler: (cb) => cb(),
+      })
+
+      let shardProgress: ((p: ShardProgress) => void) | null = null
+      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+        shardProgress = opts.shardUploaded.progress
+        return mockPacker
+      })
+
+      await manager.__testProcessFiles([createFileEntry('suspend-speed', SLAB_SIZE)])
+
+      await manager.suspend()
+      await jest.advanceTimersByTimeAsync(5 * 60 * 1000)
+      manager.resume()
+
+      // Completed just after resume but started before the suspension, so
+      // its measured duration is mostly frozen process time.
+      shardProgress!(sectorShard(0, 5 * 60 * 1000 + 500))
+      expect(manager.uploadSpeed()).toBeNull()
+
+      // Shards fully in flight after resume count normally.
+      for (let i = 1; i <= 12; i++) {
+        await jest.advanceTimersByTimeAsync(1000)
+        shardProgress!(sectorShard(i, 500))
+      }
+      expect(manager.uploadSpeed()?.rawBps).toBeCloseTo(SECTOR_SIZE * 2, 0)
     })
   })
 
