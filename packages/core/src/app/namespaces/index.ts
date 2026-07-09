@@ -50,6 +50,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     tags: swrCacheBy(),
     directories: swrCacheBy(),
     library: swrCacheBy(),
+    imports: swrCacheBy(),
     fileById: swrCacheBy(),
     thumbnails: {
       best: swrCacheBy(),

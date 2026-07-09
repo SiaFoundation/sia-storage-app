@@ -48,6 +48,14 @@ export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
 export const IMPORT_SCANNER_INTERVAL = secondsInMs(3) // 3 seconds
 // Max files requiring copy and hash allowed in the upload backlog before throttling.
 export const IMPORT_SCANNER_BACKLOG_LIMIT = 50
+// Import retry backoff: max attempts before an import_file is marked `failed`.
+export const IMPORT_MAX_ATTEMPTS = 8
+// Import scanner: release an `active` row claimed longer than this back to `pending` on the sweep.
+export const IMPORT_STALE_CLAIM_MS = minutesInMs(10) // 10 minutes
+// new-photos: seal the open import after this long with no new asset added.
+export const IMPORT_IDLE_SEAL_MS = minutesInMs(3) // 3 minutes
+// Coalesce window for imports-cache invalidations during a large library-scan drain.
+export const IMPORTS_CACHE_DEBOUNCE_MS = secondsInMs(1) // 1 second
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.
