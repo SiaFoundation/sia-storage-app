@@ -6,7 +6,6 @@ import { LearnRecoveryPhraseScreen } from '../screens/learn/LearnRecoveryPhraseS
 import { LearnSiaNetworkScreen } from '../screens/learn/LearnSiaNetworkScreen'
 import { MenuScreen } from '../screens/MenuScreen'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
-import { SettingsImportScreen } from '../screens/SettingsImportScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
 import { palette } from '../styles/colors'
 import { SwitchIndexerStack } from './SwitchIndexerStack'
@@ -24,7 +23,6 @@ export function MenuStack() {
       }}
     >
       <Stack.Screen name="MenuHome" component={MenuScreen} options={{ title: '' }} />
-      <Stack.Screen name="Import" component={SettingsImportScreen} options={{ title: 'Import' }} />
       <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
       <Stack.Screen
         name="Advanced"

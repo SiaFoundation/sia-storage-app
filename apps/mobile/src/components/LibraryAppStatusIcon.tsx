@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 import { useAppStatus } from '../hooks/useAppStatus'
-import { openSheet } from '../stores/sheets'
+import { navigateToStatusSheet } from '../lib/navigationRef'
 import { overlay } from '../styles/colors'
 
 export function LibraryAppStatusIcon() {
@@ -10,7 +10,7 @@ export function LibraryAppStatusIcon() {
       <View style={styles.statusPillContainer}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => openSheet('libraryStatus')}
+          onPress={navigateToStatusSheet}
           style={styles.statusPill}
         >
           {appStatus.icon}

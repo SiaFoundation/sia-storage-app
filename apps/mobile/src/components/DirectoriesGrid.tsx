@@ -3,6 +3,7 @@ import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
 import { useDirectoryChildren, useUnfiledFileCount } from '@siastorage/core/stores'
 import { FolderIcon, InboxIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
+import type React from 'react'
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
 import { EmptyState } from './EmptyState'
@@ -10,9 +11,15 @@ import { EmptyState } from './EmptyState'
 type Props = {
   onSelectDirectory: (directoryId: string, directoryName: string, directoryPath: string) => void
   onCreateDirectory: () => void
+  /** Rendered inside the scroll content, below the overlaid screen header. */
+  ListHeaderComponent?: React.ReactElement | null
 }
 
-export function DirectoriesGrid({ onSelectDirectory, onCreateDirectory }: Props) {
+export function DirectoriesGrid({
+  onSelectDirectory,
+  onCreateDirectory,
+  ListHeaderComponent,
+}: Props) {
   const rootDirs = useDirectoryChildren(null)
   const unfiledCount = useUnfiledFileCount()
   const dirs = rootDirs.data ?? []
@@ -56,6 +63,7 @@ export function DirectoriesGrid({ onSelectDirectory, onCreateDirectory }: Props)
     <FlatList
       data={listData}
       keyExtractor={(dir) => dir.id}
+      ListHeaderComponent={ListHeaderComponent}
       contentContainerStyle={styles.grid}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) => (

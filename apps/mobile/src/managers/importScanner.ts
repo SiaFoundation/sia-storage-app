@@ -52,10 +52,6 @@ export async function runImportScanner(signal?: AbortSignal): Promise<ImportScan
   return result
 }
 
-export function getImportBackoffEntries() {
-  return scanner.getBackoffEntries()
-}
-
 async function run(signal: AbortSignal): Promise<number | undefined> {
   // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; hashing
   // here can trip cpu_resource_fatal. See bgTaskContext.ts.
@@ -83,16 +79,6 @@ export const { init: initImportScanner, triggerNow: triggerImportScanner } = cre
   worker: run,
   interval: IMPORT_SCANNER_INTERVAL,
 })
-
-export function retryImportFile(id: string): void {
-  scanner.clearBackoff(id)
-  triggerImportScanner()
-}
-
-export function retryAllImportFiles(): void {
-  scanner.clearAllBackoff()
-  triggerImportScanner()
-}
 
 export function markImportCopyStarted(fileId: string): void {
   scanner.markCopyStarted(fileId)

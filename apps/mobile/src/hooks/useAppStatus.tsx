@@ -6,6 +6,7 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react-native'
 import type React from 'react'
+import { humanSize } from '../lib/humanSize'
 import { compactUploadPercent } from '../lib/uploadPercent'
 import { reconnectIndexer, useIsConnected } from '../stores/sdk'
 import { useUploadProgress } from '../stores/uploads'
@@ -62,11 +63,18 @@ export function useAppStatus(): AppStatus {
   }
 
   if (uploadsProgress.show) {
-    const { packerCount, packerFileCount, pendingFileCount, percentDecimal } = uploadsProgress
+    const { packerCount, packerFileCount, packerFileBytes, pendingFileCount, percentDecimal } =
+      uploadsProgress
     if (packerCount > 0) {
       const isUploading = percentDecimal > 0
       const verb = isUploading ? 'Uploading' : 'Encrypting'
-      const hint = isUploading ? (compactUploadPercent(percentDecimal) ?? undefined) : undefined
+      const percent = isUploading ? compactUploadPercent(percentDecimal) : null
+      // "62% · 1.9 GB": the percent plus the in-flight batch's total size.
+      const hint = percent
+        ? packerFileBytes > 0
+          ? `${percent} · ${humanSize(packerFileBytes)}`
+          : percent
+        : undefined
       // When real files are in flight, show the count. When only thumbnails
       // remain (packerFileCount === 0), keep the state but drop the number —
       // thumbnails still upload, but counting them confuses the user.
