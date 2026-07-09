@@ -206,7 +206,7 @@ function makeFileRecord(id: string, size: number): FileRecord {
     createdAt: now,
     updatedAt: now,
     addedAt: now,
-    localId: null,
+    mediaAssetId: null,
     trashedAt: null,
     deletedAt: null,
     objects: {},

@@ -42,14 +42,14 @@ export const fileMetadataKeys = keysOf<Omit<FileMetadata, 'tags' | 'directory'>>
 
 /** Fields that are stored only in the local database. */
 export type FileLocalMetadata = {
-  localId: string | null
+  mediaAssetId: string | null
   addedAt: number
   deletedAt: number | null
   lostReason?: string | null
 }
 
 export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
-  'localId',
+  'mediaAssetId',
   'addedAt',
   'deletedAt',
   'lostReason',

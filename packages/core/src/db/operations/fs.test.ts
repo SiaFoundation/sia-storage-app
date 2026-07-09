@@ -184,7 +184,7 @@ function makeFile(id: string, overrides?: Record<string, unknown>) {
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,
@@ -300,7 +300,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     expect(rows.map((r) => r.fileId)).toEqual(['f1'])
   })
 
-  it('never returns thumbnails — even thumbs of current originals when stale and uploaded', async () => {
+  it('never returns thumbnails, even stale uploaded thumbs of current originals', async () => {
     await insertFile(db(), makeFile('orig'))
     await insertFile(
       db(),
@@ -398,7 +398,7 @@ describe('queryTrashedCachedFiles', () => {
     expect(rows).toHaveLength(0)
   })
 
-  it('picks up thumbs of trashed originals via transactional cascade', async () => {
+  it('picks up thumbs trashed together with their originals', async () => {
     await insertFile(db(), makeFile('orig'))
     await insertFile(
       db(),

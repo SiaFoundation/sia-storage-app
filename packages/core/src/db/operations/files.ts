@@ -5,6 +5,7 @@ import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecord, FileRecordRow } from '../../types/files'
 import * as sql from '../sql'
+import { markImportFileAdded, markImportFileDuplicate } from './imports'
 import { buildRecordFilter } from './library'
 import {
   flagObjectsForFiles,
@@ -12,6 +13,7 @@ import {
   queryObjectRefsForFile,
   queryObjectsForFile,
 } from './localObjects'
+import { getOrCreateTag, insertFileTag } from './tags'
 import { tombstoneFilesAndThumbnails, trashFilesAndThumbnails } from './trash'
 
 export async function recalculateCurrentForGroup(
@@ -89,7 +91,7 @@ export async function recalculateCurrentForFileIds(
 }
 
 export const FILE_ROW_COLUMNS =
-  'id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason'
+  'id, name, size, createdAt, updatedAt, type, kind, mediaAssetId, hash, addedAt, thumbForId, thumbSize, trashedAt, deletedAt, lostReason'
 
 export const FILE_ROW_COLUMNS_F = FILE_ROW_COLUMNS.split(', ')
   .map((c) => `f.${c}`)
@@ -164,7 +166,7 @@ export function transformRow<T extends LocalObjectRef = LocalObjectRef>(
     addedAt: row.addedAt,
     type: row.type,
     kind: row.kind ?? 'file',
-    localId: row.localId,
+    mediaAssetId: row.mediaAssetId,
     hash: row.hash,
     thumbForId: row.thumbForId ?? undefined,
     thumbSize: row.thumbSize ?? undefined,
@@ -178,7 +180,7 @@ export function transformRow<T extends LocalObjectRef = LocalObjectRef>(
 export async function insertFile(
   db: DatabaseAdapter,
   fileRecord: Omit<FileRecord, 'objects'>,
-  options?: { skipCurrentRecalc?: boolean },
+  options?: { skipCurrentRecalc?: boolean; directoryId?: string | null },
 ): Promise<void> {
   const {
     id,
@@ -188,7 +190,7 @@ export async function insertFile(
     updatedAt,
     type,
     kind,
-    localId,
+    mediaAssetId,
     hash,
     addedAt,
     thumbForId,
@@ -197,6 +199,9 @@ export async function insertFile(
     deletedAt,
     lostReason,
   } = fileRecord
+  // directoryId is a files column but not a FileRecord field; it arrives
+  // separately via options.directoryId.
+  const hasDirectoryId = options?.directoryId !== undefined
   await sql.insert(db, 'files', {
     id,
     name,
@@ -206,7 +211,7 @@ export async function insertFile(
     updatedAt,
     type,
     kind,
-    localId,
+    mediaAssetId,
     hash,
     addedAt,
     thumbForId,
@@ -214,6 +219,7 @@ export async function insertFile(
     trashedAt,
     deletedAt,
     lostReason,
+    ...(hasDirectoryId ? { directoryId: options?.directoryId ?? null } : {}),
   })
   if (kind === 'file' && !options?.skipCurrentRecalc) {
     const row = await db.getFirstAsync<{ directoryId: string | null }>(
@@ -245,15 +251,6 @@ export type FileQueryOpts = {
   includeTrashed?: boolean
   /** Include tombstoned rows. Default: excluded. */
   includeDeleted?: boolean
-  hashEmpty?: boolean
-  hashNotEmpty?: boolean
-  /**
-   * Restrict to rows whose lostReason is NULL. Default: no filter.
-   * importScanner sets this to keep terminally-lost placeholders out of
-   * its candidate pool — they're already surfaced in the UI's Unavailable
-   * tab and never become hashable without external action.
-   */
-  lostReasonIsNull?: boolean
 }
 
 function buildFileRecordsQuery(
@@ -277,9 +274,6 @@ function buildFileRecordsQuery(
     includeOldVersions,
     includeTrashed,
     includeDeleted,
-    hashEmpty,
-    hashNotEmpty,
-    lostReasonIsNull,
   } = opts
   const sortColumn: FileRecordCursorColumn = orderBy ?? 'createdAt'
 
@@ -293,18 +287,6 @@ function buildFileRecordsQuery(
       includeDeleted,
     }),
   ]
-
-  if (hashEmpty) {
-    whereClauses.push(`${tableAlias}.hash = ''`)
-  }
-
-  if (hashNotEmpty) {
-    whereClauses.push(`${tableAlias}.hash != ''`)
-  }
-
-  if (lostReasonIsNull) {
-    whereClauses.push(`${tableAlias}.lostReason IS NULL`)
-  }
 
   if (after) {
     if (order === 'ASC') {
@@ -436,18 +418,6 @@ export async function queryFileByObjectId(
   )
 }
 
-export async function queryFilesByLocalIds(
-  db: DatabaseAdapter,
-  localIds: string[],
-): Promise<FileRecordRow[]> {
-  if (localIds.length === 0) return []
-  const ph = localIds.map(() => '?').join(',')
-  return db.getAllAsync<FileRecordRow>(
-    `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND localId IN (${ph})`,
-    ...localIds,
-  )
-}
-
 /**
  * Returns the current version of every file matching one of `names` in
  * `directoryId`. `directoryId` is null-safe via SQLite's IS operator.
@@ -496,6 +466,28 @@ export async function queryFileByContentHash(
     logger.debug('db', 'file_not_found_by_hash', { hash })
   }
   return row
+}
+
+/**
+ * Finalize content-dedup: the id of a live finalized file with this content
+ * hash already in `directoryId`, or null. Live-only (trashedAt/deletedAt IS
+ * NULL) so a manual re-import of a deleted file still finalizes; directory
+ * matching is null-safe via SQLite's IS.
+ */
+export async function queryFinalizedFileIdByContentHashInDirectory(
+  db: DatabaseAdapter,
+  hash: string,
+  directoryId: string | null,
+): Promise<string | null> {
+  const row = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM files
+     WHERE hash = ? AND directoryId IS ? AND kind = 'file'
+       AND trashedAt IS NULL AND deletedAt IS NULL
+     LIMIT 1`,
+    hash,
+    directoryId,
+  )
+  return row?.id ?? null
 }
 
 export async function queryFileById(
@@ -560,7 +552,7 @@ async function updateFileInner(
     'createdAt',
     'thumbForId',
     'thumbSize',
-    'localId',
+    'mediaAssetId',
     'trashedAt',
     'deletedAt',
     'lostReason',
@@ -716,16 +708,6 @@ export async function readFileByContentHash(
   return transformRow(row, objects)
 }
 
-export async function readFilesByLocalIds(
-  db: DatabaseAdapter,
-  localIds: string[],
-): Promise<(FileRecord & { localId: string })[]> {
-  const rows = await queryFilesByLocalIds(db, localIds)
-  return rows.map((row) => transformRow(row)) as (FileRecord & {
-    localId: string
-  })[]
-}
-
 export async function readCurrentFilesByNamesInDirectory(
   db: DatabaseAdapter,
   names: string[],
@@ -794,8 +776,7 @@ export async function queryLostFileCount(db: DatabaseAdapter, indexerURL: string
      WHERE ${buildRecordFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
-        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
-        AND f.hash != '')
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id))
        OR f.lostReason IS NOT NULL
      )`,
     indexerURL,
@@ -812,8 +793,7 @@ export async function queryLostFileStats(
      WHERE ${buildRecordFilter('f')}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
-        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
-        AND f.hash != '')
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id))
        OR f.lostReason IS NOT NULL
      )`,
     indexerURL,
@@ -831,8 +811,7 @@ export async function queryLostFiles(
      AND (
        f.lostReason IS NOT NULL
        OR (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
-           AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
-           AND f.hash != '')
+           AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id))
      )
      ORDER BY f.addedAt DESC`,
     indexerURL,
@@ -937,7 +916,7 @@ export async function insertManyFiles(
       updatedAt: r.updatedAt,
       type: r.type,
       kind: r.kind,
-      localId: r.localId,
+      mediaAssetId: r.mediaAssetId,
       hash: r.hash,
       addedAt: r.addedAt,
       thumbForId: r.thumbForId,
@@ -998,7 +977,7 @@ export async function upsertManyFiles(
       hash: r.hash,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
-      localId: r.localId,
+      mediaAssetId: r.mediaAssetId,
       addedAt: r.addedAt,
       thumbForId: r.thumbForId,
       thumbSize: r.thumbSize,
@@ -1101,6 +1080,21 @@ export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<num
   return row?.count ?? 0
 }
 
+/**
+ * Total bytes of unuploaded local files. Drives the paced import throttle:
+ * background-source copies defer when this pending-local total is high, and
+ * the same total is subtracted from device free space. Same predicate as
+ * `queryUnuploadedFileCount`.
+ */
+export async function queryUnuploadedFileBytes(db: DatabaseAdapter): Promise<number> {
+  const row = await db.getFirstAsync<{ totalBytes: number }>(
+    `SELECT COALESCE(SUM(f.size), 0) as totalBytes FROM files f
+     WHERE ${buildRecordFilter('f')}
+       AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)`,
+  )
+  return row?.totalBytes ?? 0
+}
+
 export async function queryUnuploadedFiles(
   db: DatabaseAdapter,
 ): Promise<{ id: string; name: string; type: string; size: number }[]> {
@@ -1149,8 +1143,7 @@ export async function deleteLostFilesAndThumbnails(
      WHERE f.kind = 'file' AND ${buildRecordFilter('f', { includeOldVersions: true })}
      AND (
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
-        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
-        AND f.hash != '')
+        AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id))
        OR f.lostReason IS NOT NULL
      )`,
     [indexerURL],
@@ -1343,4 +1336,114 @@ export async function tombstoneAllFileVersions(
     versions.map((v) => v.id),
   )
   return versions.map((v) => v.id)
+}
+
+/** Outcome of a finalize attempt; the scanner uses it to drive fs cleanup. */
+export type FinalizeResult = { outcome: 'noop' } | { outcome: 'added' } | { outcome: 'duplicate' }
+
+/**
+ * Finalize one claimed import file: promote it into `files` under the same id,
+ * so the copied bytes on disk need no move, or mark it a content `duplicate`.
+ * Runs inside one transaction; fs side effects (byte cleanup for a duplicate)
+ * and cache invalidation are the caller's job after it commits. An added file
+ * keeps its copy's `usedAt:0`, evictable once uploaded; the eviction pass
+ * requires an `objects` row, so a not-yet-uploaded file is never a victim.
+ *
+ * Every write here lands only if the row's claim token still matches, so a
+ * finalize left over from a swept-then-reclaimed row mutates nothing and can
+ * never double-finalize.
+ */
+export async function finalizeImportFile(
+  db: DatabaseAdapter,
+  id: string,
+  token: string,
+): Promise<FinalizeResult> {
+  let result: FinalizeResult = { outcome: 'noop' }
+  await db.withTransactionAsync(async () => {
+    // The row must still be this worker's active claim; the join pulls the
+    // import's dedupByHash and pendingTags along in the same read.
+    const row = await db.getFirstAsync<{
+      name: string
+      type: string
+      size: number
+      hash: string | null
+      createdAt: number
+      updatedAt: number
+      addedAt: number
+      directoryId: string | null
+      mediaAssetId: string | null
+      dedupByHash: number
+      pendingTags: string | null
+    }>(
+      `SELECT f.name AS name, f.type AS type, f.size AS size, f.hash AS hash,
+              f.createdAt AS createdAt, f.updatedAt AS updatedAt, f.addedAt AS addedAt,
+              f.directoryId AS directoryId, f.mediaAssetId AS mediaAssetId,
+              i.dedupByHash AS dedupByHash, i.pendingTags AS pendingTags
+       FROM import_files f
+       JOIN imports i ON i.id = f.importId
+       WHERE f.id = ? AND f.claimToken = ? AND f.state = 'active'`,
+      id,
+      token,
+    )
+    if (!row) return // claim lost (swept and reclaimed), mutate nothing
+
+    // Content dedup, only when the import opts in (dedupByHash=1: new-photos,
+    // library-scan, and the migration's legacy import). A hit keeps the import_files row as `duplicate` and
+    // inserts nothing into `files`.
+    if (row.dedupByHash === 1 && row.hash) {
+      const dupId = await queryFinalizedFileIdByContentHashInDirectory(
+        db,
+        row.hash,
+        row.directoryId,
+      )
+      if (dupId) {
+        await markImportFileDuplicate(db, id, token, 'duplicate-content')
+        result = { outcome: 'duplicate' }
+        return
+      }
+    }
+
+    await insertFile(
+      db,
+      {
+        id,
+        name: row.name,
+        type: row.type,
+        kind: 'file',
+        size: row.size,
+        hash: row.hash ?? '',
+        mediaAssetId: row.mediaAssetId,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        addedAt: row.addedAt,
+        thumbForId: undefined,
+        thumbSize: undefined,
+        trashedAt: null,
+        deletedAt: null,
+        lostReason: null,
+      },
+      { directoryId: row.directoryId, skipCurrentRecalc: true },
+    )
+
+    // pendingTags is a JSON array of tag names; anything malformed is ignored.
+    if (row.pendingTags) {
+      let names: string[] = []
+      try {
+        const parsed = JSON.parse(row.pendingTags)
+        if (Array.isArray(parsed)) names = parsed.filter((n): n is string => typeof n === 'string')
+      } catch {}
+      for (const name of names) {
+        const tag = await getOrCreateTag(db, name)
+        await insertFileTag(db, id, tag.id)
+      }
+    }
+
+    // Recalculate current for the name+directory group, so a same-name import
+    // becomes the newest version.
+    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+
+    await markImportFileAdded(db, id, token)
+    result = { outcome: 'added' }
+  })
+  return result
 }

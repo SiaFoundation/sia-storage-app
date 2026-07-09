@@ -4,6 +4,8 @@
 // library-scan; those callers stage the rows themselves.
 
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import { logger } from '@siastorage/logger'
+import { getAssetSizes, isNativeAvailable } from 'import-sources'
 import type {
   ImportFileRow,
   ImportRow,
@@ -244,6 +246,19 @@ export async function buildPhotoCandidateRows(
   const parsed = await Promise.all(
     survivors.map((a) => parseAssetMetadata(a, 'file', { sniffBytes: false })),
   )
+  // Size HINTS in one native batch (MediaStore SIZE / PhotoKit resource
+  // metadata, no bytes touched, no iCloud download). They feed the progress
+  // throttle's delta gate and the open import's totals; the copy re-measures the
+  // real size. Unknown (null) stays 0, which every consumer treats as "no hint".
+  let sizeHints: Record<string, number | null> = {}
+  const unsized = survivors.filter((a) => !a.size).map((a) => a.id)
+  if (unsized.length > 0 && isNativeAvailable()) {
+    try {
+      sizeHints = await getAssetSizes(unsized)
+    } catch (e) {
+      logger.debug('assetImports', 'size_hints_failed', { error: e as Error })
+    }
+  }
   return survivors.map((a, i) => {
     const meta = parsed[i]
     return buildImportFileRow({
@@ -251,7 +266,7 @@ export async function buildPhotoCandidateRows(
       directoryId,
       name: meta.name,
       type: meta.type,
-      size: a.size ?? 0,
+      size: a.size ?? sizeHints[a.id] ?? 0,
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
       now,

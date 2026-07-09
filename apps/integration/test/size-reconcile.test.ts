@@ -32,7 +32,7 @@ describe('Size reconcile', () => {
       hash: '',
       createdAt: now,
       updatedAt: now,
-      localId: null,
+      mediaAssetId: null,
       addedAt: now,
       trashedAt: null,
       deletedAt: null,
@@ -54,7 +54,7 @@ describe('Size reconcile', () => {
     await app.shutdown()
   })
 
-  it('upload pins the SDK size, correcting a mis-recorded size at the source and on sync', async () => {
+  it('upload takes the size from the SDK, correcting a mis-recorded size locally and on sync', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
@@ -78,7 +78,7 @@ describe('Size reconcile', () => {
       hash,
       createdAt: now,
       updatedAt: now,
-      localId: null,
+      mediaAssetId: null,
       addedAt: now,
       trashedAt: null,
       deletedAt: null,

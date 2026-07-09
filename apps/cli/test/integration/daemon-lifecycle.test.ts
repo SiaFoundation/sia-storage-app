@@ -159,7 +159,6 @@ describe('daemon with AppService', () => {
     const app = await createTestApp(tempDir)
     const p = app.paths
 
-    // Create a test file to upload
     const testFile = path.join(tempDir, 'upload-test.txt')
     fs.writeFileSync(testFile, 'hello from upload test')
 
@@ -182,7 +181,7 @@ describe('daemon with AppService', () => {
           addedAt: now,
           type: 'text/plain',
           kind: 'file',
-          localId: null,
+          mediaAssetId: null,
           hash,
           trashedAt: null,
           deletedAt: null,
@@ -201,7 +200,6 @@ describe('daemon with AppService', () => {
 
     expect(result.name).toBe('upload-test.txt')
 
-    // Verify file exists in DB
     const record = await app.service.files.getById(result.id)
     expect(record).not.toBeNull()
     expect(record!.name).toBe('upload-test.txt')

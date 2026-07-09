@@ -1,11 +1,11 @@
-import type { ResolveLocalIdResult } from '@siastorage/core/services/importScanner'
+import type { ResolveSourceResult } from '@siastorage/core/services/importScanner'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import { Platform } from 'react-native'
 
-const resolved = (uri: string): ResolveLocalIdResult => ({ status: 'resolved', uri })
-const deleted: ResolveLocalIdResult = { status: 'deleted' }
-const unavailable: ResolveLocalIdResult = { status: 'unavailable' }
+const resolved = (uri: string): ResolveSourceResult => ({ status: 'resolved', uri })
+const deleted: ResolveSourceResult = { status: 'deleted' }
+const unavailable: ResolveSourceResult = { status: 'unavailable' }
 
 /**
  * Resolve a media library local ID to a file URI.
@@ -28,8 +28,8 @@ const unavailable: ResolveLocalIdResult = { status: 'unavailable' }
  *
  * The three return states drive the import scanner's behavior:
  * - resolved: file is available, proceed with copy and hash
- * - unavailable: file exists but can't be accessed right now, skip
- *   without marking as lost (retry on next scan)
+ * - unavailable: file exists but can't be accessed right now; the scanner
+ *   records a transient failure and retries on the row's backoff schedule
  * - deleted: the asset row is verifiably gone (null return); never set on
  *   fetch errors, so a transient Photos-DB failure can't permanently mark
  *   a row lost
@@ -40,7 +40,7 @@ const unavailable: ResolveLocalIdResult = { status: 'unavailable' }
  * can't be cancelled from JS. Callers that loop should check their
  * signal at the loop boundary before invoking.
  */
-export async function getMediaLibraryUri(localId: string | null): Promise<ResolveLocalIdResult> {
+export async function getMediaLibraryUri(localId: string | null): Promise<ResolveSourceResult> {
   if (!localId) return deleted
   try {
     const asset = await MediaLibrary.getAssetInfoAsync(localId, {
@@ -111,7 +111,7 @@ export async function getMediaLibraryUri(localId: string | null): Promise<Resolv
  */
 export async function getMediaLibraryDisplayUri(
   localId: string | null,
-): Promise<ResolveLocalIdResult> {
+): Promise<ResolveSourceResult> {
   if (!localId) return deleted
   try {
     return resolveAssetDisplay(
@@ -126,7 +126,7 @@ export async function getMediaLibraryDisplayUri(
   }
 }
 
-function resolveAssetDisplay(asset: MediaLibrary.AssetInfo | null): ResolveLocalIdResult {
+function resolveAssetDisplay(asset: MediaLibrary.AssetInfo | null): ResolveSourceResult {
   if (!asset) return deleted
   const uri = normalizeUri(asset.localUri) ?? asset.uri ?? null
   return uri ? resolved(uri) : unavailable

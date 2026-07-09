@@ -38,7 +38,7 @@ async function createTestFile(
     hash: `hash-${id}`,
     createdAt: overrides?.createdAt ?? 1000,
     updatedAt: overrides?.createdAt ?? 1000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: overrides?.addedAt ?? overrides?.createdAt ?? 1000,
     trashedAt: null,
     deletedAt: null,

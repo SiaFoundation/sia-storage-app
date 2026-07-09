@@ -54,7 +54,6 @@ export async function generateDataset(
     `Generating dataset: ${totalRecords.toLocaleString()} records, ${getCurrentCount(dist).toLocaleString()} current files`,
   )
 
-  // Create directories
   console.log(`  Creating ${dirCount} directories...`)
   const dirIds: string[] = []
   for (let i = 0; i < dirCount; i++) {
@@ -70,7 +69,6 @@ export async function generateDataset(
     )
   }
 
-  // Create tags
   console.log(`  Creating ${tagCount} tags...`)
   const tagIds: string[] = []
   const tagNames = ['travel', 'family', 'work', 'archive', 'screenshots']
@@ -87,7 +85,6 @@ export async function generateDataset(
     )
   }
 
-  // Generate file records
   console.log(`  Generating file records...`)
   const baseTime = Date.now() - 365 * 24 * 60 * 60 * 1000
   let fileIndex = 0
@@ -140,7 +137,7 @@ export async function generateDataset(
           updatedAt,
           type: TYPES[typeIdx],
           kind: 'file',
-          localId: null,
+          mediaAssetId: null,
           hash: `hash-${fileIndex}`,
           addedAt: createdAt,
           thumbForId: null,

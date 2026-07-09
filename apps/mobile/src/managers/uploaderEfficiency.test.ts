@@ -47,7 +47,7 @@ function createFileEntry(id: string, size = 1000): FileEntry {
       hash: 'hash',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       trashedAt: null,
       deletedAt: null,
@@ -102,7 +102,7 @@ function createDBFiles(count: number, opts: { prefix?: string; size?: number } =
     hash: `hash-${prefix}-${i}`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    localId: null,
+    mediaAssetId: null,
     addedAt: Date.now(),
     objects: {},
   })) as any
@@ -127,7 +127,7 @@ function createDBPhotosWithThumbs(
       hash: `hash-${prefix}-photo-${i}`,
       createdAt: Date.now() + i,
       updatedAt: Date.now() + i,
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now() + i,
       objects: {},
     })
@@ -142,7 +142,7 @@ function createDBPhotosWithThumbs(
         hash: `hash-${prefix}-thumb-${i}-${t}`,
         createdAt: Date.now() + photoCount + i * 2 + t,
         updatedAt: Date.now() + photoCount + i * 2 + t,
-        localId: null,
+        mediaAssetId: null,
         addedAt: Date.now() + photoCount + i * 2 + t,
         objects: {},
       })
@@ -673,15 +673,15 @@ describe('UploadManager packing efficiency', () => {
     })
 
     it('re-poll catches late files -- single efficient flush', async () => {
-      // Wave 1: 25 files polled, wave 2: 25 more found on next poll
-      // excludeIds filters wave1 at SQL level so second poll returns only wave2
+      // The first poll returns 25 files; the next poll finds 25 more
+      // excludeIds filters poll1 at the SQL level, so the second poll returns only poll2
       // All 50 x 800KB packed into one batch before idle timeout
       enablePolling()
-      const wave1 = createDBFiles(25, { prefix: 'eff-w1', size: 800 * KB })
-      const wave2 = createDBFiles(25, { prefix: 'eff-w2', size: 800 * KB })
+      const poll1 = createDBFiles(25, { prefix: 'eff-w1', size: 800 * KB })
+      const poll2 = createDBFiles(25, { prefix: 'eff-w2', size: 800 * KB })
       queryFilesSpy
-        .mockResolvedValueOnce(wave1)
-        .mockResolvedValueOnce(wave2)
+        .mockResolvedValueOnce(poll1)
+        .mockResolvedValueOnce(poll2)
         .mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())

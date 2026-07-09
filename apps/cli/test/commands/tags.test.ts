@@ -25,7 +25,7 @@ async function createTestFile(app: CliApp) {
     hash: 'abc',
     createdAt: now,
     updatedAt: now,
-    localId: null,
+    mediaAssetId: null,
     addedAt: now,
     trashedAt: null,
     deletedAt: null,

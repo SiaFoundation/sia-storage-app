@@ -40,7 +40,7 @@ describe('ls command logic', () => {
         hash: 'abc',
         createdAt: now,
         updatedAt: now,
-        localId: null,
+        mediaAssetId: null,
         addedAt: now,
         trashedAt: null,
         deletedAt: null,

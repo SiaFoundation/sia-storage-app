@@ -57,7 +57,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -89,7 +89,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -105,7 +105,7 @@ describe('thumbnailScanner', () => {
         createdAt: now,
         updatedAt: now,
         addedAt: now,
-        localId: null,
+        mediaAssetId: null,
         thumbForId: 'file1',
         thumbSize: size,
         trashedAt: null,
@@ -141,7 +141,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -158,7 +158,7 @@ describe('thumbnailScanner', () => {
         createdAt: now,
         updatedAt: now,
         addedAt: now,
-        localId: null,
+        mediaAssetId: null,
         thumbForId: 'file1',
         thumbSize: size,
         trashedAt: null,
@@ -202,7 +202,7 @@ describe('thumbnailScanner', () => {
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
-        localId: `local-nosource-${i}`,
+        mediaAssetId: `local-nosource-${i}`,
         trashedAt: null,
         deletedAt: null,
       })
@@ -221,7 +221,7 @@ describe('thumbnailScanner', () => {
         createdAt: now - 100 - i,
         updatedAt: now - 100 - i,
         addedAt: now - 100 - i,
-        localId: `local-covered-${i}`,
+        mediaAssetId: `local-covered-${i}`,
         trashedAt: null,
         deletedAt: null,
       })
@@ -237,7 +237,7 @@ describe('thumbnailScanner', () => {
           createdAt: now - 100 - i,
           updatedAt: now - 100 - i,
           addedAt: now - 100 - i,
-          localId: null,
+          mediaAssetId: null,
           thumbForId: `covered-${i}`,
           thumbSize: size,
           trashedAt: null,
@@ -256,7 +256,7 @@ describe('thumbnailScanner', () => {
       createdAt: now - 500,
       updatedAt: now - 500,
       addedAt: now - 500,
-      localId: 'local-eligible-1',
+      mediaAssetId: 'local-eligible-1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -291,7 +291,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: null,
       deletedAt: null,
     })
@@ -306,7 +306,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       thumbForId: 'file1',
       thumbSize: 64,
       trashedAt: null,
@@ -339,7 +339,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-video1',
+      mediaAssetId: 'local-video1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -381,7 +381,7 @@ describe('thumbnailScanner', () => {
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
-        localId: `local-unsupported-${i}`,
+        mediaAssetId: `local-unsupported-${i}`,
         trashedAt: null,
         deletedAt: null,
       })
@@ -408,7 +408,7 @@ describe('thumbnailScanner', () => {
         createdAt: now,
         updatedAt: now,
         addedAt: now,
-        localId: `local-${i}`,
+        mediaAssetId: `local-${i}`,
         trashedAt: null,
         deletedAt: null,
       })
@@ -431,7 +431,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -459,7 +459,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -487,7 +487,7 @@ describe('thumbnailScanner', () => {
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
-        localId: `local-${i}`,
+        mediaAssetId: `local-${i}`,
         trashedAt: null,
         deletedAt: null,
       })
@@ -520,7 +520,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -550,7 +550,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -579,7 +579,7 @@ describe('thumbnailScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: null,
       deletedAt: null,
     })
@@ -596,7 +596,7 @@ describe('thumbnailScanner', () => {
   })
 })
 
-describe('thumbnailScanner type write-back', () => {
+describe('thumbnailScanner type correction', () => {
   it('updates files.type when the magic-byte sniff disagrees with the declared type', async () => {
     const now = Date.now()
     await app().files.create({
@@ -609,7 +609,7 @@ describe('thumbnailScanner type write-back', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })
@@ -642,7 +642,7 @@ describe('thumbnailScanner type write-back', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
       trashedAt: null,
       deletedAt: null,
     })

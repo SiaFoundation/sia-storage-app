@@ -12,11 +12,11 @@ import {
   queryFiles,
   queryCurrentFilesByNamesInDirectory,
   queryFilesByContentHashes,
-  queryFilesByLocalIds,
   queryFileCount,
   recalculateCurrentForGroups,
   queryFileStats,
   queryLostFiles,
+  queryUnuploadedFileBytes,
   readFile,
   readFileWithObjects,
   readFilesByIds,
@@ -43,7 +43,7 @@ function makeFileRecord(id: string, overrides?: Partial<any>) {
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,
@@ -128,7 +128,7 @@ describe('needsSyncUp dirty flag (on objects)', () => {
     expect(await objectFlag('file-1')).toBe(1)
   })
 
-  it('clearObjectIfUnchanged clears only when files.updatedAt matches (CAS)', async () => {
+  it('clearObjectIfUnchanged clears only when files.updatedAt matches', async () => {
     await insertFile(db(), makeFileRecord('file-1', { updatedAt: 1000 }))
     await insertObject(db(), makeLocalObject('file-1'))
     expect(await objectFlag('file-1')).toBe(1)
@@ -167,7 +167,7 @@ describe('needsSyncUp dirty flag (on objects)', () => {
     expect(await objectFlag('b')).toBe(1)
   })
 
-  it('clearObjectsNeedsSyncUp clears the flag unconditionally (no CAS)', async () => {
+  it('clearObjectsNeedsSyncUp clears the flag without checking updatedAt', async () => {
     await insertFile(db(), makeFileRecord('uncond', { updatedAt: 1000 }))
     await insertObject(db(), makeLocalObject('uncond', { id: 'obj-uncond' }))
     expect(await objectFlag('uncond')).toBe(1)
@@ -447,7 +447,7 @@ describe('queryLostFiles', () => {
     expect(results.map((r) => r.id)).toEqual(['implicit-lost'])
   })
 
-  it('excludes pinned, local-only, and empty-hash files', async () => {
+  it('excludes pinned and local-only files', async () => {
     await insertFile(db(), makeFileRecord('pinned'))
     await insertObject(db(), makeLocalObject('pinned', { indexerURL }))
     await insertFile(db(), makeFileRecord('local-only'))
@@ -457,7 +457,6 @@ describe('queryLostFiles', () => {
       addedAt: 1000,
       usedAt: 1000,
     })
-    await insertFile(db(), makeFileRecord('no-hash', { hash: '' }))
     const results = await queryLostFiles(db(), indexerURL)
     expect(results).toHaveLength(0)
   })
@@ -593,19 +592,6 @@ describe('queryFiles', () => {
     expect(all).toHaveLength(3)
   })
 
-  it('filters by lostReasonIsNull when set', async () => {
-    await insertFile(db(), makeFileRecord('clean'))
-    await insertFile(
-      db(),
-      makeFileRecord('lost', { lostReason: 'Source photo deleted from device' }),
-    )
-    const results = await queryFiles(db(), {
-      order: 'ASC',
-      lostReasonIsNull: true,
-    })
-    expect(results.map((r) => r.id)).toEqual(['clean'])
-  })
-
   it('does not filter lostReason by default', async () => {
     await insertFile(db(), makeFileRecord('clean'))
     await insertFile(
@@ -614,26 +600,6 @@ describe('queryFiles', () => {
     )
     const results = await queryFiles(db(), { order: 'ASC' })
     expect(results.map((r) => r.id).sort()).toEqual(['clean', 'lost'])
-  })
-
-  it('combines lostReasonIsNull with hashEmpty for the placeholder selector', async () => {
-    // Mirrors importScanner Phase 2: hash='' AND lostReason IS NULL —
-    // terminally lost placeholders must not re-enter the candidate pool.
-    await insertFile(db(), makeFileRecord('placeholder', { hash: '' }))
-    await insertFile(
-      db(),
-      makeFileRecord('placeholder-lost', {
-        hash: '',
-        lostReason: 'Source photo deleted from device',
-      }),
-    )
-    await insertFile(db(), makeFileRecord('finalized', { hash: 'sha256:abc' }))
-    const results = await queryFiles(db(), {
-      order: 'ASC',
-      hashEmpty: true,
-      lostReasonIsNull: true,
-    })
-    expect(results.map((r) => r.id)).toEqual(['placeholder'])
   })
 })
 
@@ -698,6 +664,24 @@ describe('queryFileStats', () => {
   })
 })
 
+describe('queryUnuploadedFileBytes', () => {
+  it('sums bytes of files with no objects, excluding uploaded ones', async () => {
+    await insertFile(db(), makeFileRecord('local-1', { size: 500 }))
+    await insertFile(db(), makeFileRecord('local-2', { size: 300 }))
+    await insertFile(db(), makeFileRecord('uploaded-1', { size: 9999 }))
+    // uploaded-1 has an object, so it's excluded from the unuploaded backlog.
+    await insertObject(db(), makeLocalObject('uploaded-1'))
+
+    expect(await queryUnuploadedFileBytes(db())).toBe(800)
+  })
+
+  it('returns zero when every file is uploaded', async () => {
+    await insertFile(db(), makeFileRecord('uploaded-1', { size: 100 }))
+    await insertObject(db(), makeLocalObject('uploaded-1'))
+    expect(await queryUnuploadedFileBytes(db())).toBe(0)
+  })
+})
+
 describe('queryFileByContentHash', () => {
   it('finds file by hash', async () => {
     await insertFile(db(), makeFileRecord('f1', { hash: 'abc123' }))
@@ -721,28 +705,6 @@ describe('queryFileByContentHash', () => {
     await insertFile(db(), makeFileRecord('f1', { hash: 'abc123', deletedAt: 2000 }))
     const row = await queryFileByContentHash(db(), 'abc123')
     expect(row).toBeNull()
-  })
-})
-
-describe('queryFilesByLocalIds', () => {
-  it('finds files by local IDs', async () => {
-    await insertFile(db(), makeFileRecord('f1', { localId: 'local-1' }))
-    await insertFile(db(), makeFileRecord('f2', { localId: 'local-2' }))
-    await insertFile(db(), makeFileRecord('f3', { localId: 'local-3' }))
-    const rows = await queryFilesByLocalIds(db(), ['local-1', 'local-3'])
-    expect(rows.map((r) => r.id).sort()).toEqual(['f1', 'f3'])
-  })
-
-  it('excludes trashed files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { localId: 'local-1', trashedAt: 2000 }))
-    const rows = await queryFilesByLocalIds(db(), ['local-1'])
-    expect(rows).toEqual([])
-  })
-
-  it('excludes deleted files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { localId: 'local-1', deletedAt: 2000 }))
-    const rows = await queryFilesByLocalIds(db(), ['local-1'])
-    expect(rows).toEqual([])
   })
 })
 
