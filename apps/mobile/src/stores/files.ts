@@ -110,13 +110,13 @@ export function useFileStatsLocal(
 }
 
 export async function getFileCountImporting() {
-  return app().files.queryCount({
-    order: 'ASC',
-    hashEmpty: true,
-  })
+  return app().imports.countInFlight()
 }
 
 export function useFileCountImporting(config?: SWRConfiguration) {
-  const key = app().caches.library.key('importingCount')
+  // The count comes from import_files (in-flight rows) and is invalidated via
+  // the imports cache at finalize. Finalize never touches the library cache
+  // for this key, so keying on it would load once then go permanently stale.
+  const key = app().caches.imports.key('importingCount')
   return useSWR(key, getFileCountImporting, config)
 }

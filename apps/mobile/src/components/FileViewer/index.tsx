@@ -1,6 +1,6 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import { ClockArrowUpIcon, ClockIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
+import { ClockArrowUpIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { assertNever, useFileStatus } from '../../lib/file'
@@ -44,7 +44,6 @@ export function FileViewer({
   const photosLookup = status.data?.photosLookup
   const photosDisplayUri = status.data?.photosDisplayUri ?? null
   const displayUri = status.data?.displayUri ?? null
-  const isDeferredImport = status.data?.isDeferredImport ?? false
   const isDownloading = status.data?.download.state === 'downloading'
   const fileDownload = useDownload(file, 0)
   const { data: fileDownloadState } = useDownloadEntry(file.id)
@@ -117,11 +116,7 @@ export function FileViewer({
           },
         ]}
       >
-        {isDeferredImport ? (
-          <ClockIcon color={colors.textSecondary} size={40} />
-        ) : (
-          <ClockArrowUpIcon color={colors.textSecondary} size={40} />
-        )}
+        <ClockArrowUpIcon color={colors.textSecondary} size={40} />
         <Text
           style={{
             color: colors.textPrimary,
@@ -130,24 +125,12 @@ export function FileViewer({
             textAlign: 'center',
           }}
         >
-          {isDeferredImport ? 'Import queued' : 'Importing...'}
+          Importing...
         </Text>
-        {isDeferredImport ? (
-          <Text
-            style={{
-              color: colors.textSecondary,
-              fontSize: 14,
-              textAlign: 'center',
-              maxWidth: 280,
-            }}
-          >
-            Files imported from the Photos library are queued for import and uploaded in order
-          </Text>
-        ) : null}
       </View>
     )
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
-  }, [isDeferredImport])
+  }, [])
 
   const LoadingPanel = useMemo(() => {
     return (

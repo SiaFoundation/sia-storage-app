@@ -1,6 +1,5 @@
 import {
   ClockArrowUpIcon,
-  ClockIcon,
   CloudAlertIcon,
   CloudCheckIcon,
   CloudDownloadIcon,
@@ -47,7 +46,7 @@ export function UploadStatusIcon({
       case 'import-failed':
         return 'Import failed'
       case 'importing':
-        return status.isDeferredImport ? 'Import queued' : 'Importing'
+        return 'Importing'
       case 'upload-errored':
         return 'Upload error'
       case 'uploading':
@@ -67,7 +66,7 @@ export function UploadStatusIcon({
       default:
         return assertNever(phase)
     }
-  }, [phase, status.isDeferredImport])
+  }, [phase])
 
   // Overlay summary fired only when an error layers on a non-error phase
   // (e.g., a pinned file with a failed re-upload). Null otherwise.
@@ -90,11 +89,7 @@ export function UploadStatusIcon({
     }
     switch (phase.kind) {
       case 'importing':
-        return status.isDeferredImport ? (
-          <ClockIcon color={iconColor} size={size} />
-        ) : (
-          <ClockArrowUpIcon color={iconColor} size={size} />
-        )
+        return <ClockArrowUpIcon color={iconColor} size={size} />
       case 'import-failed':
       case 'upload-errored':
       case 'unavailable':
@@ -124,7 +119,7 @@ export function UploadStatusIcon({
       default:
         return assertNever(phase)
     }
-  }, [phase, iconColor, size, status.isDeferredImport, hasUploadError, hasDownloadError])
+  }, [phase, iconColor, size, hasUploadError, hasDownloadError])
 
   const showLabel = useCallback(() => {
     // Compose a structured toast: phase · overlay (if any) · error detail.

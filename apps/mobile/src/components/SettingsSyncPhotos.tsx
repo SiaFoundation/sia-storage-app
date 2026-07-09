@@ -4,6 +4,7 @@ import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { toggleAutoSyncNewPhotos, useAutoSyncNewPhotos } from '../managers/syncNewPhotos'
 import { useArchiveSyncCompletedAt } from '../managers/syncPhotosArchive'
 import { app } from '../stores/appService'
+import { useInProgressImport } from '../stores/imports'
 import { openSheet } from '../stores/sheets'
 import { ArchiveSyncModal } from './ArchiveSyncModal'
 import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
@@ -15,6 +16,14 @@ export function SettingsSyncPhotos() {
   const { isSomeAccess, accessLabel, manageAccess } = useMediaLibraryPermissions()
   const photoImportDir = usePhotoImportDirectory()
   const [modalVisible, setModalVisible] = useState(false)
+
+  // Tapping "Import photo library" starts a new full walk, so the row is
+  // disabled while a prior scan is still in progress, keeping a second scan
+  // from stacking on an in-flight one. The "Import new photos" row only turns
+  // the feature on or off (its internal poll keeps one open import per photo
+  // source), so it is never locked.
+  const libraryScanInProgress = useInProgressImport('library-scan')
+  const libraryScanLocked = !!libraryScanInProgress.data
 
   const completedDateLabel = formatDisplayDate(archiveCompletedAt.data ?? 0)
   const photosFooter = 'Automatically import new photos taken on this device.'
@@ -57,9 +66,11 @@ export function SettingsSyncPhotos() {
       <InsetGroupSection>
         <InsetGroupLink
           label="Import photo library"
-          description={importDescription}
+          description={
+            libraryScanLocked ? 'A photo library import is already in progress.' : importDescription
+          }
           onPress={() => setModalVisible(true)}
-          disabled={!isSomeAccess}
+          disabled={!isSomeAccess || libraryScanLocked}
           showChevron={false}
         />
       </InsetGroupSection>

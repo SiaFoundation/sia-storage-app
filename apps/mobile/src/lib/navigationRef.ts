@@ -13,3 +13,13 @@ export function navigateToImports(): void {
   if (!navigationRef.isReady()) return
   navigationRef.navigate('ImportsModal', { screen: 'Imports' })
 }
+
+/** Opens the imports modal straight on one import's detail, if navigation is ready. */
+export function navigateToImportDetail(importId: string): void {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate('ImportsModal', {
+    screen: 'ImportDetail',
+    params: { importId },
+    initial: false,
+  })
+}

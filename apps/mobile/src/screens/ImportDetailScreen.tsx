@@ -21,6 +21,7 @@ import {
   statusColor,
 } from '../lib/importLabels'
 import { relativeTimeLabel } from '../lib/relativeTime'
+import { deleteImportWithCleanup } from '../lib/importDelete'
 import { triggerImportScanner } from '../managers/importScanner'
 import { app } from '../stores/appService'
 import type { ImportsStackParamList } from '../stacks/types'
@@ -147,7 +148,7 @@ function ImportDetailContent({
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await app().imports.delete(importId)
+            await deleteImportWithCleanup(importId)
             navigation.goBack()
           },
         },

@@ -1,125 +1,64 @@
 import { swrState } from '@siastorage/core/stores'
 
-// Drives ImportProgressModal during picker / camera / share-intent
-// imports. The archive walk has its own ArchiveSyncModal and does not
-// flow through this store.
+// Drives ImportProgressModal as a live view of the most recent in-progress
+// import. An import source (picker, camera, share) creates an import and
+// hands its importId here; the modal subscribes to that import's summary and
+// dismisses itself when the import reaches `done`. This store only holds
+// which import the modal is watching; per-file progress comes from the
+// import tables.
 //
-// idle      — no import in flight.
-// pending   — copy started, modal suppressed for REVEAL_DELAY_MS so
-//             quick imports don't flash a modal.
-// running   — modal visible with progress.
-// complete  — held for SUCCESS_FLASH_MS so the user sees the check,
-//             then auto-transitions to idle.
-// error     — sticks until the user dismisses.
-//
-// Concurrent imports (e.g. share-intent firing while a picker import
-// is mid-copy) fold into the same modal: totals accumulate and
-// completion waits until every in-flight import has finished.
-
-export type ImportProgressPhase = 'idle' | 'pending' | 'running' | 'complete' | 'error'
+// REVEAL_DELAY_MS: a fast 3-file picker that finalizes almost instantly
+// should never flash the modal. The importId is armed but `revealed` stays
+// false until the delay elapses; if the import is already done by then, the
+// modal stays hidden.
 
 export type ImportProgressState = {
-  phase: ImportProgressPhase
-  totalFiles: number
-  copiedFiles: number
-  totalBytes: number
-  copiedBytes: number
-  errorMessage: string | null
+  /** The import the modal is (or will be) showing, or null when idle. */
+  importId: string | null
+  /** Whether the reveal delay has elapsed so the modal may show. */
+  revealed: boolean
 }
 
 const INITIAL: ImportProgressState = {
-  phase: 'idle',
-  totalFiles: 0,
-  copiedFiles: 0,
-  totalBytes: 0,
-  copiedBytes: 0,
-  errorMessage: null,
+  importId: null,
+  revealed: false,
 }
 
 export const REVEAL_DELAY_MS = 700
-export const SUCCESS_FLASH_MS = 700
 
 const state = swrState<ImportProgressState>(INITIAL)
 
-let dismissTimer: ReturnType<typeof setTimeout> | null = null
-let inFlight = 0
+let revealTimer: ReturnType<typeof setTimeout> | null = null
 
-function setState(partial: Partial<ImportProgressState>): void {
-  state.setState({ ...state.getState(), ...partial })
-}
-
-function clearDismissTimer(): void {
-  if (dismissTimer) {
-    clearTimeout(dismissTimer)
-    dismissTimer = null
+function clearRevealTimer(): void {
+  if (revealTimer) {
+    clearTimeout(revealTimer)
+    revealTimer = null
   }
 }
 
-/** Begin a new import. Concurrent begins fold their totals into the
- * existing modal instead of resetting it. */
-export function beginImportProgress(totalFiles: number, totalBytes: number): void {
-  inFlight += 1
-  const s = state.getState()
-  if (s.phase === 'pending' || s.phase === 'running') {
-    setState({
-      totalFiles: s.totalFiles + totalFiles,
-      totalBytes: s.totalBytes + totalBytes,
-    })
-    return
-  }
-  clearDismissTimer()
-  state.setState({
-    ...INITIAL,
-    phase: 'pending',
-    totalFiles,
-    totalBytes,
-  })
+/**
+ * Point the modal at a freshly-created import. The modal is held hidden for
+ * REVEAL_DELAY_MS so quick imports don't flash; once revealed it shows the live
+ * summary and dismisses itself when the import is `done`. A second import that
+ * arrives mid-watch replaces the target (newest wins; the prior one is still in
+ * the Imports list).
+ */
+export function showImportProgress(importId: string): void {
+  clearRevealTimer()
+  state.setState({ importId, revealed: false })
+  revealTimer = setTimeout(() => {
+    revealTimer = null
+    const s = state.getState()
+    if (s.importId === importId) {
+      state.setState({ importId, revealed: true })
+    }
+  }, REVEAL_DELAY_MS)
 }
 
-export function revealImportProgress(): void {
-  if (state.getState().phase !== 'pending') return
-  setState({ phase: 'running' })
-}
-
-export function reportImportProgress(bytes: number): void {
-  const s = state.getState()
-  if (s.phase === 'idle' || s.phase === 'complete' || s.phase === 'error') return
-  setState({
-    copiedFiles: s.copiedFiles + 1,
-    copiedBytes: s.copiedBytes + bytes,
-  })
-}
-
-/** One import finished its copies. If others are still in flight, hold;
- * otherwise transition to 'complete' for SUCCESS_FLASH_MS then dismiss. */
-export function finishImportProgress(): void {
-  inFlight = Math.max(0, inFlight - 1)
-  if (inFlight > 0) return
-  const s = state.getState()
-  if (s.phase !== 'pending' && s.phase !== 'running') return
-  if (s.phase === 'pending') {
-    state.setState(INITIAL)
-    return
-  }
-  setState({ phase: 'complete' })
-  clearDismissTimer()
-  dismissTimer = setTimeout(() => {
-    dismissTimer = null
-    state.setState(INITIAL)
-  }, SUCCESS_FLASH_MS)
-}
-
-/** Any in-flight imports collapse into this error — sibling finishes
- * after this point are no-ops. */
-export function failImportProgress(message: string): void {
-  inFlight = 0
-  clearDismissTimer()
-  setState({ phase: 'error', errorMessage: message })
-}
-
+/** Hide and reset the modal (user-dismiss or auto-dismiss on `done`). */
 export function dismissImportProgress(): void {
-  inFlight = 0
-  clearDismissTimer()
+  clearRevealTimer()
   state.setState(INITIAL)
 }
 
