@@ -44,10 +44,29 @@ export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
 // Resume fetching archive photos when pending local-only bytes drop below this threshold.
 export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
-// Import scanner interval.
-export const IMPORT_SCANNER_INTERVAL = secondsInMs(3) // 3 seconds
-// Max files requiring copy and hash allowed in the upload backlog before throttling.
-export const IMPORT_SCANNER_BACKLOG_LIMIT = 50
+// Unuploaded local bytes allowed before paceable copies defer. A simulator
+// suite imports far faster than its uploads drain, so a run tunes it at bundle
+// time the same way as the storage headroom below. A zero or non-numeric
+// override falls back to the default.
+export const IMPORT_PACED_BACKLOG_BYTES =
+  Number(process.env.EXPO_PUBLIC_IMPORT_BACKLOG_BYTES) || 512 * 1024 ** 2 // 512 MB
+// Paced storage headroom: defer the next paced copy when (device free bytes
+// minus pending-local unuploaded bytes) drops under this. Applies to durable
+// rows from the background sources (new-photos, library-scan, legacy).
+// Small-disk emulators sit below any realistic fixed floor, so a simulator run
+// tunes it at bundle time. A zero or non-numeric override falls back to the default.
+export const IMPORT_PACED_STORAGE_HEADROOM_BYTES =
+  Number(process.env.EXPO_PUBLIC_IMPORT_HEADROOM_BYTES) || 2 * 1024 ** 3 // 2 GB
+// Import copies stop entirely below this much free space, whatever the source.
+// The paced headroom above is a soft yield that only background sources respect;
+// this is the floor that keeps a runaway import from driving the device to zero
+// and wedging the OS for every other app. Deliberately small: it is insurance,
+// not storage management. Emulators sit below any realistic device floor, so a
+// simulator run tunes it at bundle time; zero or non-numeric falls back.
+export const IMPORT_CRITICAL_FREE_BYTES =
+  Number(process.env.EXPO_PUBLIC_IMPORT_CRITICAL_FREE_BYTES) || 500 * 1024 ** 2 // 500 MB
+// Import scanner: max candidate import_files claimed per tick.
+export const IMPORT_MAX_PER_TICK = 20
 // Import retry backoff: max attempts before an import_file is marked `failed`.
 export const IMPORT_MAX_ATTEMPTS = 8
 // Import scanner: release an `active` row claimed longer than this back to `pending` on the sweep.

@@ -37,7 +37,7 @@ async function createTestFile(id: string) {
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,

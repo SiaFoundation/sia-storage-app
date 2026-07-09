@@ -264,19 +264,34 @@ export function activityDetailLabel(activity: Exclude<ImportActivity, null>): st
   return ACTIVITY_DETAIL_LABELS[activity]
 }
 
-/** One-sentence explainer under the detail progress bar; null for plain importing. */
+/**
+ * One-sentence explainer under the detail progress bar; null for plain
+ * importing. The appended numbers move tick to tick (upload backlog
+ * shrinking, free space growing), which is the visible proof the wait is
+ * progressing and not stuck.
+ */
 export function activityExplainer(
   activity: Exclude<ImportActivity, null>,
   summary: ImportSummary,
   now: number,
+  pacing?: ImportPacingSnapshot | null,
 ): string | null {
   switch (activity) {
-    case 'waiting-uploads':
-      return 'Waiting for uploads to catch up. Importing continues automatically'
-    case 'waiting-space':
-      return 'Free space is low. Importing continues as uploads clear space'
-    case 'needs-space':
-      return 'This device is almost out of space. Free up space to continue importing'
+    case 'waiting-uploads': {
+      const base = 'Waiting for uploads to catch up. Importing continues automatically'
+      const left = pacing?.pendingLocalBytes
+      return left ? `${base} · ${humanSize(left)} left to upload` : base
+    }
+    case 'waiting-space': {
+      const base = 'Free space is low. Importing continues as uploads clear space'
+      const free = pacing?.freeBytes
+      return free ? `${base} · ${humanSize(free)} free` : base
+    }
+    case 'needs-space': {
+      const base = 'This device is almost out of space. Free up space to continue importing'
+      const free = pacing?.freeBytes
+      return free ? `${base} · ${humanSize(free)} free` : base
+    }
     case 'retry-wait':
       return summary.soonestNextAttemptAt == null
         ? 'Waiting to retry a few files'
@@ -319,16 +334,23 @@ export function retryCountdownLabel(nextAttemptAt: number, now: number): string 
 /**
  * Row-aware state style: a pending row in backoff renders "Retrying (n/N)"
  * without a spinner, because a spinner on a sleeping row lies about activity.
- * N is the row's reason-specific attempt cap, not a hardcoded max.
+ * N is the row's reason-specific attempt cap, not a hardcoded max. `paused`
+ * (the import is in a wait state) turns plain pending rows into "Waiting"
+ * without a spinner for the same reason; backoff rows keep their retry label,
+ * since their wait has its own cause and countdown.
  */
 export function fileRowStyle(
   row: Pick<ImportFileRow, 'state' | 'attempts' | 'nextAttemptAt' | 'reason'>,
   now: number,
+  paused = false,
 ): FileStateStyle {
   if (isRetryingRow(row, now)) {
     const cap = isImportReasonCode(row.reason) ? IMPORT_REASONS[row.reason].cap : undefined
     const label = cap ? `Retrying (${row.attempts}/${cap})` : `Retrying (${row.attempts})`
     return { label, color: palette.yellow[400], spinner: false }
+  }
+  if (paused && row.state === 'pending') {
+    return { label: 'Waiting', color: palette.gray[400], spinner: false }
   }
   return fileStateStyle(row.state)
 }

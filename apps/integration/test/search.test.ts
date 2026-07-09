@@ -48,7 +48,7 @@ describe('Search', () => {
       hash: 'hash-custom-photo',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       trashedAt: null,
       deletedAt: null,

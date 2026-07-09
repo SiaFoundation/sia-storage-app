@@ -246,7 +246,7 @@ export async function syncDownEventsBatch(
   }
 
   if (totalEventsFetched > 1 && !signal.aborted) {
-    return 0 // Zero interval — poll again immediately.
+    return 0 // zero interval: poll again immediately
   }
 }
 
@@ -404,7 +404,7 @@ async function processBatch(
           ...toFileRecordFields(metadata),
           ...(realSize > 0 ? { size: realSize } : {}),
           id: fileId,
-          localId: null,
+          mediaAssetId: null,
           addedAt: Date.now(),
           deletedAt: null,
         },
@@ -460,9 +460,9 @@ async function processBatch(
 
   await internal.withTransaction(async () => {
     // Apply remote metadata only for creates and remote-newer, non-tombstoned
-    // updates. ON CONFLICT(id) preserves addedAt/localId/deletedAt/lostReason, and
-    // a locally-tombstoned row is skipped so a delete-in-progress isn't reverted
-    // by a stale remote edit (delete wins).
+    // updates. ON CONFLICT(id) preserves addedAt/mediaAssetId/deletedAt/lostReason,
+    // and a locally-tombstoned row is skipped so a delete-in-progress isn't
+    // reverted by a stale remote edit (delete wins).
     const remoteWins = updates.filter((e) => e.isRemoteNewer && !e.fileRecord.deletedAt)
     const fileUpserts = [
       ...creates.map((e) => e.fileRecord),
@@ -613,7 +613,7 @@ async function processBatch(
 /** Map decoded metadata to file record fields (all v1 fields preserved). */
 function toFileRecordFields(
   metadata: FileMetadata,
-): Omit<FileRecordRow, 'id' | 'localId' | 'addedAt' | 'deletedAt'> {
+): Omit<FileRecordRow, 'id' | 'mediaAssetId' | 'addedAt' | 'deletedAt'> {
   return {
     name: metadata.name,
     type: metadata.type,

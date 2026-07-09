@@ -79,7 +79,7 @@ export const fixtureExpectations = {
   'sample.psd': { mime: 'image/vnd.adobe.photoshop', bytesMime: null, source: 'generated' },
   'sample.avif': { mime: 'image/avif', bytesMime: 'image/avif', source: 'stub' },
   'sample.dng': { mime: 'image/dng', bytesMime: 'image/tiff', source: 'stub' },
-  'sample.heics': { mime: 'image/heic-sequence', bytesMime: null, source: 'stub' },
+  'sample.heics': { mime: 'image/heic-sequence', bytesMime: 'image/heif', source: 'stub' },
   'sample.avci': { mime: 'image/avci', bytesMime: null, source: 'stub' },
   'sample.avcs': { mime: 'image/avcs', bytesMime: null, source: 'stub' },
   'sample.cr2': { mime: 'image/x-canon-cr2', bytesMime: 'image/tiff', source: 'stub' },

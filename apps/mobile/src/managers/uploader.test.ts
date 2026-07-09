@@ -55,7 +55,7 @@ async function createTestFile(id: string, size = 1000): Promise<FileEntry> {
     hash: `hash-${id}`,
     createdAt: now,
     updatedAt: now,
-    localId: null,
+    mediaAssetId: null,
     addedAt: now,
     trashedAt: null,
     deletedAt: null,
@@ -85,7 +85,7 @@ function createFileEntry(id: string, size = 1000): FileEntry {
       hash: 'hash',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       trashedAt: null,
       deletedAt: null,
@@ -1074,7 +1074,7 @@ describe('UploadManager', () => {
         hash: `hash-${prefix}-${i}`,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        localId: null,
+        mediaAssetId: null,
         addedAt: Date.now(),
         objects: {},
       })) as any
@@ -1102,15 +1102,15 @@ describe('UploadManager', () => {
 
     it('re-polls DB and processes additional files found', async () => {
       enablePolling()
-      const wave1 = createDBFiles(5, { prefix: 'w1' })
-      const wave2 = createDBFiles(5, { prefix: 'w2' })
+      const poll1 = createDBFiles(5, { prefix: 'w1' })
+      const poll2 = createDBFiles(5, { prefix: 'w2' })
       queryFilesSpy
-        .mockResolvedValueOnce(wave1)
-        .mockResolvedValueOnce(wave2)
+        .mockResolvedValueOnce(poll1)
+        .mockResolvedValueOnce(poll2)
         .mockResolvedValue([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
-      // Flush microtasks: loop polls twice (wave1 -> wave2) and processes all 10
+      // Flush microtasks: the loop polls twice (poll1, then poll2) and processes all 10
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(10)
@@ -1123,18 +1123,18 @@ describe('UploadManager', () => {
 
     it('re-polls before idle flush catches late-arriving files', async () => {
       enablePolling()
-      const wave1 = createDBFiles(3, { prefix: 'w1' })
-      const wave2 = createDBFiles(3, { prefix: 'w2' })
-      queryFilesSpy.mockResolvedValueOnce(wave1).mockResolvedValueOnce([] as any)
+      const poll1 = createDBFiles(3, { prefix: 'w1' })
+      const poll2 = createDBFiles(3, { prefix: 'w2' })
+      queryFilesSpy.mockResolvedValueOnce(poll1).mockResolvedValueOnce([] as any)
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
       expect(mockPacker.add).toHaveBeenCalledTimes(3)
 
-      // Wave2 appears in DB during idle wait
-      queryFilesSpy.mockResolvedValueOnce(wave2).mockResolvedValue([] as any)
+      // The second batch appears in the DB during the idle wait.
+      queryFilesSpy.mockResolvedValueOnce(poll2).mockResolvedValue([] as any)
 
-      // Idle timeout -> re-poll -> finds wave2 -> processes them
+      // After the idle timeout, the re-poll finds poll2 and processes them
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       expect(mockPacker.add).toHaveBeenCalledTimes(6)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
@@ -1179,9 +1179,13 @@ describe('UploadManager', () => {
       expect(mockPacker.add).not.toHaveBeenCalled()
     })
 
-    it('filters out empty-hash files at the SQL level', async () => {
+    it('uploads finalized files from the real candidate query', async () => {
+      // No placeholder ever reaches the uploader by construction: in-flight
+      // imports live in import_files, and only finalize writes a files row
+      // (with a real hash). The candidate query carries no hashNotEmpty
+      // filter; it just sees finalized files. Run the real DB query (spy
+      // restored).
       enablePolling()
-      // Restore the spy so the real DB query runs with hashNotEmpty: true.
       queryFilesSpy.mockRestore()
 
       const now = Date.now()
@@ -1194,7 +1198,7 @@ describe('UploadManager', () => {
         hash: 'sha256:abc123',
         createdAt: now,
         updatedAt: now,
-        localId: null,
+        mediaAssetId: null,
         addedAt: now,
         trashedAt: null,
         deletedAt: null,
@@ -1205,33 +1209,12 @@ describe('UploadManager', () => {
         addedAt: now,
         usedAt: now,
       })
-      await app().files.create({
-        id: 'empty-hash-1',
-        name: 'empty-hash-1.bin',
-        type: 'application/octet-stream',
-        kind: 'file',
-        size: 0,
-        hash: '',
-        createdAt: now,
-        updatedAt: now,
-        localId: null,
-        addedAt: now,
-        trashedAt: null,
-        deletedAt: null,
-      })
-      await app().fs.upsertMeta({
-        fileId: 'empty-hash-1',
-        size: 0,
-        addedAt: now,
-        usedAt: now,
-      })
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
       expect(mockPacker.add).toHaveBeenCalledTimes(1)
       expect(app().uploads.getEntry('has-hash-1')).toBeDefined()
-      expect(app().uploads.getEntry('empty-hash-1')).toBeUndefined()
     })
 
     it('excludeIds allows polling past the 200-file query limit', async () => {

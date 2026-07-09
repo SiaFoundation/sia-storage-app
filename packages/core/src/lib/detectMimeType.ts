@@ -6,6 +6,8 @@ const FTYP_BRANDS_VIDEO = new Set([
   'iso2',
   'mp41',
   'mp42',
+  'avc1',
+  'mmp4',
   'M4V ',
   '3gp4',
   '3gp5',
@@ -100,10 +102,10 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
   ) {
     const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11])
     if (FTYP_BRANDS_HEIC.has(brand)) return 'image/heic'
-    if (brand === 'mif1') return 'image/heif'
+    if (brand === 'mif1' || brand === 'msf1') return 'image/heif'
     if (brand === 'avif') return 'image/avif'
     if (FTYP_BRANDS_VIDEO.has(brand)) return 'video/mp4'
-    if (brand === 'qt  ' || brand === 'mov ') return 'video/quicktime'
+    if (brand.startsWith('qt') || brand === 'mov ') return 'video/quicktime'
     if (FTYP_BRANDS_AUDIO.has(brand)) return 'audio/mp4'
   }
 
@@ -156,8 +158,8 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
   )
     return 'audio/ogg'
 
-  // Matroska / WebM: EBML header 1A 45 DF A3. Defaults to MKV; extension lookup
-  // (which runs before magic bytes) resolves WebM via the .webm extension.
+  // Matroska / WebM: EBML header 1A 45 DF A3. Defaults to MKV; the container
+  // refinement resolves WebM via the .webm extension.
   if (
     bytes.length >= 4 &&
     bytes[0] === 0x1a &&
@@ -255,8 +257,32 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
 }
 
 /**
+ * A container's bytes cannot name the format inside it: a docx, xlsx, pptx,
+ * epub, or apk all read as zip, and webm reads as matroska. When the byte
+ * answer is a container, metadata may refine it, but only to a member of that
+ * container's family; unrelated metadata leaves the container answer standing
+ * (`.txt` next to zip bytes stays zip).
+ */
+const CONTAINER_REFINEMENTS: Record<string, ReadonlySet<string>> = {
+  'application/zip': new Set([
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/epub+zip',
+    'application/vnd.android.package-archive',
+  ]),
+  'video/x-matroska': new Set(['video/webm']),
+}
+
+function refineContainer(fromBytes: string, candidate: string | null): string {
+  const family = CONTAINER_REFINEMENTS[fromBytes]
+  return candidate && family?.has(candidate) ? candidate : fromBytes
+}
+
+/**
  * Unified MIME type detection with priority chain:
- * 1. Magic bytes (ground truth — wins over a misleading extension)
+ * 1. Magic bytes (ground truth — wins over a misleading extension), with
+ *    container answers refined by metadata within the container's family.
  * 2. Extension from fileName
  * 3. providedType if recognized
  * 4. Fallback: application/octet-stream
@@ -268,19 +294,37 @@ export function detectMimeType(opts: {
   fileName?: string | null
   bytes?: Uint8Array | null
 }): string {
-  if (opts.bytes) {
+  const fromExt = opts.fileName ? getMimeTypeFromExtension(opts.fileName) : null
+  const provided = opts.providedType && isMimeType(opts.providedType) ? opts.providedType : null
+
+  if (opts.bytes && opts.bytes.length > 0) {
     const fromBytes = detectMimeTypeFromBytes(opts.bytes)
-    if (fromBytes) return fromBytes
+    if (fromBytes) return refineContainer(fromBytes, fromExt ?? provided)
   }
 
-  if (opts.fileName) {
-    const fromExt = getMimeTypeFromExtension(opts.fileName)
-    if (fromExt) return fromExt
-  }
+  return fromExt ?? provided ?? 'application/octet-stream'
+}
 
-  if (opts.providedType && isMimeType(opts.providedType)) {
-    return opts.providedType
+/**
+ * The one classification call for an import row at finalize. `headerBytes`
+ * and `mediaMime` come from the copy's single read; `stagedType` is the
+ * metadata-derived type recorded at staging. For a `media` row the
+ * OS-reported mime of the copied resource is definitive, so it wins outright;
+ * everything else goes through detectMimeType's content-first chain.
+ */
+export function classifyImportType(opts: {
+  stagedType: string
+  name?: string | null
+  sourceKind?: string | null
+  headerBytes?: Uint8Array | null
+  mediaMime?: string | null
+}): string {
+  if (opts.sourceKind === 'media' && opts.mediaMime && isMimeType(opts.mediaMime)) {
+    return opts.mediaMime
   }
-
-  return 'application/octet-stream'
+  return detectMimeType({
+    bytes: opts.headerBytes,
+    fileName: opts.name,
+    providedType: opts.stagedType,
+  })
 }

@@ -22,7 +22,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: `local-${id}`,
+    mediaAssetId: `local-${id}`,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,

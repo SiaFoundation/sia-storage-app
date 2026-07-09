@@ -10,6 +10,7 @@ import type { ImportsStackParamList } from '../stacks/types'
 import { app } from '../stores/appService'
 import { useFileCountImporting, useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { useActiveUploads } from '../stores/uploads'
+import { useImportPacing } from '../stores/importPacing'
 import { colors, palette, whiteA } from '../styles/colors'
 import { ActivityStatusRow } from './ActivityStatusRow'
 import { InsetGroupLink, InsetGroupSection, InsetGroupValueRow } from './InsetGroup'
@@ -89,6 +90,19 @@ export function LibraryStatusSheet() {
   const uploadingFileCount = activeUploads.filter((u) => u.kind !== 'thumb').length
 
   const importingCount = importing.data ?? 0
+  const pacing = useImportPacing()
+  // The cause is global (the scanner paces one queue), so the aggregate line
+  // names it directly instead of resolving per-import states.
+  const importsDescription =
+    importingCount === 0
+      ? 'Photos and files you imported.'
+      : pacing?.cause === 'critical-floor'
+        ? `${formatCount(importingCount)} need space to import.`
+        : pacing?.cause === 'headroom'
+          ? `${formatCount(importingCount)} waiting for space.`
+          : pacing?.cause === 'backlog'
+            ? `${formatCount(importingCount)} waiting on uploads.`
+            : `${formatCount(importingCount)} importing.`
 
   const totalCount = stats.data?.files.total ?? 0
   const totalBytes = account.data ? Number(account.data.pinnedData) : undefined
@@ -137,11 +151,7 @@ export function LibraryStatusSheet() {
         <InsetGroupValueRow label="Storage limit" value={humanLimit(account.data?.maxPinnedData)} />
         <InsetGroupLink
           label="Imports"
-          description={
-            importingCount > 0
-              ? `${formatCount(importingCount)} still importing.`
-              : 'Photos and files you imported.'
-          }
+          description={importsDescription}
           onPress={openImports}
           value={importingCount > 0 ? formatCount(importingCount) : undefined}
         />

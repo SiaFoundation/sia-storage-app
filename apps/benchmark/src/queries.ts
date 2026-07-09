@@ -11,7 +11,6 @@ export function buildQuerySpecs(
   sampleFileId: string,
 ): QuerySpec[] {
   return [
-    // Library counts
     {
       name: 'libraryFileCount',
       category: 'count',
@@ -64,7 +63,6 @@ export function buildQuerySpecs(
         }),
     },
 
-    // Pagination
     {
       name: 'sortedFileIds:date:page1',
       category: 'pagination',
@@ -96,21 +94,18 @@ export function buildQuerySpecs(
         }),
     },
 
-    // Stats
     {
       name: 'uploadStats',
       category: 'stats',
       run: () => app.stats.uploadStats(INDEXER_URL),
     },
 
-    // Directories
     {
       name: 'allDirectoriesWithCounts',
       category: 'directories',
       run: () => app.directories.getAll(),
     },
 
-    // Thumbnails
     {
       name: 'thumbnailCandidatePage',
       category: 'thumbnails',
@@ -209,7 +204,7 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
           hash: `upsert-hash-${i}`,
           createdAt: now,
           updatedAt: now,
-          localId: null,
+          mediaAssetId: null,
           addedAt: now,
           thumbForId: undefined,
           thumbSize: undefined,

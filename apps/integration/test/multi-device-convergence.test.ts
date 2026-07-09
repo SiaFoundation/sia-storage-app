@@ -30,7 +30,7 @@ async function waitForAllObjectsV1(
 }
 
 describe('Multi-Device Convergence', () => {
-  it('v1 ↔ v1: files uploaded by Device A appear on Device B simultaneously', async () => {
+  it('files uploaded by Device A appear on Device B', async () => {
     const indexerStorage = createEmptyIndexerStorage()
 
     const appA = createTestApp(indexerStorage)
@@ -65,7 +65,7 @@ describe('Multi-Device Convergence', () => {
     await appB.shutdown()
   }, 60_000)
 
-  it('v1 thumbnail with thumbForId syncs correctly to Device B', async () => {
+  it('a thumbnail linked to its parent file syncs to Device B', async () => {
     const indexerStorage = createEmptyIndexerStorage()
 
     const appA = createTestApp(indexerStorage)
@@ -113,7 +113,6 @@ describe('Multi-Device Convergence', () => {
     expect(deviceBFile.id).toBe(parentFileId)
     expect(deviceBThumb.thumbForId).toBe(parentFileId)
 
-    // Thumbnail discoverable via parent file ID
     const thumbs = deviceBFiles.filter((f) => f.kind === 'thumb' && f.thumbForId === parentFileId)
     expect(thumbs).toHaveLength(1)
     expect(thumbs[0].id).toBe(deviceAThumb.id)
@@ -143,7 +142,7 @@ describe('Multi-Device Convergence', () => {
     await appA.app.files.trashFile(deviceAFiles[0].id)
     const trashedFiles = (await appA.getFiles())
       .filter((f) => f.trashedAt != null)
-      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+      .map((f) => ({ id: f.id, type: f.type }))
     await appA.app.files.tombstoneWithThumbnailsAndCleanup(trashedFiles)
 
     await appA.waitForCondition(async () => {
@@ -247,10 +246,8 @@ describe('Multi-Device Convergence', () => {
     expect(file2!.trashedAt).toBeNull()
     expect(file2!.deletedAt).toBeNull()
 
-    // Device A trashes file 1 via app facade
     await appA.app.files.trashFile(fileIdA)
 
-    // Device B should see the trash propagate via sync
     await waitForCondition(
       async () => {
         const file = await appB.getFileById(fileIdA)
@@ -263,16 +260,14 @@ describe('Multi-Device Convergence', () => {
     expect(file1!.trashedAt).not.toBeNull()
     expect(file1!.deletedAt).toBeNull()
 
-    // Device B trashes file 2 via app facade
     await appB.app.files.trashFile(fileIdB)
     file2 = await appB.getFileById(fileIdB)
     expect(file2!.trashedAt).not.toBeNull()
     expect(file2!.deletedAt).toBeNull()
 
-    // Device A permanently deletes file 1 (trash then delete)
     const trashedA = (await appA.getFiles())
       .filter((f) => f.id === fileIdA)
-      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+      .map((f) => ({ id: f.id, type: f.type }))
     await appA.app.files.tombstoneWithThumbnailsAndCleanup(trashedA)
 
     await waitForCondition(
@@ -287,10 +282,9 @@ describe('Multi-Device Convergence', () => {
     expect(file1!.deletedAt).not.toBeNull()
     expect(await appB.getFileById(fileIdA)).not.toBeNull()
 
-    // Device B permanently deletes file 2
     const trashedB = (await appB.getFiles())
       .filter((f) => f.id === fileIdB)
-      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+      .map((f) => ({ id: f.id, type: f.type }))
     await appB.app.files.tombstoneWithThumbnailsAndCleanup(trashedB)
 
     await waitForCondition(

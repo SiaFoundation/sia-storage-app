@@ -27,7 +27,7 @@ async function addVersionFile(app: TestApp, id: string, name: string): Promise<v
     hash,
     createdAt: now,
     updatedAt: now,
-    localId: null,
+    mediaAssetId: null,
     addedAt: now,
     trashedAt: null,
     deletedAt: null,
@@ -41,7 +41,7 @@ async function addVersionFile(app: TestApp, id: string, name: string): Promise<v
 }
 
 describe('Version Sync', () => {
-  it('Device A creates v1, Device B creates v2 same name → after sync, v2 is current on both', async () => {
+  it('when Device B creates a second version of a file, v2 becomes current on both devices', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
@@ -86,9 +86,6 @@ describe('Version Sync', () => {
       message: 'Device B sees 2 files',
     })
 
-    // Version history should show both files
-    // (getFiles returns ALL records without version filter)
-
     // Version history should show both, v2 first
     const historyA = await appA.app.files.getVersionHistory('foo.txt', null)
     expect(historyA).toHaveLength(2)
@@ -102,7 +99,7 @@ describe('Version Sync', () => {
     await appB.shutdown()
   }, 30_000)
 
-  it('Device A tags v2, Device B creates v3 → tag preserved but not shown', async () => {
+  it('a tag on an old version is preserved but not shown after a newer version arrives', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
@@ -282,7 +279,7 @@ describe('Version Sync', () => {
     await appB.shutdown()
   }, 30_000)
 
-  it('same-name files in one batch → version current correct', async () => {
+  it('two same-name files synced in one batch resolve to a single current version', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const app = createTestApp(indexerStorage)
     await app.start()
@@ -324,7 +321,7 @@ describe('Version Sync', () => {
     await app.shutdown()
   }, 30_000)
 
-  it('three versions across sequential batches → current tracks latest', async () => {
+  it('with three versions arriving in sequential batches, current tracks the latest', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const app = createTestApp(indexerStorage)
     await app.start()
@@ -383,8 +380,6 @@ describe('Version Sync', () => {
   }, 30_000)
 
   it('multi-version lifecycle: create, trash, new version from other device, tombstone current promotes next', async () => {
-    // Tests: version creation across devices, local trash, new version
-    // arriving while trashed, tombstone of current promoting next version.
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
@@ -437,7 +432,7 @@ describe('Version Sync', () => {
     const trashedOnA = await appA.getFiles()
     const toDelete = trashedOnA
       .filter((f) => f.trashedAt != null)
-      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+      .map((f) => ({ id: f.id, type: f.type }))
     await appA.app.files.tombstoneWithThumbnailsAndCleanup(toDelete)
 
     // Wait for A's sync-up to delete the objects and B to see the tombstone
@@ -520,9 +515,7 @@ describe('Version Sync', () => {
     await appB.shutdown()
   }, 60_000)
 
-  it('three devices: A creates versions, B trashes, C adds new version — convergence', async () => {
-    // Tests: three-device scenario with version creation, trash,
-    // and new version — all converge to the same state.
+  it('three devices converge after A creates versions, B trashes, and C adds a new version', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
@@ -556,7 +549,7 @@ describe('Version Sync', () => {
     const trashedOnA = await appA.getFiles()
     const toDelete = trashedOnA
       .filter((f) => f.trashedAt != null)
-      .map((f) => ({ id: f.id, type: f.type, localId: f.localId }))
+      .map((f) => ({ id: f.id, type: f.type }))
     await appA.app.files.tombstoneWithThumbnailsAndCleanup(toDelete)
     await waitForCondition(async () => (await appA.getFileById('tri-v1'))?.deletedAt != null, {
       timeout: 15_000,

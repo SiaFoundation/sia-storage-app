@@ -29,6 +29,7 @@ import { deleteImportWithCleanup } from '../lib/importDelete'
 import { triggerImportScanner } from '../managers/importScanner'
 import { useAllDirectories } from '@siastorage/core/stores'
 import { app } from '../stores/appService'
+import { useImportPacing } from '../stores/importPacing'
 import type { ImportsStackParamList } from '../stacks/types'
 import {
   parsePendingTags,
@@ -97,6 +98,11 @@ function ImportDetailContent({
   const summary = summaries?.[0]
   const tags = useMemo(() => parsePendingTags(imp?.pendingTags), [imp?.pendingTags])
   const now = useNow()
+  const pacing = useImportPacing()
+  const activity =
+    imp && summary && summary.status !== 'done' ? deriveImportActivity(imp, summary, pacing) : null
+  // Wait states pause the whole queue, so plain pending rows read "Waiting".
+  const paused = activity !== null && activity !== 'importing'
   // Backoff rows in the loaded window; "Retry now" clears their nextAttemptAt.
   // Rows beyond the pagination window keep their schedule (they retry anyway).
   const retryingIds = useMemo(
@@ -200,6 +206,7 @@ function ImportDetailContent({
         <ImportFileListRow
           file={item}
           now={now}
+          paused={paused}
           first={index === 0}
           last={index === rows.length - 1}
         />
@@ -250,8 +257,9 @@ function ImportDetailHeader({
   const hasRetryable = (summary?.failed ?? 0) + (summary?.unavailable ?? 0) > 0
   const ratio = useMonotonicRatio(importing, imp && summary ? progressRatio(imp, summary) : 0)
   const bytesLabel = summary ? progressBytesLabel(summary) : null
-  const activity = imp && summary && importing ? deriveImportActivity(imp, summary, null) : null
-  const explainer = activity ? activityExplainer(activity, summary!, now) : null
+  const pacing = useImportPacing()
+  const activity = imp && summary && importing ? deriveImportActivity(imp, summary, pacing) : null
+  const explainer = activity ? activityExplainer(activity, summary!, now, pacing) : null
 
   return (
     <View style={styles.header}>
@@ -288,10 +296,7 @@ function ImportDetailHeader({
           label="Status"
           valueSlot={
             summary && imp && importing ? (
-              <ImportActivityBadge
-                activity={deriveImportActivity(imp, summary, null)}
-                variant="detail"
-              />
+              <ImportActivityBadge activity={activity} variant="detail" />
             ) : summary ? (
               <View style={styles.statusBadge}>
                 <Text style={[styles.statusText, { color: statusColor(summary) }]}>
@@ -381,11 +386,13 @@ function FileRowDivider() {
 function ImportFileListRow({
   file,
   now,
+  paused,
   first,
   last,
 }: {
   file: ImportFileRow
   now: number
+  paused: boolean
   first: boolean
   last: boolean
 }) {
@@ -411,7 +418,7 @@ function ImportFileListRow({
             </Text>
           ) : null}
         </View>
-        <ImportFileStateBadge row={file} now={now} />
+        <ImportFileStateBadge row={file} now={now} paused={paused} />
       </View>
     </View>
   )

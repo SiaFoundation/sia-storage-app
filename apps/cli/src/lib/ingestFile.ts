@@ -44,7 +44,7 @@ export async function ingestFile(
       addedAt: now,
       type,
       kind: 'file',
-      localId: null,
+      mediaAssetId: null,
       hash,
       trashedAt: null,
       deletedAt: null,
@@ -91,7 +91,6 @@ async function streamCopyAndHash(
     hasher.update(buf)
     size += buf.byteLength
   })
-  // pipeline handles backpressure, error propagation, and stream cleanup.
   await pipeline(source, createWriteStream(targetPath))
   return { hash: hasher.digest('hex'), size }
 }

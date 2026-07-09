@@ -253,6 +253,21 @@ describe('fileRowStyle', () => {
     )
     expect(style.label).toBe('Pending')
   })
+
+  it('a paused import turns plain pending rows into Waiting without a spinner', () => {
+    const style = fileRowStyle(row({ attempts: 0 }), NOW, true)
+    expect(style.label).toBe('Waiting')
+    expect(style.spinner).toBe(false)
+  })
+
+  it('a backoff row keeps its Retrying label while the import is paused', () => {
+    const style = fileRowStyle(
+      row({ attempts: 2, nextAttemptAt: NOW + 60_000, reason: 'cloud-pending' }),
+      NOW,
+      true,
+    )
+    expect(style.label).toBe('Retrying (2/8)')
+  })
 })
 
 describe('retryCountdownLabel', () => {
@@ -370,6 +385,33 @@ describe('activityExplainer', () => {
     const s = summary({ backoffPending: 1, soonestNextAttemptAt: 5 * 60_000 + 1000 })
     expect(activityExplainer('retry-wait', s, 1000)).toBe(
       'Waiting to retry a few files. Next try in 5m',
+    )
+  })
+
+  it('waiting-uploads appends the upload backlog bytes from the pacing snapshot', () => {
+    const pacing = {
+      at: 1000,
+      cause: 'backlog' as const,
+      freeBytes: null,
+      pendingLocalBytes: 1_200_000_000,
+    }
+    expect(activityExplainer('waiting-uploads', summary(), 1000, pacing)).toBe(
+      'Waiting for uploads to catch up. Importing continues automatically · 1.2 GB left to upload',
+    )
+  })
+
+  it('space states append free bytes, and omit the number without a snapshot', () => {
+    const pacing = {
+      at: 1000,
+      cause: 'headroom' as const,
+      freeBytes: 300_000_000,
+      pendingLocalBytes: null,
+    }
+    expect(activityExplainer('waiting-space', summary(), 1000, pacing)).toBe(
+      'Free space is low. Importing continues as uploads clear space · 300.0 MB free',
+    )
+    expect(activityExplainer('needs-space', summary(), 1000, null)).toBe(
+      'This device is almost out of space. Free up space to continue importing',
     )
   })
 })
