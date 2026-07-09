@@ -1,5 +1,5 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
-import { DarkTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
+import { DarkTheme, NavigationContainer } from '@react-navigation/native'
 import { AppProvider } from '@siastorage/core/app'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { useHasOnboarded, useShowSplash } from '@siastorage/core/stores'
@@ -17,10 +17,11 @@ import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { initForegroundRefresh } from './lib/foregroundRefresh'
+import { navigationRef } from './lib/navigationRef'
 import { ToastProvider } from './lib/toastContext'
 import { initApp, shutdownApp } from './managers/app'
 import { getLifecycle } from './managers/lifecycle'
-import { RootTabs } from './stacks/RootTabs'
+import { RootStack } from './stacks/RootStack'
 import { app } from './stores/appService'
 import { palette } from './styles/colors'
 
@@ -85,7 +86,6 @@ export function Root() {
 }
 
 function RootContent() {
-  const navigationRef = useNavigationContainerRef<any>()
   useReconnectIndexer()
   const { data: hasOnboarded } = useHasOnboarded()
   const showSplash = useShowSplash()
@@ -99,9 +99,9 @@ function RootContent() {
       return
     }
     if (shareUrl && navigationRef.isReady() && isShareUrl(shareUrl)) {
-      navigationRef.navigate('ImportTab', {
-        screen: 'ImportFile',
-        params: { shareUrl, id: uniqueId() },
+      navigationRef.navigate('Tabs', {
+        screen: 'ImportTab',
+        params: { screen: 'ImportFile', params: { shareUrl, id: uniqueId() } },
       })
     }
   })
@@ -115,7 +115,7 @@ function RootContent() {
           <>
             <ShareIntentConsumer />
             <NavigationContainer ref={navigationRef} theme={darkNavigationTheme}>
-              <RootTabs />
+              <RootStack />
             </NavigationContainer>
             <ImportProgressModal />
           </>
@@ -130,7 +130,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.gray[950] },
 })
 
-/** Determine if a URL is a share URL. */
 function isShareUrl(urlString: string): boolean {
   try {
     const u = new URL(urlString)
