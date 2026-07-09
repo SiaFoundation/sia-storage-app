@@ -495,6 +495,8 @@ export interface AppService {
     trashedCachedFiles(limit: number): Promise<{ fileId: string; size: number; type: string }[]>
     /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
+    /** Which of `fileIds` still have an in-flight import_files row (owns bytes on disk). */
+    inFlightImportFileIds(fileIds: string[]): Promise<Set<string>>
     /** Returns the local file URI if the file exists on disk, or null. */
     getFileUri(file: { id: string; type: string }): Promise<string | null>
     /** Returns the predicted local file URI for an id+type pair, with
@@ -504,12 +506,33 @@ export interface AppService {
     uri(file: { id: string; type: string }): string
     /** Removes a local file from disk. */
     removeFile(file: { id: string; type: string }): Promise<void>
-    /** Copies a file from the source URI into managed storage; returns the new URI. */
+    /** Removes a local file by its literal path (orphan-scanner temp sweep). */
+    removeFileByPath(path: string): Promise<void>
+    /** Copies a file from the source URI into managed storage; returns the
+     * stored uri and size. */
     copyFile(
       file: { id: string; type: string },
       sourceUri: string,
       opts?: { usedAt?: number },
-    ): Promise<string>
+    ): Promise<{ uri: string; size: number }>
+    /**
+     * The import scanner's claim-scoped copy; same bookkeeping as copyFile.
+     * `sha256`/`mime` are present when the adapter computed them during the
+     * copy's single read; when absent, the caller hashes. `signal`/`onProgress`
+     * are in-process-only and dropped over IPC.
+     */
+    importCopy(
+      file: { id: string; type: string },
+      sourceUri: string,
+      opts: {
+        usedAt?: number
+        claimToken: string
+        signal?: AbortSignal
+        onProgress?: (bytesCopied: number, totalBytes: number | null) => void
+        /** Consume the source (staged temps only; every other kind is read-only). */
+        move?: boolean
+      },
+    ): Promise<{ uri: string; size: number; sha256?: string; mime?: string }>
     /** Writes file data to managed storage, computes hash, and upserts metadata. */
     writeFileData(
       file: { id: string; type: string },
@@ -528,6 +551,12 @@ export interface AppService {
     listFiles(): Promise<string[]>
     /** Creates the managed storage directory if it does not exist. */
     ensureStorageDirectory(): Promise<void>
+    /**
+     * Reports device-level free/total storage, which drives the paced copy
+     * throttle. An adapter without `getDeviceSpace` reports ample free space,
+     * so the storage-headroom branch never defers.
+     */
+    getDeviceSpace(): Promise<{ freeBytes: number; totalBytes: number }>
   }
   /** Library aggregate queries: counts, positions, and sorted ID lists. */
   library: {

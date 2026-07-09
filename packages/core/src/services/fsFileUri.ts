@@ -14,10 +14,39 @@ export type FsFileUriAdapter = {
 
 export type FsIOAdapter = FsFileUriAdapter & {
   remove(fileId: string, type: string): Promise<void>
+  /**
+   * Delete a file by its literal path (as returned by `list()`). Used by the
+   * orphan scanner to sweep claim-scoped temp files `<id>.<token>.tmp`, whose
+   * path can't be reconstructed from id + mime type.
+   */
+  removeByPath?(path: string): Promise<void>
+  /** Plain byte copy into the file's slot. */
   copy(
     file: { id: string; type: string },
     sourceUri: string,
   ): Promise<{ uri: string; size: number }>
+  /**
+   * The import scanner's copy. Adapters whose copies can race a reclaimed
+   * claim (mobile) land each copy in a per-claim temp so the id slot never
+   * has two concurrent writers; the single-process node adapter writes the
+   * slot directly.
+   * `sha256`, when present, is the full normalized `sha256:<lowercase hex>`
+   * string; the adapter normalizes it and core never touches hash format.
+   * Absent means the caller must hash the copy itself. `signal`/`onProgress`
+   * are in-process-only and dropped over IPC (same policy as downloads).
+   */
+  importCopy(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts: {
+      claimToken: string
+      signal?: AbortSignal
+      onProgress?: (bytesCopied: number, totalBytes: number | null) => void
+      /** Consume the source by rename (one byte-write) instead of copying;
+       * only ever set for app-owned `staged` temps. */
+      move?: boolean
+    },
+  ): Promise<{ uri: string; size: number; sha256?: string; mime?: string }>
   writeFile?(
     file: { id: string; type: string },
     data: ArrayBuffer,
@@ -37,6 +66,12 @@ export type FsIOAdapter = FsFileUriAdapter & {
   renameToType(file: { id: string; type: string }, newType: string): Promise<{ uri: string }>
   list(): Promise<string[]>
   ensureDirectory(): Promise<void>
+  /**
+   * Reports the device's usable free bytes and total. Optional: an adapter
+   * that omits it reports `Number.MAX_SAFE_INTEGER` free, so callers gating
+   * on space see ample room.
+   */
+  getDeviceSpace?(): Promise<{ freeBytes: number; totalBytes: number }>
 }
 
 export async function getFsFileUri(

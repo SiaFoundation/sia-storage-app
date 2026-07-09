@@ -36,8 +36,27 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
 
     async copy(file, sourceUri) {
       const target = filePath(file.id, file.type)
+      await fs.copyFile(sourceUri.replace(/^file:\/\//, ''), target)
+      const stat = await fs.stat(target)
+      return { uri: target, size: stat.size }
+    },
+
+    // No single-read hash here; the scanner's hash pass covers it.
+    async importCopy(file, sourceUri, opts) {
+      const target = filePath(file.id, file.type)
       const sourcePath = sourceUri.replace(/^file:\/\//, '')
-      await fs.copyFile(sourcePath, target)
+      if (opts.move) {
+        // Staged temps are consumed by the move; rename falls back to
+        // copy+unlink across filesystems.
+        try {
+          await fs.rename(sourcePath, target)
+        } catch {
+          await fs.copyFile(sourcePath, target)
+          await fs.unlink(sourcePath).catch(() => {})
+        }
+      } else {
+        await fs.copyFile(sourcePath, target)
+      }
       const stat = await fs.stat(target)
       return { uri: target, size: stat.size }
     },
@@ -86,6 +105,22 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
 
     async ensureDirectory() {
       await fs.mkdir(filesDir, { recursive: true })
+    },
+
+    async getDeviceSpace() {
+      // Report the real filesystem free/total when available so headless
+      // hosts (CLI) reflect the device; fall back to an ample constant (1 TB)
+      // if statfs is unavailable, so the paced throttle never spuriously defers.
+      try {
+        const st = await fs.statfs(filesDir)
+        return {
+          freeBytes: st.bavail * st.bsize,
+          totalBytes: st.blocks * st.bsize,
+        }
+      } catch {
+        const ONE_TB = 1024 ** 4
+        return { freeBytes: ONE_TB, totalBytes: ONE_TB }
+      }
     },
   }
 }

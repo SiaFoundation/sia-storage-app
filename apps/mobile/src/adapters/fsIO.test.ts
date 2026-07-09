@@ -1,5 +1,11 @@
+import { IMPORT_STALE_CLAIM_MS } from '@siastorage/core/config'
 import RNFS from 'react-native-fs'
+import { copyToPath } from 'import-sources'
 import { createFsIOAdapter } from './fsIO'
+
+// The jest mapper serves the scriptable stub for 'import-sources'; script it
+// directly (no jest.mock factory, since factories don't reach other importers
+// under this repo's jest resolution) so the real importCopy routing runs.
 
 jest.mock('react-native-fs', () => ({
   stat: jest.fn(),
@@ -19,6 +25,7 @@ const unlinkMock = jest.mocked(RNFS.unlink)
 const copyFileMock = jest.mocked(RNFS.copyFile)
 const moveFileMock = jest.mocked(RNFS.moveFile)
 const hashMock = jest.mocked(RNFS.hash)
+const readDirMock = jest.mocked(RNFS.readDir)
 
 function mockStatResult(size: number): RNFS.StatResult {
   return {
@@ -128,6 +135,14 @@ describe('fsIO adapter copy()', () => {
     expect(unlinkMock).toHaveBeenCalledTimes(1)
     expect(copyFileMock).toHaveBeenCalledTimes(1)
   })
+
+  it('plain copy goes straight into the final slot (no temp, no rename)', async () => {
+    await adapter.copy(file, 'file:///tmp/clean.png')
+    const targetArg = copyFileMock.mock.calls[0][1] as string
+    expect(targetArg).toMatch(/\/file1\.png$/)
+    expect(targetArg).not.toMatch(/\.tmp$/)
+    expect(moveFileMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('fsIO adapter adoptFile()', () => {
@@ -165,5 +180,166 @@ describe('fsIO adapter adoptFile()', () => {
     if (!adapter.adoptFile) throw new Error('adoptFile missing')
     await adapter.adoptFile(file, 'file:///tmp/some%20file.webp')
     expect(moveFileMock).toHaveBeenCalledWith('/tmp/some file.webp', expect.any(String))
+  })
+})
+
+describe('fsIO adapter list() claim-temp mtime gate', () => {
+  const adapter = createFsIOAdapter()
+
+  // The test's `now` and the adapter's internal `Date.now()` must agree, or the
+  // exact-boundary case races across the line under load. Freeze both.
+  const NOW = 1_700_000_000_000
+  let nowSpy: jest.SpyInstance
+
+  function readDirEntry(path: string, mtimeMs: number): RNFS.ReadDirItem {
+    return {
+      ctime: undefined,
+      mtime: new Date(mtimeMs),
+      name: path.split('/').pop() ?? path,
+      path,
+      size: 1,
+      isFile: () => true,
+      isDirectory: () => false,
+    }
+  }
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOW)
+    existsMock.mockResolvedValue(true)
+  })
+
+  afterEach(() => {
+    nowSpy.mockRestore()
+  })
+
+  // The daily orphan sweep reads list(); a live in-progress copy's
+  // `<id>.<token>.tmp` (recent mtime) must be withheld so the sweep can't
+  // delete it mid-copy, while a genuinely abandoned temp (mtime older than
+  // IMPORT_STALE_CLAIM_MS) is surfaced for reclamation.
+  it('withholds a recent claim-temp but surfaces a stale one', async () => {
+    const now = Date.now()
+    readDirMock.mockResolvedValue([
+      // finalized file, always surfaced (not a .tmp)
+      readDirEntry('/store/files/finalized.jpg', 0),
+      // live in-progress copy: mtime = now, withheld
+      readDirEntry('/store/files/live.recenttok.tmp', now),
+      // abandoned orphan copy: mtime older than the stale window, surfaced
+      readDirEntry('/store/files/orphan.staletok.tmp', now - IMPORT_STALE_CLAIM_MS - 1000),
+    ])
+
+    const result = await adapter.list()
+    expect(result).toContain('/store/files/finalized.jpg')
+    expect(result).toContain('/store/files/orphan.staletok.tmp') // stale, swept
+    expect(result).not.toContain('/store/files/live.recenttok.tmp') // recent, protected
+  })
+
+  // A temp exactly at the boundary (now - mtime === IMPORT_STALE_CLAIM_MS) is
+  // surfaced (the gate is `>=`), and one a hair under is withheld.
+  it('treats the stale boundary inclusively', async () => {
+    const now = Date.now()
+    readDirMock.mockResolvedValue([
+      readDirEntry('/store/files/edge.tmp', now - IMPORT_STALE_CLAIM_MS),
+      readDirEntry('/store/files/just-under.tmp', now - IMPORT_STALE_CLAIM_MS + 1),
+    ])
+    const result = await adapter.list()
+    expect(result).toContain('/store/files/edge.tmp')
+    expect(result).not.toContain('/store/files/just-under.tmp')
+  })
+})
+
+describe('fsIO adapter importCopy()', () => {
+  const adapter = createFsIOAdapter()
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    existsMock.mockResolvedValue(false)
+    moveFileMock.mockResolvedValue(undefined)
+  })
+
+  it('routes claim-scoped copies through the native module and publishes via a move', async () => {
+    jest.mocked(copyToPath).mockResolvedValueOnce({
+      size: 42,
+      sha256: 'sha256:abc123',
+      mime: 'image/jpeg',
+    })
+
+    const result = await adapter.importCopy({ id: 'f1', type: 'image/jpeg' }, 'file:///src.jpg', {
+      claimToken: 'tok',
+    })
+
+    // Native wrote the claim temp directly; publishing it into the id slot is
+    // still this adapter's job. The token-scoped temp name means a
+    // stale-then-reclaimed orphan writes its own temp, so the id slot never
+    // has two concurrent writers.
+    expect(jest.mocked(copyToPath).mock.calls[0][1]).toContain('f1.tok.tmp')
+    expect(moveFileMock).toHaveBeenCalled()
+    // The native module returns the hash already normalized; the adapter passes it through.
+    expect(result.sha256).toBe('sha256:abc123')
+    expect(result.mime).toBe('image/jpeg')
+    expect(result.size).toBe(42)
+    expect(copyFileMock).not.toHaveBeenCalled()
+  })
+
+  it('a native coded failure propagates; no RNFS fallback, id slot untouched', async () => {
+    const err = new Error('gone') as Error & { code: string }
+    err.code = 'deleted'
+    jest.mocked(copyToPath).mockRejectedValue(err)
+
+    await expect(
+      adapter.importCopy({ id: 'f1', type: 'image/jpeg' }, 'file:///src.jpg', {
+        claimToken: 'tok',
+      }),
+    ).rejects.toMatchObject({ code: 'deleted' })
+    expect(copyFileMock).not.toHaveBeenCalled()
+    expect(moveFileMock).not.toHaveBeenCalled()
+  })
+
+  it('a pre-aborted signal never starts native work', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      adapter.importCopy({ id: 'f1', type: 'image/jpeg' }, 'file:///src.jpg', {
+        claimToken: 'tok',
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: 'cancelled' })
+    expect(jest.mocked(copyToPath)).not.toHaveBeenCalled()
+  })
+})
+
+describe('fsIO adapter importCopy() staged move', () => {
+  const adapter = createFsIOAdapter()
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    existsMock.mockResolvedValue(false)
+    moveFileMock.mockResolvedValue(undefined)
+    statMock.mockResolvedValue(mockStatResult(5))
+  })
+
+  it('consumes the source by rename, with no byte copy and no native hash', async () => {
+    const result = await adapter.importCopy(
+      { id: 'f1', type: 'image/jpeg' },
+      'file:///docs/import-staging/x.jpg',
+      { claimToken: 'tok', move: true },
+    )
+    // Two renames (origin to claim temp, claim temp to id slot), zero byte copies.
+    expect(moveFileMock).toHaveBeenCalledTimes(2)
+    expect(copyFileMock).not.toHaveBeenCalled()
+    expect(jest.mocked(copyToPath)).not.toHaveBeenCalled()
+    expect(result.sha256).toBeUndefined() // the scanner's hash pass runs
+  })
+
+  it('a failed move falls back to the copy path', async () => {
+    moveFileMock.mockRejectedValueOnce(new Error('EXDEV'))
+    jest.mocked(copyToPath).mockResolvedValue({ size: 5, sha256: 'sha256:aa' })
+    const result = await adapter.importCopy(
+      { id: 'f1', type: 'image/jpeg' },
+      'file:///docs/import-staging/x.jpg',
+      { claimToken: 'tok', move: true },
+    )
+    expect(jest.mocked(copyToPath)).toHaveBeenCalled()
+    expect(result.sha256).toBe('sha256:aa')
   })
 })
