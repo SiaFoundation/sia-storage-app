@@ -33,10 +33,21 @@ export function createFsAdapter(params: { tempDir: string }) {
     },
     async copy(file, sourceUri) {
       const fp = fsFilePath(file.id, file.type)
-      const sourcePath = sourceUri.replace(/^file:\/\//, '')
-      nodeFs.copyFileSync(sourcePath, fp)
+      nodeFs.copyFileSync(sourceUri.replace(/^file:\/\//, ''), fp)
       const size = nodeFs.statSync(fp).size
-      return { uri: `file://${fp}`, size }
+      return { kind: 'plain' as const, uri: `file://${fp}`, size }
+    },
+    async importCopy(file, sourceUri, opts) {
+      const fp = fsFilePath(file.id, file.type)
+      const sourcePath = sourceUri.replace(/^file:\/\//, '')
+      if (opts.move) {
+        // Staged temps are consumed by the move, matching the mobile adapter.
+        nodeFs.renameSync(sourcePath, fp)
+      } else {
+        nodeFs.copyFileSync(sourcePath, fp)
+      }
+      const size = nodeFs.statSync(fp).size
+      return { kind: 'plain' as const, uri: `file://${fp}`, size }
     },
     async writeFile(file, data) {
       const fp = fsFilePath(file.id, file.type)
