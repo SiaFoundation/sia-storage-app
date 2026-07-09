@@ -2,9 +2,14 @@ import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
+  AppendToOpenImportResult,
   DirectoryWithCount,
   FileQueryOpts,
   FsMetaRow,
+  ImportFileRow,
+  ImportRow,
+  ImportSource,
+  ImportSummary,
   LibraryQueryParams,
   SyncUpObjectRow,
   Tag,
@@ -58,6 +63,7 @@ export interface AppCaches {
   tags: SwrCacheBy
   directories: SwrCacheBy
   library: SwrCacheBy
+  imports: SwrCacheBy
   fileById: SwrCacheBy
   thumbnails: {
     best: SwrCacheBy
@@ -591,6 +597,102 @@ export interface AppService {
   stats: {
     /** Returns upload counts and byte totals for the given indexer. */
     uploadStats(indexerURL: string): Promise<UploadStats>
+  }
+  imports: {
+    /** Lists imports, newest first, optionally filtered by source. */
+    list(opts?: { source?: ImportSource; limit?: number }): Promise<ImportRow[]>
+    /** Returns one import by id, or null. */
+    get(id: string): Promise<ImportRow | null>
+    /** Returns derived status + counts for the given import ids. */
+    summary(ids: string[]): Promise<ImportSummary[]>
+    /** Returns the import_files rows of one import, newest-first. */
+    files(importId: string, opts?: { limit?: number; search?: string }): Promise<ImportFileRow[]>
+    /** Scanner candidate pool: ready pending rows (LIFO), newest-first. */
+    pendingFiles(limit: number, now: number): Promise<ImportFileRow[]>
+    /** The one non-`done` import of a source (still feeding or draining), or null. */
+    inProgressImport(source: ImportSource): Promise<ImportRow | null>
+    /** Count of in-flight (pending+active) import files across all imports. */
+    countInFlight(): Promise<number>
+    /** Identity dedup: which of `mediaAssetIds` are already imported into `directoryId`. */
+    getByMediaAssetIds(mediaAssetIds: string[], directoryId: string | null): Promise<Set<string>>
+    /** Opens an import: inserts the imports row + its initial import_files in one txn. */
+    create(imp: ImportRow, files: ImportFileRow[]): Promise<void>
+    /** Adds more import_files to an open (sealed=0) import, bumping updatedAt. */
+    addFiles(importId: string, files: ImportFileRow[]): Promise<void>
+    /** Seals an import: its source is done feeding it. */
+    seal(importId: string): Promise<void>
+    /**
+     * Seals every `sealed=0` import of `source` not fed in `idleMs` (vs `updatedAt`). new-photos
+     * seal-on-idle after IMPORT_IDLE_SEAL_MS; seal-leftover-on-init uses `idleMs=0`.
+     */
+    sealIdle(source: ImportSource, idleMs: number, now: number): Promise<void>
+    /**
+     * new-photos get-or-create in one txn: append the new assets to the open import, wait if
+     * the open import is sealed but still draining, or create a fresh one. `newImport` carries
+     * `expectedCount = files.length`, `sealed=0`. Concurrent polls can never create a second
+     * open import for the source.
+     */
+    appendToOpenImport(
+      source: ImportSource,
+      newImport: ImportRow,
+      files: ImportFileRow[],
+      now: number,
+    ): Promise<AppendToOpenImportResult>
+    /** Claims a pending row (flips it to active under a fresh token). Returns true if won. */
+    claim(id: string, now: number, token: string): Promise<boolean>
+    /** Records copy progress; the write only lands if the claim token still matches. */
+    markProgress(id: string, bytes: number, token: string): Promise<void>
+    /** Persists the computed hash/size/type onto the claimed row before finalize
+     * (no-op if the claim token no longer matches). */
+    recordHash(
+      id: string,
+      token: string,
+      meta: { hash: string; size: number; type: string },
+    ): Promise<void>
+    /** Marks a claimed file `unavailable` (source gone). */
+    markUnavailable(id: string, token: string, reason: string): Promise<void>
+    /**
+     * Records a transient failure: backoff to pending, or terminal at the attempt cap.
+     * `exhaustedState` is the terminal at exhaustion: `unavailable` for a source that
+     * stays unretrievable, `failed` (default) for a processing error.
+     */
+    markFailure(
+      id: string,
+      token: string,
+      reason: string,
+      now: number,
+      exhaustedState?: 'failed' | 'unavailable',
+      maxAttempts?: number,
+    ): Promise<void>
+    /** Cancels in-flight import files (the caller deletes their staged bytes). */
+    cancel(ids: string[]): Promise<void>
+    /**
+     * Cancels a whole import: its in-flight (pending/active) rows become `cancelled`
+     * via a single write (no unbounded read of children). Already-added files stay.
+     */
+    cancelImport(importId: string): Promise<void>
+    /** Clears backoff on retrying rows so the scanner reclaims them now (all if no ids). */
+    retry(ids?: string[]): Promise<void>
+    /**
+     * "Retry failed" for one import: returns its terminal `failed`/`unavailable`
+     * rows to pending (attempts reset, backoff cleared) so the scanner reprocesses them.
+     */
+    retryFailed(importId: string): Promise<void>
+    /**
+     * Saves a refreshed `sourceRef` to the row under its active claim; the write
+     * only lands if the claim token still matches. The resolver calls this when
+     * a bookmark resolved but reported stale.
+     */
+    updateSourceRef(id: string, token: string, ref: string | null): Promise<void>
+    /**
+     * Deletes an import and CASCADE-drops its import_files. Returns the still-held source refs
+     * of its rows, plus the import's folder tree grant when one exists, so the
+     * platform layer can release the OS grants (Android persistable
+     * permissions; a no-op for iOS bookmarks).
+     */
+    delete(id: string): Promise<string[]>
+    /** Sweep: release stale claims, clamp clock-skew, seal abandoned imports. */
+    resetStale(claimOlderThanMs: number, sealOlderThanMs: number, now: number): Promise<void>
   }
   /** Persistent user settings: get and set typed configuration values. */
   settings: {
