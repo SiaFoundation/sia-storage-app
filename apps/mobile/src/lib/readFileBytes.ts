@@ -22,7 +22,6 @@ export async function readFileBytes(uri: string, byteCount: number): Promise<Uin
     const reader = readable.getReader()
 
     try {
-      // Read chunks until we have enough bytes (or file ends).
       const chunks: Uint8Array[] = []
       let totalBytes = 0
 
@@ -39,7 +38,6 @@ export async function readFileBytes(uri: string, byteCount: number): Promise<Uin
         return null
       }
 
-      // Combine chunks and take only the requested number of bytes.
       const bytes = new Uint8Array(Math.min(totalBytes, byteCount))
       let offset = 0
       for (const chunk of chunks) {
@@ -54,7 +52,11 @@ export async function readFileBytes(uri: string, byteCount: number): Promise<Uin
       reader.releaseLock()
     }
   } catch (e) {
-    logger.error('readFileBytes', 'error', { error: e as Error })
+    // A miss is recoverable (callers fall back to extension detection); on
+    // Android direct media paths expo's File.open EACCESes for every asset,
+    // which at error level floods the log with one error per asset during a
+    // library scan.
+    logger.debug('readFileBytes', 'error', { error: e as Error })
     return null
   }
 }

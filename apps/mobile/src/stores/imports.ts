@@ -77,6 +77,12 @@ export async function getInProgressImport(source: ImportSource): Promise<ImportR
   return app().imports.inProgressImport(source)
 }
 
+/** The one non-`done` import of a source, or null when none is running. */
+export function useInProgressImport(source: ImportSource, config?: SWRConfiguration) {
+  const key = app().caches.imports.key('inProgress')
+  return useSWR([...key, source], () => getInProgressImport(source), config)
+}
+
 /**
  * Resolves an import's destination directoryId to a display name. Unfiled
  * (`null`) imports go to "Library". A directory deleted out from under an

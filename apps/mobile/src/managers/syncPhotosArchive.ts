@@ -13,23 +13,25 @@
  * - iOS: creationDate can be an old EXIF date; modificationDate is the
  *   iCloud-synced metadata timestamp (not local arrival time).
  *
- * Suspension signal policy: accepts AbortSignal. DB-holding walk loop
- * — writes via catalogAssets on each page. NOT driven by the service
- * scheduler; uses its own module-level walkAbortController managed
- * by pauseArchiveSync() / resumeArchiveSync() hooks wired into the
- * suspension manager's onBeforeSuspend / onAfterResume.
+ * Each page feeds the single library-scan import via addFiles; the scanner
+ * drains it. The walk is not driven by the service scheduler: it holds its
+ * own abort controller, and pauseArchiveSync() / resumeArchiveSync() are
+ * wired into the suspension manager's onBeforeSuspend / onAfterResume.
  */
 
 import { useApp } from '@siastorage/core/app'
+import type { ImportRow } from '@siastorage/core/db/operations'
 import { getErrorMessage } from '@siastorage/core/lib/errors'
+import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { yieldToEventLoop } from '@siastorage/core/lib/yieldToEventLoop'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import useSWR from 'swr'
+import { buildPhotoCandidateRows, resolveImportDirectoryId } from '../lib/assetImports'
 import { getMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
-import { catalogAssets } from '../lib/assetImports'
 import { app } from '../stores/appService'
 import { isBgTaskActive } from './bgTaskContext'
+import { triggerImportScanner } from './importScanner'
 import { acquireAutoKeepAwake, releaseAutoKeepAwake } from './autoKeepAwake'
 
 const PAGE_SIZE = 500
@@ -38,16 +40,76 @@ const CURSOR_START = 'start'
 
 let activeWalk: Promise<void> | null = null
 let walkAbortController: AbortController | null = null
-let photosAddedCount = 0
+// Scan-phase progress counters for the modal. `photosScannedCount` is assets
+// walked (progress vs the library total); `photosExistingCount` is assets the
+// identity dedup skipped as already imported. Survivors staged = scanned - existing.
+let photosScannedCount = 0
 let photosExistingCount = 0
+// The single library-scan import the walk is feeding. Created at walk start,
+// fed per page, sealed at walk end. Held across pages (and re-resolved after
+// a restart via inProgressImport) so every page drains into one import.
+let activeImportId: string | null = null
+// Its destination directory, cached with the id: both establishment paths
+// already hold the value, so pages never re-read the import row for it.
+let activeImportDirectoryId: string | null = null
+// The walk's import id, kept after `sealActiveImport` clears `activeImportId`,
+// so the modal can deep-link to that import's detail on hand-off.
+let lastArchiveImportId: string | null = null
 
-export async function startArchiveSync(): Promise<void> {
-  if (activeWalk) return
-  photosAddedCount = 0
-  photosExistingCount = 0
-  await setPhotosAddedCount(0)
-  await setPhotosExistingCount(0)
-  await restartPhotosArchiveCursor()
+/** The library-scan import id the current or most recent walk fed. */
+export function getArchiveImportId(): string | null {
+  return lastArchiveImportId
+}
+
+/** Open the single library-scan import this walk feeds. */
+async function openLibraryScanImport(): Promise<string> {
+  const directoryId = await resolveImportDirectoryId()
+  const now = Date.now()
+  const importRow: ImportRow = {
+    id: uniqueId(),
+    source: 'library-scan',
+    directoryId,
+    pendingTags: null,
+    expectedCount: 0, // grows per page as assets are discovered
+    dedupByHash: 1,
+    dirSourceRef: null,
+    sealed: 0,
+    startedAt: now,
+    updatedAt: now,
+  }
+  await app().imports.create(importRow, [])
+  lastArchiveImportId = importRow.id
+  activeImportDirectoryId = directoryId
+  return importRow.id
+}
+
+/** Seal + clear the active library-scan import (walk done). */
+async function sealActiveImport(): Promise<void> {
+  if (!activeImportId) return
+  await app().imports.seal(activeImportId)
+  activeImportId = null
+  activeImportDirectoryId = null
+}
+
+/**
+ * Resolve the import the walk should feed: the one already held, else the
+ * unsealed library-scan import that survived a restart (re-enumeration is
+ * idempotent, already-added assets produce no new rows), else a fresh one.
+ */
+async function ensureActiveImport(): Promise<string> {
+  if (activeImportId) return activeImportId
+  const inProgress = await app().imports.inProgressImport('library-scan')
+  if (inProgress && inProgress.sealed === 0) {
+    activeImportId = inProgress.id
+    activeImportDirectoryId = inProgress.directoryId
+  } else {
+    activeImportId = await openLibraryScanImport()
+  }
+  lastArchiveImportId = activeImportId
+  return activeImportId
+}
+
+function beginWalk(): void {
   walkAbortController = new AbortController()
   acquireAutoKeepAwake('archive-walk')
   activeWalk = runArchiveWalk(walkAbortController.signal)
@@ -58,12 +120,32 @@ export async function startArchiveSync(): Promise<void> {
   })
 }
 
+export async function startArchiveSync(): Promise<void> {
+  if (activeWalk) return
+  // The button is a no-op while a prior library-scan is still walking or
+  // still draining, so two full scans never stack.
+  if ((await app().imports.inProgressImport('library-scan')) !== null) {
+    logger.info('syncPhotosArchive', 'start_blocked_in_progress')
+    return
+  }
+  photosScannedCount = 0
+  photosExistingCount = 0
+  await setPhotosScannedCount(0)
+  await setPhotosExistingCount(0)
+  await restartPhotosArchiveCursor()
+  activeImportId = await openLibraryScanImport()
+  beginWalk()
+}
+
 export async function stopArchiveSync(): Promise<void> {
   walkAbortController?.abort()
   // Release immediately rather than waiting for the abort to propagate
   // through runArchiveWalk; the release in activeWalk.finally is idempotent.
   releaseAutoKeepAwake('archive-walk')
   await setPhotosArchiveCursor(CURSOR_DONE)
+  // The walk ended by user choice; seal the import so it can reach done and
+  // a new scan can start once its rows drain.
+  await sealActiveImport()
 }
 
 /** Abort the in-flight walk without clearing cursor so it resumes from the same page. */
@@ -89,14 +171,8 @@ export async function resumeArchiveSync(): Promise<void> {
   if (isBgTaskActive('BGAppRefreshTask')) return
   const cursor = await getPhotosArchiveCursor()
   if (cursor === CURSOR_DONE) return
-  walkAbortController = new AbortController()
-  acquireAutoKeepAwake('archive-walk')
-  activeWalk = runArchiveWalk(walkAbortController.signal)
-  activeWalk.finally(() => {
-    activeWalk = null
-    walkAbortController = null
-    releaseAutoKeepAwake('archive-walk')
-  })
+  await ensureActiveImport()
+  beginWalk()
 }
 
 async function runArchiveWalk(signal: AbortSignal): Promise<void> {
@@ -149,6 +225,8 @@ export async function run(signal?: AbortSignal) {
       logger.info('syncPhotosArchive', 'fully_synced')
       await setPhotosArchiveCursor(CURSOR_DONE)
       await setArchiveSyncCompletedAt(Date.now())
+      // Walk done: seal so the import can reach done and a new scan can start.
+      await sealActiveImport()
       return
     }
     const assets = page.assets
@@ -164,7 +242,14 @@ export async function run(signal?: AbortSignal) {
       prevCursor: prevCursor === CURSOR_START ? 'start' : prevCursor,
       nextCursor: page.endCursor,
     })
-    const { newCount, existingCount } = await catalogAssets(
+
+    // Memoized: after the first page this returns the cached id with no DB
+    // read. It sits per-page for the walk that restarted mid-page (recovered
+    // cursor on a fresh process) and has not re-resolved the import yet.
+    const importId = await ensureActiveImport()
+
+    const now = Date.now()
+    const rows = await buildPhotoCandidateRows(
       assets.map((asset) => ({
         id: asset.id,
         sourceUri: asset.uri,
@@ -173,22 +258,27 @@ export async function run(signal?: AbortSignal) {
         size: undefined,
         timestamp: new Date(asset.creationTime || asset.modificationTime).toISOString(),
       })),
-      'file',
-      { addToImportDirectory: true },
-      signal,
+      importId,
+      activeImportDirectoryId,
+      now,
     )
-    photosAddedCount += assets.length
+    const newCount = rows.length
+    const existingCount = assets.length - newCount
+    photosScannedCount += assets.length
     photosExistingCount += existingCount
-    await setPhotosAddedCount(photosAddedCount)
+    await setPhotosScannedCount(photosScannedCount)
     await setPhotosExistingCount(photosExistingCount)
-    if (newCount > 0) {
+    if (rows.length > 0) {
+      // addFiles grows expectedCount only by rows actually added, not page
+      // size (already-imported assets produce none), so the count-progress
+      // denominator stays reachable.
+      await app().imports.addFiles(importId, rows)
+      triggerImportScanner()
       logger.info('syncPhotosArchive', 'batch_processed', {
         newCount,
         existingCount,
         totalAssets: assets.length,
       })
-      await app().caches.library.invalidateAll()
-      app().caches.libraryVersion.invalidate()
     } else {
       logger.info('syncPhotosArchive', 'batch_all_duplicates', {
         totalAssets: assets.length,
@@ -238,10 +328,19 @@ export async function resetPhotosArchiveCursor() {
   await setPhotosArchiveDisplayDate(0)
 }
 
-export async function getPhotosArchiveDisplayDate(): Promise<number> {
-  const raw = await app().storage.getItem('photosArchiveDisplayDate')
+async function getStoredNumber(key: string): Promise<number> {
+  const raw = await app().storage.getItem(key)
   const n = raw ? Number(raw) : 0
   return Number.isFinite(n) ? n : 0
+}
+
+async function setStoredNumber(key: string, value: number): Promise<void> {
+  await app().storage.setItem(key, String(value))
+  app().caches.settings.invalidate(key)
+}
+
+export async function getPhotosArchiveDisplayDate(): Promise<number> {
+  return getStoredNumber('photosArchiveDisplayDate')
 }
 
 export function usePhotosArchiveDisplayDate() {
@@ -252,19 +351,15 @@ export function usePhotosArchiveDisplayDate() {
 }
 
 export async function setPhotosArchiveDisplayDate(value: number) {
-  await app().storage.setItem('photosArchiveDisplayDate', String(value))
-  app().caches.settings.invalidate('photosArchiveDisplayDate')
+  await setStoredNumber('photosArchiveDisplayDate', value)
 }
 
 export async function getArchiveSyncCompletedAt(): Promise<number> {
-  const raw = await app().storage.getItem('archiveSyncCompletedAt')
-  const n = raw ? Number(raw) : 0
-  return Number.isFinite(n) ? n : 0
+  return getStoredNumber('archiveSyncCompletedAt')
 }
 
 export async function setArchiveSyncCompletedAt(value: number) {
-  await app().storage.setItem('archiveSyncCompletedAt', String(value))
-  app().caches.settings.invalidate('archiveSyncCompletedAt')
+  await setStoredNumber('archiveSyncCompletedAt', value)
 }
 
 export function useArchiveSyncCompletedAt() {
@@ -274,26 +369,21 @@ export function useArchiveSyncCompletedAt() {
   )
 }
 
-export async function getPhotosAddedCount(): Promise<number> {
-  const raw = await app().storage.getItem('photosAddedCount')
-  const n = raw ? Number(raw) : 0
-  return Number.isFinite(n) ? n : 0
+export async function getPhotosScannedCount(): Promise<number> {
+  return getStoredNumber('photosScannedCount')
 }
 
-export function usePhotosAddedCount() {
+export function usePhotosScannedCount() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('photosAddedCount'), () => getPhotosAddedCount())
+  return useSWR(app.caches.settings.key('photosScannedCount'), () => getPhotosScannedCount())
 }
 
-export async function setPhotosAddedCount(value: number) {
-  await app().storage.setItem('photosAddedCount', String(value))
-  app().caches.settings.invalidate('photosAddedCount')
+export async function setPhotosScannedCount(value: number) {
+  await setStoredNumber('photosScannedCount', value)
 }
 
 export async function getPhotosExistingCount(): Promise<number> {
-  const raw = await app().storage.getItem('photosExistingCount')
-  const n = raw ? Number(raw) : 0
-  return Number.isFinite(n) ? n : 0
+  return getStoredNumber('photosExistingCount')
 }
 
 export function usePhotosExistingCount() {
@@ -302,6 +392,5 @@ export function usePhotosExistingCount() {
 }
 
 export async function setPhotosExistingCount(value: number) {
-  await app().storage.setItem('photosExistingCount', String(value))
-  app().caches.settings.invalidate('photosExistingCount')
+  await setStoredNumber('photosExistingCount', value)
 }

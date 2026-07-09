@@ -1,8 +1,9 @@
-import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
-import * as DocumentPicker from 'expo-document-picker'
 import { useCallback, useRef } from 'react'
-import type { ImportFilesOptions } from '../lib/assetImports'
+import { Platform } from 'react-native'
+import type { Asset, ImportFilesOptions } from '../lib/assetImports'
+import { capturePickedAssets } from '../lib/importCapture'
+import { pickOriginalFiles } from '../lib/sourceRefs'
 import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
 import { useToast } from '../lib/toastContext'
@@ -11,43 +12,43 @@ export function useDocumentPicker(options: ImportFilesOptions = {}) {
   const toast = useToast()
   const isPickingRef = useRef<boolean>(false)
   const { destinationDirectoryId, assignTagName } = options
-  return useCallback(async (): Promise<FileRecord[]> => {
+  return useCallback(async (): Promise<void> => {
     if (isPickingRef.current) {
       logger.debug('documentPicker', 'already_picking')
-      return []
+      return
     }
     isPickingRef.current = true
     try {
       logger.debug('documentPicker', 'opening')
-      const result = await DocumentPicker.getDocumentAsync({
-        multiple: true,
-        type: '*/*',
-        copyToCacheDirectory: false,
-      })
-
-      if (result.canceled) {
+      // The module picker returns originals on both platforms; iOS picks
+      // open in place with a bookmark minted in the delegate, Android picks
+      // are grant-captured afterward.
+      const openInPlace = Platform.OS === 'ios'
+      const files = await pickOriginalFiles()
+      if (files.length === 0) {
         logger.debug('documentPicker', 'canceled')
-        return []
+        return
       }
+      const picked: Asset[] = files.map((f) => ({
+        id: undefined,
+        name: f.name,
+        size: f.size,
+        type: f.mimeType,
+        timestamp: new Date(f.lastModified ?? Date.now()).toISOString(),
+        sourceUri: f.uri,
+        sourceRef: f.ref ?? null,
+      }))
 
       const imported = await importFiles(
-        result.assets?.map((a) => ({
-          id: undefined,
-          name: a.name,
-          size: a.size,
-          type: a.mimeType,
-          timestamp: new Date(a.lastModified).toISOString(),
-          sourceUri: a.uri,
-        })),
+        await capturePickedAssets(picked, { openInPlace }),
         'file',
         { destinationDirectoryId, assignTagName },
+        'picker',
       )
       showImportResultToast(toast, imported)
-      return imported.files
     } catch (e) {
       logger.error('documentPicker', 'error', { error: e as Error })
       toast.show('Could not add files. Please try again.')
-      return []
     } finally {
       isPickingRef.current = false
     }

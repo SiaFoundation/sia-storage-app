@@ -1,9 +1,9 @@
-import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
 import type { ImportFilesOptions } from '../lib/assetImports'
 import { extFromMime, getMimeType } from '../lib/fileTypes'
+import { stageCameraAssets } from '../lib/importCapture'
 import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
 import { showPermissionDeniedAlert } from '../lib/permissionAlert'
@@ -13,10 +13,10 @@ export function useCameraCapture(options: ImportFilesOptions = {}) {
   const toast = useToast()
   const isCapturingRef = useRef<boolean>(false)
   const { destinationDirectoryId, assignTagName } = options
-  return useCallback(async (): Promise<FileRecord[]> => {
+  return useCallback(async (): Promise<void> => {
     if (isCapturingRef.current) {
       logger.debug('cameraCapture', 'already_capturing')
-      return []
+      return
     }
     isCapturingRef.current = true
     try {
@@ -37,56 +37,60 @@ export function useCameraCapture(options: ImportFilesOptions = {}) {
 
       if (result.didCancel) {
         logger.debug('cameraCapture', 'canceled')
-        return []
+        return
       }
       if (result.errorCode === 'permission') {
         showPermissionDeniedAlert(
           'Camera Access Required',
           'To take photos and videos, allow camera access in Settings.',
         )
-        return []
+        return
       }
       if (result.errorCode) {
         logger.warn('cameraCapture', 'picker_error', {
           errorCode: result.errorCode,
           errorMessage: result.errorMessage,
         })
-        return []
+        return
       }
 
       const first = (result.assets ?? [])[0]
       if (!first || !first.uri) {
         toast.show('No media captured.')
-        return []
+        return
       }
 
+      // With saveToPhotos:false the capture is a temp file, not a media-library
+      // asset, so importAssets stages it with no media asset id. The temp is
+      // moved into the staging dir so a process kill can't purge it mid-import.
       const imported = await importFiles(
-        await Promise.all(
-          (result.assets ?? []).map(async (a) => ({
-            id: a.id,
-            name: buildDateFileName(
-              a.timestamp,
-              await getMimeType({
-                type: a.type,
-                name: a.fileName,
-                uri: a.uri,
-              }),
-            ),
-            size: a.fileSize,
-            type: a.type,
-            sourceUri: a.uri,
-            timestamp: a.timestamp,
-          })),
+        await stageCameraAssets(
+          await Promise.all(
+            (result.assets ?? []).map(async (a) => ({
+              id: a.id,
+              name: buildDateFileName(
+                a.timestamp,
+                await getMimeType({
+                  type: a.type,
+                  name: a.fileName,
+                  uri: a.uri,
+                }),
+              ),
+              size: a.fileSize,
+              type: a.type,
+              sourceUri: a.uri,
+              timestamp: a.timestamp,
+            })),
+          ),
         ),
         'file',
         { destinationDirectoryId, assignTagName },
+        'camera',
       )
       showImportResultToast(toast, imported)
-      return imported.files
     } catch (e) {
       logger.error('cameraCapture', 'error', { error: e as Error })
       toast.show('Could not save capture. Please try again.')
-      return []
     } finally {
       isCapturingRef.current = false
     }
