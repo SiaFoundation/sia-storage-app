@@ -1,3 +1,10 @@
+/*
+ * Runs the AppService across an IPC boundary (desktop main process and
+ * renderer). registerAppServiceIpc exposes every service method as an
+ * invoke channel and broadcasts cache mutations; createRemoteAppService
+ * builds a call-forwarding proxy on the other side and replays those
+ * cache messages into its local caches so hooks re-render.
+ */
 import { swrCacheBy } from '../stores/swr'
 import { createLibraryVersionCache } from './libraryVersionCache'
 import type { AppCaches, AppService } from './service'
@@ -116,6 +123,7 @@ export function createRemoteAppService(
     tags: swrCacheBy(),
     directories: swrCacheBy(),
     library: swrCacheBy(),
+    imports: swrCacheBy(),
     fileById: swrCacheBy(),
     thumbnails: {
       best: swrCacheBy(),
@@ -141,6 +149,8 @@ export function createRemoteAppService(
     })
   }
 
+  // The client can't know whether a property is a leaf method or a deeper
+  // namespace, so each one is both callable and traversable.
   function proxyAt(prefix: string): any {
     const memo: Record<string, any> = {}
     return new Proxy(
