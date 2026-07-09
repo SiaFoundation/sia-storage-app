@@ -24,10 +24,10 @@ import { FileActionsSheet } from '../components/FileActionsSheet'
 import { FileCarousel } from '../components/FileCarousel'
 import { FileGallery } from '../components/FileGallery'
 import { FileList } from '../components/FileList'
+import { FolderImportBanner } from '../components/FolderImportBanner'
 import { Gradient } from '../components/Gradient'
 import { LibraryHeader } from '../components/LibraryHeader'
 import { LibraryLocalResetButton } from '../components/LibraryLocalResetButton'
-import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { LibraryTabBar } from '../components/LibraryTabBar'
 import { ManageTagsSheet } from '../components/ManageTagsSheet'
 import { MoveToDirectorySheet } from '../components/MoveToDirectorySheet'
@@ -278,6 +278,9 @@ export function LibraryScreen({ route, navigation }: Props) {
         <DirectoriesGrid
           onSelectDirectory={handleSelectDirectory}
           onCreateDirectory={handleCreateDirectory}
+          ListHeaderComponent={
+            <FolderImportBanner directoryId={null} style={styles.rootImportBanner} />
+          }
         />
       ) : activeTab === 'tags' ? (
         <TagsGrid onSelectTag={handleSelectTag} onCreateTag={handleCreateTag} />
@@ -329,7 +332,6 @@ export function LibraryScreen({ route, navigation }: Props) {
       />
       <CreateDirectorySheet onCreated={handleDirectoryCreated} />
       <CreateTagSheet />
-      <LibraryStatusSheet />
       {isSelectionMode ? (
         <SelectionBar onComplete={handleBulkActionComplete} />
       ) : (
@@ -400,6 +402,10 @@ export function LibraryScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // The grid's padded content already supplies the 16pt gutters.
+  rootImportBanner: {
+    marginHorizontal: 0,
+  },
   container: { flex: 1, backgroundColor: colors.bgCanvas },
   topBlur: {
     zIndex: 10,

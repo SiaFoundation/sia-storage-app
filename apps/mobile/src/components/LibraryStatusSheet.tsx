@@ -1,19 +1,18 @@
-import { type NavigationProp, useNavigation } from '@react-navigation/native'
 import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAccount, useStatusDisplayMode } from '@siastorage/core/stores'
 import { useCallback } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
 import { humanSize } from '../lib/humanSize'
-import { getImportBackoffEntries } from '../managers/importScanner'
-import type { RootTabParamList } from '../stacks/types'
+import type { ImportsStackParamList } from '../stacks/types'
 import { app } from '../stores/appService'
-import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
-import { closeSheet, useSheetOpen } from '../stores/sheets'
-import { palette, whiteA } from '../styles/colors'
+import { useFileCountImporting, useFileStatsLocal, useFileStatsLost } from '../stores/files'
+import { useActiveUploads } from '../stores/uploads'
+import { colors, palette, whiteA } from '../styles/colors'
 import { ActivityStatusRow } from './ActivityStatusRow'
 import { InsetGroupLink, InsetGroupSection, InsetGroupValueRow } from './InsetGroup'
-import { ModalSheet } from './ModalSheet'
 
 const refreshInterval = 5_000
 type Mode = 'count' | 'size'
@@ -58,13 +57,15 @@ function humanLimit(maxPinnedData: bigint | string | undefined): string {
   return humanSize(n) ?? '—'
 }
 
+/** The status sheet's root screen; the imports flow pushes inside the same
+ * sheet, so this stays mounted (and polling) beneath it. */
 export function LibraryStatusSheet() {
-  const isOpen = useSheetOpen('libraryStatus')
+  const navigation = useNavigation<NativeStackNavigationProp<ImportsStackParamList>>()
   const { data: rawMode = 'count' } = useStatusDisplayMode()
   const mode: Mode = rawMode === 'size' ? 'size' : 'count'
   const account = useAccount()
   const stats = useSWR(
-    ['upload-stats', isOpen ?? null],
+    ['upload-stats'],
     async (): Promise<UploadStats> => {
       const indexerURL = await app().settings.getIndexerURL()
       return app().stats.uploadStats(indexerURL)
@@ -74,25 +75,20 @@ export function LibraryStatusSheet() {
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
   const pendingBackup = useFileStatsLocal({ localOnly: true }, { refreshInterval })
   const lost = useFileStatsLost({ refreshInterval })
-  const importErrors = useSWR(
-    ['import-errors', isOpen ?? null],
-    () => getImportBackoffEntries().length,
-    { refreshInterval },
-  )
-  const navigation = useNavigation<NavigationProp<RootTabParamList>>()
-  const openImportSettings = useCallback(
-    (tab: 'retrying' | 'lost') => {
-      closeSheet()
-      navigation.navigate('MenuTab', { screen: 'Import', params: { tab }, initial: false })
-    },
-    [navigation],
-  )
-  const handleClose = useCallback(() => {
-    closeSheet()
-  }, [])
+  const importing = useFileCountImporting({ refreshInterval })
+  const openImports = useCallback(() => {
+    navigation.navigate('Imports')
+  }, [navigation])
+  const openUnavailable = useCallback(() => {
+    navigation.navigate('Unavailable')
+  }, [navigation])
+  const openUploads = useCallback(() => {
+    navigation.navigate('Uploads')
+  }, [navigation])
+  const activeUploads = useActiveUploads()
+  const uploadingFileCount = activeUploads.filter((u) => u.kind !== 'thumb').length
 
-  const importingCount = stats.data?.importingCount ?? 0
-  const importErrorCount = importErrors.data ?? 0
+  const importingCount = importing.data ?? 0
 
   const totalCount = stats.data?.files.total ?? 0
   const totalBytes = account.data ? Number(account.data.pinnedData) : undefined
@@ -109,92 +105,108 @@ export function LibraryStatusSheet() {
   ]
 
   return (
-    <ModalSheet visible={isOpen} onRequestClose={handleClose} title="Status">
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <ActivityStatusRow />
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <ActivityStatusRow />
 
-        <View style={styles.toolbar}>
-          <View style={styles.toggleTrack}>
-            {(['count', 'size'] as const).map((m) => (
-              <Pressable
-                key={m}
-                style={[styles.toggleSegment, mode === m && styles.toggleSegmentSelected]}
-                onPress={() => app().settings.setStatusDisplayMode(m)}
-              >
-                <Text style={[styles.toggleLabel, mode === m && styles.toggleLabelSelected]}>
-                  {m === 'count' ? 'Count' : 'Size'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+      <View style={styles.toolbar}>
+        <View style={styles.toggleTrack}>
+          {(['count', 'size'] as const).map((m) => (
+            <Pressable
+              key={m}
+              style={[styles.toggleSegment, mode === m && styles.toggleSegmentSelected]}
+              onPress={() => app().settings.setStatusDisplayMode(m)}
+            >
+              <Text style={[styles.toggleLabel, mode === m && styles.toggleLabelSelected]}>
+                {m === 'count' ? 'Count' : 'Size'}
+              </Text>
+            </Pressable>
+          ))}
         </View>
+      </View>
 
-        <InsetGroupSection header="Library">
-          <InsetGroupValueRow label="Total" value={formatModeValue(mode, totalCount, totalBytes)} />
-          <InsetGroupValueRow
-            label="Available"
-            value={availableBytes !== undefined ? (humanSize(availableBytes) ?? '—') : '—'}
-          />
-          <InsetGroupValueRow
-            label="Storage limit"
-            value={humanLimit(account.data?.maxPinnedData)}
-          />
-          {importingCount > 0 ? (
-            <InsetGroupValueRow label="Pending import" value={formatCount(importingCount)} />
-          ) : null}
-          {importErrorCount > 0 ? (
-            <InsetGroupLink
-              label="Import errors"
-              onPress={() => openImportSettings('retrying')}
-              value={formatCount(importErrorCount)}
-            />
-          ) : null}
-        </InsetGroupSection>
-
-        <InsetGroupSection
-          header="Upload progress"
-          footer={
-            mode === 'size' && importingCount > 0
-              ? `Sizes do not include the ${importingCount === 1 ? 'file' : `${importingCount.toLocaleString()} files`} still pending import.`
-              : 'Upload progress across all files in the library.'
+      <InsetGroupSection header="Library">
+        <InsetGroupValueRow label="Total" value={formatModeValue(mode, totalCount, totalBytes)} />
+        <InsetGroupValueRow
+          label="Available"
+          value={availableBytes !== undefined ? (humanSize(availableBytes) ?? '—') : '—'}
+        />
+        <InsetGroupValueRow label="Storage limit" value={humanLimit(account.data?.maxPinnedData)} />
+        <InsetGroupLink
+          label="Imports"
+          description={
+            importingCount > 0
+              ? `${formatCount(importingCount)} still importing.`
+              : 'Photos and files you imported.'
           }
-        >
-          {categories.map(([label, cat]) => {
-            const value = categoryValue(mode, cat)
-            if (!value) return null
-            return <InsetGroupValueRow key={label} label={label} value={value} />
-          })}
-        </InsetGroupSection>
+          onPress={openImports}
+          value={importingCount > 0 ? formatCount(importingCount) : undefined}
+        />
+        <InsetGroupLink
+          label="Uploads"
+          description={
+            uploadingFileCount > 0
+              ? `${formatCount(uploadingFileCount)} uploading.`
+              : 'Files uploading to the network.'
+          }
+          onPress={openUploads}
+          value={uploadingFileCount > 0 ? formatCount(uploadingFileCount) : undefined}
+        />
+      </InsetGroupSection>
 
-        <InsetGroupSection header="Device">
-          <InsetGroupValueRow
-            label="On device"
-            description="Files cached locally for instant access."
-            value={formatModeValue(mode, onDevice.data?.count ?? 0, onDevice.data?.totalBytes)}
-          />
-          <InsetGroupValueRow
-            label="Pending backup"
-            description="On this device but not yet uploaded."
-            value={formatModeValue(
-              mode,
-              pendingBackup.data?.count ?? 0,
-              pendingBackup.data?.totalBytes,
-            )}
-          />
+      <InsetGroupSection
+        header="Upload progress"
+        footer={
+          mode === 'size' && importingCount > 0
+            ? `Sizes do not include the ${importingCount === 1 ? 'file' : `${importingCount.toLocaleString()} files`} still pending import.`
+            : 'Upload progress across all files in the library.'
+        }
+      >
+        {categories.map(([label, cat]) => {
+          const value = categoryValue(mode, cat)
+          if (!value) return null
+          return <InsetGroupValueRow key={label} label={label} value={value} />
+        })}
+      </InsetGroupSection>
+
+      <InsetGroupSection header="Device">
+        <InsetGroupValueRow
+          label="On device"
+          description="Files cached locally for instant access."
+          value={formatModeValue(mode, onDevice.data?.count ?? 0, onDevice.data?.totalBytes)}
+        />
+        <InsetGroupValueRow
+          label="Pending backup"
+          description="On this device but not yet uploaded."
+          value={formatModeValue(
+            mode,
+            pendingBackup.data?.count ?? 0,
+            pendingBackup.data?.totalBytes,
+          )}
+        />
+        {(lost.data?.count ?? 0) > 0 ? (
           <InsetGroupLink
             label="Unavailable"
-            description="Files that were unavailable during import."
-            onPress={() => openImportSettings('lost')}
+            description="Local files that went missing before they were uploaded."
+            onPress={openUnavailable}
             value={formatModeValue(mode, lost.data?.count ?? 0, lost.data?.totalBytes)}
           />
-        </InsetGroupSection>
-      </ScrollView>
-    </ModalSheet>
+        ) : null}
+      </InsetGroupSection>
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.bgCanvas,
+  },
   scrollContent: {
+    paddingTop: 16,
     paddingBottom: 48,
   },
   toolbar: {

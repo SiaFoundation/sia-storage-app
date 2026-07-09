@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
-import { type BackoffEntry, BackoffTracker } from '../lib/backoffTracker'
+import { BackoffTracker } from '../lib/backoffTracker'
 import { raceWithAbort } from '../lib/timeout'
 
 const MAX_PER_TICK = 20
@@ -76,21 +76,6 @@ export class ImportScanner {
 
   markCopyComplete(fileId: string): void {
     this.inFlightCopies.delete(fileId)
-  }
-
-  /** Returns all backoff entries for UI display. */
-  getBackoffEntries(): BackoffEntry[] {
-    return this.backoff.getEntries()
-  }
-
-  /** Removes a single ID from backoff so it's re-eligible on the next tick. */
-  clearBackoff(id: string): void {
-    this.backoff.clear(id)
-  }
-
-  /** Removes all IDs from backoff so all retrying files are re-eligible. */
-  clearAllBackoff(): void {
-    this.backoff.reset()
   }
 
   private getApp(): AppService {

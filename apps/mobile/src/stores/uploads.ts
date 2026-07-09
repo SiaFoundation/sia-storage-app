@@ -62,6 +62,8 @@ export function useUploadProgress(): {
   packerCount: number
   /** Active uploads that are real files (excludes thumbnails) — drives the count. */
   packerFileCount: number
+  /** Total bytes of those files, matching packerFileCount's set. */
+  packerFileBytes: number
   /** Total pending (importing + local-only) including thumbnails — drives show. */
   pendingCount: number
   /** Pending real files (excludes thumbnails) — drives the count. */
@@ -84,7 +86,9 @@ export function useUploadProgress(): {
   const importingCountQuery = useFileCountImporting(pausedWhenDisabled)
   const packerUploads = activeUploads.filter((u) => ACTIVE_STATUSES.includes(u.status))
   const packerCount = packerUploads.length
-  const packerFileCount = packerUploads.filter((u) => u.kind !== 'thumb').length
+  const packerFiles = packerUploads.filter((u) => u.kind !== 'thumb')
+  const packerFileCount = packerFiles.length
+  const packerFileBytes = packerFiles.reduce((s, u) => s + u.size, 0)
   const packerTotalBytes = packerUploads.reduce((s, u) => s + u.size, 0)
   const packerWeightedProgress = packerUploads.reduce((s, u) => s + u.progress * u.size, 0)
   const percentDecimal = packerTotalBytes > 0 ? packerWeightedProgress / packerTotalBytes : 0
@@ -100,6 +104,7 @@ export function useUploadProgress(): {
     show: isEnabled && (packerCount > 0 || pendingCount > 0),
     packerCount,
     packerFileCount,
+    packerFileBytes,
     pendingCount,
     pendingFileCount,
     percentDecimal,

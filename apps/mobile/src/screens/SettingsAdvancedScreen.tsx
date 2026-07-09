@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { navigateToImports } from '../lib/navigationRef'
 import { SettingsAdvancedDatabase } from '../components/SettingsAdvancedDatabase'
 import { SettingsAdvancedInfo } from '../components/SettingsAdvancedInfo'
 import { SettingsAdvancedLogs } from '../components/SettingsAdvancedLogs'
@@ -13,7 +14,7 @@ export function SettingsAdvancedScreen({ navigation }: Props) {
   return (
     <SettingsScrollLayout>
       <SettingsAdvancedLogs onViewLogs={() => navigation.navigate('Logs')} />
-      <SettingsAdvancedInfo onImport={() => navigation.navigate('Import')} />
+      <SettingsAdvancedInfo onImport={navigateToImports} />
       <SettingsAdvancedTransfers />
       <SettingsAdvancedSync />
       <SettingsAdvancedDatabase />

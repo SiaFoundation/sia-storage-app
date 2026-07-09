@@ -26,6 +26,7 @@ import { ActionSheetButton } from '../components/ActionSheetButton'
 import { AddFileActionSheet } from '../components/AddFileActionSheet'
 import { BottomControlBar, FloatingPill } from '../components/BottomControlBar'
 import { CreateDirectorySheet } from '../components/CreateDirectorySheet'
+import { FolderImportBanner } from '../components/FolderImportBanner'
 import { DirectoryListItem } from '../components/DirectoryListItem'
 import { DragToDismiss } from '../components/DragToDismiss'
 import { useBackClose } from '../hooks/useBackClose'
@@ -216,15 +217,23 @@ export function DirectoryScreen({ route, navigation }: Props) {
   const hasSubdirs = !isUnfiled && (subdirectories.data?.length ?? 0) > 0
 
   const directoryListHeader = useMemo(() => {
-    if (isUnfiled || !subdirectories.data?.length) return null
+    const subs =
+      isUnfiled || !subdirectories.data?.length
+        ? null
+        : subdirectories.data.map((sub) => (
+            <DirectoryListItem
+              key={sub.id}
+              dir={sub}
+              onPress={() => handleSelectSubdirectory(sub)}
+            />
+          ))
     return (
       <View>
-        {subdirectories.data.map((sub) => (
-          <DirectoryListItem key={sub.id} dir={sub} onPress={() => handleSelectSubdirectory(sub)} />
-        ))}
+        <FolderImportBanner directoryId={directoryId} />
+        {subs}
       </View>
     )
-  }, [subdirectories.data, isUnfiled, handleSelectSubdirectory])
+  }, [subdirectories.data, isUnfiled, handleSelectSubdirectory, directoryId])
 
   const handleDeleteDirectory = useCallback(() => {
     closeSheet()
