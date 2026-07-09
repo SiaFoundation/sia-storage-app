@@ -1,4 +1,3 @@
-import type { FileRecord } from '@siastorage/core/types'
 import { CameraIcon, FileIcon, ImageIcon } from 'lucide-react-native'
 import { useCallback } from 'react'
 import { useCameraCapture } from '../hooks/useCameraCapture'
@@ -14,14 +13,12 @@ type Props = {
   destinationDirectoryId?: string | null
   /** Tag to attach to every newly imported file. Used when opened from a tag's view. */
   assignTagName?: string
-  onFilesAdded?: (files: FileRecord[]) => void
 }
 
 export function AddFileActionSheet({
   sheetName = 'addFile',
   destinationDirectoryId = null,
   assignTagName,
-  onFilesAdded,
 }: Props) {
   const isOpen = useSheetOpen(sheetName)
   const pickerOptions = { destinationDirectoryId, assignTagName }
@@ -29,20 +26,18 @@ export function AddFileActionSheet({
   const capture = useCameraCapture(pickerOptions)
   const pickDocuments = useDocumentPicker(pickerOptions)
 
-  const pickAndClose = useCallback(
-    async (picker: () => Promise<FileRecord[]>) => {
-      await closeSheet()
-      const files = await picker()
-      if (files.length > 0) {
-        onFilesAdded?.(files)
-      }
-    },
-    [onFilesAdded],
-  )
+  const pickAndClose = useCallback(async (picker: () => Promise<void>) => {
+    await closeSheet()
+    await picker()
+  }, [])
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={closeSheet}>
-      <ActionSheetButton icon={<CameraIcon size={18} />} onPress={() => void pickAndClose(capture)}>
+      <ActionSheetButton
+        testID="action-take-photo"
+        icon={<CameraIcon size={18} />}
+        onPress={() => void pickAndClose(capture)}
+      >
         Take Photo or Video
       </ActionSheetButton>
       <ActionSheetButton
@@ -53,6 +48,7 @@ export function AddFileActionSheet({
         Choose from Photos
       </ActionSheetButton>
       <ActionSheetButton
+        testID="action-import-from-files"
         icon={<FileIcon size={18} />}
         onPress={() => void pickAndClose(pickDocuments)}
       >

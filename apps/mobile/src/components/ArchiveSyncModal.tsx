@@ -1,15 +1,17 @@
 import * as MediaLibrary from 'expo-media-library'
-import { CheckCircle2Icon, ImageIcon } from 'lucide-react-native'
+import { CloudUploadIcon, ImageIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useReducer } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
+  getArchiveImportId,
   startArchiveSync,
   stopArchiveSync,
-  usePhotosAddedCount,
   usePhotosArchiveCursor,
   usePhotosArchiveDisplayDate,
   usePhotosExistingCount,
+  usePhotosScannedCount,
 } from '../managers/syncPhotosArchive'
+import { navigateToImportDetail } from '../lib/navigationRef'
 import { colors, palette } from '../styles/colors'
 import { Button } from './Button'
 import { ModalSheet } from './ModalSheet'
@@ -82,13 +84,14 @@ type Props = {
 export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
   const photosArchiveCursor = usePhotosArchiveCursor()
   const photosArchiveDisplayDate = usePhotosArchiveDisplayDate()
-  const photosAddedCount = usePhotosAddedCount()
+  const photosScannedCount = usePhotosScannedCount()
   const photosExistingCount = usePhotosExistingCount()
   const cursorValue = photosArchiveCursor.data ?? 'done'
   const displayDate = photosArchiveDisplayDate.data ?? 0
-  const addedCount = photosAddedCount.data ?? 0
+  const scannedCount = photosScannedCount.data ?? 0
   const existingCount = photosExistingCount.data ?? 0
-  const newCount = addedCount - existingCount
+  // Survivors actually staged into the import = walked minus identity-dedup skips.
+  const newCount = scannedCount - existingCount
 
   const [{ phase, stats }, dispatch] = useReducer(reducer, {
     phase: 'loading',
@@ -115,9 +118,15 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
     void startArchiveSync()
   }, [])
 
+  const handleViewImport = useCallback(() => {
+    const importId = getArchiveImportId()
+    onRequestClose()
+    if (importId) navigateToImportDetail(importId)
+  }, [onRequestClose])
+
   const progress =
     phase === 'running' && stats && stats.totalCount > 0
-      ? Math.min(addedCount / stats.totalCount, 1)
+      ? Math.min(scannedCount / stats.totalCount, 1)
       : 0
 
   const canClose = phase !== 'running'
@@ -133,20 +142,27 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
           ? `Scanning: ${formatDisplayDate(displayDate)}`
           : 'Starting import...'
         : phase === 'complete'
-          ? 'Import complete'
+          ? 'Import started'
           : ''
 
+  // During the scan the lines show walk progress; on completion they report what
+  // the import actually took on: photos staged, and how many were skipped because
+  // they were already imported.
   const line1Text =
     phase === 'preview' && stats
       ? `${formatDisplayDate(stats.oldestDate)} — ${formatDisplayDate(stats.newestDate)}`
-      : (phase === 'running' || phase === 'complete') && addedCount > 0
-        ? `${addedCount.toLocaleString()}${stats ? ` / ${stats.totalCount.toLocaleString()}` : ''} photos scanned`
-        : ''
+      : phase === 'running' && scannedCount > 0
+        ? `${scannedCount.toLocaleString()}${stats ? ` of ${stats.totalCount.toLocaleString()}` : ''} scanned`
+        : phase === 'complete'
+          ? `${newCount.toLocaleString()} ${newCount === 1 ? 'photo' : 'photos'} added`
+          : ''
 
   const line2Text =
-    (phase === 'running' || phase === 'complete') && addedCount > 0
-      ? `${newCount.toLocaleString()} new${existingCount > 0 ? ` · ${existingCount.toLocaleString()} already imported` : ''}`
-      : ''
+    phase === 'running' && scannedCount > 0
+      ? `${newCount.toLocaleString()} added${existingCount > 0 ? ` · ${existingCount.toLocaleString()} already imported` : ''}`
+      : phase === 'complete' && existingCount > 0
+        ? `${existingCount.toLocaleString()} already imported`
+        : ''
 
   return (
     <ModalSheet
@@ -174,7 +190,7 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
             {phase === 'running' ? (
               <SpinnerIcon color={palette.blue[400]} size={48} />
             ) : phase === 'complete' ? (
-              <CheckCircle2Icon color={palette.green[500]} size={48} strokeWidth={1.5} />
+              <CloudUploadIcon color={palette.blue[400]} size={48} strokeWidth={1.5} />
             ) : (
               <ImageIcon color={palette.gray[400]} size={48} strokeWidth={1.5} />
             )}
@@ -207,29 +223,34 @@ export function ArchiveSyncModal({ visible, onRequestClose }: Props) {
                 (phase === 'running' || phase === 'loading') && styles.invisible,
               ]}
             >
-              Your system photo library will be imported into Sia Storage. The import process
-              immediately adds files to your library's processing queue. Photos in the processing
-              queue are then gradually copied and uploaded in the background. Sia Storage will lose
-              access to files that are deleted from your system library during this window.
+              {phase === 'complete'
+                ? 'Your photo library was added to an import. The system will gradually import and upload these files.'
+                : 'Your whole photo library is added to an import, then copied and uploaded in the background over time.'}
             </Text>
           </View>
         </View>
         <View style={styles.actionRow}>
-          <View style={phase !== 'preview' && phase !== 'running' ? styles.invisible : undefined}>
-            <Button
-              variant={phase === 'running' ? 'secondary' : 'primary'}
-              onPress={
-                phase === 'running'
-                  ? () => {
-                      void stopArchiveSync()
-                    }
-                  : handleStart
-              }
-              disabled={phase === 'preview' && (!stats || stats.totalCount === 0)}
-            >
-              {phase === 'running' ? 'Stop import' : 'Start import'}
+          {phase === 'complete' ? (
+            <Button variant="primary" onPress={handleViewImport}>
+              View import
             </Button>
-          </View>
+          ) : (
+            <View style={phase !== 'preview' && phase !== 'running' ? styles.invisible : undefined}>
+              <Button
+                variant={phase === 'running' ? 'secondary' : 'primary'}
+                onPress={
+                  phase === 'running'
+                    ? () => {
+                        void stopArchiveSync()
+                      }
+                    : handleStart
+                }
+                disabled={phase === 'preview' && (!stats || stats.totalCount === 0)}
+              >
+                {phase === 'running' ? 'Stop import' : 'Start import'}
+              </Button>
+            </View>
+          )}
         </View>
       </View>
     </ModalSheet>

@@ -1,3 +1,7 @@
+// Upload-progress stats for the status surfaces: per media category, how many
+// active files exist and how many still lack an object on the given indexer,
+// with byte totals and a percent derived from bytes.
+
 import type { DatabaseAdapter } from '../../adapters/db'
 import { buildRecordFilter } from './library'
 
@@ -20,7 +24,6 @@ export type UploadStats = {
   docs: UploadCategoryStats
   other: UploadCategoryStats
   thumbnails: UploadCategoryStats
-  importingCount: number
 }
 
 async function queryStatsForWhere(
@@ -87,12 +90,10 @@ export async function queryUploadStats(
   db: DatabaseAdapter,
   indexerURL: string,
 ): Promise<UploadStats> {
-  // Include all active files. Importing files (hash = '') have size = 0,
-  // so byte totals remain accurate while counts reflect the full library.
   const activeFile = buildRecordFilter('f')
   const q = (where: string) => queryStatsForWhere(db, where, indexerURL)
 
-  const [photos, videos, audio, docs, other, thumbnails, importingRow] = await Promise.all([
+  const [photos, videos, audio, docs, other, thumbnails] = await Promise.all([
     q(`${activeFile} AND f.type LIKE 'image/%'`),
     q(`${activeFile} AND f.type LIKE 'video/%'`),
     q(`${activeFile} AND f.type LIKE 'audio/%'`),
@@ -101,9 +102,6 @@ export async function queryUploadStats(
       `${activeFile} AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'`,
     ),
     q(`f.kind = 'thumb' AND ${buildRecordFilter('f', { includeThumbnails: true })}`),
-    db.getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM files f WHERE ${activeFile} AND f.hash = ''`,
-    ),
   ])
 
   const fileCategories = [photos, videos, audio, docs, other]
@@ -117,6 +115,5 @@ export async function queryUploadStats(
     docs,
     other,
     thumbnails,
-    importingCount: importingRow?.count ?? 0,
   }
 }

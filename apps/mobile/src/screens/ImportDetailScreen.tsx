@@ -25,6 +25,7 @@ import {
 } from '../lib/importLabels'
 import { navigateToDirectory } from '../lib/navigationRef'
 import { relativeTimeLabel } from '../lib/relativeTime'
+import { deleteImportWithCleanup } from '../lib/importDelete'
 import { triggerImportScanner } from '../managers/importScanner'
 import { useAllDirectories } from '@siastorage/core/stores'
 import { app } from '../stores/appService'
@@ -157,7 +158,7 @@ function ImportDetailContent({
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await app().imports.delete(importId)
+            await deleteImportWithCleanup(importId)
             navigation.goBack()
           },
         },

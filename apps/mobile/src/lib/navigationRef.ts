@@ -54,3 +54,16 @@ export function navigateToDirectory(dir: { id: string; name: string; path: strin
     },
   })
 }
+
+/**
+ * Opens the status sheet straight on one import's detail. `initial: false`
+ * mounts Status beneath, so back walks up through Imports to it.
+ */
+export function navigateToImportDetail(importId: string): void {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate('StatusSheet', {
+    screen: 'ImportDetail',
+    params: { importId },
+    initial: false,
+  })
+}
