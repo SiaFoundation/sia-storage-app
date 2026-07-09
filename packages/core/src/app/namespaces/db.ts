@@ -60,6 +60,26 @@ export function buildDbNamespaces(
   | 'optimize'
   | 'db'
 > {
+  // Runs after any copy's bytes land: gate so the read+upsert can't leave the
+  // file invisible to cache eviction, then correct files.size to the real
+  // on-disk length (Android often reports the wrong size at import).
+  // updatedAt is preserved so the size fix can't trip sync-up.
+  async function recordCopiedMeta(
+    file: { id: string; type: string },
+    size: number,
+    usedAt?: number,
+  ) {
+    await db.waitUntilActive?.()
+    const previous = await ops.readFsMeta(db, file.id)
+    await ops.upsertFsMeta(db, {
+      fileId: file.id,
+      size,
+      addedAt: previous?.addedAt ?? Date.now(),
+      usedAt: usedAt ?? Date.now(),
+    })
+    await ops.updateFile(db, { id: file.id, size }, { includeUpdatedAt: true })
+  }
+
   async function removeFile(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
     // Disk delete is done; gate so the fsMeta delete doesn't fast-reject
@@ -86,26 +106,28 @@ export function buildDbNamespaces(
       ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, limit),
     trashedCachedFiles: (limit) => ops.queryTrashedCachedFiles(db, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
+    inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     uri: (file) => fsIO.uri(file.id, file.type),
     removeFile,
+    removeFileByPath: async (path) => {
+      if (!fsIO.removeByPath) return
+      await fsIO.removeByPath(path)
+    },
     copyFile: async (file, sourceUri, opts) => {
       const result = await fsIO.copy(file, sourceUri)
-      // Disk copy is done; gate so the read+upsert below can't leave
-      // the file invisible to cache eviction.
-      await db.waitUntilActive?.()
-      const previous = await ops.readFsMeta(db, file.id)
-      await ops.upsertFsMeta(db, {
-        fileId: file.id,
-        size: result.size,
-        addedAt: previous?.addedAt ?? Date.now(),
-        usedAt: opts?.usedAt ?? Date.now(),
+      await recordCopiedMeta(file, result.size, opts?.usedAt)
+      return result
+    },
+    importCopy: async (file, sourceUri, opts) => {
+      const result = await fsIO.importCopy(file, sourceUri, {
+        claimToken: opts.claimToken,
+        signal: opts.signal,
+        onProgress: opts.onProgress,
+        move: opts.move,
       })
-      // Android often reports the wrong size at import; correct it to the real
-      // on-disk length after the copy. updatedAt is preserved so this size fix
-      // can't trip sync-up.
-      await ops.updateFile(db, { id: file.id, size: result.size }, { includeUpdatedAt: true })
-      return result.uri
+      await recordCopiedMeta(file, result.size, opts.usedAt)
+      return result
     },
     writeFileData: async (file, data) => {
       if (!fsIO.writeFile) throw new Error('writeFile not implemented')
@@ -139,6 +161,15 @@ export function buildDbNamespaces(
     renameToType: (file, newType) => fsIO.renameToType(file, newType),
     listFiles: () => fsIO.list(),
     ensureStorageDirectory: () => fsIO.ensureDirectory(),
+    getDeviceSpace: async () => {
+      // Without a platform capability, report ample space so the
+      // storage-headroom branch never defers; the upload-backlog branch still
+      // applies (integration/core run without a real device).
+      if (!fsIO.getDeviceSpace) {
+        return { freeBytes: Number.MAX_SAFE_INTEGER, totalBytes: Number.MAX_SAFE_INTEGER }
+      }
+      return fsIO.getDeviceSpace()
+    },
     detectMimeType: async (path) => {
       if (!adapters?.detectMimeType) return null
       return adapters.detectMimeType(path)

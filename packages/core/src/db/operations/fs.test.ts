@@ -3,6 +3,8 @@ import {
   queryEvictionCandidates,
   queryFsMetaTotalSize,
   queryNonCurrentCachedFiles,
+  queryInFlightImportFileIds,
+  queryOrphanedFileIds,
   queryTrashedCachedFiles,
   deleteFsMeta,
   deleteManyFsMeta,
@@ -10,6 +12,12 @@ import {
   updateFsMetaUsedAt,
   upsertFsMeta,
 } from './fs'
+import {
+  type ImportFileRow,
+  type ImportFileState,
+  insertImport,
+  insertManyImportFiles,
+} from './imports'
 import { insertObject } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
@@ -410,5 +418,135 @@ describe('queryTrashedCachedFiles', () => {
 
     const rows = await queryTrashedCachedFiles(db(), 10)
     expect(rows.map((r) => r.fileId).sort()).toEqual(['orig', 'thumb'])
+  })
+})
+
+async function addImportFile(id: string, state: ImportFileState) {
+  await insertImport(db(), {
+    id: `imp-${id}`,
+    source: 'library-scan',
+    directoryId: null,
+    pendingTags: null,
+    expectedCount: 0,
+    dedupByHash: 1,
+    dirSourceRef: null,
+    sealed: 0,
+    startedAt: 1,
+    updatedAt: 1,
+  })
+  const row: ImportFileRow = {
+    id,
+    importId: `imp-${id}`,
+    state,
+    reason: null,
+    name: `${id}.jpg`,
+    type: 'image/jpeg',
+    size: 10,
+    hash: null,
+    createdAt: 1,
+    updatedAt: 1,
+    addedAt: 1,
+    directoryId: null,
+    mediaAssetId: null,
+    sourceKind: 'media',
+    sourceUri: null,
+    sourceRef: null,
+    copyBytes: 0,
+    attempts: 0,
+    nextAttemptAt: 0,
+    claimedAt: null,
+    claimToken: null,
+  }
+  await insertManyImportFiles(db(), [row])
+}
+
+describe('queryOrphanedFileIds', () => {
+  it('flags an id with no fs row and no files row as orphaned (true orphan)', async () => {
+    const orphaned = await queryOrphanedFileIds(db(), ['ghost'])
+    expect([...orphaned]).toEqual(['ghost'])
+  })
+
+  it('flags a finalized id with a files row but missing fs bytes as orphaned', async () => {
+    await insertFile(db(), makeFile('f1'))
+    // No fs row, so the on-disk bytes are unregistered and reclaimable.
+    const orphaned = await queryOrphanedFileIds(db(), ['f1'])
+    expect([...orphaned]).toEqual(['f1'])
+  })
+
+  it('does NOT flag a live finalized id with both fs + files rows', async () => {
+    await insertFile(db(), makeFile('f1'))
+    await upsertFsMeta(db(), { fileId: 'f1', size: 100, addedAt: 1, usedAt: 1 })
+    const orphaned = await queryOrphanedFileIds(db(), ['f1'])
+    expect(orphaned.size).toBe(0)
+  })
+
+  it('flags a soft-deleted (tombstoned) files id as orphaned', async () => {
+    await insertFile(db(), makeFile('f1', { deletedAt: 5000 }))
+    await upsertFsMeta(db(), { fileId: 'f1', size: 100, addedAt: 1, usedAt: 1 })
+    const orphaned = await queryOrphanedFileIds(db(), ['f1'])
+    expect([...orphaned]).toEqual(['f1'])
+  })
+
+  it('does NOT flag an id backed by a non-terminal (pending) import_files row', async () => {
+    // In-flight import bytes sit at the id slot with no files row; they must
+    // be exempt.
+    await upsertFsMeta(db(), { fileId: 'inflight', size: 10, addedAt: 1, usedAt: 0 })
+    await addImportFile('inflight', 'pending')
+    const orphaned = await queryOrphanedFileIds(db(), ['inflight'])
+    expect(orphaned.size).toBe(0)
+  })
+
+  it('does NOT flag an id backed by an active import_files row, even with no fs row yet', async () => {
+    // The brief no-fs-row window between rename and fs-meta upsert: still exempt.
+    await addImportFile('active', 'active')
+    const orphaned = await queryOrphanedFileIds(db(), ['active'])
+    expect(orphaned.size).toBe(0)
+  })
+
+  it('flags a terminal-but-not-added import id with no files row as orphaned', async () => {
+    await upsertFsMeta(db(), { fileId: 'dup', size: 10, addedAt: 1, usedAt: 0 })
+    await addImportFile('dup', 'duplicate')
+    const orphaned = await queryOrphanedFileIds(db(), ['dup'])
+    expect([...orphaned]).toEqual(['dup'])
+  })
+
+  it('returns an empty set for an empty input', async () => {
+    const orphaned = await queryOrphanedFileIds(db(), [])
+    expect(orphaned.size).toBe(0)
+  })
+})
+
+describe('queryInFlightImportFileIds', () => {
+  // The orphan sweep exempts claim temps on this lookup alone, so a state it
+  // wrongly reports as finished means deleting bytes a copy is still writing.
+  it('returns pending and active ids and omits every terminal state', async () => {
+    await addImportFile('pend', 'pending')
+    await addImportFile('act', 'active')
+    await addImportFile('done', 'added')
+    await addImportFile('dup', 'duplicate')
+    await addImportFile('bad', 'failed')
+    await addImportFile('lost', 'unavailable')
+    await addImportFile('gone', 'cancelled')
+
+    const inFlight = await queryInFlightImportFileIds(db(), [
+      'pend',
+      'act',
+      'done',
+      'dup',
+      'bad',
+      'lost',
+      'gone',
+    ])
+    expect([...inFlight].sort()).toEqual(['act', 'pend'])
+  })
+
+  it('omits ids with no import_files row at all', async () => {
+    const inFlight = await queryInFlightImportFileIds(db(), ['ghost'])
+    expect(inFlight.size).toBe(0)
+  })
+
+  it('returns an empty set for an empty input', async () => {
+    const inFlight = await queryInFlightImportFileIds(db(), [])
+    expect(inFlight.size).toBe(0)
   })
 })

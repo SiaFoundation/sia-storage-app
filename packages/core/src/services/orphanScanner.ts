@@ -10,6 +10,20 @@ export type OrphanScannerResult = {
 }
 
 function extractFileIdFromName(name: string): string | null {
+  // Adapters may return absolute paths (the mobile adapter does); the id is
+  // always the basename minus its extension.
+  const slash = name.lastIndexOf('/')
+  if (slash !== -1) name = name.slice(slash + 1)
+  // Claim-scoped import temp: `<id>.<token>.tmp`. The base id (not `<id>.<token>`)
+  // is what backs the import_files / files exemption, so strip both the `.tmp`
+  // and the `.<token>`; otherwise a live in-flight temp keys off a non-existent
+  // id, the in-flight exemption misses it, and a copy in progress gets deleted.
+  if (name.endsWith('.tmp')) {
+    const base = name.slice(0, -'.tmp'.length)
+    const dotIndex = base.lastIndexOf('.')
+    if (dotIndex === -1) return base || null
+    return base.slice(0, dotIndex) || null
+  }
   const dotIndex = name.lastIndexOf('.')
   if (dotIndex === -1) return name || null
   return name.slice(0, dotIndex) || null
@@ -44,13 +58,27 @@ export async function runOrphanScanner(
       .filter((e): e is { name: string; fileId: string } => e.fileId !== null)
 
     const orphanedIds = await app.fs.findOrphanedFileIds(entries.map((e) => e.fileId))
+    // A claim temp is judged by in-flight import rows alone: its base id may
+    // belong to a finalized file (a copy that lost its claim before a retry
+    // succeeded), and the files row would otherwise protect the leftover temp
+    // forever.
+    const tmpIds = entries.filter((e) => e.name.endsWith('.tmp')).map((e) => e.fileId)
+    const inFlightIds = await app.fs.inFlightImportFileIds(tmpIds)
 
     for (const entry of entries) {
       if (signal?.aborted) break
-      if (!orphanedIds.has(entry.fileId)) continue
+      const isTemp = entry.name.endsWith('.tmp')
+      const orphaned = isTemp ? !inFlightIds.has(entry.fileId) : orphanedIds.has(entry.fileId)
+      if (!orphaned) continue
       try {
-        const type = getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
-        await app.fs.removeFile({ id: entry.fileId, type })
+        if (isTemp) {
+          // Past the mtime gate (`list()` withholds recent temps). Delete by
+          // literal path: `<id>.<token>.tmp` can't be rebuilt from id + type.
+          await app.fs.removeFileByPath(entry.name)
+        } else {
+          const type = getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
+          await app.fs.removeFile({ id: entry.fileId, type })
+        }
         removed++
       } catch (error) {
         logger.error('orphanScanner', 'delete_failed', {

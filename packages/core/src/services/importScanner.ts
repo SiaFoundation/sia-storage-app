@@ -275,7 +275,7 @@ export class ImportScanner {
                   signal,
                 )
                 if (!copyRaced.ok) break
-                const uri = copyRaced.value
+                const { uri } = copyRaced.value
                 const hashRaced = await raceWithAbort(this.hashExistingFile(file, uri), signal)
                 if (!hashRaced.ok) break
                 const outcome = hashRaced.value
