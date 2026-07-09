@@ -51,7 +51,6 @@ export async function statusCommand(dataDir: string, _opts?: { size?: boolean })
       const stats = await app.stats.uploadStats(indexerURL)
       const o = stats.overall
 
-      // Get live upload state from the daemon for real-time progress
       let uploadState: any = null
       const batchFileIds = new Set<string>()
       try {
@@ -119,7 +118,6 @@ export async function statusCommand(dataDir: string, _opts?: { size?: boolean })
           limit: 10 + batchFileIds.size,
           order: 'ASC',
           pinned: { indexerURL, isPinned: false },
-          hashNotEmpty: true,
         })
         const filtered = pendingFiles.filter((f: any) => !batchFileIds.has(f.id)).slice(0, 10)
         if (filtered.length > 0) {

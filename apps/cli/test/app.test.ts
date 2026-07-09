@@ -30,7 +30,6 @@ describe('createCliAppService', () => {
     const result = await app.db.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode')
     expect(result?.journal_mode).toBe('wal')
 
-    // Migrations should have created tables
     const tables = await app.db.getAllAsync<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     )
@@ -57,7 +56,7 @@ describe('createCliAppService', () => {
       hash: 'abc123',
       createdAt: now,
       updatedAt: now,
-      localId: null,
+      mediaAssetId: null,
       addedAt: now,
       trashedAt: null,
       deletedAt: null,

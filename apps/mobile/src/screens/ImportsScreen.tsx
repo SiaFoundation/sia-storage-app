@@ -17,6 +17,7 @@ import {
 } from '../lib/importLabels'
 import { relativeTimeLabel } from '../lib/relativeTime'
 import type { ImportsStackParamList } from '../stacks/types'
+import { useImportPacing } from '../stores/importPacing'
 import { useImportDestinationName, useImports, useImportSummary } from '../stores/imports'
 import { colors, palette } from '../styles/colors'
 
@@ -75,6 +76,7 @@ function ImportListRow({
   onPress: () => void
 }) {
   const destinationName = useImportDestinationName(imp.directoryId)
+  const pacing = useImportPacing()
   const importing = (summary?.status ?? 'queued') !== 'done'
   const ratio = useMonotonicRatio(importing, summary ? progressRatio(imp, summary) : 0)
 
@@ -91,7 +93,7 @@ function ImportListRow({
         </Text>
         {importing ? (
           <ImportActivityBadge
-            activity={summary ? deriveImportActivity(imp, summary, null) : null}
+            activity={summary ? deriveImportActivity(imp, summary, pacing) : null}
             variant="list"
           />
         ) : (

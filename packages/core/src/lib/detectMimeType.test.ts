@@ -1,4 +1,4 @@
-import { detectMimeType } from './detectMimeType'
+import { classifyImportType, detectMimeType } from './detectMimeType'
 
 describe('detectMimeType', () => {
   it('returns providedType when recognized', () => {
@@ -249,5 +249,97 @@ describe('detectMimeType', () => {
       ])
       expect(detectMimeType({ providedType: 'foo/bar', bytes: aviBytes })).toBe('video/x-msvideo')
     })
+  })
+})
+
+describe('container refinement', () => {
+  const ZIP = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0])
+  const MKV = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])
+  const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+  it('zip bytes with a docx name classify as docx', () => {
+    expect(detectMimeType({ bytes: ZIP, fileName: 'report.docx' })).toBe(DOCX)
+  })
+
+  it('zip bytes with a non-container name stay zip', () => {
+    expect(detectMimeType({ bytes: ZIP, fileName: 'notes.txt' })).toBe('application/zip')
+  })
+
+  it('zip bytes with no metadata stay zip', () => {
+    expect(detectMimeType({ bytes: ZIP })).toBe('application/zip')
+  })
+
+  it('matroska bytes with a webm name classify as webm', () => {
+    expect(detectMimeType({ bytes: MKV, fileName: 'clip.webm' })).toBe('video/webm')
+  })
+
+  it('specific non-container bytes beat a conflicting name', () => {
+    const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+    expect(detectMimeType({ bytes: JPEG, fileName: 'shot.png' })).toBe('image/jpeg')
+  })
+})
+
+describe('absorbed ftyp brands', () => {
+  const ftyp = (brand: string) =>
+    new Uint8Array([
+      0x00,
+      0x00,
+      0x00,
+      0x20,
+      0x66,
+      0x74,
+      0x79,
+      0x70,
+      brand.charCodeAt(0),
+      brand.charCodeAt(1),
+      brand.charCodeAt(2),
+      brand.charCodeAt(3),
+    ])
+
+  it('msf1 is heif, avc1 and mmp4 are mp4, qt-prefixed brands are quicktime', () => {
+    expect(detectMimeType({ bytes: ftyp('msf1') })).toBe('image/heif')
+    expect(detectMimeType({ bytes: ftyp('avc1') })).toBe('video/mp4')
+    expect(detectMimeType({ bytes: ftyp('mmp4') })).toBe('video/mp4')
+    expect(detectMimeType({ bytes: ftyp('qt  ') })).toBe('video/quicktime')
+  })
+})
+
+describe('classifyImportType', () => {
+  it('a media row with a recognized mediaMime takes it outright', () => {
+    expect(
+      classifyImportType({
+        stagedType: 'image/heic',
+        sourceKind: 'media',
+        mediaMime: 'image/jpeg',
+        headerBytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      }),
+    ).toBe('image/jpeg')
+  })
+
+  it('a media row without mediaMime falls to the general chain', () => {
+    expect(
+      classifyImportType({
+        stagedType: 'image/heic',
+        sourceKind: 'media',
+        headerBytes: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+      }),
+    ).toBe('image/jpeg')
+  })
+
+  it('header bytes upgrade a generic staged type', () => {
+    expect(
+      classifyImportType({
+        stagedType: 'application/octet-stream',
+        name: 'noext',
+        headerBytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      }),
+    ).toBe('application/pdf')
+  })
+
+  it('empty or absent header bytes fall through to name then staged type', () => {
+    expect(
+      classifyImportType({ stagedType: 'text/plain', name: 'a.md', headerBytes: new Uint8Array() }),
+    ).toBe('text/markdown')
+    expect(classifyImportType({ stagedType: 'text/plain', name: 'noext' })).toBe('text/plain')
   })
 })

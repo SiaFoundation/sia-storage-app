@@ -48,7 +48,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
     })
 
     const result = await noSourceApp.thumbnailScanner.runScan()
@@ -67,7 +67,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
     })
     for (const size of ThumbSizes) {
       await app.createFileRecord({
@@ -79,7 +79,7 @@ describe('ThumbnailScanner', () => {
         hash: `thumb-hash-${size}`,
         createdAt: now,
         updatedAt: now,
-        localId: null,
+        mediaAssetId: null,
         thumbForId: 'file1',
         thumbSize: size,
       })
@@ -101,7 +101,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
     })
     for (const size of ThumbSizes) {
       if (size === 64) continue
@@ -114,7 +114,7 @@ describe('ThumbnailScanner', () => {
         hash: `thumb-hash-${size}`,
         createdAt: now,
         updatedAt: now,
-        localId: null,
+        mediaAssetId: null,
         thumbForId: 'file1',
         thumbSize: size,
       })
@@ -158,7 +158,7 @@ describe('ThumbnailScanner', () => {
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
-        localId: `local-nosource-${i}`,
+        mediaAssetId: `local-nosource-${i}`,
       })
     }
 
@@ -174,7 +174,7 @@ describe('ThumbnailScanner', () => {
         createdAt: now - 100 - i,
         updatedAt: now - 100 - i,
         addedAt: now - 100 - i,
-        localId: `local-covered-${i}`,
+        mediaAssetId: `local-covered-${i}`,
       })
       for (const size of ThumbSizes) {
         await customApp.createFileRecord({
@@ -187,7 +187,7 @@ describe('ThumbnailScanner', () => {
           createdAt: now - 100 - i,
           updatedAt: now - 100 - i,
           addedAt: now - 100 - i,
-          localId: null,
+          mediaAssetId: null,
           thumbForId: `covered-${i}`,
           thumbSize: size,
         })
@@ -204,7 +204,7 @@ describe('ThumbnailScanner', () => {
       createdAt: now - 500,
       updatedAt: now - 500,
       addedAt: now - 500,
-      localId: 'local-eligible-1',
+      mediaAssetId: 'local-eligible-1',
     })
 
     const result = await customApp.thumbnailScanner.runScan()
@@ -231,7 +231,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: null,
+      mediaAssetId: null,
     })
     await app.createFileRecord({
       id: 'thumb-64',
@@ -242,7 +242,7 @@ describe('ThumbnailScanner', () => {
       hash: 'thumb-hash-64',
       createdAt: now,
       updatedAt: now,
-      localId: null,
+      mediaAssetId: null,
       thumbForId: 'file1',
       thumbSize: 64,
     })
@@ -280,7 +280,7 @@ describe('ThumbnailScanner', () => {
       hash: 'video-hash-1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-video1',
+      mediaAssetId: 'local-video1',
     })
 
     const result = await videoApp.thumbnailScanner.runScan()
@@ -308,7 +308,7 @@ describe('ThumbnailScanner', () => {
         hash: `hash${i}`,
         createdAt: now,
         updatedAt: now,
-        localId: `local-${i}`,
+        mediaAssetId: `local-${i}`,
       })
     }
     const result = await app.thumbnailScanner.runScan()
@@ -326,7 +326,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
     })
 
     const ac = new AbortController()
@@ -372,7 +372,7 @@ describe('ThumbnailScanner', () => {
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
-        localId: `local-${i}`,
+        mediaAssetId: `local-${i}`,
       })
     }
 
@@ -411,7 +411,7 @@ describe('ThumbnailScanner', () => {
       hash: 'hash1',
       createdAt: now,
       updatedAt: now,
-      localId: 'local-file1',
+      mediaAssetId: 'local-file1',
     })
 
     const result = await errorApp.thumbnailScanner.runScan()

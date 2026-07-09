@@ -7,15 +7,17 @@ import { SpinnerIcon } from './SpinnerIcon'
 type Props = {
   row: Pick<ImportFileRow, 'state' | 'attempts' | 'nextAttemptAt' | 'reason'>
   now: number
+  paused?: boolean
 }
 
 /**
  * A small pill for a single import_files row's state. Actively-working states
  * spin; a pending row in backoff shows "Retrying (n/N)" without a spinner
- * because it is sleeping, not working.
+ * because it is sleeping, not working. `paused` marks the whole import as
+ * waiting, so plain pending rows read "Waiting" instead of spinning.
  */
-export function ImportFileStateBadge({ row, now }: Props) {
-  const style = fileRowStyle(row, now)
+export function ImportFileStateBadge({ row, now, paused = false }: Props) {
+  const style = fileRowStyle(row, now, paused)
   return (
     <View style={styles.pill}>
       {style.spinner ? <SpinnerIcon color={style.color} size={12} /> : null}

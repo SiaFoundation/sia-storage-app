@@ -107,7 +107,9 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
       {showAdvanced.data ? (
         <InsetGroupSection header="Identity">
           <InsetGroupCopyRow label="ID" value={file.id} />
-          {file.localId ? <InsetGroupCopyRow label="Local ID" value={file.localId} /> : null}
+          {file.mediaAssetId ? (
+            <InsetGroupCopyRow label="Media Asset ID" value={file.mediaAssetId} />
+          ) : null}
           {file.hash ? <InsetGroupCopyRow label="Content hash" value={file.hash} /> : null}
           {status.fileUri ? <InsetGroupCopyRow label="File URI" value={status.fileUri} /> : null}
         </InsetGroupSection>

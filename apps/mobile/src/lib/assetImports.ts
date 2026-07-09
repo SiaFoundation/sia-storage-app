@@ -5,6 +5,8 @@
 // rows themselves.
 
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import { logger } from '@siastorage/logger'
+import { getAssetSizes, isNativeAvailable } from 'import-sources'
 import type {
   ImportFileRow,
   ImportRow,
@@ -12,7 +14,8 @@ import type {
   ImportSourceKind,
 } from '@siastorage/core/db/operations'
 import { app } from '../stores/appService'
-import { getMimeType, type MimeType } from './fileTypes'
+import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
+import { type MimeType } from './fileTypes'
 
 export type Asset = {
   id: string | undefined
@@ -37,25 +40,16 @@ type ParsedAssetMetadata = {
   type: MimeType
 }
 
-async function parseAssetMetadata(
-  asset: Asset,
-  defaultFileName: string,
-  // Photo-library candidates skip the magic-byte sniff: the filename is
-  // authoritative for library assets, and the sniff can't open Android media
-  // paths anyway (EACCES per asset). The scanner re-sniffs the LOCAL copy for
-  // octet-stream rows after the copy.
-  opts: { sniffBytes: boolean } = { sniffBytes: true },
-): Promise<ParsedAssetMetadata> {
+// Staging never opens the source: the type here is metadata-derived (picker
+// or OS type, else extension), and finalize re-classifies every row from the
+// copy's header bytes, which cost nothing extra.
+function parseAssetMetadata(asset: Asset, defaultFileName: string): ParsedAssetMetadata {
   const ts = new Date(asset.timestamp ?? Date.now()).getTime()
   return {
     name: asset.name ?? defaultFileName,
     createdAt: ts,
     updatedAt: ts,
-    type: await getMimeType({
-      type: asset.type,
-      name: asset.name,
-      uri: opts.sniffBytes ? asset.sourceUri : undefined,
-    }),
+    type: detectMimeType({ providedType: asset.type, fileName: asset.name }) as MimeType,
   }
 }
 
@@ -156,13 +150,12 @@ export async function importAssets(
     return { importId: null, newVersionCount: 0 }
   }
 
-  // parseAssetMetadata can be slow (large picker batches, share-extension
-  // files); an iOS background landing mid-flight would fast-reject the first DB
+  // An iOS background landing mid-flight would fast-reject the first DB
   // read. Gate so the import resumes after the gate reopens.
   await app().db.waitUntilActive()
 
   const importId = uniqueId()
-  const parsed = await Promise.all(picks.map((a) => parseAssetMetadata(a, defaultFileName)))
+  const parsed = picks.map((a) => parseAssetMetadata(a, defaultFileName))
   const rows: ImportFileRow[] = picks.map((a, i) => {
     const meta = parsed[i]
     return buildImportFileRow({
@@ -234,30 +227,28 @@ export async function importMediaAssets(
 
   const importId = uniqueId()
   const candidates = await buildPhotoCandidateRows(assets, importId, destinationDirectoryId, now)
-  const deniedWithIds = denied.filter((a): a is Asset & { id: string } => !!a.id)
-  const deniedMeta = await Promise.all(
-    deniedWithIds.map((a) => parseAssetMetadata(a, 'file', { sniffBytes: false })),
-  )
-  const deniedRows = deniedWithIds.map((a, i) => {
-    const meta = deniedMeta[i]
-    return {
-      ...buildImportFileRow({
-        importId,
-        directoryId: destinationDirectoryId,
-        name: meta.name,
-        type: meta.type,
-        size: a.size ?? 0,
-        createdAt: meta.createdAt,
-        updatedAt: meta.updatedAt,
-        now,
-        mediaAssetId: a.id,
-        sourceKind: 'media',
-        sourceUri: null,
-      }),
-      state: 'unavailable' as const,
-      reason: 'permission-denied',
-    }
-  })
+  const deniedRows = denied
+    .filter((a): a is Asset & { id: string } => !!a.id)
+    .map((a) => {
+      const meta = parseAssetMetadata(a, 'file')
+      return {
+        ...buildImportFileRow({
+          importId,
+          directoryId: destinationDirectoryId,
+          name: meta.name,
+          type: meta.type,
+          size: a.size ?? 0,
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
+          now,
+          mediaAssetId: a.id,
+          sourceKind: 'media',
+          sourceUri: null,
+        }),
+        state: 'unavailable' as const,
+        reason: 'permission-denied',
+      }
+    })
   const rows = [...candidates, ...deniedRows]
   if (rows.length === 0) {
     return { importId: null, newVersionCount: 0 }
@@ -319,9 +310,20 @@ export async function buildPhotoCandidateRows(
   const survivors = withAssetIds.filter((a) => !alreadyImported.has(a.id))
   if (survivors.length === 0) return []
 
-  const parsed = await Promise.all(
-    survivors.map((a) => parseAssetMetadata(a, 'file', { sniffBytes: false })),
-  )
+  const parsed = survivors.map((a) => parseAssetMetadata(a, 'file'))
+  // Size HINTS in one native batch (MediaStore SIZE / PhotoKit resource
+  // metadata, no bytes touched, no iCloud download). They feed the progress
+  // throttle's delta gate and the open import's totals; the copy re-measures the
+  // real size. Unknown (null) stays 0, which every consumer treats as "no hint".
+  let sizeHints: Record<string, number | null> = {}
+  const unsized = survivors.filter((a) => !a.size).map((a) => a.id)
+  if (unsized.length > 0 && isNativeAvailable()) {
+    try {
+      sizeHints = await getAssetSizes(unsized)
+    } catch (e) {
+      logger.debug('assetImports', 'size_hints_failed', { error: e as Error })
+    }
+  }
   return survivors.map((a, i) => {
     const meta = parsed[i]
     return buildImportFileRow({
@@ -329,7 +331,7 @@ export async function buildPhotoCandidateRows(
       directoryId,
       name: meta.name,
       type: meta.type,
-      size: a.size ?? 0,
+      size: a.size ?? sizeHints[a.id] ?? 0,
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
       now,

@@ -6,11 +6,12 @@ export {
 export { type FsFileUriAdapter, type FsIOAdapter, getFsFileUri } from './fsFileUri'
 export {
   type CalculateContentHash,
-  type GetMimeType,
+  type ReadHeaderBytes,
   ImportScanner,
   type ImportScannerResult,
-  type ResolveLocalId,
-  type ResolveLocalIdResult,
+  type ReleaseSourceGrant,
+  type ResolveSource,
+  type ResolveSourceResult,
 } from './importScanner'
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'

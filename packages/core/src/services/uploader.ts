@@ -894,10 +894,16 @@ export class UploadManager {
    * @returns Number of new files added to the polledFiles queue.
    */
   private async pollDB(): Promise<number> {
-    if (!this.app.connection.getState().isConnected) return 0
+    if (!this.app.connection.getState().isConnected) {
+      logger.debug('uploadManager', 'poll_skipped', { reason: 'not_connected' })
+      return 0
+    }
 
     const autoScan = await this.app.settings.getAutoScanUploads()
-    if (!autoScan) return 0
+    if (!autoScan) {
+      logger.debug('uploadManager', 'poll_skipped', { reason: 'auto_scan_off' })
+      return 0
+    }
 
     try {
       const activeIds = this.app.uploads.getActiveIds()
@@ -911,7 +917,6 @@ export class UploadManager {
         order: 'ASC',
         pinned: { indexerURL, isPinned: false },
         fileExistsLocally: true,
-        hashNotEmpty: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
         includeThumbnails: true,
       })
@@ -928,6 +933,11 @@ export class UploadManager {
           newEntries.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
         )
         this.polledFiles.push(...newEntries)
+      } else {
+        logger.debug('uploadManager', 'poll_empty', {
+          candidates: candidateFiles.length,
+          noUri: candidateFiles.length - newEntries.length,
+        })
       }
 
       return this.polledFiles.length

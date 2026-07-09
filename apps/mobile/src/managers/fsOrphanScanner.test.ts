@@ -1,18 +1,63 @@
 import { FS_ORPHAN_FREQUENCY } from '@siastorage/core/config'
+import type { ImportFileRow, ImportRow } from '@siastorage/core/db/operations'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
 import { cancelFsOrphanScanner, runFsOrphanScanner } from './fsOrphanScanner'
 
 let listFilesSpy: jest.SpyInstance
 let removeFileSpy: jest.SpyInstance
+let removeByPathSpy: jest.SpyInstance
 
 const now = 1_000_000_000
+
+function importRow(over: Partial<ImportRow> & { id: string }): ImportRow {
+  return {
+    source: 'new-photos',
+    directoryId: null,
+    pendingTags: null,
+    expectedCount: 0,
+    dedupByHash: 1,
+    dirSourceRef: null,
+    sealed: 0,
+    startedAt: now,
+    updatedAt: now,
+    ...over,
+  }
+}
+
+function importFileRow(
+  over: Partial<ImportFileRow> & { id: string; importId: string },
+): ImportFileRow {
+  return {
+    state: 'pending',
+    reason: null,
+    name: 'photo.jpg',
+    type: 'image/jpeg',
+    size: 0,
+    hash: null,
+    createdAt: now,
+    updatedAt: now,
+    addedAt: now,
+    directoryId: null,
+    mediaAssetId: null,
+    sourceKind: 'media',
+    sourceUri: null,
+    sourceRef: null,
+    copyBytes: 0,
+    attempts: 0,
+    nextAttemptAt: 0,
+    claimedAt: null,
+    claimToken: null,
+    ...over,
+  }
+}
 
 describe('fsOrphanScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     listFilesSpy = jest.spyOn(app().fs, 'listFiles').mockResolvedValue([])
     removeFileSpy = jest.spyOn(app().fs, 'removeFile').mockResolvedValue(undefined)
+    removeByPathSpy = jest.spyOn(app().fs, 'removeFileByPath').mockResolvedValue(undefined)
     await initializeDB()
     await app().storage.setItem('fsOrphanLastRun', '0')
   })
@@ -21,6 +66,7 @@ describe('fsOrphanScanner', () => {
     jest.spyOn(Date, 'now').mockRestore()
     listFilesSpy.mockRestore()
     removeFileSpy.mockRestore()
+    removeByPathSpy.mockRestore()
     await resetDb()
   })
 
@@ -75,7 +121,7 @@ describe('fsOrphanScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: null,
       deletedAt: null,
     })
@@ -122,7 +168,7 @@ describe('fsOrphanScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: null,
       deletedAt: null,
     })
@@ -150,7 +196,7 @@ describe('fsOrphanScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: null,
       deletedAt: null,
     })
@@ -181,7 +227,7 @@ describe('fsOrphanScanner', () => {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       trashedAt: now,
       deletedAt: now,
     })
@@ -221,6 +267,91 @@ describe('fsOrphanScanner', () => {
     } finally {
       findSpy.mockRestore()
     }
+  })
+
+  it('does NOT sweep a claim temp whose base id still has a non-terminal import_files row', async () => {
+    // A live in-progress copy: `<id>.<token>.tmp`. Its base id ('live') has a
+    // non-terminal (active) import_files row, so findOrphanedFileIds exempts it.
+    // (The mtime gate that withholds recent temps lives in the fsIO adapter's
+    // list(); here listFiles is mocked, so the non-terminal exemption is what
+    // protects it.)
+    listFilesSpy.mockResolvedValue(['live.tok123.tmp'])
+    await app().imports.create(importRow({ id: 'imp1' }), [
+      importFileRow({ id: 'live', importId: 'imp1', state: 'active', claimToken: 'tok123' }),
+    ])
+
+    const result = await runFsOrphanScanner()
+
+    expect(removeByPathSpy).not.toHaveBeenCalled()
+    expect(removeFileSpy).not.toHaveBeenCalled()
+    expect(result).toEqual({ removed: 0 })
+  })
+
+  it('sweeps a stale orphan claim temp whose base id has no non-terminal row, by literal path', async () => {
+    // An abandoned temp: its base id ('gone') has no non-terminal import_files
+    // row (the row finalized under a different claim and is now `added`). It's
+    // swept by its literal `.tmp` path (removeFileByPath), not by id+type.
+    listFilesSpy.mockResolvedValue(['gone.stale456.tmp'])
+    await app().imports.create(importRow({ id: 'imp2' }), [
+      importFileRow({ id: 'gone', importId: 'imp2', state: 'added' }),
+    ])
+
+    const result = await runFsOrphanScanner()
+
+    expect(removeByPathSpy).toHaveBeenCalledWith('gone.stale456.tmp')
+    expect(removeFileSpy).not.toHaveBeenCalled()
+    expect(result).toEqual({ removed: 1 })
+  })
+
+  it('handles absolute paths from the adapter: exempts a live temp, sweeps an orphan by full path', async () => {
+    // The mobile adapter's listFiles returns absolute paths, not basenames. The id
+    // extraction must strip the directory or the live-copy exemption never matches
+    // and a copy in progress would be deleted mid-import.
+    listFilesSpy.mockResolvedValue([
+      '/data/app/files/live.tok123.tmp',
+      '/data/app/files/gone.stale456.tmp',
+    ])
+    await app().imports.create(importRow({ id: 'imp3' }), [
+      importFileRow({ id: 'live', importId: 'imp3', state: 'active', claimToken: 'tok123' }),
+      importFileRow({ id: 'gone', importId: 'imp3', state: 'added' }),
+    ])
+
+    const result = await runFsOrphanScanner()
+
+    expect(removeByPathSpy).toHaveBeenCalledWith('/data/app/files/gone.stale456.tmp')
+    expect(removeByPathSpy).toHaveBeenCalledTimes(1)
+    expect(removeFileSpy).not.toHaveBeenCalled()
+    expect(result).toEqual({ removed: 1 })
+  })
+
+  it('sweeps a stale claim temp even after its base id finalized into a files row', async () => {
+    // A copy that lost its claim leaves `<id>.<oldToken>.tmp`; a retry under a
+    // fresh claim then finalizes the id into a real files row. The temp must be
+    // judged by in-flight import rows alone, or the files row protects the
+    // leftover temp forever.
+    listFilesSpy.mockResolvedValue(['/data/app/files/leak.oldtok.tmp'])
+    await app().imports.create(importRow({ id: 'imp4' }), [
+      importFileRow({ id: 'leak', importId: 'imp4', state: 'added' }),
+    ])
+    await app().files.create({
+      id: 'leak',
+      name: 'leak.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 4,
+      hash: 'abc',
+      createdAt: now,
+      updatedAt: now,
+      addedAt: now,
+      mediaAssetId: null,
+      trashedAt: null,
+      deletedAt: null,
+    })
+
+    const result = await runFsOrphanScanner()
+
+    expect(removeByPathSpy).toHaveBeenCalledWith('/data/app/files/leak.oldtok.tmp')
+    expect(result).toEqual({ removed: 1 })
   })
 
   it('coalesces concurrent calls into a single scan', async () => {

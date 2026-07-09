@@ -23,7 +23,6 @@ import { FileViewer } from '../FileViewer'
 import { DownloadPrompt } from './DownloadPrompt'
 import { FileMetaImport } from './FileMetaImport'
 
-// Helper function to detect file type from first few bytes.
 async function detectFileType(shareUrl: string, id: string): Promise<string> {
   logger.debug('FileImport', 'detecting_type', { id, byteCount: MAGIC_BYTES_LENGTH })
   try {
@@ -41,7 +40,6 @@ async function detectFileType(shareUrl: string, id: string): Promise<string> {
   }
 }
 
-// Helper function to download and process the full file.
 async function downloadAndProcessFile(
   id: string,
   shareUrl: string,
@@ -95,7 +93,7 @@ async function downloadAndProcessFile(
 
     return {
       id,
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       name: 'Shared File',
       type,
@@ -142,7 +140,6 @@ export function FileImport({
     () => detectFileType(shareUrl, id),
   )
 
-  // Download and build file metadata. Auto-download if file is small, otherwise require confirmation.
   const sharedFile = useSWR(
     sharedObject.data && shareUrl && (hasConfirmedLargeDownload || shouldAutoDownload)
       ? ['sharedFile', id, shareUrl, hasConfirmedLargeDownload, shouldAutoDownload]
@@ -153,11 +150,10 @@ export function FileImport({
   // Create a preview FileRecord for the confirmation screen.
   const previewFile = useMemo(() => {
     if (!sharedObject.data) return null
-    // Use detected type if available, otherwise fall back to octet-stream.
     const type = detectedType.data || 'application/octet-stream'
     return {
       id,
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       name: 'Shared File',
       type,
@@ -172,7 +168,6 @@ export function FileImport({
     } satisfies FileRecord
   }, [sharedObject.data, id, fileSize, detectedType.data])
 
-  // Check if metadata is complete (required fields: hash, type, size).
   const isMetadataComplete =
     sharedFile.data?.hash &&
     sharedFile.data.type !== 'application/octet-stream' &&
@@ -272,9 +267,7 @@ export function FileImport({
                 />
               )}
             </View>
-            {displayFile && fileStatus.data && (
-              <FileMetaImport file={displayFile} status={fileStatus.data} />
-            )}
+            {fileStatus.data && <FileMetaImport file={displayFile} status={fileStatus.data} />}
           </>
         ) : null}
         {sharedFile.error && (

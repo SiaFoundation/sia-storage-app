@@ -24,7 +24,6 @@
     "./lib/types": "./src/lib/types.ts",
     "./lib/localObjects": "./src/lib/localObjects.ts",
     "./lib/naturalSortKey": "./src/lib/naturalSortKey.ts",
-    "./lib/backoffTracker": "./src/lib/backoffTracker.ts",
     "./lib/progressThrottle": "./src/lib/progressThrottle.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",
     "./lib/yieldToEventLoop": "./src/lib/yieldToEventLoop.ts",

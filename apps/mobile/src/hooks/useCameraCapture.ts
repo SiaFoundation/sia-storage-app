@@ -2,7 +2,8 @@ import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
 import type { ImportFilesOptions } from '../lib/assetImports'
-import { extFromMime, getMimeType } from '../lib/fileTypes'
+import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
+import { extFromMime, type MimeType } from '../lib/fileTypes'
 import { stageCameraAssets } from '../lib/importCapture'
 import { importFiles } from '../lib/importFiles'
 import { showImportResultToast } from '../lib/importResultToast'
@@ -65,23 +66,20 @@ export function useCameraCapture(options: ImportFilesOptions = {}) {
       // moved into the staging dir so a process kill can't purge it mid-import.
       const imported = await importFiles(
         await stageCameraAssets(
-          await Promise.all(
-            (result.assets ?? []).map(async (a) => ({
-              id: a.id,
-              name: buildDateFileName(
-                a.timestamp,
-                await getMimeType({
-                  type: a.type,
-                  name: a.fileName,
-                  uri: a.uri,
-                }),
-              ),
-              size: a.fileSize,
-              type: a.type,
-              sourceUri: a.uri,
-              timestamp: a.timestamp,
-            })),
-          ),
+          (result.assets ?? []).map((a) => ({
+            id: a.id,
+            // Capture types come from the OS and are reliable; finalize
+            // re-classifies from the copy's header bytes anyway, so no byte
+            // read here.
+            name: buildDateFileName(
+              a.timestamp,
+              detectMimeType({ providedType: a.type, fileName: a.fileName ?? a.uri }) as MimeType,
+            ),
+            size: a.fileSize,
+            type: a.type,
+            sourceUri: a.uri,
+            timestamp: a.timestamp,
+          })),
         ),
         'file',
         { destinationDirectoryId, assignTagName },

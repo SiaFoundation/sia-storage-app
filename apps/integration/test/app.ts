@@ -186,7 +186,7 @@ export interface TestApp {
     hash: string
     createdAt: number
     updatedAt: number
-    localId?: string | null
+    mediaAssetId?: string | null
     addedAt?: number
     trashedAt?: number | null
     deletedAt?: number | null
@@ -606,7 +606,7 @@ export function createTestApp(
         addedAt: now,
         trashedAt: null,
         deletedAt: null,
-        localId: null,
+        mediaAssetId: null,
         ...record,
       } as Parameters<AppService['files']['create']>[0])
       if (record.kind === 'file') {
@@ -634,7 +634,7 @@ export function createTestApp(
           hash: file.hash,
           createdAt: now,
           updatedAt: now,
-          localId: null,
+          mediaAssetId: null,
           addedAt: now,
           trashedAt: null,
           deletedAt: null,

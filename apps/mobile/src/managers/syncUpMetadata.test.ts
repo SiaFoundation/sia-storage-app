@@ -52,7 +52,7 @@ function makeFile(params: {
     hash: params.hash ?? `hash-${params.id}`,
     createdAt: params.createdAt ?? 100,
     updatedAt: ts,
-    localId: null,
+    mediaAssetId: null,
     addedAt: params.createdAt ?? 100,
     thumbForId: undefined,
     thumbSize: undefined,
@@ -181,7 +181,7 @@ describe('syncUpMetadata', () => {
     expect(mockUpdateObjectMetadata).not.toHaveBeenCalled()
   })
 
-  test('successful push clears the flag via CAS', async () => {
+  test('successful push clears the flag', async () => {
     const file = makeFile({ id: 'pushme', updatedAt: 300 })
     await app().files.create(
       file,
@@ -250,7 +250,7 @@ describe('syncUpMetadata', () => {
     expect(await flagFor('obj-fail')).toBe(1)
   })
 
-  test('CAS clear is no-op when a local edit lands after the metadata snapshot', async () => {
+  test('flag clear does not land when a local edit arrives after the metadata snapshot', async () => {
     const file = makeFile({ id: 'concurrent', updatedAt: 300 })
     await app().files.create(
       file,
