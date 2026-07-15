@@ -1,8 +1,9 @@
-//! The local object store: each file's indexer objects plus the per-object `needsSyncUp` dirty flag.
+//! The local object store: each file's indexer objects plus the per-object `needsSyncUp` dirty
+//! flag.
 //!
-//! Objects are keyed `(indexerURL, id)`, so the same id under two indexers is two independent rows
-//! and every read and delete is indexer-scoped. The app currently assumes one indexer, but the
-//! schema and ops allow for multi-indexer / indexer-migration features in the future.
+//! Objects are keyed `(indexerURL, id)`, so the same id under two indexers is two independent
+//! rows and every read and delete is indexer-scoped. The app currently assumes one indexer, but
+//! the schema and ops allow for multi-indexer / indexer-migration features in the future.
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -11,6 +12,7 @@ use rusqlite::{Connection, params};
 use sia_storage::{SealedObject, Signature};
 
 use crate::db::DbError;
+use crate::db::database::Db;
 use crate::db::sql;
 use crate::encoding::slabs::{slabs_from_storage_string, slabs_to_storage_string};
 use crate::encoding::timestamp::{decode_epoch_ms, encode_epoch_ms};
@@ -52,118 +54,11 @@ fn local_object_from_db_row(r: &rusqlite::Row) -> rusqlite::Result<LocalObject> 
     })
 }
 
-/// Returns the lightweight object refs (id/file/indexer/timestamps, no slabs or
-/// crypto fields) for one file.
-pub fn query_object_refs_for_file(
-    conn: &Connection,
-    file_id: &str,
-) -> Result<Vec<LocalObjectRef>, DbError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, fileId, indexerURL, createdAt, updatedAt FROM objects WHERE fileId = ?",
-    )?;
-    let out = stmt
-        .query_map(params![file_id], local_object_ref_from_db_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(out)
-}
-
-/// Returns the full decoded objects (slabs plus the still-encrypted crypto fields) for one
-/// file.
-pub fn query_objects_for_file(
-    conn: &Connection,
-    file_id: &str,
-) -> Result<Vec<LocalObject>, DbError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, fileId, indexerURL, createdAt, updatedAt, encryptedDataKey,
-                 encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, slabs
-          FROM objects WHERE fileId = ?",
-    )?;
-    let out = stmt
-        .query_map(params![file_id], local_object_from_db_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(out)
-}
-
-/// Upserts one object via `INSERT OR REPLACE`: an existing row is overwritten, not
-/// duplicated. Every create/re-upload inserts the object dirty (needsSyncUp = 1), so the
-/// next sync-up pass reconciles it.
-pub fn upsert_object(conn: &Connection, o: &LocalObject) -> Result<(), DbError> {
-    conn.execute(
-        "INSERT OR REPLACE INTO objects (fileId, indexerURL, id, slabs, encryptedDataKey,
-            encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature,
-            createdAt, updatedAt, needsSyncUp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-        params![
-            o.file_id,
-            o.indexer_url,
-            o.id,
-            slabs_to_storage_string(&o.sealed.slabs),
-            hex::encode(&o.sealed.encrypted_data_key),
-            hex::encode(&o.sealed.encrypted_metadata_key),
-            hex::encode(&o.sealed.encrypted_metadata),
-            o.sealed.data_signature.to_string(),
-            o.sealed.metadata_signature.to_string(),
-            encode_epoch_ms(o.sealed.created_at),
-            encode_epoch_ms(o.sealed.updated_at),
-        ],
-    )?;
-    Ok(())
-}
-
-/// Deletes one object row, scoped to (object_id, indexer_url).
-pub fn delete_object(conn: &Connection, object_id: &str, indexer_url: &str) -> Result<(), DbError> {
-    conn.execute(
-        "DELETE FROM objects WHERE id = ? AND indexerURL = ?",
-        params![object_id, indexer_url],
-    )?;
-    Ok(())
-}
-
-/// Returns the number of object rows belonging to one file (across all indexers).
-/// Consumed by the facade's file-details read (upstack).
-pub fn count_objects_for_file(conn: &Connection, file_id: &str) -> Result<i64, DbError> {
-    Ok(conn.query_row(
-        "SELECT COUNT(*) FROM objects WHERE fileId = ?",
-        params![file_id],
-        |r| r.get(0),
-    )?)
-}
-
-/// Deletes every object row for one file, regardless of indexer. Consumed by the
-/// facade's permanent-delete flow (upstack).
-pub fn delete_objects_for_file(conn: &Connection, file_id: &str) -> Result<(), DbError> {
-    conn.execute("DELETE FROM objects WHERE fileId = ?", params![file_id])?;
-    Ok(())
-}
-
-/// Bulk variant of [`query_object_refs_for_file`]: returns lightweight object refs
-/// for many files, keyed by file id. Consumed by the facade's bulk file reads (upstack).
-pub fn query_object_refs_for_files(
-    conn: &Connection,
-    file_ids: &[String],
-) -> Result<HashMap<String, Vec<LocalObjectRef>>, DbError> {
-    if file_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let mut stmt = conn.prepare(
-        "SELECT id, fileId, indexerURL, createdAt, updatedAt FROM objects
-          WHERE fileId IN rarray(?)",
-    )?;
-    let rows = stmt
-        .query_map([sql::id_array(file_ids)], local_object_ref_from_db_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut map: HashMap<String, Vec<LocalObjectRef>> = HashMap::new();
-    for lo in rows {
-        map.entry(lo.file_id.clone()).or_default().push(lo);
-    }
-    Ok(map)
-}
-
 /// What an object upsert does to the `needsSyncUp` flag on conflict.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NeedsSyncUp {
-    /// On conflict, leave the existing `needsSyncUp` untouched (preserve a pending push); a fresh
-    /// insert defaults it to 0 (clean).
+    /// On conflict, leave the existing `needsSyncUp` untouched (preserve a pending push); a
+    /// fresh insert defaults it to 0 (clean).
     Leave,
     /// Set `needsSyncUp = 1` (dirty, needs a remote push).
     Set,
@@ -186,10 +81,341 @@ impl NeedsSyncUp {
     }
 }
 
-/// Upserts many objects with one prepared statement (metadata refreshed on a `(indexerURL, id)`
-/// conflict). `sync_up`: upload passes `Set`; sync-down passes `Leave`, which omits
-/// `needsSyncUp` from the update set so a conflicting row keeps its pending dirty flag.
-pub fn upsert_many_objects(
+/// One dirty object at an indexer, joined to its file to build the sync-up push: the file's
+/// edit clock (`file_updated_at`, for the compare-and-swap clear) and its `deleted_at`, which
+/// decides the push, a delete when the file is gone, otherwise an upsert of the object's
+/// metadata.
+pub struct SyncUpObjectRow {
+    pub object_id: String,
+    pub file_id: String,
+    pub file_name: String,
+    pub file_updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+fn sync_up_object_from_db_row(r: &rusqlite::Row) -> rusqlite::Result<SyncUpObjectRow> {
+    Ok(SyncUpObjectRow {
+        object_id: r.get("objectId")?,
+        file_id: r.get("fileId")?,
+        file_name: r.get("fileName")?,
+        file_updated_at: r.get("fileUpdatedAt")?,
+        deleted_at: r.get("deletedAt")?,
+    })
+}
+
+impl Db {
+    /// Returns the lightweight object refs (id/file/indexer/timestamps, no slabs or crypto
+    /// fields) for one file.
+    pub async fn query_object_refs_for_file(
+        &self,
+        file_id: &str,
+    ) -> Result<Vec<LocalObjectRef>, DbError> {
+        let file_id = file_id.to_string();
+        self.transaction(move |c| query_object_refs_for_file_stmt(c, &file_id))
+            .await
+    }
+
+    /// Returns the full decoded objects (slabs plus the still-encrypted crypto fields) for one
+    /// file.
+    pub async fn query_objects_for_file(&self, file_id: &str) -> Result<Vec<LocalObject>, DbError> {
+        let file_id = file_id.to_string();
+        self.transaction(move |c| query_objects_for_file_stmt(c, &file_id))
+            .await
+    }
+
+    /// Upserts one object via `INSERT OR REPLACE`: an existing row is overwritten, not
+    /// duplicated. Every create/re-upload inserts the object dirty (needsSyncUp = 1), so the
+    /// next sync-up pass reconciles it.
+    pub async fn upsert_object(&self, o: LocalObject) -> Result<(), DbError> {
+        self.transaction(move |c| upsert_object_stmt(c, &o)).await
+    }
+
+    /// Deletes one object row, scoped to (object_id, indexer_url).
+    pub async fn delete_object(&self, object_id: &str, indexer_url: &str) -> Result<(), DbError> {
+        let (object_id, indexer_url) = (object_id.to_string(), indexer_url.to_string());
+        self.transaction(move |c| {
+            c.execute(
+                "DELETE FROM objects WHERE id = ? AND indexerURL = ?",
+                params![object_id, indexer_url],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Returns the number of object rows belonging to one file, across all indexers.
+    pub async fn count_objects_for_file(&self, file_id: &str) -> Result<i64, DbError> {
+        let file_id = file_id.to_string();
+        self.transaction(move |c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM objects WHERE fileId = ?",
+                params![file_id],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+    }
+
+    /// Deletes every object row for one file, regardless of indexer.
+    pub async fn delete_objects_for_file(&self, file_id: &str) -> Result<(), DbError> {
+        let file_id = file_id.to_string();
+        self.transaction(move |c| {
+            c.execute("DELETE FROM objects WHERE fileId = ?", params![file_id])?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Bulk variant of [`query_object_refs_for_file`](Db::query_object_refs_for_file): the
+    /// lightweight object refs for many files, keyed by file id.
+    pub async fn query_object_refs_for_files(
+        &self,
+        file_ids: &[String],
+    ) -> Result<HashMap<String, Vec<LocalObjectRef>>, DbError> {
+        if file_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let file_ids = file_ids.to_vec();
+        self.transaction(move |c| {
+            let mut stmt = c.prepare(
+                "SELECT id, fileId, indexerURL, createdAt, updatedAt FROM objects
+                  WHERE fileId IN rarray(?)",
+            )?;
+            let rows = stmt
+                .query_map([sql::id_array(&file_ids)], local_object_ref_from_db_row)?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut map: HashMap<String, Vec<LocalObjectRef>> = HashMap::new();
+            for lo in rows {
+                map.entry(lo.file_id.clone()).or_default().push(lo);
+            }
+            Ok(map)
+        })
+        .await
+    }
+
+    /// Upserts many objects with one prepared statement (metadata refreshed on a `(indexerURL,
+    /// id)` conflict). `sync_up`: upload passes `Set`; sync-down passes `Leave`, which omits
+    /// `needsSyncUp` from the update set so a conflicting row keeps its pending dirty flag.
+    pub async fn upsert_many_objects(
+        &self,
+        objects: &[LocalObject],
+        sync_up: NeedsSyncUp,
+    ) -> Result<(), DbError> {
+        if objects.is_empty() {
+            return Ok(());
+        }
+        let objects = objects.to_vec();
+        self.transaction(move |c| upsert_many_objects_stmt(c, &objects, sync_up))
+            .await
+    }
+
+    /// Flag every object of the given files dirty (the local-mutation entry point).
+    pub async fn flag_objects_for_files(&self, file_ids: &[String]) -> Result<(), DbError> {
+        if file_ids.is_empty() {
+            return Ok(());
+        }
+        let file_ids = file_ids.to_vec();
+        self.transaction(move |c| flag_objects_for_files_stmt(c, &file_ids))
+            .await
+    }
+
+    /// Compare-and-swap clear: clears the flag only if the file's edit clock (files.updatedAt)
+    /// still matches the value observed before the sync round-trip, so an edit that landed
+    /// mid-round-trip keeps the object flagged for the next pass. Resolution is updatedAt's
+    /// millisecond; a second edit within the same millisecond can clear with that edit
+    /// unpushed.
+    pub async fn clear_object_if_unchanged(
+        &self,
+        object_id: &str,
+        indexer_url: &str,
+        expected_file_updated_at: i64,
+    ) -> Result<(), DbError> {
+        let (object_id, indexer_url) = (object_id.to_string(), indexer_url.to_string());
+        self.transaction(move |c| {
+            c.execute(
+                r"UPDATE objects SET needsSyncUp = 0
+                    WHERE id = ? AND indexerURL = ?
+                      AND (SELECT updatedAt FROM files WHERE files.id = objects.fileId) = ?",
+                params![object_id, indexer_url, expected_file_updated_at],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Clear the flag on specific objects (sync-down remote-newer winners), scoped to one
+    /// indexer.
+    pub async fn clear_objects(
+        &self,
+        indexer_url: &str,
+        object_ids: &[String],
+    ) -> Result<(), DbError> {
+        if object_ids.is_empty() {
+            return Ok(());
+        }
+        let (indexer_url, object_ids) = (indexer_url.to_string(), object_ids.to_vec());
+        self.transaction(move |c| clear_objects_stmt(c, &indexer_url, &object_ids))
+            .await
+    }
+
+    /// Flag every object dirty (the advanced "resync metadata" escape hatch).
+    pub async fn flag_all_objects(&self) -> Result<(), DbError> {
+        self.transaction(move |c| {
+            c.execute("UPDATE objects SET needsSyncUp = 1", [])?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Dirty objects at the given indexer (one row per push target, so LIMIT bounds work items
+    /// exactly). Ordered by `o.id`, the index key, not updatedAt.
+    pub async fn query_sync_up_objects(
+        &self,
+        indexer_url: &str,
+        limit: i64,
+    ) -> Result<Vec<SyncUpObjectRow>, DbError> {
+        let indexer_url = indexer_url.to_string();
+        self.transaction(move |c| {
+            let mut stmt = c.prepare(
+                r"SELECT o.id AS objectId, o.fileId AS fileId, f.name AS fileName,
+                    f.updatedAt AS fileUpdatedAt, f.deletedAt AS deletedAt
+                  FROM objects o JOIN files f ON f.id = o.fileId
+                  WHERE o.indexerURL = ? AND o.needsSyncUp = 1
+                  ORDER BY o.id
+                  LIMIT ?",
+            )?;
+            let out = stmt
+                .query_map(params![indexer_url, limit], sync_up_object_from_db_row)?
+                .collect::<rusqlite::Result<Vec<SyncUpObjectRow>>>()?;
+            Ok(out)
+        })
+        .await
+    }
+
+    /// Count of dirty objects at the given indexer (sync-up progress total plus the post-batch
+    /// "remaining == 0" termination check).
+    pub async fn count_sync_up_objects(&self, indexer_url: &str) -> Result<i64, DbError> {
+        let indexer_url = indexer_url.to_string();
+        self.transaction(move |c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM objects WHERE indexerURL = ? AND needsSyncUp = 1",
+                params![indexer_url],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+    }
+
+    /// Deletes many object rows by id, all scoped to a single `indexer_url`.
+    pub async fn delete_many_objects_by_ids(
+        &self,
+        object_ids: &[String],
+        indexer_url: &str,
+    ) -> Result<(), DbError> {
+        if object_ids.is_empty() {
+            return Ok(());
+        }
+        let (object_ids, indexer_url) = (object_ids.to_vec(), indexer_url.to_string());
+        self.transaction(move |c| delete_many_objects_by_ids_stmt(c, &object_ids, &indexer_url))
+            .await
+    }
+
+    /// Returns the subset of the given file ids that have no object rows.
+    pub async fn query_files_with_no_objects(
+        &self,
+        file_ids: &[String],
+    ) -> Result<Vec<String>, DbError> {
+        if file_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let file_ids = file_ids.to_vec();
+        self.transaction(move |c| query_files_with_no_objects_stmt(c, &file_ids))
+            .await
+    }
+
+    /// Deletes all objects for the given files in one statement.
+    pub async fn delete_many_objects_for_files(&self, file_ids: &[String]) -> Result<(), DbError> {
+        if file_ids.is_empty() {
+            return Ok(());
+        }
+        let file_ids = file_ids.to_vec();
+        self.transaction(move |c| {
+            c.execute(
+                "DELETE FROM objects WHERE fileId IN rarray(?)",
+                [sql::id_array(&file_ids)],
+            )?;
+            Ok(())
+        })
+        .await
+    }
+}
+
+pub(in crate::db) fn query_object_refs_for_file_stmt(
+    conn: &Connection,
+    file_id: &str,
+) -> Result<Vec<LocalObjectRef>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, fileId, indexerURL, createdAt, updatedAt FROM objects WHERE fileId = ?",
+    )?;
+    let out = stmt
+        .query_map(params![file_id], local_object_ref_from_db_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(out)
+}
+
+pub(in crate::db) fn query_objects_for_file_stmt(
+    conn: &Connection,
+    file_id: &str,
+) -> Result<Vec<LocalObject>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, fileId, indexerURL, createdAt, updatedAt, encryptedDataKey,
+                 encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature, slabs
+          FROM objects WHERE fileId = ?",
+    )?;
+    let out = stmt
+        .query_map(params![file_id], local_object_from_db_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(out)
+}
+
+pub(in crate::db) fn upsert_object_stmt(conn: &Connection, o: &LocalObject) -> Result<(), DbError> {
+    conn.execute(
+        "INSERT OR REPLACE INTO objects (fileId, indexerURL, id, slabs, encryptedDataKey,
+            encryptedMetadataKey, encryptedMetadata, dataSignature, metadataSignature,
+            createdAt, updatedAt, needsSyncUp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        params![
+            o.file_id,
+            o.indexer_url,
+            o.id,
+            slabs_to_storage_string(&o.sealed.slabs),
+            hex::encode(&o.sealed.encrypted_data_key),
+            hex::encode(&o.sealed.encrypted_metadata_key),
+            hex::encode(&o.sealed.encrypted_metadata),
+            o.sealed.data_signature.to_string(),
+            o.sealed.metadata_signature.to_string(),
+            encode_epoch_ms(o.sealed.created_at),
+            encode_epoch_ms(o.sealed.updated_at),
+        ],
+    )?;
+    Ok(())
+}
+
+pub(in crate::db) fn flag_objects_for_files_stmt(
+    conn: &Connection,
+    file_ids: &[String],
+) -> Result<(), DbError> {
+    if file_ids.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE objects SET needsSyncUp = 1 WHERE fileId IN rarray(?)",
+        [sql::id_array(file_ids)],
+    )?;
+    Ok(())
+}
+
+pub(in crate::db) fn upsert_many_objects_stmt(
     conn: &Connection,
     objects: &[LocalObject],
     sync_up: NeedsSyncUp,
@@ -237,41 +463,7 @@ pub fn upsert_many_objects(
     Ok(())
 }
 
-/// Flag every object of the given files dirty (the local-mutation entry point).
-pub fn flag_objects_for_files(conn: &Connection, file_ids: &[String]) -> Result<(), DbError> {
-    if file_ids.is_empty() {
-        return Ok(());
-    }
-    conn.execute(
-        "UPDATE objects SET needsSyncUp = 1 WHERE fileId IN rarray(?)",
-        [sql::id_array(file_ids)],
-    )?;
-    Ok(())
-}
-
-/// Compare-and-swap clear: clears the flag only if the file's edit clock
-/// (files.updatedAt) still matches the value observed before the sync round-trip,
-/// so an edit that landed mid-round-trip keeps the object flagged for the next
-/// pass. Resolution is updatedAt's millisecond; a second edit within the same
-/// millisecond can clear with that edit unpushed.
-pub fn clear_object_if_unchanged(
-    conn: &Connection,
-    object_id: &str,
-    indexer_url: &str,
-    expected_file_updated_at: i64,
-) -> Result<(), DbError> {
-    conn.execute(
-        r"UPDATE objects SET needsSyncUp = 0
-            WHERE id = ? AND indexerURL = ?
-              AND (SELECT updatedAt FROM files WHERE files.id = objects.fileId) = ?",
-        params![object_id, indexer_url, expected_file_updated_at],
-    )?;
-    Ok(())
-}
-
-/// Clear the flag on specific objects (sync-down remote-newer winners), scoped to one
-/// indexer.
-pub fn clear_objects(
+pub(in crate::db) fn clear_objects_stmt(
     conn: &Connection,
     indexer_url: &str,
     object_ids: &[String],
@@ -286,67 +478,7 @@ pub fn clear_objects(
     Ok(())
 }
 
-/// Flag every object dirty (the advanced "resync metadata" escape hatch).
-pub fn flag_all_objects(conn: &Connection) -> Result<(), DbError> {
-    conn.execute("UPDATE objects SET needsSyncUp = 1", [])?;
-    Ok(())
-}
-
-/// One dirty object at an indexer, joined to its file to build the sync-up push:
-/// the file's edit clock (`file_updated_at`, for the compare-and-swap clear) and
-/// its `deleted_at`, which decides the push, a delete when the file is gone,
-/// otherwise an upsert of the object's metadata.
-pub struct SyncUpObjectRow {
-    pub object_id: String,
-    pub file_id: String,
-    pub file_name: String,
-    pub file_updated_at: i64,
-    pub deleted_at: Option<i64>,
-}
-
-fn sync_up_object_from_db_row(r: &rusqlite::Row) -> rusqlite::Result<SyncUpObjectRow> {
-    Ok(SyncUpObjectRow {
-        object_id: r.get("objectId")?,
-        file_id: r.get("fileId")?,
-        file_name: r.get("fileName")?,
-        file_updated_at: r.get("fileUpdatedAt")?,
-        deleted_at: r.get("deletedAt")?,
-    })
-}
-
-/// Dirty objects at the given indexer (one row per push target, so LIMIT
-/// bounds work items exactly). Ordered by `o.id`, the index key, not updatedAt.
-pub fn query_sync_up_objects(
-    conn: &Connection,
-    indexer_url: &str,
-    limit: i64,
-) -> Result<Vec<SyncUpObjectRow>, DbError> {
-    let mut stmt = conn.prepare(
-        r"SELECT o.id AS objectId, o.fileId AS fileId, f.name AS fileName,
-            f.updatedAt AS fileUpdatedAt, f.deletedAt AS deletedAt
-          FROM objects o JOIN files f ON f.id = o.fileId
-          WHERE o.indexerURL = ? AND o.needsSyncUp = 1
-          ORDER BY o.id
-          LIMIT ?",
-    )?;
-    let out = stmt
-        .query_map(params![indexer_url, limit], sync_up_object_from_db_row)?
-        .collect::<rusqlite::Result<Vec<SyncUpObjectRow>>>()?;
-    Ok(out)
-}
-
-/// Count of dirty objects at the given indexer (sync-up progress total plus the
-/// post-batch "remaining == 0" termination check).
-pub fn count_sync_up_objects(conn: &Connection, indexer_url: &str) -> Result<i64, DbError> {
-    Ok(conn.query_row(
-        "SELECT COUNT(*) FROM objects WHERE indexerURL = ? AND needsSyncUp = 1",
-        params![indexer_url],
-        |r| r.get(0),
-    )?)
-}
-
-/// Deletes many object rows by id, all scoped to a single `indexer_url`.
-pub fn delete_many_objects_by_ids(
+pub(in crate::db) fn delete_many_objects_by_ids_stmt(
     conn: &Connection,
     object_ids: &[String],
     indexer_url: &str,
@@ -361,68 +493,69 @@ pub fn delete_many_objects_by_ids(
     Ok(())
 }
 
-/// Returns the subset of the given file ids that have no object rows.
-pub fn query_files_with_no_objects(
+pub(in crate::db) fn query_files_with_no_objects_stmt(
     conn: &Connection,
     file_ids: &[String],
 ) -> Result<Vec<String>, DbError> {
     if file_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let q = r"SELECT id FROM files WHERE id IN rarray(?)
-              AND NOT EXISTS (SELECT 1 FROM objects WHERE fileId = files.id)";
-    let mut stmt = conn.prepare(q)?;
+    let mut stmt = conn.prepare(
+        r"SELECT id FROM files WHERE id IN rarray(?)
+          AND NOT EXISTS (SELECT 1 FROM objects WHERE fileId = files.id)",
+    )?;
     let out = stmt
         .query_map([sql::id_array(file_ids)], |r| r.get("id"))?
         .collect::<rusqlite::Result<Vec<String>>>()?;
     Ok(out)
 }
 
-/// Deletes all objects for the given files in one statement. Consumed by the facade's
-/// bulk permanent-delete flow (upstack).
-pub fn delete_many_objects_for_files(
-    conn: &Connection,
-    file_ids: &[String],
-) -> Result<(), DbError> {
-    if file_ids.is_empty() {
-        return Ok(());
-    }
-    conn.execute(
-        "DELETE FROM objects WHERE fileId IN rarray(?)",
-        [sql::id_array(file_ids)],
-    )?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::migrations::migrated_conn;
     use chrono::{TimeZone, Utc};
 
-    fn seed_file(conn: &Connection, id: &str) {
-        // The real schema makes name/size/type/hash/addedAt/createdAt/updatedAt
-        // NOT NULL with no default; these ops only read `FROM files`, so the
-        // values don't matter here: supply 0/'' placeholders.
-        seed_file_with_name_and_updated_at(conn, id, "", 0);
+    async fn test_db() -> Db {
+        Db::open_in_memory().await.unwrap()
     }
 
-    fn seed_file_with_name_and_updated_at(
-        conn: &Connection,
-        id: &str,
-        name: &str,
-        updated_at: i64,
-    ) {
-        conn.execute(
-            "INSERT INTO files (id, addedAt, name, size, type, createdAt, updatedAt, hash) \
-              VALUES (?, 0, ?, 0, '', 0, ?, '')",
-            params![id, name, updated_at],
-        )
+    // The real schema makes name/size/type/hash/addedAt/createdAt/updatedAt NOT NULL with no
+    // default; these ops only read `FROM files`, so the values don't matter: supply 0/''.
+    async fn seed_file(db: &Db, id: &str) {
+        seed_file_named(db, id, "", 0).await;
+    }
+
+    async fn seed_file_named(db: &Db, id: &str, name: &str, updated_at: i64) {
+        let (id, name) = (id.to_string(), name.to_string());
+        db.transaction(move |c| {
+            c.execute(
+                "INSERT INTO files (id, addedAt, name, size, type, createdAt, updatedAt, hash) \
+                  VALUES (?, 0, ?, 0, '', 0, ?, '')",
+                params![id, name, updated_at],
+            )?;
+            Ok(())
+        })
+        .await
         .unwrap();
     }
 
-    // Builds a test object with a DISTINCT value in every sealed field, so a swapped
-    // bind in the 12-column writes fails the round-trip assertions.
+    // Reads back the raw needsSyncUp column (the ops never decode it into LocalObject), so the
+    // flag-behavior tests can assert on it directly.
+    async fn needs_sync_up(db: &Db, object_id: &str, indexer_url: &str) -> i64 {
+        let (object_id, indexer_url) = (object_id.to_string(), indexer_url.to_string());
+        db.transaction(move |c| {
+            Ok(c.query_row(
+                "SELECT needsSyncUp FROM objects WHERE id = ? AND indexerURL = ?",
+                params![object_id, indexer_url],
+                |r| r.get::<_, i64>(0),
+            )?)
+        })
+        .await
+        .unwrap()
+    }
+
+    // Builds a test object with a DISTINCT value in every sealed field, so a swapped bind in the
+    // 12-column writes fails the round-trip assertions.
     fn make_local_object(file_id: &str, indexer_url: &str, object_id: &str) -> LocalObject {
         LocalObject {
             id: object_id.into(),
@@ -441,58 +574,56 @@ mod tests {
         }
     }
 
-    #[test]
-    fn query_object_refs_for_files_returns_map_keyed_by_file_id_without_slabs() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        seed_file(&conn, "f2");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        upsert_object(&conn, &make_local_object("f2", "https://a.com", "obj2")).unwrap();
+    #[tokio::test]
+    async fn query_object_refs_for_files_returns_map_keyed_by_file_id_without_slabs() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        seed_file(&db, "f2").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f2", "https://a.com", "obj2"))
+            .await
+            .unwrap();
 
-        let map = query_object_refs_for_files(&conn, &["f1".into(), "f2".into()]).unwrap();
+        let map = db
+            .query_object_refs_for_files(&["f1".into(), "f2".into()])
+            .await
+            .unwrap();
         assert_eq!(map.get("f1").unwrap().len(), 1);
         assert_eq!(map.get("f1").unwrap()[0].id, "obj1");
         assert_eq!(map.get("f2").unwrap().len(), 1);
         assert_eq!(map.get("f2").unwrap()[0].id, "obj2");
     }
 
-    #[test]
-    fn query_object_refs_for_files_returns_empty_map_for_empty_input() {
-        let conn = migrated_conn();
-        let map = query_object_refs_for_files(&conn, &[]).unwrap();
+    #[tokio::test]
+    async fn query_object_refs_for_files_returns_empty_map_for_empty_input() {
+        let db = test_db().await;
+        let map = db.query_object_refs_for_files(&[]).await.unwrap();
         assert!(map.is_empty());
     }
 
-    // Reads back the raw needsSyncUp column for one object (the ops never decode it
-    // into LocalObject), so the flag-behavior tests can assert on it directly.
-    fn read_needs_sync_up(conn: &Connection, object_id: &str, indexer_url: &str) -> i64 {
-        conn.query_row(
-            "SELECT needsSyncUp FROM objects WHERE id = ? AND indexerURL = ?",
-            params![object_id, indexer_url],
-            |r| r.get::<_, i64>(0),
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn upsert_many_objects_inserts_all_and_reads_back() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        seed_file(&conn, "f2");
+    #[tokio::test]
+    async fn upsert_many_objects_inserts_all_and_reads_back() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        seed_file(&db, "f2").await;
         let objects = vec![
             make_local_object("f1", "https://a.com", "obj1"),
             make_local_object("f1", "https://b.com", "obj2"),
             make_local_object("f2", "https://a.com", "obj3"),
         ];
-        upsert_many_objects(&conn, &objects, NeedsSyncUp::Set).unwrap();
+        db.upsert_many_objects(&objects, NeedsSyncUp::Set)
+            .await
+            .unwrap();
 
-        let f1 = query_objects_for_file(&conn, "f1").unwrap();
+        let f1 = db.query_objects_for_file("f1").await.unwrap();
         assert_eq!(f1.len(), 2);
         let mut f1_ids: Vec<String> = f1.iter().map(|o| o.id.clone()).collect();
         f1_ids.sort();
         assert_eq!(f1_ids, vec!["obj1".to_string(), "obj2".to_string()]);
 
-        let f2 = query_objects_for_file(&conn, "f2").unwrap();
+        let f2 = db.query_objects_for_file("f2").await.unwrap();
         assert_eq!(f2.len(), 1);
         assert_eq!(f2[0].id, "obj3");
         assert_eq!(f2[0].indexer_url, "https://a.com");
@@ -514,102 +645,106 @@ mod tests {
         assert_eq!(sealed.updated_at.timestamp_millis(), 2000);
     }
 
-    #[test]
-    fn upsert_many_objects_empty_is_noop() {
-        let conn = migrated_conn();
-        upsert_many_objects(&conn, &[], NeedsSyncUp::Set).unwrap();
-        assert!(query_objects_for_file(&conn, "f1").unwrap().is_empty());
+    #[tokio::test]
+    async fn upsert_many_objects_empty_is_noop() {
+        let db = test_db().await;
+        db.upsert_many_objects(&[], NeedsSyncUp::Set).await.unwrap();
+        assert!(db.query_objects_for_file("f1").await.unwrap().is_empty());
     }
 
-    #[test]
-    fn upsert_many_objects_on_conflict_refreshes_fields_without_duplicating() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn upsert_many_objects_on_conflict_refreshes_fields_without_duplicating() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Set,
         )
+        .await
         .unwrap();
-        // Same (indexerURL, id) with changed sealed fields: the DO UPDATE SET must
-        // refresh every column, not insert a second row.
+        // Same (indexerURL, id) with changed sealed fields: the DO UPDATE SET must refresh every
+        // column, not insert a second row.
         let mut changed = make_local_object("f1", "https://a.com", "obj1");
         changed.sealed.encrypted_data_key = vec![0x99];
         changed.sealed.encrypted_metadata = vec![0x98];
         changed.sealed.updated_at = Utc.timestamp_millis_opt(9000).unwrap();
-        upsert_many_objects(&conn, &[changed], NeedsSyncUp::Set).unwrap();
+        db.upsert_many_objects(&[changed], NeedsSyncUp::Set)
+            .await
+            .unwrap();
 
-        assert_eq!(count_objects_for_file(&conn, "f1").unwrap(), 1);
-        let read = &query_objects_for_file(&conn, "f1").unwrap()[0];
+        assert_eq!(db.count_objects_for_file("f1").await.unwrap(), 1);
+        let read = &db.query_objects_for_file("f1").await.unwrap()[0];
         assert_eq!(read.sealed.encrypted_data_key, vec![0x99]);
         assert_eq!(read.sealed.encrypted_metadata, vec![0x98]);
         assert_eq!(read.sealed.updated_at.timestamp_millis(), 9000);
     }
 
-    #[test]
-    fn upsert_many_objects_with_leave_preserves_conflicting_pending_flag() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn upsert_many_objects_with_leave_preserves_conflicting_pending_flag() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Set,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
 
-        upsert_many_objects(
-            &conn,
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Leave,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
     }
 
-    #[test]
-    fn upsert_many_objects_with_clear_clears_conflicting_flag() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn upsert_many_objects_with_clear_clears_conflicting_flag() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Set,
         )
+        .await
         .unwrap();
-        upsert_many_objects(
-            &conn,
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
     }
 
     // Leave on a FRESH insert (no conflicting row) defaults the flag to clean.
-    #[test]
-    fn upsert_many_objects_with_leave_inserts_fresh_rows_clean() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn upsert_many_objects_with_leave_inserts_fresh_rows_clean() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Leave,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
     }
 
-    #[test]
-    fn upsert_object_inserts_flagged_and_round_trips() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+    #[tokio::test]
+    async fn upsert_object_inserts_flagged_and_round_trips() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
 
-        // upsert_object binds its own 11-column statement (separate from
-        // upsert_many_objects), so its fields round-trip too.
-        let read = &query_objects_for_file(&conn, "f1").unwrap()[0];
+        // upsert_object binds its own 11-column statement (separate from upsert_many_objects), so
+        // its fields round-trip too.
+        let read = &db.query_objects_for_file("f1").await.unwrap()[0];
         assert_eq!(read.indexer_url, "https://a.com");
         let sealed = &read.sealed;
         assert_eq!(sealed.encrypted_data_key, vec![0x11, 0x12]);
@@ -627,114 +762,136 @@ mod tests {
         assert_eq!(sealed.updated_at.timestamp_millis(), 2000);
     }
 
-    #[test]
-    fn clear_object_if_unchanged_clears_only_when_files_updated_at_matches() {
-        let conn = migrated_conn();
+    #[tokio::test]
+    async fn clear_object_if_unchanged_clears_only_when_files_updated_at_matches() {
+        let db = test_db().await;
         // The compare-and-swap clear keys off files.updatedAt: seed a non-zero clock.
-        seed_file_with_name_and_updated_at(&conn, "f1", "", 5000);
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+        seed_file_named(&db, "f1", "", 5000).await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
 
         // Stale expectation (file's live updatedAt is 5000, not 4000): no-op.
-        clear_object_if_unchanged(&conn, "obj1", "https://a.com", 4000).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+        db.clear_object_if_unchanged("obj1", "https://a.com", 4000)
+            .await
+            .unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
 
-        clear_object_if_unchanged(&conn, "obj1", "https://a.com", 5000).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
+        db.clear_object_if_unchanged("obj1", "https://a.com", 5000)
+            .await
+            .unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
     }
 
-    #[test]
-    fn clear_objects_clears_unconditionally() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj2")).unwrap();
+    #[tokio::test]
+    async fn clear_objects_clears_unconditionally() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj2"))
+            .await
+            .unwrap();
         // Same id under a different indexer must not be cleared (indexer-scoped).
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "obj1")).unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "obj1"))
+            .await
+            .unwrap();
 
-        clear_objects(&conn, "https://a.com", &["obj1".into()]).unwrap();
+        db.clear_objects("https://a.com", &["obj1".into()])
+            .await
+            .unwrap();
 
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
-        assert_eq!(read_needs_sync_up(&conn, "obj2", "https://a.com"), 1);
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://b.com"), 1);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
+        assert_eq!(needs_sync_up(&db, "obj2", "https://a.com").await, 1);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://b.com").await, 1);
     }
 
-    #[test]
-    fn clear_objects_empty_is_noop() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        clear_objects(&conn, "https://a.com", &[]).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
+    #[tokio::test]
+    async fn clear_objects_empty_is_noop() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.clear_objects("https://a.com", &[]).await.unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
     }
 
-    #[test]
-    fn flag_all_objects_flags_every_object() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
+    #[tokio::test]
+    async fn flag_all_objects_flags_every_object() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
         // Insert via upsert with NeedsSyncUp::Clear so both start cleared.
-        upsert_many_objects(
-            &conn,
+        db.upsert_many_objects(
             &[
                 make_local_object("f1", "https://a.com", "obj1"),
                 make_local_object("f1", "https://b.com", "obj2"),
             ],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
-        assert_eq!(read_needs_sync_up(&conn, "obj2", "https://b.com"), 0);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
+        assert_eq!(needs_sync_up(&db, "obj2", "https://b.com").await, 0);
 
-        flag_all_objects(&conn).unwrap();
+        db.flag_all_objects().await.unwrap();
 
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
-        assert_eq!(read_needs_sync_up(&conn, "obj2", "https://b.com"), 1);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
+        assert_eq!(needs_sync_up(&db, "obj2", "https://b.com").await, 1);
     }
 
-    #[test]
-    fn flag_objects_for_files_sets_needs_sync_up() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        seed_file(&conn, "f2");
+    #[tokio::test]
+    async fn flag_objects_for_files_sets_needs_sync_up() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        seed_file(&db, "f2").await;
         // Both start clean (needsSyncUp = 0) via NeedsSyncUp::Clear.
-        upsert_many_objects(
-            &conn,
+        db.upsert_many_objects(
             &[
                 make_local_object("f1", "https://a.com", "obj1"),
                 make_local_object("f2", "https://a.com", "obj2"),
             ],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
-        assert_eq!(read_needs_sync_up(&conn, "obj2", "https://a.com"), 0);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
+        assert_eq!(needs_sync_up(&db, "obj2", "https://a.com").await, 0);
 
-        flag_objects_for_files(&conn, &["f1".into()]).unwrap();
+        db.flag_objects_for_files(&["f1".into()]).await.unwrap();
 
         // f1's object is flagged; f2's object (a different file) stays clean.
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 1);
-        assert_eq!(read_needs_sync_up(&conn, "obj2", "https://a.com"), 0);
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 1);
+        assert_eq!(needs_sync_up(&db, "obj2", "https://a.com").await, 0);
     }
 
-    #[test]
-    fn query_sync_up_objects_returns_only_flagged_ordered_by_id() {
-        let conn = migrated_conn();
-        seed_file_with_name_and_updated_at(&conn, "f1", "name1", 7000);
-        seed_file_with_name_and_updated_at(&conn, "f2", "name2", 8000);
-        // obj_b and obj_a are flagged for https://a.com; obj_c is cleared; obj_z
-        // is on a different indexer.
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj_b")).unwrap();
-        upsert_object(&conn, &make_local_object("f2", "https://a.com", "obj_a")).unwrap();
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn query_sync_up_objects_returns_only_flagged_ordered_by_id() {
+        let db = test_db().await;
+        seed_file_named(&db, "f1", "name1", 7000).await;
+        seed_file_named(&db, "f2", "name2", 8000).await;
+        // obj_b and obj_a are flagged for https://a.com; obj_c is cleared; obj_z is on a
+        // different indexer.
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj_b"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f2", "https://a.com", "obj_a"))
+            .await
+            .unwrap();
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj_c")],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "obj_z")).unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "obj_z"))
+            .await
+            .unwrap();
 
-        let rows = query_sync_up_objects(&conn, "https://a.com", 10).unwrap();
-        // Only the two flagged a.com objects, ORDER BY o.id → obj_a before obj_b.
+        let rows = db.query_sync_up_objects("https://a.com", 10).await.unwrap();
+        // Only the two flagged a.com objects, ORDER BY o.id -> obj_a before obj_b.
         let ids: Vec<String> = rows.iter().map(|r| r.object_id.clone()).collect();
         assert_eq!(ids, vec!["obj_a".to_string(), "obj_b".to_string()]);
         assert_eq!(rows[0].file_id, "f2");
@@ -746,142 +903,195 @@ mod tests {
         assert_eq!(rows[1].file_updated_at, 7000);
 
         // LIMIT bounds the work items.
-        let limited = query_sync_up_objects(&conn, "https://a.com", 1).unwrap();
+        let limited = db.query_sync_up_objects("https://a.com", 1).await.unwrap();
         assert_eq!(limited.len(), 1);
         assert_eq!(limited[0].object_id, "obj_a");
     }
 
-    #[test]
-    fn count_sync_up_objects_counts_flagged_per_indexer() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj2")).unwrap();
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn count_sync_up_objects_counts_flagged_per_indexer() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj2"))
+            .await
+            .unwrap();
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj3")],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "obj4")).unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "obj4"))
+            .await
+            .unwrap();
 
-        assert_eq!(count_sync_up_objects(&conn, "https://a.com").unwrap(), 2);
-        assert_eq!(count_sync_up_objects(&conn, "https://b.com").unwrap(), 1);
+        assert_eq!(db.count_sync_up_objects("https://a.com").await.unwrap(), 2);
+        assert_eq!(db.count_sync_up_objects("https://b.com").await.unwrap(), 1);
     }
 
-    #[test]
-    fn delete_many_objects_by_ids_only_targets_matching_indexer() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "shared")).unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "shared")).unwrap();
-        assert_eq!(count_objects_for_file(&conn, "f1").unwrap(), 2);
+    #[tokio::test]
+    async fn delete_many_objects_by_ids_only_targets_matching_indexer() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "shared"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "shared"))
+            .await
+            .unwrap();
+        assert_eq!(db.count_objects_for_file("f1").await.unwrap(), 2);
 
-        delete_many_objects_by_ids(&conn, &["shared".into()], "https://a.com").unwrap();
+        db.delete_many_objects_by_ids(&["shared".into()], "https://a.com")
+            .await
+            .unwrap();
 
         // Only the a.com row is gone; the b.com row with the same id survives.
-        let remaining = query_object_refs_for_file(&conn, "f1").unwrap();
+        let remaining = db.query_object_refs_for_file("f1").await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, "shared");
         assert_eq!(remaining[0].indexer_url, "https://b.com");
     }
 
-    #[test]
-    fn delete_many_objects_by_ids_empty_is_noop() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        delete_many_objects_by_ids(&conn, &[], "https://a.com").unwrap();
-        assert_eq!(count_objects_for_file(&conn, "f1").unwrap(), 1);
+    #[tokio::test]
+    async fn delete_many_objects_by_ids_empty_is_noop() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.delete_many_objects_by_ids(&[], "https://a.com")
+            .await
+            .unwrap();
+        assert_eq!(db.count_objects_for_file("f1").await.unwrap(), 1);
     }
 
-    #[test]
-    fn delete_object_only_targets_matching_indexer() {
-        // delete_object binds both id and indexerURL, so the b.com row with the
-        // same id must survive.
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "shared")).unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "shared")).unwrap();
-        assert_eq!(count_objects_for_file(&conn, "f1").unwrap(), 2);
+    #[tokio::test]
+    async fn delete_object_only_targets_matching_indexer() {
+        // delete_object binds both id and indexerURL, so the b.com row with the same id must
+        // survive.
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "shared"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "shared"))
+            .await
+            .unwrap();
+        assert_eq!(db.count_objects_for_file("f1").await.unwrap(), 2);
 
-        delete_object(&conn, "shared", "https://a.com").unwrap();
+        db.delete_object("shared", "https://a.com").await.unwrap();
 
-        let remaining = query_object_refs_for_file(&conn, "f1").unwrap();
+        let remaining = db.query_object_refs_for_file("f1").await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, "shared");
         assert_eq!(remaining[0].indexer_url, "https://b.com");
     }
 
-    #[test]
-    fn query_files_with_no_objects_returns_files_lacking_objects() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        seed_file(&conn, "f2");
-        seed_file(&conn, "f3");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
+    #[tokio::test]
+    async fn query_files_with_no_objects_returns_files_lacking_objects() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        seed_file(&db, "f2").await;
+        seed_file(&db, "f3").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
 
-        let mut result =
-            query_files_with_no_objects(&conn, &["f1".into(), "f2".into(), "f3".into()]).unwrap();
+        let mut result = db
+            .query_files_with_no_objects(&["f1".into(), "f2".into(), "f3".into()])
+            .await
+            .unwrap();
         result.sort();
         assert_eq!(result, vec!["f2".to_string(), "f3".to_string()]);
     }
 
-    #[test]
-    fn query_files_with_no_objects_empty_input_returns_empty() {
-        let conn = migrated_conn();
-        let result = query_files_with_no_objects(&conn, &[]).unwrap();
+    #[tokio::test]
+    async fn query_files_with_no_objects_empty_input_returns_empty() {
+        let db = test_db().await;
+        let result = db.query_files_with_no_objects(&[]).await.unwrap();
         assert!(result.is_empty());
     }
 
-    #[test]
-    fn delete_objects_for_file_deletes_all_objects_for_a_file() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        upsert_object(&conn, &make_local_object("f1", "https://b.com", "obj2")).unwrap();
+    #[tokio::test]
+    async fn delete_objects_for_file_deletes_all_objects_for_a_file() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f1", "https://b.com", "obj2"))
+            .await
+            .unwrap();
 
-        delete_objects_for_file(&conn, "f1").unwrap();
-        assert!(query_object_refs_for_file(&conn, "f1").unwrap().is_empty());
+        db.delete_objects_for_file("f1").await.unwrap();
+        assert!(
+            db.query_object_refs_for_file("f1")
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
-    #[test]
-    fn delete_many_objects_for_files_batch_deletes_across_files_leaving_f3() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        seed_file(&conn, "f2");
-        seed_file(&conn, "f3");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        upsert_object(&conn, &make_local_object("f2", "https://a.com", "obj2")).unwrap();
-        upsert_object(&conn, &make_local_object("f3", "https://a.com", "obj3")).unwrap();
+    #[tokio::test]
+    async fn delete_many_objects_for_files_batch_deletes_across_files_leaving_f3() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        seed_file(&db, "f2").await;
+        seed_file(&db, "f3").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f2", "https://a.com", "obj2"))
+            .await
+            .unwrap();
+        db.upsert_object(make_local_object("f3", "https://a.com", "obj3"))
+            .await
+            .unwrap();
 
-        delete_many_objects_for_files(&conn, &["f1".into(), "f2".into()]).unwrap();
+        db.delete_many_objects_for_files(&["f1".into(), "f2".into()])
+            .await
+            .unwrap();
 
-        assert!(query_object_refs_for_file(&conn, "f1").unwrap().is_empty());
-        assert!(query_object_refs_for_file(&conn, "f2").unwrap().is_empty());
-        assert_eq!(query_object_refs_for_file(&conn, "f3").unwrap().len(), 1);
+        assert!(
+            db.query_object_refs_for_file("f1")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            db.query_object_refs_for_file("f2")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(db.query_object_refs_for_file("f3").await.unwrap().len(), 1);
     }
 
-    #[test]
-    fn delete_many_objects_for_files_empty_is_noop() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_object(&conn, &make_local_object("f1", "https://a.com", "obj1")).unwrap();
-        delete_many_objects_for_files(&conn, &[]).unwrap();
-        assert_eq!(count_objects_for_file(&conn, "f1").unwrap(), 1);
+    #[tokio::test]
+    async fn delete_many_objects_for_files_empty_is_noop() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_object(make_local_object("f1", "https://a.com", "obj1"))
+            .await
+            .unwrap();
+        db.delete_many_objects_for_files(&[]).await.unwrap();
+        assert_eq!(db.count_objects_for_file("f1").await.unwrap(), 1);
     }
 
-    #[test]
-    fn flag_objects_for_files_empty_is_noop() {
-        let conn = migrated_conn();
-        seed_file(&conn, "f1");
-        upsert_many_objects(
-            &conn,
+    #[tokio::test]
+    async fn flag_objects_for_files_empty_is_noop() {
+        let db = test_db().await;
+        seed_file(&db, "f1").await;
+        db.upsert_many_objects(
             &[make_local_object("f1", "https://a.com", "obj1")],
             NeedsSyncUp::Clear,
         )
+        .await
         .unwrap();
-        flag_objects_for_files(&conn, &[]).unwrap();
-        assert_eq!(read_needs_sync_up(&conn, "obj1", "https://a.com"), 0);
+        db.flag_objects_for_files(&[]).await.unwrap();
+        assert_eq!(needs_sync_up(&db, "obj1", "https://a.com").await, 0);
     }
 }

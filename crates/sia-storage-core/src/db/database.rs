@@ -73,7 +73,9 @@ impl Db {
     /// statements. A caller cancelled while still waiting for the connection never starts; once
     /// the closure is spawned, a dropped future still finishes the transaction on its blocking
     /// thread rather than leaving it open.
-    pub async fn transaction<T, F>(&self, f: F) -> Result<T, DbError>
+    ///
+    /// Restricted to `crate::db`: no consumer opens a transaction or holds the connection.
+    pub(in crate::db) async fn transaction<T, F>(&self, f: F) -> Result<T, DbError>
     where
         F: FnOnce(&mut Transaction) -> Result<T, DbError> + Send + 'static,
         T: Send + 'static,
