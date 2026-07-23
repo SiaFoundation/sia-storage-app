@@ -20,7 +20,6 @@ export type SwitchIndexerStackParamList = {
 export type MenuStackParamList = {
   MenuHome: undefined
   SwitchIndexer: NavigatorScreenParams<SwitchIndexerStackParamList> | undefined
-  Import: { tab?: 'retrying' | 'lost' } | undefined
   Logs: undefined
   Advanced: undefined
   LearnRecoveryPhrase: undefined
@@ -39,8 +38,22 @@ export type ImportStackParamList = {
   ImportFile: { shareUrl: string; id: string }
 }
 
+export type ImportsStackParamList = {
+  Imports: undefined
+  ImportDetail: { importId: string }
+}
+
 export type RootTabParamList = {
   MainTab: NavigatorScreenParams<MainStackParamList> | undefined
   MenuTab: NavigatorScreenParams<MenuStackParamList> | undefined
   ImportTab: NavigatorScreenParams<ImportStackParamList> | undefined
+}
+
+// The container root: the tab UI plus modal flows presentable from any tab.
+// Imports live here (not in the settings stack) because their common entry is
+// the library status sheet; a modal returns to wherever the user was instead
+// of unwinding through Settings.
+export type RootStackParamList = {
+  Tabs: NavigatorScreenParams<RootTabParamList> | undefined
+  ImportsModal: NavigatorScreenParams<ImportsStackParamList> | undefined
 }

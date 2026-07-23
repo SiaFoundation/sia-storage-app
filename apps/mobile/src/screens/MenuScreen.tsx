@@ -10,6 +10,7 @@ import {
   InsetGroupToggleRow,
   InsetGroupValueRow,
 } from '../components/InsetGroup'
+import { navigateToImports } from '../lib/navigationRef'
 import { SettingsScrollLayout } from '../components/SettingsLayout'
 import { SettingsSyncPhotos } from '../components/SettingsSyncPhotos'
 import { LINKS } from '../config/links'
@@ -69,6 +70,10 @@ export function MenuScreen({ navigation }: Props) {
   return (
     <SettingsScrollLayout>
       <SettingsSyncPhotos />
+
+      <InsetGroupSection header="Library">
+        <InsetGroupLink label="Imports" onPress={navigateToImports} />
+      </InsetGroupSection>
 
       <InsetGroupSection header="Device">
         <InsetGroupToggleRow

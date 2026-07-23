@@ -1,14 +1,12 @@
-import { type NavigationProp, useNavigation } from '@react-navigation/native'
+import { navigateToImports } from '../lib/navigationRef'
 import type { UploadCategoryStats, UploadStats } from '@siastorage/core/db/operations'
 import { useAccount, useStatusDisplayMode } from '@siastorage/core/stores'
 import { useCallback } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
 import { humanSize } from '../lib/humanSize'
-import { getImportBackoffEntries } from '../managers/importScanner'
-import type { RootTabParamList } from '../stacks/types'
 import { app } from '../stores/appService'
-import { useFileStatsLocal, useFileStatsLost } from '../stores/files'
+import { useFileCountImporting, useFileStatsLocal, useFileStatsLost } from '../stores/files'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { palette, whiteA } from '../styles/colors'
 import { ActivityStatusRow } from './ActivityStatusRow'
@@ -74,25 +72,16 @@ export function LibraryStatusSheet() {
   const onDevice = useFileStatsLocal({ localOnly: false }, { refreshInterval })
   const pendingBackup = useFileStatsLocal({ localOnly: true }, { refreshInterval })
   const lost = useFileStatsLost({ refreshInterval })
-  const importErrors = useSWR(
-    ['import-errors', isOpen ?? null],
-    () => getImportBackoffEntries().length,
-    { refreshInterval },
-  )
-  const navigation = useNavigation<NavigationProp<RootTabParamList>>()
-  const openImportSettings = useCallback(
-    (tab: 'retrying' | 'lost') => {
-      closeSheet()
-      navigation.navigate('MenuTab', { screen: 'Import', params: { tab }, initial: false })
-    },
-    [navigation],
-  )
+  const importing = useFileCountImporting({ refreshInterval })
+  const openImports = useCallback(() => {
+    closeSheet()
+    navigateToImports()
+  }, [])
   const handleClose = useCallback(() => {
     closeSheet()
   }, [])
 
-  const importingCount = stats.data?.importingCount ?? 0
-  const importErrorCount = importErrors.data ?? 0
+  const importingCount = importing.data ?? 0
 
   const totalCount = stats.data?.files.total ?? 0
   const totalBytes = account.data ? Number(account.data.pinnedData) : undefined
@@ -139,16 +128,16 @@ export function LibraryStatusSheet() {
             label="Storage limit"
             value={humanLimit(account.data?.maxPinnedData)}
           />
-          {importingCount > 0 ? (
-            <InsetGroupValueRow label="Pending import" value={formatCount(importingCount)} />
-          ) : null}
-          {importErrorCount > 0 ? (
-            <InsetGroupLink
-              label="Import errors"
-              onPress={() => openImportSettings('retrying')}
-              value={formatCount(importErrorCount)}
-            />
-          ) : null}
+          <InsetGroupLink
+            label="Imports"
+            description={
+              importingCount > 0
+                ? `${formatCount(importingCount)} still importing.`
+                : 'Photos and files you imported.'
+            }
+            onPress={openImports}
+            value={importingCount > 0 ? formatCount(importingCount) : undefined}
+          />
         </InsetGroupSection>
 
         <InsetGroupSection
@@ -181,10 +170,9 @@ export function LibraryStatusSheet() {
               pendingBackup.data?.totalBytes,
             )}
           />
-          <InsetGroupLink
+          <InsetGroupValueRow
             label="Unavailable"
-            description="Files that were unavailable during import."
-            onPress={() => openImportSettings('lost')}
+            description="Local files that went missing before they were uploaded."
             value={formatModeValue(mode, lost.data?.count ?? 0, lost.data?.totalBytes)}
           />
         </InsetGroupSection>
