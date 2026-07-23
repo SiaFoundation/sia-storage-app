@@ -56,6 +56,34 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun --cwd apps/mobile test
 
+  # The import-sources Swift logic. A standalone SwiftPM package, so this needs
+  # no prebuild and no simulator. The simulator tier (Photos-framework behavior)
+  # stays local: see `mobile:test:native:ios:sim`.
+  test-native-ios:
+    runs-on: macos-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup
+      - run: bun run mobile:test:native:ios
+
+  # The Kotlin half. Unlike iOS this needs a prebuild first, because
+  # apps/mobile/android is generated and gitignored, and gradle autolinking
+  # resolves the module through it.
+  test-native-android:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: bunx expo prebuild -p android --no-install
+        working-directory: apps/mobile
+      - run: bun run mobile:test:native:android
+
   test-integration:
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'

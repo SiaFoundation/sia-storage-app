@@ -53,11 +53,27 @@ export function computeBuildHash(): string {
   const pluginGlob = new Glob('plugins/*.js')
   const pluginFiles = Array.from(pluginGlob.scanSync({ cwd: PROJECT_ROOT })).sort()
 
-  const allFiles = [...coreFiles, ...pluginFiles]
+  // Local expo modules ship native code the build embeds; if they didn't feed
+  // the hash, an edit there would silently reinstall a stale build.
+  const moduleFiles = [
+    'modules/*/android/src/main/**/*.kt',
+    'modules/*/android/src/main/**/*.java',
+    'modules/*/android/src/main/AndroidManifest.xml',
+    'modules/*/android/build.gradle',
+    'modules/*/ios/**/*.swift',
+    'modules/*/ios/*.podspec',
+    'modules/*/expo-module.config.json',
+    'modules/*/package.json',
+  ]
+    .flatMap((pattern) => Array.from(new Glob(pattern).scanSync({ cwd: PROJECT_ROOT })))
+    .sort()
+
+  const allFiles = [...coreFiles, ...pluginFiles, ...moduleFiles]
   const content = allFiles
     .map((f) => {
       const path = join(PROJECT_ROOT, f)
-      return existsSync(path) ? readFileSync(path, 'utf-8') : ''
+      // Path prefixed so a rename or a new empty file busts the hash too.
+      return existsSync(path) ? `${f}\0${readFileSync(path, 'utf-8')}` : f
     })
     .join('')
 
