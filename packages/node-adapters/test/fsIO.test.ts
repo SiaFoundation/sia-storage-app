@@ -90,6 +90,15 @@ describe('list', () => {
   })
 })
 
+describe('getDeviceSpace', () => {
+  it('returns positive free + total bytes with free <= total', async () => {
+    const space = await fsIO.getDeviceSpace!()
+    expect(space.freeBytes).toBeGreaterThan(0)
+    expect(space.totalBytes).toBeGreaterThan(0)
+    expect(space.freeBytes).toBeLessThanOrEqual(space.totalBytes)
+  })
+})
+
 describe('ensureDirectory', () => {
   it('creates directory recursively', async () => {
     const nestedDir = path.join(filesDir, 'a', 'b', 'c')

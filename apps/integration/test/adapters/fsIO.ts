@@ -6,6 +6,7 @@ export function createMockFsIO(overrides?: Partial<FsIOAdapter>): FsIOAdapter {
     size: async () => ({ value: 1000 }),
     remove: async () => {},
     copy: async () => ({ uri: '', size: 0 }),
+    importCopy: async () => ({ uri: '', size: 0 }),
     writeFile: async (_file, data) => ({
       uri: 'file://thumb.webp',
       size: data.byteLength,

@@ -146,6 +146,7 @@ export {
   type FsMetaRow,
   queryEvictionCandidates,
   queryNonCurrentCachedFiles,
+  queryInFlightImportFileIds,
   queryOrphanedFileIds,
   queryTrashedCachedFiles,
   readFsMeta,

@@ -119,17 +119,41 @@ export async function queryTrashedCachedFiles(
   )
 }
 
+/** Which of `ids` still have an in-flight (pending/active) import_files row. */
+export async function queryInFlightImportFileIds(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const ph = ids.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM import_files WHERE id IN (${ph}) AND state IN ('pending','active')`,
+    ...ids,
+  )
+  return new Set(rows.map((r) => r.id))
+}
+
 export async function queryOrphanedFileIds(
   db: DatabaseAdapter,
   fileIds: string[],
 ): Promise<Set<string>> {
   if (fileIds.length === 0) return new Set()
+  // Bytes for a pending or active import sit on disk with no files row, including
+  // the brief window between the claim-temp rename and the fs-meta upsert, so an id
+  // backed by a non-terminal import_files row is never orphaned. A terminal row that
+  // never became a file leaves no live files row either, so the second clause makes
+  // those bytes reclaimable after a crash.
   const rows = await db.getAllAsync<{ fileId: string }>(
     `SELECT value AS fileId FROM json_each(?)
      WHERE NOT EXISTS (
-       SELECT 1 FROM fs WHERE fs.fileId = value
-     ) OR NOT EXISTS (
-       SELECT 1 FROM files WHERE files.id = value AND files.deletedAt IS NULL
+       SELECT 1 FROM import_files
+       WHERE import_files.id = value AND import_files.state IN ('pending','active')
+     ) AND (
+       NOT EXISTS (
+         SELECT 1 FROM fs WHERE fs.fileId = value
+       ) OR NOT EXISTS (
+         SELECT 1 FROM files WHERE files.id = value AND files.deletedAt IS NULL
+       )
      )`,
     JSON.stringify(fileIds),
   )
