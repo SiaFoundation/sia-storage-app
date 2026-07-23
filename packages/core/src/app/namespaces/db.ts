@@ -5,6 +5,7 @@ import * as ops from '../../db/operations'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
+import { IMPORTS_CACHE_DEBOUNCE_MS } from '../../config'
 import type { AppCaches, AppService } from '../service'
 
 function parseLogRow(row: {
@@ -161,7 +162,90 @@ export function buildDbNamespaces(
     return { metadata, deletedAt: record.deletedAt }
   }
 
+  const importsDebounced = caches.imports.debounced(IMPORTS_CACHE_DEBOUNCE_MS)
+  function invalidateImports() {
+    importsDebounced.invalidateAll()
+  }
+
   return {
+    imports: {
+      list: (opts) => ops.queryImports(db, opts),
+      get: (id) => ops.queryImportById(db, id),
+      summary: (ids) => ops.queryImportSummary(db, ids),
+      files: (importId, opts) =>
+        ops.queryImportFiles(db, { importId, limit: opts?.limit, search: opts?.search }),
+      pendingFiles: (limit, now) => ops.queryPendingImportFiles(db, { limit, now }),
+      inProgressImport: (source) => ops.queryInProgressImport(db, source),
+      countInFlight: () => ops.countInFlight(db),
+      getByMediaAssetIds: (mediaAssetIds, directoryId) =>
+        ops.queryImportFilesByMediaAssetIds(db, mediaAssetIds, directoryId),
+      create: async (imp, files) => {
+        await db.withTransactionAsync(async () => {
+          await ops.insertImport(db, imp)
+          await ops.insertManyImportFiles(db, files)
+        })
+        invalidateImports()
+      },
+      addFiles: async (importId, files) => {
+        if (files.length === 0) return
+        await ops.addFilesToImport(db, importId, files, Date.now())
+        invalidateImports()
+      },
+      seal: async (id) => {
+        await ops.sealImport(db, id, Date.now())
+        invalidateImports()
+      },
+      sealIdle: async (source, idleMs, now) => {
+        await ops.sealIdleImports(db, source, idleMs, now)
+        invalidateImports()
+      },
+      appendToOpenImport: async (source, newImport, files, now) => {
+        const result = await ops.appendToOpenImportOrCreate(db, source, newImport, files, now)
+        invalidateImports()
+        return result
+      },
+      claim: (id, now, token) => ops.claimImportFile(db, id, now, token),
+      markProgress: (id, bytes, token) =>
+        ops.markImportFileProgress(db, id, bytes, token, Date.now()),
+      recordHash: async (id, token, meta) => {
+        await ops.recordImportFileHash(db, id, token, meta)
+        invalidateImports()
+      },
+      markUnavailable: async (id, token, reason) => {
+        await ops.markImportFileUnavailable(db, id, token, reason)
+        invalidateImports()
+      },
+      markFailure: async (id, token, reason, now, exhaustedState, maxAttempts) => {
+        await ops.markImportFileFailure(db, id, token, reason, now, exhaustedState, maxAttempts)
+        invalidateImports()
+      },
+      cancel: async (ids) => {
+        await ops.cancelImportFiles(db, ids)
+        invalidateImports()
+      },
+      cancelImport: async (importId) => {
+        await ops.cancelInFlightImportFiles(db, importId, Date.now())
+        invalidateImports()
+      },
+      retry: async (ids) => {
+        await ops.retryImportFiles(db, ids)
+        invalidateImports()
+      },
+      retryFailed: async (importId) => {
+        await ops.rependTerminalImportFiles(db, importId, Date.now())
+        invalidateImports()
+      },
+      updateSourceRef: (id, token, ref) => ops.updateImportSourceRef(db, id, token, ref),
+      delete: async (id) => {
+        const grants = await ops.deleteImport(db, id)
+        invalidateImports()
+        return grants
+      },
+      resetStale: async (claimOlderThanMs, sealOlderThanMs, now) => {
+        await ops.resetStaleImportFiles(db, claimOlderThanMs, sealOlderThanMs, now)
+        invalidateImports()
+      },
+    },
     tags: {
       getAll: () => ops.queryAllTagsWithCounts(db),
       getForFile: (fileId) => ops.queryTagsForFile(db, fileId),
@@ -452,10 +536,17 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
       },
       deleteAndTrashFiles: async (id) => {
+        // Resolve in-flight imports targeting this directory to `failed` and
+        // delete their staged bytes BEFORE the directory goes; otherwise the
+        // scanner would try to finalize them into a now-deleted directory (FK
+        // violation) and leak bytes.
+        const failedImports = await ops.failImportFilesInDirectory(db, id, 'destination-deleted')
+        await Promise.all(failedImports.map((f) => removeFile(f)))
         const count = await ops.deleteDirectoryAndTrashFiles(db, id)
         caches.directories.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
+        if (failedImports.length > 0) invalidateImports()
         return count
       },
       deleteEmpty: async (directoryIds, opts) => {
