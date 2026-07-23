@@ -34,7 +34,7 @@ function row(id: string, isFavorite: 0 | 1, fsExists: 0 | 1) {
     createdAt: 1,
     updatedAt: 1,
     addedAt: 1,
-    localId: null,
+    mediaAssetId: null,
     trashedAt: null,
     deletedAt: null,
     lostReason: null,

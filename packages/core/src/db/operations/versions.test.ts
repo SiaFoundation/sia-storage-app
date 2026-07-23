@@ -51,7 +51,7 @@ async function createFile(
     hash: `hash-${id}`,
     createdAt: overrides?.createdAt ?? base,
     updatedAt: overrides?.updatedAt ?? overrides?.createdAt ?? base,
-    localId: null,
+    mediaAssetId: null,
     addedAt: overrides?.createdAt ?? base,
     trashedAt: null,
     deletedAt: null,
@@ -73,7 +73,7 @@ async function createDirectory(id: string, name: string) {
 }
 
 describe('version filtering', () => {
-  test('two files same name+dir → library count = 1, shows latest by updatedAt', async () => {
+  test('two files with the same name and dir count as one library entry, showing the latest by updatedAt', async () => {
     await createFile('v1', { name: 'foo.txt', updatedAt: base })
     await createFile('v2', { name: 'foo.txt', updatedAt: base + 100 })
 
@@ -486,7 +486,7 @@ describe('batch move moves every selected stack in full', () => {
     expect(await queryUnfiledFileCount(db())).toBe(1)
   })
 
-  test('merging same-named stacks into one dir is deterministic — newest wins current', async () => {
+  test('merging same-named stacks into one dir is deterministic, newest wins current', async () => {
     await createDirectory('dir-a', 'A')
     await createDirectory('dir-b', 'B')
     await createDirectory('dir-c', 'C')
@@ -545,7 +545,7 @@ describe('trash cascades to all versions', () => {
 })
 
 describe('rename merge', () => {
-  test('file B renamed to match A → B becomes current', async () => {
+  test('renaming file B to match A makes B current', async () => {
     await createFile('a1', { name: 'foo.txt', updatedAt: base })
     await createFile('b1', { name: 'bar.txt', updatedAt: base + 50 })
 
@@ -562,7 +562,7 @@ describe('rename merge', () => {
     expect(latest?.id).toBe('b1')
   })
 
-  test('A has 3 versions, B has 2 → merged group has 5, B latest is current', async () => {
+  test('merging A (3 versions) with B (2 versions) yields 5, with the latest of B current', async () => {
     await createFile('a1', { name: 'foo.txt', updatedAt: base })
     await createFile('a2', { name: 'foo.txt', updatedAt: base + 100 })
     await createFile('a3', { name: 'foo.txt', updatedAt: base + 200 })
@@ -731,7 +731,7 @@ describe('current column maintenance', () => {
         hash: 'h-a1',
         createdAt: base,
         updatedAt: base,
-        localId: null,
+        mediaAssetId: null,
         addedAt: base,
         trashedAt: null,
         deletedAt: null,
@@ -745,7 +745,7 @@ describe('current column maintenance', () => {
         hash: 'h-a2',
         createdAt: base + 10,
         updatedAt: base + 100,
-        localId: null,
+        mediaAssetId: null,
         addedAt: base + 10,
         trashedAt: null,
         deletedAt: null,
@@ -759,7 +759,7 @@ describe('current column maintenance', () => {
         hash: 'h-b1',
         createdAt: base,
         updatedAt: base,
-        localId: null,
+        mediaAssetId: null,
         addedAt: base,
         trashedAt: null,
         deletedAt: null,

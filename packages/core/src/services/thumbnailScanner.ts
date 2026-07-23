@@ -95,7 +95,7 @@ export type ThumbnailCandidateRow = {
   id: string
   hash: string
   type: string
-  localId: string | null
+  mediaAssetId: string | null
   createdAt: number
 }
 
@@ -127,7 +127,7 @@ export type EnsureThumbnailParams = {
   fileId: string
   fileHash: string
   fileType: string
-  fileLocalId: string | null
+  fileMediaAssetId: string | null
   size: ThumbSize
   sourceUri: string
 }
@@ -272,7 +272,7 @@ export class ThumbnailScanner {
           fileId: fileRecord.id,
           fileHash: fileRecord.hash,
           fileType: actualType,
-          fileLocalId: fileRecord.localId,
+          fileMediaAssetId: fileRecord.mediaAssetId,
           sizes: missingSizes,
           sourceUri: effectiveSourceUri,
         })
@@ -282,7 +282,7 @@ export class ThumbnailScanner {
             fileId: fileRecord.id,
             fileHash: fileRecord.hash,
             fileType: actualType,
-            fileLocalId: fileRecord.localId,
+            fileMediaAssetId: fileRecord.mediaAssetId,
             size,
             sourceUri: effectiveSourceUri,
           })
@@ -362,7 +362,7 @@ export class ThumbnailScanner {
         createdAt: now,
         updatedAt: now,
         addedAt: now,
-        localId: null,
+        mediaAssetId: null,
         thumbForId: fileId,
         thumbSize: size,
         trashedAt: null,
@@ -401,7 +401,7 @@ export class ThumbnailScanner {
     fileId: string
     fileHash: string
     fileType: string
-    fileLocalId: string | null
+    fileMediaAssetId: string | null
     sizes: ThumbSize[]
     sourceUri: string
   }): Promise<void> {
@@ -453,7 +453,7 @@ export class ThumbnailScanner {
           createdAt: now,
           updatedAt: now,
           addedAt: now,
-          localId: null,
+          mediaAssetId: null,
           thumbForId: fileId,
           thumbSize: size,
           trashedAt: null,
@@ -624,7 +624,7 @@ export class ThumbnailScanner {
                 fileId: c.id,
                 fileHash: c.hash,
                 fileType: actualType,
-                fileLocalId: c.localId,
+                fileMediaAssetId: c.mediaAssetId,
                 size,
                 sourceUri: effectiveSourceUri,
               }),

@@ -24,7 +24,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: `local-${id}`,
+    mediaAssetId: `local-${id}`,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,
@@ -43,7 +43,7 @@ async function createThumbnail(id: string, parentId: string, thumbSize: 64 | 512
     hash: `hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,
@@ -153,7 +153,7 @@ describe('queryBestThumbnailByFileId', () => {
 })
 
 describe('queryThumbnailFileInfoByFileIds', () => {
-  it('returns id, type, localId for thumbnails of given file IDs', async () => {
+  it('returns id and type for thumbnails of given file IDs', async () => {
     await createTestFile('f1')
     await createTestFile('f2')
     await createThumbnail('t1', 'f1', 64)
@@ -164,7 +164,6 @@ describe('queryThumbnailFileInfoByFileIds', () => {
     const ids = infos.map((i) => i.id).sort()
     expect(ids).toEqual(['t1', 't2'])
     expect(infos[0]).toHaveProperty('type')
-    expect(infos[0]).toHaveProperty('localId')
   })
 
   it('returns empty for empty input', async () => {

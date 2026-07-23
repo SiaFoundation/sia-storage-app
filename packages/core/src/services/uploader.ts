@@ -911,7 +911,6 @@ export class UploadManager {
         order: 'ASC',
         pinned: { indexerURL, isPinned: false },
         fileExistsLocally: true,
-        hashNotEmpty: true,
         excludeIds: activeIds.length > 0 ? activeIds : undefined,
         includeThumbnails: true,
       })

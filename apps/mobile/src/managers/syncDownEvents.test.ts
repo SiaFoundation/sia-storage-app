@@ -235,7 +235,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -284,7 +284,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -379,7 +379,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -461,7 +461,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-rn',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -521,7 +521,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-tomb',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -590,7 +590,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-ln',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 100,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -655,7 +655,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE + 100,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -759,7 +759,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -1140,7 +1140,7 @@ describe('syncDownEvents', () => {
       hash: 'same-hash',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       trashedAt: null,
       deletedAt: null,
@@ -1303,7 +1303,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -1364,7 +1364,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -1425,7 +1425,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -1560,7 +1560,7 @@ describe('syncDownEvents', () => {
       expect(app().sync.getState().syncGateStatus).toBe('idle')
     })
 
-    test('transitions pending → active on large batch', async () => {
+    test('transitions from pending to active on large batch', async () => {
       app().sync.setState({ syncGateStatus: 'pending' })
       const events = makeEvents(20)
       const heartbeat = makeEvents(1, 20)
@@ -1576,7 +1576,7 @@ describe('syncDownEvents', () => {
       expect(app().sync.getState().syncGateStatus).toBe('dismissed')
     })
 
-    test('transitions pending → dismissed on small batch', async () => {
+    test('transitions from pending to dismissed on small batch', async () => {
       app().sync.setState({ syncGateStatus: 'pending' })
       const events = makeEvents(5)
       internal().setSdk({
@@ -1588,7 +1588,7 @@ describe('syncDownEvents', () => {
       expect(app().sync.getState().syncGateStatus).toBe('dismissed')
     })
 
-    test('transitions pending → dismissed on heartbeat', async () => {
+    test('transitions from pending to dismissed on heartbeat', async () => {
       app().sync.setState({ syncGateStatus: 'pending' })
       const events = makeEvents(1)
       internal().setSdk({
@@ -1600,7 +1600,7 @@ describe('syncDownEvents', () => {
       expect(app().sync.getState().syncGateStatus).toBe('dismissed')
     })
 
-    test('transitions active → dismissed when caught up', async () => {
+    test('transitions from active to dismissed when caught up', async () => {
       app().sync.setState({ syncGateStatus: 'pending' })
       const largeBatch = makeEvents(500)
       const heartbeat = makeEvents(1, 500)
@@ -1805,7 +1805,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,
@@ -1858,7 +1858,7 @@ describe('syncDownEvents', () => {
       hash: 'hash-1',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
-      localId: null,
+      mediaAssetId: null,
       addedAt: NOW_BASE,
       thumbForId: undefined,
       thumbSize: undefined,

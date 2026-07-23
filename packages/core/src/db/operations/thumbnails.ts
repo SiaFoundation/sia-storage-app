@@ -9,7 +9,7 @@ export type ThumbnailCandidateRow = {
   id: string
   hash: string
   type: string
-  localId: string | null
+  mediaAssetId: string | null
   createdAt: number
 }
 
@@ -18,7 +18,7 @@ export async function queryThumbnailsByFileId(
   fileId: string,
 ): Promise<FileRecord[]> {
   const rows = await db.getAllAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, mediaAssetId, hash, addedAt, thumbForId, thumbSize
      FROM files
      WHERE thumbForId = ?
      ORDER BY COALESCE(thumbSize, 0) ASC, id ASC`,
@@ -82,7 +82,7 @@ export async function queryBestThumbnailByFileId(
   requiredSize: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, mediaAssetId, hash, addedAt, thumbForId, thumbSize
      FROM files
      WHERE thumbForId = ? AND COALESCE(thumbSize, 0) <= ?
      ORDER BY
@@ -100,14 +100,13 @@ export async function queryBestThumbnailByFileId(
 export async function queryThumbnailFileInfoByFileIds(
   db: DatabaseAdapter,
   fileIds: string[],
-): Promise<{ id: string; type: string; localId: string | null }[]> {
+): Promise<{ id: string; type: string }[]> {
   if (fileIds.length === 0) return []
   const ph = fileIds.map(() => '?').join(',')
-  return db.getAllAsync<{
-    id: string
-    type: string
-    localId: string | null
-  }>(`SELECT id, type, localId FROM files WHERE thumbForId IN (${ph})`, ...fileIds)
+  return db.getAllAsync<{ id: string; type: string }>(
+    `SELECT id, type FROM files WHERE thumbForId IN (${ph})`,
+    ...fileIds,
+  )
 }
 
 export async function queryThumbnailByFileIdAndSize(
@@ -116,7 +115,7 @@ export async function queryThumbnailByFileIdAndSize(
   size: ThumbSize,
 ): Promise<FileRecord | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
-    `SELECT id, name, size, createdAt, updatedAt, type, kind, localId, hash, addedAt, thumbForId, thumbSize
+    `SELECT id, name, size, createdAt, updatedAt, type, kind, mediaAssetId, hash, addedAt, thumbForId, thumbSize
      FROM files WHERE thumbForId = ? AND thumbSize = ?`,
     fileId,
     size,
@@ -142,7 +141,7 @@ export async function queryThumbnailCandidatePage(
   const typePlaceholders = allowedTypes.map(() => '?').join(',')
 
   return db.getAllAsync<ThumbnailCandidateRow>(
-    `SELECT f.id, f.hash, f.type, f.localId, f.createdAt
+    `SELECT f.id, f.hash, f.type, f.mediaAssetId, f.createdAt
      FROM files f
      INNER JOIN fs fsm ON fsm.fileId = f.id
      LEFT JOIN files t
@@ -150,7 +149,6 @@ export async function queryThumbnailCandidatePage(
       AND t.thumbSize IN (${ThumbSizes.join(',')})
      WHERE f.type IN (${typePlaceholders})
        AND ${buildRecordFilter('f')}
-       AND f.hash != ''
        ${cursorClause}
      GROUP BY f.id
      HAVING COUNT(DISTINCT t.thumbSize) < ${ThumbSizes.length}

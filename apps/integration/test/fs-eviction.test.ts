@@ -49,7 +49,7 @@ async function seedUploadedThumb(
       hash: `hash-${params.id}`,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      localId: null,
+      mediaAssetId: null,
       addedAt: Date.now(),
       thumbForId: params.thumbForId,
       thumbSize: 512,
@@ -83,7 +83,7 @@ async function supersedeFile(
     hash: `hash-${superseder.id}`,
     createdAt: Date.now(),
     updatedAt: Date.now() + 1, // beat the original's updatedAt to win current=1
-    localId: null,
+    mediaAssetId: null,
     addedAt: Date.now(),
     trashedAt: null,
     deletedAt: null,

@@ -58,7 +58,7 @@ export type ResolvedThumbnail = {
 /**
  * Resolves what a file's thumbnail cell should render: the real cached
  * `kind='thumb'` when present, otherwise the OS photo-library tile while the
- * file is still importing and has a source asset (`localId`).
+ * file is still importing and has a source asset (`mediaAssetId`).
  *
  * The OS lookup is gated on the real thumb being absent, so files that
  * already have a thumbnail never touch the photo library. A failed lookup
@@ -68,9 +68,9 @@ export type ResolvedThumbnail = {
  */
 export function useThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512): ResolvedThumbnail {
   const best = useBestThumbnailUri(file, thumbSize)
-  const localId = file?.localId ?? null
-  const osKey = !best.data && localId ? (['os-thumb-uri', localId] as const) : null
-  const { data: osUri, mutate: mutateOs } = useSWR(osKey, () => getOsThumbnailUri(localId), {
+  const mediaAssetId = file?.mediaAssetId ?? null
+  const osKey = !best.data && mediaAssetId ? (['os-thumb-uri', mediaAssetId] as const) : null
+  const { data: osUri, mutate: mutateOs } = useSWR(osKey, () => getOsThumbnailUri(mediaAssetId), {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,

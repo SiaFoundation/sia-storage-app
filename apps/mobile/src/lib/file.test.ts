@@ -11,7 +11,6 @@ import {
 
 function makeFacts(overrides?: Partial<FileFacts>): FileFacts {
   return {
-    isProcessing: false,
     isImportFailed: false,
     isPinned: false,
     hasLocalCopy: false,
@@ -34,7 +33,7 @@ function makeFileRecord(overrides?: Partial<FileRecord>): FileRecord {
     hash: 'sha256:abc123',
     createdAt: 1000,
     updatedAt: 2000,
-    localId: null,
+    mediaAssetId: null,
     addedAt: 1000,
     trashedAt: null,
     deletedAt: null,
@@ -136,12 +135,6 @@ describe('computeFileStatus', () => {
       expect(status.phase.kind).toBe('unavailable')
     })
 
-    it('phase is importing while file is still hashing', () => {
-      const file = makeFileRecord({ hash: '' })
-      const status = computeFileStatus({ ...baseArgs, file })
-      expect(status.phase).toEqual({ kind: 'importing', preview: 'none' })
-    })
-
     it('phase is local-only when only local URI is present', () => {
       const file = makeFileRecord({ objects: {} })
       const status = computeFileStatus({
@@ -152,25 +145,8 @@ describe('computeFileStatus', () => {
       expect(status.phase.kind).toBe('local-only')
     })
 
-    it('phase is importing with preview=pending while Photos lookup is unknown', () => {
-      const file = makeFileRecord({ hash: '', localId: 'ph://1' })
-      const status = computeFileStatus({ ...baseArgs, file, photosLookup: 'unknown' })
-      expect(status.phase).toEqual({ kind: 'importing', preview: 'pending' })
-    })
-
-    it('phase is importing with preview=available during import + photos resolved', () => {
-      const file = makeFileRecord({ hash: '', localId: 'ph://1' })
-      const status = computeFileStatus({
-        ...baseArgs,
-        file,
-        photosLookup: 'available',
-        photosDisplayUri: 'file:///photos/1.jpg',
-      })
-      expect(status.phase).toEqual({ kind: 'importing', preview: 'available' })
-    })
-
     it('phase is unavailable when Photos backup resolves as unavailable', () => {
-      const file = makeFileRecord({ hash: 'sha256:abc', objects: {}, localId: 'ph://1' })
+      const file = makeFileRecord({ hash: 'sha256:abc', objects: {}, mediaAssetId: 'ph://1' })
       const status = computeFileStatus({ ...baseArgs, file, photosLookup: 'unavailable' })
       expect(status.phase.kind).toBe('unavailable')
     })
@@ -180,7 +156,6 @@ describe('computeFileStatus', () => {
     it('import-failed wins over everything', () => {
       const facts = makeFacts({
         isImportFailed: true,
-        isProcessing: true,
         isPinned: true,
         hasLocalCopy: true,
         upload: { state: 'uploading', progress: 0.5 },
@@ -188,25 +163,6 @@ describe('computeFileStatus', () => {
       })
       const phase = derivePhase(facts)
       expect(phase).toEqual({ kind: 'import-failed', reason: 'boom' })
-    })
-
-    it('importing carries preview sub-state derived from photosLookup', () => {
-      expect(derivePhase(makeFacts({ isProcessing: true }))).toEqual({
-        kind: 'importing',
-        preview: 'none',
-      })
-      expect(derivePhase(makeFacts({ isProcessing: true, photosLookup: 'unknown' }))).toEqual({
-        kind: 'importing',
-        preview: 'pending',
-      })
-      expect(derivePhase(makeFacts({ isProcessing: true, photosLookup: 'available' }))).toEqual({
-        kind: 'importing',
-        preview: 'available',
-      })
-      expect(derivePhase(makeFacts({ isProcessing: true, photosLookup: 'unavailable' }))).toEqual({
-        kind: 'importing',
-        preview: 'none',
-      })
     })
 
     it('upload-errored only when not pinned', () => {
@@ -340,7 +296,7 @@ describe('computeFileStatus', () => {
       ).toBe(true)
     })
 
-    it('canPlay covers local and photos only — not shared+pinned without local copy', () => {
+    it('canPlay covers local and photos only, not shared+pinned without local copy', () => {
       expect(deriveCapabilities(makeFacts({ hasLocalCopy: true })).canPlay).toBe(true)
       expect(deriveCapabilities(makeFacts({ photosLookup: 'available' })).canPlay).toBe(true)
       expect(deriveCapabilities(makeFacts({ isShared: true, isPinned: true })).canPlay).toBe(false)
@@ -398,7 +354,7 @@ describe('computeFileStatus', () => {
     })
 
     it('falls back to photosDisplayUri when fileUri is null', () => {
-      const file = makeFileRecord({ hash: 'sha256:abc', objects: {}, localId: 'ph://1' })
+      const file = makeFileRecord({ hash: 'sha256:abc', objects: {}, mediaAssetId: 'ph://1' })
       const status = computeFileStatus({
         ...baseArgs,
         file,
@@ -410,7 +366,7 @@ describe('computeFileStatus', () => {
   })
 
   describe('errorText', () => {
-    it('surfaces the file.lostReason verbatim — not a generic "Import failed"', () => {
+    it('surfaces the file.lostReason verbatim, not a generic "Import failed"', () => {
       const file = makeFileRecord({
         hash: '',
         lostReason: 'Source photo deleted from device',
@@ -425,7 +381,7 @@ describe('computeFileStatus', () => {
       })
     })
 
-    it('falls back through upload → download → explicit', () => {
+    it('falls back through upload, then download, then explicit error text', () => {
       const file = makeFileRecord()
       const uploadErr = computeFileStatus({
         ...baseArgs,
@@ -452,7 +408,6 @@ describe('computeFileStatus', () => {
       const visit = (facts: FileFacts) => seen.add(derivePhase(facts).kind)
 
       visit(makeFacts({ isImportFailed: true }))
-      visit(makeFacts({ isProcessing: true }))
       visit(makeFacts({ upload: { state: 'errored', progress: 0 } }))
       visit(makeFacts({ upload: { state: 'uploading', progress: 0.5 } }))
       visit(makeFacts({ download: { state: 'downloading', progress: 0.5 } }))
@@ -464,7 +419,6 @@ describe('computeFileStatus', () => {
       expect(seen).toEqual(
         new Set([
           'import-failed',
-          'importing',
           'upload-errored',
           'uploading',
           'downloading',
@@ -509,7 +463,7 @@ describe('computeFileStatus', () => {
 })
 
 describe('getFileTypeName', () => {
-  describe('image/* → photo', () => {
+  describe('image/* maps to photo', () => {
     const cases = [
       'image/jpeg',
       'image/png',
@@ -524,7 +478,7 @@ describe('getFileTypeName', () => {
     })
   })
 
-  describe('video/* → video', () => {
+  describe('video/* maps to video', () => {
     const cases = [
       'video/mp4',
       'video/quicktime',
@@ -537,7 +491,7 @@ describe('getFileTypeName', () => {
     })
   })
 
-  describe('audio/* → audio', () => {
+  describe('audio/* maps to audio', () => {
     const cases = ['audio/mpeg', 'audio/mp4', 'audio/flac', 'audio/ogg', 'audio/aiff']
     it.each(cases)('%s', (type) => {
       expect(getFileTypeName(makeFileRecord({ type }))).toBe('audio')
@@ -546,7 +500,7 @@ describe('getFileTypeName', () => {
 
   // application/* maps to 'document', so archives and installers all read as
   // documents in UI surfaces using this label.
-  describe('application/* → document', () => {
+  describe('application/* maps to document', () => {
     const cases = [
       'application/pdf',
       'application/zip',
@@ -560,7 +514,7 @@ describe('getFileTypeName', () => {
     })
   })
 
-  describe('text/* and unknown → other', () => {
+  describe('text/* and unknown map to other', () => {
     const cases = ['text/plain', 'text/markdown', 'text/csv', 'foo/bar']
     it.each(cases)('%s', (type) => {
       expect(getFileTypeName(makeFileRecord({ type }))).toBe('other')

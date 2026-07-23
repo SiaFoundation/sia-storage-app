@@ -1,6 +1,6 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import { ClockArrowUpIcon, CloudDownloadIcon, FileIcon } from 'lucide-react-native'
+import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
 import { assertNever, useFileStatus } from '../../lib/file'
@@ -40,7 +40,6 @@ export function FileViewer({
   const { type, name } = file
   const status = useFileStatus(file, { isShared, resolvePhotosLookup: true })
   const phase = status.data?.phase
-  const importingPreview = phase?.kind === 'importing' ? phase.preview : null
   const photosLookup = status.data?.photosLookup
   const photosDisplayUri = status.data?.photosDisplayUri ?? null
   const displayUri = status.data?.displayUri ?? null
@@ -102,35 +101,6 @@ export function FileViewer({
     )
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [isDownloading, isQueued, onDownloadPress, fileDownloadState?.progress, file.size])
-
-  const ImportingPanel = useMemo(() => {
-    return (
-      <View
-        style={[
-          baseMediaStyle,
-          {
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 12,
-            paddingHorizontal: 32,
-          },
-        ]}
-      >
-        <ClockArrowUpIcon color={colors.textSecondary} size={40} />
-        <Text
-          style={{
-            color: colors.textPrimary,
-            fontSize: 17,
-            fontWeight: '600',
-            textAlign: 'center',
-          }}
-        >
-          Importing...
-        </Text>
-      </View>
-    )
-    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
-  }, [])
 
   const LoadingPanel = useMemo(() => {
     return (
@@ -229,16 +199,6 @@ export function FileViewer({
   const mediaContent = useMemo(() => {
     if (!phase) return LoadingPanel
     switch (phase.kind) {
-      case 'importing':
-        switch (phase.preview) {
-          case 'pending':
-            return LoadingPanel
-          case 'available':
-            return displayUri ? renderViewer(displayUri) : ImportingPanel
-          case 'none':
-            return ImportingPanel
-        }
-        return ImportingPanel
       case 'import-failed':
         return UnavailablePanel
       case 'unavailable':
@@ -262,12 +222,10 @@ export function FileViewer({
     // oxlint-disable-next-line react/exhaustive-deps -- depend on phase?.kind/preview not phase to avoid identity churn from progress ticks
   }, [
     phase?.kind,
-    importingPreview,
     photosLookup,
     photosDisplayUri,
     displayUri,
     LoadingPanel,
-    ImportingPanel,
     UnavailablePanel,
     DownloadPanel,
     renderViewer,

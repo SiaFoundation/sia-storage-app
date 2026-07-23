@@ -5,6 +5,7 @@ import type {
   AppendToOpenImportResult,
   DirectoryWithCount,
   FileQueryOpts,
+  FinalizeResult,
   FsMetaRow,
   ImportFileRow,
   ImportRow,
@@ -63,6 +64,9 @@ export interface AppCaches {
   tags: SwrCacheBy
   directories: SwrCacheBy
   library: SwrCacheBy
+  /** Imports screen list + per-import summary; invalidated (debounced) on the
+   * row changes the screen shows (claims and progress writes don't invalidate)
+   * so a large photo-library scan drain doesn't storm. */
   imports: SwrCacheBy
   fileById: SwrCacheBy
   thumbnails: {
@@ -154,8 +158,6 @@ export interface AppService {
     getByIds(ids: string[]): Promise<FileRecord[]>
     /** Returns a file by object ID and indexer URL. */
     getByObjectId(objectId: string, indexerURL: string): Promise<FileRecord | null>
-    /** Returns files by local IDs (excludes trashed/tombstoned). */
-    getByLocalIds(localIds: string[]): Promise<FileRecord[]>
     /**
      * Returns the current version of every file matching one of `names`
      * in `directoryId`. Used by the manual import path to count name
@@ -277,6 +279,8 @@ export interface AppService {
     restore(ids: string[]): Promise<void>
     /** Returns the count of unuploaded files. */
     getUnuploadedCount(): Promise<number>
+    /** Returns the total unuploaded bytes (the pending-local bytes the paced-throttle backlog gate reads). */
+    getUnuploadedBytes(): Promise<number>
     /** Returns unuploaded files. */
     getUnuploaded(): Promise<{ id: string; name: string; type: string; size: number }[]>
     /** Returns summaries of all active files. */
@@ -288,9 +292,7 @@ export interface AppService {
     /** Tombstones files and thumbnails (sets deletedAt). */
     tombstoneWithThumbnails(ids: string[]): Promise<void>
     /** Tombstones files and thumbnails, then cleans up local files and uploads. */
-    tombstoneWithThumbnailsAndCleanup(
-      files: { id: string; type: string; localId: string | null }[],
-    ): Promise<void>
+    tombstoneWithThumbnailsAndCleanup(files: { id: string; type: string }[]): Promise<void>
     /** Tombstones files past trash retention, then cleans up local files and uploads. */
     autoPurgeWithCleanup(): Promise<void>
     /** Returns the count of lost files for an indexer. */
@@ -376,10 +378,8 @@ export interface AppService {
     getBest(fileId: string, requiredSize: ThumbSize): Promise<FileRecord | null>
     /** Returns a thumbnail for a specific file and size combination. */
     getByFileIdAndSize(fileId: string, size: ThumbSize): Promise<FileRecord | null>
-    /** Returns thumbnail info (id, type, localId) for multiple files. */
-    getInfoForFiles(
-      fileIds: string[],
-    ): Promise<{ id: string; type: string; localId: string | null }[]>
+    /** Returns thumbnail info (id, type) for multiple files. */
+    getInfoForFiles(fileIds: string[]): Promise<{ id: string; type: string }[]>
     /** Returns all available thumbnail sizes for a file. */
     getSizesForFile(fileId: string): Promise<ThumbSize[]>
     /** Returns a map of fileId → available thumbnail sizes for a batch of files. */
@@ -396,7 +396,7 @@ export interface AppService {
         id: string
         hash: string
         type: string
-        localId: string | null
+        mediaAssetId: string | null
         createdAt: number
       }[]
     >
@@ -627,6 +627,12 @@ export interface AppService {
     /** Returns upload counts and byte totals for the given indexer. */
     uploadStats(indexerURL: string): Promise<UploadStats>
   }
+  /**
+   * The two-level imports/import_files tables that hold everything
+   * pre-finalize (`files` is finalized-only). Reads drive the Imports screen
+   * and the app-status count; writes are the scanner's claim/copy/finalize
+   * loop plus create/addFiles from the import sources.
+   */
   imports: {
     /** Lists imports, newest first, optionally filtered by source. */
     list(opts?: { source?: ImportSource; limit?: number }): Promise<ImportRow[]>
@@ -678,6 +684,8 @@ export interface AppService {
       token: string,
       meta: { hash: string; size: number; type: string },
     ): Promise<void>
+    /** Finalizes a claimed file into `files` (or marks it a content duplicate). */
+    finalize(id: string, token: string): Promise<FinalizeResult>
     /** Marks a claimed file `unavailable` (source gone). */
     markUnavailable(id: string, token: string, reason: string): Promise<void>
     /**

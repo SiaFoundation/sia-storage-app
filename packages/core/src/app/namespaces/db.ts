@@ -242,6 +242,12 @@ export function buildDbNamespaces(
         await ops.recordImportFileHash(db, id, token, meta)
         invalidateImports()
       },
+      finalize: async (id, token) => {
+        const result = await ops.finalizeImportFile(db, id, token)
+        invalidateLibrary()
+        invalidateImports()
+        return result
+      },
       markUnavailable: async (id, token, reason) => {
         await ops.markImportFileUnavailable(db, id, token, reason)
         invalidateImports()
@@ -347,7 +353,6 @@ export function buildDbNamespaces(
       getMetadataForSync: (id) => readMetadataWithDeleted(id),
       getByIds: (ids) => ops.readFilesByIds(db, ids),
       getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
-      getByLocalIds: (localIds) => ops.readFilesByLocalIds(db, localIds),
       getCurrentByNamesInDirectory: (names, directoryId) =>
         ops.readCurrentFilesByNamesInDirectory(db, names, directoryId),
       getByName: (name) => ops.readFileByName(db, name),
@@ -477,6 +482,7 @@ export function buildDbNamespaces(
       getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
       getLost: (indexerURL) => ops.queryLostFiles(db, indexerURL),
       getUnuploadedCount: () => ops.queryUnuploadedFileCount(db),
+      getUnuploadedBytes: () => ops.queryUnuploadedFileBytes(db),
       getUnuploaded: () => ops.queryUnuploadedFiles(db),
       getActiveSummaries: () => ops.queryActiveFileSummaries(db),
       getUploadedIds: (url) => ops.queryUploadedFileIds(db, url),

@@ -39,11 +39,11 @@ export function fileItemPropsAreEqual(prev: FileItemProps, next: FileItemProps):
 }
 
 /**
- * Result of a Photos-library asset lookup for a file with a localId:
+ * Result of a Photos-library asset lookup for a file with a mediaAssetId:
  * - 'unknown': SWR in flight, lookup not yet resolved
  * - 'available': asset resolved with a URI a player can render (may be ph://)
  * - 'unavailable': asset is deleted or temporarily unreachable (iCloud)
- * - 'none': caller didn't opt in, or file has no localId — no fallback exists
+ * - 'none': caller didn't opt in, or file has no mediaAssetId, no fallback exists
  */
 export type PhotosLookup = 'unknown' | 'available' | 'unavailable' | 'none'
 
@@ -62,7 +62,6 @@ export type DownloadActivity = {
  * deriveCapabilities. No derived/aggregate booleans here.
  */
 export type FileFacts = {
-  isProcessing: boolean
   isImportFailed: boolean
   isPinned: boolean
   hasLocalCopy: boolean
@@ -77,12 +76,8 @@ export type FileFacts = {
  * Mutually exclusive lifecycle state of a file. Every input combination
  * resolves to exactly one phase via derivePhase. Use `switch (phase.kind)`
  * with assertNever to make consumers exhaustive.
- *
- * `importing.preview` is a sub-state that tells the viewer whether it can
- * render a Photos-library preview yet — analogous to `uploading.isQueued`.
  */
 export type FilePhase =
-  | { kind: 'importing'; preview: 'pending' | 'available' | 'none' }
   | { kind: 'import-failed'; reason: string }
   | { kind: 'uploading'; progress: number; isPacking: boolean; isQueued: boolean }
   | { kind: 'upload-errored'; error: string | null }
@@ -108,17 +103,6 @@ export type FileCapabilities = {
  */
 export function derivePhase(facts: FileFacts): FilePhase {
   if (facts.isImportFailed) return { kind: 'import-failed', reason: facts.errorText ?? '' }
-  if (facts.isProcessing) {
-    return {
-      kind: 'importing',
-      preview:
-        facts.photosLookup === 'unknown'
-          ? 'pending'
-          : facts.photosLookup === 'available'
-            ? 'available'
-            : 'none',
-    }
-  }
   if (facts.upload.state === 'errored' && !facts.isPinned)
     return { kind: 'upload-errored', error: facts.errorText }
   if (
@@ -149,7 +133,7 @@ export function derivePhase(facts: FileFacts): FilePhase {
   // filter rows out before they reach here. If a bug or external mutation
   // ever leaves a hashed file stranded, we route it here loudly. The
   // viewer still shows the original from Photos via displayUri when the
-  // localId resolves, so the user can recover by re-importing.
+  // mediaAssetId resolves, so the user can recover by re-importing.
   return { kind: 'unavailable' }
 }
 
@@ -177,7 +161,6 @@ export function deriveCapabilities(facts: FileFacts): FileCapabilities {
  */
 export function getFileCapabilities(file: FileRecord, fileUri: string | null): FileCapabilities {
   return deriveCapabilities({
-    isProcessing: file.hash === '',
     isImportFailed: !!file.lostReason,
     isPinned: fileHasASealedObject(file),
     hasLocalCopy: !!fileUri,
@@ -195,7 +178,6 @@ export function assertNever(value: never): never {
 }
 
 export type FileStatus = {
-  isProcessing: boolean
   isImportFailed: boolean
   isPinned: boolean
   isOnNetwork: boolean
@@ -250,7 +232,6 @@ export function computeFileStatus({
   photosDisplayUri?: string | null
   errorText: string | null
 }): FileStatus {
-  const isProcessing = !!file && file.hash === ''
   const isImportFailed = !!file?.lostReason
   const uploadStatus = uploadState?.status
   const hasSealedObject = fileHasASealedObject(file)
@@ -287,7 +268,6 @@ export function computeFileStatus({
   const resolvedErrorText =
     file?.lostReason ?? uploadState?.error ?? downloadState?.error ?? errorText
   const facts: FileFacts = {
-    isProcessing,
     isImportFailed,
     isPinned,
     hasLocalCopy: isDownloaded,
@@ -301,7 +281,6 @@ export function computeFileStatus({
   const capabilities = deriveCapabilities(facts)
 
   return {
-    isProcessing,
     isImportFailed,
     isPinned,
     isOnNetwork: capabilities.isOnNetwork,
@@ -330,7 +309,7 @@ export type FileStatusResponse = {
 export type UseFileStatusOptions = {
   isShared?: boolean
   /**
-   * Resolve the Photos-library backup for files with a localId. iOS
+   * Resolve the Photos-library backup for files with a mediaAssetId. iOS
    * MediaLibrary.getAssetInfoAsync can trigger an iCloud download, so
    * gallery-style consumers must leave this off; only opt in for surfaces
    * that actually need the fallback (e.g., FileViewer).
@@ -347,17 +326,18 @@ export function useFileStatus(
   const { data: downloadState } = useDownloadEntry(file?.id || '')
   const fileUri = useFsFileUri(file)
 
-  // Only look up Photos when caller opts in AND the file has a localId AND
+  // Only look up Photos when caller opts in AND the file has a mediaAssetId AND
   // there's no sealed-object fallback (network download is canonical when pinned).
   const hasSealed = fileHasASealedObject(file)
-  const photosLocalId = resolvePhotosLookup && file?.localId && !hasSealed ? file.localId : null
+  const photosLocalId =
+    resolvePhotosLookup && file?.mediaAssetId && !hasSealed ? file.mediaAssetId : null
   const photosSwr = useSWR(photosLocalId ? ['mediaLibraryDisplayUri', photosLocalId] : null, () =>
     getMediaLibraryDisplayUri(photosLocalId),
   )
 
   const photosLookup: PhotosLookup = !resolvePhotosLookup
     ? 'none'
-    : !file?.localId || hasSealed
+    : !file?.mediaAssetId || hasSealed
       ? 'none'
       : !photosSwr.data && !photosSwr.error
         ? 'unknown'

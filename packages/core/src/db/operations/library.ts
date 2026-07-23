@@ -348,7 +348,7 @@ export async function queryLibraryFiles(
   // short-circuit instead of issuing one SELECT per visible row.
   return db.getAllAsync<FileRecordRow & { isFavorite: number; fsExists: number }>(
     `SELECT files.id, files.name, files.size, files.createdAt, files.updatedAt, files.type, files.kind,
-            files.localId, files.hash, files.addedAt, files.thumbForId, files.thumbSize,
+            files.mediaAssetId, files.hash, files.addedAt, files.thumbForId, files.thumbSize,
             files.trashedAt, files.deletedAt,
             (file_tags.fileId IS NOT NULL) AS isFavorite,
             (fs.fileId IS NOT NULL) AS fsExists

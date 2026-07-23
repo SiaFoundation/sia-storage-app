@@ -1,5 +1,4 @@
 import {
-  ClockArrowUpIcon,
   CloudAlertIcon,
   CloudCheckIcon,
   CloudDownloadIcon,
@@ -45,8 +44,6 @@ export function UploadStatusIcon({
     switch (phase.kind) {
       case 'import-failed':
         return 'Import failed'
-      case 'importing':
-        return 'Importing'
       case 'upload-errored':
         return 'Upload error'
       case 'uploading':
@@ -88,8 +85,6 @@ export function UploadStatusIcon({
       return <CloudAlertIcon color={iconColor} size={size} />
     }
     switch (phase.kind) {
-      case 'importing':
-        return <ClockArrowUpIcon color={iconColor} size={size} />
       case 'import-failed':
       case 'upload-errored':
       case 'unavailable':
@@ -161,8 +156,6 @@ export function UploadStatusIcon({
 
 function testIdFor(phase: FileStatus['phase']): string {
   switch (phase.kind) {
-    case 'importing':
-      return 'processing'
     case 'import-failed':
     case 'upload-errored':
     case 'unavailable':

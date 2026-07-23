@@ -15,7 +15,6 @@ export async function exportLogs(): Promise<string | null> {
       return null
     }
 
-    // Format logs as JSONL.
     const content = logs
       .map((entry) =>
         JSON.stringify({
@@ -28,7 +27,6 @@ export async function exportLogs(): Promise<string | null> {
       )
       .join('\n')
 
-    // Write to temporary file.
     const tempFileName = `logs-export-${Date.now()}.jsonl`
     const tempFilePath = `${RNFS.DocumentDirectoryPath}/${tempFileName}`
     await RNFS.writeFile(tempFilePath, content, 'utf8')
@@ -38,25 +36,19 @@ export async function exportLogs(): Promise<string | null> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const fileName = `logs-${timestamp}.jsonl`
 
-    // Copy temp file to FS storage.
     const fsFileUri = await copyFileToFs({ id: fileId, type: 'application/x-ndjson' }, tempFilePath)
-
-    // Clean up temp file.
     await RNFS.unlink(tempFilePath)
 
-    // Calculate hash.
     const hash = await calculateContentHash(fsFileUri)
     if (!hash) {
       throw new Error('Failed to calculate content hash')
     }
 
-    // Check for duplicates.
     const existingFile = await app().files.getByContentHash(hash)
     if (existingFile) {
       return existingFile.id
     }
 
-    // Create file record.
     const now = Date.now()
     await app().files.create({
       id: fileId,
@@ -67,7 +59,7 @@ export async function exportLogs(): Promise<string | null> {
       createdAt: now,
       updatedAt: now,
       addedAt: now,
-      localId: null,
+      mediaAssetId: null,
       kind: 'file',
       trashedAt: null,
       deletedAt: null,
