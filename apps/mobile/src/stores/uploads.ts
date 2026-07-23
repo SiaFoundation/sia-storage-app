@@ -88,8 +88,8 @@ export function useUploadProgress(): {
   const packerTotalBytes = packerUploads.reduce((s, u) => s + u.size, 0)
   const packerWeightedProgress = packerUploads.reduce((s, u) => s + u.progress * u.size, 0)
   const percentDecimal = packerTotalBytes > 0 ? packerWeightedProgress / packerTotalBytes : 0
-  // importingCount (empty-hash records) is already files-only — thumbnails are
-  // generated with their hash, so they never sit in the importing state.
+  // The in-flight import count comes from import_files rows, which never
+  // include thumbnails.
   const importingCount = importingCountQuery.data ?? 0
   const localOnlyCount = localOnlyStats.data?.count ?? 0
   const localOnlyFileCount = localOnlyFileStats.data?.count ?? 0

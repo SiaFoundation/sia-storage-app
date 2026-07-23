@@ -196,7 +196,6 @@ export function assertNever(value: never): never {
 
 export type FileStatus = {
   isProcessing: boolean
-  isDeferredImport: boolean
   isImportFailed: boolean
   isPinned: boolean
   isOnNetwork: boolean
@@ -252,9 +251,6 @@ export function computeFileStatus({
   errorText: string | null
 }): FileStatus {
   const isProcessing = !!file && file.hash === ''
-  // Deferred import: placeholder created by archive sync with localId,
-  // waiting for the scanner to copy from the media library.
-  const isDeferredImport = isProcessing && !fileUri && !!file?.localId
   const isImportFailed = !!file?.lostReason
   const uploadStatus = uploadState?.status
   const hasSealedObject = fileHasASealedObject(file)
@@ -306,7 +302,6 @@ export function computeFileStatus({
 
   return {
     isProcessing,
-    isDeferredImport,
     isImportFailed,
     isPinned,
     isOnNetwork: capabilities.isOnNetwork,

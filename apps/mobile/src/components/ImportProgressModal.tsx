@@ -1,195 +1,239 @@
-import { AlertCircleIcon, CheckCircle2Icon } from 'lucide-react-native'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { humanSize } from '../lib/humanSize'
+import type { ImportFileRow } from '@siastorage/core/db/operations'
+import { useEffect } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useNow } from '../hooks/useNow'
+import {
+  reasonCopy,
+  progressBytesLabel,
+  progressRatio,
+  sourceLabel,
+  statusColor,
+  statusLabel,
+} from '../lib/importLabels'
+import { navigateToImportDetail } from '../lib/navigationRef'
+import { useMonotonicRatio } from '../hooks/useMonotonicRatio'
 import { dismissImportProgress, useImportProgress } from '../stores/importProgress'
+import {
+  useImport,
+  useImportDestinationName,
+  useImportFiles,
+  useImportSummary,
+} from '../stores/imports'
 import { colors, palette } from '../styles/colors'
+import { ImportCountChips } from './ImportCountChips'
+import { ImportFileStateBadge } from './ImportFileStateBadge'
+import { ImportProgressBar } from './ImportProgressBar'
 import { ModalSheet } from './ModalSheet'
 import { SpinnerIcon } from './SpinnerIcon'
 
-const NOOP = () => {}
+// How many per-file rows the modal previews. The full list lives on the Imports
+// detail screen; the modal stays lightweight (a 50k library-scan must not load
+// 50k rows here).
+const PREVIEW_LIMIT = 6
 
 export function ImportProgressModal() {
-  const { phase, totalFiles, copiedFiles, totalBytes, copiedBytes, errorMessage } =
-    useImportProgress()
+  const { importId, revealed } = useImportProgress()
+  return importId ? (
+    <ImportProgressModalContent key={importId} importId={importId} revealed={revealed} />
+  ) : null
+}
 
-  const visible = phase === 'running' || phase === 'complete' || phase === 'error'
-  const canClose = phase !== 'running'
+function ImportProgressModalContent({
+  importId,
+  revealed,
+}: {
+  importId: string
+  revealed: boolean
+}) {
+  const { data: imp } = useImport(importId)
+  const { data: summaries } = useImportSummary([importId])
+  const { data: files } = useImportFiles(importId, { limit: PREVIEW_LIMIT })
+  const destinationName = useImportDestinationName(imp?.directoryId)
 
-  // Prefer bytes-based progress when source sizes are known; fall back
-  // to file count when bytes are unavailable (e.g. share-extension files
-  // sometimes lack a size). Math.min guards against measured size > stated size.
-  const progress =
-    totalBytes > 0
-      ? Math.min(copiedBytes / totalBytes, 1)
-      : totalFiles > 0
-        ? Math.min(copiedFiles / totalFiles, 1)
-        : 0
+  const summary = summaries?.[0]
+  const status = summary?.status ?? 'queued'
+  const done = status === 'done'
+  const now = useNow()
 
-  const titleText =
-    phase === 'running'
-      ? 'Importing files'
-      : phase === 'complete'
-        ? 'Import complete'
-        : phase === 'error'
-          ? 'Import failed'
-          : ''
+  // A done that lands before the reveal delay dismisses at once, so the modal
+  // never appears for a fast import. Once revealed, hold so the completed state
+  // is actually seen. The full record stays in the Imports list.
+  useEffect(() => {
+    if (!done) return
+    if (!revealed) {
+      dismissImportProgress()
+      return
+    }
+    const timer = setTimeout(dismissImportProgress, 1200)
+    return () => clearTimeout(timer)
+  }, [done, revealed])
 
-  const line1Text =
-    phase === 'running' || phase === 'complete'
-      ? `${copiedFiles.toLocaleString()} of ${totalFiles.toLocaleString()} files`
-      : ''
+  // Hold hidden until the reveal delay elapses, so a fast import never flashes.
+  const visible = revealed && !!summary
 
-  const line2Text =
-    (phase === 'running' || phase === 'complete') && totalBytes > 0
-      ? `${humanSize(copiedBytes) ?? '0 B'} of ${humanSize(totalBytes) ?? '0 B'}`
-      : ''
+  const ratio = useMonotonicRatio(!done, imp && summary ? progressRatio(imp, summary) : 0)
+  const byteLine = summary ? (progressBytesLabel(summary) ?? '') : ''
 
-  const descriptionText =
-    phase === 'running'
-      ? 'Keep the app open until this finishes. Closing now may cancel the import.'
-      : phase === 'complete'
-        ? `${totalFiles.toLocaleString()} ${totalFiles === 1 ? 'file is' : 'files are'} now safely stored.`
-        : phase === 'error'
-          ? (errorMessage ?? 'Something went wrong while importing your files.')
-          : ''
+  const handleViewAll = () => {
+    dismissImportProgress()
+    navigateToImportDetail(importId)
+  }
 
   return (
     <ModalSheet
       visible={visible}
-      onRequestClose={canClose ? dismissImportProgress : NOOP}
+      onRequestClose={dismissImportProgress}
       title="Import"
       headerRight={
-        canClose ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Done"
-            onPress={dismissImportProgress}
-            hitSlop={8}
-          >
-            <Text style={styles.doneText}>Done</Text>
-          </Pressable>
-        ) : (
-          <View />
-        )
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Done"
+          onPress={dismissImportProgress}
+          hitSlop={8}
+        >
+          <Text style={styles.doneText}>Done</Text>
+        </Pressable>
       }
     >
-      <View style={styles.root}>
-        <View style={styles.slots}>
-          <View style={styles.iconRow}>
-            {phase === 'running' ? (
-              <SpinnerIcon color={palette.blue[400]} size={48} />
-            ) : phase === 'complete' ? (
-              <CheckCircle2Icon color={palette.green[500]} size={48} strokeWidth={1.5} />
-            ) : phase === 'error' ? (
-              <AlertCircleIcon color={palette.red[500]} size={48} strokeWidth={1.5} />
-            ) : null}
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.source}>{imp ? sourceLabel(imp.source) : 'Import'}</Text>
+            <Text style={styles.destination} numberOfLines={1}>
+              {destinationName}
+            </Text>
           </View>
-          <View style={styles.titleRow}>
-            <Text style={styles.titleText}>{titleText}</Text>
-          </View>
-          <View style={styles.lineRow}>
-            <Text style={styles.lineText}>{line1Text}</Text>
-          </View>
-          <View style={styles.lineRow}>
-            <Text style={styles.lineText}>{line2Text}</Text>
-          </View>
-          <View style={styles.progressRow}>
-            <View style={[styles.progressTrack, phase !== 'running' && styles.invisible]}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${(progress * 100).toFixed(1)}%` as `${number}%`,
-                  },
-                ]}
-              />
+          {summary ? (
+            <View style={styles.statusBadge}>
+              {!done ? <SpinnerIcon color={palette.blue[400]} size={14} /> : null}
+              <Text style={[styles.statusText, { color: statusColor(summary) }]}>
+                {statusLabel(status)}
+              </Text>
             </View>
-          </View>
-          <View style={styles.descriptionRow}>
-            <Text style={styles.descriptionText}>{descriptionText}</Text>
-          </View>
+          ) : null}
         </View>
-      </View>
+
+        {!done ? (
+          <View style={styles.progressBlock}>
+            <ImportProgressBar ratio={ratio} />
+            {byteLine ? <Text style={styles.byteLine}>{byteLine}</Text> : null}
+          </View>
+        ) : null}
+
+        {summary ? <ImportCountChips summary={summary} /> : null}
+
+        {files && files.length > 0 ? (
+          <View style={styles.fileList}>
+            {files.map((file: ImportFileRow) => (
+              <View key={file.id} style={styles.fileRow}>
+                <View style={styles.fileText}>
+                  <Text style={styles.fileName} numberOfLines={1}>
+                    {file.name}
+                  </Text>
+                  {reasonCopy(file.reason) && file.state !== 'added' ? (
+                    <Text style={styles.fileReason} numberOfLines={1}>
+                      {reasonCopy(file.reason)}
+                    </Text>
+                  ) : null}
+                </View>
+                <ImportFileStateBadge row={file} now={now} />
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleViewAll}
+          style={({ pressed }) => [styles.viewAll, pressed ? styles.viewAllPressed : null]}
+        >
+          <Text style={styles.viewAllText}>View import details</Text>
+        </Pressable>
+      </ScrollView>
     </ModalSheet>
   )
 }
 
-const ICON_SIZE = 48
-const TITLE_HEIGHT = 24
-const LINE_HEIGHT = 20
-const PROGRESS_HEIGHT = 4
-const DESCRIPTION_MIN_HEIGHT = 80
-
 const styles = StyleSheet.create({
-  root: {
+  scroll: {
+    padding: 24,
+    gap: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerText: {
     flex: 1,
-    paddingHorizontal: 24,
+    flexShrink: 1,
   },
-  slots: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconRow: {
-    height: ICON_SIZE,
-    marginBottom: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  titleRow: {
-    height: TITLE_HEIGHT,
-    marginBottom: 8,
-    justifyContent: 'center',
-  },
-  lineRow: {
-    height: LINE_HEIGHT,
-    marginBottom: 4,
-    justifyContent: 'center',
-  },
-  progressRow: {
-    height: PROGRESS_HEIGHT,
-    width: '60%',
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  descriptionRow: {
-    minHeight: DESCRIPTION_MIN_HEIGHT,
-  },
-  titleText: {
+  source: {
     color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
-    textAlign: 'center',
   },
-  lineText: {
+  destination: {
     color: colors.textSecondary,
     fontSize: 14,
-    textAlign: 'center',
+    marginTop: 2,
   },
-  descriptionText: {
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  progressBlock: {
+    gap: 8,
+  },
+  byteLine: {
     color: colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    maxWidth: 300,
+    fontSize: 13,
+  },
+  fileList: {
+    gap: 12,
+  },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  fileText: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  fileName: {
+    color: palette.gray[100],
+    fontSize: 15,
+  },
+  fileReason: {
+    color: palette.gray[400],
+    fontSize: 13,
+    marginTop: 2,
+  },
+  viewAll: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: colors.bgPanel,
+  },
+  viewAllPressed: {
+    backgroundColor: palette.gray[800],
+  },
+  viewAllText: {
+    color: palette.blue[400],
+    fontSize: 16,
+    fontWeight: '600',
   },
   doneText: {
     color: palette.blue[400],
     fontSize: 17,
     fontWeight: '600',
-  },
-  progressTrack: {
-    height: PROGRESS_HEIGHT,
-    borderRadius: 2,
-    backgroundColor: palette.gray[800],
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-    backgroundColor: palette.blue[400],
-  },
-  invisible: {
-    opacity: 0,
   },
 })

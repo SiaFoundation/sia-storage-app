@@ -1,4 +1,3 @@
-import type { FileRecord } from '@siastorage/core/types'
 import { logger } from '@siastorage/logger'
 import { useCallback, useRef } from 'react'
 import * as ImagePicker from 'react-native-image-picker'
@@ -12,10 +11,10 @@ export function useImagePicker(options: ImportFilesOptions = {}) {
   const toast = useToast()
   const isPickingRef = useRef<boolean>(false)
   const { destinationDirectoryId, assignTagName } = options
-  return useCallback(async (): Promise<FileRecord[]> => {
+  return useCallback(async (): Promise<void> => {
     if (isPickingRef.current) {
       logger.debug('imagePicker', 'already_picking')
-      return []
+      return
     }
     isPickingRef.current = true
     try {
@@ -35,21 +34,21 @@ export function useImagePicker(options: ImportFilesOptions = {}) {
 
       if (result.didCancel) {
         logger.debug('imagePicker', 'canceled')
-        return []
+        return
       }
       if (result.errorCode === 'permission') {
         showPermissionDeniedAlert(
           'Photo Access Required',
           'To choose photos and videos, allow photo library access in Settings.',
         )
-        return []
+        return
       }
       if (result.errorCode) {
         logger.warn('imagePicker', 'picker_error', {
           errorCode: result.errorCode,
           errorMessage: result.errorMessage,
         })
-        return []
+        return
       }
 
       const imported = await importFiles(
@@ -63,13 +62,12 @@ export function useImagePicker(options: ImportFilesOptions = {}) {
         })),
         'file',
         { destinationDirectoryId, assignTagName },
+        'picker',
       )
       showImportResultToast(toast, imported)
-      return imported.files
     } catch (e) {
       logger.error('imagePicker', 'error', { error: e as Error })
       toast.show('Could not add photos. Please try again.')
-      return []
     } finally {
       isPickingRef.current = false
     }
