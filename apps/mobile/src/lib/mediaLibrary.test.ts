@@ -51,37 +51,89 @@ describe('getMediaLibraryUri', () => {
     expect(await getMediaLibraryUri('ph://deleted')).toEqual({ status: 'deleted' })
   })
 
-  // iOS: asset is in iCloud and the download hasn't completed or the
-  // content can't be exported (e.g. slow-mo video). The asset record
-  // exists but localUri is null.
-  // iOS: iCloud content that hasn't finished downloading. Asset exists
-  // but localUri is null because the content isn't on disk yet.
-  it('returns unavailable when asset exists but localUri is null', async () => {
+  // iOS: iCloud content that hasn't finished downloading. The asset exists
+  // but localUri is null and asset.uri is ph://, so there are no readable
+  // bytes; the file:// fallback must not fire and the row stays retryable.
+  it('returns unavailable when localUri is null and asset.uri is ph://', async () => {
     getAssetInfoAsyncMock.mockResolvedValue({
       localUri: null,
+      uri: 'ph://icloud-video/L0/001',
       id: 'ph://icloud-video',
     } as any)
 
     expect(await getMediaLibraryUri('ph://icloud-video')).toEqual({ status: 'unavailable' })
   })
 
-  // Android: cloud-only file (Google Photos "Free up space"). localUri
-  // is undefined because expo-media-library only sets it when
-  // ExifInterface can read the file on disk.
-  it('returns unavailable when asset exists but localUri is undefined', async () => {
+  it('returns unavailable when asset has neither localUri nor uri', async () => {
     getAssetInfoAsyncMock.mockResolvedValue({
       localUri: undefined,
-      id: 'ph://icloud-video',
+      id: 'ph://no-uris',
     } as any)
 
-    expect(await getMediaLibraryUri('ph://icloud-video')).toEqual({ status: 'unavailable' })
+    expect(await getMediaLibraryUri('ph://no-uris')).toEqual({ status: 'unavailable' })
+  })
+
+  // Android: videos never get localUri (expo's ExifInterface branch is
+  // image-only) but asset.uri carries the readable file://$DATA path.
+  it('resolves an Android video via the file:// asset.uri fallback', async () => {
+    getAssetInfoAsyncMock.mockResolvedValue({
+      localUri: undefined,
+      uri: 'file:///storage/emulated/0/DCIM/Camera/PXL_001.mp4',
+    } as any)
+
+    expect(await getMediaLibraryUri('42')).toEqual({
+      status: 'resolved',
+      uri: 'file:///storage/emulated/0/DCIM/Camera/PXL_001.mp4',
+    })
+  })
+
+  it('returns unavailable when asset.uri is a content:// provider uri', async () => {
+    getAssetInfoAsyncMock.mockResolvedValue({
+      localUri: null,
+      uri: 'content://media/external/video/media/42',
+    } as any)
+
+    expect(await getMediaLibraryUri('42')).toEqual({ status: 'unavailable' })
+  })
+
+  it('returns unavailable when localUri is a non-file scheme', async () => {
+    getAssetInfoAsyncMock.mockResolvedValue({
+      localUri: 'ph://not-a-local-file',
+      uri: null,
+    } as any)
+
+    expect(await getMediaLibraryUri('42')).toEqual({ status: 'unavailable' })
+  })
+
+  it('normalizes the fallback asset.uri by stripping hash suffix', async () => {
+    getAssetInfoAsyncMock.mockResolvedValue({
+      localUri: null,
+      uri: 'file:///storage/emulated/0/DCIM/Camera/PXL_002.mp4#idx',
+    } as any)
+
+    expect(await getMediaLibraryUri('43')).toEqual({
+      status: 'resolved',
+      uri: 'file:///storage/emulated/0/DCIM/Camera/PXL_002.mp4',
+    })
+  })
+
+  it('prefers localUri over asset.uri when both are present', async () => {
+    getAssetInfoAsyncMock.mockResolvedValue({
+      localUri: 'file:///photos/local.jpg',
+      uri: 'file:///storage/other.jpg',
+    } as any)
+
+    expect(await getMediaLibraryUri('44')).toEqual({
+      status: 'resolved',
+      uri: 'file:///photos/local.jpg',
+    })
   })
 
   // iOS: iCloud download or video export can throw. Android ignores the
   // shouldDownloadFromNetwork option and never does network downloads in
   // getAssetInfoAsync, so this path is iOS-only. We retry without
   // download to check if the asset still exists.
-  describe('iOS: iCloud download/export failure with fallback', () => {
+  describe('iOS: iCloud download/export failure with existence recheck', () => {
     it('returns unavailable when fetch throws but asset still exists', async () => {
       getAssetInfoAsyncMock
         .mockRejectedValueOnce(new Error('Network error'))
@@ -102,12 +154,27 @@ describe('getMediaLibraryUri', () => {
       expect(await getMediaLibraryUri('ph://gone')).toEqual({ status: 'deleted' })
     })
 
-    it('returns deleted when both fetch and fallback throw', async () => {
+    // A transient Photos-DB error on both fetches must stay retryable;
+    // only a clean null return means the asset is actually deleted.
+    it('returns unavailable when both the fetch and the existence recheck throw', async () => {
       getAssetInfoAsyncMock
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Photos DB unavailable'))
 
-      expect(await getMediaLibraryUri('ph://broken')).toEqual({ status: 'deleted' })
+      expect(await getMediaLibraryUri('ph://broken')).toEqual({ status: 'unavailable' })
+    })
+
+    // The retry exists only to distinguish existence; the file:// fallback
+    // is happy-path-only and must not fire here.
+    it('never applies the uri fallback in the retry branch', async () => {
+      getAssetInfoAsyncMock
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          localUri: null,
+          uri: 'file:///storage/emulated/0/DCIM/Camera/PXL_003.jpg',
+        } as any)
+
+      expect(await getMediaLibraryUri('45')).toEqual({ status: 'unavailable' })
     })
 
     // iOS-specific: slow-mo and edited videos throw
