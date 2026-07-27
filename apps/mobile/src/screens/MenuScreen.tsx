@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
 import { useAccount, useIndexerURL } from '@siastorage/core/stores'
+import Constants from 'expo-constants'
 import { useCallback, useState } from 'react'
 import { Alert } from 'react-native'
 import {
@@ -68,6 +69,10 @@ export function MenuScreen({ navigation }: Props) {
 
   return (
     <SettingsScrollLayout>
+      <InsetGroupSection header="About">
+        <InsetGroupValueRow label="Version" value={Constants.expoConfig?.version ?? 'Unknown'} />
+      </InsetGroupSection>
+
       <SettingsSyncPhotos />
 
       <InsetGroupSection header="Device">
