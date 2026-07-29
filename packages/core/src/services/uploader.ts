@@ -925,6 +925,24 @@ export class UploadManager {
       for (const file of candidateFiles) {
         const fileUri = await this.app.fs.getFileUri(file)
         if (!fileUri) continue
+        // An empty file can never upload: the network rejects an object with
+        // zero slabs, so an enqueued one re-fails every poll. Removing the
+        // copy is what drops it, since every fs-backed query (this poll,
+        // unuploaded counts, pacing backlog) keys off the fs row. Both sizes
+        // must read zero: a recorded 0 can be stale, and an unreadable meta
+        // row would delete real bytes if it counted as zero.
+        if (file.size === 0) {
+          const meta = await this.app.fs.readMeta(file.id).catch(() => null)
+          if (meta?.size === 0) {
+            logger.warn('uploadManager', 'empty_file_marked_lost', {
+              fileId: file.id,
+              name: file.name,
+            })
+            await this.app.files.update({ id: file.id, lostReason: 'Empty file' })
+            await this.app.fs.removeFile({ id: file.id, type: file.type })
+            continue
+          }
+        }
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
       }
 

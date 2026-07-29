@@ -302,6 +302,28 @@ describe('ImportScanner claim-loop', () => {
     expect(result.finalized).toBe(0)
   })
 
+  it('a zero-byte copy is refused terminally as empty-file, bytes cleaned, never finalized', async () => {
+    const m = createMocks({
+      candidates: [fileRow({ id: 'a', importId: 'imp1' })],
+    })
+    m.fs.importCopy.mockResolvedValue({ kind: 'plain', uri: '/local/a', size: 0 })
+    const s = scanner(m)
+    const result = await s.runScan()
+    expect(m.imports.markFailure).toHaveBeenCalledWith(
+      'a',
+      expect.any(String),
+      'empty-file',
+      expect.any(Number),
+      'failed',
+      0,
+    )
+    expect(m.fs.removeFile).toHaveBeenCalledWith({ id: 'a', type: 'image/jpeg' })
+    expect(m.imports.recordHash).not.toHaveBeenCalled()
+    expect(m.imports.finalize).not.toHaveBeenCalled()
+    expect(result.failed).toBe(1)
+    expect(result.finalized).toBe(0)
+  })
+
   it('a noop finalize counts as skipped with no fs side effect', async () => {
     const m = createMocks({
       candidates: [fileRow({ id: 'a', importId: 'imp1' })],
