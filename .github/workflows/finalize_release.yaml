@@ -4,13 +4,14 @@
 # builds nothing (the store submission is the tested candidate) and triggers the
 # release announcement. Safe to run after newer changes have merged: it finalizes
 # from the shipped candidate's tag, and the newer work starts the next train.
+# Gated apps promote together: every app ships the same cut before finalizing.
 name: Finalize Release
 
 on:
   workflow_dispatch:
     inputs:
       candidate:
-        description: 'Tag of the candidate that shipped (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut candidate'
+        description: 'Tag of the cut that shipped, named by any gated app''s tag (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut'
         required: false
         type: string
 
