@@ -42,12 +42,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # On a published `mobile/` release, both variants build from the SAME commit:
+  # Only prerelease `mobile/` releases (X.Y.Z-rc.N) build: the stable release is
+  # cut after a candidate already shipped, and the store submission is that
+  # candidate's tested build. Both variants build from the SAME commit:
   #   prod (sia.storage)      → TestFlight + Play internal — promoted to the store manually
   #   beta (sia.storage.beta) → TestFlight + Play internal — never promoted
   # Manual dispatch can target a single variant via the `variant` input.
   release-android:
-    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'android' || inputs.platform == 'both' }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/') && github.event.release.prerelease) || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -117,7 +119,7 @@ jobs:
         shell: bash
 
   release-ios:
-    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/')) || inputs.platform == 'ios' || inputs.platform == 'both' }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/') && github.event.release.prerelease) || inputs.platform == 'ios' || inputs.platform == 'both' }}
     runs-on: macos-26
     strategy:
       fail-fast: false

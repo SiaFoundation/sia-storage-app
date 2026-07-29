@@ -49,17 +49,26 @@ function wasChangedFromMain(filePath: string): boolean {
 }
 
 const sections: string[] = []
+const versions: string[] = []
 for (const { name, path } of changelogs) {
   if (!wasChangedFromMain(path)) continue
   const entry = getLatestEntry(path)
   if (entry) {
     sections.push(`## ${name} ${entry.version}\n\n${entry.body}`)
+    versions.push(entry.version)
   }
 }
 
-const body = `${sections.join('\n\n')}\n\n---\nMerging this PR will create a GitHub release.`
+// Versions, not sections: a changelog body may mention "-rc." in prose.
+const isRc = versions.some((v) => v.includes('-rc.'))
+const note = isRc
+  ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
+  : 'Merging this PR will create a GitHub release.'
+const body = `${sections.join('\n\n')}\n\n---\n${note}`
 
-const title = 'chore: release'
+// Both titles keep the "chore: release" prefix the prepare-release skip check
+// matches on.
+const title = isRc ? 'chore: release (rc)' : 'chore: release'
 const bodyFile = join(tmpdir(), 'release-pr-body.md')
 writeFileSync(bodyFile, body)
 

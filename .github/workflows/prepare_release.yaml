@@ -1,5 +1,9 @@
 # Creates/updates a release PR on every push to main.
 # The PR bumps package.json version and updates CHANGELOG.md based on changesets.
+#
+# Trains carrying mobile changes are versioned X.Y.Z-rc.N (see
+# scripts/prepare-release.ts); once a candidate has shipped to the stores, the
+# Finalize Release workflow regenerates the PR as the final stable release.
 name: Prepare Release
 
 on:
@@ -30,7 +34,7 @@ jobs:
           version: 0.22.2
 
       - name: Prepare Release
-        run: knope prepare-release --verbose
+        run: bun scripts/prepare-release.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
