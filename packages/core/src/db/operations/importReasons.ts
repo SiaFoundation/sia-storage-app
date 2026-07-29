@@ -26,6 +26,7 @@ export type ImportReasonCode =
   | 'hash-failed'
   | 'destination-deleted'
   | 'duplicate-content'
+  | 'empty-file'
 
 export type ImportReasonRule = {
   /** immediate = no retries, mark the row terminal now; backoff = retry on the schedule. */
@@ -62,6 +63,10 @@ export const IMPORT_REASONS: Record<ImportReasonCode, ImportReasonRule> = {
   // deleted out from under the row, or the content already exists.
   'destination-deleted': { kind: 'immediate', exhausted: 'failed', cap: 0 },
   'duplicate-content': { kind: 'immediate', exhausted: 'unavailable', cap: 0 },
+  // Set by the scanner at finalize, never by the error classifier: the copy
+  // succeeded but produced zero bytes. An empty object cannot be stored on
+  // the network (zero slabs), so the row is refused before it reaches `files`.
+  'empty-file': { kind: 'immediate', exhausted: 'failed', cap: 0 },
 }
 
 /** A retry can never succeed for these codes, so the retry action skips them. */
@@ -70,6 +75,7 @@ export const UNRETRYABLE_REASONS: readonly ImportReasonCode[] = [
   'session-expired',
   'unsupported',
   'destination-deleted',
+  'empty-file',
 ]
 
 export function isImportReasonCode(value: string | null | undefined): value is ImportReasonCode {

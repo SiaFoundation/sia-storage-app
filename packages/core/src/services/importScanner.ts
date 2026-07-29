@@ -67,7 +67,8 @@ function createProgressWriter(
 export type ImportScannerResult = {
   /** Files finalized into `files` this tick. */
   finalized: number
-  /** Files that hit a transient failure (hash/copy error, content unavailable) and backed off. */
+  /** Files that hit a transient failure (hash/copy error, content unavailable) and
+   * backed off, plus immediate terminal refusals recorded at finalize (empty files). */
   failed: number
   /** Files whose source is permanently gone, now `unavailable`. */
   lost: number
@@ -311,7 +312,7 @@ export class ImportScanner {
           const preMeta = await app.fs.readMeta(row.id)
           if (preMeta) {
             const fileUri = app.fs.uri({ id: row.id, type: row.type })
-            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri), signal)
+            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri, preMeta.size), signal)
             if (!hashRaced.ok) {
               suspending = true
               return
@@ -356,6 +357,9 @@ export class ImportScanner {
           // Copy bytes off the source, then drop any resolver access scope
           // (`release`) before hashing.
           let suspended = false
+          // Overwritten on every successful copy; the initial 0 is never read
+          // (the suspend/failure paths return before hashing).
+          let copiedSize = 0
           let hashedInCopy: {
             sha256: string
             size: number
@@ -403,6 +407,7 @@ export class ImportScanner {
               suspended = true // on suspend the row stays active; resetStale recovers
             } else {
               const copied = copyRaced.value
+              copiedSize = copied.size
               if (copied.kind !== 'plain') {
                 hashedInCopy = {
                   sha256: copied.sha256,
@@ -459,7 +464,7 @@ export class ImportScanner {
             }
           } else {
             const fileUri = app.fs.uri({ id: row.id, type: row.type })
-            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri), signal)
+            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri, copiedSize), signal)
             if (!hashRaced.ok) {
               // On suspend the row stays active; resetStale recovers.
               suspending = true
@@ -573,6 +578,21 @@ export class ImportScanner {
     outcome: { hash: string; size: number; type: string },
     result: ImportScannerResult,
   ): Promise<void> {
+    // A zero-byte copy hashes fine (the empty-input digest is valid) but can
+    // never be stored: the network rejects an object with zero slabs, and an
+    // enqueued empty file re-fails on every upload cycle. Refuse it here,
+    // before it reaches `files`, and clean the empty id-slot bytes so the
+    // fast path can't resurrect it.
+    if (outcome.size === 0) {
+      logger.warn('importScanner', 'empty_file_rejected', {
+        fileId: row.id,
+        name: row.name,
+      })
+      await app.fs.removeFile({ id: row.id, type: row.type })
+      await this.recordFailure(app, row, token, 'empty-file', Date.now())
+      result.failed++
+      return
+    }
     // Persist hash/size/type onto the row BEFORE finalize; finalizeImportFile
     // reads them from its own ownership SELECT (it takes only (id, token)).
     await app.imports.recordHash(row.id, token, {
@@ -718,7 +738,9 @@ export class ImportScanner {
   }
 
   /**
-   * Hashes the file at its id-slot uri and resolves the size/type to persist.
+   * Hashes the file at its id-slot uri and resolves the type to persist.
+   * `size` is the caller's authoritative byte count (the copy result, or the
+   * fs meta on the fast path); it is passed through, not re-derived here.
    * Classifies from the local copy's header bytes (one 32-byte read); this is
    * the path for copies that carried no hash, so the classifier never saw
    * header bytes either. Returns `failed` when hashing returns null.
@@ -726,11 +748,10 @@ export class ImportScanner {
   private async hashFile(
     row: { id: string; name: string; type: string; sourceKind?: string },
     fileUri: string,
+    size: number,
   ): Promise<
     { action: 'finalized'; hash: string; size: number; type: string } | { action: 'failed' }
   > {
-    const app = this.getApp()
-
     const headerBytes = this._readHeaderBytes ? await this._readHeaderBytes(fileUri) : null
     const type = classifyImportType({
       stagedType: row.type,
@@ -748,16 +769,8 @@ export class ImportScanner {
 
     const hash = await this._calculateContentHash(fileUri)
     if (!hash) {
-      logger.warn('importScanner', 'hash_failed', { fileId: row.id })
+      logger.warn('importScanner', 'hash_failed', { fileId: row.id, name: row.name })
       return { action: 'failed' }
-    }
-
-    let size: number
-    try {
-      const meta = await app.fs.readMeta(row.id)
-      size = meta?.size ?? 0
-    } catch {
-      size = 0
     }
 
     logger.debug('importScanner', 'file_complete', { fileId: row.id, hash, size })

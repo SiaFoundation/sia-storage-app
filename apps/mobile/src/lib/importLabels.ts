@@ -176,6 +176,7 @@ const REASON_COPY: Record<ImportReasonCode, string> = {
   'hash-failed': 'Import failed while verifying',
   'destination-deleted': 'The destination folder was deleted',
   'duplicate-content': 'Identical content already in this folder',
+  'empty-file': "This file is empty, there's nothing to back up",
 }
 
 /** User copy for a row's reason: registry codes map to copy; rows written

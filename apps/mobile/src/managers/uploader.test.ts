@@ -1302,6 +1302,68 @@ describe('UploadManager', () => {
       expect(app().uploads.getEntry('has-hash-1')).toBeDefined()
     })
 
+    it('marks a zero-byte candidate lost and removes its copy instead of queueing it', async () => {
+      enablePolling()
+      queryFilesSpy.mockRestore()
+
+      const now = Date.now()
+      await app().files.create({
+        id: 'empty-1',
+        name: 'empty-1.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 0,
+        hash: 'sha256:empty',
+        createdAt: now,
+        updatedAt: now,
+        mediaAssetId: null,
+        addedAt: now,
+        trashedAt: null,
+        deletedAt: null,
+      })
+      await app().fs.upsertMeta({ fileId: 'empty-1', size: 0, addedAt: now, usedAt: now })
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(app().uploads.getEntry('empty-1')).toBeUndefined()
+      const file = await app().files.getById('empty-1')
+      expect(file?.lostReason).toBe('Empty file')
+      // The empty copy's fs meta is gone, so the next poll's
+      // fileExistsLocally filter drops the row at the SQL level.
+      expect(await app().fs.readMeta('empty-1')).toBeNull()
+    })
+
+    it('uploads a candidate whose recorded size is 0 but whose local copy has bytes', async () => {
+      enablePolling()
+      queryFilesSpy.mockRestore()
+
+      const now = Date.now()
+      await app().files.create({
+        id: 'stale-size-1',
+        name: 'stale-size-1.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 0,
+        hash: 'sha256:stale',
+        createdAt: now,
+        updatedAt: now,
+        mediaAssetId: null,
+        addedAt: now,
+        trashedAt: null,
+        deletedAt: null,
+      })
+      await app().fs.upsertMeta({ fileId: 'stale-size-1', size: 400, addedAt: now, usedAt: now })
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(mockPacker.add).toHaveBeenCalledTimes(1)
+      const file = await app().files.getById('stale-size-1')
+      expect(file?.lostReason).toBeNull()
+    })
+
     it('excludeIds allows polling past the 200-file query limit', async () => {
       // Without excludeIds, a second poll would return the same 200 files
       // (still local-only until pin), JS filter removes them all, and idle
