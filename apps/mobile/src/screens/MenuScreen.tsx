@@ -71,7 +71,16 @@ export function MenuScreen({ navigation }: Props) {
   return (
     <SettingsScrollLayout>
       <InsetGroupSection header="About">
-        <InsetGroupValueRow label="Version" value={Constants.expoConfig?.version ?? 'Unknown'} />
+        {/* The build code's last two digits name the rc (99 = final): testers can
+            identify a build, and store users never see an rc suffix. */}
+        <InsetGroupValueRow
+          label="Version"
+          value={
+            Constants.expoConfig?.version
+              ? `${Constants.expoConfig.version} (${Constants.expoConfig.extra?.buildCode})`
+              : 'Unknown'
+          }
+        />
       </InsetGroupSection>
 
       <SettingsSyncPhotos />

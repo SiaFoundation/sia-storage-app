@@ -1,21 +1,21 @@
 const { version } = require('./package.json')
+const { deriveAppVersion } = require('./appVersion')
 const { resolveVariant } = require('./variants')
 
 // App identity (name, bundle id, icons, app group) is driven by APP_VARIANT
 // (dev | beta | prod); see variants.js. Defaults to `dev` for local builds.
 const variant = resolveVariant()
 
-// Calculate Android versionCode from semver (1.2.3 → 10203)
-// This ensures versionCode always increases with version bumps
-const [major, minor, patch] = version.split('.').map(Number)
-const versionCode = major * 10000 + minor * 100 + patch
+// Release candidates (X.Y.Z-rc.N) ship with the plain X.Y.Z marketing version
+// and are told apart by build number / versionCode; see appVersion.js.
+const { marketingVersion, versionCode, buildNumber } = deriveAppVersion(version)
 
 export default {
   expo: {
     name: variant.name,
     slug: variant.slug,
     scheme: 'sia',
-    version,
+    version: marketingVersion,
     orientation: 'default',
     icon: variant.iosIcon,
     userInterfaceStyle: 'dark',
@@ -27,6 +27,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
+      buildNumber,
       bundleIdentifier: variant.bundleId,
       entitlements: {
         'com.apple.security.application-groups': [variant.appGroup],
@@ -125,6 +126,9 @@ export default {
     ],
     runtimeVersion: version,
     extra: {
+      // The build encoding again, platform-neutral so the UI needn't branch on
+      // ios.buildNumber vs android.versionCode.
+      buildCode: versionCode,
       variant: variant.key,
       // `prod` stays true for any non-dev (release-signed) build — beta behaves
       // like production, just under a separate identity.

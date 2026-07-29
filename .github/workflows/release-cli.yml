@@ -17,9 +17,11 @@ concurrency:
 
 jobs:
   build:
-    # Run on every cli/v* release and on every manual dispatch. Skip mobile/*
-    # releases so this workflow doesn't fire alongside the mobile build.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/')) }}
+    # Run on stable cli/v* releases and every manual dispatch. Skip mobile/*
+    # releases (they have their own build workflow) and cli rc prereleases, which
+    # exist only because a train carrying mobile changes versions every package
+    # as a release candidate.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/') && !github.event.release.prerelease) }}
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
