@@ -2,8 +2,9 @@ import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback } from 'react'
-import { ActivityIndicator, FlatList, type FlatListProps, Platform, StyleSheet } from 'react-native'
+import { ActivityIndicator, FlatList, type FlatListProps, StyleSheet } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
+import { HEADER_CONTENT_OFFSET } from '../styles/layout'
 import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {
@@ -76,7 +77,7 @@ export function FileGallery({
 
 const styles = StyleSheet.create({
   galleryContent: {
-    paddingTop: Platform.OS === 'android' ? 150 : 130,
+    paddingTop: HEADER_CONTENT_OFFSET,
     paddingBottom: 130,
   },
 })

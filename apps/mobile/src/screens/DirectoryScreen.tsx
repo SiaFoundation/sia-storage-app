@@ -57,6 +57,7 @@ import {
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { useViewSettings } from '../stores/viewSettings'
 import { colors, overlay, palette } from '../styles/colors'
+import { HEADER_CONTENT_OFFSET } from '../styles/layout'
 
 type Props = NativeStackScreenProps<MainStackParamList, 'DirectoryScreen'>
 
@@ -323,11 +324,16 @@ export function DirectoryScreen({ route, navigation }: Props) {
           />
         )
       ) : (
-        <EmptyState
-          image={require('../../assets/image-stack.png')}
-          title="No files in this folder"
-          message="Move files here from the file actions menu."
-        />
+        // The list header's banner never mounts on this branch, which is where
+        // a folder still taking an import lands.
+        <View style={styles.emptyBranch}>
+          <FolderImportBanner directoryId={directoryId} style={styles.emptyBranchBanner} />
+          <EmptyState
+            image={require('../../assets/image-stack.png')}
+            title="No files in this folder"
+            message="Move files here from the file actions menu."
+          />
+        </View>
       )}
 
       <AddFileActionSheet
@@ -505,6 +511,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  emptyBranch: {
+    flex: 1,
+  },
+  // Overlaid so the empty state keeps its center when the banner hides itself
+  // at a zero count.
+  emptyBranchBanner: {
+    position: 'absolute',
+    top: HEADER_CONTENT_OFFSET,
+    left: 0,
+    right: 0,
+    zIndex: 1,
   },
   controlBar: {
     justifyContent: 'flex-end',

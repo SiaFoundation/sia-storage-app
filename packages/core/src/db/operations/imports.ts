@@ -8,6 +8,7 @@ import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import { IMPORT_MAX_ATTEMPTS } from '../../config'
 import { minutesInMs } from '../../lib/time'
 import { UNRETRYABLE_REASONS } from './importReasons'
+import { UNFILED_DIRECTORY_ID } from './library'
 import { insert, insertMany } from '../sql'
 
 export type ImportSource = 'picker' | 'camera' | 'share' | 'new-photos' | 'library-scan' | 'legacy'
@@ -408,16 +409,19 @@ export async function queryImportSummary(
   return [...byId.values()]
 }
 
+/**
+ * In-flight rows destined for one directory, or across every import when
+ * `directoryId` is omitted. Unfiled has no directory row of its own, so its
+ * pseudo-id matches the rows staged with no destination.
+ */
 export async function countInFlight(db: DatabaseAdapter, directoryId?: string): Promise<number> {
-  const row = directoryId
-    ? await db.getFirstAsync<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM import_files
-         WHERE state IN ('pending','active') AND directoryId = ?`,
-        directoryId,
-      )
-    : await db.getFirstAsync<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active')`,
-      )
+  const base = `SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active')`
+  const row =
+    directoryId === UNFILED_DIRECTORY_ID
+      ? await db.getFirstAsync<{ n: number }>(`${base} AND directoryId IS NULL`)
+      : directoryId
+        ? await db.getFirstAsync<{ n: number }>(`${base} AND directoryId = ?`, directoryId)
+        : await db.getFirstAsync<{ n: number }>(base)
   return row?.n ?? 0
 }
 
