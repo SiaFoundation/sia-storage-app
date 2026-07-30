@@ -35,6 +35,10 @@ async function main() {
   const scale = scaleIdx >= 0 ? Number(args[scaleIdx + 1] || 1) : 1
   const approachIdx = args.indexOf('--approach')
   const approach = approachIdx >= 0 ? args[approachIdx + 1] : 'CURRENT_COLUMN'
+  const filterIdx = args.indexOf('--filter')
+  const filter = filterIdx >= 0 ? args[filterIdx + 1] : null
+  const applyFilter = <T extends { name: string }>(specs: T[]): T[] =>
+    filter ? specs.filter((s) => s.name.includes(filter)) : specs
 
   console.log(`\n=== Benchmark: ${approach} (scale ${scale}x) ===\n`)
 
@@ -59,7 +63,7 @@ async function main() {
   // Phase 1: Before ANALYZE
   console.log('\n--- Before ANALYZE ---\n')
   const specsBeforeAnalyze = buildQuerySpecs(app, sampleDirId, sampleTagId, sampleFileId)
-  const resultsBeforeAnalyze = await runBenchmark(specsBeforeAnalyze)
+  const resultsBeforeAnalyze = await runBenchmark(applyFilter(specsBeforeAnalyze))
   const reportBeforeAnalyze = buildReport(
     `${approach}_before_analyze`,
     datasetInfo,
@@ -77,7 +81,7 @@ async function main() {
   // Phase 3: After ANALYZE
   console.log('\n--- After ANALYZE ---\n')
   const specsAfterAnalyze = buildQuerySpecs(app, sampleDirId, sampleTagId, sampleFileId)
-  const resultsAfterAnalyze = await runBenchmark(specsAfterAnalyze)
+  const resultsAfterAnalyze = await runBenchmark(applyFilter(specsAfterAnalyze))
   const reportAfterAnalyze = buildReport(
     `${approach}_after_analyze`,
     datasetInfo,
@@ -88,7 +92,7 @@ async function main() {
   // Phase 4: Write benchmarks (after ANALYZE, with rollback per iteration)
   console.log('\n--- Write Benchmarks ---\n')
   const writeSpecs = buildWriteQuerySpecs(db, sampleDirId)
-  const writeResults = await runBenchmark(writeSpecs)
+  const writeResults = await runBenchmark(applyFilter(writeSpecs))
   const writeReportData = buildReport(`${approach}_writes`, datasetInfo, writeResults)
   writeReport(writeReportData, outputDir)
 

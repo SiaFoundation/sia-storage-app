@@ -440,6 +440,20 @@ describe('queryDirectoryChildren', () => {
     expect(axb.subdirectoryCount).toBe(0)
   })
 
+  it('does not count a case-different sibling directory as a child', async () => {
+    await insertDirectory(db(), 'Photos')
+    await insertDirectory(db(), 'photos')
+    const child = await insertDirectory(db(), 'Vacation', 'photos')
+    await createTestFile('f1')
+    await moveFileToDirectory(db(), 'f1', child.id)
+
+    const roots = await queryDirectoryChildren(db(), null)
+    const upper = roots.find((d) => d.path === 'Photos')!
+    expect(upper.subdirectoryCount).toBe(0)
+    expect(upper.fileCount).toBe(0)
+    expect(await queryDirectoryChildren(db(), 'Photos')).toEqual([])
+  })
+
   it('handles directory names with percent sign', async () => {
     await insertDirectory(db(), '50% off')
     await insertDirectory(db(), 'child', '50% off')

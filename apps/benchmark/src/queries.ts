@@ -105,6 +105,11 @@ export function buildQuerySpecs(
       category: 'directories',
       run: () => app.directories.getAll(),
     },
+    {
+      name: 'directoryChildren:root',
+      category: 'directories',
+      run: () => app.directories.getChildren(null),
+    },
 
     {
       name: 'thumbnailCandidatePage',
