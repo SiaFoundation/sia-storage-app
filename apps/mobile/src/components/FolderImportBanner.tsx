@@ -1,3 +1,4 @@
+import { UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
 import { Pressable, StyleSheet, type StyleProp, Text, type ViewStyle } from 'react-native'
 import { navigateToImports } from '../lib/navigationRef'
 import { useInFlightCountForDirectory } from '../stores/imports'
@@ -8,6 +9,7 @@ import { colors, palette } from '../styles/colors'
  * just imported into looks empty. This banner names the in-flight count and
  * links to the imports list. On the root view (`directoryId` null) it counts
  * across every import, since root is also where destination-less imports land.
+ * Unfiled counts only the imports staged with no destination.
  */
 export function FolderImportBanner({
   directoryId,
@@ -21,6 +23,7 @@ export function FolderImportBanner({
   const { data: count } = useInFlightCountForDirectory(directoryId)
   if (!count) return null
   const noun = count === 1 ? '1 file' : `${count.toLocaleString()} files`
+  const intoFolder = directoryId !== null && directoryId !== UNFILED_DIRECTORY_ID
   return (
     <Pressable
       accessibilityRole="button"
@@ -28,7 +31,7 @@ export function FolderImportBanner({
       style={({ pressed }) => [styles.banner, pressed ? styles.pressed : null, style]}
     >
       <Text style={styles.text}>
-        {directoryId === null ? `${noun} importing` : `${noun} importing into this folder`}
+        {intoFolder ? `${noun} importing into this folder` : `${noun} importing`}
       </Text>
     </Pressable>
   )

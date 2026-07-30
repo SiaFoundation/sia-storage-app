@@ -49,13 +49,18 @@ export function DirectoriesGrid({
   }
 
   if (listData.length === 0) {
+    // The header carries the import banner, which a library with no folders
+    // of its own still needs.
     return (
-      <EmptyState
-        image={require('../../assets/folder-stack.png')}
-        title="No folders yet"
-        message="Create folders to organize your files."
-        action={{ label: 'Create folder', onPress: onCreateDirectory }}
-      />
+      <View style={styles.empty}>
+        <View style={styles.emptyHeader}>{ListHeaderComponent}</View>
+        <EmptyState
+          image={require('../../assets/folder-stack.png')}
+          title="No folders yet"
+          message="Create folders to organize your files."
+          action={{ label: 'Create folder', onPress: onCreateDirectory }}
+        />
+      </View>
     )
   }
 
@@ -117,6 +122,19 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 140,
     paddingBottom: 120,
+  },
+  empty: {
+    flex: 1,
+  },
+  // Offset and gutter match the grid's own. Overlaid so the empty state keeps
+  // its center when the banner hides itself at a zero count.
+  emptyHeader: {
+    position: 'absolute',
+    top: 140,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    zIndex: 1,
   },
   card: {
     flexDirection: 'row',

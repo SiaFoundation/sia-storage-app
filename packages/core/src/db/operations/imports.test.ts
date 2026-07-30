@@ -32,6 +32,7 @@ import {
   updateImportSourceRef,
 } from './imports'
 import { IMPORT_REASONS, isImportReasonCode, UNRETRYABLE_REASONS } from './importReasons'
+import { UNFILED_DIRECTORY_ID } from './library'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 function imp(over: Partial<ImportRow> & { id: string; source: ImportSource }): ImportRow {
@@ -318,6 +319,19 @@ describe('imports ops', () => {
       file({ id: 'c', importId: 'i1', state: 'added' }),
     ])
     expect(await countInFlight(db())).toBe(2)
+  })
+
+  it('countInFlight scoped to a directory, and to unfiled by its pseudo-id', async () => {
+    await insertImport(db(), imp({ id: 'i1', source: 'picker' }))
+    await insertManyImportFiles(db(), [
+      file({ id: 'a', importId: 'i1', state: 'pending', directoryId: 'd1' }),
+      file({ id: 'b', importId: 'i1', state: 'active', directoryId: 'd1' }),
+      file({ id: 'c', importId: 'i1', state: 'added', directoryId: 'd1' }),
+      file({ id: 'd', importId: 'i1', state: 'pending', directoryId: null }),
+    ])
+    expect(await countInFlight(db(), 'd1')).toBe(2)
+    expect(await countInFlight(db(), UNFILED_DIRECTORY_ID)).toBe(1)
+    expect(await countInFlight(db())).toBe(3)
   })
 
   it('cancelImportFiles cancels in-flight rows and clears the claim', async () => {

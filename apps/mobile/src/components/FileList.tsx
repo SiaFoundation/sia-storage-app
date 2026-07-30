@@ -2,8 +2,9 @@ import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback } from 'react'
-import { ActivityIndicator, FlatList, type FlatListProps, Platform } from 'react-native'
+import { ActivityIndicator, FlatList, type FlatListProps } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
+import { HEADER_CONTENT_OFFSET } from '../styles/layout'
 import { FileListItem } from './FileListItem'
 
 type Props = {
@@ -51,7 +52,7 @@ export function FileList({
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
-        paddingTop: contentPaddingTop ?? (Platform.OS === 'android' ? 150 : 130),
+        paddingTop: contentPaddingTop ?? HEADER_CONTENT_OFFSET,
         paddingBottom: 130,
       }}
       ListHeaderComponent={ListHeaderComponent}
