@@ -192,66 +192,76 @@ export async function queryDirectoryByPath(
   return row ? toDirectory(row) : null
 }
 
-// File count includes all files in this directory and all descendant directories.
-const RECURSIVE_FILE_COUNT_EXPR = `(SELECT COUNT(*) FROM files f JOIN directories fd ON f.directoryId = fd.id WHERE (fd.id = d.id OR fd.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\') AND ${buildRecordFilter('f')})`
-const DIRECT_SUBDIR_COUNT_EXPR = `(SELECT COUNT(*) FROM directories c WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\' AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\')`
+/**
+ * Every directory with its recursive file count and direct-subdirectory count, from one
+ * GROUP BY over active files rolled up each path's ancestor chain in memory. The natural
+ * SQL, a correlated subtree subquery per listed row, re-tests every directory row for every
+ * row it lists, so its cost climbs with the directory count where this is one scan of the
+ * file index plus one walk of the directory list; at a few thousand directories that is
+ * seconds against milliseconds. It also depends on the planner having fresh statistics,
+ * which PRAGMA optimize refreshes only lazily. The GROUP BY matches
+ * idx_files_current_directoryId's partial predicate, so passing filter options to
+ * buildRecordFilter would give up that index.
+ *
+ * `scope` is 'all', or the immediate children of `parentPath` (root level when it is null).
+ * Matching is exact rather than SQL LIKE, which is ASCII-case-insensitive and would list a
+ * sibling `photos/`'s children under `Photos`.
+ */
+async function queryDirectoriesWithCounts(
+  db: DatabaseAdapter,
+  scope: 'all' | { parentPath: string | null },
+): Promise<DirectoryWithCount[]> {
+  const dirs = await db.getAllAsync<DirectoryRow>(
+    'SELECT id, path, createdAt FROM directories ORDER BY nameSortKey',
+  )
+  const directRows = await db.getAllAsync<{ directoryId: string; fileCount: number }>(
+    `SELECT f.directoryId, COUNT(*) AS fileCount FROM files f
+      WHERE f.directoryId IS NOT NULL AND ${buildRecordFilter('f')}
+      GROUP BY f.directoryId`,
+  )
+  const directCounts = new Map(directRows.map((r) => [r.directoryId, r.fileCount]))
+
+  const fileCounts = new Map<string, number>()
+  const subdirectoryCounts = new Map<string, number>()
+  for (const d of dirs) {
+    const direct = directCounts.get(d.id) ?? 0
+    if (direct > 0) {
+      // A directory's own files count toward its total and every ancestor's.
+      fileCounts.set(d.path, (fileCounts.get(d.path) ?? 0) + direct)
+      for (let i = d.path.indexOf('/'); i !== -1; i = d.path.indexOf('/', i + 1)) {
+        const ancestor = d.path.slice(0, i)
+        fileCounts.set(ancestor, (fileCounts.get(ancestor) ?? 0) + direct)
+      }
+    }
+    const parent = directoryParentPath(d.path)
+    if (parent !== null) {
+      subdirectoryCounts.set(parent, (subdirectoryCounts.get(parent) ?? 0) + 1)
+    }
+  }
+
+  const inScope = (path: string): boolean =>
+    scope === 'all' || directoryParentPath(path) === scope.parentPath
+
+  return dirs
+    .filter((d) => inScope(d.path))
+    .map((d) => ({
+      ...toDirectory(d),
+      fileCount: fileCounts.get(d.path) ?? 0,
+      subdirectoryCount: subdirectoryCounts.get(d.path) ?? 0,
+    }))
+}
 
 export async function queryDirectoryChildren(
   db: DatabaseAdapter,
   parentPath: string | null,
 ): Promise<DirectoryWithCount[]> {
-  type Row = DirectoryRow & { fileCount: number; subdirectoryCount: number }
-
-  let rows: Row[]
-
-  if (parentPath === null) {
-    rows = await db.getAllAsync<Row>(
-      `SELECT d.id, d.path, d.createdAt,
-        ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
-        ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
-       FROM directories d
-       WHERE d.path NOT LIKE '%/%' ESCAPE '\\'
-       ORDER BY d.nameSortKey`,
-    )
-  } else {
-    const escaped = escapeLikePattern(parentPath)
-    rows = await db.getAllAsync<Row>(
-      `SELECT d.id, d.path, d.createdAt,
-        ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
-        ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
-       FROM directories d
-       WHERE d.path LIKE ? || '/%' ESCAPE '\\' AND d.path NOT LIKE ? || '/%/%' ESCAPE '\\'
-       ORDER BY d.nameSortKey`,
-      escaped,
-      escaped,
-    )
-  }
-
-  return rows.map((row) => ({
-    ...toDirectory(row),
-    fileCount: row.fileCount,
-    subdirectoryCount: row.subdirectoryCount,
-  }))
+  return queryDirectoriesWithCounts(db, { parentPath })
 }
 
 export async function queryAllDirectoriesWithCounts(
   db: DatabaseAdapter,
 ): Promise<DirectoryWithCount[]> {
-  type Row = DirectoryRow & { fileCount: number; subdirectoryCount: number }
-
-  const rows = await db.getAllAsync<Row>(
-    `SELECT d.id, d.path, d.createdAt,
-      ${RECURSIVE_FILE_COUNT_EXPR} as fileCount,
-      ${DIRECT_SUBDIR_COUNT_EXPR} as subdirectoryCount
-     FROM directories d
-     ORDER BY d.nameSortKey`,
-  )
-
-  return rows.map((row) => ({
-    ...toDirectory(row),
-    fileCount: row.fileCount,
-    subdirectoryCount: row.subdirectoryCount,
-  }))
+  return queryDirectoriesWithCounts(db, 'all')
 }
 
 export async function queryDirectoryPathForFile(
