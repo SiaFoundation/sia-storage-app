@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       candidate:
-        description: 'Tag of the cut that shipped, named by any gated app''s tag (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut'
+        description: "Tag of the cut that shipped, named by any gated app's tag (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut"
         required: false
         type: string
 
