@@ -15,6 +15,7 @@ function makeImport(id: string, overrides: Partial<ImportRow> = {}): ImportRow {
     sealed: 1,
     startedAt: 1000,
     updatedAt: 1000,
+    lastActivityAt: 1000,
     ...overrides,
   }
 }

@@ -639,8 +639,16 @@ export interface AppService {
    * loop plus create/addFiles from the import sources.
    */
   imports: {
-    /** Lists imports, newest first, optionally filtered by source. */
+    /** Lists imports, most recently active first, optionally filtered by source. */
     list(opts?: { source?: ImportSource; limit?: number }): Promise<ImportRow[]>
+    /** A page of imports plus their summaries in one call (the Imports screen
+     * read), issued back to back with no render between the two statements.
+     * `limit` bounds the summary aggregate, which walks the children of every
+     * import in the page. */
+    listWithSummary(opts?: {
+      limit?: number
+      now?: number
+    }): Promise<{ imports: ImportRow[]; summaries: ImportSummary[] }>
     /** Returns one import by id, or null. */
     get(id: string): Promise<ImportRow | null>
     /** Returns derived status + counts for the given import ids. `now` anchors

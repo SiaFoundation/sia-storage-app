@@ -9,6 +9,7 @@ import {
   claimImportFile,
   countInFlight,
   deleteImport,
+  IMPORT_ACTIVITY_GRANULARITY_MS,
   type ImportFileRow,
   type ImportRow,
   type ImportSource,
@@ -23,6 +24,7 @@ import {
   queryImportById,
   queryImportFiles,
   queryImportSummary,
+  queryImportsWithSummary,
   queryInProgressImport,
   queryPendingImportFiles,
   rependTerminalImportFiles,
@@ -45,6 +47,7 @@ function imp(over: Partial<ImportRow> & { id: string; source: ImportSource }): I
     sealed: 1,
     startedAt: 1,
     updatedAt: 1,
+    lastActivityAt: 1,
     ...over,
   }
 }
@@ -94,11 +97,13 @@ describe('imports ops', () => {
     await claimImportFile(db(), 'a', 1000, 'owner')
 
     // An orphaned op holding a stale token must not mutate the row.
-    await markImportFileProgress(db(), 'a', 999, 'stale', 1_000)
+    await markImportFileProgress(db(), 'a', 999, 'stale')
     const row = await db().getFirstAsync<{ copyBytes: number }>(
       `SELECT copyBytes FROM import_files WHERE id='a'`,
     )
     expect(row?.copyBytes).toBe(0)
+
+    const activityBefore = (await queryImportById(db(), 'i1'))?.lastActivityAt
 
     await markImportFileFailure(db(), 'a', 'stale', 'boom', 2000)
     await markImportFileAdded(db(), 'a', 'stale')
@@ -106,6 +111,10 @@ describe('imports ops', () => {
       `SELECT state, attempts FROM import_files WHERE id='a'`,
     )
     expect(after).toEqual({ state: 'active', attempts: 0 }) // untouched
+
+    // Nor may it look like activity: an orphan that changed no row must not
+    // float its import to the top of the history list.
+    expect((await queryImportById(db(), 'i1'))?.lastActivityAt).toBe(activityBefore)
   })
 
   it('backs off transient failures and escalates to failed at MAX_ATTEMPTS', async () => {
@@ -167,6 +176,75 @@ describe('imports ops', () => {
     expect(await byName('_final')).toEqual(['100%_final.jpg'])
     expect(await byName('back\\')).toEqual(['back\\slash.png'])
     expect(await byName('nothing')).toEqual([])
+  })
+
+  it('queryImportsWithSummary returns imports most-recently-active first with a summary per returned row', async () => {
+    await insertImport(db(), imp({ id: 'quiet', source: 'picker', lastActivityAt: 100 }))
+    await insertImport(db(), imp({ id: 'busy', source: 'camera', lastActivityAt: 200 }))
+    await insertManyImportFiles(db(), [
+      file({ id: 'b1', importId: 'busy', state: 'added', size: 5 }),
+      file({ id: 'q1', importId: 'quiet', state: 'pending' }),
+    ])
+
+    const { imports, summaries } = await queryImportsWithSummary(db(), 1000)
+    expect(imports.map((i) => i.id)).toEqual(['busy', 'quiet'])
+    expect(summaries.map((s) => s.importId).sort()).toEqual(['busy', 'quiet'])
+    expect(summaries.find((s) => s.importId === 'busy')?.added).toBe(1)
+    expect(summaries.find((s) => s.importId === 'quiet')?.inFlight).toBe(1)
+  })
+
+  it('an import that started long ago but is still draining sorts above newer finished ones', async () => {
+    // The reason the list orders by activity rather than start time: a photo
+    // library scan runs for days, so by start time it sinks under every import
+    // made since and a user has to page to reach the one thing still running.
+    await insertImport(db(), imp({ id: 'scan', source: 'library-scan', startedAt: 100 }))
+    await insertImport(
+      db(),
+      imp({ id: 'recent', source: 'picker', startedAt: 5_000, lastActivityAt: 5_000 }),
+    )
+    await insertManyImportFiles(db(), [
+      file({ id: 's1', importId: 'scan', state: 'pending' }),
+      file({ id: 'r1', importId: 'recent', state: 'added' }),
+    ])
+
+    await claimImportFile(db(), 's1', 9_000, 'tok')
+
+    const { imports } = await queryImportsWithSummary(db(), 9_000)
+    expect(imports.map((i) => i.id)).toEqual(['scan', 'recent'])
+  })
+
+  it('coalesces activity bumps within the granularity window so a drain writes once per window', async () => {
+    await insertImport(db(), imp({ id: 'i', source: 'library-scan', lastActivityAt: 0 }))
+    await insertManyImportFiles(db(), [
+      file({ id: 'a', importId: 'i' }),
+      file({ id: 'b', importId: 'i' }),
+    ])
+    const activityAt = async () => (await queryImportById(db(), 'i'))?.lastActivityAt as number
+
+    const t0 = 10 * IMPORT_ACTIVITY_GRANULARITY_MS
+    await claimImportFile(db(), 'a', t0, 'tok-a')
+    expect(await activityAt()).toBe(t0)
+
+    // A second transition inside the window leaves the column alone: the value
+    // only orders the list, and a drain lands many transitions a second.
+    await claimImportFile(db(), 'b', t0 + 1_000, 'tok-b')
+    expect(await activityAt()).toBe(t0)
+
+    await markImportFileAdded(db(), 'a', 'tok-a')
+    expect(await activityAt()).toBeGreaterThan(t0)
+  })
+
+  it('limits the page and the summary to the most recently active imports', async () => {
+    for (let i = 0; i < 5; i++) {
+      await insertImport(db(), imp({ id: `i${i}`, source: 'picker', lastActivityAt: i * 100 }))
+      await insertManyImportFiles(db(), [file({ id: `f${i}`, importId: `i${i}`, state: 'added' })])
+    }
+
+    const { imports, summaries } = await queryImportsWithSummary(db(), 1000, 2)
+    expect(imports.map((i) => i.id)).toEqual(['i4', 'i3'])
+    // The aggregate walks the children of every import it is handed, so a page
+    // that summarized the whole history would defeat the limit.
+    expect(summaries.map((s) => s.importId).sort()).toEqual(['i3', 'i4'])
   })
 
   it('resetStaleImportFiles releases stale claims, clamps clock-skew, and seals abandoned imports', async () => {
@@ -282,7 +360,7 @@ describe('imports ops', () => {
     await insertImport(db(), imp({ id: 'open', source: 'new-photos', sealed: 0 }))
     expect((await queryInProgressImport(db(), 'new-photos'))?.id).toBe('open')
 
-    await sealImport(db(), 'open', 2)
+    await sealImport(db(), 'open')
     await insertManyImportFiles(db(), [file({ id: 'y', importId: 'open', state: 'pending' })])
     expect((await queryInProgressImport(db(), 'new-photos'))?.id).toBe('open') // draining
   })
@@ -389,7 +467,7 @@ describe('imports ops', () => {
       file({ id: 'gone', importId: 'i1', state: 'unavailable', reason: 'icloud', attempts: 5 }),
       file({ id: 'ok', importId: 'i1', state: 'added' }),
     ])
-    await rependTerminalImportFiles(db(), 'i1', 9000)
+    await rependTerminalImportFiles(db(), 'i1')
 
     for (const id of ['fail', 'gone']) {
       const r = await db().getFirstAsync<{
@@ -413,7 +491,7 @@ describe('imports ops', () => {
       file({ id: 'a', importId: 'i1', state: 'active', claimToken: 'tok' }),
       file({ id: 'ok', importId: 'i1', state: 'added' }),
     ])
-    await cancelInFlightImportFiles(db(), 'i1', 9000)
+    await cancelInFlightImportFiles(db(), 'i1')
 
     for (const id of ['p', 'a']) {
       const r = await db().getFirstAsync<{ state: string; claimToken: string | null }>(
@@ -431,7 +509,7 @@ describe('imports ops', () => {
   it('cancelInFlightImportFiles seals an open import so its status cannot stay importing', async () => {
     await insertImport(db(), imp({ id: 'open', source: 'new-photos', sealed: 0 }))
     await insertManyImportFiles(db(), [file({ id: 'p1', importId: 'open', state: 'pending' })])
-    await cancelInFlightImportFiles(db(), 'open', 9000)
+    await cancelInFlightImportFiles(db(), 'open')
 
     expect((await queryImportById(db(), 'open'))?.sealed).toBe(1)
     const [summary] = await queryImportSummary(db(), ['open'], 9000)
@@ -451,7 +529,7 @@ describe('imports ops', () => {
         ? Promise.reject(new Error('suspended mid-cancel'))
         : realRun(sql, ...params)
     try {
-      await expect(cancelInFlightImportFiles(adapter, 'open', 9000)).rejects.toThrow(
+      await expect(cancelInFlightImportFiles(adapter, 'open')).rejects.toThrow(
         'suspended mid-cancel',
       )
     } finally {
@@ -657,10 +735,13 @@ describe('failure reason codes and retry rules', () => {
 
   it('progress writes heartbeat the claim so long copies survive the stale sweep', async () => {
     await seedActive('h')
-    await markImportFileProgress(db(), 'h', 4_096, 'tok', 999_999)
-    const row = await readFull('h')
-    expect(row?.copyBytes).toBe(4_096)
-    expect(row?.claimedAt).toBe(999_999)
+    await markImportFileProgress(db(), 'h', 4_096, 'tok')
+    expect((await readFull('h'))?.copyBytes).toBe(4_096)
+
+    // The heartbeat is the whole point: on its seeded claimedAt this sweep
+    // would release the row out from under the copy still writing it.
+    await resetStaleImportFiles(db(), 10 * 60_000, 10 * 60_000, Date.now())
+    expect((await readFull('h'))?.state).toBe('active')
   })
 
   it('retry-failed skips guaranteed-bounce codes and returns everything else to pending', async () => {
@@ -674,7 +755,7 @@ describe('failure reason codes and retry rules', () => {
       file({ id: 'broke', importId: 'r1', state: 'failed', reason: 'io-error' }),
       file({ id: 'legacy', importId: 'r1', state: 'failed', reason: 'processing error' }),
     ])
-    await rependTerminalImportFiles(db(), 'r1', 5_000)
+    await rependTerminalImportFiles(db(), 'r1')
 
     expect((await readFull('gone'))?.state).toBe('unavailable')
     expect((await readFull('expired'))?.state).toBe('unavailable')

@@ -22,6 +22,26 @@ import type { Migration } from '../types'
  *
  * The migration runner wraps this in a transaction, so it issues no BEGIN/COMMIT.
  */
+/*
+ * Index coverage for the imports tables. A drain re-runs every query these
+ * serve about once a second on the app's single connection, so none of them may
+ * scan a table or sort its rows.
+ */
+const IMPORT_INDEX_STATEMENTS: readonly string[] = [
+  // Scanner reads an import's rows filtered by state (drain, count terminals, decide finalize).
+  `CREATE INDEX IF NOT EXISTS idx_import_files_import ON import_files(importId, state);`,
+  // Pending rows, newest staged first.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_pending ON import_files(addedAt DESC) WHERE state = 'pending';`,
+  // Identity dedup: find in-flight rows for a given photo-library asset.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_mediaAsset ON import_files(mediaAssetId) WHERE mediaAssetId IS NOT NULL;`,
+  // The history list, most recently active first, so a draining import stays on
+  // the first page however old it is.
+  `CREATE INDEX IF NOT EXISTS idx_imports_activity
+   ON imports(lastActivityAt DESC, id DESC);`,
+  // queryInProgressImport's per-source lookup.
+  `CREATE INDEX IF NOT EXISTS idx_imports_started ON imports(startedAt DESC);`,
+]
+
 async function up(db: DatabaseAdapter): Promise<void> {
   // One row per user action that starts an import.
   await db.execAsync(
@@ -35,7 +55,8 @@ async function up(db: DatabaseAdapter): Promise<void> {
       dirSourceRef TEXT,                                      -- OS permission handle for a picked directory (Android SAF / iOS bookmark)
       sealed INTEGER NOT NULL DEFAULT 1,                      -- 1 = import source done adding; may finalize once all rows are terminal
       startedAt INTEGER NOT NULL,
-      updatedAt INTEGER NOT NULL
+      updatedAt INTEGER NOT NULL,                             -- last time rows were added or it was sealed; the idle-seal sweep reads this
+      lastActivityAt INTEGER NOT NULL DEFAULT 0               -- last time a child changed state; orders the history list
     );`,
   )
 
@@ -65,20 +86,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
       claimToken TEXT                                         -- owner token; a claimed write only lands if it still matches (one writer per row)
     );`,
   )
-  // Scanner reads an import's rows filtered by state (drain, count terminals, decide finalize).
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_import_files_import ON import_files(importId, state);`,
-  )
-  // Pending rows, newest staged first.
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_import_files_pending ON import_files(addedAt DESC) WHERE state = 'pending';`,
-  )
-  // Identity dedup: find in-flight rows for a given photo-library asset.
-  await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_import_files_mediaAsset ON import_files(mediaAssetId) WHERE mediaAssetId IS NOT NULL;`,
-  )
-  // The imports history list, newest first.
-  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_imports_started ON imports(startedAt DESC);`)
+  for (const stmt of IMPORT_INDEX_STATEMENTS) await db.execAsync(stmt)
 
   // Retire localId: add the non-unique replacement and carry the existing values over.
   await db.execAsync(`ALTER TABLE files ADD COLUMN mediaAssetId TEXT;`)
@@ -100,8 +108,9 @@ async function up(db: DatabaseAdapter): Promise<void> {
 
   const now = Date.now()
   await db.runAsync(
-    `INSERT INTO imports (id, source, directoryId, expectedCount, dedupByHash, sealed, startedAt, updatedAt)
-     VALUES ('legacy', 'legacy', NULL, 0, 1, 1, ?, ?)`,
+    `INSERT INTO imports (id, source, directoryId, expectedCount, dedupByHash, sealed, startedAt, updatedAt, lastActivityAt)
+     VALUES ('legacy', 'legacy', NULL, 0, 1, 1, ?, ?, ?)`,
+    now,
     now,
     now,
   )

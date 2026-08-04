@@ -200,6 +200,7 @@ export async function importAssets(
     sealed: 1,
     startedAt: now,
     updatedAt: now,
+    lastActivityAt: now,
   }
 
   await app().imports.create(importRow, rows)
@@ -276,6 +277,7 @@ export async function importMediaAssets(
     sealed: 1,
     startedAt: now,
     updatedAt: now,
+    lastActivityAt: now,
   }
 
   await app().imports.create(importRow, rows)

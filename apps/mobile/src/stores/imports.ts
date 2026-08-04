@@ -10,23 +10,33 @@ import useSWR, { type SWRConfiguration } from 'swr'
 import { app } from './appService'
 
 // Every read below keys on `caches.imports`. Row-state writes invalidate that
-// cache (debounced), so these hooks refetch as an import drains. Claiming and
-// per-copy progress heartbeats do not invalidate.
+// cache through a 1s debounce, so these hooks refetch about once a second while
+// an import drains and go quiet when it stops.
 
-export async function getImports(opts?: {
-  source?: ImportSource
-  limit?: number
-}): Promise<ImportRow[]> {
-  return app().imports.list(opts)
+export type ImportsWithSummary = {
+  imports: ImportRow[]
+  summaries: ImportSummary[]
 }
 
-/** All imports, newest-first (optionally filtered by source). Drives the Imports list. */
-export function useImports(
-  opts?: { source?: ImportSource; limit?: number },
-  config?: SWRConfiguration,
-) {
-  const key = app().caches.imports.key('list')
-  return useSWR([...key, opts ?? null], () => getImports(opts), config)
+/** The list orders by activity, so anything running is on the first page and
+ * paging is only ever to reach finished history. */
+export const IMPORTS_PAGE_SIZE = 30
+
+/**
+ * The Imports list's whole read in one hook, keyed on the page size rather than
+ * the ids it returns, so an arriving import does not change the key.
+ *
+ * `limit` bounds the summary aggregate, which walks the children of every
+ * import in the page; nothing prunes `import_files`, so an unbounded read grows
+ * with lifetime usage.
+ */
+export function useImportsWithSummary(limit: number, config?: SWRConfiguration) {
+  const key = app().caches.imports.key('listSummary')
+  return useSWR<ImportsWithSummary>(
+    [...key, limit],
+    () => app().imports.listWithSummary({ limit }),
+    { keepPreviousData: true, ...config },
+  )
 }
 
 export async function getImport(id: string): Promise<ImportRow | null> {
