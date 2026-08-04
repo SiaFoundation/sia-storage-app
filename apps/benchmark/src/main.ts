@@ -1,8 +1,6 @@
-import { createAppService } from '@siastorage/core/app'
 import { runMigrations } from '@siastorage/core/db'
 import { coreMigrations, sortMigrations } from '@siastorage/core/db/migrations'
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
-import { createInMemoryStorage } from '@siastorage/node-adapters/storage'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -11,51 +9,8 @@ import { generateDataset } from './dataset'
 import { buildQuerySpecs, buildWriteQuerySpecs } from './queries'
 import { writeReport } from './report'
 import { runBenchmark } from './runner'
+import { createStubAppService } from './stubApp'
 import type { BenchmarkReport, DatasetInfo } from './types'
-
-function createStubAppService(db: any) {
-  return createAppService({
-    db,
-    storage: createInMemoryStorage(),
-    secrets: createInMemoryStorage(),
-    crypto: { sha256: async () => '' },
-    fsIO: {
-      exists: async () => false,
-      remove: async () => {},
-      stat: async () => ({ size: 0 }),
-      readDir: async () => [],
-      mkdir: async () => {},
-      readFile: async () => new ArrayBuffer(0),
-      writeFile: async () => {},
-      copyFile: async () => {},
-      moveFile: async () => {},
-      getStorageDirectory: () => '',
-      getTempDirectory: () => '',
-    },
-    downloadObject: {
-      async download() {
-        throw new Error('not implemented')
-      },
-      async downloadFromShareUrl() {
-        throw new Error('not implemented')
-      },
-    },
-    uploader: {
-      calculateContentHash: async () => '',
-      getMimeType: async () => null,
-    },
-    sdkAuth: {
-      createBuilder: async () => {},
-      requestConnection: async () => '',
-      waitForApproval: async () => {},
-      connectWithKey: async () => false,
-      register: async () => '',
-      generateRecoveryPhrase: () => '',
-      validateRecoveryPhrase: () => {},
-      cancelAuth: () => {},
-    },
-  })
-}
 
 function buildReport(
   approach: string,

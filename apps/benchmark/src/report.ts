@@ -33,6 +33,12 @@ function formatMarkdown(report: BenchmarkReport): string {
   lines.push(`| Tags | ${report.dataset.tags} |`)
   lines.push(`| Objects populated | ${report.dataset.objectsPopulated.toLocaleString()} |`)
   lines.push(`| fs populated | ${report.dataset.fsPopulated.toLocaleString()} |`)
+  if (report.dataset.importCount !== undefined) {
+    lines.push(`| Imports | ${report.dataset.importCount.toLocaleString()} |`)
+  }
+  if (report.dataset.importFileCount !== undefined) {
+    lines.push(`| Import files | ${report.dataset.importFileCount.toLocaleString()} |`)
+  }
   lines.push(`| Generation time | ${(report.dataset.generationTimeMs / 1000).toFixed(1)}s |`)
   lines.push('')
   lines.push('## Results')

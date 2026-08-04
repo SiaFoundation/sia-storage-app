@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "bench": "node --import tsx src/main.ts",
-    "bench:10m": "node --import tsx src/main.ts --scale 10"
+    "bench:10m": "node --import tsx src/main.ts --scale 10",
+    "bench:imports": "node --import tsx src/importsMain.ts",
+    "bench:imports:100k": "node --import tsx src/importsMain.ts --profile archive100k"
   },
   "dependencies": {
     "tsx": "4.21.0"

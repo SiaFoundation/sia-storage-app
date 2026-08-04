@@ -392,8 +392,12 @@ export async function queryImportSummary(
     backoff: number
     soonest: number | null
   }>(
+    // COUNT(f.importId), not COUNT(f.id): id is not in
+    // idx_import_files_import_state_agg, so counting it would add a table-row
+    // fetch per child and break the index-only aggregation. Same semantics
+    // under the LEFT JOIN (both are non-null exactly when a child matched).
     `SELECT i.id AS importId, i.sealed AS sealed, f.state AS state,
-            COUNT(f.id) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size,
+            COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size,
             COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized,
             COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff,
             MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest
@@ -599,8 +603,14 @@ export async function queryPendingImportFiles(
   db: DatabaseAdapter,
   opts: { limit: number; now: number },
 ): Promise<ImportFileRow[]> {
+  // INDEXED BY: whether the planner picks this index depends on table
+  // statistics, which a device may or may not have (PRAGMA optimize runs on
+  // an interval and analyzes lazily). Without them it chooses a state probe
+  // plus a temp-b-tree sort of every ready pending row, every scanner tick.
+  // The partial index already stores the exact order, so the walk stops at
+  // LIMIT; forcing it errors loudly if the index is dropped.
   return db.getAllAsync<ImportFileRow>(
-    `SELECT * FROM import_files
+    `SELECT * FROM import_files INDEXED BY idx_import_files_pending
      WHERE state = 'pending' AND nextAttemptAt <= ?
      ORDER BY addedAt DESC, id DESC LIMIT ?`,
     opts.now,
