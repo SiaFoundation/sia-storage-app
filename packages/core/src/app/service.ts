@@ -726,12 +726,12 @@ export interface AppService {
      */
     updateSourceRef(id: string, token: string, ref: string | null): Promise<void>
     /**
-     * Deletes an import and CASCADE-drops its import_files. Returns the still-held source refs
-     * of its rows, plus the import's folder tree grant when one exists, so the
-     * platform layer can release the OS grants (Android persistable
-     * permissions; a no-op for iOS bookmarks).
+     * Deletes an import and CASCADE-drops its import_files. Returns the cleanup owed
+     * afterwards: still-held source refs (rows plus the folder tree grant) for the
+     * platform layer to release (Android persistable permissions; a no-op for iOS
+     * bookmarks), and staged-copy uris whose temp bytes must be removed.
      */
-    delete(id: string): Promise<string[]>
+    delete(id: string): Promise<{ refs: string[]; stagedUris: string[] }>
     /** Sweep: release stale claims, clamp clock-skew, seal abandoned imports. */
     resetStale(claimOlderThanMs: number, sealOlderThanMs: number, now: number): Promise<void>
   }

@@ -280,9 +280,9 @@ export function buildDbNamespaces(
       },
       updateSourceRef: (id, token, ref) => ops.updateImportSourceRef(db, id, token, ref),
       delete: async (id) => {
-        const grants = await ops.deleteImport(db, id)
+        const cleanup = await ops.deleteImport(db, id)
         invalidateImports()
-        return grants
+        return cleanup
       },
       resetStale: async (claimOlderThanMs, sealOlderThanMs, now) => {
         await ops.resetStaleImportFiles(db, claimOlderThanMs, sealOlderThanMs, now)

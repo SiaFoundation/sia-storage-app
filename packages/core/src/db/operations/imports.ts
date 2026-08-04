@@ -183,26 +183,42 @@ export async function sealImport(db: DatabaseAdapter, id: string, now: number): 
 }
 
 /**
- * Delete an import (CASCADE drops its `import_files`). Returns the still-held source refs of
- * its rows, plus the import's folder tree grant when one exists, so the platform layer can
- * release the underlying OS grants (Android `releasePersistableUriPermission`; a no-op for
- * iOS bookmarks). The refs are collected before the delete; once CASCADE runs the rows, and
- * their refs, are gone.
+ * Delete an import (CASCADE drops its `import_files`). Returns the cleanup the platform
+ * layer owes afterwards: the still-held source refs of its rows plus the import's folder
+ * tree grant (Android `releasePersistableUriPermission`; a no-op for iOS bookmarks), and
+ * the staged-copy uris whose temp bytes must be removed. Both are collected before the
+ * delete; once CASCADE runs the rows, and their refs, are gone.
  */
-export async function deleteImport(db: DatabaseAdapter, id: string): Promise<string[]> {
-  const grants = await db.getAllAsync<{ sourceRef: string }>(
-    `SELECT sourceRef FROM import_files WHERE importId = ? AND sourceRef IS NOT NULL`,
-    id,
-  )
-  // The folder pick's one tree grant lives on the import row itself.
-  const imp = await db.getFirstAsync<{ dirSourceRef: string | null }>(
-    'SELECT dirSourceRef FROM imports WHERE id = ?',
-    id,
-  )
-  await db.runAsync('DELETE FROM imports WHERE id = ?', id)
-  const refs = grants.map((g) => g.sourceRef)
-  if (imp?.dirSourceRef) refs.push(imp.dirSourceRef)
-  return refs
+export async function deleteImport(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<{ refs: string[]; stagedUris: string[] }> {
+  let refs: string[] = []
+  let stagedUris: string[] = []
+  // One transaction so the returned cleanup describes exactly the rows the
+  // cascade drops: a scanner finalize landing between the reads and the delete
+  // would otherwise hand back a ref it had already released.
+  await db.withTransactionAsync(async () => {
+    const grants = await db.getAllAsync<{ sourceRef: string }>(
+      `SELECT sourceRef FROM import_files WHERE importId = ? AND sourceRef IS NOT NULL`,
+      id,
+    )
+    const staged = await db.getAllAsync<{ sourceUri: string }>(
+      `SELECT sourceUri FROM import_files
+       WHERE importId = ? AND sourceKind = 'staged' AND sourceUri IS NOT NULL`,
+      id,
+    )
+    // The folder pick's one tree grant lives on the import row itself.
+    const imp = await db.getFirstAsync<{ dirSourceRef: string | null }>(
+      'SELECT dirSourceRef FROM imports WHERE id = ?',
+      id,
+    )
+    await db.runAsync('DELETE FROM imports WHERE id = ?', id)
+    refs = grants.map((g) => g.sourceRef)
+    if (imp?.dirSourceRef) refs.push(imp.dirSourceRef)
+    stagedUris = staged.map((s) => s.sourceUri)
+  })
+  return { refs, stagedUris }
 }
 
 /**
@@ -474,19 +490,31 @@ export async function rependTerminalImportFiles(
  * `cancelled`, clearing any claim so an orphaned native op no-ops.
  * Already-terminal rows (added/duplicate/...) are untouched. One UPDATE, no
  * unbounded client read of the import's children. Bytes for the now-cancelled
- * rows are reclaimed by the eviction backstop / orphan scanner.
+ * rows are reclaimed by the eviction backstop / orphan scanner. Also seals
+ * the import: with sealed=0 its status would read `importing` forever (until
+ * an idle sweep), and cancelling is the user ending the session anyway.
  */
 export async function cancelInFlightImportFiles(
   db: DatabaseAdapter,
   importId: string,
   now: number,
 ): Promise<void> {
-  await db.runAsync(
-    `UPDATE import_files SET state = 'cancelled', claimedAt = NULL, claimToken = NULL, updatedAt = ?
-     WHERE importId = ? AND state IN ('pending','active')`,
-    now,
-    importId,
-  )
+  // One transaction: an import whose rows were cancelled but which never got
+  // sealed reads `importing` forever, since deriveStatus treats sealed=0 as
+  // running whatever its children say.
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE import_files SET state = 'cancelled', claimedAt = NULL, claimToken = NULL, updatedAt = ?
+       WHERE importId = ? AND state IN ('pending','active')`,
+      now,
+      importId,
+    )
+    await db.runAsync(
+      `UPDATE imports SET sealed = 1, updatedAt = ? WHERE id = ? AND sealed = 0`,
+      now,
+      importId,
+    )
+  })
 }
 
 export async function insertManyImportFiles(

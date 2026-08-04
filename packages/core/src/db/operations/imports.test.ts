@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
+import type { SQLParam } from '../../adapters/db'
 import { IMPORT_MAX_ATTEMPTS } from '../../config'
 import {
   appendToOpenImportOrCreate,
@@ -411,6 +412,42 @@ describe('imports ops', () => {
     expect(ok?.state).toBe('added') // terminal, untouched
   })
 
+  it('cancelInFlightImportFiles seals an open import so its status cannot stay importing', async () => {
+    await insertImport(db(), imp({ id: 'open', source: 'new-photos', sealed: 0 }))
+    await insertManyImportFiles(db(), [file({ id: 'p1', importId: 'open', state: 'pending' })])
+    await cancelInFlightImportFiles(db(), 'open', 9000)
+
+    expect((await queryImportById(db(), 'open'))?.sealed).toBe(1)
+    const [summary] = await queryImportSummary(db(), ['open'], 9000)
+    expect(summary.status).toBe('done')
+  })
+
+  it('a failed seal rolls the cancel back, so rows are never cancelled on an unsealed import', async () => {
+    // deriveStatus reads sealed=0 as `importing` whatever its children say, so
+    // cancelled rows under an unsealed import would read as running forever.
+    await insertImport(db(), imp({ id: 'open', source: 'new-photos', sealed: 0 }))
+    await insertManyImportFiles(db(), [file({ id: 'p1', importId: 'open', state: 'pending' })])
+
+    const adapter = db()
+    const realRun = adapter.runAsync.bind(adapter)
+    adapter.runAsync = (sql: string, ...params: SQLParam[]) =>
+      sql.includes('SET sealed = 1')
+        ? Promise.reject(new Error('suspended mid-cancel'))
+        : realRun(sql, ...params)
+    try {
+      await expect(cancelInFlightImportFiles(adapter, 'open', 9000)).rejects.toThrow(
+        'suspended mid-cancel',
+      )
+    } finally {
+      adapter.runAsync = realRun
+    }
+
+    const row = await db().getFirstAsync<{ state: string }>(
+      `SELECT state FROM import_files WHERE id = 'p1'`,
+    )
+    expect(row?.state).toBe('pending')
+  })
+
   it('sealIdleImports seals only sealed=0 imports of the source idle past the cutoff', async () => {
     // Open and idle (updatedAt well before the cutoff): both get sealed.
     await insertImport(db(), imp({ id: 'idle', source: 'new-photos', sealed: 0, updatedAt: 1000 }))
@@ -540,14 +577,16 @@ describe('source-ref release and retain across terminal states', () => {
     expect((await readRow('e'))?.sourceRef).toBe('android-uri:new')
   })
 
-  it('deleteImport returns the still-held grants plus the folder tree grant for release', async () => {
+  it('deleteImport returns held grants, the folder tree grant, and staged uris for cleanup', async () => {
     await insertImport(db(), imp({ id: 'i1', source: 'picker', dirSourceRef: 'android-tree:d1' }))
     await insertManyImportFiles(db(), [
       file({ id: 'g1', importId: 'i1', sourceKind: 'bookmark', sourceRef: 'android-uri:g1' }),
       file({ id: 'g2', importId: 'i1', sourceKind: 'ephemeral', sourceRef: null }),
+      file({ id: 'g3', importId: 'i1', sourceKind: 'staged', sourceUri: 'file:///staged/g3.jpg' }),
     ])
-    const grants = await deleteImport(db(), 'i1')
-    expect(grants).toEqual(['android-uri:g1', 'android-tree:d1'])
+    const cleanup = await deleteImport(db(), 'i1')
+    expect(cleanup.refs).toEqual(['android-uri:g1', 'android-tree:d1'])
+    expect(cleanup.stagedUris).toEqual(['file:///staged/g3.jpg'])
     // CASCADE dropped the rows.
     expect(await readRow('g1')).toBeNull()
   })

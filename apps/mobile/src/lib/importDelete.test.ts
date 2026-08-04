@@ -9,14 +9,17 @@ jest.mock('./importStaging', () => ({
 jest.mock('../stores/appService', () => ({ app: jest.fn() }))
 
 describe('deleteImportWithCleanup', () => {
-  it('releases every returned grant (incl. the tree grant) and removes staged bytes', async () => {
-    const files = jest.fn(async () => [
-      { sourceKind: 'staged', sourceUri: 'file:///docs/import-staging/a.jpg' },
-      { sourceKind: 'bookmark', sourceUri: null },
-    ])
-    const del = jest.fn(async () => ['android-uri:doc1', 'android-uri:tree'])
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('releases every returned grant and removes every returned staged uri', async () => {
+    const del = jest.fn(async () => ({
+      refs: ['android-uri:doc1', 'android-uri:tree'],
+      stagedUris: ['file:///docs/import-staging/a.jpg'],
+    }))
     jest.mocked(app).mockReturnValue({
-      imports: { files, delete: del },
+      imports: { delete: del },
     } as unknown as ReturnType<typeof app>)
 
     await deleteImportWithCleanup('imp1')
@@ -27,13 +30,16 @@ describe('deleteImportWithCleanup', () => {
     expect(jest.mocked(removeStagedFile)).toHaveBeenCalledWith('file:///docs/import-staging/a.jpg')
   })
 
-  it('the delete proceeds even when the staged-row scan fails', async () => {
-    const del = jest.fn(async () => [])
+  it('a delete with nothing to clean up releases and removes nothing', async () => {
+    const del = jest.fn(async () => ({ refs: [], stagedUris: [] }))
     jest.mocked(app).mockReturnValue({
-      imports: { files: jest.fn(async () => Promise.reject(new Error('db'))), delete: del },
+      imports: { delete: del },
     } as unknown as ReturnType<typeof app>)
 
     await deleteImportWithCleanup('imp1')
-    expect(del).toHaveBeenCalled()
+
+    expect(del).toHaveBeenCalledWith('imp1')
+    expect(jest.mocked(releaseGrant)).not.toHaveBeenCalled()
+    expect(jest.mocked(removeStagedFile)).not.toHaveBeenCalled()
   })
 })
