@@ -10,6 +10,8 @@ export type DatasetInfo = {
   objectsPopulated: number
   fsPopulated: number
   generationTimeMs: number
+  importCount?: number
+  importFileCount?: number
 }
 
 export type QuerySpec = {

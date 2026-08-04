@@ -28,10 +28,29 @@ import type { Migration } from '../types'
  * scan a table or sort its rows.
  */
 const IMPORT_INDEX_STATEMENTS: readonly string[] = [
-  // Scanner reads an import's rows filtered by state (drain, count terminals, decide finalize).
-  `CREATE INDEX IF NOT EXISTS idx_import_files_import ON import_files(importId, state);`,
-  // Pending rows, newest staged first.
-  `CREATE INDEX IF NOT EXISTS idx_import_files_pending ON import_files(addedAt DESC) WHERE state = 'pending';`,
+  // Per-import summary rollup. Every aggregated column is in the index, so the
+  // GROUP BY reads index entries only; adding a column the summary sums means
+  // widening this index or losing that.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_import_state_agg
+   ON import_files(importId, state, size, copyBytes, attempts, nextAttemptAt);`,
+  // In-flight counts, global and per folder (the destination view's banner).
+  // Also serves the stale-claim sweep's state='active' probe.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_state_directory
+   ON import_files(state, directoryId);`,
+  // The scanner's pending pool, newest staged first. `id` is part of the key
+  // because a batch insert stamps every row in one import with the same
+  // `addedAt`, so `addedAt` alone leaves the whole ready set tied and SQLite
+  // re-sorts it on every tick.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_pending
+   ON import_files(addedAt DESC, id DESC) WHERE state = 'pending';`,
+  // The clock-skew sweep looks for pending rows backed off past the cap, which
+  // normally means none; this lets it seek rather than walk the pending set.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_pending_next
+   ON import_files(nextAttemptAt) WHERE state = 'pending';`,
+  // One import's file page: ORDER BY addedAt DESC, id DESC LIMIT n comes out of
+  // the index, so paging a 100k-child import costs the page, not the import.
+  `CREATE INDEX IF NOT EXISTS idx_import_files_import_added
+   ON import_files(importId, addedAt DESC, id DESC);`,
   // Identity dedup: find in-flight rows for a given photo-library asset.
   `CREATE INDEX IF NOT EXISTS idx_import_files_mediaAsset ON import_files(mediaAssetId) WHERE mediaAssetId IS NOT NULL;`,
   // The history list, most recently active first, so a draining import stays on
