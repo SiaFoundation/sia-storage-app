@@ -10,7 +10,6 @@ import {
   type ObjectsCursor,
   type PackedUploadRef,
   type PinnedObjectRef,
-  type Reader,
   type SdkAdapter,
   type SealedObjectRef,
   type ShardProgress,
@@ -50,16 +49,6 @@ function bridgeShardCallback(
 ): ((p: NativeShardProgress) => void) | undefined {
   if (!cb) return undefined
   return (p) => cb.progress(castShardProgress(p))
-}
-
-function readerToReadableStream(reader: Reader): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    async pull(controller) {
-      const chunk = await reader.read()
-      if (chunk.byteLength === 0) controller.close()
-      else controller.enqueue(new Uint8Array(chunk))
-    },
-  })
 }
 
 function readableStreamToDownloadLikeRef(stream: ReadableStream<Uint8Array>): DownloadLikeRef {
@@ -226,8 +215,8 @@ function wrapPinnedObject(obj: PinnedObject): PinnedObjectRef {
 
 function wrapPackedUpload(packed: PackedUpload): PackedUploadRef {
   return {
-    async add(reader: Reader): Promise<bigint> {
-      return packed.add(readerToReadableStream(reader))
+    async addPath(path: string): Promise<bigint> {
+      return packed.addPath(path)
     },
     cancel(): void {
       packed.cancel()

@@ -1,6 +1,5 @@
 import type { LocalObject } from '../encoding/localObject'
 import type { Slab } from '../types/slabs'
-import type { Reader } from './fs'
 
 export interface ObjectsCursor {
   id: string
@@ -39,7 +38,8 @@ export interface PinnedObjectRef {
 }
 
 export interface PackedUploadRef {
-  add(reader: Reader): Promise<bigint>
+  /** The SDK opens and reads the file, so no data crosses FFI per chunk. */
+  addPath(path: string): Promise<bigint>
   cancel(): void
   finalize(): Promise<PinnedObjectRef[]>
   length(): bigint

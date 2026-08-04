@@ -124,7 +124,7 @@ function createMockPacker(
   pinnedObject: jest.Mocked<PinnedObjectInterface>,
 ): jest.Mocked<PackedUploadInterface> {
   return {
-    add: jest.fn().mockResolvedValue(BigInt(1000)),
+    addPath: jest.fn().mockResolvedValue(BigInt(1000)),
     cancel: jest.fn().mockResolvedValue(undefined),
     finalize: jest.fn().mockResolvedValue([pinnedObject]),
   } as unknown as jest.Mocked<PackedUploadInterface>
@@ -143,9 +143,7 @@ function createMockSdk(packer: jest.Mocked<PackedUploadInterface>): jest.Mocked<
 
 function defaultAdapters(): UploaderAdapters {
   return {
-    createFileReader: jest.fn(() => ({
-      read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    })),
+    toFilePath: jest.fn((uri: string) => uri),
   }
 }
 
@@ -253,12 +251,12 @@ describe('UploadManager', () => {
       await manager.__testProcessFiles([createFileEntry('file2')])
 
       expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
-      expect(mockPacker.add).toHaveBeenCalledTimes(2)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(2)
     })
 
     it('sets error status on add failure', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
-      mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
+      mockPacker.addPath.mockRejectedValueOnce(new Error('Add failed'))
 
       await manager.__testProcessFiles([createFileEntry('file1')])
 
@@ -274,7 +272,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
       // First add fails
-      mockPacker.add.mockRejectedValueOnce(new Error('Add failed'))
+      mockPacker.addPath.mockRejectedValueOnce(new Error('Add failed'))
       // Second add succeeds (default mock)
 
       await manager.__testProcessFiles([entry1, entry2])
@@ -745,7 +743,7 @@ describe('UploadManager', () => {
 
     it('stops processing remaining files in the current batch', async () => {
       let addCallCount = 0
-      mockPacker.add.mockImplementation(async () => {
+      mockPacker.addPath.mockImplementation(async () => {
         addCallCount++
         if (addCallCount === 2) {
           manager.shutdown()
@@ -775,9 +773,7 @@ describe('UploadManager', () => {
   describe('progress callback', () => {
     it('updates progress in upload store when a shard finishes', async () => {
       manager.initialize(app(), internal(), {
-        createFileReader: jest.fn(() => ({
-          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-        })),
+        toFilePath: jest.fn((uri: string) => uri),
         progressScheduler: (cb) => cb(),
       })
 
@@ -812,9 +808,7 @@ describe('UploadManager', () => {
     it('progress is monotonic across successive shard events', async () => {
       const fileSize = Math.floor(SLAB_SIZE * 1.5)
       manager.initialize(app(), internal(), {
-        createFileReader: jest.fn(() => ({
-          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-        })),
+        toFilePath: jest.fn((uri: string) => uri),
         progressScheduler: (cb) => cb(),
       })
 
@@ -859,9 +853,7 @@ describe('UploadManager', () => {
 
     it('tracks upload speed from shard completions and keeps it across suspend', async () => {
       manager.initialize(app(), internal(), {
-        createFileReader: jest.fn(() => ({
-          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-        })),
+        toFilePath: jest.fn((uri: string) => uri),
         progressScheduler: (cb) => cb(),
       })
 
@@ -898,9 +890,7 @@ describe('UploadManager', () => {
 
     it('excludes shards that were in flight across a suspension', async () => {
       manager.initialize(app(), internal(), {
-        createFileReader: jest.fn(() => ({
-          read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-        })),
+        toFilePath: jest.fn((uri: string) => uri),
         progressScheduler: (cb) => cb(),
       })
 
@@ -981,7 +971,7 @@ describe('UploadManager', () => {
       await flushPromise
 
       // Both files processed
-      expect(mockPacker.add).toHaveBeenCalledTimes(2)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -1174,7 +1164,7 @@ describe('UploadManager', () => {
       // drainQueues -> processEntries adds all 20
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(20)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(20)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
       // Idle timeout triggers: loop re-polls (empty) -> flushes
@@ -1198,7 +1188,7 @@ describe('UploadManager', () => {
       // Flush microtasks: the loop polls twice (poll1, then poll2) and processes all 10
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(10)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(10)
 
       // Idle timeout -> re-poll (empty) -> flush
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
@@ -1214,14 +1204,14 @@ describe('UploadManager', () => {
 
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
-      expect(mockPacker.add).toHaveBeenCalledTimes(3)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(3)
 
       // The second batch appears in the DB during the idle wait.
       queryFilesSpy.mockResolvedValueOnce(poll2).mockResolvedValue([] as any)
 
       // After the idle timeout, the re-poll finds poll2 and processes them
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
-      expect(mockPacker.add).toHaveBeenCalledTimes(6)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(6)
       expect(mockPacker.finalize).not.toHaveBeenCalled()
 
       // Second idle timeout -> re-poll (all excluded) -> flush
@@ -1238,7 +1228,7 @@ describe('UploadManager', () => {
       manager.enqueue([createFileEntry('explicit-1')])
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(4)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(4)
     })
 
     it('does not poll when disconnected', async () => {
@@ -1249,7 +1239,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(mockPacker.addPath).not.toHaveBeenCalled()
       expect(queryFilesSpy).not.toHaveBeenCalled()
     })
 
@@ -1261,7 +1251,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(mockPacker.addPath).not.toHaveBeenCalled()
     })
 
     it('uploads finalized files from the real candidate query', async () => {
@@ -1298,7 +1288,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(1)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(1)
       expect(app().uploads.getEntry('has-hash-1')).toBeDefined()
     })
 
@@ -1326,7 +1316,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(mockPacker.addPath).not.toHaveBeenCalled()
       expect(app().uploads.getEntry('empty-1')).toBeUndefined()
       const file = await app().files.getById('empty-1')
       expect(file?.lostReason).toBe('Empty file')
@@ -1359,7 +1349,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(1)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(1)
       const file = await app().files.getById('stale-size-1')
       expect(file?.lostReason).toBeNull()
     })
@@ -1380,7 +1370,7 @@ describe('UploadManager', () => {
       manager.initialize(app(), internal(), defaultAdapters())
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(300)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(300)
 
       await jest.advanceTimersByTimeAsync(PACKER_IDLE_TIMEOUT)
       const totalFiles = manager.flushHistory.reduce((sum, h) => sum + h.fileCount, 0)
@@ -1435,7 +1425,7 @@ describe('UploadManager', () => {
   })
 
   describe('abandoned promise handling', () => {
-    it('no uncaught rejections when packer.add() promises reject after shutdown', async () => {
+    it('no uncaught rejections when packer.addPath() promises reject after shutdown', async () => {
       type Deferred = {
         resolve: (v: bigint) => void
         reject: (e: Error) => void
@@ -1443,7 +1433,7 @@ describe('UploadManager', () => {
       const deferreds: Deferred[] = []
       let addCount = 0
 
-      mockPacker.add.mockImplementation(() => {
+      mockPacker.addPath.mockImplementation(() => {
         addCount++
         if (addCount === 1) return Promise.resolve(BigInt(1000))
         return new Promise<bigint>((resolve, reject) => {
@@ -1587,13 +1577,13 @@ describe('UploadManager', () => {
       manager.enqueue([entry])
 
       await jest.advanceTimersByTimeAsync(0)
-      expect(mockPacker.add).not.toHaveBeenCalled()
+      expect(mockPacker.addPath).not.toHaveBeenCalled()
 
       app().sync.setState({ syncGateStatus: 'dismissed' })
       await jest.advanceTimersByTimeAsync(PACKER_POLL_INTERVAL)
       await jest.advanceTimersByTimeAsync(0)
 
-      expect(mockPacker.add).toHaveBeenCalledTimes(1)
+      expect(mockPacker.addPath).toHaveBeenCalledTimes(1)
     })
   })
 })

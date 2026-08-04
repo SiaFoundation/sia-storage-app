@@ -1,7 +1,7 @@
 import type { AppKeyRef, SdkAdapter } from '@siastorage/core/adapters'
+import { fileUriToPath } from '@siastorage/core/lib/fileUri'
 import type { UploaderAdapters } from '@siastorage/core/services/uploader'
 import type { MockSdk } from '@siastorage/sdk-mock'
-import * as nodeFs from 'fs'
 
 export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter {
   return {
@@ -26,17 +26,6 @@ export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter
 
 export function createTestUploaderAdapters(): UploaderAdapters {
   return {
-    createFileReader: (uri) => {
-      const filePath = uri.replace('file://', '')
-      return {
-        async read() {
-          const data = nodeFs.readFileSync(filePath)
-          return data.buffer.slice(
-            data.byteOffset,
-            data.byteOffset + data.byteLength,
-          ) as ArrayBuffer
-        },
-      }
-    },
+    toFilePath: fileUriToPath,
   }
 }

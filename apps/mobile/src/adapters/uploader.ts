@@ -1,9 +1,9 @@
 import type { UploaderAdapters } from '@siastorage/core/app'
-import { createFileReader } from '../lib/fileReader'
+import { fileUriToPath } from '@siastorage/core/lib/fileUri'
 
 export function createUploaderAdapters(): UploaderAdapters {
   return {
-    createFileReader: (uri) => createFileReader(uri),
+    toFilePath: fileUriToPath,
     progressScheduler: (cb) => requestAnimationFrame(cb),
   }
 }

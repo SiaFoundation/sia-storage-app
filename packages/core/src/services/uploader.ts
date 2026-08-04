@@ -1,5 +1,4 @@
 import { logger } from '@siastorage/logger'
-import type { Reader } from '../adapters/fs'
 import type { PackedUploadRef, PinnedObjectRef, ShardProgress } from '../adapters/sdk'
 import type { AppService, AppServiceInternal } from '../app/service'
 import type { UploadSpeed } from '../app/stores'
@@ -60,7 +59,8 @@ export function calculateAllFileProgress(
 
 /** Platform-specific adapters for the upload system. */
 export interface UploaderAdapters {
-  createFileReader: (uri: string) => Reader
+  /** The SDK reads the file itself, so no data streams through the bridge. */
+  toFilePath: (uri: string) => string
   progressScheduler?: (cb: () => void) => void
 }
 
@@ -89,13 +89,13 @@ type BatchState = {
   /** Number of complete slabs: floor(totalSize / SLAB_SIZE). */
   slabsFilled: number
   startedAt: number
-  /** Timestamp of last successful packer.add(). */
+  /** Timestamp of last successful packer.addPath(). */
   lastProcessedAt: number
   /** Accumulated wall-clock time spent suspended by iOS, excluded from duration checks. */
   suspendedMs: number
-  /** Cumulative time spent in packer.add() calls (encoding + any mid-add slab uploads). */
+  /** Cumulative time spent in packer.addPath() calls (encoding + any mid-add slab uploads). */
   totalAddMs: number
-  /** Number of packer.add() calls that triggered a slab upload (slabs increased). */
+  /** Number of packer.addPath() calls that triggered a slab upload (slabs increased). */
   slabUploadAdds: number
   /**
    * Running sum of uploaded-shard byte counts reported by the SDK's
@@ -124,7 +124,7 @@ export type FlushRecord = {
  * 2. pollDB() — background scan of local-only files (camera roll sync)
  *
  * The async loop (runLoop) pulls files from both sources and feeds them to
- * processEntry(), which packs them into the current batch. Each packer.add()
+ * processEntry(), which packs them into the current batch. Each packer.addPath()
  * call packs data into the current slab and uploads full slabs to the
  * network as they fill. When a flush trigger fires, finalize() uploads
  * the last partial slab and returns pinned objects.
@@ -167,9 +167,9 @@ export class UploadManager {
   private wakeResolver: (() => void) | null = null
   /** Recorded flush events for efficiency analysis and testing. */
   private _flushHistory: FlushRecord[] = []
-  /** Cumulative count of files passed to packer.add(). */
+  /** Cumulative count of files passed to packer.addPath(). */
   private _packedCount = 0
-  /** Cumulative bytes passed to packer.add(). */
+  /** Cumulative bytes passed to packer.addPath(). */
   private _packedBytes = 0
   /** Cumulative count of files successfully pinned and saved. */
   private _uploadedCount = 0
@@ -230,7 +230,7 @@ export class UploadManager {
   /**
    * Finalize the current batch: upload the last partial slab and pin objects.
    *
-   * Full slabs are already uploaded during packer.add() calls, so finalize
+   * Full slabs are already uploaded during packer.addPath() calls, so finalize
    * only handles the remaining partial slab. Between the first add() and
    * pinObject there is a risk window where data is uploaded but not yet
    * pinned. Smaller batches reduce this exposure.
@@ -695,26 +695,23 @@ export class UploadManager {
         batchId: this.batch!.batchId,
       })
 
-      // Add to batch state BEFORE packer.add() so onProgress can
+      // Add to batch state BEFORE packer.addPath() so onProgress can
       // distribute progress to this file while data streams to the network.
       this.batch!.files.push(entry)
       this.batch!.totalSize += entry.size
       needsRollback = true
 
+      const path = this.adapters.toFilePath(entry.fileUri)
       const t0 = Date.now()
-      const reader = this.adapters.createFileReader(entry.fileUri)
-      const t1 = Date.now()
-      await this.packer.add(reader)
+      await this.packer.addPath(path)
       needsRollback = false
-      const t2 = Date.now()
-      const addMs = t2 - t1
+      const addMs = Date.now() - t0
       const slabsBefore = this.batch!.slabsFilled
       this.recordAdd(entry, addMs)
       logger.debug('uploadManager', 'file_added', {
         fileId: entry.fileId,
         size: entry.size,
         batchId: this.batch!.batchId,
-        readerMs: t1 - t0,
         addMs,
         slabsBefore,
         slabsAfter: this.batch!.slabsFilled,
@@ -744,7 +741,7 @@ export class UploadManager {
   }
 
   /**
-   * Process entries with pipelined packer.add() calls. The SDK serializes
+   * Process entries with pipelined packer.addPath() calls. The SDK serializes
    * the actual pack+upload work, but firing multiple adds overlaps reader
    * creation and FFI call setup with the previous call's I/O.
    *
@@ -785,7 +782,7 @@ export class UploadManager {
   }
 
   /**
-   * Fire packer.add() for entries[from..end) concurrently, then await
+   * Fire packer.addPath() for entries[from..end) concurrently, then await
    * each in order updating batch state after each completes.
    */
   private async processWindow(entries: FileEntry[], from: number, end: number): Promise<void> {
@@ -793,7 +790,7 @@ export class UploadManager {
 
     const inflight = []
     for (let j = from; j < end; j++) {
-      // Stop launching new packer.add() calls on shutdown or suspension.
+      // Stop launching new packer.addPath() calls on shutdown or suspension.
       if (!this.active || this._suspended) break
       const entry = entries[j]
       this.app.uploads.setStatus(entry.fileId, 'packing')
@@ -802,23 +799,19 @@ export class UploadManager {
         size: entry.size,
         batchId: this.batch!.batchId,
       })
-      // Add to batch state before packer.add() so onProgress can
+      // Add to batch state before packer.addPath() so onProgress can
       // distribute progress while data streams to the network.
       this.batch!.files.push(entry)
       this.batch!.totalSize += entry.size
-      const t0 = Date.now()
-      const reader = this.adapters.createFileReader(entry.fileUri)
       inflight.push({
         entry,
-        t0,
-        readerMs: Date.now() - t0,
-        promise: packer.add(reader),
+        promise: packer.addPath(this.adapters.toFilePath(entry.fileUri)),
       })
     }
 
     // Await each add in order. The SDK serializes the actual work, so
     // t1->t2 measures this file's queue wait + processing + any slab upload.
-    for (const { entry, readerMs, promise } of inflight) {
+    for (const { entry, promise } of inflight) {
       try {
         const t1 = Date.now()
         await promise
@@ -832,7 +825,6 @@ export class UploadManager {
           fileId: entry.fileId,
           size: entry.size,
           batchId: this.batch.batchId,
-          readerMs,
           addMs,
           slabsBefore,
           slabsAfter: this.batch.slabsFilled,
@@ -1028,7 +1020,7 @@ export class UploadManager {
     })
   }
 
-  /** Update batch state after a successful packer.add(). */
+  /** Update batch state after a successful packer.addPath(). */
   private recordAdd(entry: FileEntry, addMs: number): void {
     this.batch!.lastProcessedAt = Date.now()
     this._packedCount++
