@@ -8,7 +8,6 @@ import type {
   ObjectsCursor,
   PackedUploadRef,
   PinnedObjectRef,
-  Reader,
   SdkAdapter,
   SealedObjectRef,
   UploadOptions,
@@ -17,6 +16,18 @@ import { SECTOR_SIZE } from '@siastorage/core/config'
 import { decodeFileMetadata, encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata } from '@siastorage/core/types'
+
+/**
+ * The real SDK opens the file itself, so the mock needs its own way to bytes.
+ * Defaults to the real filesystem so integration tests keep exercising real
+ * files; unit tests with synthetic URIs inject a stub.
+ */
+export type MockFileReader = (path: string) => Promise<Uint8Array>
+
+const readFromDisk: MockFileReader = async (path) => {
+  const { readFile } = await import('node:fs/promises')
+  return new Uint8Array(await readFile(path))
+}
 
 export type StoredObject = {
   id: string
@@ -88,17 +99,18 @@ class MockPacker implements PackedUploadRef {
   private storage: MockIndexerStorage
   private options: UploadOptions
   private files: Array<{ data: Uint8Array; size: bigint }> = []
+  private readFile: MockFileReader
   private totalSize = 0n
   private slabSize = 120n * 1024n * 1024n
 
-  constructor(storage: MockIndexerStorage, options: UploadOptions) {
+  constructor(storage: MockIndexerStorage, options: UploadOptions, readFile: MockFileReader) {
     this.storage = storage
     this.options = options
+    this.readFile = readFile
   }
 
-  async add(reader: Reader): Promise<bigint> {
-    const data = await reader.read()
-    const bytes = new Uint8Array(data)
+  async addPath(path: string): Promise<bigint> {
+    const bytes = await this.readFile(path)
     const size = BigInt(bytes.length)
     this.files.push({ data: bytes, size })
     this.totalSize += size
@@ -201,11 +213,13 @@ class MockPacker implements PackedUploadRef {
 
 export class MockSdk implements SdkAdapter {
   private storage: MockIndexerStorage
+  private readFile: MockFileReader
   private connected = true
   pruneSlabsCallCount = 0
 
-  constructor(storage?: MockIndexerStorage) {
+  constructor(storage?: MockIndexerStorage, readFile: MockFileReader = readFromDisk) {
     this.storage = storage ?? createEmptyIndexerStorage()
+    this.readFile = readFile
   }
 
   private upsertEvent(event: ObjectEvent): void {
@@ -330,7 +344,7 @@ export class MockSdk implements SdkAdapter {
 
   async uploadPacked(options: UploadOptions): Promise<PackedUploadRef> {
     if (!this.connected) throw new Error('Network unavailable')
-    return new MockPacker(this.storage, options)
+    return new MockPacker(this.storage, options, this.readFile)
   }
 
   async sharedObject(_url: string): Promise<PinnedObjectRef> {

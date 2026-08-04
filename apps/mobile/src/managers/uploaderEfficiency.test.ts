@@ -69,7 +69,7 @@ function createMockPacker(
   pinnedObject: jest.Mocked<PinnedObjectInterface>,
 ): jest.Mocked<PackedUploadInterface> {
   return {
-    add: jest.fn().mockResolvedValue(BigInt(1000)),
+    addPath: jest.fn().mockResolvedValue(BigInt(1000)),
     finalize: jest.fn().mockResolvedValue([pinnedObject]),
   } as unknown as jest.Mocked<PackedUploadInterface>
 }
@@ -86,9 +86,7 @@ function createMockSdk(packer: jest.Mocked<PackedUploadInterface>): jest.Mocked<
 
 function defaultAdapters(): UploaderAdapters {
   return {
-    createFileReader: jest.fn(() => ({
-      read: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    })),
+    toFilePath: jest.fn((uri: string) => uri),
   }
 }
 
