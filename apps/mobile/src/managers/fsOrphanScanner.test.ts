@@ -21,6 +21,7 @@ function importRow(over: Partial<ImportRow> & { id: string }): ImportRow {
     sealed: 0,
     startedAt: now,
     updatedAt: now,
+    lastActivityAt: now,
     ...over,
   }
 }

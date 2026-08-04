@@ -206,6 +206,8 @@ export function buildDbNamespaces(
   return {
     imports: {
       list: (opts) => ops.queryImports(db, opts),
+      listWithSummary: (opts) =>
+        ops.queryImportsWithSummary(db, opts?.now ?? Date.now(), opts?.limit),
       get: (id) => ops.queryImportById(db, id),
       summary: (ids, now) => ops.queryImportSummary(db, ids, now ?? Date.now()),
       files: (importId, opts) =>
@@ -224,11 +226,11 @@ export function buildDbNamespaces(
       },
       addFiles: async (importId, files) => {
         if (files.length === 0) return
-        await ops.addFilesToImport(db, importId, files, Date.now())
+        await ops.addFilesToImport(db, importId, files)
         invalidateImports()
       },
       seal: async (id) => {
-        await ops.sealImport(db, id, Date.now())
+        await ops.sealImport(db, id)
         invalidateImports()
       },
       sealIdle: async (source, idleMs, now) => {
@@ -247,7 +249,7 @@ export function buildDbNamespaces(
         return won
       },
       markProgress: async (id, bytes, token) => {
-        await ops.markImportFileProgress(db, id, bytes, token, Date.now())
+        await ops.markImportFileProgress(db, id, bytes, token)
         invalidateImports()
       },
       recordHash: async (id, token, meta) => {
@@ -273,7 +275,7 @@ export function buildDbNamespaces(
         invalidateImports()
       },
       cancelImport: async (importId) => {
-        await ops.cancelInFlightImportFiles(db, importId, Date.now())
+        await ops.cancelInFlightImportFiles(db, importId)
         invalidateImports()
       },
       retry: async (ids) => {
@@ -281,7 +283,7 @@ export function buildDbNamespaces(
         invalidateImports()
       },
       retryFailed: async (importId) => {
-        await ops.rependTerminalImportFiles(db, importId, Date.now())
+        await ops.rependTerminalImportFiles(db, importId)
         invalidateImports()
       },
       updateSourceRef: (id, token, ref) => ops.updateImportSourceRef(db, id, token, ref),

@@ -76,6 +76,7 @@ async function openLibraryScanImport(): Promise<string> {
     sealed: 0,
     startedAt: now,
     updatedAt: now,
+    lastActivityAt: now,
   }
   await app().imports.create(importRow, [])
   lastArchiveImportId = importRow.id

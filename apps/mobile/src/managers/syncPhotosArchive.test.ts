@@ -127,6 +127,7 @@ function scanImport(over: Partial<ImportRow> = {}): ImportRow {
     sealed: 0,
     startedAt: 0,
     updatedAt: 0,
+    lastActivityAt: 0,
     ...over,
   }
 }

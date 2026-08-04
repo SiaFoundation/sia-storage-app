@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { ImportRow, ImportSummary } from '@siastorage/core/db/operations'
-import { useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { FolderIcon } from 'lucide-react-native'
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ImportProgressBar } from '../components/ImportProgressBar'
@@ -18,22 +18,38 @@ import {
 import { relativeTimeLabel } from '../lib/relativeTime'
 import type { ImportsStackParamList } from '../stacks/types'
 import { useImportPacing } from '../stores/importPacing'
-import { useImportDestinationName, useImports, useImportSummary } from '../stores/imports'
+import {
+  IMPORTS_PAGE_SIZE,
+  useImportDestinationName,
+  useImportsWithSummary,
+} from '../stores/imports'
 import { colors, palette } from '../styles/colors'
 
 type Props = NativeStackScreenProps<ImportsStackParamList, 'Imports'>
 
 export function ImportsScreen({ navigation }: Props) {
-  const { data: imports } = useImports()
-  const ids = useMemo(() => (imports ?? []).map((i) => i.id), [imports])
-  const { data: summaries } = useImportSummary(ids)
+  const [limit, setLimit] = useState(IMPORTS_PAGE_SIZE)
+  const { data } = useImportsWithSummary(limit)
+  const imports = data?.imports
   const now = useNow()
 
   const summaryById = useMemo(() => {
     const map = new Map<string, ImportSummary>()
-    for (const s of summaries ?? []) map.set(s.importId, s)
+    for (const s of data?.summaries ?? []) map.set(s.importId, s)
     return map
-  }, [summaries])
+  }, [data?.summaries])
+
+  const onOpen = useCallback(
+    (importId: string) => navigation.navigate('ImportDetail', { importId }),
+    [navigation],
+  )
+
+  // A short page means the history ends here, so stop growing; otherwise every
+  // bounce off the end of a fully-loaded list would widen the summary
+  // aggregate, which walks the children of every import in the page.
+  const onEndReached = useCallback(() => {
+    if (imports && imports.length >= limit) setLimit((n) => n + IMPORTS_PAGE_SIZE)
+  }, [imports, limit])
 
   if (imports && imports.length === 0) {
     return (
@@ -52,38 +68,46 @@ export function ImportsScreen({ navigation }: Props) {
       data={imports ?? []}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
+      windowSize={8}
+      removeClippedSubviews
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
       renderItem={({ item }) => (
-        <ImportListRow
-          imp={item}
-          summary={summaryById.get(item.id)}
-          now={now}
-          onPress={() => navigation.navigate('ImportDetail', { importId: item.id })}
-        />
+        <ImportListRow imp={item} summary={summaryById.get(item.id)} now={now} onOpen={onOpen} />
       )}
     />
   )
 }
 
-function ImportListRow({
+/** Subscribes to the pacing snapshot only for rows that are actually running,
+ * so the scanner's per-tick pacing publish re-renders the in-flight rows, not
+ * the whole history list. */
+function RunningActivityBadge({ imp, summary }: { imp: ImportRow; summary: ImportSummary }) {
+  const pacing = useImportPacing()
+  return (
+    <ImportActivityBadge activity={deriveImportActivity(imp, summary, pacing)} variant="list" />
+  )
+}
+
+const ImportListRow = memo(function ImportListRow({
   imp,
   summary,
   now,
-  onPress,
+  onOpen,
 }: {
   imp: ImportRow
   summary: ImportSummary | undefined
   now: number
-  onPress: () => void
+  onOpen: (importId: string) => void
 }) {
   const destinationName = useImportDestinationName(imp.directoryId)
-  const pacing = useImportPacing()
   const importing = (summary?.status ?? 'queued') !== 'done'
   const ratio = useMonotonicRatio(importing, summary ? progressRatio(imp, summary) : 0)
 
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => onOpen(imp.id)}
       android_ripple={{ color: palette.gray[700] }}
       style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
     >
@@ -92,10 +116,11 @@ function ImportListRow({
           {sourceLabel(imp.source)}
         </Text>
         {importing ? (
-          <ImportActivityBadge
-            activity={summary ? deriveImportActivity(imp, summary, pacing) : null}
-            variant="list"
-          />
+          summary ? (
+            <RunningActivityBadge imp={imp} summary={summary} />
+          ) : (
+            <ImportActivityBadge activity={null} variant="list" />
+          )
         ) : (
           <Text style={styles.time}>{relativeTimeLabel(imp.startedAt, now)}</Text>
         )}
@@ -135,7 +160,7 @@ function ImportListRow({
       {summary && importing ? <ImportProgressBar ratio={ratio} /> : null}
     </Pressable>
   )
-}
+})
 
 const styles = StyleSheet.create({
   container: {

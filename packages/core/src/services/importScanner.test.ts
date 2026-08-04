@@ -14,6 +14,7 @@ function impRow(over: Partial<ImportRow> & { id: string }): ImportRow {
     sealed: 1,
     startedAt: 1,
     updatedAt: 1,
+    lastActivityAt: 1,
     ...over,
   }
 }

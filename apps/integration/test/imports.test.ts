@@ -98,6 +98,7 @@ describe('Imports lifecycle (integration)', () => {
       sealed: 1,
       startedAt: Date.now(),
       updatedAt: Date.now(),
+      lastActivityAt: Date.now(),
       ...over,
     }
   }

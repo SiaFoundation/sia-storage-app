@@ -433,6 +433,7 @@ async function addImportFile(id: string, state: ImportFileState) {
     sealed: 0,
     startedAt: 1,
     updatedAt: 1,
+    lastActivityAt: 1,
   })
   const row: ImportFileRow = {
     id,

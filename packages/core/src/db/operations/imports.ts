@@ -82,7 +82,13 @@ export type ImportRow = {
   dirSourceRef: string | null
   sealed: number
   startedAt: number
+  /** Last time rows were added or the import was sealed. The idle-seal sweep
+   * reads this, so drain progress must not touch it: an open import that is
+   * still draining but no longer accruing has to look idle and seal. */
   updatedAt: number
+  /** Last time a child changed state. Orders the history list, so a draining
+   * import stays on the first page however long ago it started. */
+  lastActivityAt: number
 }
 
 export type ImportFileRow = {
@@ -140,6 +146,12 @@ export async function insertImport(db: DatabaseAdapter, row: ImportRow): Promise
   await insert(db, 'imports', row)
 }
 
+/**
+ * The history list, most recently active first. Ordering by activity rather
+ * than start time keeps a long-running import (a photo-library scan started
+ * days ago, still draining) on the first page instead of sinking under every
+ * import made since.
+ */
 export async function queryImports(
   db: DatabaseAdapter,
   opts?: { source?: ImportSource; limit?: number },
@@ -148,7 +160,7 @@ export async function queryImports(
   const params = opts?.source ? [opts.source] : []
   const limit = opts?.limit ? ` LIMIT ${Math.floor(opts.limit)}` : ''
   return db.getAllAsync<ImportRow>(
-    `SELECT * FROM imports ${where} ORDER BY startedAt DESC${limit}`,
+    `SELECT * FROM imports ${where} ORDER BY lastActivityAt DESC, id DESC${limit}`,
     ...params,
   )
 }
@@ -179,7 +191,8 @@ export async function queryInProgressImport(
   )
 }
 
-export async function sealImport(db: DatabaseAdapter, id: string, now: number): Promise<void> {
+export async function sealImport(db: DatabaseAdapter, id: string): Promise<void> {
+  const now = Date.now()
   await db.runAsync('UPDATE imports SET sealed = 1, updatedAt = ? WHERE id = ?', now, id)
 }
 
@@ -261,14 +274,15 @@ export async function addFilesToImport(
   db: DatabaseAdapter,
   importId: string,
   files: ImportFileRow[],
-  now: number,
 ): Promise<void> {
+  const now = Date.now()
   await db.withTransactionAsync(async () => {
     await insertManyImportFiles(db, files)
     await db.runAsync(
-      `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?
+      `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?, lastActivityAt = ?
        WHERE id = ? AND sealed = 0`,
       files.length,
+      now,
       now,
       importId,
     )
@@ -307,9 +321,10 @@ export async function appendToOpenImportOrCreate(
         files.map((f) => (f.importId === inProg.id ? f : { ...f, importId: inProg.id })),
       )
       await db.runAsync(
-        `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?
+        `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?, lastActivityAt = ?
          WHERE id = ? AND sealed = 0`,
         files.length,
+        now,
         now,
         inProg.id,
       )
@@ -331,6 +346,32 @@ function deriveStatus(sealed: number, active: number, pending: number): ImportSt
   if (active > 0 || sealed === 0) return 'importing'
   if (pending > 0) return 'queued'
   return 'done'
+}
+
+/**
+ * The Imports screen's whole read in one call: a page of imports plus their
+ * summaries. One function so the two statements are issued back to back
+ * instead of a list read, a React render, then a summary read queued
+ * separately behind whatever the scanner and uploader are writing.
+ *
+ * `limit` bounds the aggregate, which is the expensive half: it walks the
+ * children of every import it is given, and nothing prunes `import_files`, so
+ * an unbounded call grows with lifetime usage. Ordering by activity is what
+ * makes a page correct rather than merely cheap - whatever is draining sorts
+ * onto the first page, so the screen never pages just to reach live work.
+ */
+export async function queryImportsWithSummary(
+  db: DatabaseAdapter,
+  now: number,
+  limit?: number,
+): Promise<{ imports: ImportRow[]; summaries: ImportSummary[] }> {
+  const imports = await queryImports(db, { limit })
+  const summaries = await queryImportSummary(
+    db,
+    imports.map((i) => i.id),
+    now,
+  )
+  return { imports, summaries }
 }
 
 export async function queryImportSummary(
@@ -457,6 +498,7 @@ export async function retryImportFiles(db: DatabaseAdapter, ids?: string[]): Pro
        WHERE id IN (${ph}) AND state = 'pending' AND attempts > 0`,
       ...ids,
     )
+    await touchImportActivityByFileIds(db, ids, Date.now())
     return
   }
   await db.runAsync(
@@ -475,8 +517,8 @@ export async function retryImportFiles(db: DatabaseAdapter, ids?: string[]): Pro
 export async function rependTerminalImportFiles(
   db: DatabaseAdapter,
   importId: string,
-  now: number,
 ): Promise<void> {
+  const now = Date.now()
   // Unretryable codes are excluded: retrying a deleted source or an expired
   // session is a guaranteed bounce straight back to terminal.
   await db.runAsync(
@@ -489,6 +531,7 @@ export async function rependTerminalImportFiles(
     importId,
     ...UNRETRYABLE_REASONS,
   )
+  await touchImportActivityById(db, importId, now)
 }
 
 /**
@@ -503,8 +546,8 @@ export async function rependTerminalImportFiles(
 export async function cancelInFlightImportFiles(
   db: DatabaseAdapter,
   importId: string,
-  now: number,
 ): Promise<void> {
+  const now = Date.now()
   // One transaction: an import whose rows were cancelled but which never got
   // sealed reads `importing` forever, since deriveStatus treats sealed=0 as
   // running whatever its children say.
@@ -520,6 +563,7 @@ export async function cancelInFlightImportFiles(
       now,
       importId,
     )
+    await touchImportActivityById(db, importId, now)
   })
 }
 
@@ -594,6 +638,61 @@ export async function queryImportFilesByMediaAssetIds(
   return new Set(rows.map((r) => r.mediaAssetId))
 }
 
+/**
+ * Coarseness of `imports.lastActivityAt`. It only orders the history list, so
+ * second-accuracy buys a reader nothing, and the `<` guard below turns every
+ * bump after the first in a window into a zero-row write. That matters: a drain
+ * moves many rows a second, and a real bump dirties the import row and its
+ * index each time.
+ */
+export const IMPORT_ACTIVITY_GRANULARITY_MS = 5_000
+
+/**
+ * Mark the owning import as active, given one of its rows. The copy heartbeat
+ * deliberately does not call this: it moves `copyBytes`, which the list does
+ * not order by, and the claim that started that copy already bumped.
+ */
+async function touchImportActivity(
+  db: DatabaseAdapter,
+  fileId: string,
+  now: number,
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE imports SET lastActivityAt = ?
+     WHERE id = (SELECT importId FROM import_files WHERE id = ?)
+       AND lastActivityAt < ?`,
+    now,
+    fileId,
+    now - IMPORT_ACTIVITY_GRANULARITY_MS,
+  )
+}
+
+/** Same, from a user action (cancel, retry) rather than the drain. Unguarded:
+ * these are rare, and the user expects the import they just acted on to be at
+ * the top of the list rather than up to a window late. */
+async function touchImportActivityById(
+  db: DatabaseAdapter,
+  importId: string,
+  now: number,
+): Promise<void> {
+  await db.runAsync(`UPDATE imports SET lastActivityAt = ? WHERE id = ?`, now, importId)
+}
+
+async function touchImportActivityByFileIds(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  now: number,
+): Promise<void> {
+  if (fileIds.length === 0) return
+  const ph = fileIds.map(() => '?').join(',')
+  await db.runAsync(
+    `UPDATE imports SET lastActivityAt = ?
+     WHERE id IN (SELECT DISTINCT importId FROM import_files WHERE id IN (${ph}))`,
+    now,
+    ...fileIds,
+  )
+}
+
 /** Claim a pending row: flip it to `active`, stamping claimedAt and a fresh
  * claimToken. Returns true if this caller won the claim. */
 export async function claimImportFile(
@@ -609,6 +708,7 @@ export async function claimImportFile(
     token,
     id,
   )
+  if (r.changes > 0) await touchImportActivity(db, id, now)
   return r.changes > 0
 }
 
@@ -622,8 +722,8 @@ export async function markImportFileProgress(
   id: string,
   bytes: number,
   token: string,
-  now: number,
 ): Promise<void> {
+  const now = Date.now()
   await db.runAsync(
     `UPDATE import_files SET copyBytes = ?, claimedAt = ? WHERE id = ? AND claimToken = ?`,
     bytes,
@@ -672,12 +772,13 @@ export async function markImportFileAdded(
   id: string,
   token: string,
 ): Promise<void> {
-  await db.runAsync(
+  const r = await db.runAsync(
     `UPDATE import_files SET state = 'added', sourceRef = NULL, claimedAt = NULL, claimToken = NULL
      WHERE id = ? AND claimToken = ?`,
     id,
     token,
   )
+  if (r.changes > 0) await touchImportActivity(db, id, Date.now())
 }
 
 /** Success terminal (content dup of a finalized sibling); releases `sourceRef` like `added`. */
@@ -687,13 +788,14 @@ export async function markImportFileDuplicate(
   token: string,
   reason?: string,
 ): Promise<void> {
-  await db.runAsync(
+  const r = await db.runAsync(
     `UPDATE import_files SET state = 'duplicate', sourceRef = NULL, reason = ?, claimedAt = NULL, claimToken = NULL
      WHERE id = ? AND claimToken = ?`,
     reason ?? null,
     id,
     token,
   )
+  if (r.changes > 0) await touchImportActivity(db, id, Date.now())
 }
 
 /**
@@ -722,13 +824,14 @@ export async function markImportFileUnavailable(
   token: string,
   reason: string,
 ): Promise<void> {
-  await db.runAsync(
+  const r = await db.runAsync(
     `UPDATE import_files SET state = 'unavailable', reason = ?, claimedAt = NULL, claimToken = NULL
      WHERE id = ? AND claimToken = ?`,
     reason,
     id,
     token,
   )
+  if (r.changes > 0) await touchImportActivity(db, id, Date.now())
 }
 
 /**
@@ -768,6 +871,7 @@ export async function markImportFileFailure(
       id,
       token,
     )
+    await touchImportActivity(db, id, now)
     return
   }
   const delay = Math.min(5 * 60_000 * 3 ** (attempts - 1), IMPORT_MAX_BACKOFF_MS)
@@ -781,6 +885,7 @@ export async function markImportFileFailure(
     id,
     token,
   )
+  await touchImportActivity(db, id, now)
 }
 
 /** Cancel specific rows without checking any claim: in-flight rows become `cancelled`,
@@ -793,6 +898,7 @@ export async function cancelImportFiles(db: DatabaseAdapter, ids: string[]): Pro
      WHERE id IN (${ph}) AND state IN ('pending','active')`,
     ...ids,
   )
+  await touchImportActivityByFileIds(db, ids, Date.now())
 }
 
 /** Resolve a directory's in-flight import files to `failed` before the directory is dropped. */

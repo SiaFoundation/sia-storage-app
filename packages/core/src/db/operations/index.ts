@@ -60,6 +60,7 @@ export {
   queryImportFilesByMediaAssetIds,
   queryImports,
   queryImportSummary,
+  queryImportsWithSummary,
   queryInProgressImport,
   queryPendingImportFiles,
   recordImportFileHash,

@@ -30,6 +30,7 @@ function imp(over: Partial<ImportRow> & { id: string; source: ImportSource }): I
     sealed: 1,
     startedAt: 1,
     updatedAt: 1,
+    lastActivityAt: 1,
     ...over,
   }
 }

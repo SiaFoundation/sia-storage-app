@@ -83,6 +83,7 @@ export async function run(signal?: AbortSignal): Promise<void> {
         sealed: 0,
         startedAt: now,
         updatedAt: now,
+        lastActivityAt: now,
       }
       // Resolve the importId for the candidate rows up front. On append, the
       // rows are re-pointed at the open import inside the transaction; on

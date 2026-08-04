@@ -227,6 +227,7 @@ describe('buildPhotoCandidateRows shared photo-feature builder', () => {
         sealed: 0,
         startedAt: 1,
         updatedAt: 1,
+        lastActivityAt: 1,
       },
       [
         {
