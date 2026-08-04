@@ -176,7 +176,9 @@ describe('imports ops', () => {
       file({ id: 'skew', importId: 'open', state: 'pending', nextAttemptAt: 9_999_999_999_999 }),
     ])
     const now = 100_000_000
-    await resetStaleImportFiles(db(), 10 * 60_000, 10 * 60_000, now)
+    // Returns total changed rows; the facade skips cache invalidation on 0.
+    expect(await resetStaleImportFiles(db(), 10 * 60_000, 10 * 60_000, now)).toBe(3)
+    expect(await resetStaleImportFiles(db(), 10 * 60_000, 10 * 60_000, now)).toBe(0)
 
     const stuck = await db().getFirstAsync<{ state: string; claimToken: string | null }>(
       `SELECT state, claimToken FROM import_files WHERE id='stuck'`,
@@ -473,7 +475,9 @@ describe('imports ops', () => {
     await insertImport(db(), imp({ id: 'other', source: 'library-scan', sealed: 0, updatedAt: 1 }))
 
     const now = 10_000
-    await sealIdleImports(db(), 'new-photos', 5000, now) // cutoff = now - idleMs = 5000
+    // Returns the sealed count; the facade skips cache invalidation on 0.
+    expect(await sealIdleImports(db(), 'new-photos', 5000, now)).toBe(2) // cutoff = now - idleMs = 5000
+    expect(await sealIdleImports(db(), 'new-photos', 5000, now)).toBe(0) // second pass seals nothing
 
     expect((await queryImportById(db(), 'idle'))?.sealed).toBe(1)
     expect((await queryImportById(db(), 'idle'))?.updatedAt).toBe(now)

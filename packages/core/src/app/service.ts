@@ -666,7 +666,7 @@ export interface AppService {
      * Seals every `sealed=0` import of `source` not fed in `idleMs` (vs `updatedAt`). new-photos
      * seal-on-idle after IMPORT_IDLE_SEAL_MS; seal-leftover-on-init uses `idleMs=0`.
      */
-    sealIdle(source: ImportSource, idleMs: number, now: number): Promise<void>
+    sealIdle(source: ImportSource, idleMs: number, now: number): Promise<number>
     /**
      * new-photos get-or-create in one txn: append the new assets to the open import, wait if
      * the open import is sealed but still draining, or create a fresh one. `newImport` carries
@@ -734,8 +734,9 @@ export interface AppService {
      * bookmarks), and staged-copy uris whose temp bytes must be removed.
      */
     delete(id: string): Promise<{ refs: string[]; stagedUris: string[] }>
-    /** Sweep: release stale claims, clamp clock-skew, seal abandoned imports. */
-    resetStale(claimOlderThanMs: number, sealOlderThanMs: number, now: number): Promise<void>
+    /** Sweep: release stale claims, clamp clock-skew, seal abandoned imports.
+     * Returns total changed rows (usually zero). */
+    resetStale(claimOlderThanMs: number, sealOlderThanMs: number, now: number): Promise<number>
   }
   /** Persistent user settings: get and set typed configuration values. */
   settings: {

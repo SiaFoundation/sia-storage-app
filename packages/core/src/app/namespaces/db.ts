@@ -6,6 +6,7 @@ import type { FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
 import { IMPORTS_CACHE_DEBOUNCE_MS } from '../../config'
+import { createDebouncedAction } from '../../lib/debouncedAction'
 import type { AppCaches, AppService } from '../service'
 
 function parseLogRow(row: {
@@ -197,6 +198,10 @@ export function buildDbNamespaces(
   function invalidateImports() {
     importsDebounced.invalidateAll()
   }
+  // The scanner calls finalize once per file, up to 20 a tick during a drain.
+  // Every other invalidateLibrary caller fires once per operation, so paying a
+  // second of staleness to coalesce would buy them nothing.
+  const libraryDebounced = createDebouncedAction(invalidateLibrary, IMPORTS_CACHE_DEBOUNCE_MS)
 
   return {
     imports: {
@@ -227,8 +232,9 @@ export function buildDbNamespaces(
         invalidateImports()
       },
       sealIdle: async (source, idleMs, now) => {
-        await ops.sealIdleImports(db, source, idleMs, now)
-        invalidateImports()
+        const sealed = await ops.sealIdleImports(db, source, idleMs, now)
+        if (sealed > 0) invalidateImports()
+        return sealed
       },
       appendToOpenImport: async (source, newImport, files, now) => {
         const result = await ops.appendToOpenImportOrCreate(db, source, newImport, files, now)
@@ -250,7 +256,7 @@ export function buildDbNamespaces(
       },
       finalize: async (id, token) => {
         const result = await ops.finalizeImportFile(db, id, token)
-        invalidateLibrary()
+        libraryDebounced.trigger()
         invalidateImports()
         return result
       },
@@ -285,8 +291,9 @@ export function buildDbNamespaces(
         return cleanup
       },
       resetStale: async (claimOlderThanMs, sealOlderThanMs, now) => {
-        await ops.resetStaleImportFiles(db, claimOlderThanMs, sealOlderThanMs, now)
-        invalidateImports()
+        const changed = await ops.resetStaleImportFiles(db, claimOlderThanMs, sealOlderThanMs, now)
+        if (changed > 0) invalidateImports()
+        return changed
       },
     },
     tags: {

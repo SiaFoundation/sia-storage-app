@@ -228,21 +228,23 @@ export async function deleteImport(
  * IMPORT_IDLE_SEAL_MS with no new asset rather than on the first empty poll; an empty poll
  * mid-capture would seal the session's import early and make the next batch wait behind its
  * drain. Seal-leftover-on-init uses `idleMs=0` to seal any open import left by a previous run.
- * Seals ALL matching imports in one pass, not just one.
+ * Seals ALL matching imports in one pass, not just one. Returns the number sealed; the
+ * poll usually seals nothing, so the caller invalidates caches only on a real change.
  */
 export async function sealIdleImports(
   db: DatabaseAdapter,
   source: ImportSource,
   idleMs: number,
   now: number,
-): Promise<void> {
-  await db.runAsync(
+): Promise<number> {
+  const r = await db.runAsync(
     `UPDATE imports SET sealed = 1, updatedAt = ?
      WHERE source = ? AND sealed = 0 AND updatedAt < ?`,
     now,
     source,
     now - idleMs,
   )
+  return r.changes
 }
 
 export type AppendToOpenImportResult = {
@@ -823,27 +825,30 @@ export async function failImportFilesInDirectory(
  * `sealed=0` import that stopped being fed, so an abandoned open import can't block
  * its source's next import. Claim release and idle-seal take separate windows: cold
  * start zeroes only the claim window, so a just-created open import isn't sealed at
- * launch.
+ * launch. Returns the three statements' row counts summed, so a row both released
+ * and clamped counts twice; callers only ask whether it is above zero, since the
+ * sweep runs every scanner tick and almost always changes nothing.
  */
 export async function resetStaleImportFiles(
   db: DatabaseAdapter,
   claimOlderThanMs: number,
   sealOlderThanMs: number,
   now: number,
-): Promise<void> {
-  await db.runAsync(
+): Promise<number> {
+  const released = await db.runAsync(
     `UPDATE import_files SET state = 'pending', claimedAt = NULL, claimToken = NULL
      WHERE state = 'active' AND (claimedAt IS NULL OR claimedAt < ?)`,
     now - claimOlderThanMs,
   )
-  await db.runAsync(
+  const clamped = await db.runAsync(
     `UPDATE import_files SET nextAttemptAt = ?
      WHERE state = 'pending' AND nextAttemptAt > ?`,
     now,
     now + IMPORT_MAX_BACKOFF_MS,
   )
-  await db.runAsync(
+  const sealed = await db.runAsync(
     `UPDATE imports SET sealed = 1 WHERE sealed = 0 AND updatedAt < ?`,
     now - sealOlderThanMs,
   )
+  return released.changes + clamped.changes + sealed.changes
 }

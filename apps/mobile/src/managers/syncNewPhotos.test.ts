@@ -99,7 +99,7 @@ describe('syncNewPhotos', () => {
     getAssetInfoAsyncMock.mockImplementation(async (id) => asset(String(id)))
     buildRowsMock.mockResolvedValue([])
     resolveDirMock.mockResolvedValue(null)
-    sealIdleSpy = jest.spyOn(app().imports, 'sealIdle').mockResolvedValue(undefined)
+    sealIdleSpy = jest.spyOn(app().imports, 'sealIdle').mockResolvedValue(0)
     appendSpy = jest.spyOn(app().imports, 'appendToOpenImport').mockResolvedValue(appended)
     await app().storage.setItem('autoSyncNewPhotos', 'true')
     await app().storage.setItem(CURSOR_KEY, 'v1:saved')
