@@ -165,8 +165,6 @@ export class UploadManager {
   private _resumeResolve: (() => void) | null = null
   /** Resolves the waitForWorkOrTimeout promise when wake() is called. */
   private wakeResolver: (() => void) | null = null
-  /** Whether saveBatchObjects succeeded and invalidation is pending. */
-  private _needsInvalidation = false
   /** Recorded flush events for efficiency analysis and testing. */
   private _flushHistory: FlushRecord[] = []
   /** Cumulative count of files passed to packer.add(). */
@@ -299,9 +297,6 @@ export class UploadManager {
 
       const saveStart = Date.now()
       const successfulFileIds = await this.saveBatchObjects(batch, pinnedObjects)
-      if (successfulFileIds.length > 0) {
-        this._needsInvalidation = true
-      }
       logger.info('uploadManager', 'batch_completed', {
         batchId: batch.batchId,
         files: successfulFileIds.length,
@@ -525,7 +520,6 @@ export class UploadManager {
     this.polledFiles = []
     this.app = null!
     this.internal = null!
-    this._needsInvalidation = false
     this._flushHistory = []
     this._packedCount = 0
     this._packedBytes = 0
@@ -611,12 +605,6 @@ export class UploadManager {
       if (next) {
         await this.processEntries(this.drainQueues(next))
         continue
-      }
-
-      if (this._needsInvalidation) {
-        this._needsInvalidation = false
-        this.app.caches.library.invalidateAll()
-        this.app.caches.libraryVersion.invalidate()
       }
 
       if (await this.isStorageFull()) {
@@ -1275,7 +1263,6 @@ export class UploadManager {
     if (successfulFileIds.length > 0) {
       this.app.caches.library.invalidateAll()
       this.app.caches.libraryVersion.invalidate()
-      this._needsInvalidation = false
       if (SAVE_REMOVAL_DELAY_MS > 0) {
         await new Promise((resolve) => setTimeout(resolve, SAVE_REMOVAL_DELAY_MS))
       }
