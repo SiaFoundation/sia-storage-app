@@ -6,6 +6,7 @@ All notable changes to Sia Storage will be documented in this file.
 
 ### Features
 
+- Added an opt-in iOS setting to remove Apple Photos originals after their Sia uploads are pinned successfully.
 - Picking photos on Android now uses the system Photo Picker and imports them without any up-front copying, so large picks start instantly and use no extra storage before the import runs.
 - A folder receiving an import shows a banner with the in-flight file count that opens the imports list; the root Files view shows the same banner counting across all imports.
 - Imports copy several files at once, so small files no longer wait behind one large file.

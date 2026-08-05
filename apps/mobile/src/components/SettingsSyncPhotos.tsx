@@ -1,5 +1,7 @@
 import { usePhotoImportDirectory } from '@siastorage/core/stores'
 import { useCallback, useState } from 'react'
+import { Alert, Platform } from 'react-native'
+import useSWR from 'swr'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { toggleAutoSyncNewPhotos, useAutoSyncNewPhotos } from '../managers/syncNewPhotos'
 import { useArchiveSyncCompletedAt } from '../managers/syncPhotosArchive'
@@ -16,6 +18,9 @@ export function SettingsSyncPhotos() {
   const { isSomeAccess, accessLabel, manageAccess } = useMediaLibraryPermissions()
   const photoImportDir = usePhotoImportDirectory()
   const [modalVisible, setModalVisible] = useState(false)
+  const deleteAfterUpload = useSWR(app().caches.settings.key('deletePhotosAfterUpload'), () =>
+    app().settings.getDeletePhotosAfterUpload(),
+  )
 
   // Tapping "Import photo library" starts a new full walk, so the row is
   // disabled while a prior scan is still in progress, keeping a second scan
@@ -43,6 +48,25 @@ export function SettingsSyncPhotos() {
     void app().settings.setPhotoImportDirectory('')
   }, [])
 
+  const handleDeleteAfterUpload = useCallback((enabled: boolean) => {
+    if (!enabled) {
+      void app().settings.setDeletePhotosAfterUpload(false)
+      return
+    }
+    Alert.alert(
+      'Delete photos after upload?',
+      'After Sia confirms each upload, the original will be removed from Apple Photos. Apple will ask you to confirm deletions. Deleted items remain in Recently Deleted for recovery.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Enable',
+          style: 'destructive',
+          onPress: () => void app().settings.setDeletePhotosAfterUpload(true),
+        },
+      ],
+    )
+  }, [])
+
   return (
     <>
       <InsetGroupSection header="Photos" footer={photosFooter}>
@@ -62,6 +86,14 @@ export function SettingsSyncPhotos() {
           value={autoSyncNew.data ?? false}
           onValueChange={toggleAutoSyncNewPhotos}
         />
+        {Platform.OS === 'ios' && (
+          <InsetGroupToggleRow
+            label="Delete after upload"
+            description="Remove originals from Apple Photos after Sia confirms the upload."
+            value={deleteAfterUpload.data ?? false}
+            onValueChange={handleDeleteAfterUpload}
+          />
+        )}
       </InsetGroupSection>
       <InsetGroupSection>
         <InsetGroupLink
