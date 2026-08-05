@@ -1,6 +1,6 @@
 import { usePhotoImportDirectory } from '@siastorage/core/stores'
 import { useCallback, useState } from 'react'
-import { Alert, Platform } from 'react-native'
+import { Platform } from 'react-native'
 import useSWR from 'swr'
 import { useMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { toggleAutoSyncNewPhotos, useAutoSyncNewPhotos } from '../managers/syncNewPhotos'
@@ -49,22 +49,7 @@ export function SettingsSyncPhotos() {
   }, [])
 
   const handleDeleteAfterUpload = useCallback((enabled: boolean) => {
-    if (!enabled) {
-      void app().settings.setDeletePhotosAfterUpload(false)
-      return
-    }
-    Alert.alert(
-      'Delete photos after upload?',
-      'After Sia confirms each upload, the original will be removed from Apple Photos. Apple will ask you to confirm deletions. Deleted items remain in Recently Deleted for recovery.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Enable',
-          style: 'destructive',
-          onPress: () => void app().settings.setDeletePhotosAfterUpload(true),
-        },
-      ],
-    )
+    void app().settings.setDeletePhotosAfterUpload(enabled)
   }, [])
 
   return (
