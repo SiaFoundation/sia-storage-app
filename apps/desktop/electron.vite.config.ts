@@ -43,6 +43,9 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     plugins: [react()],
+    // The dev loop launches an installed app told this exact port, so letting
+    // vite pick a free one would leave it pointed at nothing, showing blank.
+    server: { port: 5173, strictPort: true },
     build: {
       rollupOptions: { input: { index: resolve(__dirname, 'src/renderer/index.html') } },
     },
