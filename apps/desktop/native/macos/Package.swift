@@ -11,10 +11,12 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "SiaShared", targets: ["SiaShared"]),
+        .library(name: "SiaFileProvider", targets: ["SiaFileProvider"]),
     ],
     targets: [
         .target(name: "SiaShared", path: "Shared"),
+        .target(name: "SiaFileProvider", dependencies: ["SiaShared"], path: "Ext"),
         .testTarget(
-            name: "SiaDesktopTests", dependencies: ["SiaShared"], path: "Tests"),
+            name: "SiaDesktopTests", dependencies: ["SiaShared", "SiaFileProvider"], path: "Tests"),
     ]
 )
