@@ -4,10 +4,12 @@
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "bun run build/dev.ts",
+    "dev:no-mount": "electron-vite dev",
     "build": "electron-vite build",
+    "package": "bun run build/package.ts",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.build.json",
     "lint": "oxlint . && oxfmt --check .",
     "test": "bun test"
   },

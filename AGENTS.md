@@ -9,18 +9,19 @@ this file. Review calibration is in `REVIEW.md`.
 
 ## Repo map
 
-| Path                       | What it is                                                     |
-| -------------------------- | -------------------------------------------------------------- |
-| `apps/mobile`              | React Native / Expo app. The shipping product.                 |
-| `apps/cli`                 | Bun CLI, cross-compiled to standalone binaries.                |
-| `apps/integration`         | Cross-package tests only, no shipped code.                     |
-| `apps/benchmark`           | Query benchmarks and `EXPLAIN QUERY PLAN` reports.             |
-| `apps/web`, `apps/desktop` | `package.json` stubs with no source. Do not assume they build. |
-| `packages/core`            | Shared TS core: DB, sync, services, stores, AppService facade. |
-| `packages/logger`          | Logging package.                                               |
-| `packages/node-adapters`   | Node implementations of the core's platform adapters.          |
-| `packages/sdk-mock`        | In-memory indexer and SDK used by tests.                       |
-| `crates/sia-storage-core`  | Rust port of the core. Separate CI and toolchain.              |
+| Path                      | What it is                                                     |
+| ------------------------- | -------------------------------------------------------------- |
+| `apps/mobile`             | React Native / Expo app. The shipping product.                 |
+| `apps/cli`                | Bun CLI, cross-compiled to standalone binaries.                |
+| `apps/integration`        | Cross-package tests only, no shipped code.                     |
+| `apps/benchmark`          | Query benchmarks and `EXPLAIN QUERY PLAN` reports.             |
+| `apps/desktop`            | Electron macOS app with a Swift File Provider extension.       |
+| `apps/web`                | A `package.json` stub with no source. Do not assume it builds. |
+| `packages/core`           | Shared TS core: DB, sync, services, stores, AppService facade. |
+| `packages/logger`         | Logging package.                                               |
+| `packages/node-adapters`  | Node implementations of the core's platform adapters.          |
+| `packages/sdk-mock`       | In-memory indexer and SDK used by tests.                       |
+| `crates/sia-storage-core` | Rust port of the core. Separate CI and toolchain.              |
 
 ## Verification
 
@@ -54,9 +55,9 @@ Builds handle this themselves: `bun run mobile:dev:*` prints a progress line and
 writes the full output to `.build-cache/<target>/build.log`. Run them directly and
 read that file if something fails.
 
-Tests do not. `bun run test` runs jest across five packages and prints a line per
-suite, so background it and read the `Test Suites:` and `Tests:` summary lines per
-package rather than the stream. Background it for a second reason too: an open
+Tests do not. `bun run test` runs six packages, five under jest and the desktop app
+under bun test, and prints a line per suite, so background it and read the
+`Test Suites:` and `Tests:` summary lines per package rather than the stream. Background it for a second reason too: an open
 handle from an async loop hangs the run instead of failing it, and a hung foreground
 run costs the whole session. If output stops growing for 30 seconds or more, kill it
 and find the leak.
@@ -104,12 +105,35 @@ fail with "Could not locate the bindings file" for `better-sqlite3`, build it:
 
 ## Running the app
 
+### Mobile
+
 `bun run mobile:dev:ios:simulator`, `mobile:dev:ios:device`,
 `mobile:dev:android:emulator`, `mobile:dev:android:device`. Each hashes the native
 inputs, skips the rebuild when nothing changed, and writes full output to
 `.build-cache/<target>/build.log`. Raw `expo run:ios` bypasses that cache and is the
 usual cause of a stale binary. `bun run mobile:start` runs Metro against an installed
 build.
+
+### Desktop
+
+`bun run desktop:dev`. It packages, signs, installs to `/Applications` and launches,
+every run, and serves the renderer from a dev server so UI edits reload in place.
+Changing the main process, the preload or any Swift target means restarting it.
+
+It has to install a signed copy because that is the only kind that mounts. Registering
+the Finder folder is an entitled call made by a signed helper inside the bundle, and
+the system loads the File Provider extension only from an app LaunchServices knows
+about. Anything run straight from the source tree gets no folder.
+
+Signing needs `apps/desktop/env/dev.env`, which is gitignored. Copy `dev.example.env`
+and fill in the five Apple Developer values; without it the command stops before it
+builds anything and names the file. `bun run desktop:package <dev|beta|prod>` is the
+same build without the dev server, and the three contexts install side by side under
+different bundle ids.
+
+`bun run desktop:dev:no-mount` skips all of that and runs from source. Use it for UI
+work with no account or signing setup. The app reports it: the popover's Finder row
+reads "Not in this build".
 
 ## Tests
 
