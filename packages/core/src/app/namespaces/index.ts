@@ -7,6 +7,7 @@ import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { swrCacheBy } from '../../stores/swr'
+import { coalesceChanges, createAppEvents } from '../events'
 import { createLibraryVersionCache } from '../libraryVersionCache'
 import type { AppCaches, AppService, AppServiceInternal } from '../service'
 import type { ConnectionState, InitState, SyncState } from '../stores'
@@ -67,6 +68,20 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     sdk: swrCacheBy(),
     hosts: swrCacheBy(),
   }
+
+  const raw = createAppEvents()
+  // The scopes with no counter of their own react here, as subscribers like
+  // anything else, so an emit site can never forget the cache bust.
+  raw.on((scope) => {
+    if (scope === 'sync') caches.sync.invalidate()
+    else if (scope === 'connection') caches.connection.invalidate()
+  })
+  // Every library mutation already bumps this counter, so one subscription
+  // here catches all of them and no mutation has to emit for itself.
+  caches.libraryVersion.subscribe(() => raw.emit('library'))
+  // Only this coalesced view leaves the file, so the raw firehose can never
+  // reach a socket by accident.
+  const events = coalesceChanges(raw)
 
   let sdkRef: SdkAdapter | null = null
 
@@ -158,7 +173,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       getState: () => ({ ...syncState }),
       setState: (patch) => {
         syncState = { ...syncState, ...patch }
-        caches.sync.invalidate()
+        raw.emit('sync')
       },
       getSyncDownCursor: async () => {
         const raw = await adapters.storage.getItem('syncDownCursor')
@@ -187,7 +202,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       getState: () => ({ ...connectionState }),
       setState: (patch) => {
         connectionState = { ...connectionState, ...patch }
-        caches.connection.invalidate()
+        raw.emit('connection')
       },
     },
     init: {
@@ -233,6 +248,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     },
     initUploader: () => initUploader(uploadManager, service, internal, adapters.uploader),
     withTransaction: (fn) => adapters.db.withTransactionAsync(fn),
+    events,
   }
 
   return { service, internal, uploadManager }
