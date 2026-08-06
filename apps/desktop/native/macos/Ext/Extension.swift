@@ -54,7 +54,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         // Stamped into Info.plist at build time from the daemon's own version,
         // so the two cannot drift apart within a build.
         let version =
-            (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+            (Bundle.main.infoDictionary?["SiaDaemonVersion"] as? String) ?? "unknown"
         self.rpc = rpc
         self.handoff = Handoff()
         self.handshake = Handshake {
