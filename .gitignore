@@ -10,6 +10,8 @@ node_modules
 
 # build
 dist/
+# SwiftPM writes here; oxfmt reads the .abi.json it leaves behind.
+.build/
 .build-cache/
 .build-cache
 
