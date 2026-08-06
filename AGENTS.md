@@ -227,7 +227,11 @@ must hold for a reader with only this file.
 A file, schema, or non-trivial function opens with a header saying what it is and the
 problem it solves. Not the mechanics; comment non-obvious fields and steps inline.
 
-**Length.** Inline: one or two lines. Header: six at most. Past that, the comment is
+**Length.** Inline: one or two lines. Header: six at most. A header is the comment
+opening a file, a type, or a function, in whatever syntax the language uses, so a
+three-line `///` block on a function is a header and within budget. Inline means a
+comment inside a body. Count only the lines carrying words: a `/*` or `*/` alone is a
+delimiter and a bare ` *` between paragraphs is a separator. Past that, the comment is
 doing the code's job or the function needs splitting. Migrations and wire-format schemas
 may run longer, because the before-and-after is the content.
 

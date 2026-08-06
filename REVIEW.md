@@ -18,7 +18,11 @@ sync between two devices:
   transaction that needs one.
 - Blocking the JS thread on a path the user waits on, including any synchronous
   `expo-file-system` call.
-- A secret, app key, recovery phrase, or file path reaching a log line or error message.
+- A secret, app key, or recovery phrase reaching any log line or error message.
+- A file path reaching a message the user did not choose to send: a forwarded log,
+  error text shown on screen, or an `os_log` line marked `.public`. A log file that
+  leaves the machine only when someone attaches it to a report may name paths, and
+  usually should.
 - A comment stating a wrong field list, state set, count, or returned shape. A reader
   trusts it over the code.
 
@@ -83,8 +87,15 @@ that:
   for the mechanism. A number the code fixes (a 200ms interval) or one derived from the
   mechanism (2x disk while a copy has both files on disk) is correct; do not flag it.
 - Runs long. Count the lines: an inline comment over two, or a header over six, is a
-  finding. Migrations and wire-format schemas are the only exemption. Say which sentences
-  to cut. This is the check most often skipped, so run it on every comment the diff adds.
+  finding. A header is the comment opening a file, a type, or a function, in whatever
+  syntax the language uses; a three-line `///` or `/** */` block on a function is a
+  header, not an inline comment, and is within budget. Inline means a comment sitting
+  inside a body. Count the lines carrying words, and only those: a `/*` or `*/` alone
+  on a line is a delimiter, a bare ` *` between paragraphs is a separator, and a blank
+  line before the code belongs to neither. A ten-line block holding two delimiters and
+  two separators is six lines and passes.
+  Migrations and wire-format schemas are the only exemption. Say which sentences to cut.
+  This is the check most often skipped, so run it on every comment the diff adds.
 
 Flag the absence too: an ordering constraint, race, or platform workaround introduced
 with nothing explaining why, and a genuine-why comment the diff deletes whose reason
