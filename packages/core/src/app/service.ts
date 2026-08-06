@@ -19,6 +19,7 @@ import type {
 } from '../db/operations'
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
+import type { ChangeSource } from './events'
 import type { ImportCopyResult } from '../services/fsFileUri'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -1019,6 +1020,12 @@ export interface AppServiceInternal {
   requireSdk(): SdkAdapter
   /** Wires the UploadManager with a live SDK reference. */
   initUploader(): void
+  /**
+   * Fires when the library, the connection or sync state changes. The wire's
+   * view: paced, so a burst of writes crosses it once and a long run of them
+   * still crosses it while it runs.
+   */
+  events: ChangeSource & { dispose(): void }
   /** Runs a function inside a database transaction. */
   withTransaction(fn: () => Promise<void>): Promise<void>
 }
