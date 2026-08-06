@@ -1,7 +1,9 @@
 import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
+import packageJson from '../../package.json'
 import { writeState } from '@siastorage/node-adapters'
 import { connectSdk, createCliAppService } from '../app'
-import { startIpcDispatcher } from './ipc'
+import { buildHandlerMap, startIpcDispatcher } from './ipc'
+import { startProviderListener } from './ipc/provider'
 import {
   acquireLockOrExit,
   attachSignalHandlers,
@@ -9,6 +11,15 @@ import {
   type ShutdownContext,
 } from './lifecycle'
 import { initializeScheduler } from './scheduler'
+
+/**
+ * Build identifier a storage-provider shell must match to call anything.
+ *
+ * Read from the package because the packaging script stamps the same value into
+ * the extension's Info.plist; two hand-maintained constants would only disagree
+ * at run time.
+ */
+const DAEMON_VERSION = packageJson.version
 
 export type DaemonContext = ShutdownContext & {
   connected: boolean
@@ -26,7 +37,13 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   // appender's output flows there.
   addAppender(createConsoleAppender({ ansi: true }))
 
-  const app = await createCliAppService(dataDir)
+  // Env rather than flags: `spawnDaemon` re-spawns this program with no argv at
+  // all, so the environment is the only channel that survives being backgrounded.
+  // Absent means no shell is served and the daemon is a plain CLI daemon.
+  const providerSocket = process.env.SIA_PROVIDER_SOCKET
+  const handoffDir = process.env.SIA_HANDOFF_DIR
+
+  const app = await createCliAppService(dataDir, { handoffDir })
   const lock = acquireLockOrExit(app.paths)
 
   let connected = false
@@ -53,10 +70,24 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
     if (!ctx) return
     return executeShutdown(ctx)
   }
-  const ipcServer = startIpcDispatcher(app, app.paths.sockPath, () => {
+  const handlers = buildHandlerMap(app, () => {
     void shutdown()
   })
-  ctx = { app, scheduler, ipcServer, lock }
+  const ipcServer = startIpcDispatcher(
+    app,
+    app.paths.sockPath,
+    () => {
+      void shutdown()
+    },
+    handlers,
+  )
+  const providerServer = providerSocket
+    ? startProviderListener(app, handlers, {
+        socketPath: providerSocket,
+        version: DAEMON_VERSION,
+      })
+    : undefined
+  ctx = { app, scheduler, ipcServer, providerServer, lock }
 
   attachSignalHandlers(shutdown)
 

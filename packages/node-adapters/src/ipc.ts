@@ -2,7 +2,24 @@ import { logger } from '@siastorage/logger'
 import * as fs from 'fs'
 import * as net from 'net'
 
-export type IpcHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>
+/**
+ * The connection a request arrived on, for the rare handler that outlives its
+ * own reply. A handler that never resolves turns the connection into a one-way
+ * stream: nothing is written back for that request, and `push` sends unsolicited
+ * frames until the peer disconnects.
+ */
+export type IpcConnection = {
+  /** Sends a frame with no request id, which the client reads as an event. */
+  push: (payload: unknown) => void
+  /** Runs when the peer disconnects, to release whatever the stream holds. */
+  onClose: (fn: () => void) => void
+}
+
+export type IpcHandler = (
+  method: string,
+  params: Record<string, unknown>,
+  connection: IpcConnection,
+) => Promise<unknown>
 
 export type IpcServer = {
   close: () => void
@@ -18,6 +35,16 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
 
   const server = net.createServer((socket) => {
     let buffer = ''
+    const closeHandlers: Array<() => void> = []
+    const connection: IpcConnection = {
+      push(payload) {
+        if (socket.destroyed) return
+        socket.write(`${JSON.stringify(payload)}\n`)
+      },
+      onClose(fn) {
+        closeHandlers.push(fn)
+      },
+    }
 
     socket.on('data', (chunk) => {
       buffer += chunk.toString()
@@ -26,8 +53,13 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
 
       for (const line of lines) {
         if (!line.trim()) continue
-        handleMessage(line, socket, handler)
+        handleMessage(line, socket, handler, connection)
       }
+    })
+
+    socket.on('close', () => {
+      for (const fn of closeHandlers) fn()
+      closeHandlers.length = 0
     })
 
     socket.on('error', () => {
@@ -63,11 +95,16 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
   }
 }
 
-async function handleMessage(line: string, socket: net.Socket, handler: IpcHandler): Promise<void> {
+async function handleMessage(
+  line: string,
+  socket: net.Socket,
+  handler: IpcHandler,
+  connection: IpcConnection,
+): Promise<void> {
   try {
     const { id, method, params } = JSON.parse(line)
     try {
-      const result = await handler(method, params ?? {})
+      const result = await handler(method, params ?? {}, connection)
       socket.write(`${JSON.stringify({ id, ok: true, result })}\n`)
     } catch (e) {
       socket.write(

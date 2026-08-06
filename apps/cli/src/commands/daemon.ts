@@ -11,12 +11,22 @@ import { c, formatRelativeDate } from '../lib/format'
 export async function daemonCommand(
   dataDir: string,
   action: string,
-  _opts?: { foreground?: boolean },
+  opts?: { foreground?: boolean },
 ) {
   const p = getPaths(dataDir)
 
   switch (action) {
     case 'start': {
+      // Ahead of the already-running check on purpose: --foreground makes this
+      // process the daemon, and its caller spawns only after finding nothing
+      // answering the socket. A pid file whose process is alive but no longer
+      // serving would otherwise exit here, leaving that caller with no daemon.
+      if (opts?.foreground) {
+        const { startDaemon } = await import('../daemon/entry')
+        await startDaemon(dataDir)
+        await new Promise(() => {})
+        return
+      }
       if (isDaemonRunning(p.pidPath)) {
         const pid = readDaemonPid(p.pidPath)
         console.log(`Daemon already running (PID: ${pid})`)
