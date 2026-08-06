@@ -1,5 +1,23 @@
 {
   "name": "@siastorage/desktop",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "lint": "oxlint . && oxfmt --check ."
+  },
+  "dependencies": {
+    "@siastorage/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.2",
+    "electron": "43.2.0",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.0"
+  }
 }
