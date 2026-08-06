@@ -13,7 +13,7 @@ export { createBunThumbnailAdapter } from './thumbnail'
 export { acquireLock, isDaemonRunning, readDaemonPid } from './lock'
 export type { LockHandle } from './lock'
 export { startIpcServer, sendIpcCommand, connectToIpc } from './ipc'
-export type { IpcHandler, IpcServer } from './ipc'
+export type { IpcConnection, IpcHandler, IpcServer } from './ipc'
 export { readState, writeState, removeState } from './state'
 export type { DaemonState } from './state'
 

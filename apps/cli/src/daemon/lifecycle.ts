@@ -7,6 +7,8 @@ export type ShutdownContext = {
   app: CliApp
   scheduler: ServiceScheduler
   ipcServer: { close(): void }
+  /** Present only when a storage-provider shell is being served. */
+  providerServer?: { close(): void }
   lock: LockHandle
 }
 
@@ -50,8 +52,10 @@ export function attachSignalHandlers(shutdown: () => Promise<void>): void {
 export async function executeShutdown(ctx: ShutdownContext): Promise<void> {
   logger.info('daemon', 'shutting_down')
   await ctx.app.service.uploader.shutdown()
+  ctx.app.internal.events.dispose()
   await ctx.scheduler.shutdown()
   ctx.ipcServer.close()
+  ctx.providerServer?.close()
   await ctx.app.db.finalize?.()
   ctx.app.db.close?.()
   removeState(ctx.app.paths.statePath)

@@ -90,7 +90,7 @@ function createRealBootstrap(): Bootstrap {
 
 export async function createCliAppService(
   dataDir?: string,
-  opts?: { createDatabase?: CreateDatabaseFn },
+  opts?: { createDatabase?: CreateDatabaseFn; handoffDir?: string },
 ): Promise<CliApp> {
   const dir = dataDir ?? getDataDir()
   const p = getPaths(dir)
@@ -124,6 +124,7 @@ export async function createCliAppService(
     sdkAuth: bootstrap.authAdapters,
     thumbnail,
     detectMimeType,
+    handoffDir: opts?.handoffDir,
   })
 
   // In test mode the MockSdk attaches before connectSdk runs, so the daemon
