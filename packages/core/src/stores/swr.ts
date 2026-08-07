@@ -1,5 +1,5 @@
 import useSWR, { mutate } from 'swr'
-import { createDebouncedAction } from '../lib/debouncedAction'
+import { createCoalescer } from '../lib/coalescer'
 
 let nextId = 0
 
@@ -41,7 +41,7 @@ export function swrState<T>(initial: T) {
 /** Creates a prefix-scoped SWR cache supporting keyed and bulk invalidation. */
 export function swrCacheBy<T = unknown>() {
   const prefix = `swr/${nextId++}`
-  const debouncers = new Map<string, ReturnType<typeof createDebouncedAction>>()
+  const coalescers = new Map<string, ReturnType<typeof createCoalescer>>()
 
   const cache = {
     key: (...parts: string[]) => [`${prefix}/${parts.join('/')}`],
@@ -56,16 +56,17 @@ export function swrCacheBy<T = unknown>() {
         revalidate: false,
       }),
     /**
-     * Returns debounced versions of invalidate/invalidateAll.
-     * Multiple calls within `ms` coalesce into a single invalidation.
-     * Call `flush` to force immediate invalidation (e.g. on register/remove).
+     * Returns coalesced versions of invalidate/invalidateAll: the first call
+     * in a quiet stretch invalidates at once, later calls at most once per
+     * `ms`. Call `flush` to force immediate invalidation (e.g. on
+     * register/remove).
      */
-    debounced: (ms: number) => {
+    coalesced: (ms: number) => {
       function getOrCreate(key: string, fn: () => void) {
-        let d = debouncers.get(key)
+        let d = coalescers.get(key)
         if (!d) {
-          d = createDebouncedAction(fn, ms)
-          debouncers.set(key, d)
+          d = createCoalescer(fn, ms)
+          coalescers.set(key, d)
         }
         return d
       }
@@ -75,7 +76,7 @@ export function swrCacheBy<T = unknown>() {
         invalidateAll: () => getOrCreate('*', () => cache.invalidateAll()).trigger(),
         flush: (...parts: string[]) => {
           const key = parts.length ? parts.join('/') : '*'
-          const d = debouncers.get(key)
+          const d = coalescers.get(key)
           if (d) {
             d.flush()
             return

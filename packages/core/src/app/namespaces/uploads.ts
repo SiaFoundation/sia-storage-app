@@ -4,33 +4,33 @@ import type { UploadsState } from '../stores'
 /** Builds the uploads namespace: register, update, and clear in-progress uploads. */
 export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] {
   let state: UploadsState = { uploads: {} }
-  const debounced = caches.uploads.debounced(1000)
+  const coalesced = caches.uploads.coalesced(1000)
 
   const namespace: AppService['uploads'] = {
     getState: () => ({ ...state }),
     getEntry: (id) => state.uploads[id],
     register: (entry) => {
       state = { uploads: { ...state.uploads, [entry.id]: entry } }
-      debounced.flush('all')
-      debounced.flush('counts')
-      debounced.flush('active')
+      coalesced.flush('all')
+      coalesced.flush('counts')
+      coalesced.flush('active')
       caches.uploads.invalidate(entry.id)
     },
     update: (id, patch) => {
       const existing = state.uploads[id]
       if (!existing) return
       state = { uploads: { ...state.uploads, [id]: { ...existing, ...patch } } }
-      debounced.invalidate('all')
-      debounced.invalidate('counts')
-      debounced.invalidate('active')
+      coalesced.invalidate('all')
+      coalesced.invalidate('counts')
+      coalesced.invalidate('active')
       caches.uploads.invalidate(id)
     },
     remove: (id) => {
       const { [id]: _, ...rest } = state.uploads
       state = { uploads: rest }
-      debounced.flush('all')
-      debounced.flush('counts')
-      debounced.flush('active')
+      coalesced.flush('all')
+      coalesced.flush('counts')
+      coalesced.flush('active')
       caches.uploads.invalidate(id)
     },
     removeMany: (ids) => {

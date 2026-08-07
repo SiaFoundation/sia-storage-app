@@ -74,7 +74,7 @@ export const IMPORT_STALE_CLAIM_MS = minutesInMs(10) // 10 minutes
 // new-photos: seal the open import after this long with no new asset added.
 export const IMPORT_IDLE_SEAL_MS = minutesInMs(3) // 3 minutes
 // Coalesce window for imports-cache invalidations during a large library-scan drain.
-export const IMPORTS_CACHE_DEBOUNCE_MS = secondsInMs(1) // 1 second
+export const IMPORTS_CACHE_COALESCE_MS = secondsInMs(1) // 1 second
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // Maximum number of bytes to retain in the local file system before evicting.
