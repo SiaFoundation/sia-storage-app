@@ -1,3 +1,24 @@
+## 0.0.19-rc.1 (2026-08-07)
+
+### Features
+
+- The import scanner schedules copies through a byte-weighted concurrency pool, paced by pending unuploaded bytes; the backlog counts only files whose bytes are still on the device, so an unuploadable lost file can never stall pacing.
+- Add `fs` facade methods `removeFileByPath`, `getDeviceSpace`, and `importCopy` (the import scanner's claim-scoped copy, reading each source once with hash and progress reported from the copy, and a `move` option that consumes staged sources by rename), and exempt files referenced by in-flight `import_files` rows from the orphan sweep.
+- Add DB operations and the `app.imports` facade for the `imports`/`import_files` tables, with failure-reason codes from a central registry.
+- The import scanner claims, copies, and finalizes `import_files` rows into the files table, recording a reason code for every failure.
+- Add the `imports` and `import_files` tables that track in-flight imports in place of `hash=''` placeholder file rows; the migration rehomes existing placeholder rows under a legacy import and adds `files.mediaAssetId`.
+- Rename `FileRecord.localId` to `mediaAssetId`.
+- `UploadStats` no longer includes `importingCount`; the in-flight file count comes from `app.imports.countInFlight()`.
+- `app.uploader.uploadSpeed()` returns a running-average upload throughput (raw and file rates), measured over in-flight shard time only and persisted across sessions.
+
+### Fixes
+
+- Import copies now stop below a critical free-space floor, so a runaway import cannot drive the device to zero.
+- `IMPORT_PACED_STORAGE_HEADROOM_BYTES` and `IMPORT_PACED_BACKLOG_BYTES` honor `EXPO_PUBLIC_IMPORT_HEADROOM_BYTES` and `EXPO_PUBLIC_IMPORT_BACKLOG_BYTES` overrides at bundle time.
+- The import scanner accepts copy results that already carry the content hash and skips its separate hash pass.
+- The uploader invalidates the library cache once per saved batch instead of twice.
+- Zero-byte files no longer stall uploads: imports refuse them with an "empty file" reason, and already-imported ones are marked lost instead of retrying forever.
+
 ## 0.0.19-rc.0 (2026-07-29)
 
 ### Features
