@@ -63,6 +63,14 @@ export type FsIOAdapter = FsFileUriAdapter & {
     file: { id: string; type: string },
     data: ArrayBuffer,
   ): Promise<{ uri: string; size: number }>
+  /**
+   * Places a managed file's bytes at an absolute path outside managed storage
+   * and returns the byte count. Hardlinks when both sides share a volume and
+   * falls back to a copy, so a large file is never held in memory.
+   *
+   * Optional: only a host that hands bytes to another process by path needs it.
+   */
+  exportTo?(file: { id: string; type: string }, destPath: string): Promise<number>
   adoptFile?(
     file: { id: string; type: string },
     sourceUri: string,

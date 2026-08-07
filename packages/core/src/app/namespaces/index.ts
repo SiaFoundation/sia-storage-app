@@ -34,6 +34,12 @@ export interface AppServiceAdapters {
   sdkAuth: SdkAuthAdapters
   thumbnail?: ThumbnailAdapter
   detectMimeType?: (path: string) => Promise<string | null>
+  /**
+   * Absolute directory an OS shell and this process both reach, for path
+   * handoff. Absent means no shell is attached and every handoff call fails
+   * closed.
+   */
+  handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
 }
@@ -202,6 +208,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     provider: buildProviderNamespace({
       getService: () => service,
       db: adapters.db,
+      fsIO: adapters.fsIO,
+      handoffDir: adapters.handoffDir,
       maxPageSize: adapters.maxPageSize,
     }),
     downloads: downloadsNamespace,

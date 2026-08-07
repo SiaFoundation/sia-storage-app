@@ -20,7 +20,14 @@ import type {
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
 import type { ChangeSource } from './events'
-import type { ProviderChanges, ProviderItem, ProviderPage } from '../types/provider'
+import type {
+  ProviderChanges,
+  ProviderFetchResult,
+  ProviderItem,
+  ProviderItemKind,
+  ProviderPage,
+  ProviderProgress,
+} from '../types/provider'
 import type { ImportCopyResult } from '../services/fsFileUri'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -946,6 +953,32 @@ export interface AppService {
      * next signal.
      */
     changes(folderId: string | null, anchor: string): Promise<ProviderChanges>
+    /**
+     * Places a file's bytes at `destPath`, downloading them first if absent.
+     * `destPath` must sit inside the host's handoff directory; bytes never
+     * cross the call itself. A host that can read managed storage directly is
+     * handed the path instead, when such a host exists.
+     */
+    fetch(id: string, destPath: string): Promise<ProviderFetchResult>
+    /** Bytes moved so far for an in-flight transfer of this item, never a fraction. */
+    progress(id: string): Promise<ProviderProgress>
+    /**
+     * Creates a folder, or a file from bytes already staged at `srcPath` inside
+     * the handoff directory. A created file is queued for upload, not uploaded
+     * here.
+     */
+    create(
+      parentId: string | null,
+      name: string,
+      kind: ProviderItemKind,
+      srcPath?: string,
+    ): Promise<ProviderItem>
+    /** Replaces a file's bytes from `srcPath` and queues it for upload. */
+    write(id: string, srcPath: string): Promise<ProviderItem>
+    /** Renames and reparents in one call; moves a file's whole version stack. */
+    rename(id: string, newParentId: string | null, newName: string): Promise<ProviderItem>
+    /** Reversible delete. A folder cascades to the files inside it. */
+    trash(id: string): Promise<void>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {

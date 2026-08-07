@@ -1,5 +1,6 @@
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
+import { createHash } from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 
@@ -14,6 +15,31 @@ export function createFsAdapter(params: { tempDir: string }) {
   const fsIO: FsIOAdapter = {
     uri(fileId, type) {
       return `file://${fsFilePath(fileId, type)}`
+    },
+    async exportTo(file, destPath) {
+      const source = fsFilePath(file.id, file.type)
+      const size = nodeFs.statSync(source).size
+      nodeFs.rmSync(destPath, { force: true })
+      try {
+        nodeFs.linkSync(source, destPath)
+      } catch {
+        nodeFs.copyFileSync(source, destPath)
+      }
+      return size
+    },
+    async adoptFile(file, sourceUri) {
+      const source = sourceUri.replace(/^file:\/\//, '')
+      // Same refusal as the production adapter, so the containment tests run
+      // against the semantics they claim to cover.
+      if (nodeFs.lstatSync(source).isSymbolicLink()) {
+        throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+      }
+      const target = fsFilePath(file.id, file.type)
+      nodeFs.mkdirSync(path.dirname(target), { recursive: true })
+      nodeFs.renameSync(source, target)
+      const bytes = nodeFs.readFileSync(target)
+      const hash = createHash('sha256').update(bytes).digest('hex')
+      return { uri: `file://${target}`, size: bytes.byteLength, hash: `sha256:${hash}` }
     },
     async size(fileId, type) {
       try {

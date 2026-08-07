@@ -113,3 +113,45 @@ describe('ensureDirectory', () => {
     expect(fs.existsSync(filesDir)).toBe(true)
   })
 })
+
+describe('adoptFile across volumes', () => {
+  it('refuses a link even when the move falls back to a copy', async () => {
+    const secret = path.join(filesDir, 'secret.txt')
+    fs.writeFileSync(secret, 'not yours')
+    const staged = path.join(filesDir, 'staged.bin')
+    fs.symlinkSync(secret, staged)
+
+    await expect(fsIO.adoptFile!({ id: 'x1', type: 'image/jpeg' }, staged)).rejects.toThrow(
+      /symbolic link/,
+    )
+  })
+})
+
+describe('adoptFile', () => {
+  it('takes ownership of a staged file and reports its hash', async () => {
+    const staged = path.join(filesDir, 'staged.bin')
+    fs.writeFileSync(staged, 'hello')
+
+    const adopted = await fsIO.adoptFile!({ id: 'f1', type: 'application/octet-stream' }, staged)
+
+    expect(adopted.size).toBe(5)
+    expect(adopted.hash).toMatch(/^sha256:/)
+    expect(fs.existsSync(staged)).toBe(false)
+  })
+
+  it('refuses a symbolic link, which would read a file outside the staging area', async () => {
+    const outside = path.join(os.tmpdir(), `sia-fsio-outside-${process.pid}`)
+    fs.writeFileSync(outside, 'not yours')
+    const staged = path.join(filesDir, 'link.bin')
+    fs.symlinkSync(outside, staged)
+
+    try {
+      await expect(
+        fsIO.adoptFile!({ id: 'f2', type: 'application/octet-stream' }, staged),
+      ).rejects.toThrow(/symbolic link/)
+      expect(fs.readFileSync(outside, 'utf8')).toBe('not yours')
+    } finally {
+      fs.rmSync(outside, { force: true })
+    }
+  })
+})

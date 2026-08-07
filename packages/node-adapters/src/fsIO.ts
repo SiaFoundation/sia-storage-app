@@ -1,5 +1,7 @@
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
+import { createHash } from 'crypto'
+import { constants } from 'fs'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
@@ -59,6 +61,80 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       }
       const stat = await fs.stat(target)
       return { kind: 'plain' as const, uri: target, size: stat.size }
+    },
+
+    async adoptFile(file, sourceUri) {
+      const target = filePath(file.id, file.type)
+      const source = sourceUri.replace(/^file:\/\//, '')
+      // A symlink passes a containment check on its own path and then reads
+      // whatever it points at, so it is refused. O_NOFOLLOW rather than an
+      // lstat: the open fails outright on a link, which leaves no window in
+      // which the path could be swapped for one between the check and the read.
+      let staged: fs.FileHandle
+      try {
+        staged = await fs.open(source, constants.O_RDONLY | constants.O_NOFOLLOW)
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ELOOP') {
+          throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+        }
+        throw e
+      }
+      // Consumes the source: it is a staged temp whose only purpose was to carry
+      // the bytes here, and a rename moves no data when both sides share a
+      // volume.
+      try {
+        try {
+          await fs.rename(source, target)
+        } catch {
+          // Across volumes, copied from the descriptor already open rather than
+          // from the path, because copyFile follows a link and this cannot.
+          await fs.writeFile(target, staged.createReadStream({ autoClose: false }))
+          await fs.unlink(source).catch(() => {})
+        }
+      } finally {
+        await staged.close()
+      }
+      // Checked again after the move: the first check can be raced by swapping
+      // the staged file for a link between lstat and rename. By now the file is
+      // in a directory only this process writes, so this one cannot be.
+      if ((await fs.lstat(target)).isSymbolicLink()) {
+        await fs.unlink(target).catch(() => {})
+        throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+      }
+      const hash = createHash('sha256')
+      const handle = await fs.open(target, 'r')
+      try {
+        const buffer = Buffer.allocUnsafe(64 * 1024)
+        let position = 0
+        while (true) {
+          const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, position)
+          if (bytesRead === 0) break
+          hash.update(buffer.subarray(0, bytesRead))
+          position += bytesRead
+        }
+      } finally {
+        await handle.close()
+      }
+      const stat = await fs.stat(target)
+      return { uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
+    },
+
+    async exportTo(file, destPath) {
+      const source = filePath(file.id, file.type)
+      const stat = await fs.stat(source)
+      // Unlinked first: link(2) refuses an existing destination, and a symlink
+      // sitting at one would otherwise be followed by the copy fallback.
+      await fs.rm(destPath, { force: true })
+      try {
+        // Same volume: the destination becomes a second name for the same
+        // inode, so no bytes move at all. The reader gets a stable view even
+        // if the managed copy is evicted while it reads.
+        await fs.link(source, destPath)
+      } catch {
+        // Different volume, or a filesystem without hardlinks.
+        await fs.copyFile(source, destPath)
+      }
+      return stat.size
     },
 
     async writeFile(file, data) {

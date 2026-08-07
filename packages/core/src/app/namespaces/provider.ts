@@ -1,7 +1,7 @@
 /*
  * The surface an OS storage-provider shell drives: describe one file or
- * folder, list a folder a page at a time, and say what changed since an
- * anchor.
+ * folder, list a folder a page at a time, say what changed since an anchor,
+ * and land what the user did in the folder back in the library.
  *
  * A shell (a macOS File Provider extension, a Windows sync root, a FUSE mount)
  * has no database and caches nothing. It turns each OS callback into one call
@@ -17,6 +17,9 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
 import type { Directory } from '../../db/operations'
+import { getMimeTypeFromExtension } from '../../lib/fileTypes'
+import { uniqueId } from '../../lib/uniqueId'
+import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { FileRecordRow } from '../../types/files'
 import {
   directoryProviderId,
@@ -33,6 +36,14 @@ const MAX_PAGE_SIZE = 500
 export type ProviderNamespaceDeps = {
   getService: () => AppService
   db: DatabaseAdapter
+  fsIO: FsIOAdapter
+  /**
+   * Absolute directory both this process and the OS shell can reach. Every
+   * handoff path is checked against it, so a shell can only ever name a file
+   * inside the area the host chose for it. Absent means no shell is attached
+   * and every handoff call fails closed.
+   */
+  handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
 }
@@ -45,7 +56,7 @@ type TransferFlags = {
 }
 
 export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService['provider'] {
-  const { getService, db } = deps
+  const { getService, db, fsIO, handoffDir } = deps
   const pageSize = deps.maxPageSize ?? MAX_PAGE_SIZE
 
   /**
@@ -200,6 +211,52 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return ops.queryDirectorySubdirectories(db, path)
   }
 
+  /**
+   * Rejects any handoff path outside the directory the host nominated.
+   *
+   * The shell runs in a different trust domain, so an unchecked path would let
+   * it name any file the daemon can reach, both to read from and to overwrite.
+   * The check resolves `..` before comparing, and requires a separator after
+   * the prefix so a sibling directory sharing a name prefix cannot pass.
+   *
+   * A path is text here and nothing else, so a symlink planted inside the
+   * handoff directory passes this test. It is refused where it is opened, in
+   * the adapter, the only place the link is still distinguishable from what it
+   * points at.
+   */
+  function requireHandoffPath(candidate: string): string {
+    if (!handoffDir) {
+      throw new Error('No handoff directory is configured; this host cannot exchange files by path')
+    }
+    const resolved = normalizePath(candidate)
+    const root = normalizePath(handoffDir)
+    if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+      throw new Error(`Handoff path is outside ${root}`)
+    }
+    return resolved
+  }
+
+  function requireExport(): NonNullable<FsIOAdapter['exportTo']> {
+    if (!fsIO.exportTo) {
+      throw new Error('This host cannot place file bytes at a path')
+    }
+    return fsIO.exportTo
+  }
+
+  /** Resolves a file's bytes into managed storage, downloading them if absent. */
+  async function ensureLocal(fileId: string): Promise<{ id: string; type: string }> {
+    const service = getService()
+    const file = await service.files.getById(fileId)
+    if (!file) throw new Error(`No file with id ${fileId}`)
+    const target = { id: file.id, type: file.type }
+    if (await service.fs.getFileUri(target)) return target
+    await service.downloads.downloadFile(fileId)
+    if (!(await service.fs.getFileUri(target))) {
+      throw new Error(`Download did not produce local bytes for ${fileId}`)
+    }
+    return target
+  }
+
   /** Reads one item. Hoisted because other verbs read back through it. */
   async function item(id: string): Promise<ProviderItem | null> {
     const service = getService()
@@ -311,6 +368,158 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         expired: false,
       }
     },
+
+    async fetch(id, destPath) {
+      const dest = requireHandoffPath(destPath)
+      const target = await ensureLocal(id)
+      const bytes = await requireExport()(target, dest)
+      const fetched = await item(id)
+      if (!fetched) throw new Error(`No file with id ${id}`)
+      return { bytes, item: fetched }
+    },
+
+    async progress(id) {
+      const service = getService()
+      const download = service.downloads.getState().downloads[id]
+      if (download) {
+        // A download reports a fraction and never a byte count, so the size
+        // has to come from the row. Reported in bytes anyway: a shell drawing
+        // a progress bar out of these two numbers has no way to know which
+        // unit it was handed.
+        const file = await service.files.getById(id)
+        const total = file?.size ?? null
+        return { received: total === null ? 0 : Math.round(download.progress * total), total }
+      }
+      const upload = service.uploads.getState().uploads[id]
+      if (upload) {
+        return { received: Math.round(upload.progress * upload.size), total: upload.size }
+      }
+      return { received: 0, total: null }
+    },
+
+    async create(parentId, name, kind, srcPath) {
+      const service = getService()
+      const path = await folderPath(parentId)
+      if (path === undefined) throw new Error('No directory with that id')
+
+      if (kind === 'dir') {
+        const dir = await service.directories.create(name, path ?? undefined)
+        return directoryToItem(dir, parentId)
+      }
+
+      if (!srcPath) throw new Error('Creating a file needs the path holding its bytes')
+      const source = requireHandoffPath(srcPath)
+      if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
+
+      const id = uniqueId()
+      // The name the user chose is the better signal: the staged file is a
+      // UUID with no extension, so sniffing it alone types every text file as
+      // a byte stream.
+      const type =
+        getMimeTypeFromExtension(name) ??
+        (await service.fs.detectMimeType(source)) ??
+        'application/octet-stream'
+      const adopted = await fsIO.adoptFile({ id, type }, source)
+      const now = Date.now()
+      await service.files.create({
+        id,
+        name,
+        type,
+        kind: 'file',
+        size: adopted.size,
+        hash: adopted.hash,
+        trashedAt: null,
+        createdAt: now,
+        updatedAt: now,
+        mediaAssetId: null,
+        addedAt: now,
+        deletedAt: null,
+      })
+      await service.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
+      if (path !== null) {
+        const dir = await service.directories.getByPath(path)
+        if (dir) await service.directories.moveFile(id, dir.id)
+      }
+      // The uploader owns getting it to the indexer; this call only stages it.
+      await service.uploader.enqueueByIds([id])
+
+      const created = await item(id)
+      if (!created) throw new Error(`Created file ${id} could not be read back`)
+      return created
+    },
+
+    async write(id, srcPath) {
+      const service = getService()
+      const source = requireHandoffPath(srcPath)
+      if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
+
+      const file = await service.files.getById(id)
+      if (!file) throw new Error(`No file with id ${id}`)
+      const adopted = await fsIO.adoptFile({ id: file.id, type: file.type }, source)
+      await service.files.update(
+        { id: file.id, size: adopted.size, hash: adopted.hash },
+        { includeUpdatedAt: true },
+      )
+      await service.fs.upsertMeta({
+        fileId: file.id,
+        size: adopted.size,
+        addedAt: Date.now(),
+        usedAt: Date.now(),
+      })
+      await service.uploader.enqueueByIds([file.id])
+
+      const updated = await item(id)
+      if (!updated) throw new Error(`No file with id ${id}`)
+      return updated
+    },
+
+    async rename(id, newParentId, newName) {
+      const service = getService()
+      const directoryId = parseDirectoryProviderId(id)
+
+      if (directoryId !== null) {
+        const dir = await service.directories.getById(directoryId)
+        if (!dir) throw new Error('No directory with that id')
+        if (dir.name !== newName) await service.directories.rename(directoryId, newName)
+        const destination = await folderPath(newParentId)
+        if (destination === undefined) throw new Error('No directory with that id')
+        const current = await service.directories.getById(directoryId)
+        if (current && directoryParent(current.path) !== destination) {
+          await service.directories.moveDirectory(directoryId, destination)
+        }
+        const moved = await item(id)
+        if (!moved) throw new Error('No directory with that id')
+        return moved
+      }
+
+      const file = await service.files.getById(id)
+      if (!file) throw new Error(`No file with id ${id}`)
+      if (file.name !== newName) await service.files.renameFile(id, newName)
+
+      const destination = await folderPath(newParentId)
+      if (destination === undefined) throw new Error('No directory with that id')
+      // Moves the whole version stack. Moving the single current row would
+      // split a file's history across two folders.
+      const dir = destination === null ? null : await service.directories.getByPath(destination)
+      await service.files.moveFile(id, dir ? dir.id : null)
+
+      const updated = await item(id)
+      if (!updated) throw new Error(`No file with id ${id}`)
+      return updated
+    },
+
+    async trash(id) {
+      const service = getService()
+      const directoryId = parseDirectoryProviderId(id)
+      if (directoryId !== null) {
+        // Cascades to the files inside, all reversibly.
+        await service.directories.deleteAndTrashFiles(directoryId)
+        return
+      }
+      // Always reversible. The OS owns permanent delete, and a shell mistake
+      // must never be unrecoverable.
+      await service.files.trashFile(id)
+    },
   }
 }
 
@@ -318,4 +527,26 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 function directoryParent(path: string): string | null {
   const i = path.lastIndexOf('/')
   return i === -1 ? null : path.slice(0, i)
+}
+
+/**
+ * Collapses `.`, `..`, and repeated separators without touching the disk.
+ *
+ * Text only, because a fetch names a destination that does not exist yet and
+ * there is nothing on disk to resolve. Nothing here follows a link.
+ */
+function normalizePath(input: string): string {
+  const isAbsolute = input.startsWith('/')
+  const parts: string[] = []
+  for (const segment of input.split('/')) {
+    if (segment === '' || segment === '.') continue
+    if (segment === '..') {
+      if (parts.length > 0 && parts[parts.length - 1] !== '..') parts.pop()
+      else if (!isAbsolute) parts.push('..')
+      continue
+    }
+    parts.push(segment)
+  }
+  const joined = parts.join('/')
+  return isAbsolute ? `/${joined}` : joined
 }
