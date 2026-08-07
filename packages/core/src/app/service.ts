@@ -20,6 +20,7 @@ import type {
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
 import type { ChangeSource } from './events'
+import type { ProviderItem, ProviderPage } from '../types/provider'
 import type { ImportCopyResult } from '../services/fsFileUri'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -926,6 +927,17 @@ export interface AppService {
     setBatchUploading(ids: string[], batchId: string): void
     /** Returns IDs of uploads that are actively being processed. */
     getActiveIds(): string[]
+  }
+  /** What an OS storage-provider shell reads: files and folders as flat items. */
+  provider: {
+    /** Returns one item by provider id, or null if nothing visible has that id. */
+    item(id: string): Promise<ProviderItem | null>
+    /**
+     * Returns one page of a folder's contents, subfolders on the first page.
+     * `folderId` is null for the mount root. Pass the returned cursor back
+     * for the next page; its absence means the listing is complete.
+     */
+    list(folderId: string | null, cursor?: string): Promise<ProviderPage>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {

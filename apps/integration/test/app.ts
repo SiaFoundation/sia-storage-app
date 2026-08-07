@@ -112,6 +112,8 @@ const THUMBNAIL_SCAN_INTERVAL = 1000
 const DB_OPTIMIZE_INTERVAL = 5000
 
 export interface TestAppOptions {
+  /** Lowered so a paging test does not have to write 500 rows. */
+  maxPageSize?: number
   fsIO?: Partial<FsIOAdapter>
   thumbnail?: Partial<ThumbnailAdapter>
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
@@ -270,6 +272,7 @@ export function createTestApp(
     uploadManager,
   } = createAppService({
     db,
+    maxPageSize: options?.maxPageSize,
     storage,
     secrets,
     crypto,

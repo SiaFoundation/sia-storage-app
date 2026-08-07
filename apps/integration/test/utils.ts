@@ -87,3 +87,29 @@ export async function waitForCondition(
   }
   throw new Error(`${message ?? 'Condition'} not met within ${timeout}ms`)
 }
+
+/**
+ * A newer version of the same name, as another device's upload arrives:
+ * a new row id joining the same name-and-directory group.
+ */
+export async function createNewerVersion(
+  app: { app: { files: { create(record: Record<string, unknown>): Promise<unknown> } } },
+  first: { name: string; type: string },
+  id = 'newer-version',
+): Promise<void> {
+  const now = Date.now() + 1000
+  await app.app.files.create({
+    id,
+    name: first.name,
+    type: first.type,
+    kind: 'file',
+    size: 123,
+    hash: 'sha256:newer',
+    trashedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    mediaAssetId: null,
+    addedAt: now,
+    deletedAt: null,
+  })
+}
