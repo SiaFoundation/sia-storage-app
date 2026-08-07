@@ -44,8 +44,8 @@ export type SwrCacheBy<T = unknown> = {
   invalidateAll: () => Promise<any>
   /** Directly sets the cached data for the given key parts. */
   set: (data: T, ...parts: string[]) => Promise<any>
-  /** Returns debounced invalidate/invalidateAll that coalesce calls within `ms`. */
-  debounced: (ms: number) => {
+  /** Returns coalesced invalidate/invalidateAll: at once when quiet, once per `ms` under a stream. */
+  coalesced: (ms: number) => {
     invalidate: (...parts: string[]) => void
     invalidateAll: () => void
     flush: (...parts: string[]) => void
@@ -67,9 +67,8 @@ export interface AppCaches {
   tags: SwrCacheBy
   directories: SwrCacheBy
   library: SwrCacheBy
-  /** Imports list + per-import summary. Every import_files write invalidates
-   * it through a 1s debounce, so a large drain refreshes consumers at most
-   * once per second. */
+  /** Imports list + per-import summary. Every import_files write invalidates it
+   * through a 1s coalescer, so a large drain refreshes consumers once a second. */
   imports: SwrCacheBy
   fileById: SwrCacheBy
   thumbnails: {

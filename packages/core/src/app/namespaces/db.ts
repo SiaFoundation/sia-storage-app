@@ -5,8 +5,8 @@ import * as ops from '../../db/operations'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
-import { IMPORTS_CACHE_DEBOUNCE_MS } from '../../config'
-import { createDebouncedAction } from '../../lib/debouncedAction'
+import { IMPORTS_CACHE_COALESCE_MS } from '../../config'
+import { createCoalescer } from '../../lib/coalescer'
 import type { AppCaches, AppService } from '../service'
 
 function parseLogRow(row: {
@@ -194,14 +194,15 @@ export function buildDbNamespaces(
     return { metadata, deletedAt: record.deletedAt }
   }
 
-  const importsDebounced = caches.imports.debounced(IMPORTS_CACHE_DEBOUNCE_MS)
+  const importsCoalesced = caches.imports.coalesced(IMPORTS_CACHE_COALESCE_MS)
   function invalidateImports() {
-    importsDebounced.invalidateAll()
+    importsCoalesced.invalidateAll()
   }
-  // The scanner calls finalize once per file, up to 20 a tick during a drain.
-  // Every other invalidateLibrary caller fires once per operation, so paying a
-  // second of staleness to coalesce would buy them nothing.
-  const libraryDebounced = createDebouncedAction(invalidateLibrary, IMPORTS_CACHE_DEBOUNCE_MS)
+  // The scanner calls finalize once per file, up to 20 a tick during a drain;
+  // the coalescer keeps consumers refreshing once a second through it. Every
+  // other invalidateLibrary caller fires once per operation and calls it
+  // directly: an interactive change must not wait out another change's window.
+  const libraryCoalesced = createCoalescer(invalidateLibrary, IMPORTS_CACHE_COALESCE_MS)
 
   return {
     imports: {
@@ -258,7 +259,7 @@ export function buildDbNamespaces(
       },
       finalize: async (id, token) => {
         const result = await ops.finalizeImportFile(db, id, token)
-        libraryDebounced.trigger()
+        libraryCoalesced.trigger()
         invalidateImports()
         return result
       },
