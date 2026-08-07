@@ -112,6 +112,8 @@ const THUMBNAIL_SCAN_INTERVAL = 1000
 const DB_OPTIMIZE_INTERVAL = 5000
 
 export interface TestAppOptions {
+  /** Directory the provider namespace accepts handoff paths under. */
+  handoffDir?: string
   /** Lowered so a paging test does not have to write 500 rows. */
   maxPageSize?: number
   fsIO?: Partial<FsIOAdapter>
@@ -272,6 +274,7 @@ export function createTestApp(
     uploadManager,
   } = createAppService({
     db,
+    handoffDir: options?.handoffDir,
     maxPageSize: options?.maxPageSize,
     storage,
     secrets,
