@@ -1,6 +1,7 @@
 /*
- * The read surface an OS storage-provider shell drives: describe one file or
- * folder, and list a folder a page at a time.
+ * The surface an OS storage-provider shell drives: describe one file or
+ * folder, list a folder a page at a time, and say what changed since an
+ * anchor.
  *
  * A shell (a macOS File Provider extension, a Windows sync root, a FUSE mount)
  * has no database and caches nothing. It turns each OS callback into one call
@@ -24,6 +25,7 @@ import {
   type ProviderItem,
 } from '../../types/provider'
 import type { AppService } from '../service'
+import { folderFingerprint, formatAnchor, parseAnchor } from '../providerAnchor'
 
 /** Rows per page. */
 const MAX_PAGE_SIZE = 500
@@ -168,6 +170,12 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return row.directoryId ? directoryProviderId(row.directoryId) : null
   }
 
+  /** The directory row id for a path, or null when the path names nothing. */
+  async function dirIdFor(path: string): Promise<string | null> {
+    const dir = await getService().directories.getByPath(path)
+    return dir ? dir.id : null
+  }
+
   async function listFiles(
     path: string | null,
     limit: number,
@@ -240,6 +248,68 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
       const nextCursor = rows.length === pageSize ? String(offset + rows.length) : undefined
       return nextCursor === undefined ? { items } : { items, cursor: nextCursor }
+    },
+
+    async changes(folderId, anchor) {
+      const since = parseAnchor(anchor)
+      const empty = { items: [], deletedIds: [], anchor, hasMore: false, expired: false }
+
+      // Every folder at once. A file leaving one changes neither that folder's
+      // contents nor the new one's in a way a per-folder read can express, so
+      // this is where a move becomes visible. It lists no folders of its own,
+      // so it has no folder set to compare.
+      if (folderId === WORKING_SET_ID) {
+        const page = await ops.queryProviderChanges(db, null, since, pageSize)
+        return {
+          items: await itemsForFiles(page.changed, parentOf),
+          deletedIds: page.removed,
+          anchor: formatAnchor(page.cursor, ''),
+          hasMore: page.hasMore,
+          expired: false,
+        }
+      }
+
+      const path = await folderPath(folderId)
+      if (path === undefined) return empty
+
+      const directoryId = path === null ? UNFILED_DIRECTORY_ID : ((await dirIdFor(path)) ?? null)
+      if (directoryId === null) return empty
+
+      const children = await subdirectories(path)
+      const folders = folderFingerprint(children.map((dir) => dir.id))
+
+      // A deleted folder leaves no row to name, so it can only be reported by
+      // expiring the anchor and letting the caller list, which says what exists
+      // rather than what changed. Any difference expires: a fingerprint cannot
+      // tell an addition from an addition beside a removal, and a missed
+      // removal is a folder that never goes away.
+      if (since.folders !== '' && since.folders !== folders) {
+        return {
+          items: [],
+          deletedIds: [],
+          anchor: formatAnchor(since, folders),
+          hasMore: false,
+          expired: true,
+        }
+      }
+
+      const page = await ops.queryProviderChanges(db, directoryId, since, pageSize)
+      const items = await itemsForFiles(page.changed, parentOf)
+
+      // Every subfolder, every time. A folder carries no edit clock, so there
+      // is nothing to compare an anchor against; the OS drops the ones whose
+      // metadata version it already holds.
+      for (const dir of children) {
+        items.push(directoryToItem(dir, folderId))
+      }
+
+      return {
+        items,
+        deletedIds: page.removed,
+        anchor: formatAnchor(page.cursor, folders),
+        hasMore: page.hasMore,
+        expired: false,
+      }
     },
   }
 }

@@ -20,7 +20,7 @@ import type {
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
 import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
 import type { ChangeSource } from './events'
-import type { ProviderItem, ProviderPage } from '../types/provider'
+import type { ProviderChanges, ProviderItem, ProviderPage } from '../types/provider'
 import type { ImportCopyResult } from '../services/fsFileUri'
 import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
 import type {
@@ -938,6 +938,14 @@ export interface AppService {
      * for the next page; its absence means the listing is complete.
      */
     list(folderId: string | null, cursor?: string): Promise<ProviderPage>
+    /**
+     * Returns what changed in a folder since `anchor`, plus the anchor to pass
+     * next time. `WORKING_SET_ID` reads across every folder, the only scope
+     * that can report a file moving out of one. A page is bounded, so
+     * `hasMore` says whether to come straight back rather than wait for the
+     * next signal.
+     */
+    changes(folderId: string | null, anchor: string): Promise<ProviderChanges>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {
