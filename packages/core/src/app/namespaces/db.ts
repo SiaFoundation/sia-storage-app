@@ -51,6 +51,7 @@ export function buildDbNamespaces(
   | 'caches'
   | 'sync'
   | 'uploads'
+  | 'provider'
   | 'downloads'
   | 'shares'
   | 'connection'

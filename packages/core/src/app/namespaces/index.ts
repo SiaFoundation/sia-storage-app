@@ -9,6 +9,7 @@ import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { swrCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
 import { createLibraryVersionCache } from '../libraryVersionCache'
+import { buildProviderNamespace } from './provider'
 import type { AppCaches, AppService, AppServiceInternal } from '../service'
 import type { ConnectionState, InitState, SyncState } from '../stores'
 import { buildAuthNamespace } from './auth'
@@ -33,6 +34,8 @@ export interface AppServiceAdapters {
   sdkAuth: SdkAuthAdapters
   thumbnail?: ThumbnailAdapter
   detectMimeType?: (path: string) => Promise<string | null>
+  /** Lowered by tests, which cannot afford to write a full page of rows. */
+  maxPageSize?: number
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -196,6 +199,11 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       },
     },
     uploads: uploadsNamespace,
+    provider: buildProviderNamespace({
+      getService: () => service,
+      db: adapters.db,
+      maxPageSize: adapters.maxPageSize,
+    }),
     downloads: downloadsNamespace,
     shares: sharesNamespace,
     connection: {

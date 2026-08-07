@@ -234,6 +234,37 @@ export async function queryDirectoryChildren(
   }))
 }
 
+/**
+ * The children of one directory, without the per-row descendant counts.
+ *
+ * The provider surface reads children on every listing and every change poll,
+ * and draws nothing from the counts; the counted variant runs a recursive
+ * COUNT over `files` per row, which is real work to throw away that often.
+ */
+export async function queryDirectorySubdirectories(
+  db: DatabaseAdapter,
+  parentPath: string | null,
+): Promise<Directory[]> {
+  let rows: DirectoryRow[]
+  if (parentPath === null) {
+    rows = await db.getAllAsync<DirectoryRow>(
+      `SELECT d.id, d.path, d.createdAt FROM directories d
+       WHERE d.path NOT LIKE '%/%' ESCAPE '\\'
+       ORDER BY d.nameSortKey`,
+    )
+  } else {
+    const escaped = escapeLikePattern(parentPath)
+    rows = await db.getAllAsync<DirectoryRow>(
+      `SELECT d.id, d.path, d.createdAt FROM directories d
+       WHERE d.path LIKE ? || '/%' ESCAPE '\\' AND d.path NOT LIKE ? || '/%/%' ESCAPE '\\'
+       ORDER BY d.nameSortKey`,
+      escaped,
+      escaped,
+    )
+  }
+  return rows.map(toDirectory)
+}
+
 export async function queryAllDirectoriesWithCounts(
   db: DatabaseAdapter,
 ): Promise<DirectoryWithCount[]> {

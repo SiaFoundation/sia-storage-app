@@ -18,6 +18,7 @@ export {
   queryDirectoryById,
   queryDirectoryByPath,
   queryDirectoryChildren,
+  queryDirectorySubdirectories,
   queryDirectoryPathForFile,
   queryFileByNameInDirectory,
   queryFilesByDirectoryPath,
@@ -179,6 +180,7 @@ export {
   type SortDir,
   UNFILED_DIRECTORY_ID,
 } from './library'
+export * from './providerChanges'
 export {
   clearObjectIfUnchanged,
   clearObjectsNeedsSyncUp,
