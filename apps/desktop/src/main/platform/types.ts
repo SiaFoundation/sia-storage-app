@@ -10,7 +10,13 @@
 
 import type { DesktopConfig } from '../config'
 
-export type ShellState = 'absent' | 'starting' | 'mounted' | 'error'
+/**
+ * `unsupported` means this build cannot mount at all, which is different from a
+ * mount that was attempted and failed: nothing is wrong and there is nothing to
+ * retry. On macOS it is what a run from source gets, because registering a
+ * mount needs a signed helper that only the packaged app carries.
+ */
+export type ShellState = 'absent' | 'starting' | 'mounted' | 'error' | 'unsupported'
 
 export type ShellConfig = {
   /** Where the shell reaches the daemon: a unix socket, or a named pipe. */
@@ -37,7 +43,8 @@ export interface PlatformIntegration {
   shellPaths(config: DesktopConfig): ShellPaths
   /** Brings the OS mount up. Calling it twice is not an error. */
   start(config: ShellConfig): Promise<void>
-  /** Takes it down and leaves no registration behind. */
+  /** Stops serving the mount. Whether the registration survives is the
+   * platform's call: macOS hides the domain so downloaded files stay. */
   stop(): Promise<void>
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
