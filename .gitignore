@@ -41,6 +41,9 @@ android-release.keystore
 .env.*
 !.env.example
 !.env.test
+# One machine's certificates, profiles and bundle ids.
+apps/desktop/env/*.env
+!apps/desktop/env/*.example.env
 
 # Claude Code
 # CLAUDE.md, AGENTS.md and REVIEW.md are checked in; personal notes go in CLAUDE.local.md.

@@ -46,6 +46,6 @@ lifetime is wrong on the second launch.
 
 ## Swift
 
-Swift is here only where the OS requires it, and the extension is sandboxed so
-it cannot be Electron. New surface goes in TypeScript unless the OS forces
-otherwise.
+Swift is here only where the OS requires it: the sandboxed extension, which
+cannot be Electron, and the helper bundle carrying the entitlement to add the
+Finder domain. New surface goes in TypeScript.
