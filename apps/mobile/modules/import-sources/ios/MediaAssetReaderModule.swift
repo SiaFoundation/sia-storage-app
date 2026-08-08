@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Foundation
+import Photos
 
 /// Expo bindings for photo-library reads: stream an asset's bytes to a path
 /// with throttled progress events and cancellation, plus batched size hints.
@@ -44,6 +45,24 @@ public class MediaAssetReaderModule: Module {
     AsyncFunction("getSizes") { (assetIds: [String], promise: Promise) in
       DispatchQueue.global(qos: .userInitiated).async {
         promise.resolve(AssetCopier.sizes(assetIds: assetIds))
+      }
+    }
+
+
+    AsyncFunction("deleteAssets") { (assetIds: [String], promise: Promise) in
+      let assets = PHAsset.fetchAssets(withLocalIdentifiers: assetIds, options: nil)
+      guard assets.count > 0 else {
+        promise.resolve(true)
+        return
+      }
+      PHPhotoLibrary.shared().performChanges({
+        PHAssetChangeRequest.deleteAssets(assets)
+      }) { success, error in
+        if let error {
+          promise.reject(ImportSourcesException("delete-failed", error.localizedDescription))
+        } else {
+          promise.resolve(success)
+        }
       }
     }
   }

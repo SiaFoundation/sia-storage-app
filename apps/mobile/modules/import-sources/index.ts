@@ -54,6 +54,7 @@ type NativeReader = {
   ): Promise<{ size: number; sha256: string; mime: string; variant: 'original' | 'rendered' }>
   cancelCopy(copyId: string): Promise<void>
   getSizes(assetIds: string[]): Promise<Record<string, number | null>>
+  deleteAssets(assetIds: string[]): Promise<boolean>
   addListener(event: 'copyProgress', cb: (e: CopyProgressEvent) => void): Subscription
 }
 
@@ -176,6 +177,12 @@ export async function cancelCopy(copyId: string): Promise<void> {
 export async function getAssetSizes(assetIds: string[]): Promise<Record<string, number | null>> {
   if (assetIds.length === 0) return {}
   return requireReader().getSizes(assetIds)
+}
+
+/** Remove assets from Apple Photos. iOS presents its standard confirmation sheet. */
+export async function deleteMediaAssets(assetIds: string[]): Promise<boolean> {
+  if (assetIds.length === 0) return true
+  return requireReader().deleteAssets(assetIds)
 }
 
 export function addCopyProgressListener(cb: (e: CopyProgressEvent) => void): Subscription {

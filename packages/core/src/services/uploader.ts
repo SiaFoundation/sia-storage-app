@@ -62,6 +62,8 @@ export function calculateAllFileProgress(
 export interface UploaderAdapters {
   createFileReader: (uri: string) => Reader
   progressScheduler?: (cb: () => void) => void
+  /** Best-effort platform cleanup after objects are pinned and saved locally. */
+  onFilesUploaded?: (files: FileRecordRow[]) => Promise<void>
 }
 
 /** A file queued for upload with its resolved URI and size. */
@@ -1267,6 +1269,18 @@ export class UploadManager {
         await new Promise((resolve) => setTimeout(resolve, SAVE_REMOVAL_DELAY_MS))
       }
       this.app.uploads.removeMany(successfulFileIds)
+
+      if (this.adapters.onFilesUploaded) {
+        const successfulIds = new Set(successfulFileIds)
+        const files = batch.files
+          .filter((entry) => successfulIds.has(entry.fileId))
+          .map((e) => e.file)
+        try {
+          await this.adapters.onFilesUploaded(files)
+        } catch (e) {
+          logger.warn('uploadManager', 'post_upload_cleanup_failed', { error: e as Error })
+        }
+      }
     }
 
     return successfulFileIds

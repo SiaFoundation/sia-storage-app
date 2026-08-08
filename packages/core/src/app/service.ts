@@ -780,6 +780,10 @@ export interface AppService {
     getPhotoImportDirectory(): Promise<string>
     /** Sets the photo import directory. */
     setPhotoImportDirectory(value: string): Promise<void>
+    /** Returns whether uploaded iOS Photos assets should be removed from the device library. */
+    getDeletePhotosAfterUpload(): Promise<boolean>
+    /** Enables or disables removal of iOS Photos assets after a successful upload. */
+    setDeletePhotosAfterUpload(value: boolean): Promise<void>
     /** Returns the currently active library tab. */
     getActiveLibraryTab(): Promise<string>
     /** Sets the active library tab. */
