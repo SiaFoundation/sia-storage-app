@@ -17,6 +17,7 @@ import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
+import { RESET_MARKER_KEYS, recordForcedReset, resolveForcedReset } from './forcedReset'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
@@ -31,14 +32,10 @@ import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
 import { getUploadManager } from './uploader'
 
-// Change this value to force a one-time app reset on next launch.
-// Set to null to disable. Stored via app service settings so each value only triggers once.
-const FORCED_RESET_VERSION: string | null = '71936'
-
 export async function initApp(): Promise<void> {
   // Attach the AppState listener first so foreground/background
   // transitions during init are observed. Idempotent; safe to call on
-  // re-init from FORCED_RESET / OnboardingFinishedScreen. The suspend
+  // re-init from a forced reset / OnboardingFinishedScreen. The suspend
   // flow itself is gated on isInitializing inside onAppStateChange so
   // an early 'background' event during init doesn't race the
   // cleanup/services steps.
@@ -54,21 +51,20 @@ export async function initApp(): Promise<void> {
   ])
   applyLogContext(deviceId, mnemonicHash)
 
-  if (FORCED_RESET_VERSION) {
-    const completed = await app().settings.getCompletedResetVersion()
-    const hasOnboarded = await app().settings.getHasOnboarded()
-    if (completed !== FORCED_RESET_VERSION) {
-      if (hasOnboarded) {
-        await resetApp()
-        return
-      }
-      await app().settings.setCompletedResetVersion(FORCED_RESET_VERSION)
-    }
+  const hasOnboarded = await app().settings.getHasOnboarded()
+
+  // Before the database opens: a reset drops the file, re-migrates, and
+  // re-enters initApp itself.
+  const forcedReset = await resolveForcedReset(hasOnboarded)
+  if (forcedReset === 'reset') {
+    await resetLocalDataAndResync()
+    return
+  }
+  if (forcedReset === 'record') {
+    await recordForcedReset()
   }
 
   startInitState()
-
-  const hasOnboarded = await app().settings.getHasOnboarded()
 
   const steps: StepDefinition[] = [
     {
@@ -186,7 +182,7 @@ const REMOTE_LOG_KEEP_KEYS = ['remoteLogEnabled', 'remoteLogEndpoint', 'deviceId
 const RESYNC_KEEP_KEYS = [
   'hasOnboarded',
   'indexerURL',
-  'completedResetVersion',
+  ...RESET_MARKER_KEYS,
   ...REMOTE_LOG_KEEP_KEYS,
 ]
 
@@ -242,10 +238,6 @@ export async function resetLocalDataAndSignOut() {
   await runResetFlow({ label: 'Signing out', keepAuth: false })
 }
 
-// Preserved as an alias because initApp's FORCED_RESET_VERSION branch and
-// other callers still reference it; sign-out is the historical behavior.
-export const resetApp = resetLocalDataAndSignOut
-
 async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: boolean }) {
   // Show splash immediately so the UI stops rendering data we're about to wipe.
   startInitState()
@@ -267,11 +259,9 @@ async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: bool
     return
   }
 
-  // Mark the forced reset complete only on success so a failed reset retries
-  // on next launch.
-  if (FORCED_RESET_VERSION) {
-    await app().settings.setCompletedResetVersion(FORCED_RESET_VERSION)
-  }
+  // Only on success, so a failed reset retries next launch. A user-triggered
+  // reset records any pending nonce too: it cleared what that nonce was asking for.
+  await recordForcedReset()
 
   // Re-initialize the app from clean state.
   await initApp()
