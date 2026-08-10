@@ -112,6 +112,7 @@ function localObjectToSealedObject(object: LocalObject): SealedObject {
     encryptedDataKey: Buffer.from(new Uint8Array(object.encryptedDataKey)),
     encryptedMetadataKey: Buffer.from(new Uint8Array(object.encryptedMetadataKey)),
     slabs: object.slabs.map((s) => ({
+      version: s.version,
       encryptionKey: Buffer.from(new Uint8Array(s.encryptionKey)),
       minShards: s.minShards,
       sectors: s.sectors,
@@ -188,6 +189,7 @@ function wrapPinnedObject(obj: PinnedObject): PinnedObjectRef {
         encryptedDataKey: toArrayBuffer(sealed.encryptedDataKey),
         encryptedMetadataKey: toArrayBuffer(sealed.encryptedMetadataKey),
         slabs: sealed.slabs.map((s) => ({
+          version: s.version,
           encryptionKey: toArrayBuffer(s.encryptionKey),
           minShards: s.minShards,
           sectors: s.sectors,
@@ -203,6 +205,7 @@ function wrapPinnedObject(obj: PinnedObject): PinnedObjectRef {
     },
     slabs() {
       return obj.slabs().map((s) => ({
+        version: s.version,
         encryptionKey: toArrayBuffer(s.encryptionKey),
         minShards: s.minShards,
         sectors: s.sectors,
@@ -226,8 +229,8 @@ function wrapPackedUpload(packed: PackedUpload): PackedUploadRef {
     async add(reader: Reader): Promise<bigint> {
       return packed.add(readerToReadableStream(reader))
     },
-    async cancel(): Promise<void> {
-      await packed.cancel()
+    cancel(): void {
+      packed.cancel()
     },
     async finalize(): Promise<PinnedObjectRef[]> {
       const objects = await packed.finalize()
