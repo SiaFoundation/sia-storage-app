@@ -129,7 +129,7 @@
         "react-native-safe-area-context": "5.6.2",
         "react-native-screens": "4.23.0",
         "react-native-share": "12.2.5",
-        "react-native-sia": "0.15.1",
+        "react-native-sia": "0.15.2",
         "react-native-svg": "15.15.3",
         "react-native-view-shot": "^5.1.0",
         "react-native-webview": "13.16.0",
@@ -191,7 +191,7 @@
       "name": "@siastorage/node-adapters",
       "version": "0.0.1",
       "dependencies": {
-        "@siafoundation/sia-storage": "0.0.13",
+        "@siafoundation/sia-storage": "0.0.14",
         "@siastorage/core": "workspace:*",
         "@siastorage/logger": "workspace:*",
         "better-sqlite3": "12.6.2",
@@ -880,17 +880,17 @@
 
     "@react-navigation/routers": ["@react-navigation/routers@7.5.3", "", { "dependencies": { "nanoid": "^3.3.11" } }, "sha512-1tJHg4KKRJuQ1/EvJxatrMef3NZXEPzwUIUZ3n1yJ2t7Q97siwRtbynRpQG9/69ebbtiZ8W3ScOZF/OmhvM4Rg=="],
 
-    "@siafoundation/sia-storage": ["@siafoundation/sia-storage@0.0.13", "", { "optionalDependencies": { "@siafoundation/sia-storage-darwin-arm64": "0.0.13", "@siafoundation/sia-storage-darwin-x64": "0.0.13", "@siafoundation/sia-storage-linux-arm64-gnu": "0.0.13", "@siafoundation/sia-storage-linux-x64-gnu": "0.0.13", "@siafoundation/sia-storage-win32-x64-msvc": "0.0.13" } }, "sha512-pu1l8oBpnlUe5Pz/KnZTDisKOUoSmYWPiIycg5Fc5TlEvMFoAvEDdhqOmlrJbWP5H5QhOM0YVH3s49qW+Uv7QA=="],
+    "@siafoundation/sia-storage": ["@siafoundation/sia-storage@0.0.14", "", { "optionalDependencies": { "@siafoundation/sia-storage-darwin-arm64": "0.0.14", "@siafoundation/sia-storage-darwin-x64": "0.0.14", "@siafoundation/sia-storage-linux-arm64-gnu": "0.0.14", "@siafoundation/sia-storage-linux-x64-gnu": "0.0.14", "@siafoundation/sia-storage-win32-x64-msvc": "0.0.14" } }, "sha512-TIS3IH6SBZra2l0WoYxa56BdMcfYV9zvfXQv8fnQQ2sn/dtmi7YpHOHslTVQlG4Or0dUX85feaBu3q+gIZ6NrQ=="],
 
-    "@siafoundation/sia-storage-darwin-arm64": ["@siafoundation/sia-storage-darwin-arm64@0.0.13", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Dt0OKVFDx829JULNJ8CcNUmDbi7nI1hBMEkOpRMqpHJ+jJLeg9hcqcdgp1GLWvsDrWZ4wUO9zI1Z+F57kv0Pcw=="],
+    "@siafoundation/sia-storage-darwin-arm64": ["@siafoundation/sia-storage-darwin-arm64@0.0.14", "", { "os": "darwin", "cpu": "arm64" }, "sha512-pc86+evbBH4LXwAdMmjpw9n27MgjPejoT5btdKQm+/CDEyMRIGPECOPRo0T2bc6yaBwe2p3R818HcBx6DMyP8w=="],
 
-    "@siafoundation/sia-storage-darwin-x64": ["@siafoundation/sia-storage-darwin-x64@0.0.13", "", { "os": "darwin", "cpu": "x64" }, "sha512-gkgTzBYWYEiqPmAlgrgmXSq2xctbhWX89QmHNENyiRRRgwjwP7Fxbx1fUkZ4bIB7op+cc6L0jwTTXwo0/xcd4g=="],
+    "@siafoundation/sia-storage-darwin-x64": ["@siafoundation/sia-storage-darwin-x64@0.0.14", "", { "os": "darwin", "cpu": "x64" }, "sha512-5BNCip8F46VBiOcOMuGUVqrLhgG3XgouC1l0n3eN9lZtBqWv4WU1msu4NHNFs8V05XAdWfro8Xv/nh8iUwXUyw=="],
 
-    "@siafoundation/sia-storage-linux-arm64-gnu": ["@siafoundation/sia-storage-linux-arm64-gnu@0.0.13", "", { "os": "linux", "cpu": "arm64" }, "sha512-OGbtV4gJuE3Ns7WfEW4OTpO9IkGjEGMra14j+86E61g2H67JqmLfV9uh5PkpGPdpHo1o3sgqmfhJeP7gqvDQHg=="],
+    "@siafoundation/sia-storage-linux-arm64-gnu": ["@siafoundation/sia-storage-linux-arm64-gnu@0.0.14", "", { "os": "linux", "cpu": "arm64" }, "sha512-DGNdIy/ewJyIYzHu8soggKTtN6AuvYoSUV3+gS0XpeysPecN5VZpiYsLSaXQ+OEWKEd3bqlOgR/ksUqlcYkDnA=="],
 
-    "@siafoundation/sia-storage-linux-x64-gnu": ["@siafoundation/sia-storage-linux-x64-gnu@0.0.13", "", { "os": "linux", "cpu": "x64" }, "sha512-xP9oRO3Z8ka/mjj/xcKesELkDGA8ZqEX4wTwoj4k5NrtqyeIhUg8uaxQu12RKHJsbtcY2x2Bj4DeT3jKdJcifQ=="],
+    "@siafoundation/sia-storage-linux-x64-gnu": ["@siafoundation/sia-storage-linux-x64-gnu@0.0.14", "", { "os": "linux", "cpu": "x64" }, "sha512-+VtaPDwj/FDTHjurJXauCX+/QCwpnlEvQmbrEBGnMO3F8zq/SDlvB8QhJO8G+edMUURikvAOXJrh1D+OgYkuKA=="],
 
-    "@siafoundation/sia-storage-win32-x64-msvc": ["@siafoundation/sia-storage-win32-x64-msvc@0.0.13", "", { "os": "win32", "cpu": "x64" }, "sha512-3Bp4RKYqYuMiU7L8WibnORRcWdz4RnVTKqVK9jXqDEA56rkDSfv8p7zDnJ2cgmiF0OpPAJA10iitt41bSTPpUg=="],
+    "@siafoundation/sia-storage-win32-x64-msvc": ["@siafoundation/sia-storage-win32-x64-msvc@0.0.14", "", { "os": "win32", "cpu": "x64" }, "sha512-jc+OItqpSP85gSQiWXywGEVMqeUnGVDdiv4ag50W4FUjvPGmZG0Ta9UGBATWUDQL80Css0bDhL6kMVlG9dJA3A=="],
 
     "@siastorage/benchmark": ["@siastorage/benchmark@workspace:apps/benchmark"],
 
@@ -1974,7 +1974,7 @@
 
     "react-native-share": ["react-native-share@12.2.5", "", {}, "sha512-2uwd/PdlUyvpsSBfL7OMiL4sD0Ja51wu5m62JSIXjrtlF+uSTUOGsMrE49ncIRYziqAfYUeI195WwhpvqXB0ww=="],
 
-    "react-native-sia": ["react-native-sia@0.15.1", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-Qu/oI4ivqXRHBmQIco4qW4I5OwsiLUg7GCBYJUZMx+451puS1yx0kMqJdSfuJReWPXcyQIIkwGDVYgjwuPPyZw=="],
+    "react-native-sia": ["react-native-sia@0.15.2", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-w50+G6YVA/VLSQ2mp5sLpLsZdJtgKnoosvKFEQji5BkVmYnxhDcoSnY2pVAEVmCTrbqXfaMm8MMk7HFmz9jbHQ=="],
 
     "react-native-svg": ["react-native-svg@15.15.3", "", { "dependencies": { "css-select": "^5.1.0", "css-tree": "^1.1.3", "warn-once": "0.1.1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA=="],
 

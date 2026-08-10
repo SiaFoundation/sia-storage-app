@@ -105,7 +105,7 @@ class MockPacker implements PackedUploadRef {
     return size
   }
 
-  async cancel(): Promise<void> {
+  cancel(): void {
     this.files = []
     this.totalSize = 0n
   }

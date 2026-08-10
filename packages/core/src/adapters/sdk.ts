@@ -1,4 +1,5 @@
 import type { LocalObject } from '../encoding/localObject'
+import type { Slab } from '../types/slabs'
 import type { Reader } from './fs'
 
 export interface ObjectsCursor {
@@ -17,13 +18,7 @@ export interface SealedObjectRef {
   id: string
   encryptedDataKey: ArrayBuffer
   encryptedMetadataKey: ArrayBuffer
-  slabs: Array<{
-    encryptionKey: ArrayBuffer
-    minShards: number
-    sectors: Array<{ root: string; hostKey: string }>
-    offset: number
-    length: number
-  }>
+  slabs: Array<Slab>
   encryptedMetadata: ArrayBuffer
   dataSignature: ArrayBuffer
   metadataSignature: ArrayBuffer
@@ -38,20 +33,14 @@ export interface PinnedObjectRef {
   size(): bigint
   encodedSize(): bigint
   seal(appKey: AppKeyRef): SealedObjectRef
-  slabs(): Array<{
-    encryptionKey: ArrayBuffer
-    minShards: number
-    sectors: Array<{ root: string; hostKey: string }>
-    offset: number
-    length: number
-  }>
+  slabs(): Array<Slab>
   createdAt(): Date
   updatedAt(): Date
 }
 
 export interface PackedUploadRef {
   add(reader: Reader): Promise<bigint>
-  cancel(): Promise<void>
+  cancel(): void
   finalize(): Promise<PinnedObjectRef[]>
   length(): bigint
   remaining(): bigint

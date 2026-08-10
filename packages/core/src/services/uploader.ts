@@ -331,7 +331,7 @@ export class UploadManager {
         batchId: this.batch?.batchId,
       })
       try {
-        await this.packer.cancel()
+        this.packer.cancel()
       } catch (e) {
         logger.debug('uploadManager', 'batch_cancel_error', {
           error: e as Error,
@@ -343,7 +343,7 @@ export class UploadManager {
         batchId: this.uploadingBatch?.batchId,
       })
       try {
-        await this.uploadingPacker.cancel()
+        this.uploadingPacker.cancel()
       } catch (e) {
         logger.debug('uploadManager', 'uploading_batch_cancel_error', {
           error: e as Error,

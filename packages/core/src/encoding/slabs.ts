@@ -8,6 +8,7 @@ export const pinnedSectorSchema = z.object({
 }) satisfies z.ZodType<PinnedSector>
 
 export const slabSchema = z.object({
+  version: z.number().int().nonnegative(),
   encryptionKey: z.instanceof(ArrayBuffer),
   minShards: z.number().int().nonnegative(),
   sectors: z.array(pinnedSectorSchema),
@@ -16,6 +17,7 @@ export const slabSchema = z.object({
 }) satisfies z.ZodType<Slab>
 
 type SlabStorage = {
+  version?: number
   encryptionKey: string
   minShards: number
   sectors: PinnedSector[]
@@ -24,6 +26,8 @@ type SlabStorage = {
 }
 
 const slabStorageSchema = z.object({
+  // Rows written before slab versions have no version key, equivalent to zero.
+  version: z.number().int().nonnegative().optional(),
   encryptionKey: z.hex(),
   minShards: z.number().int().nonnegative(),
   sectors: z.array(pinnedSectorSchema),
@@ -35,6 +39,7 @@ const slabStorageSchema = z.object({
 export const slabCodec = z.codec(slabStorageSchema, slabSchema, {
   decode: (stored: SlabStorage): Slab => ({
     ...stored,
+    version: stored.version ?? 0,
     encryptionKey: hexArrayBufferCodec.decode(stored.encryptionKey),
   }),
   encode: (domain: Slab): SlabStorage => ({
