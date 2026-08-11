@@ -9,7 +9,7 @@
 import { app, ipcMain, shell } from 'electron'
 import { Daemon } from './daemon'
 import { log } from './log'
-import { daemonLogPath } from './paths'
+import { daemonLogPath, desktopLogPath } from './paths'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
 import { beginQuit, resizeToContent } from './windows'
@@ -45,7 +45,12 @@ export function registerBridge(platform: PlatformIntegration): void {
     const path = platform.mountPath()
     if (path) await openPath(path)
   })
-  ipcMain.handle('open:logs', () => openPath(daemonLogPath()))
+  // Both, because which one holds the answer depends on what went wrong: a
+  // mount that will not register is in this process's, not the daemon's.
+  ipcMain.handle('open:logs', async () => {
+    await openPath(desktopLogPath())
+    await openPath(daemonLogPath())
+  })
 
   ipcMain.handle('app:quit', () => {
     beginQuit()
