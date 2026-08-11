@@ -642,6 +642,18 @@ describe('queryFileCount', () => {
     })
     expect(count).toBe(0)
   })
+
+  it('ignores limit: the aggregate counts the full filtered set', async () => {
+    await insertFile(db(), makeFileRecord('f1'))
+    await insertFile(db(), makeFileRecord('f2'))
+    const count = await queryFileCount(db(), {
+      order: 'ASC',
+      includeThumbnails: true,
+      includeOldVersions: true,
+      limit: 0,
+    })
+    expect(count).toBe(2)
+  })
 })
 
 describe('queryFileStats', () => {
@@ -661,6 +673,14 @@ describe('queryFileStats', () => {
     })
     expect(stats.count).toBe(0)
     expect(stats.totalBytes).toBe(0)
+  })
+
+  it('ignores limit: the aggregate sums the full filtered set', async () => {
+    await insertFile(db(), makeFileRecord('f1', { size: 500 }))
+    await insertFile(db(), makeFileRecord('f2', { size: 300 }))
+    const stats = await queryFileStats(db(), { order: 'ASC', limit: 0 })
+    expect(stats.count).toBe(2)
+    expect(stats.totalBytes).toBe(800)
   })
 })
 

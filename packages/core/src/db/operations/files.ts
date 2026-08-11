@@ -339,9 +339,9 @@ function buildFileRecordsQuery(
 }
 
 export async function queryFileCount(db: DatabaseAdapter, opts: FileQueryOpts): Promise<number> {
-  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
+  const { where, params } = buildFileRecordsQuery(opts)
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
+    `SELECT COUNT(*) as count FROM files ${where}`,
     ...params,
   )
   return row?.count ?? 0
@@ -351,9 +351,9 @@ export async function queryFileStats(
   db: DatabaseAdapter,
   opts: FileQueryOpts,
 ): Promise<{ count: number; totalBytes: number }> {
-  const { where, params, orderExpr, limitExpr } = buildFileRecordsQuery(opts)
+  const { where, params } = buildFileRecordsQuery(opts)
   const row = await db.getFirstAsync<{ count: number; totalBytes: number }>(
-    `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files ${where} ORDER BY ${orderExpr}${limitExpr}`,
+    `SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as totalBytes FROM files ${where}`,
     ...params,
   )
   return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 }
