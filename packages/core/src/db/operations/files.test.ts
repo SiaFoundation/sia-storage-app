@@ -22,6 +22,7 @@ import {
   readFilesByIds,
   updateFile,
   updateManyFiles,
+  upsertManyFiles,
 } from './files'
 import { insertDirectory } from './directories'
 import { upsertFsMeta } from './fs'
@@ -654,6 +655,20 @@ describe('readFilesByIds edge cases', () => {
     const results = await readFilesByIds(db(), ['f1'])
     expect(results).toHaveLength(1)
     expect(results[0].deletedAt).toBe(2000)
+  })
+})
+
+describe('upsertManyFiles', () => {
+  it('renaming the current version away recalculates the vacated group', async () => {
+    await insertFile(db(), makeFileRecord('v1', { name: 'a.txt', updatedAt: 100 }))
+    await insertFile(db(), makeFileRecord('v2', { name: 'a.txt', updatedAt: 200 }))
+    await recalculateCurrentForGroups(db(), [{ name: 'a.txt', directoryId: null }])
+    expect(await currentFlag('v2')).toBe(1)
+
+    await upsertManyFiles(db(), [makeFileRecord('v2', { name: 'b.txt', updatedAt: 300 })])
+
+    expect(await currentFlag('v1')).toBe(1)
+    expect(await currentFlag('v2')).toBe(1)
   })
 })
 

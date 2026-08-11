@@ -468,6 +468,13 @@ async function processBatch(
       ...creates.map((e) => e.fileRecord),
       ...remoteWins.map((e) => e.fileRecord),
     ]
+    // A remote rename arrives as a file upsert that rewrites `name`, moving the row into a
+    // different (name, directoryId) group. Read the groups these rows sit in before that
+    // rewrite, so the recalc below can also recompute the group a rename empties. Creates have
+    // no pre-existing row to contribute; directory moves come through `oldDirGroups`.
+    const preUpsertGroups = await app.files.queryNameDirGroups(
+      fileUpserts.filter((r) => r.kind === 'file').map((r) => r.id),
+    )
     if (fileUpserts.length > 0) {
       await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true })
     }
@@ -544,6 +551,10 @@ async function processBatch(
     // dir-A needs separate recalc to promote the next version as current.
     if (oldDirGroups.length > 0) {
       await app.files.recalculateCurrentForGroups(oldDirGroups)
+    }
+    // Recalculate the groups renames vacated (captured before the upsert above).
+    if (preUpsertGroups.length > 0) {
+      await app.files.recalculateCurrentForGroups(preUpsertGroups)
     }
 
     // Clean up directories left empty by this batch. Must run after the

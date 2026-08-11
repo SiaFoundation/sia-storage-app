@@ -112,6 +112,7 @@ export {
   queryFileCount,
   queryFileStats,
   queryFileVersions,
+  queryNameDirGroups,
   queryLocalFileCount,
   queryLocalFileStats,
   queryLocalOnlyFiles,

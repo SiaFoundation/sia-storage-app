@@ -284,6 +284,8 @@ export interface AppService {
     recalculateCurrentForGroups(
       groups: { name: string; directoryId: string | null }[],
     ): Promise<void>
+    /** The DISTINCT (name, directoryId) version groups the given file IDs sit in. */
+    queryNameDirGroups(fileIds: string[]): Promise<{ name: string; directoryId: string | null }[]>
     /** Trashes files and their thumbnails. */
     trash(ids: string[]): Promise<void>
     /** Restores files and their thumbnails from trash. */

@@ -71,6 +71,41 @@ describe('Sync Down', () => {
     )
   })
 
+  it('renaming the current version promotes the remaining version in its old group', async () => {
+    // Two versions of one name: a stack where only the newer is current.
+    const base = Date.now()
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, { name: 'versioned.jpg', updatedAt: base - 60_000 }),
+    })
+    const newer = app.sdk.injectObject({
+      metadata: generateMockFileMetadata(2, { name: 'versioned.jpg', updatedAt: base - 30_000 }),
+    })
+
+    // Current versions only (getFiles includes old versions).
+    const currentNames = async () =>
+      (await app.app.files.query({ order: 'ASC' })).map((f) => f.name).sort()
+
+    await waitForCondition(
+      async () =>
+        (await app.getFileById('mock-file-1')) != null &&
+        (await app.getFileById('mock-file-2')) != null,
+      { timeout: 10_000, message: 'Both versions to sync' },
+    )
+    expect(await currentNames()).toEqual(['versioned.jpg'])
+
+    // Renaming the current version vacates the versioned.jpg group; the remaining version
+    // must take current there, so both names stay visible as current files.
+    app.sdk.injectMetadataChange(newer.id, { name: 'renamed.jpg' })
+
+    await waitForCondition(
+      async () => {
+        const names = await currentNames()
+        return names.length === 2 && names[0] === 'renamed.jpg' && names[1] === 'versioned.jpg'
+      },
+      { timeout: 10_000, message: 'Vacated group to regain a current version' },
+    )
+  })
+
   it('handles delete events from server', async () => {
     const stored = app.sdk.injectObject({
       metadata: generateMockFileMetadata(1, { name: 'to-delete.jpg' }),

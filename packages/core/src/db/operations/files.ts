@@ -41,6 +41,19 @@ export async function recalculateCurrentForGroup(
   )
 }
 
+/** The DISTINCT (name, directoryId) groups the given `kind = 'file'` rows sit in. */
+export async function queryNameDirGroups(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<{ name: string; directoryId: string | null }[]> {
+  if (fileIds.length === 0) return []
+  const ph = fileIds.map(() => '?').join(',')
+  return db.getAllAsync<{ name: string; directoryId: string | null }>(
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
+    ...fileIds,
+  )
+}
+
 export async function recalculateCurrentForGroups(
   db: DatabaseAdapter,
   groups: { name: string; directoryId: string | null }[],
@@ -968,6 +981,11 @@ export async function upsertManyFiles(
   options?: { skipCurrentRecalc?: boolean },
 ): Promise<void> {
   if (records.length === 0) return
+  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
+  // Read the groups these rows sit in before the upsert rewrites their names. The recalc below
+  // sees only each row's new group, so a rename that carries the current row out of a group
+  // leaves that group without one unless the vacated side is recomputed too.
+  const preUpsertGroups = options?.skipCurrentRecalc ? [] : await queryNameDirGroups(db, fileIds)
   await sql.upsertMany(
     db,
     'files',
@@ -995,17 +1013,9 @@ export async function upsertManyFiles(
     },
   )
   if (options?.skipCurrentRecalc) return
-  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
   if (fileIds.length > 0) {
-    const ph = fileIds.map(() => '?').join(',')
-    const groups = await db.getAllAsync<{
-      name: string
-      directoryId: string | null
-    }>(
-      `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
-      ...fileIds,
-    )
-    await recalculateCurrentForGroups(db, groups)
+    const groups = await queryNameDirGroups(db, fileIds)
+    await recalculateCurrentForGroups(db, [...groups, ...preUpsertGroups])
   }
 }
 
