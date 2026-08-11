@@ -421,6 +421,19 @@ describe('deleteLostFilesAndThumbnails', () => {
     const deletedCount = await deleteLostFilesAndThumbnails(db(), indexerURL)
     expect(deletedCount).toBe(0)
   })
+
+  it('spares a file lost against this indexer but hosted on another', async () => {
+    // No object on the queried indexer, but one on B: deleting the row would cascade the B
+    // object away, so the file must survive this indexer's cleanup.
+    await insertFile(db(), makeFileRecord('on-b'))
+    await insertObject(db(), makeLocalObject('on-b', { indexerURL: 'https://b.example.com' }))
+    await insertFile(db(), makeFileRecord('lost'))
+
+    const deletedCount = await deleteLostFilesAndThumbnails(db(), INDEXER_URL)
+    expect(deletedCount).toBe(1)
+    expect(await readFile(db(), 'on-b')).not.toBeNull()
+    expect(await readFile(db(), 'lost')).toBeNull()
+  })
 })
 
 describe('queryLostFiles', () => {
