@@ -33,6 +33,35 @@ describe('acquireLock', () => {
     handle!.release()
   })
 
+  it('refuses a second caller while the first still holds it', () => {
+    const first = acquireLock(lockPath, pidPath)
+    expect(acquireLock(lockPath, pidPath)).toBeNull()
+    first!.release()
+  })
+
+  it('takes over a lock whose owner is no longer running', () => {
+    // A pid the OS will not have handed out again inside this test.
+    fs.writeFileSync(lockPath, '2147483646')
+    const handle = acquireLock(lockPath, pidPath)
+    expect(handle).not.toBeNull()
+    expect(fs.readFileSync(lockPath, 'utf-8')).toBe(String(process.pid))
+    handle!.release()
+  })
+
+  it('takes over a lock file left empty by a process that died mid-claim', () => {
+    fs.writeFileSync(lockPath, '')
+    const handle = acquireLock(lockPath, pidPath)
+    expect(handle).not.toBeNull()
+    handle!.release()
+  })
+
+  it('lets the next caller in once the holder releases', () => {
+    acquireLock(lockPath, pidPath)!.release()
+    const second = acquireLock(lockPath, pidPath)
+    expect(second).not.toBeNull()
+    second!.release()
+  })
+
   it('writes PID to lock file', () => {
     const handle = acquireLock(lockPath, pidPath)
     expect(handle).not.toBeNull()
