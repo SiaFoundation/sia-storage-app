@@ -511,7 +511,8 @@ async function processBatch(
       deletedFileIds = await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
     }
 
-    // Sync directory associations from metadata.
+    // Sync directory associations from metadata. This writes directoryId without touching the
+    // version clock: the file upsert above already carried the remote updatedAt for these rows.
     if (dirEntries.length > 0) {
       oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
         skipInvalidation: true,

@@ -21,6 +21,14 @@ export type FileMetadata = {
   directory?: string
   trashedAt: number | null
   createdAt: number
+  /**
+   * The version clock, not a row-write timestamp. It orders the versions of a name to pick the
+   * current one, and decides remote-versus-local wins during sync, so it advances only when a
+   * device changes something: applying a remote change carries that device's value, and
+   * correcting a stored field to match what was observed carries none. A correction leaves the
+   * clock behind remote, so sync-up skips pushing it; that only holds for a field every device
+   * can observe for itself, which is why size is the one field corrected this way.
+   */
   updatedAt: number
 }
 

@@ -79,6 +79,15 @@ async function objectFlag(fileId: string): Promise<number> {
   return row?.needsSyncUp ?? 0
 }
 
+/** Reads a file's current-version flag. */
+async function currentFlag(fileId: string): Promise<number> {
+  const row = await db().getFirstAsync<{ current: number }>(
+    'SELECT current FROM files WHERE id = ?',
+    fileId,
+  )
+  return row?.current ?? 0
+}
+
 /** Clears a file's object dirty flag directly (test setup for "M flags it"). */
 async function clearObjectFlag(fileId: string): Promise<void> {
   await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', fileId)
@@ -303,6 +312,20 @@ describe('updateFile', () => {
     await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' })
     const result = await readFile(db(), 'file-1')
     expect(result!.updatedAt).toBeGreaterThan(1000)
+  })
+
+  it('recalculates current when the auto-bumped updatedAt makes an old version newest', async () => {
+    await insertFile(db(), makeFileRecord('v1', { name: 'a.txt', updatedAt: 100 }))
+    await insertFile(db(), makeFileRecord('v2', { name: 'a.txt', updatedAt: 200 }))
+    await recalculateCurrentForGroups(db(), [{ name: 'a.txt', directoryId: null }])
+    expect(await currentFlag('v2')).toBe(1)
+
+    // A size-only update with default options auto-bumps v1's updatedAt to now, making it the
+    // group's newest row; the current pointer must follow.
+    await updateFile(db(), { id: 'v1', size: 4096 })
+
+    expect(await currentFlag('v1')).toBe(1)
+    expect(await currentFlag('v2')).toBe(0)
   })
 
   it('can include updatedAt explicitly', async () => {
