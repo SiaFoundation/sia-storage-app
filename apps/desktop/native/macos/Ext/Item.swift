@@ -79,12 +79,15 @@ public final class SiaItem: NSObject, NSFileProviderItem {
             contentVersion: Data(content.utf8), metadataVersion: Data(metadata.utf8))
     }
 
-    /// Listing only. Finder greys out what it is not offered, so advertising a
-    /// capability the write callbacks refuse would put rename and delete in the
-    /// menu and fail every time they were used.
     public var capabilities: NSFileProviderItemCapabilities {
-        guard let item else { return [.allowsContentEnumerating] }
-        return item.isDirectory ? [.allowsContentEnumerating] : []
+        guard let item else { return [.allowsAddingSubItems, .allowsContentEnumerating] }
+        if item.isDirectory {
+            return [
+                .allowsAddingSubItems, .allowsContentEnumerating, .allowsRenaming,
+                .allowsReparenting, .allowsDeleting,
+            ]
+        }
+        return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting]
     }
 
     fileprivate var transfer: ProviderItem? { item }

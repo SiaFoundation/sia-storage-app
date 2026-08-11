@@ -78,19 +78,26 @@ final class ItemShapeTests: XCTestCase {
         XCTAssertEqual(item.parentItemIdentifier, NSFileProviderItemIdentifier("dir:d1"))
     }
 
-    func testAFolderCanBeListedAndNothingCanBeChanged() throws {
+    func testBothKindsAllowRenameReparentAndDelete() throws {
         // NSFileProviderItemCapabilities aliases its bits: allowsReading is
         // allowsContentEnumerating, and allowsWriting is allowsAddingSubItems.
-        let dir = SiaItem(try makeItem(kind: "dir")).capabilities
-        let file = SiaItem(try makeItem()).capabilities
-
-        XCTAssertTrue(dir.contains(.allowsContentEnumerating))
-        for caps in [dir, file] {
-            XCTAssertFalse(caps.contains(.allowsWriting))
-            XCTAssertFalse(caps.contains(.allowsRenaming))
-            XCTAssertFalse(caps.contains(.allowsReparenting))
-            XCTAssertFalse(caps.contains(.allowsDeleting))
+        for caps in [
+            SiaItem(try makeItem(kind: "dir")).capabilities,
+            SiaItem(try makeItem()).capabilities,
+        ] {
+            XCTAssertTrue(caps.contains(.allowsRenaming))
+            XCTAssertTrue(caps.contains(.allowsReparenting))
+            XCTAssertTrue(caps.contains(.allowsDeleting))
         }
+    }
+
+    func testAFileCanBeReadWrittenRenamedAndDeleted() throws {
+        let caps = SiaItem(try makeItem()).capabilities
+
+        XCTAssertTrue(caps.contains(.allowsReading))
+        XCTAssertTrue(caps.contains(.allowsWriting))
+        XCTAssertTrue(caps.contains(.allowsRenaming))
+        XCTAssertTrue(caps.contains(.allowsDeleting))
     }
 
     func testADirectoryReportsNoSize() throws {
@@ -178,6 +185,13 @@ final class ErrorMappingTests: XCTestCase {
 
         XCTAssertEqual(error.domain, NSCocoaErrorDomain)
         XCTAssertEqual(error.code, NSFileReadCorruptFileError)
+    }
+
+    func testTheAlertForAnUnwritableHandoffDoesNotNameTheDirectory() {
+        let mapped = mapError(HandoffError.unavailable("not writable: /Users/someone/Library"))
+
+        XCTAssertFalse(mapped.localizedDescription.contains("/Users/someone"))
+        XCTAssertEqual(mapped.domain, NSCocoaErrorDomain)
     }
 
     func testAnUnrecognisedMessageStillLandsInAHonouredDomain() {
@@ -409,3 +423,133 @@ final class LogPrivacyTests: XCTestCase {
         }
     }
 }
+
+/// A modify that names `.contents` but hands over no URL must fail rather than
+/// report success, because Finder would then believe the edit was saved.
+final class ModifyWithoutBytesTests: XCTestCase {
+    func testAContentsChangeWithNoBytesIsRefused() {
+        let mapped = mapError(HandoffError.io("the system offered no bytes to save"))
+
+        XCTAssertEqual(mapped.domain, NSCocoaErrorDomain)
+        XCTAssertEqual(mapped.code, NSFileWriteUnknownError)
+    }
+}
+
+final class HandoffTests: XCTestCase {
+    private var root: String!
+
+    override func setUp() {
+        root = NSTemporaryDirectory() + "sia-handoff-\(UUID().uuidString)"
+        SiaPaths.ensureDirectory(root)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(atPath: root)
+    }
+
+    func testPrepareCreatesBothSubdirectories() throws {
+        try Handoff(root: root).prepare()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: "\(root!)/fetch"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: "\(root!)/stage"))
+    }
+
+    func testPrepareThrowsWhenASubdirectoryCannotBeMade() throws {
+        // A plain file where a subdirectory belongs is what a partially created
+        // container looks like, and ensureDirectory swallows the failure.
+        FileManager.default.createFile(atPath: "\(root!)/fetch", contents: Data())
+
+        XCTAssertThrowsError(try Handoff(root: root).prepare())
+    }
+
+    func testEachFetchGetsItsOwnDestination() throws {
+        let handoff = Handoff(root: root)
+
+        XCTAssertNotEqual(handoff.fetchDestination(), handoff.fetchDestination())
+    }
+
+    func testStagingLinksRatherThanCopying() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+        let source = "\(root!)/source.bin"
+        FileManager.default.createFile(atPath: source, contents: Data("hello".utf8))
+
+        let staged = try handoff.stage(URL(fileURLWithPath: source))
+
+        // link(2) leaves the source in place and shares one inode.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source))
+        // Unwrapped: two failed lookups are both nil, and comparing them would
+        // pass while proving nothing about the link.
+        let a = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: source)[.systemFileNumber] as? Int)
+        let b = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: staged)[.systemFileNumber] as? Int)
+        XCTAssertEqual(a, b)
+    }
+
+    func testDiscardingRemovesTheStagedEntry() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+        let source = "\(root!)/failed.bin"
+        FileManager.default.createFile(atPath: source, contents: Data("bytes".utf8))
+        let staged = try handoff.stage(URL(fileURLWithPath: source))
+
+        handoff.discard(staged)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staged))
+    }
+
+    func testDiscardingSomethingAlreadyGoneIsHarmless() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+
+        handoff.discard("\(root!)/stage/never-existed")
+    }
+
+    func testStagedFilesLandInsideTheHandoffRoot() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+        let source = "\(root!)/source2.bin"
+        FileManager.default.createFile(atPath: source, contents: Data("x".utf8))
+
+        let staged = try handoff.stage(URL(fileURLWithPath: source))
+
+        XCTAssertTrue(staged.hasPrefix("\(root!)/stage/"))
+    }
+
+    func testStagingAMissingSourceThrows() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+
+        XCTAssertThrowsError(try handoff.stage(URL(fileURLWithPath: "\(root!)/absent")))
+    }
+
+    func testSweepClearsAbandonedEntriesInBothDirectories() throws {
+        let handoff = Handoff(root: root)
+        try handoff.prepare()
+        for sub in ["fetch", "stage"] {
+            let orphan = "\(root!)/\(sub)/orphan"
+            FileManager.default.createFile(atPath: orphan, contents: Data("x".utf8))
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: orphan)
+        }
+
+        handoff.sweep(olderThan: 600)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: "\(root!)/fetch/orphan"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: "\(root!)/stage/orphan"))
+    }
+}
+
+final class ContainerArgumentTests: XCTestCase {
+    func testTheRootIsPassedAsNull() {
+        XCTAssertTrue(FileProviderExtension.containerArg(.rootContainer) is NSNull)
+    }
+
+    func testAFolderIsPassedById() {
+        let arg = FileProviderExtension.containerArg(NSFileProviderItemIdentifier("dir:d1"))
+
+        XCTAssertEqual(arg as? String, "dir:d1")
+    }
+}
+

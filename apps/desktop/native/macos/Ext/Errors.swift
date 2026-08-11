@@ -13,6 +13,16 @@ public func mapError(_ error: Error) -> NSError {
     let ns = error as NSError
     if ns.domain == NSFileProviderErrorDomain || ns.domain == NSCocoaErrorDomain { return ns }
 
+    // A staging failure is a file error, not a connection one. Without this it
+    // falls to the catch-all below and reports the daemon as unreachable.
+    if error is HandoffError {
+        // Fixed text rather than the error's own: one variant names the
+        // container directory, and a container path holds the account name.
+        return NSError(
+            domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError,
+            userInfo: [NSLocalizedDescriptionKey: "Sia Storage could not write this file."])
+    }
+
     if let rpc = error as? RpcError {
         switch rpc {
         case .unreachable:
