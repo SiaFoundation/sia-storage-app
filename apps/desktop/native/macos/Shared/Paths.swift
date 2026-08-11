@@ -8,6 +8,11 @@
 import Foundation
 
 public enum SiaPaths {
+    /// Subdirectory the daemon writes fetched bytes into.
+    public static let fetchSubdir = "fetch"
+    /// Subdirectory the extension stages bytes into on the way up.
+    public static let stageSubdir = "stage"
+
     /// Only correct when called from inside the extension, which is what the
     /// name says: it builds from the sandbox's own home directory. The app runs
     /// unsandboxed and has to be told this path rather than derive it.

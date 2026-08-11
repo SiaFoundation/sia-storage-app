@@ -3,7 +3,8 @@
 //
 // A call opens its own connection and closes it, so concurrent callbacks never
 // interleave replies on a shared socket, which matters because fileproviderd
-// drives several at once. A signal mid-syscall reads as an unreachable daemon.
+// drives several at once. A signal mid-syscall reads as an unreachable daemon
+// rather than being retried, which costs one callback and the next corrects.
 
 import Foundation
 
