@@ -7,16 +7,22 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint . && oxfmt --check .",
     "test": "bun test"
   },
   "dependencies": {
-    "@siastorage/core": "workspace:*"
+    "@siastorage/core": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "swr": "2.4.1"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
     "@types/node": "22.15.2",
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.5",
     "electron": "43.2.0",
     "electron-vite": "5.0.0",
     "typescript": "5.9.3",

@@ -68,23 +68,42 @@ function createRealBootstrap(): Bootstrap {
     sdkAuth,
     async connect(app) {
       const indexerURL = await app.service.settings.getIndexerURL()
+      // Each failure records why, so a client can tell a connection still being
+      // attempted from one that never will be.
+      const fail = (why: string) => {
+        app.service.connection.setState({ isConnected: false, connectionError: why })
+        return false
+      }
+
       const keyBytes = await app.service.auth.getAppKey(indexerURL)
-      if (!keyBytes) return false
+      if (!keyBytes) return fail('No account on this device')
 
       const keyHex = uint8ToHex(new Uint8Array(keyBytes))
       await sdkAuth.adapters.createBuilder(indexerURL, JSON.stringify(APP_META))
 
       const connected = await sdkAuth.adapters.connectWithKey(keyHex)
-      if (!connected) return false
+      // Host only: this text reaches the desktop tray verbatim, and a custom
+      // indexer URL can carry credentials.
+      if (!connected) return fail(`Could not reach ${hostOf(indexerURL)}`)
 
       const sdk = sdkAuth.getLastSdk()
-      if (!sdk) return false
+      if (!sdk) return fail('The indexer connection produced no client')
 
       app.internal.setSdk(createNodeSdkAdapter(sdk))
-      app.service.connection.setState({ isConnected: true })
+      app.service.connection.setState({ isConnected: true, connectionError: null })
       app.internal.initUploader()
       return true
     },
+  }
+}
+
+/** Names an unparseable URL rather than echoing it, since the echo is what
+ *  would put a password or a path in front of the user. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host || 'the indexer'
+  } catch {
+    return 'the indexer'
   }
 }
 
