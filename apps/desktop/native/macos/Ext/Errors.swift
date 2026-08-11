@@ -9,6 +9,10 @@ import FileProvider
 import Foundation
 import SiaShared
 
+/// Shown two ways for one condition: the banner across the top of the folder and
+/// the alert on a single item. They have to read the same.
+let unreachableMessage = "Sia Storage isn't running. Open it and try again."
+
 public func mapError(_ error: Error) -> NSError {
     let ns = error as NSError
     if ns.domain == NSFileProviderErrorDomain || ns.domain == NSCocoaErrorDomain { return ns }
@@ -28,7 +32,7 @@ public func mapError(_ error: Error) -> NSError {
         case .unreachable:
             // Finder puts this in an alert, so it says what the user can do
             // rather than quoting a syscall at them.
-            return fpError(.serverUnreachable, "Sia Storage isn't running. Open it and try again.")
+            return fpError(.serverUnreachable, unreachableMessage)
         case .encoding(let message), .decoding(let message):
             // Malformed data on the wire. A read failure rather than a
             // connection one, because retrying the connection will not help.
