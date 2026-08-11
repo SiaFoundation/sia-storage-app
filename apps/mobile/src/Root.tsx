@@ -7,10 +7,10 @@ import * as ScreenOrientation from 'expo-screen-orientation'
 import { ShareIntentProvider } from 'expo-share-intent'
 import { useEffect } from 'react'
 import { Platform, StatusBar, StyleSheet } from 'react-native'
-import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SWRConfig } from 'swr'
 import { AppSplash } from './components/AppSplash'
+import { DimSurface } from './components/DimSurface'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
 import { ShareLinkSheet } from './components/ShareLinkSheet'
@@ -60,7 +60,7 @@ export function Root() {
   }, [])
 
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
+    <DimSurface style={styles.gestureRoot}>
       <ErrorBoundary>
         <SafeAreaProvider>
           <ToastProvider>
@@ -81,7 +81,7 @@ export function Root() {
           </ToastProvider>
         </SafeAreaProvider>
       </ErrorBoundary>
-    </GestureHandlerRootView>
+    </DimSurface>
   )
 }
 

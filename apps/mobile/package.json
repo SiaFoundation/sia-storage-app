@@ -55,6 +55,7 @@
     "background-time-remaining": "file:./modules/background-time-remaining",
     "expo": "55.0.5",
     "expo-audio": "55.0.8",
+    "expo-brightness": "55.0.15",
     "expo-constants": "55.0.7",
     "expo-dev-client": "55.0.11",
     "expo-file-system": "55.0.10",

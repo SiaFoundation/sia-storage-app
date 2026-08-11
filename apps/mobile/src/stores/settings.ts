@@ -1,5 +1,6 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import useSWR from 'swr'
+import { setManualKeepAwakeHeld } from '../managers/screenDim'
 import { app } from './appService'
 
 export type ActiveLibraryTab = 'files' | 'tags' | 'media'
@@ -42,6 +43,7 @@ export async function setKeepAwake(value: boolean) {
   } else {
     deactivateKeepAwake(KEEP_AWAKE_TAG)
   }
+  setManualKeepAwakeHeld(value)
 }
 
 export async function toggleKeepAwake() {
@@ -54,4 +56,5 @@ export async function initKeepAwake() {
   if (enabled) {
     await activateKeepAwakeAsync(KEEP_AWAKE_TAG)
   }
+  setManualKeepAwakeHeld(enabled)
 }

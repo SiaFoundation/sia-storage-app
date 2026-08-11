@@ -66,6 +66,11 @@ export default {
         'android.permission.ACCESS_MEDIA_LOCATION',
         'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
       ],
+      // expo-brightness's plugin adds WRITE_SETTINGS for its
+      // setSystemBrightnessAsync API, which we never call. Prebuild applies
+      // that plugin whether or not it is listed under `plugins`, so blocking
+      // it here is the only thing that keeps it out of the manifest.
+      blockedPermissions: ['android.permission.WRITE_SETTINGS'],
     },
     web: {
       favicon: './assets/favicon.png',

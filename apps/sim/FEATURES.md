@@ -400,6 +400,18 @@ its sign-in window shows only after Sign Out.
   `mobile/rapid-app-switching`, `mobile/import-resumes-after-suspension`;
   integration `suspension`, `app-boot`
 
+### Keeping the phone awake
+
+- When: the screen staying on while a keep-awake lock is held, from Stay
+  awake during uploads, the first sync or a photo archive walk, and dimming
+  after a minute untouched while it is.
+- Code: files `apps/mobile/src/managers/autoKeepAwake.ts`,
+  `apps/mobile/src/managers/screenDim.ts`,
+  `apps/mobile/src/components/DimOverlay.tsx`
+- Check: the overlay's test id `screen-dim` is in the tree while dimmed. Sim
+  cannot read the panel's brightness, so that needs a device.
+- Tests: scenarios `mobile/screen-dims-while-idle`
+
 ### Account and onboarding
 
 - When: signing in, the recovery phrase, switching indexer and resetting.

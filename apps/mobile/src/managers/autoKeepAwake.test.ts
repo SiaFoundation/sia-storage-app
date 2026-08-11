@@ -28,7 +28,9 @@ import {
   __resetAutoKeepAwakeForTesting,
   acquireAutoKeepAwake,
   initAutoKeepAwake,
+  isAutoKeepAwakeHeld,
   releaseAutoKeepAwake,
+  subscribeAutoKeepAwake,
 } from './autoKeepAwake'
 import { __resetLifecycleForTesting } from './lifecycle'
 
@@ -146,6 +148,69 @@ describe('lifecycle suspend / resume', () => {
 
     emit('active')
     expect(mockActivate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('held subscription', () => {
+  it('fires once when the intent set becomes non-empty', () => {
+    const seen: boolean[] = []
+    subscribeAutoKeepAwake((held) => seen.push(held))
+
+    acquireAutoKeepAwake('a')
+    acquireAutoKeepAwake('b')
+    expect(seen).toEqual([true])
+  })
+
+  it('fires once when the last intent is released', () => {
+    const seen: boolean[] = []
+    acquireAutoKeepAwake('a')
+    acquireAutoKeepAwake('b')
+    subscribeAutoKeepAwake((held) => seen.push(held))
+
+    releaseAutoKeepAwake('a')
+    expect(seen).toEqual([])
+    releaseAutoKeepAwake('b')
+    expect(seen).toEqual([false])
+  })
+
+  it('does not fire on a release of a tag that was never held', () => {
+    const seen: boolean[] = []
+    subscribeAutoKeepAwake((held) => seen.push(held))
+
+    releaseAutoKeepAwake('never-acquired')
+    expect(seen).toEqual([])
+  })
+
+  it('reports intents that survive a background transition', () => {
+    const seen: boolean[] = []
+    subscribeAutoKeepAwake((held) => seen.push(held))
+
+    acquireAutoKeepAwake('a')
+    emit('background')
+    // Backgrounding drops the lock but not the intent, and this subscription
+    // reports intents.
+    expect(seen).toEqual([true])
+    expect(isAutoKeepAwakeHeld()).toBe(true)
+  })
+
+  it('unsubscribe stops delivery', () => {
+    const seen: boolean[] = []
+    const unsubscribe = subscribeAutoKeepAwake((held) => seen.push(held))
+
+    unsubscribe()
+    acquireAutoKeepAwake('a')
+    expect(seen).toEqual([])
+  })
+
+  it('one throwing subscriber does not strand the others', () => {
+    const seen: boolean[] = []
+    subscribeAutoKeepAwake(() => {
+      throw new Error('boom')
+    })
+    subscribeAutoKeepAwake((held) => seen.push(held))
+
+    acquireAutoKeepAwake('a')
+    expect(seen).toEqual([true])
   })
 })
 
