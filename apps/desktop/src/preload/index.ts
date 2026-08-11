@@ -5,8 +5,12 @@
  * no require. `rpc` reaches the daemon's facade, the same one the CLI calls.
  */
 
+import type { IpcMessage } from '@siastorage/core/app'
 import type { ChangeEvent } from '@siastorage/core/types'
 import { contextBridge, ipcRenderer } from 'electron'
+
+/** One cache mutation the daemon made, replayed by a client holding its own. */
+export type CacheMessage = IpcMessage
 
 const api = {
   /** Calls a reflected AppService method, e.g. `ds:settings:getIndexerURL`. */
@@ -28,6 +32,13 @@ const api = {
     const handler = (_event: unknown, payload: ChangeEvent) => listener(payload)
     ipcRenderer.on('change', handler)
     return () => ipcRenderer.removeListener('change', handler)
+  },
+
+  /** Fires with each cache change the daemon made, for this window to apply. */
+  onCache: (listener: (message: CacheMessage) => void) => {
+    const handler = (_event: unknown, payload: CacheMessage) => listener(payload)
+    ipcRenderer.on('cache', handler)
+    return () => ipcRenderer.removeListener('cache', handler)
   },
   platform: process.platform,
 }

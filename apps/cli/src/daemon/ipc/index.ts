@@ -13,11 +13,16 @@ export type IpcHandler = (
 export type IpcHandlerMap = Map<string, IpcHandler>
 
 /**
- * Builds the handler map the daemon serves: `ping`, `status`, `upload`,
- * `uploadState` and `shutdown` are registered by hand, and every AppService
- * namespace is reflected onto `ds:<namespace>:<method>` channels.
+ * Builds the handler map the daemon serves. `ping`, `status`, `upload`,
+ * `uploadState` and `shutdown` are registered explicitly because they are the
+ * daemon's own; every AppService namespace is reflected onto
+ * `ds:<namespace>:<method>`.
  */
-export function buildHandlerMap(app: CliApp, onShutdown: () => void): IpcHandlerMap {
+export function buildHandlerMap(
+  app: CliApp,
+  onShutdown: () => void,
+  broadcast?: (message: unknown) => void,
+): IpcHandlerMap {
   const handlers: IpcHandlerMap = new Map()
 
   registerStatusHandlers(handlers, app, onShutdown)
@@ -34,6 +39,9 @@ export function buildHandlerMap(app: CliApp, onShutdown: () => void): IpcHandler
       },
     },
     app.service,
+    // Each mutation, named and uncoalesced, so a client holding its own caches
+    // makes the same change. One without caches ignores these.
+    broadcast ? (_channel, data) => broadcast(data) : undefined,
   )
 
   return handlers
@@ -52,16 +60,56 @@ export function pushChanges(app: CliApp, connection: IpcConnection): Promise<nev
   return new Promise<never>(() => {})
 }
 
+/**
+ * Everyone currently holding this socket's push stream open.
+ *
+ * Cache mutations reach all of them uncoalesced: a client replaying them into
+ * its own caches needs the key each one names, and a coalesced burst has none.
+ */
+export type Subscribers = {
+  add(connection: IpcConnection): void
+  broadcast(message: unknown): void
+}
+
+export function createSubscribers(): Subscribers {
+  const connections = new Set<IpcConnection>()
+  return {
+    add(connection) {
+      connections.add(connection)
+      connection.onClose(() => connections.delete(connection))
+    },
+    broadcast(message) {
+      for (const connection of connections) connection.push(message)
+    },
+  }
+}
+
+/**
+ * A handler map and the subscribers its cache broadcasts reach.
+ *
+ * One value rather than two arguments, because the map closes over a specific
+ * `Subscribers`, and passing a different one would broadcast into an empty set.
+ */
+export type IpcSurface = { handlers: IpcHandlerMap; subscribers: Subscribers }
+
+export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface {
+  const subscribers = createSubscribers()
+  return { handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast), subscribers }
+}
+
 /** Serves the full handler map on the CLI socket. */
 export function startIpcDispatcher(
   app: CliApp,
   sockPath: string,
-  onShutdown: () => void,
-  handlers: IpcHandlerMap = buildHandlerMap(app, onShutdown),
+  surface: IpcSurface,
 ): ReturnType<typeof startIpcServer> {
+  const { handlers: map, subscribers } = surface
   return startIpcServer(sockPath, async (method, params, connection) => {
-    if (method === 'subscribe') return pushChanges(app, connection)
-    const handler = handlers.get(method)
+    if (method === 'subscribe') {
+      subscribers.add(connection)
+      return pushChanges(app, connection)
+    }
+    const handler = map.get(method)
     if (!handler) throw new Error(`Unknown method: ${method}`)
     return handler(params, connection)
   })

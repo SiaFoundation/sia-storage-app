@@ -9,9 +9,45 @@
  * tray issue calls concurrently. The subscription is the one held open.
  */
 
+import type { CacheMethod, IpcMessage } from '@siastorage/core/app'
 import type { ChangeEvent } from '@siastorage/core/types'
 import { connect, type Socket } from 'node:net'
+import { log } from './log'
 import { daemonSocketPath } from './paths'
+
+/** A `Record` keyed by the union, so adding a method fails to compile here. */
+const CACHE_METHODS: Record<CacheMethod, true> = {
+  invalidate: true,
+  invalidateAll: true,
+  set: true,
+}
+
+/** Narrows from `unknown`, so no call site has to cast to reach the check. */
+function isChangeEvent(frame: unknown): frame is ChangeEvent {
+  return Boolean(frame) && typeof frame === 'object' && (frame as ChangeEvent).event === 'change'
+}
+
+/**
+ * Checks the shape before it is replayed into another process's caches. The
+ * frame crosses a socket, so its fields are claims until something reads them.
+ *
+ * The arguments are checked per method, because they are spread straight into
+ * the call: every cache key part is a string, and only `set` carries a value
+ * in front of them.
+ */
+function isCacheFrame(frame: unknown): frame is IpcMessage {
+  if (!frame || typeof frame !== 'object') return false
+  const { kind, path, method, args } = frame as Partial<IpcMessage>
+  if (kind !== 'cache' || typeof method !== 'string') return false
+  if (!Array.isArray(path) || !path.every((part) => typeof part === 'string')) return false
+  if (!Array.isArray(args) || !Object.hasOwn(CACHE_METHODS, method)) return false
+  const keyParts = method === 'set' ? args.slice(1) : args
+  return (
+    (method !== 'invalidateAll' || args.length === 0) &&
+    (method !== 'set' || args.length >= 1) &&
+    keyParts.every((part) => typeof part === 'string')
+  )
+}
 
 export class RpcError extends Error {}
 
@@ -59,6 +95,9 @@ export function call(method: string, args: unknown[] = [], timeoutMs = 15_000): 
  * Holds one connection open for everything the daemon pushes, reconnecting when
  * it drops. The daemon outlives this process and restarts under it, so a dropped
  * stream is expected rather than exceptional.
+ *
+ * Two kinds of frame arrive: a change signal saying a scope moved, and a cache
+ * message naming a key the daemon changed, with the new value when it has one.
  */
 export class DaemonStream {
   private socket: Socket | null = null
@@ -72,6 +111,7 @@ export class DaemonStream {
    */
   constructor(
     private readonly onEvent: (event: ChangeEvent) => void,
+    private readonly onCache: (message: IpcMessage) => void = () => {},
     private readonly onDown: () => void = () => {},
   ) {}
 
@@ -95,11 +135,15 @@ export class DaemonStream {
         buffer = buffer.slice(newline + 1)
         if (line.trim()) {
           try {
-            const parsed = JSON.parse(line)
-            if (parsed.event === 'change') this.onEvent(parsed as ChangeEvent)
+            const parsed: unknown = JSON.parse(line)
+            // Any other frame answers a request this stream never sends, so it
+            // matches neither branch and is dropped.
+            if (isChangeEvent(parsed)) this.onEvent(parsed)
+            else if (isCacheFrame(parsed)) this.onCache(parsed)
           } catch {
-            // Anything that is not an event is a reply to a request this stream
-            // never sends, so it is ignored rather than treated as an error.
+            // Reported rather than reconnected: the daemon sent something this
+            // build cannot read, and retrying the same stream would loop on it.
+            log.error(`the daemon sent a frame this build cannot read: ${line.slice(0, 200)}`)
           }
         }
         newline = buffer.indexOf('\n')

@@ -9,10 +9,13 @@ import { swrCacheBy } from '../stores/swr'
 import { createLibraryVersionCache } from './libraryVersionCache'
 import type { AppCaches, AppService } from './service'
 
-type IpcMessage = {
+/** One cache mutation on the wire, for a process replaying it into its own. */
+export type CacheMethod = 'invalidate' | 'invalidateAll' | 'set'
+
+export type IpcMessage = {
   kind: 'cache'
   path: string[]
-  method: string
+  method: CacheMethod
   args: unknown[]
 }
 
