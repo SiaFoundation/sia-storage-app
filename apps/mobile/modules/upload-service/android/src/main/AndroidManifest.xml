@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+  <uses-permission android:name="android.permission.WAKE_LOCK"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+  <application>
+    <!-- Android 14 rejects a foreground service with no declared type
+         (MissingForegroundServiceTypeException). dataSync is the documented
+         type for transferring data between a device and the cloud. -->
+    <service
+      android:name=".UploadForegroundService"
+      android:foregroundServiceType="dataSync"
+      android:exported="false"/>
+  </application>
+</manifest>

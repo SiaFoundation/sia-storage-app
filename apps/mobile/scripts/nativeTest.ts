@@ -1,5 +1,5 @@
 /**
- * Native test runner for the import-sources module.
+ * Native test runner for the local Expo modules.
  *
  * bun scripts/nativeTest.ts ios Swift host suite (headless macOS)
  * bun scripts/nativeTest.ts ios --simulator Photos/picker XCTest on a simulator of its own
@@ -229,7 +229,10 @@ if (platform === 'android') {
     console.error('android/ not generated; run `bunx expo prebuild -p android` first.')
     process.exit(1)
   }
-  process.exit(run(['./gradlew', ':import-sources:testDebugUnitTest'], androidDir))
+  const gradleTasks = ['import-sources', 'upload-service'].map(
+    (module) => `:${module}:testDebugUnitTest`,
+  )
+  process.exit(run(['./gradlew', ...gradleTasks], androidDir))
 }
 
 console.error('usage: bun scripts/nativeTest.ts <ios|android> [--simulator]')
