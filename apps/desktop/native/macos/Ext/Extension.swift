@@ -39,6 +39,14 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     private let handoff: Handoff
     private let domain: NSFileProviderDomain
     private let handshake: Handshake
+    private let availability = Availability(grace: FileProviderExtension.gracePeriod)
+    /// Guards `changes` and `invalidated`, which the system's teardown thread,
+    /// the stream's queue and the resubscribe timer all touch.
+    private let lifecycle = NSLock()
+    private var changes: RpcStream?
+    /// Set once teardown starts, so a reconnect already scheduled gives up
+    /// instead of subscribing behind it.
+    private var invalidated = false
 
     public required init(domain: NSFileProviderDomain) {
         self.domain = domain
@@ -68,9 +76,133 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             }
             handoff.sweep()
         }
+        subscribeToChanges()
     }
 
-    public func invalidate() {}
+    /// Signals the working set when the library changes, reconnecting on drop:
+    /// only the provider may signal its own domain, and the OS keeps this
+    /// process alive across daemon restarts.
+    private func subscribeToChanges() {
+        let stream = RpcStream(socketPath: SiaPaths.providerSocketFromExtension()) {
+            [weak self] event in
+            guard event.scope == "library", let self else { return }
+            guard let manager = NSFileProviderManager(for: self.domain) else {
+                fpLog.error("self-signal: no manager for this domain")
+                return
+            }
+            manager.signalEnumerator(for: .workingSet) { error in
+                if let error {
+                    fpLog.failure("self-signal failed", error)
+                } else {
+                    fpLog.info("self-signal ok")
+                }
+            }
+        }
+        // Published before it starts: the other order leaves a window where
+        // invalidate() finds no stream and the one just started outlives it.
+        let adopted = withLifecycle { () -> Bool in
+            if invalidated { return false }
+            changes = stream
+            return true
+        }
+        guard adopted else { return }
+        stream.start(
+            onConnected: { [weak self] in
+                // Checked inside the task, not before it: teardown can land in
+                // the hop and the reconnect would then run against a dead domain.
+                Task { [weak self] in
+                    guard let self, !self.withLifecycle({ self.invalidated }) else { return }
+                    await self.apply(self.availability.succeeded())
+                }
+            },
+            onDisconnect: { [weak self] error in
+                fpLog.failure("change stream ended", error)
+                self?.noteDaemonAway()
+                self?.scheduleResubscribe()
+            })
+    }
+
+    /// Waits before reconnecting, so a daemon that is down rather than restarting
+    /// costs one connect a second instead of a spin.
+    private func scheduleResubscribe() {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
+            // invalidated rather than a nil changes: the stream is replaced on
+            // every normal reconnect, so only the flag distinguishes teardown.
+            guard let self, !self.withLifecycle({ self.invalidated }) else { return }
+            self.subscribeToChanges()
+        }
+    }
+
+    /// Starts the clock on an outage, and comes back when it is up.
+    private func noteDaemonAway() {
+        Task { [weak self] in
+            guard let self, !self.withLifecycle({ self.invalidated }) else { return }
+            guard await self.availability.failed(at: Self.now()) else { return }
+            // Returns on cancellation: a cancelled sleep comes back early, and
+            // settling then reports an outage the grace period never timed.
+            guard
+                (try? await Task.sleep(nanoseconds: UInt64(Self.gracePeriod * 1_000_000_000)))
+                    != nil
+            else { return }
+            // Checked again: teardown inside the grace window would otherwise
+            // still reach the disconnect below.
+            guard !self.withLifecycle({ self.invalidated }) else { return }
+            await self.apply(self.availability.settle(at: Self.now()))
+        }
+    }
+
+    /// Tells the system the mount is not being served, or that it is again.
+    ///
+    /// The user keeps browsing either way; what changes is that a disconnected
+    /// domain stops being asked for updates, and Finder says why at the top of
+    /// the folder instead of failing one operation at a time.
+    private func apply(_ action: AvailabilityAction) async {
+        guard action != .none else { return }
+        guard let manager = NSFileProviderManager(for: domain) else {
+            // The domain went away underneath us, which is the one case where
+            // the banner silently never appears.
+            fpLog.error("availability: no manager for this domain")
+            return
+        }
+        do {
+            switch action {
+            case .disconnect:
+                try await manager.disconnect(
+                    reason: unreachableMessage,
+                    options: .temporary)
+                fpLog.info("disconnected: the daemon is not answering")
+            case .reconnect:
+                try await manager.reconnect()
+                fpLog.info("reconnected: the daemon is back")
+            case .none:
+                break
+            }
+        } catch {
+            fpLog.failure("availability", error)
+        }
+    }
+
+    /// The wait before `settle` and the actor's threshold are one value, or
+    /// `settle` refuses every outage and nothing says why.
+    static let gracePeriod: Double = 5
+    static func now() -> Double { ProcessInfo.processInfo.systemUptime }
+
+    private func withLifecycle<T>(_ body: () -> T) -> T {
+        lifecycle.lock()
+        defer { lifecycle.unlock() }
+        return body()
+    }
+
+    public func invalidate() {
+        // Both set before the stop, which is what fires the handler reading them.
+        let stream = withLifecycle { () -> RpcStream? in
+            invalidated = true
+            let current = changes
+            changes = nil
+            return current
+        }
+        stream?.stop()
+    }
 
     /// Every callback that reaches the daemon waits on this. The OS keeps an
     /// extension alive across app upgrades, so a stale one would otherwise drive
