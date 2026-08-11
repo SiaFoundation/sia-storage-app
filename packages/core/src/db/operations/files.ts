@@ -576,12 +576,16 @@ async function updateFileInner(
     assignments.updatedAt = Date.now()
   }
 
+  // updatedAt lands on every default-path update (auto-bumped to now above) and on an
+  // includeUpdatedAt update only when the caller supplies one. Either way it can make a
+  // non-current row its group's newest, so currency is recalculated whenever it is written.
+  const updatedAtWritten = !options.includeUpdatedAt || update.updatedAt !== undefined
   const needsRecalc =
     !options.skipCurrentRecalc &&
     (update.name !== undefined ||
       update.trashedAt !== undefined ||
       update.deletedAt !== undefined ||
-      update.updatedAt !== undefined)
+      updatedAtWritten)
 
   let oldRow: { name: string; directoryId: string | null } | null = null
   if (needsRecalc) {

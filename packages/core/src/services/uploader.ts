@@ -1229,9 +1229,8 @@ export class UploadManager {
       // Re-gate (see upsert above): the size heal and the upsert must commit on
       // the same side of the suspend gate.
       await this.app.db.waitUntilActive()
-      // Persist the SDK size so the local row matches what we uploaded. Pass
-      // includeUpdatedAt with no updatedAt to leave the timestamp untouched — the
-      // upload is not an edit. The object was already flagged when it was
+      // Persist the SDK size so the local row matches what we uploaded. The upload is not an
+      // edit, so the version clock stays put. The object was already flagged when it was
       // inserted, so sync-up pushes the corrected size on the next pass.
       const sizeByFileId = new Map(
         results.flatMap((r) => (r.type === 'success' ? [[r.fileId, r.size] as const] : [])),

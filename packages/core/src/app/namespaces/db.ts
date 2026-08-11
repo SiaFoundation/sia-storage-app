@@ -79,6 +79,7 @@ export function buildDbNamespaces(
       addedAt: previous?.addedAt ?? Date.now(),
       usedAt: usedAt ?? Date.now(),
     })
+    // Writing the file to disk told us its real size; it is not an edit, so the clock stays put.
     await ops.updateFile(db, { id: file.id, size }, { includeUpdatedAt: true })
   }
 
