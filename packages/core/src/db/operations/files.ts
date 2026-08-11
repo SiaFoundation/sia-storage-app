@@ -1138,6 +1138,9 @@ export async function queryUploadedFileIds(
   return rows.map((r) => r.fileId)
 }
 
+// A file is lost against `indexerURL` when it has no object there, but deleting the row cascades
+// away its object rows on every other indexer too, so only files with no object anywhere are
+// deleted.
 export async function deleteLostFilesAndThumbnails(
   db: DatabaseAdapter,
   indexerURL: string,
@@ -1150,7 +1153,8 @@ export async function deleteLostFilesAndThumbnails(
        (NOT EXISTS (SELECT 1 FROM objects s WHERE s.fileId = f.id AND s.indexerURL = ?)
         AND NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id))
        OR f.lostReason IS NOT NULL
-     )`,
+     )
+     AND NOT EXISTS (SELECT 1 FROM objects anyIdx WHERE anyIdx.fileId = f.id)`,
     [indexerURL],
     500,
     async (rows) => {
