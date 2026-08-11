@@ -1,21 +1,24 @@
 /*
  * Application lifecycle.
  *
- * The app is tray-resident. Quitting is the tray's Quit item or the platform's
- * own gesture, and nothing else.
+ * The app is tray-resident. Quitting is the tray's Quit item or Cmd-Q, and
+ * nothing else: closing every window is not a reason to quit, so both routes go
+ * through `beginQuit` first and the window close handler stops intercepting.
  *
  * Electron holds no library logic, no database handle and no file bytes. It
  * attaches to the daemon, brings the OS mount up, and relays calls.
  */
 
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { dirname, join } from 'node:path'
+import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
 import { Daemon, type DaemonSpawn } from './daemon'
 import { log } from './log'
 import { createPlatformIntegration } from './platform'
 import { DaemonStream } from './rpc'
 import { createTray, destroyTray } from './tray'
+import { beginQuit, broadcast, createMainWindow, showMainWindow } from './windows'
 
 /**
  * The daemon runtime and script sit beside the app directory the packaging
@@ -35,6 +38,19 @@ if (!app.requestSingleInstanceLock()) {
   let spawn: DaemonSpawn | null = null
   let quitting: Promise<void> | null = null
 
+  // Both can arrive before `whenReady` resolves, and a BrowserWindow built then
+  // throws, so each waits rather than assuming the app is already up.
+  app.on('second-instance', () => void app.whenReady().then(() => showMainWindow()))
+
+  app.on(
+    'activate',
+    () =>
+      void app.whenReady().then(() => {
+        if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+        else showMainWindow()
+      }),
+  )
+
   // The tray is the app's home, so an empty window list is the resting state.
   // Present and empty on purpose: the default behaviour would quit.
   app.on('window-all-closed', () => {})
@@ -48,6 +64,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', (event) => {
     event.preventDefault()
     if (quitting) return
+    beginQuit()
     quitting = teardown()
       .catch((e) => log.error(`shutdown: ${(e as Error).message}`))
       .finally(() => app.exit(0))
@@ -121,6 +138,7 @@ if (!app.requestSingleInstanceLock()) {
     // Startup is the one place a failure leaves a running process with nothing
     // working and no window to report it in, so each step says what it did.
     try {
+      registerBridge(platform)
       createTray()
       trayUp = true
       log.info('tray ready')
@@ -145,16 +163,19 @@ if (!app.requestSingleInstanceLock()) {
         })
         log.info(`mount ${platform.status()}`)
       } catch (e) {
-        // A missing shell is not fatal: the tray still works, and the mount
-        // being down is something the user finds out from the status surface.
+        // A missing shell is not fatal: the tray and the window still work, and
+        // the status surface reads the mount state itself through `shellStatus`.
         log.error(`mount unavailable: ${(e as Error).message}`)
       }
 
-      // Subscribed for the disconnects rather than the events: a dropped stream
-      // is how this process learns the daemon died.
       changes = new DaemonStream(
-        () => {},
-        () => void reviveDaemon(),
+        (event) => broadcast('change', event),
+        () => {
+          // The window has no other way to learn the daemon went: its reads
+          // keep answering from cache, and no change signal is coming.
+          broadcast('change', { event: 'change', scope: 'connection' })
+          void reviveDaemon()
+        },
       )
       changes.start()
       log.info('subscribed to the daemon')
