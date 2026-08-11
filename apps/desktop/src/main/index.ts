@@ -170,6 +170,7 @@ if (!app.requestSingleInstanceLock()) {
 
       changes = new DaemonStream(
         (event) => broadcast('change', event),
+        (message) => broadcast('cache', message),
         () => {
           // The window has no other way to learn the daemon went: its reads
           // keep answering from cache, and no change signal is coming.

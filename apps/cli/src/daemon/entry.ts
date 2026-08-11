@@ -2,7 +2,7 @@ import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
 import packageJson from '../../package.json'
 import { writeState } from '@siastorage/node-adapters'
 import { connectSdk, createCliAppService } from '../app'
-import { buildHandlerMap, startIpcDispatcher } from './ipc'
+import { buildIpcSurface, startIpcDispatcher } from './ipc'
 import { startProviderListener } from './ipc/provider'
 import {
   acquireLockOrExit,
@@ -37,9 +37,8 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   // appender's output flows there.
   addAppender(createConsoleAppender({ ansi: true }))
 
-  // Env rather than flags: `spawnDaemon` re-spawns this program with no argv at
-  // all, so the environment is the only channel that survives being backgrounded.
-  // Absent means no shell is served and the daemon is a plain CLI daemon.
+  // Env rather than flags: `spawnDaemon` re-spawns this with no argv, so the
+  // environment is the only channel that survives. Absent means no shell.
   const providerSocket = process.env.SIA_PROVIDER_SOCKET
   const handoffDir = process.env.SIA_HANDOFF_DIR
 
@@ -61,28 +60,21 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
     connected,
   })
 
-  // The IPC server's `shutdown` handler needs to call back into the shutdown
-  // function — but the function references the IPC server itself. Resolve by
-  // declaring `ctx` first and assigning after both are constructed. Signal
-  // handlers attach AFTER `ctx` is set so a signal can never observe it null.
+  // Declared before either is built because the IPC server's `shutdown` calls
+  // the function that references it. Signal handlers attach after it is set.
   let ctx: ShutdownContext | null = null
   const shutdown = async () => {
     if (!ctx) return
     return executeShutdown(ctx)
   }
-  const handlers = buildHandlerMap(app, () => {
+  // Cache mutations reach this socket only. A storage-provider shell holds no
+  // caches, so the provider socket carries the change signal alone.
+  const surface = buildIpcSurface(app, () => {
     void shutdown()
   })
-  const ipcServer = startIpcDispatcher(
-    app,
-    app.paths.sockPath,
-    () => {
-      void shutdown()
-    },
-    handlers,
-  )
+  const ipcServer = startIpcDispatcher(app, app.paths.sockPath, surface)
   const providerServer = providerSocket
-    ? startProviderListener(app, handlers, {
+    ? startProviderListener(app, surface.handlers, {
         socketPath: providerSocket,
         version: DAEMON_VERSION,
       })
