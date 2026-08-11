@@ -1,12 +1,13 @@
 /*
  * The menu bar item.
  *
- * The icon is a template image on macOS so the system tints it for light and
- * dark menu bars.
+ * Left click opens the popover, right click gives the menu. The icon is a
+ * template image so the system tints it for light and dark menu bars.
  */
 
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
+import { beginQuit, hidePopover, showMainWindow, togglePopover } from './windows'
 
 let tray: Tray | null = null
 
@@ -22,7 +23,24 @@ export function createTray(): Tray {
 
   const item = new Tray(image)
   item.setToolTip('Sia Storage')
-  item.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
+
+  item.on('click', (_event, bounds) => togglePopover(bounds))
+  item.on('right-click', () => {
+    hidePopover()
+    item.popUpContextMenu(
+      Menu.buildFromTemplate([
+        { label: 'Open Sia Storage', click: () => showMainWindow() },
+        { type: 'separator' },
+        {
+          label: 'Quit',
+          click: () => {
+            beginQuit()
+            app.quit()
+          },
+        },
+      ]),
+    )
+  })
 
   tray = item
   return item
