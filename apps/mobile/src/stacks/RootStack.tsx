@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text } from 'react-native'
+import { DimSurface } from '../components/DimSurface'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { dismissStatusSheet } from '../lib/navigationRef'
 import { ImportDetailScreen } from '../screens/ImportDetailScreen'
@@ -31,28 +32,30 @@ function DoneButton() {
 // Status and dismissing returns to wherever the user was.
 function StatusSheetModal() {
   return (
-    <Sheet.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: styles.header,
-        headerTintColor: palette.gray[50],
-        headerRight: DoneButton,
-      }}
-    >
-      <Sheet.Screen name="Status" component={LibraryStatusSheet} options={{ title: 'Status' }} />
-      <Sheet.Screen name="Imports" component={ImportsScreen} options={{ title: 'Imports' }} />
-      <Sheet.Screen
-        name="ImportDetail"
-        component={ImportDetailScreen}
-        options={{ title: 'Import' }}
-      />
-      <Sheet.Screen
-        name="Unavailable"
-        component={UnavailableFilesScreen}
-        options={{ title: 'Unavailable' }}
-      />
-      <Sheet.Screen name="Uploads" component={UploadsScreen} options={{ title: 'Uploads' }} />
-    </Sheet.Navigator>
+    <DimSurface>
+      <Sheet.Navigator
+        screenOptions={{
+          headerShown: true,
+          headerStyle: styles.header,
+          headerTintColor: palette.gray[50],
+          headerRight: DoneButton,
+        }}
+      >
+        <Sheet.Screen name="Status" component={LibraryStatusSheet} options={{ title: 'Status' }} />
+        <Sheet.Screen name="Imports" component={ImportsScreen} options={{ title: 'Imports' }} />
+        <Sheet.Screen
+          name="ImportDetail"
+          component={ImportDetailScreen}
+          options={{ title: 'Import' }}
+        />
+        <Sheet.Screen
+          name="Unavailable"
+          component={UnavailableFilesScreen}
+          options={{ title: 'Unavailable' }}
+        />
+        <Sheet.Screen name="Uploads" component={UploadsScreen} options={{ title: 'Uploads' }} />
+      </Sheet.Navigator>
+    </DimSurface>
   )
 }
 

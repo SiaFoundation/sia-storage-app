@@ -26,6 +26,7 @@ import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { maybePruneSlabs, resetPruneThrottle } from './pruneSlabs'
+import { initScreenDim, shutdownScreenDim } from './screenDim'
 import { initShareLinks } from './shareLinks'
 import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
@@ -79,6 +80,7 @@ export async function initApp(): Promise<void> {
         await ensureTempFsStorageDirectory()
         await initKeepAwake()
         initAutoKeepAwake()
+        initScreenDim()
         const maxDownloads = await app().settings.getMaxDownloads()
         await app().downloads.setMaxSlots(maxDownloads)
       },
@@ -164,6 +166,7 @@ async function cancelAllTransfers() {
 
 export async function shutdownApp() {
   teardownSuspensionManager()
+  shutdownScreenDim()
   await cancelAllTransfers()
 }
 
