@@ -480,6 +480,7 @@ export function buildDbNamespaces(
       },
       recalculateCurrent: (fileIds) => ops.recalculateCurrentForFileIds(db, fileIds),
       recalculateCurrentForGroups: (groups) => ops.recalculateCurrentForGroups(db, groups),
+      queryNameDirGroups: (fileIds) => ops.queryNameDirGroups(db, fileIds),
       deleteLost: async (indexerURL) => {
         const count = await ops.deleteLostFilesAndThumbnails(db, indexerURL)
         if (count > 0) {
