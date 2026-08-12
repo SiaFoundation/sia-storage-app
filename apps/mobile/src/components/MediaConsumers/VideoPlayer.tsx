@@ -48,7 +48,7 @@ export function VideoPlayer({
         />
       ) : null}
       {isPlaying ? (
-        <PlayingVideo source={source} onExit={() => setIsPlaying(false)} />
+        <PlayingVideo fileId={file.id} source={source} onExit={() => setIsPlaying(false)} />
       ) : (
         <View style={styles.overlay} pointerEvents="box-none">
           <Pressable
@@ -80,9 +80,28 @@ const VIDEO_BUFFER_OPTIONS = {
 }
 
 /** Owns the player, so it exists for exactly as long as playback does. */
-function PlayingVideo({ source, onExit }: { source: string; onExit: () => void }) {
+function PlayingVideo({
+  fileId,
+  source,
+  onExit,
+}: {
+  fileId: string
+  source: string
+  onExit: () => void
+}) {
   const player = useVideoPlayer(source, (p) => {
     p.bufferOptions = VIDEO_BUFFER_OPTIONS
+    // No cleanup hook needed: useVideoPlayer releases the player through
+    // useReleasingSharedObject on unmount and source change, and that drops listeners.
+    p.addListener('statusChange', ({ status, oldStatus, error }) => {
+      if (status === 'error') {
+        logger.error('VideoPlayer', 'playback_error', {
+          fileId,
+          oldStatus,
+          error: error ?? 'unknown',
+        })
+      }
+    })
     p.play()
   })
   const videoRef = useRef<VideoView>(null)
