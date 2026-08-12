@@ -1823,7 +1823,7 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    await app().files.update({ id: 'file-1', deletedAt: 5000 })
+    await app().files.update({ id: 'file-1', deletedAt: 5000 }, { updatedAt: 'now' })
 
     const events: ObjectEvent[] = [
       makeObjectEvent({
@@ -1876,7 +1876,7 @@ describe('syncDownEvents', () => {
       }),
     )
 
-    await app().files.update({ id: 'file-1', deletedAt: 5000 })
+    await app().files.update({ id: 'file-1', deletedAt: 5000 }, { updatedAt: 'now' })
 
     const updatedMetadata: FileMetadata = {
       id: 'file-1',

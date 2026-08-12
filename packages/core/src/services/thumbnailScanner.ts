@@ -58,13 +58,13 @@ async function correctType(
     storedType: oldType,
     detectedType: newType,
   })
-  await app.files.update({ id: fileId, type: newType })
+  await app.files.update({ id: fileId, type: newType }, { updatedAt: 'now' })
   try {
     const renamed = await app.fs.renameToType({ id: fileId, type: oldType }, newType)
     return renamed.uri
   } catch (e) {
     // Best-effort rollback so the DB stays consistent with disk.
-    await app.files.update({ id: fileId, type: oldType }).catch(() => {})
+    await app.files.update({ id: fileId, type: oldType }, { updatedAt: 'now' }).catch(() => {})
     throw e
   }
 }

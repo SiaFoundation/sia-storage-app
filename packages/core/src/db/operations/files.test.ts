@@ -134,7 +134,7 @@ describe('needsSyncUp dirty flag (on objects)', () => {
     await insertObject(db(), makeLocalObject('file-1'))
     await clearObjectFlag('file-1')
     expect(await objectFlag('file-1')).toBe(0)
-    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' })
+    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' }, { updatedAt: 'now' })
     expect(await objectFlag('file-1')).toBe(1)
   })
 
@@ -303,14 +303,14 @@ describe('insertManyFiles', () => {
 describe('updateFile', () => {
   it('updates specified fields', async () => {
     await insertFile(db(), makeFileRecord('file-1'))
-    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' })
+    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' }, { updatedAt: 'now' })
     const result = await readFile(db(), 'file-1')
     expect(result!.name).toBe('renamed.jpg')
   })
 
   it('auto-sets updatedAt', async () => {
     await insertFile(db(), makeFileRecord('file-1', { updatedAt: 1000 }))
-    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' })
+    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' }, { updatedAt: 'now' })
     const result = await readFile(db(), 'file-1')
     expect(result!.updatedAt).toBeGreaterThan(1000)
   })
@@ -323,19 +323,15 @@ describe('updateFile', () => {
 
     // A size-only update with default options auto-bumps v1's updatedAt to now, making it the
     // group's newest row; the current pointer must follow.
-    await updateFile(db(), { id: 'v1', size: 4096 })
+    await updateFile(db(), { id: 'v1', size: 4096 }, { updatedAt: 'now' })
 
     expect(await currentFlag('v1')).toBe(1)
     expect(await currentFlag('v2')).toBe(0)
   })
 
-  it('can include updatedAt explicitly', async () => {
+  it('can carry an explicit updatedAt', async () => {
     await insertFile(db(), makeFileRecord('file-1'))
-    await updateFile(
-      db(),
-      { id: 'file-1', name: 'renamed.jpg', updatedAt: 5000 },
-      { includeUpdatedAt: true },
-    )
+    await updateFile(db(), { id: 'file-1', name: 'renamed.jpg' }, { updatedAt: 5000 })
     const result = await readFile(db(), 'file-1')
     expect(result!.updatedAt).toBe(5000)
   })
@@ -345,10 +341,14 @@ describe('updateManyFiles', () => {
   it('batch updates in transaction', async () => {
     await insertFile(db(), makeFileRecord('file-1'))
     await insertFile(db(), makeFileRecord('file-2'))
-    await updateManyFiles(db(), [
-      { id: 'file-1', name: 'a.jpg' },
-      { id: 'file-2', name: 'b.jpg' },
-    ])
+    await updateManyFiles(
+      db(),
+      [
+        { id: 'file-1', name: 'a.jpg' },
+        { id: 'file-2', name: 'b.jpg' },
+      ],
+      { updatedAt: 'now' },
+    )
     const r1 = await readFile(db(), 'file-1')
     const r2 = await readFile(db(), 'file-2')
     expect(r1!.name).toBe('a.jpg')
@@ -356,7 +356,7 @@ describe('updateManyFiles', () => {
   })
 
   it('handles empty array', async () => {
-    await updateManyFiles(db(), [])
+    await updateManyFiles(db(), [], { updatedAt: 'now' })
   })
 })
 
@@ -643,7 +643,7 @@ describe('queryFiles', () => {
 describe('updateFile edge cases', () => {
   it('writes null values correctly', async () => {
     await insertFile(db(), makeFileRecord('f1', { trashedAt: 2000 }))
-    await updateFile(db(), { id: 'f1', trashedAt: null })
+    await updateFile(db(), { id: 'f1', trashedAt: null }, { updatedAt: 'now' })
     const result = await readFile(db(), 'f1')
     expect(result!.trashedAt).toBeNull()
   })

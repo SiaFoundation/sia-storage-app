@@ -71,7 +71,7 @@ describe('Tag Rename', () => {
     const objectId = localObjects[0].id
 
     await app.addTagToFile(file.id, 'vacation')
-    await app.updateFileRecord({ id: file.id, updatedAt: Date.now() }, { includeUpdatedAt: true })
+    await app.updateFileRecord({ id: file.id }, { updatedAt: Date.now() })
 
     await waitForCondition(
       async () => {

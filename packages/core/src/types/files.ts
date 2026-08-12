@@ -70,6 +70,16 @@ export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
   ...fileLocalMetadataKeys,
 ])
 
+/**
+ * How a write moves the file's version clock: 'now' stamps a local edit, a number carries the
+ * timestamp of a change made elsewhere, and 'preserve' leaves the clock where it is for a
+ * correction that changes nothing the user did.
+ */
+export type UpdatedAtWrite = 'now' | 'preserve' | number
+
+/** Fields a write may set. updatedAt is absent because UpdatedAtWrite decides it. */
+export type FileUpdate = Omit<Partial<FileRecordRow>, 'updatedAt'> & { id: string }
+
 export type FileRecord = FileRecordRow & {
   objects: Record<string, LocalObjectRef>
 }

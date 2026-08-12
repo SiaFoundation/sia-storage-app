@@ -281,7 +281,7 @@ describe('syncUpMetadata', () => {
     // so it is not in the pushed payload. The CAS (against the snapshot's
     // updatedAt) must fail, leaving the object flagged for the next pass.
     mockUpdateObjectMetadata.mockImplementation(async () => {
-      await app().files.update({ id: 'concurrent', name: 'edited.jpg' })
+      await app().files.update({ id: 'concurrent', name: 'edited.jpg' }, { updatedAt: 'now' })
     })
 
     await runSyncUpMetadata(5)
@@ -341,7 +341,7 @@ describe('syncUpMetadata', () => {
     // Tombstoning bumps updatedAt and re-flags the file's objects.
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false, skipInvalidation: true },
+      { updatedAt: 'now', skipInvalidation: true },
     )
     mockDeleteObject.mockResolvedValue(undefined)
 
@@ -368,7 +368,7 @@ describe('syncUpMetadata', () => {
     )
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false, skipInvalidation: true },
+      { updatedAt: 'now', skipInvalidation: true },
     )
     mockDeleteObject.mockRejectedValue(new Error('network'))
 
@@ -393,7 +393,7 @@ describe('syncUpMetadata', () => {
     )
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false, skipInvalidation: true },
+      { updatedAt: 'now', skipInvalidation: true },
     )
     // Remote object already gone (e.g. a prior session deleted it but crashed
     // before local cleanup). The delete is idempotently done, so the dangling
@@ -430,7 +430,7 @@ describe('syncUpMetadata', () => {
     )
     await app().files.update(
       { id: file.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false, skipInvalidation: true },
+      { updatedAt: 'now', skipInvalidation: true },
     )
 
     mockDeleteObject.mockResolvedValue(undefined)

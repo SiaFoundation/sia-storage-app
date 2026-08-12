@@ -967,7 +967,10 @@ export class UploadManager {
               fileId: file.id,
               name: file.name,
             })
-            await this.app.files.update({ id: file.id, lostReason: 'Empty file' })
+            await this.app.files.update(
+              { id: file.id, lostReason: 'Empty file' },
+              { updatedAt: 'now' },
+            )
             await this.app.fs.removeFile({ id: file.id, type: file.type })
             continue
           }
@@ -1241,7 +1244,7 @@ export class UploadManager {
       })
       if (sizeUpdates.length > 0) {
         await this.app.files.updateMany(sizeUpdates, {
-          includeUpdatedAt: true,
+          updatedAt: 'preserve',
           skipCurrentRecalc: true,
         })
       }

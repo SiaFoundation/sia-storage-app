@@ -28,7 +28,7 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
 
   const handleRenameFile = useCallback(
     async (newName: string) => {
-      await app().files.update({ id: file.id, name: newName })
+      await app().files.update({ id: file.id, name: newName }, { updatedAt: 'now' })
     },
     [file.id],
   )

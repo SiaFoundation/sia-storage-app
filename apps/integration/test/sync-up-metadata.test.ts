@@ -32,10 +32,7 @@ describe('Sync Up Metadata', () => {
 
     const newName = 'renamed-file.bin'
     const renameTimestamp = Date.now()
-    await app.updateFileRecord(
-      { id: file.id, name: newName, updatedAt: renameTimestamp },
-      { includeUpdatedAt: true },
-    )
+    await app.updateFileRecord({ id: file.id, name: newName }, { updatedAt: renameTimestamp })
 
     await waitForCondition(
       async () => {
@@ -84,17 +81,11 @@ describe('Sync Up Metadata', () => {
 
     const localOlderName = 'local-older-edit.bin'
     const T_local_old = T1 + 1000
-    await app.updateFileRecord(
-      { id: file1.id, name: localOlderName, updatedAt: T_local_old },
-      { includeUpdatedAt: true },
-    )
+    await app.updateFileRecord({ id: file1.id, name: localOlderName }, { updatedAt: T_local_old })
 
     const file2NewName = 'file2-local-rename.bin'
     const T_file2 = Date.now()
-    await app.updateFileRecord(
-      { id: file2.id, name: file2NewName, updatedAt: T_file2 },
-      { includeUpdatedAt: true },
-    )
+    await app.updateFileRecord({ id: file2.id, name: file2NewName }, { updatedAt: T_file2 })
 
     await waitForCondition(
       async () => {
@@ -126,7 +117,7 @@ describe('Sync Up Metadata', () => {
 
     await app.addTagToFile(file.id, 'vacation')
     await app.addTagToFile(file.id, 'beach')
-    await app.updateFileRecord({ id: file.id, updatedAt: Date.now() }, { includeUpdatedAt: true })
+    await app.updateFileRecord({ id: file.id }, { updatedAt: Date.now() })
 
     await waitForCondition(
       async () => {
@@ -182,7 +173,7 @@ describe('Sync Up Metadata', () => {
     const objectId = localObjects[0].id
 
     await app.addTagToFile(file.id, 'vacation')
-    await app.updateFileRecord({ id: file.id, updatedAt: Date.now() }, { includeUpdatedAt: true })
+    await app.updateFileRecord({ id: file.id }, { updatedAt: Date.now() })
 
     await waitForCondition(
       async () => {

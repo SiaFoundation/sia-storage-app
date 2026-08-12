@@ -4,7 +4,9 @@ export type {
   FileMetadata,
   FileRecord,
   FileRecordRow,
+  FileUpdate,
   ThumbSize,
+  UpdatedAtWrite,
 } from './files'
 export { fileLocalMetadataKeys, fileMetadataKeys, fileRecordRowKeys, ThumbSizes } from './files'
 export type { ChangeEvent, ChangeScope } from './changes'
