@@ -34,10 +34,7 @@ describe('Full File Lifecycle', () => {
     expect(objects).toHaveLength(1)
     const objectId = objects[0].id
 
-    await app.updateFileRecord(
-      { id: file.id, name: 'beach-sunset.bin', updatedAt: Date.now() },
-      { includeUpdatedAt: true },
-    )
+    await app.updateFileRecord({ id: file.id, name: 'beach-sunset.bin' }, { updatedAt: Date.now() })
 
     await waitForCondition(
       () => {

@@ -458,7 +458,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       const adopted = await fsIO.adoptFile({ id: file.id, type: file.type }, source)
       await service.files.update(
         { id: file.id, size: adopted.size, hash: adopted.hash },
-        { includeUpdatedAt: true },
+        { updatedAt: 'preserve' },
       )
       await service.fs.upsertMeta({
         fileId: file.id,

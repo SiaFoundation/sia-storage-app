@@ -57,7 +57,7 @@ describe('FS Orphan Scanner', () => {
     expect(uriBefore).not.toBeNull()
 
     // Soft-delete the file record
-    await app.updateFileRecord({ id: file.id, deletedAt: Date.now() }, { includeUpdatedAt: false })
+    await app.updateFileRecord({ id: file.id, deletedAt: Date.now() }, { updatedAt: 'now' })
 
     const result = await runOrphanScanner(app.app)
 
@@ -75,10 +75,7 @@ describe('FS Orphan Scanner', () => {
 
     // 3. Soft-deleted file
     const [deletedFile] = await app.addFiles(generateTestFiles(1, { startId: 2, sizeBytes: 100 }))
-    await app.updateFileRecord(
-      { id: deletedFile.id, deletedAt: Date.now() },
-      { includeUpdatedAt: false },
-    )
+    await app.updateFileRecord({ id: deletedFile.id, deletedAt: Date.now() }, { updatedAt: 'now' })
 
     const result = await runOrphanScanner(app.app)
 

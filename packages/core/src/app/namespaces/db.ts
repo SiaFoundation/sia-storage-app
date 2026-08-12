@@ -80,7 +80,7 @@ export function buildDbNamespaces(
       usedAt: usedAt ?? Date.now(),
     })
     // Writing the file to disk told us its real size; it is not an edit, so the clock stays put.
-    await ops.updateFile(db, { id: file.id, size }, { includeUpdatedAt: true })
+    await ops.updateFile(db, { id: file.id, size }, { updatedAt: 'preserve' })
   }
 
   async function removeFile(file: { id: string; type: string }) {
@@ -427,7 +427,7 @@ export function buildDbNamespaces(
       },
       update: async (update, opts) => {
         await ops.updateFile(db, update, {
-          includeUpdatedAt: opts?.includeUpdatedAt,
+          updatedAt: opts.updatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (!opts?.skipInvalidation) {
@@ -437,7 +437,7 @@ export function buildDbNamespaces(
       },
       updateMany: async (updates, opts) => {
         await ops.updateManyFiles(db, updates, {
-          includeUpdatedAt: opts?.includeUpdatedAt,
+          updatedAt: opts.updatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (updates.length > 0) {

@@ -67,20 +67,20 @@ describe('files store (core functions with appService)', () => {
     await app().files.create(makeFileRecord('f1'))
     const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
     const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
-    await app().files.update({ id: 'f1', name: 'renamed.jpg' })
+    await app().files.update({ id: 'f1', name: 'renamed.jpg' }, { updatedAt: 'now' })
     const record = await app().files.getById('f1')
     expect(record!.name).toBe('renamed.jpg')
     expect(fileSpy).toHaveBeenCalledWith('f1')
     expect(verSpy).toHaveBeenCalled()
   })
 
-  test('updateFileRecord passes includeUpdatedAt option', async () => {
+  test('update can carry an explicit updatedAt', async () => {
     await app().files.create(makeFileRecord('f1'))
     const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
     const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
     await app().files.update(
-      { id: 'f1', updatedAt: 9999, name: 'updated.jpg' },
-      { includeUpdatedAt: true, skipInvalidation: true },
+      { id: 'f1', name: 'updated.jpg' },
+      { updatedAt: 9999, skipInvalidation: true },
     )
     const record = await app().files.getById('f1')
     expect(record!.updatedAt).toBe(9999)
@@ -94,10 +94,13 @@ describe('files store (core functions with appService)', () => {
     await app().files.create(makeFileRecord('f3'))
     const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
     const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
-    await app().files.updateMany([
-      { id: 'f1', name: 'a.jpg' },
-      { id: 'f2', name: 'b.jpg' },
-    ])
+    await app().files.updateMany(
+      [
+        { id: 'f1', name: 'a.jpg' },
+        { id: 'f2', name: 'b.jpg' },
+      ],
+      { updatedAt: 'now' },
+    )
     expect(fileSpy).toHaveBeenCalledWith('f1')
     expect(fileSpy).toHaveBeenCalledWith('f2')
     expect(fileSpy).not.toHaveBeenCalledWith('f3')
@@ -108,7 +111,7 @@ describe('files store (core functions with appService)', () => {
   test('updateMany with empty array does not invalidate', async () => {
     const fileSpy = jest.spyOn(app().caches.fileById, 'invalidate')
     const verSpy = jest.spyOn(app().caches.libraryVersion, 'invalidate')
-    await app().files.updateMany([])
+    await app().files.updateMany([], { updatedAt: 'now' })
     expect(fileSpy).not.toHaveBeenCalled()
     expect(verSpy).not.toHaveBeenCalled()
   })

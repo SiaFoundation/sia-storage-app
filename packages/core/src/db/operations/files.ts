@@ -3,7 +3,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRef, LocalObjectRefRow } from '../../encoding/localObject'
 import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
-import type { FileRecord, FileRecordRow } from '../../types/files'
+import type { FileRecord, FileRecordRow, FileUpdate, UpdatedAtWrite } from '../../types/files'
 import * as sql from '../sql'
 import { markImportFileAdded, markImportFileDuplicate } from './imports'
 import { buildRecordFilter } from './library'
@@ -535,11 +535,11 @@ export async function queryFileStackKey(
 
 export async function updateFile(
   db: DatabaseAdapter,
-  update: Partial<FileRecordRow> & { id: string },
+  update: FileUpdate,
   options: {
-    includeUpdatedAt?: boolean
+    updatedAt: UpdatedAtWrite
     skipCurrentRecalc?: boolean
-  } = { includeUpdatedAt: false },
+  },
 ): Promise<void> {
   // Commit the file write and the object flag in one transaction. Callers already
   // inside a transaction use updateFileInner.
@@ -548,15 +548,15 @@ export async function updateFile(
 
 async function updateFileInner(
   db: DatabaseAdapter,
-  update: Partial<FileRecordRow> & { id: string },
+  update: FileUpdate,
   options: {
-    includeUpdatedAt?: boolean
+    updatedAt: UpdatedAtWrite
     skipCurrentRecalc?: boolean
-  } = { includeUpdatedAt: false },
+  },
 ): Promise<void> {
   const { id } = update
   const assignments: Record<string, string | number | boolean | null> = {}
-  const updatableFields: (keyof Omit<FileRecordRow, 'tags'>)[] = [
+  const updatableFields: (keyof Omit<FileRecordRow, 'tags' | 'updatedAt'>)[] = [
     'name',
     'type',
     'kind',
@@ -570,9 +570,6 @@ async function updateFileInner(
     'deletedAt',
     'lostReason',
   ]
-  if (options.includeUpdatedAt) {
-    updatableFields.push('updatedAt')
-  }
   for (const field of updatableFields) {
     const value = update[field]
     if (value === undefined) {
@@ -585,20 +582,18 @@ async function updateFileInner(
     assignments.nameSortKey = naturalSortKey(update.name)
   }
 
-  if (!options.includeUpdatedAt) {
-    assignments.updatedAt = Date.now()
+  const { updatedAt } = options
+  if (updatedAt !== 'preserve') {
+    assignments.updatedAt = updatedAt === 'now' ? Date.now() : updatedAt
   }
 
-  // updatedAt lands on every default-path update (auto-bumped to now above) and on an
-  // includeUpdatedAt update only when the caller supplies one. Either way it can make a
-  // non-current row its group's newest, so currency is recalculated whenever it is written.
-  const updatedAtWritten = !options.includeUpdatedAt || update.updatedAt !== undefined
+  // A written updatedAt can make a non-current row its group's newest, so currency follows it.
   const needsRecalc =
     !options.skipCurrentRecalc &&
     (update.name !== undefined ||
       update.trashedAt !== undefined ||
       update.deletedAt !== undefined ||
-      updatedAtWritten)
+      updatedAt !== 'preserve')
 
   let oldRow: { name: string; directoryId: string | null } | null = null
   if (needsRecalc) {
@@ -777,9 +772,9 @@ export async function createFileWithLocalObject(
 
 export async function updateFileWithLocalObject(
   db: DatabaseAdapter,
-  update: Partial<FileRecordRow> & { id: string },
+  update: FileUpdate,
   localObject: LocalObject,
-  options?: { includeUpdatedAt?: boolean },
+  options: { updatedAt: UpdatedAtWrite },
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await updateFileInner(db, update, options)
@@ -1021,11 +1016,11 @@ export async function upsertManyFiles(
 
 export async function updateManyFiles(
   db: DatabaseAdapter,
-  updates: (Partial<FileRecordRow> & { id: string })[],
+  updates: FileUpdate[],
   options: {
-    includeUpdatedAt?: boolean
+    updatedAt: UpdatedAtWrite
     skipCurrentRecalc?: boolean
-  } = { includeUpdatedAt: false },
+  },
 ): Promise<void> {
   if (updates.length === 0) return
   await db.withTransactionAsync(async () => {

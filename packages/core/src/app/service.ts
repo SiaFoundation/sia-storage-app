@@ -29,7 +29,15 @@ import type {
   ProviderProgress,
 } from '../types/provider'
 import type { ImportCopyResult } from '../services/fsFileUri'
-import type { FileKind, FileMetadata, FileRecord, FileRecordRow, ThumbSize } from '../types/files'
+import type {
+  FileKind,
+  FileMetadata,
+  FileRecord,
+  FileRecordRow,
+  FileUpdate,
+  ThumbSize,
+  UpdatedAtWrite,
+} from '../types/files'
 import type {
   ConnectionState,
   DownloadEntry,
@@ -245,26 +253,26 @@ export interface AppService {
     ): Promise<void>
     /** Updates a file. */
     update(
-      update: Partial<FileRecordRow> & { id: string },
-      opts?: {
-        includeUpdatedAt?: boolean
+      update: FileUpdate,
+      opts: {
+        updatedAt: UpdatedAtWrite
         skipInvalidation?: boolean
         skipCurrentRecalc?: boolean
       },
     ): Promise<void>
     /** Updates multiple files. */
     updateMany(
-      updates: (Partial<FileRecordRow> & { id: string })[],
-      opts?: {
-        includeUpdatedAt?: boolean
+      updates: FileUpdate[],
+      opts: {
+        updatedAt: UpdatedAtWrite
         skipCurrentRecalc?: boolean
       },
     ): Promise<void>
     /** Updates a file and upserts its local object. */
     updateWithLocalObject(
-      update: Partial<FileRecordRow> & { id: string },
+      update: FileUpdate,
       localObject: LocalObject,
-      opts?: { includeUpdatedAt?: boolean; skipInvalidation?: boolean },
+      opts: { updatedAt: UpdatedAtWrite; skipInvalidation?: boolean },
     ): Promise<void>
     /** Hard-deletes a file by ID. */
     delete(id: string, opts?: { skipInvalidation?: boolean }): Promise<void>

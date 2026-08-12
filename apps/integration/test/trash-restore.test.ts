@@ -49,7 +49,7 @@ describe('Trash and Restore', () => {
 
     // Backdate trashedAt so auto-purge considers them expired
     for (const file of [files[0], files[1]]) {
-      await app.app.files.update({ id: file.id, trashedAt: 1 })
+      await app.app.files.update({ id: file.id, trashedAt: 1 }, { updatedAt: 'now' })
     }
 
     const purgedCount = await app.app.files.autoPurge()

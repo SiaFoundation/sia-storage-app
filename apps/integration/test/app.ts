@@ -24,7 +24,7 @@ import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
 import type { UploadManager } from '@siastorage/core/services/uploader'
-import type { FileRecord, FileRecordRow } from '@siastorage/core/types'
+import type { FileRecord, FileUpdate, UpdatedAtWrite } from '@siastorage/core/types'
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
 import { createInMemoryStorage } from '@siastorage/node-adapters/storage'
 import { createEmptyIndexerStorage, type MockIndexerStorage, MockSdk } from '@siastorage/sdk-mock'
@@ -211,10 +211,7 @@ export interface TestApp {
   readDirectoryPathForFile(fileId: string): Promise<string | undefined>
   readAllDirectoriesWithCounts(): Promise<DirectoryWithCount[]>
 
-  updateFileRecord(
-    update: Partial<FileRecordRow> & { id: string },
-    opts?: { includeUpdatedAt?: boolean },
-  ): Promise<void>
+  updateFileRecord(update: FileUpdate, opts: { updatedAt: UpdatedAtWrite }): Promise<void>
   readLocalObjectsForFile(fileId: string): Promise<LocalObjectRef[]>
 
   removeFsFile(fileId: string, type: string): Promise<void>
