@@ -76,7 +76,7 @@ export default {
       'expo-image',
       ['./plugins/ios-target-16'],
       './plugins/android-gradle-cache',
-      'expo-video',
+      ['expo-video', { supportsPictureInPicture: true }],
       './plugins/background-fetch',
       [
         'react-native-maps',
