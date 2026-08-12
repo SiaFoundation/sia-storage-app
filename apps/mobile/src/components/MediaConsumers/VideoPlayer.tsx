@@ -14,7 +14,20 @@ export function VideoPlayer({
   style?: ViewStyle
   onViewerControlPress?: () => void
 }) {
-  const player = useVideoPlayer(source)
+  // Log playback failures. No cleanup needed: useVideoPlayer creates the player
+  // via useReleasingSharedObject, which calls player.release() on unmount and on
+  // source change — releasing the player tears down this listener with it.
+  const player = useVideoPlayer(source, (p) => {
+    p.addListener('statusChange', ({ status, oldStatus, error }) => {
+      if (status === 'error') {
+        logger.error('VideoPlayer', 'playback_error', {
+          source,
+          oldStatus,
+          error: error ?? 'unknown',
+        })
+      }
+    })
+  })
   const videoRef = useRef<VideoView>(null)
   const [showNativeControls, setShowNativeControls] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
