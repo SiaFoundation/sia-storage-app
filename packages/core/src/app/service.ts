@@ -518,6 +518,15 @@ export interface AppService {
       sourceUri: string,
       opts?: { usedAt?: number },
     ): Promise<{ uri: string; size: number }>
+    /** Moves (renames) a source file into managed storage, consuming the
+     * source; same bookkeeping as copyFile. Falls back to a copy on a
+     * cross-volume rename. Used by the download path to avoid the ~2x
+     * temp+copy footprint. */
+    moveFile(
+      file: { id: string; type: string },
+      sourceUri: string,
+      opts?: { usedAt?: number },
+    ): Promise<{ uri: string; size: number }>
     /**
      * The import scanner's claim-scoped copy; same bookkeeping as copyFile.
      * Returns ImportCopyResult: the `stream`/`asset` arms carry the hash and

@@ -27,6 +27,19 @@ export async function copyFileToFs(file: FsFileInfo, sourceUri: string): Promise
   return uri
 }
 
+/**
+ * Move a file into app storage, consuming the source. Like copyFileToFs but
+ * renames instead of duplicating (falling back to a copy on a cross-volume
+ * rename); used by the download path so the temp download file isn't left
+ * behind as a ~2x duplicate.
+ */
+export async function moveFileToFs(file: FsFileInfo, sourceUri: string): Promise<string> {
+  logger.debug('fs', 'move_file', { fileId: file.id, sourceUri })
+  const { uri } = await app().fs.moveFile(file, sourceUri)
+  await app().caches.fsFileUri.set(uri, file.id)
+  return uri
+}
+
 export function useFsFileUri(file?: FsFileInfo) {
   return useSWR(file ? app().caches.fsFileUri.key(file.id) : null, () => {
     return file ? app().fs.getFileUri(file) : null

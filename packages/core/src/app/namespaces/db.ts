@@ -120,6 +120,14 @@ export function buildDbNamespaces(
       await recordCopiedMeta(file, result.size, opts?.usedAt)
       return result
     },
+    moveFile: async (file, sourceUri, opts) => {
+      // Same bookkeeping as copyFile; the adapter consumes the source (falling
+      // back to copy on a cross-volume rename) rather than duplicating it.
+      const move = fsIO.move ?? fsIO.copy
+      const result = await move(file, sourceUri)
+      await recordCopiedMeta(file, result.size, opts?.usedAt)
+      return result
+    },
     importCopy: async (file, sourceUri, opts) => {
       const result = await fsIO.importCopy(file, sourceUri, {
         claimToken: opts.claimToken,
