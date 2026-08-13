@@ -220,6 +220,7 @@
     "better-sqlite3",
   ],
   "patchedDependencies": {
+    "expo-video@55.0.10": "patches/expo-video@55.0.10.patch",
     "react-native-fs@2.20.0": "patches/react-native-fs@2.20.0.patch",
     "expo-sqlite@55.0.10": "patches/expo-sqlite@55.0.10.patch",
   },
