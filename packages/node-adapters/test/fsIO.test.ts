@@ -134,8 +134,22 @@ describe('adoptFile', () => {
 
     const adopted = await fsIO.adoptFile!({ id: 'f1', type: 'application/octet-stream' }, staged)
 
+    expect(adopted.kind).toBe('hashed')
+    if (adopted.kind === 'hashed') expect(adopted.hash).toMatch(/^sha256:/)
     expect(adopted.size).toBe(5)
-    expect(adopted.hash).toMatch(/^sha256:/)
+    expect(fs.existsSync(staged)).toBe(false)
+  })
+
+  it('skips the hash when hash is false, still consuming the source', async () => {
+    const staged = path.join(filesDir, 'staged-nohash.bin')
+    fs.writeFileSync(staged, 'hello')
+
+    const adopted = await fsIO.adoptFile!({ id: 'f2', type: 'application/octet-stream' }, staged, {
+      hash: false,
+    })
+
+    expect(adopted.kind).toBe('plain')
+    expect(adopted.size).toBe(5)
     expect(fs.existsSync(staged)).toBe(false)
   })
 

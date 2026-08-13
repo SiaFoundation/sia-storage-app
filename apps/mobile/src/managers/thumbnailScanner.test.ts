@@ -556,9 +556,12 @@ describe('thumbnailScanner', () => {
     })
     await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    const adoptSpy = jest
-      .spyOn(app().fs, 'adoptFile')
-      .mockResolvedValue({ uri: 'file://target.webp', size: 200, hash: 'thumb-hash' })
+    const adoptSpy = jest.spyOn(app().fs, 'adoptFile').mockResolvedValue({
+      kind: 'hashed',
+      uri: 'file://target.webp',
+      size: 200,
+      hash: 'thumb-hash',
+    })
     generateMock.mockResolvedValue({ savedUri: 'file:///tmp/sized.webp', mimeType: 'image/webp' })
 
     const result = await runThumbnailScanner()

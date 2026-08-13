@@ -1,9 +1,10 @@
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { createHash } from 'crypto'
-import { constants } from 'fs'
+import { constants, createWriteStream } from 'fs'
 import * as fs from 'fs/promises'
 import * as path from 'path'
+import { pipeline } from 'stream/promises'
 
 export function createNodeFsIO(filesDir: string): FsIOAdapter {
   function filePath(fileId: string, type: string): string {
@@ -63,7 +64,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       return { kind: 'plain' as const, uri: target, size: stat.size }
     },
 
-    async adoptFile(file, sourceUri) {
+    async adoptFile(file, sourceUri, opts) {
       const target = filePath(file.id, file.type)
       const source = sourceUri.replace(/^file:\/\//, '')
       // A symlink passes a containment check on its own path and then reads
@@ -88,7 +89,16 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
         } catch {
           // Across volumes, copied from the descriptor already open rather than
           // from the path, because copyFile follows a link and this cannot.
-          await fs.writeFile(target, staged.createReadStream({ autoClose: false }))
+          // Remove any existing target first and open exclusively ('wx'): a
+          // symlink left at the destination would otherwise be followed and
+          // written through, before the post-move lstat check can refuse it.
+          // rm with force ignores a missing target but still surfaces a real
+          // failure (EACCES/EPERM) rather than masking it.
+          await fs.rm(target, { force: true })
+          await pipeline(
+            staged.createReadStream({ autoClose: false }),
+            createWriteStream(target, { flags: 'wx' }),
+          )
           await fs.unlink(source).catch(() => {})
         }
       } finally {
@@ -100,6 +110,10 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       if ((await fs.lstat(target)).isSymbolicLink()) {
         await fs.unlink(target).catch(() => {})
         throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+      }
+      if (opts?.hash === false) {
+        const stat = await fs.stat(target)
+        return { kind: 'plain', uri: target, size: stat.size }
       }
       const hash = createHash('sha256')
       const handle = await fs.open(target, 'r')
@@ -116,7 +130,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
         await handle.close()
       }
       const stat = await fs.stat(target)
-      return { uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
+      return { kind: 'hashed', uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
     },
 
     async exportTo(file, destPath) {

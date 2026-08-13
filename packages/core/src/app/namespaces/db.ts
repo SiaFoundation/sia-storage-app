@@ -152,9 +152,12 @@ export function buildDbNamespaces(
       })
       return { uri: result.uri, size: result.size, hash }
     },
-    adoptFile: async (file, sourceUri) => {
+    adoptFile: async (file, sourceUri, opts) => {
       if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
-      const result = await fsIO.adoptFile(file, sourceUri)
+      const result = await fsIO.adoptFile(file, sourceUri, opts)
+      // Bytes are on disk; gate so the fsMeta upsert can't fast-reject and
+      // leave a file with no meta row, invisible to cache eviction.
+      await db.waitUntilActive?.()
       const now = Date.now()
       await ops.upsertFsMeta(db, {
         fileId: file.id,

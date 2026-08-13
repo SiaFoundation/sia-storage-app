@@ -14,7 +14,11 @@ async function writeThumbnailToStorage(
   result: ThumbnailResult,
 ): Promise<{ uri: string; size: number; hash: string }> {
   if ('savedUri' in result) {
-    return app.fs.adoptFile(thumbInfo, result.savedUri)
+    const adopted = await app.fs.adoptFile(thumbInfo, result.savedUri)
+    if (adopted.kind !== 'hashed') {
+      throw new Error(`adoptFile returned '${adopted.kind}' without a hash for ${thumbInfo.id}`)
+    }
+    return adopted
   }
   return app.fs.writeFileData(thumbInfo, result.data)
 }
