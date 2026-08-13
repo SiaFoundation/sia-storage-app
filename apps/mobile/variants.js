@@ -34,6 +34,9 @@ const VARIANTS = {
     bundleId: 'sia.storage.beta',
     iosIcon: './assets/app-icon-ios-beta.png',
     androidIcon: './assets/app-icon-android-beta.png',
+    // Must match the TestFlight external group names in App Store Connect
+    // exactly; pilot aborts the upload on a name it can't find.
+    testflightExternalGroups: ['External'],
   },
   prod: {
     name: 'Sia Storage',
@@ -42,8 +45,9 @@ const VARIANTS = {
     bundleId: 'sia.storage',
     iosIcon: './assets/app-icon-ios.png',
     androidIcon: './assets/app-icon-android.png',
-    // Must match the TestFlight external group names in App Store Connect exactly.
-    testflightExternalGroups: ['Beacons', 'Hackers', 'Marketing'],
+    // No testflightExternalGroups: all TestFlight testing happens on the beta
+    // app, so a prod build is uploaded only to be attached to an App Store
+    // submission.
   },
 }
 
