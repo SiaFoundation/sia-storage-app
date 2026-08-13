@@ -14,9 +14,13 @@ async function writeThumbnailToStorage(
   result: ThumbnailResult,
 ): Promise<{ uri: string; size: number; hash: string }> {
   if ('savedUri' in result) {
+    // adoptFile already returns a normalized sha256:<hex> hash.
     return app.fs.adoptFile(thumbInfo, result.savedUri)
   }
-  return app.fs.writeFileData(thumbInfo, result.data)
+  // writeFileData returns a bare digest; normalize so both branches, and the
+  // scanner sites that consume the result, see one hash format.
+  const written = await app.fs.writeFileData(thumbInfo, result.data)
+  return { ...written, hash: `sha256:${written.hash}` }
 }
 
 /**
@@ -358,7 +362,7 @@ export class ThumbnailScanner {
         type: result.mimeType,
         kind: 'thumb',
         size: copied.size,
-        hash: `sha256:${copied.hash}`,
+        hash: copied.hash,
         createdAt: now,
         updatedAt: now,
         addedAt: now,
@@ -449,7 +453,7 @@ export class ThumbnailScanner {
           type: result.mimeType,
           kind: 'thumb',
           size: copied.size,
-          hash: `sha256:${copied.hash}`,
+          hash: copied.hash,
           createdAt: now,
           updatedAt: now,
           addedAt: now,

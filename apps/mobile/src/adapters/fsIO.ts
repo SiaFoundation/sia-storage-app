@@ -42,6 +42,40 @@ function fileUriToPath(uri: string): string {
   }
 }
 
+// Overloaded to match the adapter contract: hashed by default, size-only with
+// { hash: false }. A single union-returning function does not satisfy the
+// overloaded interface property, so the signatures live here.
+async function adoptFile(
+  file: { id: string; type: string },
+  sourceUri: string,
+): Promise<{ uri: string; size: number; hash: string }>
+async function adoptFile(
+  file: { id: string; type: string },
+  sourceUri: string,
+  opts: { hash: false },
+): Promise<{ uri: string; size: number }>
+async function adoptFile(
+  file: { id: string; type: string },
+  sourceUri: string,
+  opts?: { hash: false },
+): Promise<{ uri: string; size: number; hash?: string }> {
+  const targetUri = fsFileUri(file.id, file.type)
+  if (!(await RNFS.exists(fsStorageDirectoryUri))) {
+    await RNFS.mkdir(fsStorageDirectoryUri)
+  }
+  if (await RNFS.exists(targetUri)) {
+    await RNFS.unlink(targetUri)
+  }
+  await RNFS.moveFile(fileUriToPath(sourceUri), targetUri)
+  const stat = await RNFS.stat(targetUri)
+  if (opts?.hash === false) {
+    return { uri: targetUri, size: stat.size }
+  }
+  // Normalize RNFS.hash's bare hex to the sha256:<hex> form other clients use.
+  const hash = await RNFS.hash(targetUri, 'sha256')
+  return { uri: targetUri, size: stat.size, hash: `sha256:${hash}` }
+}
+
 export function createFsIOAdapter(): FsIOAdapter {
   return {
     uri(fileId, type) {
@@ -122,19 +156,7 @@ export function createFsIOAdapter(): FsIOAdapter {
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },
-    async adoptFile(file, sourceUri) {
-      const targetUri = fsFileUri(file.id, file.type)
-      if (!(await RNFS.exists(fsStorageDirectoryUri))) {
-        await RNFS.mkdir(fsStorageDirectoryUri)
-      }
-      if (await RNFS.exists(targetUri)) {
-        await RNFS.unlink(targetUri)
-      }
-      await RNFS.moveFile(fileUriToPath(sourceUri), targetUri)
-      const stat = await RNFS.stat(targetUri)
-      const hash = await RNFS.hash(targetUri, 'sha256')
-      return { uri: targetUri, size: stat.size, hash }
-    },
+    adoptFile,
     async renameToType(file, newType) {
       const oldUri = fsFileUri(file.id, file.type)
       const newUri = fsFileUri(file.id, newType)

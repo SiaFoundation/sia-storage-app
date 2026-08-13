@@ -15,6 +15,15 @@ export type ImportCopyResult =
   | { kind: 'asset'; uri: string; size: number; sha256: string; mediaMime: string }
   | { kind: 'plain'; uri: string; size: number }
 
+/**
+ * What `adoptFile` produced when it hashed the file (the default): the
+ * `sha256:<hex>` string callers write to the file record.
+ */
+export type AdoptFileHashed = { uri: string; size: number; hash: string }
+
+/** What `adoptFile` produced with `{ hash: false }`: size only, no hash. */
+export type AdoptFilePlain = { uri: string; size: number }
+
 export type SizeResult =
   | { value: number; error?: undefined }
   | { value: null; error: 'not_found' | 'stat_error' }
@@ -71,10 +80,20 @@ export type FsIOAdapter = FsFileUriAdapter & {
    * Optional: only a host that hands bytes to another process by path needs it.
    */
   exportTo?(file: { id: string; type: string }, destPath: string): Promise<number>
+  /**
+   * Take ownership of a source file by renaming it into the file's slot,
+   * consuming the source. Hashes the result by default, returning the
+   * `sha256:<hex>` string; the download path passes `hash: false` to skip the
+   * extra full read (size only), because it already knows the size and never
+   * reads a hash back. Optional: only a host that takes ownership of a file by
+   * path implements it.
+   */
+  adoptFile?(file: { id: string; type: string }, sourceUri: string): Promise<AdoptFileHashed>
   adoptFile?(
     file: { id: string; type: string },
     sourceUri: string,
-  ): Promise<{ uri: string; size: number; hash: string }>
+    opts: { hash: false },
+  ): Promise<AdoptFilePlain>
   /**
    * Move a file's on-disk path to match a new mime type. No-op when
    * extensions match. **Overwrites** any existing file at the destination

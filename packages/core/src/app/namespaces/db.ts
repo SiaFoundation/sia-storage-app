@@ -2,7 +2,7 @@ import type { CryptoAdapter } from '../../adapters/crypto'
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import * as ops from '../../db/operations'
-import type { FsIOAdapter } from '../../services/fsFileUri'
+import type { AdoptFileHashed, AdoptFilePlain, FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
 import { IMPORTS_CACHE_COALESCE_MS } from '../../config'
@@ -99,6 +99,34 @@ export function buildDbNamespaces(
     caches.libraryVersion.invalidate()
   }
 
+  // adoptFile through the fs adapter, then record fsMeta. Overloaded to mirror
+  // the adapter: hashed by default, size-only with { hash: false }.
+  async function adoptFileWithMeta(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<AdoptFileHashed>
+  async function adoptFileWithMeta(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts: { hash: false },
+  ): Promise<AdoptFilePlain>
+  async function adoptFileWithMeta(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts?: { hash: false },
+  ): Promise<AdoptFileHashed | AdoptFilePlain> {
+    if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
+    const result = opts
+      ? await fsIO.adoptFile(file, sourceUri, opts)
+      : await fsIO.adoptFile(file, sourceUri)
+    // Bytes are on disk; gate so the fsMeta upsert can't fast-reject and leave
+    // a file with no meta row, invisible to cache eviction.
+    await db.waitUntilActive?.()
+    const now = Date.now()
+    await ops.upsertFsMeta(db, { fileId: file.id, size: result.size, addedAt: now, usedAt: now })
+    return result
+  }
+
   const fsNamespace: AppService['fs'] = {
     readMeta: (fileId) => ops.readFsMeta(db, fileId),
     upsertMeta: (row) => ops.upsertFsMeta(db, row),
@@ -152,18 +180,7 @@ export function buildDbNamespaces(
       })
       return { uri: result.uri, size: result.size, hash }
     },
-    adoptFile: async (file, sourceUri) => {
-      if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
-      const result = await fsIO.adoptFile(file, sourceUri)
-      const now = Date.now()
-      await ops.upsertFsMeta(db, {
-        fileId: file.id,
-        size: result.size,
-        addedAt: now,
-        usedAt: now,
-      })
-      return result
-    },
+    adoptFile: adoptFileWithMeta,
     renameToType: (file, newType) => fsIO.renameToType(file, newType),
     listFiles: () => fsIO.list(),
     ensureStorageDirectory: () => fsIO.ensureDirectory(),

@@ -21,8 +21,21 @@ export async function removeFsFile(file: FsFileInfo): Promise<void> {
  * loop boundary before invoking.
  */
 export async function copyFileToFs(file: FsFileInfo, sourceUri: string): Promise<string> {
-  logger.debug('fs', 'copy_file', { fileId: file.id, sourceUri })
+  logger.debug('fs', 'copy_file', { fileId: file.id })
   const { uri } = await app().fs.copyFile(file, sourceUri)
+  await app().caches.fsFileUri.set(uri, file.id)
+  return uri
+}
+
+/**
+ * Rename a finished download's temp into its storage slot, consuming the temp.
+ * A download stages to a temp first because execute() treats any bytes already
+ * at the slot as complete, so a partial write there would look permanently
+ * done. hash: false because the download already knows its size.
+ */
+export async function adoptFileToFs(file: FsFileInfo, sourceUri: string): Promise<string> {
+  logger.debug('fs', 'adopt_file', { fileId: file.id })
+  const { uri } = await app().fs.adoptFile(file, sourceUri, { hash: false })
   await app().caches.fsFileUri.set(uri, file.id)
   return uri
 }

@@ -556,15 +556,31 @@ describe('thumbnailScanner', () => {
     })
     await upsertFs('file1')
     getFsFileUriMock.mockResolvedValue('file://test.jpg')
-    const adoptSpy = jest
-      .spyOn(app().fs, 'adoptFile')
-      .mockResolvedValue({ uri: 'file://target.webp', size: 200, hash: 'thumb-hash' })
+    // A realistic sha256:<hex> proves the scanner does not re-prefix it into
+    // sha256:sha256:... and sync that to the indexer.
+    const thumbHash = `sha256:${'a'.repeat(64)}`
+    const adoptSpy = jest.spyOn(app().fs, 'adoptFile').mockResolvedValue({
+      uri: 'file://target.webp',
+      size: 200,
+      hash: thumbHash,
+    } as {
+      uri: string
+      size: number
+      hash: string
+    })
     generateMock.mockResolvedValue({ savedUri: 'file:///tmp/sized.webp', mimeType: 'image/webp' })
 
     const result = await runThumbnailScanner()
     const producedSizes = result.produced.map((p) => p.size).sort((a, b) => a - b)
     expect(producedSizes).toEqual([...ThumbSizes].sort((a, b) => a - b))
     expect(adoptSpy).toHaveBeenCalledTimes(ThumbSizes.length)
+
+    // The stored thumbnail hash is the adapter's, not double-prefixed.
+    const thumbs = await app().thumbnails.getForFile('file1')
+    for (const t of thumbs) {
+      expect(t.hash).toBe(thumbHash)
+      expect(t.hash).toMatch(/^sha256:[0-9a-f]{64}$/)
+    }
   })
 
   it('does not return metadata-only files (no fs row) as candidates', async () => {
