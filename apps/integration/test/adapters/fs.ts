@@ -12,6 +12,37 @@ export function createFsAdapter(params: { tempDir: string }) {
     return path.join(tempDir, `${fileId}${ext}`)
   }
 
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<{ uri: string; size: number; hash: string }>
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts: { hash: false },
+  ): Promise<{ uri: string; size: number }>
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts?: { hash: false },
+  ): Promise<{ uri: string; size: number; hash?: string }> {
+    const source = sourceUri.replace(/^file:\/\//, '')
+    // Same refusal as the production adapter, so the containment tests run
+    // against the semantics they claim to cover.
+    if (nodeFs.lstatSync(source).isSymbolicLink()) {
+      throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+    }
+    const target = fsFilePath(file.id, file.type)
+    nodeFs.mkdirSync(path.dirname(target), { recursive: true })
+    nodeFs.renameSync(source, target)
+    const size = nodeFs.statSync(target).size
+    if (opts?.hash === false) {
+      return { uri: `file://${target}`, size }
+    }
+    const hash = createHash('sha256').update(nodeFs.readFileSync(target)).digest('hex')
+    return { uri: `file://${target}`, size, hash: `sha256:${hash}` }
+  }
+
   const fsIO: FsIOAdapter = {
     uri(fileId, type) {
       return `file://${fsFilePath(fileId, type)}`
@@ -27,20 +58,7 @@ export function createFsAdapter(params: { tempDir: string }) {
       }
       return size
     },
-    async adoptFile(file, sourceUri) {
-      const source = sourceUri.replace(/^file:\/\//, '')
-      // Same refusal as the production adapter, so the containment tests run
-      // against the semantics they claim to cover.
-      if (nodeFs.lstatSync(source).isSymbolicLink()) {
-        throw new Error(`Refusing to adopt a symbolic link: ${source}`)
-      }
-      const target = fsFilePath(file.id, file.type)
-      nodeFs.mkdirSync(path.dirname(target), { recursive: true })
-      nodeFs.renameSync(source, target)
-      const bytes = nodeFs.readFileSync(target)
-      const hash = createHash('sha256').update(bytes).digest('hex')
-      return { uri: `file://${target}`, size: bytes.byteLength, hash: `sha256:${hash}` }
-    },
+    adoptFile,
     async size(fileId, type) {
       try {
         return { value: nodeFs.statSync(fsFilePath(fileId, type)).size }

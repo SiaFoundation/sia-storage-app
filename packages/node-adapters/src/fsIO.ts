@@ -1,14 +1,91 @@
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { createHash } from 'crypto'
-import { constants } from 'fs'
+import { constants, createWriteStream } from 'fs'
 import * as fs from 'fs/promises'
 import * as path from 'path'
+import { pipeline } from 'stream/promises'
 
 export function createNodeFsIO(filesDir: string): FsIOAdapter {
   function filePath(fileId: string, type: string): string {
     const ext = extFromMime(type)
     return path.join(filesDir, `${fileId}${ext}`)
+  }
+
+  // Overloaded to match the adapter contract: hashed by default, size-only with
+  // { hash: false }. A single union-returning function does not satisfy the
+  // overloaded interface property, so the signatures live here.
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<{ uri: string; size: number; hash: string }>
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts: { hash: false },
+  ): Promise<{ uri: string; size: number }>
+  async function adoptFile(
+    file: { id: string; type: string },
+    sourceUri: string,
+    opts?: { hash: false },
+  ): Promise<{ uri: string; size: number; hash?: string }> {
+    const target = filePath(file.id, file.type)
+    const source = sourceUri.replace(/^file:\/\//, '')
+    // O_NOFOLLOW refuses a symlink at open time, with no check-then-swap window
+    // an lstat would leave; a link would otherwise read a file outside staging.
+    let staged: fs.FileHandle
+    try {
+      staged = await fs.open(source, constants.O_RDONLY | constants.O_NOFOLLOW)
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ELOOP') {
+        throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+      }
+      throw e
+    }
+    // Rename consumes the staged temp with no byte copy on the same volume.
+    try {
+      try {
+        await fs.rename(source, target)
+      } catch {
+        // Cross-volume: copy from the open descriptor (copyFile follows links,
+        // this cannot). rm+'wx' so a symlink recreated at the target can't be
+        // written through, while surfacing a real rm failure (EACCES/EPERM).
+        await fs.rm(target, { force: true })
+        await pipeline(
+          staged.createReadStream({ autoClose: false }),
+          createWriteStream(target, { flags: 'wx' }),
+        )
+        await fs.unlink(source).catch(() => {})
+      }
+    } finally {
+      await staged.close()
+    }
+    // Re-check after the move: the target dir is process-private, so a link
+    // here (unlike at the source) cannot have been swapped in by another writer.
+    if ((await fs.lstat(target)).isSymbolicLink()) {
+      await fs.unlink(target).catch(() => {})
+      throw new Error(`Refusing to adopt a symbolic link: ${source}`)
+    }
+    if (opts?.hash === false) {
+      const stat = await fs.stat(target)
+      return { uri: target, size: stat.size }
+    }
+    const hash = createHash('sha256')
+    const handle = await fs.open(target, 'r')
+    try {
+      const buffer = Buffer.allocUnsafe(64 * 1024)
+      let position = 0
+      while (true) {
+        const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, position)
+        if (bytesRead === 0) break
+        hash.update(buffer.subarray(0, bytesRead))
+        position += bytesRead
+      }
+    } finally {
+      await handle.close()
+    }
+    const stat = await fs.stat(target)
+    return { uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
   }
 
   return {
@@ -63,61 +140,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       return { kind: 'plain' as const, uri: target, size: stat.size }
     },
 
-    async adoptFile(file, sourceUri) {
-      const target = filePath(file.id, file.type)
-      const source = sourceUri.replace(/^file:\/\//, '')
-      // A symlink passes a containment check on its own path and then reads
-      // whatever it points at, so it is refused. O_NOFOLLOW rather than an
-      // lstat: the open fails outright on a link, which leaves no window in
-      // which the path could be swapped for one between the check and the read.
-      let staged: fs.FileHandle
-      try {
-        staged = await fs.open(source, constants.O_RDONLY | constants.O_NOFOLLOW)
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ELOOP') {
-          throw new Error(`Refusing to adopt a symbolic link: ${source}`)
-        }
-        throw e
-      }
-      // Consumes the source: it is a staged temp whose only purpose was to carry
-      // the bytes here, and a rename moves no data when both sides share a
-      // volume.
-      try {
-        try {
-          await fs.rename(source, target)
-        } catch {
-          // Across volumes, copied from the descriptor already open rather than
-          // from the path, because copyFile follows a link and this cannot.
-          await fs.writeFile(target, staged.createReadStream({ autoClose: false }))
-          await fs.unlink(source).catch(() => {})
-        }
-      } finally {
-        await staged.close()
-      }
-      // Checked again after the move: the first check can be raced by swapping
-      // the staged file for a link between lstat and rename. By now the file is
-      // in a directory only this process writes, so this one cannot be.
-      if ((await fs.lstat(target)).isSymbolicLink()) {
-        await fs.unlink(target).catch(() => {})
-        throw new Error(`Refusing to adopt a symbolic link: ${source}`)
-      }
-      const hash = createHash('sha256')
-      const handle = await fs.open(target, 'r')
-      try {
-        const buffer = Buffer.allocUnsafe(64 * 1024)
-        let position = 0
-        while (true) {
-          const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, position)
-          if (bytesRead === 0) break
-          hash.update(buffer.subarray(0, bytesRead))
-          position += bytesRead
-        }
-      } finally {
-        await handle.close()
-      }
-      const stat = await fs.stat(target)
-      return { uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
-    },
+    adoptFile,
 
     async exportTo(file, destPath) {
       const source = filePath(file.id, file.type)
