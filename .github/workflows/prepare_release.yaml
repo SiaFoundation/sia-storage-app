@@ -33,7 +33,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # A PAT, not GITHUB_TOKEN: pushes and pull requests attributed to the
+          # workflow token are gated behind "approve workflows to run", so the
+          # release PR's required checks never report and it cannot merge.
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Configure Git
         run: |
@@ -51,5 +54,5 @@ jobs:
       - name: Prepare Release
         run: bun scripts/prepare-release.ts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         continue-on-error: true
