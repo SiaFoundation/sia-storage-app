@@ -1,9 +1,12 @@
 # The manual step of a mobile release: run after the chosen release candidate has
 # shipped to the stores. Regenerates the release PR as the stable version
-# (X.Y.Z-rc.N becomes X.Y.Z); merging it creates the stable GitHub release, which
-# builds nothing (the store submission is the tested candidate) and triggers the
-# release announcement. Safe to run after newer changes have merged: it finalizes
-# from the shipped candidate's tag, and the newer work starts the next train.
+# (X.Y.Z-rc.N becomes X.Y.Z) and records which candidate it graduated. Merging it
+# brings main's versions and changelogs forward, and Publish Release then tags
+# the candidate's own commit, so the stable tag names the source that shipped
+# rather than main's tip. Safe to run after newer changes have merged: it
+# finalizes from the shipped candidate's tag, and the newer work starts the next
+# train. While the PR it opens is unmerged, Prepare Release leaves the release
+# branch alone, so a push to main can no longer replace the graduation with an rc.
 # Gated apps promote together: every app ships the same cut before finalizing.
 name: Finalize Release
 
@@ -14,6 +17,10 @@ on:
         description: "Tag of the cut that shipped, named by any gated app's tag (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut"
         required: false
         type: string
+
+concurrency:
+  group: release-train
+  cancel-in-progress: false
 
 jobs:
   finalize-release:

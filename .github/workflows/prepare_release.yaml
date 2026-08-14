@@ -9,10 +9,23 @@ name: Prepare Release
 on:
   push:
     branches: [main]
+  # Regenerating on demand is the way back after closing a final cut: the guard
+  # in prepare-release.ts clears when that PR closes, but the release branch
+  # still holds the graduation until a run overwrites it.
+  workflow_dispatch:
+
+# Shared with the other release workflows: two pushes in quick succession would
+# otherwise race to force-push the release branch, and a prepare must not run
+# while a publish is mid-flight and versions disagree with tags.
+concurrency:
+  group: release-train
+  cancel-in-progress: false
 
 jobs:
   prepare-release:
-    if: "!contains(github.event.head_commit.message, 'chore: release')"
+    # A dispatch has no head_commit, so it is allowed explicitly rather than
+    # relying on contains() coercing a missing value.
+    if: "${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'chore: release') }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

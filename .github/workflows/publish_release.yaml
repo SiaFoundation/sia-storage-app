@@ -1,0 +1,67 @@
+# Creates the tags and GitHub releases for a merged release PR.
+#
+# Replaces knope's Release step, which tags the CI checkout's HEAD with no way
+# to name a commit. A graduated release is prepared from the shipped candidate's
+# tag while main has moved on, so HEAD-tagging would put the stable tag on work
+# that never shipped; release-cli.yml then builds whatever the tag points at.
+#
+# The merged PR's title says which kind of cut it is, and a final cut carries a
+# committed .release-candidate naming the commit to tag, so nothing depends on
+# state that disappears when the release commit is rebased onto main. Re-run any
+# failed publish from the dispatch below with the same ref: publish-releases.ts
+# converges rather than duplicating.
+name: Publish Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit or tag to publish from (e.g. mobile/v1.14.0-rc.1)'
+        required: true
+        type: string
+      mode:
+        description: 'publish = tag the versions as they stand; promote = graduate an rc cut to stable'
+        required: true
+        type: choice
+        options:
+          - publish
+          - promote
+        default: publish
+      dry_run:
+        description: 'Print what would be created without touching any release'
+        required: false
+        type: boolean
+        default: false
+
+# Shared with the other release workflows so a publish can never interleave with
+# a prepare that would recompute versions from a half-published state.
+concurrency:
+  group: release-train
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.head_ref == 'release' && github.event.pull_request.merged == true) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Publish
+        run: bun scripts/publish-releases.ts
+        env:
+          # A PAT, not GITHUB_TOKEN: releases created with the workflow token do
+          # not trigger the release workflows that build from the tag.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+          PUBLISH_REF: ${{ inputs.ref }}
+          PUBLISH_MODE: ${{ inputs.mode }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}

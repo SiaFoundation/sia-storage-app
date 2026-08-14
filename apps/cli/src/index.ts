@@ -12,6 +12,15 @@ import {
 import pkg from '../package.json'
 import { c } from './lib/format'
 
+// A released binary is built from the commit its tag points at, and for a
+// graduated release that commit's package.json still reads X.Y.Z-rc.N, so
+// release-cli.yml substitutes the tag's version here at build time. A build-time
+// constant rather than an env var: the version of a shipped binary is a fact
+// about the build, not something a caller should be able to change. `typeof`
+// guards the identifier not existing at all in a build that omits the define.
+declare const SIA_CLI_VERSION: string | undefined
+const releaseVersion = typeof SIA_CLI_VERSION === 'string' ? SIA_CLI_VERSION : undefined
+
 // Hidden entry points for daemon mode and shell completion
 if (process.env.SIA_DAEMON_MODE === '1') {
   import('./daemon/entry')
@@ -31,7 +40,7 @@ if (process.env.SIA_DAEMON_MODE === '1') {
   const program = new Command()
     .name('sia')
     .description('Sia decentralized storage CLI')
-    .version(pkg.version)
+    .version(releaseVersion ?? pkg.version)
     .option('-d, --data-dir <path>', 'Data directory (overrides SIA_DATA_DIR)')
 
   function resolveDataDir(): string {

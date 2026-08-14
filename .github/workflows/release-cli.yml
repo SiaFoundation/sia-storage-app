@@ -5,8 +5,12 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Release to build and attach to (e.g. cli/v0.0.6). Defaults to the tag this run was dispatched from, then to the newest stable cli release.'
+        required: false
+        type: string
       upload_to_latest_release:
-        description: 'Attach the built binaries to the latest cli/ release (semver). Off = build only, artifacts stay on the run.'
+        description: 'Attach the built binaries to the resolved release. Off = build only, artifacts stay on the run.'
         required: false
         type: boolean
         default: false
@@ -16,12 +20,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # One source of truth for which release these binaries belong to: the build
+  # bakes this version into the binary and the upload attaches to this release,
+  # so resolving it once keeps the two from naming different releases.
+  #
+  # Also the single gate for the workflow. Runs on every cli/v* release and every
+  # manual dispatch, candidates included so a cut can be tried before it
+  # graduates, and skips mobile/* releases, which build elsewhere.
+  resolve:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Resolve release tag
+        id: resolve
+        run: bun scripts/resolve-cli-release.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF: ${{ github.ref }}
+          WANTS_UPLOAD: ${{ inputs.upload_to_latest_release }}
+
   build:
-    # Run on stable cli/v* releases and every manual dispatch. Skip mobile/*
-    # releases (they have their own build workflow) and cli rc prereleases, which
-    # exist only because a train carrying mobile changes versions every package
-    # as a release candidate.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/') && !github.event.release.prerelease) }}
+    # Gated by resolve alone: a skipped dependency skips this too, so there is
+    # one condition rather than two that can drift apart.
+    needs: resolve
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -52,6 +82,15 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
+      # A stable release is tagged on the candidate's own commit, where
+      # package.json still reads X.Y.Z-rc.N, so the tag rather than the checked-in
+      # version decides what the binary reports.
+      - name: Resolve version
+        shell: bash
+        run: echo "CLI_VERSION=${TAG#cli/v}" >> "$GITHUB_ENV"
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+
       - name: Build sia-storage-${{ matrix.name }}${{ matrix.ext }}
         working-directory: apps/cli
         shell: bash
@@ -59,6 +98,7 @@ jobs:
           bun build src/index.ts \
             --compile \
             --target=${{ matrix.target }} \
+            ${CLI_VERSION:+--define process.env.SIA_CLI_VERSION=\"$CLI_VERSION\"} \
             --outfile dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
 
       - name: Upload artifact
@@ -71,11 +111,11 @@ jobs:
 
   upload:
     # Attach binaries on real release events, or on manual dispatch when the
-    # operator opts in. Lets us re-attach assets to the latest release after a
+    # operator opts in. Lets us re-attach assets to a release after a
     # failed/edited build without cutting a new tag (the original workflow run
     # can't be re-run once its artifacts expire).
     if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_latest_release) }}
-    needs: build
+    needs: [resolve, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -86,36 +126,33 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Resolve target release tag
-        id: tag
+      # Binaries are only ever attached to the release whose commit produced
+      # them. Two ways that would otherwise break: a retarget deletes and
+      # recreates a release while a build is still in flight for it, and a
+      # dispatch off a branch would attach branch-built binaries to whichever
+      # release resolved. Dispatch from the tag you are attaching to.
+      - name: Check the release points at what we built
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          BUILT_SHA: ${{ github.sha }}
         run: |
-          if [ "$EVENT_NAME" = "release" ]; then
-            TAG="$EVENT_TAG"
-          else
-            # Highest semver among cli/v* releases. `gh release list --latest`
-            # would pick the newest release of any kind (including mobile/).
-            TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
-              --json tagName \
-              --jq '.[] | .tagName | select(startswith("cli/v"))' \
-              | sort -V | tail -n1)
-            if [ -z "$TAG" ]; then
-              echo "No cli/v* release found to upload to."
-              exit 1
-            fi
+          if [ -z "$TAG" ]; then
+            echo "No release resolved to upload to."
+            exit 1
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null \
             || { echo "Release $TAG not found."; exit 1; }
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Resolved release tag: $TAG"
+          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
+          if [ "$TAG_SHA" != "$BUILT_SHA" ]; then
+            echo "$TAG points at $TAG_SHA but these binaries were built from $BUILT_SHA."
+            exit 1
+          fi
 
       - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         # --clobber lets re-runs replace assets cleanly if the workflow
         # is restarted after a partial upload. --repo is required because
         # this job has no checkout, so gh can't infer the repo from git.

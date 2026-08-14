@@ -48,6 +48,55 @@ function wasChangedFromMain(filePath: string): boolean {
   }
 }
 
+// A graduating cut is prepared from the shipped candidate's commit, so anything
+// merged after it is held back for the next train. The sections above say what
+// ships; without this one, what is being left out is only inferable from which
+// changesets survive the merge.
+function deferredSummaries(candidate: string): Map<string, string[]> {
+  const consumed = new Set(
+    execSync(`git diff --diff-filter=D --name-only "${candidate}" HEAD -- .changeset/`, {
+      encoding: 'utf-8',
+    })
+      .split('\n')
+      .filter(Boolean),
+  )
+  const byPackage = new Map<string, string[]>()
+  const onMain = execSync('git ls-tree --name-only main .changeset/', { encoding: 'utf-8' })
+    .split('\n')
+    .filter((path) => path.endsWith('.md'))
+
+  for (const path of onMain) {
+    if (consumed.has(path)) continue
+    const content = execSync(`git show "main:${path}"`, { encoding: 'utf-8' })
+    const frontmatter = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(content)
+    if (!frontmatter) continue
+    const summary = frontmatter[2].trim().split('\n')[0]
+    for (const line of frontmatter[1].split('\n')) {
+      const name = line.split(':')[0]?.trim()
+      if (!name) continue
+      byPackage.set(name, [...(byPackage.get(name) ?? []), summary])
+    }
+  }
+  return byPackage
+}
+
+function deferredSection(candidate: string): string {
+  let byPackage: Map<string, string[]>
+  try {
+    byPackage = deferredSummaries(candidate)
+  } catch (error) {
+    // Losing this section costs a reader some context; throwing here would cost
+    // them the release PR, which is the only way the cut reaches main.
+    console.error(`WARNING: could not list deferred changesets: ${error}`)
+    return ''
+  }
+  if (byPackage.size === 0) return ''
+  const packages = [...byPackage.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, summaries]) => `**${name}**\n${summaries.map((s) => `- ${s}`).join('\n')}`)
+  return `\n\n## Not in this release\n\nMerged after ${candidate} and held for the next train:\n\n${packages.join('\n\n')}`
+}
+
 const sections: string[] = []
 const versions: string[] = []
 for (const { name, path } of changelogs) {
@@ -61,14 +110,20 @@ for (const { name, path } of changelogs) {
 
 // Versions, not sections: a changelog body may mention "-rc." in prose.
 const isRc = versions.some((v) => v.includes('-rc.'))
-const note = isRc
-  ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
-  : 'Merging this PR will create a GitHub release.'
-const body = `${sections.join('\n\n')}\n\n---\n${note}`
+const final = process.env.RELEASE_MODE === 'final'
 
-// Both titles keep the "chore: release" prefix the prepare-release skip check
-// matches on.
-const title = isRc ? 'chore: release (rc)' : 'chore: release'
+const candidate = final ? readFileSync('.release-candidate', 'utf-8').trim() : ''
+const note = final
+  ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip.`
+  : isRc
+    ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
+    : 'Merging this PR will create a GitHub release.'
+const body = `${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
+
+// Every title keeps the "chore: release" prefix the prepare-release skip check
+// matches on. The suffix is what publish-releases.ts reads off the merged PR to
+// tell a graduation from an ordinary cut, so the two must stay in step.
+const title = final ? 'chore: release (final)' : isRc ? 'chore: release (rc)' : 'chore: release'
 const bodyFile = join(tmpdir(), 'release-pr-body.md')
 writeFileSync(bodyFile, body)
 
