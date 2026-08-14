@@ -12,6 +12,7 @@
 import { execFileSync, execSync } from 'child_process'
 import { readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { createReleasePr } from './create-release-pr'
 
 // Records which candidate a final cut graduated. It is committed with the cut,
 // so scripts/publish-releases.ts can still find the commit to tag after the
@@ -107,8 +108,9 @@ if (!final && finalCutIsOpen()) {
   process.exit(0)
 }
 
+const candidate = final ? checkoutShippedCandidate() : ''
 if (final) {
-  writeFileSync(CANDIDATE_FILE, `${checkoutShippedCandidate()}\n`)
+  writeFileSync(CANDIDATE_FILE, `${candidate}\n`)
 }
 
 const rc = !final && pendingChangesetsTouchRcPackage()
@@ -118,3 +120,8 @@ console.log(
 execSync(`knope prepare-release --verbose${rc ? ' --prerelease-label rc' : ''}`, {
   stdio: 'inherit',
 })
+
+// Not a knope step: knope spawns those after the working tree has been replaced
+// by the candidate's, which would run whatever version of this shipped back
+// then. Imported statically instead, so it is resolved before that checkout.
+createReleasePr(final ? candidate : '')

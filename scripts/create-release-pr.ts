@@ -97,48 +97,54 @@ function deferredSection(candidate: string): string {
   return `\n\n## Not in this release\n\nMerged after ${candidate} and held for the next train:\n\n${packages.join('\n\n')}`
 }
 
-const sections: string[] = []
-const versions: string[] = []
-for (const { name, path } of changelogs) {
-  if (!wasChangedFromMain(path)) continue
-  const entry = getLatestEntry(path)
-  if (entry) {
-    sections.push(`## ${name} ${entry.version}\n\n${entry.body}`)
-    versions.push(entry.version)
+// Called by prepare-release.ts rather than run as a knope step. Finalizing
+// checks out the shipped candidate, replacing the working tree with that
+// commit's, so anything knope spawns afterwards executes months-old code. This
+// describes the current process rather than the released content, so it has to
+// be the current version: a static import is resolved before that checkout and
+// runs from memory.
+export function createReleasePr(candidate: string): void {
+  const sections: string[] = []
+  const versions: string[] = []
+  for (const { name, path } of changelogs) {
+    if (!wasChangedFromMain(path)) continue
+    const entry = getLatestEntry(path)
+    if (entry) {
+      sections.push(`## ${name} ${entry.version}\n\n${entry.body}`)
+      versions.push(entry.version)
+    }
   }
-}
 
-// Versions, not sections: a changelog body may mention "-rc." in prose.
-const isRc = versions.some((v) => v.includes('-rc.'))
-const final = process.env.RELEASE_MODE === 'final'
+  // Versions, not sections: a changelog body may mention "-rc." in prose.
+  const isRc = versions.some((v) => v.includes('-rc.'))
+  const final = candidate !== ''
+  const note = final
+    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip.`
+    : isRc
+      ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
+      : 'Merging this PR will create a GitHub release.'
+  const body = `${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
 
-const candidate = final ? readFileSync('.release-candidate', 'utf-8').trim() : ''
-const note = final
-  ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip.`
-  : isRc
-    ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
-    : 'Merging this PR will create a GitHub release.'
-const body = `${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
+  // Every title keeps the "chore: release" prefix the prepare-release skip check
+  // matches on. The suffix is one of the two signals publish-releases.ts reads off
+  // the merged PR to tell a graduation from an ordinary cut.
+  const title = final ? 'chore: release (final)' : isRc ? 'chore: release (rc)' : 'chore: release'
+  const bodyFile = join(tmpdir(), 'release-pr-body.md')
+  writeFileSync(bodyFile, body)
 
-// Every title keeps the "chore: release" prefix the prepare-release skip check
-// matches on. The suffix is what publish-releases.ts reads off the merged PR to
-// tell a graduation from an ordinary cut, so the two must stay in step.
-const title = final ? 'chore: release (final)' : isRc ? 'chore: release (rc)' : 'chore: release'
-const bodyFile = join(tmpdir(), 'release-pr-body.md')
-writeFileSync(bodyFile, body)
-
-try {
   try {
-    execSync(`gh pr create --base main --title "${title}" --body-file "${bodyFile}"`, {
-      stdio: 'inherit',
-    })
-  } catch {
-    execSync(`gh pr edit --title "${title}" --body-file "${bodyFile}"`, {
-      stdio: 'inherit',
-    })
+    try {
+      execSync(`gh pr create --base main --title "${title}" --body-file "${bodyFile}"`, {
+        stdio: 'inherit',
+      })
+    } catch {
+      execSync(`gh pr edit --title "${title}" --body-file "${bodyFile}"`, {
+        stdio: 'inherit',
+      })
+    }
+  } finally {
+    try {
+      unlinkSync(bodyFile)
+    } catch {}
   }
-} finally {
-  try {
-    unlinkSync(bodyFile)
-  } catch {}
 }

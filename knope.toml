@@ -61,10 +61,6 @@ command = "git commit -m \"chore: release\""
 type = "Command"
 command = "git push --force --set-upstream origin release"
 
-[[workflows.steps]]
-type = "Command"
-command = "bun scripts/create-release-pr.ts"
-
 [[workflows]]
 name = "document-change"
 
