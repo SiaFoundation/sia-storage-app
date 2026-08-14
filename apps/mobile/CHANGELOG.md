@@ -2,6 +2,36 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.14.0 (2026-08-14)
+
+### Features
+
+- Picking photos on Android now uses the system Photo Picker and imports them without any up-front copying, so large picks start instantly and use no extra storage before the import runs.
+- Uploads are faster and use less battery, and the device stays cooler during long transfers.
+- A folder receiving an import shows a banner with the in-flight file count that opens the imports list; the root Files view shows the same banner counting across all imports.
+- Imports copy several files at once, so small files no longer wait behind one large file.
+- The import detail screen adds file search.
+- Imports show live progress with processed counts and byte totals.
+- Imports stage instantly without upfront copying: each file is read only when its turn comes, and a mid-import kill resumes where it left off on next launch.
+- Picked files appear in the imports list immediately, and the photo-library import sheet explains that files upload gradually in the background.
+- Imports now say why they are waiting: imports paced behind uploads or low space show a wait badge with the live free-space or upload-backlog number, files sleeping out a retry backoff read Waiting to retry with a countdown, and the library status sheet names the cause.
+- The new Imports screen lists imports most recently active first, with plain-language per-file failure reasons, retry for failed files, and cancel or remove from the detail screen. An open photo import with nothing left to copy reads Watching instead of Importing.
+- Picking photos on iOS now imports directly from the photo library with no temporary copies, skips photos already imported into the destination, and shows a clear permission message for photos outside a limited photo access selection.
+- The status line shows the uploading batch's total size next to the percentage.
+- The app status sheet is now one navigable surface: the status pill opens it on the Status view, and Imports and import details open inside the same sheet from every entry point, with Done dismissing from any depth.
+- The status sheet's Unavailable row opens a list of local files that went missing before they were uploaded, with remove and remove-all; the row hides when there are none.
+- Upload speed is now shown while files upload, under the status row and at the top of the uploads list.
+- The status sheet gains an Uploads view listing each file currently uploading or queued with its thumbnail, size, added date, and live progress.
+
+### Fixes
+
+- Fixed action menus to open at the appropriate height.
+- Fix Android photo-library videos getting stuck importing forever; already-stuck items finish automatically after the update.
+- Added a reset mechanism to the beta app.
+- Imports read each file once, photo imports show live copy progress, and cancelling an import stops the copy immediately.
+- The version shown in the menu now includes the build number, so any specific build can be identified exactly.
+- Zero-byte files no longer stall uploads: imports refuse them with an "empty file" reason, and already-imported ones are marked lost instead of retrying forever.
+
 ## 1.14.0-rc.1 (2026-08-11)
 
 ### Features
