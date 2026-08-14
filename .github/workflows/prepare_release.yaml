@@ -23,9 +23,11 @@ concurrency:
 
 jobs:
   prepare-release:
-    # A dispatch has no head_commit, so it is allowed explicitly rather than
-    # relying on contains() coercing a missing value.
-    if: "${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'chore: release') }}"
+    # Matches the subject only. head_commit.message carries the body too, so
+    # contains() skipped this job for any commit that merely quoted a release
+    # subject while explaining something. A dispatch has no head_commit, so it is
+    # allowed explicitly rather than relying on coercion of a missing value.
+    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release') }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
