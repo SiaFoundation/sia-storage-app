@@ -11,6 +11,7 @@ import ViewShot, { type ViewShotRef } from 'react-native-view-shot'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksShape, { BLOCK_COLORS } from '../components/BlocksShape'
 import { Button } from '../components/Button'
+import { OptionsMenuButton } from '../components/OptionsMenuButton'
 import { RecoveryPhraseInput } from '../components/RecoveryPhraseInput'
 import { useRecoveryPhraseRegistration } from '../hooks/useRecoveryPhraseRegistration'
 import { initApp } from '../managers/app'
@@ -149,6 +150,7 @@ export default function OnboardingRecoveryPhraseScreen() {
           >
             <ArrowLeftIcon color={palette.gray[50]} size={22} />
           </Pressable>
+          <OptionsMenuButton testID="recovery-options-button" top={top + 12} />
           <View style={[styles.centerWrap, { paddingTop: top, paddingBottom: bottom }]}>
             <View style={styles.card}>
               <View style={styles.titleRow}>

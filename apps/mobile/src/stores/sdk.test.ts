@@ -46,6 +46,7 @@ let mockValidateMnemonic: jest.SpyInstance
 let _mockGetIndexerURL: jest.SpyInstance
 let mockSetIndexerURL: jest.SpyInstance
 let mockGetAppKey: jest.SpyInstance
+let mockClearAppKey: jest.SpyInstance
 let _mockBuilderCreate: jest.SpyInstance
 let mockBuilderConnectWithKey: jest.SpyInstance
 let mockBuilderRequestConnection: jest.SpyInstance
@@ -129,6 +130,7 @@ describe('sdk store', () => {
       .mockResolvedValue('https://indexer.example.com')
     mockSetIndexerURL = jest.spyOn(app().settings, 'setIndexerURL').mockResolvedValue(undefined)
     mockGetAppKey = jest.spyOn(app().auth, 'getAppKey')
+    mockClearAppKey = jest.spyOn(app().auth, 'clearAppKey').mockResolvedValue(undefined)
     mockOnConnected = jest.spyOn(app().auth, 'onConnected').mockResolvedValue(undefined)
 
     _mockBuilderCreate = jest.spyOn(app().auth.builder, 'create').mockResolvedValue(undefined)
@@ -314,15 +316,13 @@ describe('sdk store', () => {
         expectCleanAuthState()
       })
 
-      it('returns error when connectWithKey throws', async () => {
+      it('returns error and keeps the stored key when connectWithKey throws', async () => {
         mockBuilderConnectWithKey.mockRejectedValue(new Error('Connection failed'))
 
         const [, error] = await sdkStore.authenticateIndexer(indexerUrl)
 
         expect(error?.type).toBe('error')
-        if (error?.type === 'error') {
-          expect(error.message).toBe('Connection failed')
-        }
+        expect(mockClearAppKey).not.toHaveBeenCalled()
         expect(mockBuilderRequestConnection).not.toHaveBeenCalled()
         expectCleanAuthState()
       })
@@ -337,13 +337,27 @@ describe('sdk store', () => {
           const [, error] = await promise
 
           expect(error?.type).toBe('error')
-          if (error?.type === 'error') {
-            expect(error.message).toBe('Connection timed out')
-          }
+          expect(mockClearAppKey).not.toHaveBeenCalled()
           expectCleanAuthState()
         } finally {
           jest.useRealTimers()
         }
+      })
+
+      it('discards the stored key and starts registration when the indexer has no account for it', async () => {
+        mockBuilderConnectWithKey.mockRejectedValue(
+          new Error(
+            'BuilderError.Error: client error: indexd responded with an error: unknown account',
+          ),
+        )
+
+        const [result, error] = await sdkStore.authenticateIndexer(indexerUrl)
+
+        expect(error).toBeNull()
+        expect(result?.alreadyConnected).toBe(false)
+        expect(mockClearAppKey).toHaveBeenCalledWith(indexerUrl)
+        expect(mockBuilderRequestConnection).toHaveBeenCalled()
+        expectCleanAuthState()
       })
 
       it('runs browser auth when AppKey exists but connectWithKey returns false', async () => {
@@ -574,7 +588,7 @@ describe('sdk store', () => {
 
         expect(error?.type).toBe('error')
         if (error?.type === 'error') {
-          expect(error.message).toBe('Request failed')
+          expect(error.message).toBe(sdkStore.CONNECT_ERROR_MESSAGE)
         }
         expect(mockOpenAuthURL).not.toHaveBeenCalled()
         expectCleanAuthState()
@@ -922,7 +936,7 @@ describe('sdk store', () => {
 
       expect(error?.type).toBe('error')
       if (error?.type === 'error') {
-        expect(error.message).toBe('Registration failed')
+        expect(error.message).toBe(sdkStore.REGISTER_ERROR_MESSAGE)
       }
       expect(mockOnConnected).not.toHaveBeenCalled()
       expectCleanAuthState()
@@ -940,7 +954,7 @@ describe('sdk store', () => {
 
         expect(error?.type).toBe('error')
         if (error?.type === 'error') {
-          expect(error.message).toBe('Connection timed out')
+          expect(error.message).toBe(sdkStore.CONNECT_ERROR_MESSAGE)
         }
         expect(mockBuilderRegister).not.toHaveBeenCalled()
         expectCleanAuthState()
@@ -962,7 +976,7 @@ describe('sdk store', () => {
 
         expect(error?.type).toBe('error')
         if (error?.type === 'error') {
-          expect(error.message).toBe('Connection timed out')
+          expect(error.message).toBe(sdkStore.REGISTER_ERROR_MESSAGE)
         }
         expect(mockOnConnected).not.toHaveBeenCalled()
         expectCleanAuthState()

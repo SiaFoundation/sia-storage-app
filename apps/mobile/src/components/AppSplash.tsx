@@ -13,6 +13,7 @@ import { palette } from '../styles/colors'
 import { AppSplashError } from './AppSplashError'
 import BlocksGrid from './BlocksGrid'
 import BlocksLoader from './BlocksLoader'
+import { OptionsMenuButton } from './OptionsMenuButton'
 
 function useSyncProgress() {
   const { data } = useSyncState()
@@ -46,6 +47,10 @@ export function AppSplash() {
         inset={{ top, bottom }}
         style={StyleSheet.absoluteFillObject}
       />
+      {/* The error card carries its own copy of these actions with an
+          explanation of each, so the cog would be a second route to the same
+          place. Everywhere else on the splash there is no other way out. */}
+      {initializationError ? null : <OptionsMenuButton top={top + 12} />}
       <View style={[styles.centerWrap, { paddingTop: top + 12, paddingBottom: bottom + 12 }]}>
         {initializationError && currentStep ? (
           <AppSplashError step={currentStep} />

@@ -1,13 +1,13 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { SettingsIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BlocksGrid from '../components/BlocksGrid'
 import BlocksLoader from '../components/BlocksLoader'
 import { SHAPES } from '../components/BlocksShape'
 import { Button } from '../components/Button'
+import { OptionsMenuButton } from '../components/OptionsMenuButton'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { initApp } from '../managers/app'
 import type { OnboardingStackParamList } from '../stacks/types'
@@ -94,15 +94,11 @@ export default function OnboardingWelcomeScreen() {
       </Animated.View>
 
       <Animated.View style={[styles.advancedWrap, { opacity: contentOpacity }]}>
-        <Pressable
+        <OptionsMenuButton
           testID="welcome-advanced-button"
-          onPress={() => nav.navigate('AdvancedIndexer')}
-          style={[styles.advancedButton, { top: top + 12 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Custom indexer"
-        >
-          <SettingsIcon color={palette.gray[400]} size={20} />
-        </Pressable>
+          top={top + 12}
+          onCustomIndexer={() => nav.navigate('AdvancedIndexer')}
+        />
       </Animated.View>
 
       {showWaiting ? (
@@ -151,11 +147,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     zIndex: 1,
-  },
-  advancedButton: {
-    position: 'absolute',
-    right: 16,
-    padding: 4,
   },
 
   contentWrap: {

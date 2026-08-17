@@ -164,6 +164,23 @@ export async function reconnectIndexer(): Promise<boolean> {
 
 type AuthError = { type: 'cancelled' } | { type: 'error'; message: string }
 
+// Shown to the user in a toast. The underlying SDK message is API and FFI
+// wrapper text ("BuilderError.Error: client error: ..."), which tells them
+// nothing; it goes to the log instead.
+export const CONNECT_ERROR_MESSAGE = 'Could not connect to the indexer. Please try again.'
+export const REGISTER_ERROR_MESSAGE = 'Could not finish signing in. Please try again.'
+
+/**
+ * indexd answers a correctly signed request with "unknown account" when no
+ * account exists for the key: the account was deleted, or the key was issued
+ * against an indexer database that has since been replaced. The SDK collapses
+ * its errors to a message string crossing the FFI boundary, so the text is the
+ * only signal we get.
+ */
+function isUnknownAccountError(e: unknown): boolean {
+  return getErrorMessage(e).toLowerCase().includes('unknown account')
+}
+
 export type AuthenticateError = { type: 'cancelled' } | { type: 'error'; message: string }
 
 export type AuthenticateResult = Result<{ alreadyConnected: boolean }, AuthenticateError>
@@ -206,12 +223,17 @@ export async function authenticateIndexer(indexerURL: string): Promise<Authentic
         return ok({ alreadyConnected: true })
       }
     } catch (e) {
-      app().connection.setState({ isAuthing: false })
-      logger.error('sdk', 'connect_error', { error: e as Error })
-      return err({
-        type: 'error',
-        message: getErrorMessage(e),
-      })
+      if (!isUnknownAccountError(e)) {
+        app().connection.setState({ isAuthing: false })
+        logger.error('sdk', 'connect_error', { error: e as Error })
+        return err({ type: 'error', message: CONNECT_ERROR_MESSAGE })
+      }
+      // The key is real but its account is gone, so every retry fails the same
+      // way. Drop it and continue into browser auth, which registers a new
+      // account and stores a fresh key. Without this an iOS user can't recover
+      // even by reinstalling, because the keychain survives app deletion.
+      logger.warn('sdk', 'stale_app_key_cleared', { error: e as Error })
+      await app().auth.clearAppKey(indexerURL)
     }
     app().connection.setState({ isAuthing: false })
   }
@@ -296,10 +318,7 @@ export async function registerWithIndexer(
     app().connection.setState({ isAuthing: false })
     pendingApproval = null
     logger.error('sdk', 'register_error', { error: e as Error })
-    return err({
-      type: 'error',
-      message: getErrorMessage(e),
-    })
+    return err({ type: 'error', message: REGISTER_ERROR_MESSAGE })
   }
 }
 
@@ -439,10 +458,7 @@ async function runBrowserAuthFlow(indexerURL: string): Promise<Result<void, Auth
     return ok(undefined)
   } catch (e) {
     logger.error('sdk', 'connection_request_error', { error: e as Error })
-    return err({
-      type: 'error',
-      message: getErrorMessage(e),
-    })
+    return err({ type: 'error', message: CONNECT_ERROR_MESSAGE })
   }
 }
 
