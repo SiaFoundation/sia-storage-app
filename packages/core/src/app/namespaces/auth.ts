@@ -69,6 +69,12 @@ export function buildAuthNamespace(
       const map = await getAppKeysMap()
       return Object.keys(map)
     },
+    async clearAppKey(indexerUrl: string) {
+      const map = await getAppKeysMap()
+      if (!(indexerUrl in map)) return
+      delete map[indexerUrl]
+      await setAppKeysMap(map)
+    },
     async clearAppKeys() {
       await secrets.deleteItem(APP_KEYS_KEY)
     },

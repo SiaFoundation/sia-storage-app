@@ -9,6 +9,7 @@ import BlocksGrid from '../components/BlocksGrid'
 import BlocksLoader from '../components/BlocksLoader'
 import BlocksShape from '../components/BlocksShape'
 import { Button } from '../components/Button'
+import { OptionsMenuButton } from '../components/OptionsMenuButton'
 import { useChangeIndexer } from '../hooks/useChangeIndexer'
 import { initApp } from '../managers/app'
 import type { OnboardingStackParamList } from '../stacks/types'
@@ -68,6 +69,7 @@ export default function OnboardingAdvancedIndexerScreen() {
         >
           <ArrowLeftIcon color={palette.gray[50]} size={22} />
         </Pressable>
+        <OptionsMenuButton testID="advanced-indexer-options-button" top={top + 12} />
         <BlocksGrid
           cols={5}
           rows={12}

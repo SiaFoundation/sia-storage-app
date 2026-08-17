@@ -881,6 +881,8 @@ export interface AppService {
     hasAppKey(indexerUrl: string): Promise<boolean>
     /** Returns all indexer URLs that have a registered app key. */
     getRegisteredIndexerURLs(): Promise<string[]>
+    /** Removes the app key for a single indexer, leaving any others intact. */
+    clearAppKey(indexerUrl: string): Promise<void>
     /** Removes all stored app keys. */
     clearAppKeys(): Promise<void>
     /** Step-by-step connection builder for pairing with an indexer. */
