@@ -120,6 +120,7 @@ export function FileViewer({
         case 'video':
           return (
             <VideoPlayer
+              file={file}
               source={uri}
               style={baseMediaStyle}
               onViewerControlPress={onViewerControlPress}
@@ -188,7 +189,7 @@ export function FileViewer({
       name,
       textInsetValue,
       textMediaStyle,
-      file.size,
+      file,
       onViewerControlPress,
       onSwipeLeft,
       onSwipeRight,
