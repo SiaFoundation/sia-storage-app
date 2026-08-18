@@ -10,16 +10,15 @@ import { useFsFileUri } from '../stores/fs'
 import { useIsConnected } from '../stores/sdk'
 
 /**
- * useBestThumbnailUri returns the local URI of the best available thumbnail for a file.
+ * The generated-thumbnail half of [useThumbnailUri], which is the hook to
+ * call. This one resolves no fallback, so on its own it leaves a file
+ * without a thumbnail yet with nothing to draw.
  *
- * Behavior:
- * - Only considers thumbnails with thumbSize <= requested size.
- * - Picks the largest thumbSize that does not exceed the requested size.
- * - Returns null if no qualifying thumbnail exists.
- * - If a best thumbnail exists on the network but is not cached locally,
- *   this hook will auto-download it.
+ * Returns the local URI of the largest cached thumbnail that does not exceed
+ * the requested size, or null when the file has none. A thumbnail that is on
+ * the network but not cached is downloaded at auto priority.
  */
-export function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512) {
+function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512) {
   // Skip thumbnail lookup for files still being imported (no hash yet).
   const isImported = !!file && file.hash !== ''
   const thumbRecord = useSWR(
