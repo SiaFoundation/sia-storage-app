@@ -3,7 +3,11 @@ import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileRecord } from '@siastorage/core/types'
 import { initializeDB, resetDb } from '../db'
 import { app } from '../stores/appService'
-import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
+import {
+  cancelFsEvictionScanner,
+  clearBackedUpFsFiles,
+  runFsEvictionScanner,
+} from './fsEvictionScanner'
 
 jest.mock('@siastorage/core/config', () => {
   const { daysInMs } = jest.requireActual('@siastorage/core')
@@ -164,6 +168,34 @@ describe('fsEvictionScanner', () => {
     expect(await app().fs.readMeta('file-4')).toBeNull()
     expect(await app().fs.readMeta('file-5')).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
+  })
+
+  it('clearing while a scan is already running still clears everything', async () => {
+    // Recent and well under the cap, so a scan on the default config spares it.
+    await createRemoteFile({ id: 'file-1', size: 200, usedAt: now })
+    // Claims the single-flight slot on the default config before the clear
+    // arrives, which is the state a background scan leaves it in.
+    const inFlight = runFsEvictionScanner({ force: true })
+
+    const cleared = await clearBackedUpFsFiles()
+    await inFlight
+
+    expect(cleared!.evictedFileIds).toContain('file-1')
+    expect(await app().fs.readMeta('file-1')).toBeNull()
+  })
+
+  it('a caller that already aborted neither evicts nor stops a running scan', async () => {
+    await createRemoteFile({ id: 'file-1', size: 200, usedAt: now })
+    const inFlight = runFsEvictionScanner({ force: true })
+    const controller = new AbortController()
+    controller.abort()
+
+    const cleared = await clearBackedUpFsFiles({ signal: controller.signal })
+
+    expect(cleared).toBeUndefined()
+    expect(await app().fs.readMeta('file-1')).toBeDefined()
+    // The running scan was left alone, so it completes rather than aborting.
+    expect(await inFlight).toEqual(expect.objectContaining({ evicted: 0 }))
   })
 })
 
