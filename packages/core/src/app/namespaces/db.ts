@@ -89,6 +89,9 @@ export function buildDbNamespaces(
     // and leave a row pointing at a missing file.
     await db.waitUntilActive?.()
     await ops.deleteFsMeta(db, file.id)
+    // Callers read on-device state from here, not from the fsMeta row, so a
+    // stale entry hands out the path of a file that no longer exists.
+    await caches.fsFileUri.set(null, file.id)
   }
 
   function invalidateLibrary() {

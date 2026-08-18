@@ -1,6 +1,7 @@
 export {
   type CacheEvictionConfig,
   type CacheEvictionResult,
+  EVICT_ALL_BACKED_UP,
   runCacheEviction,
 } from './cacheEviction'
 export { type FsFileUriAdapter, type FsIOAdapter, getFsFileUri } from './fsFileUri'

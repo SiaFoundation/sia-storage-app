@@ -1,7 +1,7 @@
 import { useShowAdvanced } from '@siastorage/core/stores'
 import { Alert } from 'react-native'
 import { humanSize } from '../lib/humanSize'
-import { runFsEvictionScanner } from '../managers/fsEvictionScanner'
+import { clearBackedUpFsFiles } from '../managers/fsEvictionScanner'
 import { runFsOrphanScanner } from '../managers/fsOrphanScanner'
 import { app } from '../stores/appService'
 import { InsetGroupLink, InsetGroupSection, InsetGroupToggleRow } from './InsetGroup'
@@ -27,7 +27,7 @@ export function SettingsAdvancedInfo({ onImport }: Props) {
             try {
               const before = await app().fs.calcTotalSize()
               await runFsOrphanScanner({ force: true })
-              await runFsEvictionScanner({ force: true })
+              await clearBackedUpFsFiles()
               const after = await app().fs.calcTotalSize()
               const freed = Math.max(0, before - after)
               Alert.alert('Local files cleared', `Freed ${humanSize(freed) ?? '0 B'}.`)
