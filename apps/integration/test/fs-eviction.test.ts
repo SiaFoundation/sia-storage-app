@@ -1,5 +1,5 @@
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
-import { runCacheEviction } from '@siastorage/core/services'
+import { EVICT_ALL_BACKED_UP, runCacheEviction } from '@siastorage/core/services'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
@@ -330,6 +330,37 @@ describe('FS Cache Eviction', () => {
     expect(result!.evictedFileIds).toContain(superFile.id)
     expect(result!.evictedFileIds).not.toContain(staleCurrentFile.id)
     expect(await app.app.fs.readMeta(staleCurrentFile.id)).not.toBeNull()
+  }, 60_000)
+
+  it('clearing on request evicts a backed-up file the scheduled scan would keep', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 500 }))
+    await app.waitForNoActiveUploads()
+    // Recently used and well under any cap, so every gate the scheduled scan
+    // applies would spare this file.
+    await app.app.fs.upsertMeta({
+      fileId: file.id,
+      size: file.size,
+      addedAt: Date.now(),
+      usedAt: Date.now(),
+    })
+
+    const scheduled = await runCacheEviction(app.app, { maxBytes: 10_000_000 })
+    expect(scheduled!.evictedFileIds).not.toContain(file.id)
+
+    const cleared = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+    expect(cleared!.evictedFileIds).toContain(file.id)
+    expect(await app.app.fs.readMeta(file.id)).toBeNull()
+  }, 60_000)
+
+  it('clearing on request still keeps a file that is not backed up', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 500 }))
+    app.setConnected(false)
+
+    const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+    expect(result!.evictedFileIds).not.toContain(file.id)
+    expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
   }, 60_000)
 
   it('aborts mid-eviction when the AbortSignal fires', async () => {

@@ -11,6 +11,22 @@ export type CacheEvictionConfig = {
   batchSize?: number
 }
 
+/**
+ * Evicts every local copy whose bytes are safely on the network, rather than
+ * trimming back to the cap.
+ *
+ * The scheduled scan exists to hold the cache under `FS_MAX_BYTES`, so it skips
+ * the LRU pass entirely while under that and spares anything used recently. A
+ * user asking to clear local files is asking for neither gate: with no cap and
+ * no age threshold, every backed-up file is a candidate. Local-only files are
+ * still kept, because that guard lives in the queries rather than here.
+ */
+export const EVICT_ALL_BACKED_UP: CacheEvictionConfig = {
+  maxBytes: 0,
+  minAge: 0,
+  minAgeNonCurrent: 0,
+}
+
 export type CacheEvictionResult = {
   processedRows: number
   evicted: number
