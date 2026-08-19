@@ -1,3 +1,24 @@
+## 0.0.20-rc.0 (2026-08-19)
+
+### Features
+
+- Add `internal.events`, a per-scope coalesced change signal an out-of-process listener subscribes to instead of polling.
+- Add `auth.clearAppKey(indexerUrl)`, which drops one indexer's stored app key and leaves the rest in place.
+- Coalesced cache invalidations run on both edges: the first change in a quiet stretch lands at once, and a stream after it lands once per window.
+- Add `app.provider.changes`: what changed in a folder since an anchor, so a file browser stays fresh without re-listing.
+- Add the read half of `app.provider`: describe one file or folder, and list a folder a page at a time, as an OS file browser asks for them.
+- Add the wire types an OS storage-provider shell exchanges with the library, plus `directoryProviderId` for addressing a directory by row id rather than by path.
+- Add the write half of `app.provider`: create, write, rename and trash, with bytes crossing by path through a directory the host nominates.
+- File update operations take `updatedAt: 'now' | 'preserve' | number` in place of the `includeUpdatedAt` flag, and the update payload no longer carries `updatedAt`.
+
+### Fixes
+
+- queryFileCount and queryFileStats apply only the WHERE filters; a caller limit of 0 previously made them return zero counts.
+- deleteLostFilesAndThumbnails only deletes files with no object on any indexer, so a file still hosted on another indexer survives one indexer's lost-file cleanup.
+- Optimize the directory listing queries: file and subdirectory counts now come from one pass instead of a correlated subquery per row. Child matching is now case-sensitive.
+- Sync-down and upsertManyFiles now recalculate the version group a rename vacates, so a renamed stack can no longer leave its old group without a current version.
+- updateFile now recalculates version currency when the auto-bumped updatedAt makes a row its group's newest, not only when the caller supplies updatedAt.
+
 ## 0.0.19 (2026-08-14)
 
 ### Features

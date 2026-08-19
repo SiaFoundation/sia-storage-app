@@ -1,3 +1,13 @@
+## 0.0.6-rc.0 (2026-08-19)
+
+### Features
+
+- `sia daemon start` can serve a second, narrowed socket for an OS storage-provider shell, so a desktop app can put the library in Finder without exposing the whole daemon surface to it.
+
+### Fixes
+
+- A second daemon can no longer start against the same data directory.
+
 ## 0.0.5 (2026-06-26)
 
 ### Fixes

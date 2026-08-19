@@ -1,6 +1,6 @@
 {
   "name": "@siastorage/cli",
-  "version": "0.0.5",
+  "version": "0.0.6-rc.0",
   "private": true,
   "bin": {
     "sia": "src/index.ts"
