@@ -1,0 +1,24 @@
+diff --git a/android/src/main/java/expo/modules/video/FullscreenPlayerActivity.kt b/android/src/main/java/expo/modules/video/FullscreenPlayerActivity.kt
+index c35bb7006cb346f9137060277d9eae8ebfe677bd..aa3b117546c5e338d560344590707529132fa656 100644
+--- a/android/src/main/java/expo/modules/video/FullscreenPlayerActivity.kt
++++ b/android/src/main/java/expo/modules/video/FullscreenPlayerActivity.kt
+@@ -120,7 +120,18 @@ class FullscreenPlayerActivity : Activity() {
+   override fun finish() {
+     super.finish()
+     didFinish = true
+-    videoViewId?.let { VideoManager.getVideoView(it).attachPlayer() }
++    // The view that opened this activity may be gone by the time it closes:
++    // React can unmount it, and Android can destroy the activity hosting it,
++    // neither of which a consumer can prevent. getVideoView throws in that
++    // case, from the main looper, killing the process. There is nothing to
++    // hand the player back to, so there is nothing to do. Caught by name so an
++    // OutOfMemoryError from the same call still surfaces.
++    videoViewId?.let {
++      try {
++        VideoManager.getVideoView(it).attachPlayer()
++      } catch (_: VideoViewNotFoundException) {
++      }
++    }
+ 
+     // Disable the exit transition
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
