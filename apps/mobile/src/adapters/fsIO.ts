@@ -79,6 +79,29 @@ export function createFsIOAdapter(): FsIOAdapter {
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },
+    async move(file, sourceUri) {
+      const targetUri = fsFileUri(file.id, file.type)
+      // copy() relies on the storage dir existing at startup; move can run for
+      // the first materialized file, so ensure it defensively — otherwise both
+      // the rename and the copy fallback would fail on a missing dir.
+      if (!(await RNFS.exists(fsStorageDirectoryUri))) {
+        await RNFS.mkdir(fsStorageDirectoryUri)
+      }
+      if (await RNFS.exists(targetUri)) {
+        await RNFS.unlink(targetUri)
+      }
+      const src = fileUriToPath(sourceUri)
+      try {
+        // One write, and it consumes the source temp — no lingering duplicate.
+        await RNFS.moveFile(src, targetUri)
+      } catch {
+        // Cross-volume rename (EXDEV) or other move failure: fall back to a
+        // copy, mirroring importCopy's move-then-copy pattern.
+        await RNFS.copyFile(src, targetUri)
+      }
+      const stat = await RNFS.stat(targetUri)
+      return { uri: targetUri, size: stat.size }
+    },
     async importCopy(file, sourceUri, opts) {
       const targetUri = fsFileUri(file.id, file.type)
       // Land the bytes in this claim's temp, then publish into the slot. The

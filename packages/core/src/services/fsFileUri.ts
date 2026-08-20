@@ -38,6 +38,17 @@ export type FsIOAdapter = FsFileUriAdapter & {
     sourceUri: string,
   ): Promise<{ uri: string; size: number }>
   /**
+   * Move (rename) a source file into the file's slot, consuming the source.
+   * Optional: adapters that omit it fall back to `copy`. Used by the download
+   * path to avoid the ~2x temp+copy footprint. The implementation must tolerate
+   * a cross-volume rename (`EXDEV`) by falling back to a copy, since the source
+   * temp and the destination slot can live in different containers.
+   */
+  move?(
+    file: { id: string; type: string },
+    sourceUri: string,
+  ): Promise<{ uri: string; size: number }>
+  /**
    * The import scanner's copy. Adapters whose copies can race a reclaimed
    * claim (mobile) land each copy in a per-claim temp so the id slot never
    * has two concurrent writers; the single-process node adapter writes the

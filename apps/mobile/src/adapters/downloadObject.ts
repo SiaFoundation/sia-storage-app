@@ -2,7 +2,7 @@ import type { DownloadObjectAdapter } from '@siastorage/core/app'
 import { PinnedObject } from 'react-native-sia'
 import { streamToCache } from '../lib/streamToCache'
 import { getAppKeyForIndexer } from '../stores/appKey'
-import { copyFileToFs } from '../stores/fs'
+import { moveFileToFs } from '../stores/fs'
 
 export function createDownloadAdapter(): DownloadObjectAdapter {
   return {
@@ -22,7 +22,7 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
         dl,
         signal,
         onAfterClose: async (targetFile) => {
-          await copyFileToFs(file, targetFile.uri)
+          await moveFileToFs(file, targetFile.uri)
         },
         onProgress,
       })
@@ -41,7 +41,7 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
         dl,
         signal,
         onAfterClose: async (targetFile) => {
-          await copyFileToFs(file, targetFile.uri)
+          await moveFileToFs(file, targetFile.uri)
         },
         onProgress,
       })
