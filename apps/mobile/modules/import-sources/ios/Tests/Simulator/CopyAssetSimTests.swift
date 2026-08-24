@@ -36,7 +36,7 @@ final class CopyAssetSimTests: XCTestCase {
   }
 
   override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: destDir)
+    if let destDir { try? FileManager.default.removeItem(at: destDir) }
   }
 
   /// A JPEG that decodes. `requestContentEditingInput` decodes the original,

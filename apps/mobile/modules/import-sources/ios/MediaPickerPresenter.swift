@@ -2,7 +2,6 @@ import ExpoModulesCore
 import Photos
 import PhotosUI
 import UIKit
-import UniformTypeIdentifiers
 
 /// Identifier-delivery photo picking: the picker hands back PHAsset ids and
 /// no byte representation is ever exported, so a pick moves zero bytes and
@@ -51,19 +50,19 @@ final class MediaPickerPresenter: NSObject, PHPickerViewControllerDelegate {
     }
   }
 
-  /// Metadata only, never bytes: name and type from the original resource,
-  /// capture time from the asset. Sizes are deliberately absent; staging
-  /// batches them through getSizes, which owns the policy-aware resource
-  /// choice.
-  private static func metadata(for ids: [String]) -> [String: [String: Any]] {
+  /// Metadata only, never bytes: capture time and filename from the original
+  /// capture, MIME type from the resource an import will read. Those two come
+  /// from different resources on purpose, so an edited raw keeps the name
+  /// `IMG_1234.CR3` while typing as the JPEG its render is. Sizes are absent;
+  /// staging batches them through getSizes.
+  static func metadata(for ids: [String]) -> [String: [String: Any]] {
     var out: [String: [String: Any]] = [:]
     let fetch = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
     fetch.enumerateObjects { asset, _, _ in
       var meta: [String: Any] = ["mediaAssetId": asset.localIdentifier, "accessible": true]
-      if let resource = PHAssetResource.assetResources(for: asset).first {
-        meta["name"] = resource.originalFilename
-        if let type = UTType(resource.uniformTypeIdentifier),
-          let mime = type.preferredMIMEType {
+      if let selection = try? AssetCopier.inspect(asset) {
+        meta["name"] = selection.original.originalFilename
+        if let mime = AssetCopier.mime(of: selection.resource) {
           meta["mimeType"] = mime
         }
       }
