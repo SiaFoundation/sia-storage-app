@@ -745,24 +745,27 @@ export async function markImportFileProgress(
 }
 
 /**
- * Persist the computed hash/size/type onto the claimed row (no-op if the claim
+ * Persist the computed hash/size/type/name onto the claimed row (no-op if the claim
  * token no longer matches). Finalizing reads these columns back off the row,
  * so they must be written first. The write only lands if the claim token still matches and the
  * row is still `active`, so a swept-then-reclaimed row's late write no-ops. copyBytes is set to
  * size so the byte bar reflects the completed copy.
+ * `name` is the row's name, with a `media` row's extension swapped for the one
+ * the classified type implies.
  */
 export async function recordImportFileHash(
   db: DatabaseAdapter,
   id: string,
   token: string,
-  meta: { hash: ContentHash; size: number; type: string },
+  meta: { hash: ContentHash; size: number; type: string; name: string },
 ): Promise<void> {
   await db.runAsync(
-    `UPDATE import_files SET hash = ?, size = ?, type = ?, copyBytes = ?, updatedAt = ?
+    `UPDATE import_files SET hash = ?, size = ?, type = ?, name = ?, copyBytes = ?, updatedAt = ?
      WHERE id = ? AND claimToken = ? AND state = 'active'`,
     meta.hash,
     meta.size,
     meta.type,
+    meta.name,
     meta.size,
     Date.now(),
     id,

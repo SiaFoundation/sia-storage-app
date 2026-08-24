@@ -6,23 +6,6 @@ export default defineScenario({
   description:
     "The phone imports one real file for every type in the file-type corpus through its file picker, named in the shapes past bugs turned on. The phone and a laptop both hold every file under its exact name, with the type its bytes and name call for and the phone's bytes, and every JPEG and PNG gets a thumbnail on both. On the phone's screen, the Files tab's No folder list shows the files with the hardest names.",
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug:
-    "A file the phone imports whose bytes call for a different extension than its name gives, such as a PNG named .txt, a file with no extension, or an .m4v holding MP4, keeps its bytes under the name's extension. The app then finds no local copy at the path its new type names, so the file never uploads and the two devices never agree.",
-  bugShowsAs: [
-    'every device holds the same library at the end',
-    'the phone and the laptop agree',
-    {
-      check: 'phone finds every file’s bytes at the path its type names',
-      matches: (lost: string[]) => lost.length > 0,
-    },
-    {
-      check: 'laptop holds every file under its exact name',
-      matches: (missing: string[]) => missing.length > 0,
-    },
-    // The PNG named with no extension is one the phone loses.
-    { check: 'phone has a thumbnail for every JPEG and PNG', got: ['phone-1-png-0'] },
-    { check: 'laptop has a thumbnail for every JPEG and PNG', got: ['phone-1-png-0'] },
-  ],
   timeoutMs: 15 * 60_000,
   async run({ devices, seedTypes, converge, step, checkEqual, checkContent, check, waitFor }) {
     const { phone } = devices

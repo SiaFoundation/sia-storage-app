@@ -751,12 +751,12 @@ export interface AppService {
     claim(id: string, now: number, token: string): Promise<boolean>
     /** Records copy progress; the write only lands if the claim token still matches. */
     markProgress(id: string, bytes: number, token: string): Promise<void>
-    /** Persists the computed hash/size/type onto the claimed row before finalize
-     * (no-op if the claim token no longer matches). */
+    /** Persists the computed hash/size/type/name onto the claimed row before
+     * finalize (no-op if the claim token no longer matches). */
     recordHash(
       id: string,
       token: string,
-      meta: { hash: ContentHash; size: number; type: string },
+      meta: { hash: ContentHash; size: number; type: string; name: string },
     ): Promise<void>
     /** Finalizes a claimed file into `files` (or marks it a content duplicate). */
     finalize(id: string, token: string): Promise<FinalizeResult>
