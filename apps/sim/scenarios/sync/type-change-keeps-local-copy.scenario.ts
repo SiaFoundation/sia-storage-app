@@ -5,12 +5,6 @@ export default defineScenario({
   description:
     'The laptop adds a file of unknown type and the desk downloads it. The laptop then changes the file to text. Once the change reaches the desk, the desk still has the file on disk, under the name its new type gives it.',
   devices: { laptop: 'cli', desk: 'cli' },
-  knownBug:
-    'Sync-down records the new type but leaves the local bytes under the old extension, and a device finds a file on disk by the extension its type names, so the desk drops its local copy the next time it looks.',
-  bugShowsAs: [
-    'desk still finds the file on disk',
-    { check: 'desk keeps its record of the local copy', got: false },
-  ],
   async run({
     devices: { laptop, desk },
     seed,

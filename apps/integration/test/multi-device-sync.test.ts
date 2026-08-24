@@ -1,3 +1,4 @@
+import nodeFs from 'node:fs'
 import {
   createEmptyIndexerStorage,
   generateMockFileMetadata,
@@ -404,6 +405,92 @@ describe('Multi-Device Sync (upload + sync)', () => {
     expect(files).toHaveLength(2)
     expect(files[0].hash).toBe(files[1].hash)
     expect(files[0].id).not.toBe(files[1].id)
+  }, 30_000)
+
+  it("a type change from another device moves this device's local copy to the new extension", async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    await appA.waitForNoActiveUploads()
+    const localCopies = () => nodeFs.readdirSync(appA.tempDir).filter((f) => f.startsWith(file.id))
+    expect(localCopies()).toEqual([`${file.id}.bin`])
+    await waitForCondition(async () => (await appB.getFileById(file.id)) != null, {
+      timeout: 15_000,
+      message: 'B to receive the file',
+    })
+
+    await appB.app.files.update({ id: file.id, type: 'text/plain' }, { updatedAt: 'now' })
+
+    await waitForCondition(async () => (await appA.getFileById(file.id))?.type === 'text/plain', {
+      timeout: 15_000,
+      message: 'A to apply the type change',
+    })
+    // The move runs after sync-down commits the new type.
+    await waitForCondition(() => localCopies().join() === `${file.id}.txt`, {
+      timeout: 5_000,
+      message: "A's copy to move to .txt",
+    })
+    expect(await appA.app.fs.getFileUri({ id: file.id, type: 'text/plain' })).not.toBeNull()
+    expect(await appA.app.fs.readMeta(file.id)).not.toBeNull()
+  }, 30_000)
+
+  it('a type change moves the local copy when its fs row is already gone', async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    await appA.waitForNoActiveUploads()
+    const localCopies = () => nodeFs.readdirSync(appA.tempDir).filter((f) => f.startsWith(file.id))
+    await waitForCondition(async () => (await appB.getFileById(file.id)) != null, {
+      timeout: 15_000,
+      message: 'B to receive the file',
+    })
+    // A getFileUri at the new type, run between sync-down's commit and the
+    // move, deletes the fs row and leaves the bytes at the old extension.
+    await appA.app.fs.deleteMeta(file.id)
+
+    await appB.app.files.update({ id: file.id, type: 'text/plain' }, { updatedAt: 'now' })
+
+    await waitForCondition(async () => (await appA.getFileById(file.id))?.type === 'text/plain', {
+      timeout: 15_000,
+      message: 'A to apply the type change',
+    })
+    await waitForCondition(() => localCopies().join() === `${file.id}.txt`, {
+      timeout: 5_000,
+      message: "A's copy to move to .txt",
+    })
+  }, 30_000)
+
+  it('two type changes for one file in one batch move the local copy once, to the newest type', async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    await appA.waitForNoActiveUploads()
+    const localCopies = () => nodeFs.readdirSync(appA.tempDir).filter((f) => f.startsWith(file.id))
+    const row = await appA.getFileById(file.id)
+    if (!row) throw new Error('A has no row for the file it added')
+    // Another device changed the type twice, and its push reached two objects
+    // apart, so both arrive in one batch, the newer first.
+    const metadata = {
+      id: row.id,
+      name: row.name,
+      kind: 'file' as const,
+      size: row.size,
+      hash: row.hash,
+      createdAt: row.createdAt,
+      trashedAt: null,
+    }
+    appA.pause()
+    appA.sdk.injectObject({
+      metadata: { ...metadata, type: 'image/png', updatedAt: row.updatedAt + 2000 },
+    })
+    appA.sdk.injectObject({
+      metadata: { ...metadata, type: 'text/plain', updatedAt: row.updatedAt + 1000 },
+    })
+    appA.resume()
+
+    await waitForCondition(async () => (await appA.getFileById(file.id))?.type === 'image/png', {
+      timeout: 15_000,
+      message: 'A to apply the newest type',
+    })
+    await waitForCondition(() => localCopies().join() === `${file.id}.png`, {
+      timeout: 5_000,
+      message: "A's copy to move to .png",
+    })
+    expect(await appA.app.fs.readMeta(file.id)).not.toBeNull()
   }, 30_000)
 
   // Scenario: User edits file on desktop, then edits on phone. Newest edit

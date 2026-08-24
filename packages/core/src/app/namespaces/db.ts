@@ -146,6 +146,14 @@ export function buildDbNamespaces(
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     uri: (file) => fsIO.uri(file.id, file.type),
+    sizeOnDisk: async (file) => {
+      const size = await fsIO.size(file.id, file.type)
+      // `fsIO.size` returns a null value both for `not_found` and for
+      // `stat_error`. A failed stat throws here, because returning null would
+      // tell the caller the bytes are gone when they may still be on disk.
+      if (size.error === 'stat_error') throw new Error(`Could not stat local file ${file.id}`)
+      return size.value
+    },
     removeFile,
     removeFileByPath: async (path) => {
       if (!fsIO.removeByPath) return
