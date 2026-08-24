@@ -543,6 +543,8 @@ export interface AppService {
     trashedCachedFiles(limit: number): Promise<{ fileId: string; size: number; type: string }[]>
     /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
+    /** Stored type of each live file among `fileIds`; absent when tombstoned or gone. */
+    liveFileTypes(fileIds: string[]): Promise<Map<string, string>>
     /** Which of `fileIds` still have an in-flight import_files row (owns bytes on disk). */
     inFlightImportFileIds(fileIds: string[]): Promise<Set<string>>
     /** Returns the local file URI if the file exists on disk, or null. */

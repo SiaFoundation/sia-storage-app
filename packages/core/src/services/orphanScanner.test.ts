@@ -2,31 +2,42 @@ import type { AppService } from '../app/service'
 import { runOrphanScanner } from './orphanScanner'
 
 /**
- * The sweep deletes local files with no database row behind them. Claim-scoped
- * import temps (`<id>.<token>.tmp`) are the hazard: they are named differently
- * from finalized files and are live bytes mid-copy, so a wrong id split or a
- * wrong exemption lookup deletes a copy that is still being written.
+ * The sweep deletes local files with no database row behind them. Two hazards
+ * shape it: claim-scoped import temps (`<id>.<token>.tmp`) are live bytes
+ * mid-copy, and a file whose bytes sit at a stale extension looks exactly like
+ * an orphan from disk. Both must survive it.
  */
 function mockApp(
   over: {
     files?: string[]
     orphanedIds?: string[]
     inFlightIds?: string[]
+    /** fileId -> stored type, i.e. the rows the library still holds. */
+    liveTypes?: Record<string, string>
   } = {},
 ) {
   const removeFile = jest.fn(async () => {})
   const removeFileByPath = jest.fn(async () => {})
   const findOrphanedFileIds = jest.fn(async () => new Set(over.orphanedIds ?? []))
   const inFlightImportFileIds = jest.fn(async () => new Set(over.inFlightIds ?? []))
+  const liveFileTypes = jest.fn(async (ids: string[]) => {
+    const live = over.liveTypes ?? {}
+    return new Map(ids.filter((id) => id in live).map((id) => [id, live[id]]))
+  })
   const deleteMetaBatch = jest.fn(async () => {})
+  const renameToType = jest.fn(async () => ({ uri: 'file://renamed' }))
+  const getFileUri = jest.fn(async () => 'file://restored')
   const app = {
     fs: {
       listFiles: jest.fn(async () => over.files ?? []),
       findOrphanedFileIds,
       inFlightImportFileIds,
+      liveFileTypes,
       removeFile,
       removeFileByPath,
       deleteMetaBatch,
+      renameToType,
+      getFileUri,
     },
   } as unknown as AppService
   return {
@@ -35,7 +46,10 @@ function mockApp(
     removeFileByPath,
     findOrphanedFileIds,
     inFlightImportFileIds,
+    liveFileTypes,
     deleteMetaBatch,
+    renameToType,
+    getFileUri,
   }
 }
 
@@ -83,7 +97,11 @@ describe('runOrphanScanner claim temps', () => {
   })
 
   it('keeps a non-temp file that is not orphaned', async () => {
-    const m = mockApp({ files: ['/data/xyz.jpg'], orphanedIds: [] })
+    const m = mockApp({
+      files: ['/data/xyz.jpg'],
+      orphanedIds: [],
+      liveTypes: { xyz: 'image/jpeg' },
+    })
     const res = await runOrphanScanner(m.app)
     expect(m.removeFile).not.toHaveBeenCalled()
     expect(res?.removed).toBe(0)
@@ -97,5 +115,101 @@ describe('runOrphanScanner claim temps', () => {
     })
     await runOrphanScanner(m.app)
     expect(m.inFlightImportFileIds).toHaveBeenCalledWith(['abc'])
+  })
+})
+
+describe('runOrphanScanner type drift', () => {
+  it('moves a live file whose bytes sit at a stale extension instead of deleting it', async () => {
+    // The shape an edited raw import leaves: the row says JPEG, which is what
+    // the rendered bytes are, while they sit under the staged `.cr3`.
+    const m = mockApp({
+      files: ['/data/abc.cr3'],
+      orphanedIds: ['abc'],
+      liveTypes: { abc: 'image/jpeg' },
+    })
+    const res = await runOrphanScanner(m.app)
+    expect(m.renameToType).toHaveBeenCalledWith(
+      { id: 'abc', type: 'image/x-canon-cr3' },
+      'image/jpeg',
+    )
+    expect(m.removeFile).not.toHaveBeenCalled()
+    expect(m.removeFileByPath).not.toHaveBeenCalled()
+    expect(res).toEqual({ removed: 0, repaired: 1 })
+  })
+
+  it('rebuilds the fs row for a file it moved back', async () => {
+    // The missing fs row is what hid the file; the move alone fixes nothing.
+    const m = mockApp({
+      files: ['/data/abc.cr3'],
+      orphanedIds: ['abc'],
+      liveTypes: { abc: 'image/jpeg' },
+    })
+    await runOrphanScanner(m.app)
+    expect(m.getFileUri).toHaveBeenCalledWith({ id: 'abc', type: 'image/jpeg' })
+    expect(m.deleteMetaBatch).not.toHaveBeenCalled()
+  })
+
+  it('drops the stale copy when the row already resolves to real bytes', async () => {
+    const m = mockApp({
+      files: ['/data/abc.cr3', '/data/abc.jpg'],
+      orphanedIds: [],
+      liveTypes: { abc: 'image/jpeg' },
+    })
+    const res = await runOrphanScanner(m.app)
+    expect(m.removeFileByPath).toHaveBeenCalledWith('/data/abc.cr3')
+    expect(m.renameToType).not.toHaveBeenCalled()
+    expect(res?.removed).toBe(1)
+  })
+
+  it('rebuilds a missing fs row rather than deleting bytes the library points at', async () => {
+    const m = mockApp({
+      files: ['/data/abc.jpg'],
+      orphanedIds: ['abc'],
+      liveTypes: { abc: 'image/jpeg' },
+    })
+    const res = await runOrphanScanner(m.app)
+    expect(m.removeFile).not.toHaveBeenCalled()
+    expect(m.getFileUri).toHaveBeenCalledWith({ id: 'abc', type: 'image/jpeg' })
+    expect(m.deleteMetaBatch).not.toHaveBeenCalled()
+    expect(res?.removed).toBe(0)
+  })
+
+  it('moves a file stored under the generic extension once its type is known', async () => {
+    // extFromMime's fallback for a type that names no format. Nothing maps
+    // `.bin` back to a type, so without handling it these stay stranded.
+    const m = mockApp({
+      files: ['/data/abc.bin'],
+      orphanedIds: ['abc'],
+      liveTypes: { abc: 'image/jpeg' },
+    })
+    const res = await runOrphanScanner(m.app)
+    expect(m.renameToType).toHaveBeenCalledWith(
+      { id: 'abc', type: 'application/octet-stream' },
+      'image/jpeg',
+    )
+    expect(res).toEqual({ removed: 0, repaired: 1 })
+  })
+
+  it.each([['/data/abc.unknownext'], ['/data/abc.jpeg']])(
+    'leaves %s alone rather than guess at a move, since no writer produces that path',
+    async (file) => {
+      // Not a path this code wrote, but still a live row's bytes.
+      const m = mockApp({
+        files: [file],
+        orphanedIds: ['abc'],
+        liveTypes: { abc: 'image/jpeg' },
+      })
+      const res = await runOrphanScanner(m.app)
+      expect(m.removeFile).not.toHaveBeenCalled()
+      expect(m.removeFileByPath).not.toHaveBeenCalled()
+      expect(m.renameToType).not.toHaveBeenCalled()
+      expect(res).toEqual({ removed: 0, repaired: 0 })
+    },
+  )
+
+  it('still drops the fs row of an id it deleted', async () => {
+    const m = mockApp({ files: ['/data/xyz.jpg'], orphanedIds: ['xyz'] })
+    await runOrphanScanner(m.app)
+    expect(m.deleteMetaBatch).toHaveBeenCalledWith(['xyz'])
   })
 })

@@ -158,6 +158,7 @@ export {
   queryEvictionCandidates,
   queryNonCurrentCachedFiles,
   queryInFlightImportFileIds,
+  queryLiveFileTypes,
   queryOrphanedFileIds,
   queryTrashedCachedFiles,
   readFsMeta,

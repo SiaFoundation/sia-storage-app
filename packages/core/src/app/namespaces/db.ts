@@ -143,6 +143,7 @@ export function buildDbNamespaces(
       ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, limit),
     trashedCachedFiles: (limit) => ops.queryTrashedCachedFiles(db, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
+    liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
     getFileUri: (file) => getFsFileUri(db, file, fsIO),
     uri: (file) => fsIO.uri(file.id, file.type),

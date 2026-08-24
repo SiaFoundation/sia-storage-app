@@ -107,7 +107,7 @@ describe('fsOrphanScanner', () => {
     expect(removeFileSpy).toHaveBeenCalledTimes(1)
     expect(await app().fs.readMeta('file-1')).toBeNull()
     expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('keeps files that still have metadata', async () => {
@@ -138,7 +138,7 @@ describe('fsOrphanScanner', () => {
     expect(removeFileSpy).not.toHaveBeenCalled()
     expect((await app().fs.readMeta('file-2'))?.fileId).toBe('file-2')
     expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(now)
-    expect(result).toEqual({ removed: 0 })
+    expect(result).toEqual({ removed: 0, repaired: 0 })
   })
 
   it('deletes files that have no associated files table row', async () => {
@@ -154,7 +154,7 @@ describe('fsOrphanScanner', () => {
 
     expect(removeFileSpy).toHaveBeenCalledTimes(1)
     expect(await app().fs.readMeta('file-1')).toBeNull()
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('calls onProgress with correct removed/total counts', async () => {
@@ -242,7 +242,7 @@ describe('fsOrphanScanner', () => {
     const result = await runFsOrphanScanner()
 
     expect(removeFileSpy).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('processes large file lists across multiple batches', async () => {
@@ -251,7 +251,7 @@ describe('fsOrphanScanner', () => {
 
     const result = await runFsOrphanScanner()
 
-    expect(result).toEqual({ removed: 60 })
+    expect(result).toEqual({ removed: 60, repaired: 0 })
   })
 
   it('does not advance lastRun when aborted mid-scan', async () => {
@@ -263,7 +263,7 @@ describe('fsOrphanScanner', () => {
 
     try {
       const result = await runFsOrphanScanner()
-      expect(result).toEqual({ removed: 0 })
+      expect(result).toEqual({ removed: 0, repaired: 0 })
       expect(Number(await app().storage.getItem('fsOrphanLastRun'))).toBe(0)
     } finally {
       findSpy.mockRestore()
@@ -285,7 +285,7 @@ describe('fsOrphanScanner', () => {
 
     expect(removeByPathSpy).not.toHaveBeenCalled()
     expect(removeFileSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ removed: 0 })
+    expect(result).toEqual({ removed: 0, repaired: 0 })
   })
 
   it('sweeps a stale orphan claim temp whose base id has no non-terminal row, by literal path', async () => {
@@ -301,7 +301,7 @@ describe('fsOrphanScanner', () => {
 
     expect(removeByPathSpy).toHaveBeenCalledWith('gone.stale456.tmp')
     expect(removeFileSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('handles absolute paths from the adapter: exempts a live temp, sweeps an orphan by full path', async () => {
@@ -322,7 +322,7 @@ describe('fsOrphanScanner', () => {
     expect(removeByPathSpy).toHaveBeenCalledWith('/data/app/files/gone.stale456.tmp')
     expect(removeByPathSpy).toHaveBeenCalledTimes(1)
     expect(removeFileSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('sweeps a stale claim temp even after its base id finalized into a files row', async () => {
@@ -352,7 +352,7 @@ describe('fsOrphanScanner', () => {
     const result = await runFsOrphanScanner()
 
     expect(removeByPathSpy).toHaveBeenCalledWith('/data/app/files/leak.oldtok.tmp')
-    expect(result).toEqual({ removed: 1 })
+    expect(result).toEqual({ removed: 1, repaired: 0 })
   })
 
   it('coalesces concurrent calls into a single scan', async () => {
@@ -371,7 +371,7 @@ describe('fsOrphanScanner', () => {
     const [result1, result2] = await Promise.all([call1, call2])
 
     expect(listFilesSpy).toHaveBeenCalledTimes(1)
-    expect(result1).toEqual({ removed: 1 })
-    expect(result2).toEqual({ removed: 1 })
+    expect(result1).toEqual({ removed: 1, repaired: 0 })
+    expect(result2).toEqual({ removed: 1, repaired: 0 })
   })
 })
