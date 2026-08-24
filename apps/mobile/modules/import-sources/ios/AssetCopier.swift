@@ -14,6 +14,51 @@ enum AssetCopier {
     let fraction: Double?
   }
 
+  struct Selection {
+    /// The resource an import reads.
+    let resource: PHAssetResource
+    /// The capture it descends from, whatever gets read.
+    let original: PHAssetResource
+    let decision: BytesPolicy.Decision
+  }
+
+  /// What an import of one asset will read, and the capture it is named after.
+  /// Every native call that describes an import ahead of time resolves through
+  /// here, so a staged row can't name a different resource than `copy` reads:
+  /// an edited raw photo stages as the rendered JPEG it imports as.
+  ///
+  /// The two are separate because a rendered resource is named
+  /// `FullSizeRender.<ext>` for every edited photo alike, so naming from it
+  /// would stack unrelated photos into one version group.
+  ///
+  /// One `assetResources` hop serves both; it is the expensive part of
+  /// describing a large pick.
+  static func inspect(_ asset: PHAsset) throws -> Selection {
+    let resources = PHAssetResource.assetResources(for: asset)
+    let kinds = Set(resources.compactMap { resourceKind($0.type) })
+    // Adjusted assets carry a fullSize* resource; unedited ones don't. That
+    // presence is the only public has-adjustments signal (PHAsset exposes
+    // none).
+    let hasAdjustments = kinds.contains(.fullSizePhoto) || kinds.contains(.fullSizeVideo)
+    let decision = try BytesPolicy.decide(
+      mediaKind: asset.mediaType == .video ? .video : .image,
+      hasAdjustments: hasAdjustments,
+      resources: kinds)
+    guard
+      let resource = resources.first(where: { resourceKind($0.type) == decision.selection }),
+      // decide() throws on empty resources, so first is present here.
+      let original = resources.first(where: {
+        $0.type == (asset.mediaType == .video ? .video : .photo)
+      }) ?? resources.first
+    else { throw CodedError("unsupported", "selected resource vanished") }
+    return Selection(resource: resource, original: original, decision: decision)
+  }
+
+  /// A resource's MIME type, or nil when its UTI maps to none.
+  static func mime(of resource: PHAssetResource) -> String? {
+    UTType(resource.uniformTypeIdentifier)?.preferredMIMEType
+  }
+
   /// Batched size hints for `getSizes`: metadata only, never triggers an
   /// iCloud download. Sizes the same resource BytesPolicy would copy, via the
   /// undocumented-but-industry-standard `fileSize` KVC key (PhotoKit has no
@@ -26,19 +71,12 @@ enum AssetCopier {
     for id in assetIds { out[id] = NSNull() }
     let fetch = PHAsset.fetchAssets(withLocalIdentifiers: assetIds, options: nil)
     fetch.enumerateObjects { asset, _, _ in
-      let resources = PHAssetResource.assetResources(for: asset)
-      let kinds = Set(resources.compactMap { resourceKind($0.type) })
-      let hasAdjustments = kinds.contains(.fullSizePhoto) || kinds.contains(.fullSizeVideo)
       guard
-        let decision = try? BytesPolicy.decide(
-          mediaKind: asset.mediaType == .video ? .video : .image,
-          hasAdjustments: hasAdjustments,
-          resources: kinds),
-        let resource = resources.first(where: { resourceKind($0.type) == decision.selection }),
+        let selection = try? inspect(asset),
         // KVC on a private key: if an iOS release removes it, valueForKey
         // raises an uncatchable NSUnknownKeyException, so probe first.
-        resource.responds(to: Selector(("fileSize"))),
-        let size = resource.value(forKey: "fileSize") as? Int64,
+        selection.resource.responds(to: Selector(("fileSize"))),
+        let size = selection.resource.value(forKey: "fileSize") as? Int64,
         size > 0
       else { return }
       out[asset.localIdentifier] = size
@@ -61,18 +99,9 @@ enum AssetCopier {
       return
     }
 
-    let resources = PHAssetResource.assetResources(for: asset)
-    let kinds = Set(resources.compactMap { resourceKind($0.type) })
-    // Adjusted assets carry a fullSize* resource; unedited ones don't. That
-    // presence is the only public has-adjustments signal (PHAsset exposes
-    // none).
-    let hasAdjustments = kinds.contains(.fullSizePhoto) || kinds.contains(.fullSizeVideo)
-    let decision: BytesPolicy.Decision
+    let selection: Selection
     do {
-      decision = try BytesPolicy.decide(
-        mediaKind: asset.mediaType == .video ? .video : .image,
-        hasAdjustments: hasAdjustments,
-        resources: kinds)
+      selection = try inspect(asset)
     } catch let error as CodedError {
       completion(.failure(error))
       return
@@ -80,11 +109,7 @@ enum AssetCopier {
       completion(.failure(CodedError("io-error", "\(error)")))
       return
     }
-    guard let resource = resources.first(where: { resourceKind($0.type) == decision.selection })
-    else {
-      completion(.failure(CodedError("unsupported", "selected resource vanished")))
-      return
-    }
+    let resource = selection.resource
 
     let fm = FileManager.default
     fm.createFile(atPath: destPath, contents: nil)
@@ -154,15 +179,14 @@ enum AssetCopier {
           fail(mapCompletionError(error))
           return
         }
-        let mime =
-          UTType(resource.uniformTypeIdentifier)?.preferredMIMEType
-          ?? resource.uniformTypeIdentifier
         completion(
           .success([
             "size": size,
             "sha256": sink.finalizeHex(),
-            "mime": mime,
-            "variant": decision.variant,
+            // The bare UTI when it maps to no MIME type; the app's classifier
+            // rejects it and falls back rather than storing it as one.
+            "mime": mime(of: resource) ?? resource.uniformTypeIdentifier,
+            "variant": selection.decision.variant,
           ]))
       })
   }
