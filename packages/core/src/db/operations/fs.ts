@@ -47,6 +47,25 @@ export async function deleteManyFsMeta(db: DatabaseAdapter, fileIds: string[]): 
   await db.runAsync(`DELETE FROM fs WHERE fileId IN (${ph})`, ...fileIds)
 }
 
+/**
+ * Stored type of each live (non-tombstoned) file among `fileIds`. Lets the
+ * orphan sweep tell bytes at a stale extension, which it must move, from
+ * bytes nothing references, which it deletes.
+ */
+export async function queryLiveFileTypes(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<Map<string, string>> {
+  if (fileIds.length === 0) return new Map()
+  const rows = await db.getAllAsync<{ id: string; type: string }>(
+    `SELECT files.id AS id, files.type AS type FROM json_each(?)
+     JOIN files ON files.id = value
+     WHERE files.deletedAt IS NULL`,
+    JSON.stringify(fileIds),
+  )
+  return new Map(rows.map((r) => [r.id, r.type]))
+}
+
 // LRU pass: only current originals. Thumbnails are never evicted by LRU —
 // regenerating a current thumb is wasted work and causes UI flicker. Non-
 // current and trashed rows are handled by the dedicated pre-passes.

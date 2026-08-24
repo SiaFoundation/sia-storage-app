@@ -1,3 +1,4 @@
+import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../adapters/db'
 import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
 import type { ContentHash } from '../lib/contentHash'
@@ -124,6 +125,10 @@ export async function getFsFileUri(
 
   if (size === null) {
     if (error === 'not_found' && existingMeta) {
+      // No bytes at the path the file's type names, so dropping the record
+      // makes the file read as remote-only. The bytes can still sit at a
+      // stale extension, which the orphan scanner moves back and records.
+      logger.warn('fsFileUri', 'local_copy_missing', { fileId: file.id, type: file.type })
       await deleteFsMeta(db, file.id)
     }
     // On stat_error, preserve existing metadata so we don't lose

@@ -5,16 +5,6 @@ export default defineScenario({
   description:
     'The phone is offline and imports two files, which cannot upload. The first file’s bytes are moved to an extension its type no longer names, and the second loses its local record, as a crash or an older version could leave them. The user runs Clear local files from Developers. Both files still have their bytes afterwards, and the second has its record back.',
   devices: { phone: 'phone' },
-  knownBug:
-    'The sweep behind Clear local files treats bytes whose extension does not match their file’s type, or that have no local record, as belonging to no file and deletes them, so a file that has not uploaded loses its only copy.',
-  bugShowsAs: [
-    'the file still has its bytes on the phone',
-    { check: 'Clear local files leaves the file’s bytes on disk', got: 0 },
-    {
-      check: 'Clear local files keeps the bytes of a file with no local record, and records them',
-      got: { bytesOnDisk: 0, record: 0 },
-    },
-  ],
   timeoutMs: 6 * 60_000,
   async run({ devices: { phone }, network, seed, step, check, checkEqual, waitFor }) {
     await network.setOffline('phone', true)
