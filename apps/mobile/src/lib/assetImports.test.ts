@@ -76,6 +76,17 @@ describe('importAssets for picker / camera / share', () => {
     expect(rows.map((r) => r.sourceUri).sort()).toEqual(['file:///other', 'file:///same'])
   })
 
+  it('stages a media pick with the type the OS reports for the copied resource, and names it to match', async () => {
+    // An edited raw photo: the capture is named .CR3, and iOS reports the
+    // rendered JPEG the copy will read.
+    const { importId } = await importMediaAssets(
+      [pick({ id: 'a1', name: 'IMG_1.CR3', type: 'image/jpeg', sourceUri: 'file:///edited' })],
+      [],
+    )
+    const [row] = await app().imports.files(importId!)
+    expect(row).toMatchObject({ type: 'image/jpeg', name: 'IMG_1.jpg' })
+  })
+
   it('skips assets without a sourceUri and returns null when nothing is staged', async () => {
     const result = await importAssets([pick({ sourceUri: undefined })])
     expect(result).toEqual({ importId: null, newVersionCount: 0 })

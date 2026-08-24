@@ -14,7 +14,8 @@ import type {
   ImportSourceKind,
 } from '@siastorage/core/db/operations'
 import { app } from '../stores/appService'
-import { detectMimeType } from '@siastorage/core/lib/detectMimeType'
+import { classifyImportType } from '@siastorage/core/lib/detectMimeType'
+import { nameForType } from '@siastorage/core/lib/fileTypes'
 import { type MimeType } from './fileTypes'
 
 export type Asset = {
@@ -40,16 +41,33 @@ type ParsedAssetMetadata = {
   type: MimeType
 }
 
-// Staging never opens the source: the type here is metadata-derived (picker
-// or OS type, else extension), and finalize re-classifies every row from the
-// copy's header bytes, which cost nothing extra.
-function parseAssetMetadata(asset: Asset, defaultFileName: string): ParsedAssetMetadata {
+// Staging never opens the source, so the type here is metadata-derived and
+// finalize re-classifies from the copy's own bytes. Both run
+// classifyImportType, so a media pick whose picker reported the type of the
+// resource the copy reads is staged with the type it finalizes with, and one
+// reported with its capture's type is retyped at finalize. The name follows
+// the type: a photo library reports the capture's filename, which for an
+// edited raw names a format the import won't produce.
+function parseAssetMetadata(
+  asset: Asset,
+  defaultFileName: string,
+  sourceKind: ImportSourceKind,
+): ParsedAssetMetadata {
   const ts = new Date(asset.timestamp ?? Date.now()).getTime()
+  const name = asset.name ?? defaultFileName
+  const type = classifyImportType({
+    stagedType: asset.type ?? '',
+    name,
+    sourceKind,
+    // A media pick's `type` is the OS's answer for the asset. No other
+    // source has one to offer.
+    mediaMime: sourceKind === 'media' ? asset.type : undefined,
+  }) as MimeType
   return {
-    name: asset.name ?? defaultFileName,
+    name: nameForType(name, type),
     createdAt: ts,
     updatedAt: ts,
-    type: detectMimeType({ providedType: asset.type, fileName: asset.name }) as MimeType,
+    type,
   }
 }
 
@@ -155,7 +173,9 @@ export async function importAssets(
   await app().db.waitUntilActive()
 
   const importId = uniqueId()
-  const parsed = picks.map((a) => parseAssetMetadata(a, defaultFileName))
+  const parsed = picks.map((a) =>
+    parseAssetMetadata(a, defaultFileName, a.sourceKind ?? 'ephemeral'),
+  )
   const rows: ImportFileRow[] = picks.map((a, i) => {
     const meta = parsed[i]
     return buildImportFileRow({
@@ -231,7 +251,7 @@ export async function importMediaAssets(
   const deniedRows = denied
     .filter((a): a is Asset & { id: string } => !!a.id)
     .map((a) => {
-      const meta = parseAssetMetadata(a, 'file')
+      const meta = parseAssetMetadata(a, 'file', 'media')
       return {
         ...buildImportFileRow({
           importId,
@@ -312,7 +332,7 @@ export async function buildPhotoCandidateRows(
   const survivors = withAssetIds.filter((a) => !alreadyImported.has(a.id))
   if (survivors.length === 0) return []
 
-  const parsed = survivors.map((a) => parseAssetMetadata(a, 'file'))
+  const parsed = survivors.map((a) => parseAssetMetadata(a, 'file', 'media'))
   // Size HINTS in one native batch (MediaStore SIZE / PhotoKit resource
   // metadata, no bytes touched, no iCloud download). They feed the progress
   // throttle's delta gate and the open import's totals; the copy re-measures the
