@@ -556,6 +556,10 @@ export interface AppService {
      *  is on disk (e.g., the library fetcher priming the fs URI cache)
      *  use this to avoid the stat round trip getFileUri performs. */
     uri(file: { id: string; type: string }): string
+    /** Byte size at `type`'s path, or null when nothing is there. Throws when
+     *  the stat itself fails. A plain stat: unlike getFileUri it never drops
+     *  the fs row, so probing for bytes can't destroy the row recording them. */
+    sizeOnDisk(file: { id: string; type: string }): Promise<number | null>
     /** Removes a local file from disk. */
     removeFile(file: { id: string; type: string }): Promise<void>
     /** Removes a local file by its literal path (orphan-scanner temp sweep). */

@@ -70,6 +70,11 @@ type PreparedUpdate = {
   directory?: string
   isFile: boolean
   isRemoteNewer: boolean
+  /**
+   * Type before the merge, so a remote type change can move the local bytes.
+   * Unset on a create that dedup turned into an update.
+   */
+  previousType?: string
 }
 
 // A "delete" means the object was removed from the indexer.
@@ -407,6 +412,7 @@ async function processBatch(
         directory: metadata.directory,
         isFile: type === 'file',
         isRemoteNewer,
+        previousType: existing.type,
       })
     } else {
       const fileId = metadata.id
@@ -480,13 +486,21 @@ async function processBatch(
     .filter((e) => e.tags !== undefined)
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
 
+  // Apply remote metadata only for creates and remote-newer, non-tombstoned
+  // updates. ON CONFLICT(id) preserves addedAt/mediaAssetId/deletedAt/lostReason,
+  // and a locally-tombstoned row is skipped so a delete-in-progress isn't
+  // reverted by a stale remote edit (delete wins).
+  const remoteWins = updates.filter((e) => e.isRemoteNewer && !e.fileRecord.deletedAt)
+  const winners = newestPerFile([...creates, ...remoteWins])
+  // The bytes move once per file, to the type its row ends with. A create
+  // that dedup turned into an update has no earlier copy to move.
+  const remoteRetyped = winners.filter(
+    (e): e is PreparedUpdate & { previousType: string } =>
+      e.kind === 'update' && e.previousType !== undefined && e.previousType !== e.fileRecord.type,
+  )
+
   await internal.withTransaction(async (tx) => {
-    // Apply remote metadata only for creates and remote-newer, non-tombstoned
-    // updates. ON CONFLICT(id) preserves addedAt/mediaAssetId/deletedAt/lostReason,
-    // and a locally-tombstoned row is skipped so a delete-in-progress isn't
-    // reverted by a stale remote edit (delete wins).
-    const remoteWins = updates.filter((e) => e.isRemoteNewer && !e.fileRecord.deletedAt)
-    const fileUpserts = newestPerFile([...creates, ...remoteWins]).map((e) => e.fileRecord)
+    const fileUpserts = winners.map((e) => e.fileRecord)
     // A remote rename arrives as a file upsert that rewrites `name`, moving the row into a
     // different (name, directoryId) group. Read the groups these rows sit in before that
     // rewrite, so the recalc below can also recompute the group a rename empties. Creates have
@@ -616,6 +630,37 @@ async function processBatch(
   // and an in-closure `+=` would double-count on retry.
   counts.total += creates.length + updates.length + deletedFileIds.length
   counts.fileCreates += creates.filter((e) => e.isFile).length
+
+  // A remote-won type change has to move the local bytes with it, or the
+  // cached copy reads as absent. The DB is already committed, so a rename
+  // that fails removes the old copy instead, and the next open downloads the
+  // file again. Left at the old path, the bytes would stay on the CLI and
+  // desktop for good, since neither runs the orphan sweep that reclaims them.
+  for (const event of remoteRetyped) {
+    if (signal.aborted) break
+    const oldCopy = { id: event.fileId, type: event.previousType }
+    // A getFileUri at the new type, run after the commit, finds no bytes there
+    // and deletes the fs row, so the gate checks for bytes at the old path.
+    // A stat that fails leaves the bytes where they are, for the orphan sweep.
+    const held = await app.fs.sizeOnDisk(oldCopy).catch(() => null)
+    if (held === null) continue
+    try {
+      await app.fs.renameToType(oldCopy, event.fileRecord.type)
+    } catch (e) {
+      logger.warn('syncDownEvents', 'retype_failed', {
+        fileId: event.fileId,
+        from: event.previousType,
+        to: event.fileRecord.type,
+        error: e as Error,
+      })
+      await app.fs.removeFile(oldCopy).catch((removeError) => {
+        logger.warn('syncDownEvents', 'retype_cleanup_failed', {
+          fileId: event.fileId,
+          error: removeError as Error,
+        })
+      })
+    }
+  }
 
   // Filesystem cleanup runs after the transaction commits. FS isn't
   // transactional, and an orphan-on-disk after a committed delete is
