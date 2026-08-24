@@ -9,6 +9,7 @@ import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
 import { ThumbSizes } from '../types/files'
+import { retypeFile } from './retypeFile'
 
 async function writeThumbnailToStorage(
   app: AppService,
@@ -43,37 +44,6 @@ export function shouldReplaceType(declared: string, detected: string): boolean {
 }
 
 /**
- * Apply a type correction: update the DB first, then rename the on-disk
- * file (storage path is derived from `type`). Returns the new URI.
- *
- * DB-first ordering: the SQL write is the cheap, atomic step; the FS
- * rename is the risky one. If the rename throws, we roll the DB back to
- * the old type so the on-disk file (still at the old path) stays
- * findable by the next scan, which can retry the correction cleanly.
- */
-async function correctType(
-  app: AppService,
-  fileId: string,
-  oldType: string,
-  newType: string,
-): Promise<string> {
-  logger.info('thumbnailer', 'type_corrected', {
-    fileId,
-    storedType: oldType,
-    detectedType: newType,
-  })
-  await app.files.update({ id: fileId, type: newType }, { updatedAt: 'now' })
-  try {
-    const renamed = await app.fs.renameToType({ id: fileId, type: oldType }, newType)
-    return renamed.uri
-  } catch (e) {
-    // Best-effort rollback so the DB stays consistent with disk.
-    await app.files.update({ id: fileId, type: oldType }, { updatedAt: 'now' }).catch(() => {})
-    throw e
-  }
-}
-
-/**
  * Detect + correct (if needed) once per file, before iterating sizes.
  * Returns the post-correction type and source URI for per-size calls,
  * so they don't redundantly re-detect or re-correct.
@@ -92,7 +62,7 @@ async function prepareForCandidate(
   }
   return {
     actualType: detectedType,
-    effectiveSourceUri: await correctType(app, fileId, fileType, detectedType),
+    effectiveSourceUri: await retypeFile(app, fileId, fileType, detectedType),
   }
 }
 
