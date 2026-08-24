@@ -114,6 +114,7 @@ async function arrange(
       hash,
       size: fileRow.size,
       type: fileRow.type,
+      name: fileRow.name,
     })
   }
 }
@@ -366,6 +367,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
       hash: EMPTY_HASH,
       size: 0,
       type: 'application/octet-stream',
+      name: 'empty1.dat',
     })
     expect(await finalizeImportFile(db(), 'if1', 'tok1')).toEqual({ outcome: 'added' })
 
@@ -389,6 +391,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
       hash: EMPTY_HASH,
       size: 0,
       type: 'application/octet-stream',
+      name: 'empty2.dat',
     })
     expect(await finalizeImportFile(db(), 'if2', 'tok2')).toEqual({ outcome: 'duplicate' })
     expect((await rawImportFile('if2'))?.state).toBe('duplicate')

@@ -60,8 +60,11 @@ type Mocks = {
   }
   fs: {
     readMeta: jest.Mock
+    sizeOnDisk: jest.Mock
     importCopy: jest.Mock
     removeFile: jest.Mock
+    renameToType: jest.Mock
+    listFiles: jest.Mock
     uri: jest.Mock
     getDeviceSpace: jest.Mock
   }
@@ -86,6 +89,10 @@ function createMocks(opts?: {
   deviceSpaceThrows?: boolean
   /** Unuploaded pending-local bytes the paced throttle reads. */
   unuploadedBytes?: number
+  /** Bytes on disk at an (id, type) pair; defaults to whatever readMeta says. */
+  sizeOnDisk?: (file: { id: string; type: string }) => number | null
+  /** Paths the storage directory lists. */
+  listFiles?: string[]
 }): Mocks {
   const importsById = new Map<string, ImportRow>()
   for (const i of opts?.imports ?? [impRow({ id: 'imp1' })]) importsById.set(i.id, i)
@@ -106,12 +113,19 @@ function createMocks(opts?: {
 
   const fs = {
     readMeta: jest.fn(async (fileId: string) => opts?.readMeta?.(fileId) ?? null),
+    // The bytes are wherever readMeta says a copy happened, unless a test
+    // overrides it to model a slot the row's type no longer names.
+    sizeOnDisk: jest.fn(async (file: any) =>
+      opts?.sizeOnDisk ? opts.sizeOnDisk(file) : (opts?.readMeta?.(file.id)?.size ?? null),
+    ),
     importCopy: jest.fn(async (file: any) => ({
       kind: 'plain',
       uri: `/local/${file.id}`,
       size: 9,
     })),
     removeFile: jest.fn(async () => {}),
+    renameToType: jest.fn(async (file: any) => ({ uri: `/local/${file.id}` })),
+    listFiles: jest.fn(async () => opts?.listFiles ?? []),
     uri: jest.fn((file: any) => `/local/${file.id}`),
     getDeviceSpace: jest.fn(async () => {
       if (opts?.deviceSpaceThrows) throw new Error('device space unavailable')
@@ -200,6 +214,7 @@ describe('ImportScanner claim-loop', () => {
       hash: HASH,
       size: expect.any(Number),
       type: 'image/jpeg',
+      name: 'photo.jpg',
     })
     expect(m.imports.finalize).toHaveBeenCalledWith('a', token)
     expect(result.finalized).toBe(1)
@@ -232,6 +247,7 @@ describe('ImportScanner claim-loop', () => {
       hash: HASH,
       size: 9,
       type: DOCX,
+      name: 'report.docx',
     })
   })
 
@@ -272,6 +288,198 @@ describe('ImportScanner claim-loop', () => {
     )
     expect(typeById.get('a')).toBe('image/jpeg')
     expect(typeById.get('b')).toBe('image/jpeg')
+  })
+
+  it('moves the bytes when classification lands on a different extension', async () => {
+    // Staged from the CR3 capture, copied as the rendered JPEG: the row is
+    // about to record image/jpeg, so the bytes have to leave `<id>.cr3`.
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1', name: 'IMG_1.CR3', type: 'image/x-canon-cr3' }),
+      ],
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'asset',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      mediaMime: 'image/jpeg',
+    })
+    await scanner(m).runScan()
+    expect(m.fs.renameToType).toHaveBeenCalledWith(
+      { id: 'a', type: 'image/x-canon-cr3' },
+      'image/jpeg',
+    )
+    // A kill between the two leaves a row naming where the bytes still are.
+    const renameOrder = m.fs.renameToType.mock.invocationCallOrder[0]
+    expect(renameOrder).toBeLessThan(m.imports.recordHash.mock.invocationCallOrder[0])
+  })
+
+  it('renames the file to match, so a raw capture stops claiming JPEG bytes are a CR3', async () => {
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1', name: 'IMG_1.CR3', type: 'image/x-canon-cr3' }),
+      ],
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'asset',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      mediaMime: 'image/jpeg',
+    })
+    await scanner(m).runScan()
+    expect(m.imports.recordHash).toHaveBeenCalledWith('a', expect.any(String), {
+      hash: `sha256:${HASH}`,
+      size: 9,
+      type: 'image/jpeg',
+      name: 'IMG_1.jpg',
+    })
+  })
+
+  it('keeps the name of a file the user picked when its bytes call for another type', async () => {
+    const m = createMocks({
+      candidates: [
+        fileRow({
+          id: 'a',
+          importId: 'imp1',
+          name: 'budget.numbers',
+          type: 'application/vnd.apple.numbers',
+          sourceKind: 'ephemeral',
+        }),
+      ],
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'stream',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      headerBytes: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+    })
+    await scanner(m).runScan()
+    // The zip bytes retype the row, and a media row would be renamed .zip.
+    expect(m.imports.recordHash).toHaveBeenCalledWith(
+      'a',
+      expect.any(String),
+      expect.objectContaining({ name: 'budget.numbers', type: 'application/zip' }),
+    )
+  })
+
+  it('leaves the bytes alone when the classified type keeps the same extension', async () => {
+    const m = createMocks({
+      candidates: [fileRow({ id: 'a', importId: 'imp1', name: 'p.jpg', type: 'image/jpeg' })],
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'asset',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      mediaMime: 'image/jpeg',
+    })
+    await scanner(m).runScan()
+    expect(m.fs.renameToType).not.toHaveBeenCalled()
+  })
+
+  it('backs off without finalizing when the bytes cannot be moved', async () => {
+    // Finalizing anyway commits a row naming an extension the bytes left.
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1', name: 'IMG_1.CR3', type: 'image/x-canon-cr3' }),
+      ],
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'asset',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      mediaMime: 'image/jpeg',
+    })
+    m.fs.renameToType.mockRejectedValueOnce(new Error('cross-device link'))
+    const result = await scanner(m).runScan()
+    expect(m.imports.recordHash).not.toHaveBeenCalled()
+    expect(m.imports.finalize).not.toHaveBeenCalled()
+    expect(m.imports.markFailure).toHaveBeenCalledWith(
+      'a',
+      expect.any(String),
+      'io-error',
+      expect.any(Number),
+      expect.any(String),
+      expect.any(Number),
+    )
+    expect(result.failed).toBe(1)
+  })
+
+  it('cleans a content duplicate at the extension the bytes were moved to', async () => {
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1', name: 'IMG_1.CR3', type: 'image/x-canon-cr3' }),
+      ],
+      finalize: { outcome: 'duplicate' },
+    })
+    m.fs.importCopy.mockResolvedValueOnce({
+      kind: 'asset',
+      uri: '/local/a',
+      size: 9,
+      sha256: `sha256:${HASH}`,
+      mediaMime: 'image/jpeg',
+    })
+    await scanner(m).runScan()
+    expect(m.fs.removeFile).toHaveBeenCalledWith({ id: 'a', type: 'image/jpeg' })
+  })
+
+  it('moves bytes left one extension over back under the row type, without the source', async () => {
+    // A tick killed between the retype and the type write. A staged row's copy
+    // consumed its source, so re-copying would mark it unavailable.
+    let moved = false
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1', type: 'image/x-canon-cr3', sourceKind: 'staged' }),
+      ],
+      readMeta: () => ({ fileId: 'a', size: 9, addedAt: 1, usedAt: 0 }),
+      sizeOnDisk: () => (moved ? 9 : null),
+      listFiles: ['/files/b.png', '/files/a.1234.tmp', '/files/a.jpg'],
+    })
+    m.fs.renameToType.mockImplementationOnce(async (file: any) => {
+      moved = true
+      return { uri: `/local/${file.id}` }
+    })
+    const result = await scanner(m).runScan()
+    expect(m.fs.renameToType).toHaveBeenCalledWith(
+      { id: 'a', type: 'image/jpeg' },
+      'image/x-canon-cr3',
+    )
+    expect(m.fs.importCopy).not.toHaveBeenCalled()
+    expect(result.finalized).toBe(1)
+  })
+
+  it('re-copies from the source when no bytes for the row are on disk', async () => {
+    // Hashing an empty path would fail every retry until the row went
+    // terminal, so a row whose source is still there copies it again.
+    const m = createMocks({
+      candidates: [fileRow({ id: 'a', importId: 'imp1' })],
+      readMeta: () => ({ fileId: 'a', size: 9, addedAt: 1, usedAt: 0 }),
+      sizeOnDisk: () => null,
+    })
+    const result = await scanner(m).runScan()
+    expect(m.fs.importCopy).toHaveBeenCalled()
+    expect(result.finalized).toBe(1)
+    expect(m.imports.markFailure).not.toHaveBeenCalled()
+  })
+
+  it('backs a resumed row off when its bytes cannot be statted, without copying again', async () => {
+    // A staged row's copy consumed its source, so a copy again would mark it
+    // unavailable over a stat that only failed once.
+    const m = createMocks({
+      candidates: [fileRow({ id: 'a', importId: 'imp1', sourceKind: 'staged' })],
+      readMeta: () => ({ fileId: 'a', size: 9, addedAt: 1, usedAt: 0 }),
+      sizeOnDisk: () => {
+        throw new Error('Could not stat local file a')
+      },
+    })
+    await scanner(m).runScan()
+    expect(m.fs.importCopy).not.toHaveBeenCalled()
+    expect(m.imports.markUnavailable).not.toHaveBeenCalled()
+    expect(m.imports.markFailure).toHaveBeenCalledTimes(1)
   })
 
   it('persists hash/size/type via recordHash BEFORE finalize', async () => {
@@ -556,6 +764,7 @@ describe('ImportScanner claim-loop', () => {
       hash: HASH,
       size: 999,
       type: 'image/jpeg',
+      name: 'photo.jpg',
     })
     expect(m.imports.finalize).toHaveBeenCalled()
     expect(result.finalized).toBe(1)

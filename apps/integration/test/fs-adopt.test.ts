@@ -3,6 +3,29 @@ import * as nodeFs from 'fs'
 import * as path from 'path'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
 
+describe('fs.sizeOnDisk', () => {
+  it('answers null for a missing file and throws when the stat fails', async () => {
+    let failStat = false
+    const app = createTestApp(createEmptyIndexerStorage(), {
+      fsIO: {
+        size: async () =>
+          failStat
+            ? { value: null, error: 'stat_error' as const }
+            : { value: null, error: 'not_found' as const },
+      },
+    })
+    await app.start()
+    try {
+      const file = { id: 'missing', type: 'image/jpeg' }
+      expect(await app.app.fs.sizeOnDisk(file)).toBeNull()
+      failStat = true
+      await expect(app.app.fs.sizeOnDisk(file)).rejects.toThrow('Could not stat')
+    } finally {
+      await app.shutdown()
+    }
+  })
+})
+
 describe('fs.adoptFile', () => {
   let app: TestApp
 
