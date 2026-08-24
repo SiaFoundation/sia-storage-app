@@ -4,6 +4,8 @@ import {
   isIdentifiedMimeType,
   isMimeType,
   MimeTypes,
+  nameForType,
+  typeOfStoredPath,
 } from './fileTypes'
 import type { Ext, MimeType } from './fileTypes'
 
@@ -375,5 +377,60 @@ describe('storage path mapping', () => {
       return !back || extFromMime(back) !== ext
     })
     expect(broken).toEqual(['.bin'])
+  })
+})
+
+describe('nameForType', () => {
+  it('swaps the extension when it names a different format than the type', () => {
+    // The bytes are the rendered JPEG, so the name must stop saying CR3.
+    expect(nameForType('IMG_1234.CR3', 'image/jpeg')).toBe('IMG_1234.jpg')
+  })
+
+  it('leaves an extension that already names the type, whatever its spelling', () => {
+    expect(nameForType('photo.jpeg', 'image/jpeg')).toBe('photo.jpeg')
+    expect(nameForType('photo.jpg', 'image/jpeg')).toBe('photo.jpg')
+    expect(nameForType('photo.JPEG', 'image/jpeg')).toBe('photo.JPEG')
+  })
+
+  it('leaves an extension it cannot classify rather than guess', () => {
+    expect(nameForType('archive.weird', 'image/jpeg')).toBe('archive.weird')
+  })
+
+  it('leaves a name with no extension, and a dotfile', () => {
+    expect(nameForType('IMG_1234', 'image/jpeg')).toBe('IMG_1234')
+    expect(nameForType('.gitignore', 'image/jpeg')).toBe('.gitignore')
+  })
+
+  it('leaves the name alone for a type with no extension of its own', () => {
+    expect(nameForType('scan.jpg', 'application/octet-stream')).toBe('scan.jpg')
+  })
+
+  it('swaps only the last extension', () => {
+    expect(nameForType('my.photo.png', 'image/jpeg')).toBe('my.photo.jpg')
+  })
+
+  it('swaps the extension of a name with a # or ? before it', () => {
+    expect(nameForType('IMG #2.CR3', 'image/jpeg')).toBe('IMG #2.jpg')
+    expect(nameForType('is this it?.CR3', 'image/jpeg')).toBe('is this it?.jpg')
+  })
+})
+
+describe('typeOfStoredPath', () => {
+  it('gives the type whose extension the path ends in, for a name or a full path', () => {
+    expect(typeOfStoredPath('abc.jpg')).toBe('image/jpeg')
+    expect(typeOfStoredPath('/data/files/abc.png')).toBe('image/png')
+  })
+
+  it('reads .bin as the type that names no format', () => {
+    expect(typeOfStoredPath('abc.bin')).toBe('application/octet-stream')
+  })
+
+  it('gives null for an extension no writer produces', () => {
+    // image/jpeg is always written as .jpg.
+    expect(typeOfStoredPath('abc.jpeg')).toBeNull()
+    expect(typeOfStoredPath('abc.JPG')).toBeNull()
+    expect(typeOfStoredPath('abc.weird')).toBeNull()
+    expect(typeOfStoredPath('abc')).toBeNull()
+    expect(typeOfStoredPath('/data/files.d/abc')).toBeNull()
   })
 })

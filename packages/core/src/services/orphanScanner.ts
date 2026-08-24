@@ -1,6 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
-import { extFromMime, getMimeTypeFromExtension } from '../lib/fileTypes'
+import { extFromMime, getMimeTypeFromExtension, typeOfStoredPath } from '../lib/fileTypes'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 
 const BATCH_SIZE = 50
@@ -156,13 +156,9 @@ export async function runOrphanScanner(
         continue
       }
 
-      // Every writer derives the path from extFromMime, so an extension that
-      // does not round-trip is not a path this code wrote. Leave it. `.bin` is
-      // the exception: it is extFromMime's fallback for a type that names no
-      // format, so it is a path this code writes but nothing maps back from.
-      const diskType =
-        haveExt === '.bin' ? 'application/octet-stream' : getMimeTypeFromExtension(entry.name)
-      if (!diskType || extFromMime(diskType) !== haveExt) {
+      // Not a path this code wrote, so it is left where it is.
+      const diskType = typeOfStoredPath(entry.name)
+      if (!diskType) {
         logger.warn('orphanScanner', 'type_drift_unrepairable', {
           fileId: entry.fileId,
           name: entry.name,

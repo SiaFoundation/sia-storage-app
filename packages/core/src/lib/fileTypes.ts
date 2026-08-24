@@ -523,3 +523,42 @@ export function isMimeType(type?: string): type is MimeType {
 export function isIdentifiedMimeType(type?: string | null): type is MimeType {
   return !!type && type !== 'application/octet-stream' && isMimeType(type)
 }
+
+/**
+ * `name` with the extension its `type` implies. The stored name is what a
+ * download writes to disk, so a disagreeing extension hands the user a file
+ * their OS opens with the wrong app.
+ *
+ * Swaps only when unambiguous: the current extension must map to a different
+ * known type, so `.jpeg` survives `image/jpeg` and an unclassifiable
+ * extension is left alone.
+ */
+export function nameForType(name: string, type: string): string {
+  const ext = extFromMime(type)
+  if (ext === '.bin') return name
+  const dot = name.lastIndexOf('.')
+  // dot === 0 is a dotfile, whose leading dot is part of the name.
+  if (dot <= 0) return name
+  // Only the part after the last dot, so a `#` or `?` earlier in the name is
+  // not read as the start of a URL's query or fragment.
+  const currentType = getMimeTypeFromExtension(name.slice(dot))
+  if (!currentType || currentType === type) return name
+  return `${name.slice(0, dot)}${ext}`
+}
+
+/**
+ * The type a stored copy at `path` was written under, or null when this code
+ * did not write that path. Every writer derives the extension from
+ * extFromMime, so one that does not round-trip came from somewhere else.
+ * `.bin` is the exception: it is extFromMime's fallback for a type that names
+ * no format, so it is a path this code writes but nothing maps back from.
+ */
+export function typeOfStoredPath(path: string): string | null {
+  const name = path.slice(path.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  if (dot === -1) return null
+  const ext = name.slice(dot)
+  if (ext === '.bin') return 'application/octet-stream'
+  const type = getMimeTypeFromExtension(ext)
+  return type && extFromMime(type) === ext ? type : null
+}
