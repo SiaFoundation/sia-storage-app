@@ -3,7 +3,7 @@ import type { ThumbnailResult } from '../adapters/thumbnail'
 import type { AppService } from '../app/service'
 import type { ContentHash } from '../lib/contentHash'
 import { refinesContainer } from '../lib/detectMimeType'
-import { extFromMime, isMimeType } from '../lib/fileTypes'
+import { extFromMime, isIdentifiedMimeType, isMimeType } from '../lib/fileTypes'
 import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
@@ -26,7 +26,8 @@ async function writeThumbnailToStorage(
  */
 export function shouldReplaceType(declared: string, detected: string): boolean {
   if (declared === detected) return false
-  if (!isMimeType(detected)) return false
+  // A sniff that identified nothing never overwrites a real type.
+  if (!isIdentifiedMimeType(detected)) return false
   // A DNG sniffs as TIFF, and the sniff cannot see further. Replacing it
   // would rename a raw photo to .tiff on every device.
   if (refinesContainer(detected, declared)) return false
