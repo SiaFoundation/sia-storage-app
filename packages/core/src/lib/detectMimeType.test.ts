@@ -295,27 +295,23 @@ describe('container refinement', () => {
 })
 
 describe('absorbed ftyp brands', () => {
-  const ftyp = (brand: string) =>
-    new Uint8Array([
-      0x00,
-      0x00,
-      0x00,
-      0x20,
-      0x66,
-      0x74,
-      0x79,
-      0x70,
-      brand.charCodeAt(0),
-      brand.charCodeAt(1),
-      brand.charCodeAt(2),
-      brand.charCodeAt(3),
-    ])
+  const ascii = (s: string) => Array.from(s, (ch) => ch.charCodeAt(0))
+  // An ftyp box: its length, "ftyp", the major brand, a minor version, then
+  // the compatible brands.
+  const ftyp = (brand: string, ...compatible: string[]) => {
+    const body = [...ascii('ftyp'), ...ascii(brand), 0, 0, 0, 1, ...compatible.flatMap(ascii)]
+    return new Uint8Array([0, 0, 0, 4 + body.length, ...body])
+  }
 
   it('msf1 is heif, avc1 and mmp4 are mp4, qt-prefixed brands are quicktime', () => {
     expect(detectMimeType({ bytes: ftyp('msf1') })).toBe('image/heif')
     expect(detectMimeType({ bytes: ftyp('avc1') })).toBe('video/mp4')
     expect(detectMimeType({ bytes: ftyp('mmp4') })).toBe('video/mp4')
     expect(detectMimeType({ bytes: ftyp('qt  ') })).toBe('video/quicktime')
+  })
+
+  it('crx is Canon raw, not the mp4 its isom compatible-brand suggests', () => {
+    expect(detectMimeType({ bytes: ftyp('crx ', 'crx ', 'isom') })).toBe('image/x-canon-cr3')
   })
 })
 
@@ -329,6 +325,30 @@ describe('classifyImportType', () => {
         headerBytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       }),
     ).toBe('image/jpeg')
+  })
+
+  it('a media row whose OS type is octet-stream falls through to the bytes', () => {
+    // Android reports it when MediaStore has no type for the row.
+    expect(
+      classifyImportType({
+        stagedType: 'image/heic',
+        sourceKind: 'media',
+        mediaMime: 'application/octet-stream',
+        headerBytes: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+      }),
+    ).toBe('image/jpeg')
+  })
+
+  it('a media row whose OS type is a bare UTI falls through to the name', () => {
+    // iOS hands back the raw UTI when it maps to no MIME type.
+    expect(
+      classifyImportType({
+        stagedType: '',
+        name: 'IMG_1234.CR3',
+        sourceKind: 'media',
+        mediaMime: 'com.canon.cr3-raw-image',
+      }),
+    ).toBe('image/x-canon-cr3')
   })
 
   it('a media row without mediaMime falls to the general chain', () => {

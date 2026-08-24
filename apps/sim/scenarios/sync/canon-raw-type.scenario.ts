@@ -17,12 +17,6 @@ export default defineScenario({
   description:
     'The laptop adds a file holding a Canon CR3 photo and named with no extension. The laptop and a second device store it as image/x-canon-cr3, the type its bytes name.',
   devices: { laptop: 'cli', desk: 'cli' },
-  knownBug:
-    'Byte detection knows no ftyp brand `crx `, so a CR3 is identified only by its extension, and one without an extension is stored as application/octet-stream.',
-  bugShowsAs: ['laptop', 'desk'].map((device) => ({
-    check: `${device} stores it as image/x-canon-cr3`,
-    got: 'application/octet-stream',
-  })),
   async run({ devices, converge, step, checkEqual, workDir }) {
     const path = join(workDir, 'IMG_0001')
     writeFileSync(path, cr3Header())
