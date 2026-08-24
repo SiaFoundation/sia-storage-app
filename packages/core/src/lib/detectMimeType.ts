@@ -1,4 +1,9 @@
-import { getMimeTypeFromExtension, isMimeType, lookupTable } from './fileTypes'
+import {
+  getMimeTypeFromExtension,
+  isIdentifiedMimeType,
+  isMimeType,
+  lookupTable,
+} from './fileTypes'
 
 const FTYP_BRANDS_HEIC = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'])
 const FTYP_BRANDS_VIDEO = new Set([
@@ -84,6 +89,8 @@ function tag4(bytes: Uint8Array, offset: number): string {
  * through to the checks after the ftyp block.
  */
 function mimeFromFtypBrand(brand: string): string | null {
+  // Canon raw: an ftyp container whose brand matches none of the sets below.
+  if (brand === 'crx ') return 'image/x-canon-cr3'
   if (FTYP_BRANDS_HEIC.has(brand)) return 'image/heic'
   if (brand === 'mif1' || brand === 'msf1') return 'image/heif'
   if (brand === 'avif') return 'image/avif'
@@ -212,9 +219,9 @@ export function detectMimeType(opts: {
 /**
  * The one classification call for an import row at finalize. `headerBytes`
  * and `mediaMime` come from the copy's single read; `stagedType` is the
- * metadata-derived type recorded at staging. For a `media` row the
- * OS-reported mime of the copied resource is definitive, so it wins outright;
- * everything else goes through detectMimeType's content-first chain.
+ * metadata-derived type recorded at staging. A `media` row takes the
+ * OS-reported type of the copied resource, but only when it identifies
+ * something; everything else goes through the content-first chain.
  */
 export function classifyImportType(opts: {
   stagedType: string
@@ -223,7 +230,7 @@ export function classifyImportType(opts: {
   headerBytes?: Uint8Array | null
   mediaMime?: string | null
 }): string {
-  if (opts.sourceKind === 'media' && opts.mediaMime && isMimeType(opts.mediaMime)) {
+  if (opts.sourceKind === 'media' && isIdentifiedMimeType(opts.mediaMime)) {
     return opts.mediaMime
   }
   return detectMimeType({

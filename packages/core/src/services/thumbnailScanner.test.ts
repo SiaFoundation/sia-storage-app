@@ -13,6 +13,11 @@ describe('shouldReplaceType', () => {
     expect(shouldReplaceType('application/octet-stream', 'image/jpeg')).toBe(true)
   })
 
+  it('returns false when the sniff identified nothing', () => {
+    // octet-stream is the "no idea" answer.
+    expect(shouldReplaceType('image/jpeg', 'application/octet-stream')).toBe(false)
+  })
+
   it('returns true when declared is not a recognized MIME type', () => {
     expect(shouldReplaceType('application/x-not-a-mime', 'image/jpeg')).toBe(true)
   })

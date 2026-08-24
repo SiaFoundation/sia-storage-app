@@ -513,3 +513,13 @@ export function extFromMime(mime?: string | null): Ext {
 export function isMimeType(type?: string): type is MimeType {
   return MimeTypes.includes(type as MimeType)
 }
+
+/**
+ * True only for a type that identifies content. `application/octet-stream` is
+ * a valid MIME type meaning "no idea", so a source reporting it (Android's
+ * media copy, when MediaStore has no type for the row) must not out-rank an
+ * extension or a byte match.
+ */
+export function isIdentifiedMimeType(type?: string | null): type is MimeType {
+  return !!type && type !== 'application/octet-stream' && isMimeType(type)
+}
