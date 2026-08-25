@@ -44,7 +44,7 @@ export function FileViewer({
   const photosDisplayUri = status.data?.photosDisplayUri ?? null
   const displayUri = status.data?.displayUri ?? null
   const isDownloading = status.data?.download.state === 'downloading'
-  const fileDownload = useDownload(file, 0)
+  const fileDownload = useDownload(file, 0, { notifyOnInsufficientSpace: true })
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
   const baseMediaStyle = styles.media
