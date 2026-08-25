@@ -71,14 +71,16 @@ export function createNodeDownloadAdapter(deps: {
       await streamToFs(dl, file, file.size, deps.fsIO, signal, onProgress)
     },
 
-    async downloadFromShareUrl({ file, url, sdk, onProgress, signal }) {
+    async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
       const sharedObject = await sdk.sharedObject(url)
+      const totalSize = Number(sharedObject.size())
+      await ensureSpace(totalSize)
       const dl = await sdk.download(sharedObject, {
         offset: BigInt(0),
         length: undefined,
       })
 
-      await streamToFs(dl, file, undefined, deps.fsIO, signal, onProgress)
+      await streamToFs(dl, file, totalSize, deps.fsIO, signal, onProgress)
     },
   }
 }

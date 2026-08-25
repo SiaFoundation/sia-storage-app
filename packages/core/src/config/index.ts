@@ -65,6 +65,18 @@ export const IMPORT_PACED_STORAGE_HEADROOM_BYTES =
 // simulator run tunes it at bundle time; zero or non-numeric falls back.
 export const IMPORT_CRITICAL_FREE_BYTES =
   Number(process.env.EXPO_PUBLIC_IMPORT_CRITICAL_FREE_BYTES) || 500 * 1024 ** 2 // 500 MB
+// Free space kept unused for the OS and other apps. A download is refused
+// unless the device would still have at least this much free with the object
+// on disk, so a large download cannot drive the device to zero. An override
+// that is not a positive number (zero, negative, non-numeric) falls back to
+// the default; a negative reserve would defeat the floor.
+const downloadPreservedOverride = Number(process.env.EXPO_PUBLIC_DOWNLOAD_PRESERVED_DISK_BYTES)
+export const DOWNLOAD_PRESERVED_DISK_BYTES =
+  downloadPreservedOverride > 0 ? downloadPreservedOverride : 500 * 1024 ** 2 // 500 MB
+// Shown when a download is refused for space, both in the UI toast and as the
+// download-entry error the backstop guard throws, so one condition reads the
+// same wherever it surfaces.
+export const INSUFFICIENT_SPACE_MESSAGE = 'Not enough free space to download.'
 // Import scanner: max candidate import_files claimed per tick.
 export const IMPORT_MAX_PER_TICK = 20
 // Import retry backoff: max attempts before an import_file is marked `failed`.

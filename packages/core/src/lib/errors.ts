@@ -41,6 +41,24 @@ export function isSuspendedDbError(e: unknown): boolean {
 }
 
 /**
+ * A download refused because the device lacks room. Thrown by the download
+ * backstop so an awaiting caller learns the reason, while the entry's status
+ * is left untouched (no error badge for a background prefetch with no room).
+ * The message is supplied by the caller (INSUFFICIENT_SPACE_MESSAGE).
+ */
+export class InsufficientSpaceError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InsufficientSpaceError'
+  }
+}
+
+/** True for InsufficientSpaceError. Name-matched, like the errors above. */
+export function isInsufficientSpaceError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'InsufficientSpaceError'
+}
+
+/**
  * Best-effort human-readable message extraction from an unknown thrown value.
  * Returns Error.message for Error instances, string values as-is, and the
  * string form of primitives (numbers, booleans). For everything else —

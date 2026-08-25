@@ -91,11 +91,9 @@ describe('list', () => {
 })
 
 describe('getDeviceSpace', () => {
-  it('returns positive free + total bytes with free <= total', async () => {
+  it('returns positive free bytes', async () => {
     const space = await fsIO.getDeviceSpace!()
     expect(space.freeBytes).toBeGreaterThan(0)
-    expect(space.totalBytes).toBeGreaterThan(0)
-    expect(space.freeBytes).toBeLessThanOrEqual(space.totalBytes)
   })
 })
 

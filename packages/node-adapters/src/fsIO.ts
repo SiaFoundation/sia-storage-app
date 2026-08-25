@@ -198,18 +198,14 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
     },
 
     async getDeviceSpace() {
-      // Report the real filesystem free/total when available so headless
-      // hosts (CLI) reflect the device; fall back to an ample constant (1 TB)
-      // if statfs is unavailable, so the paced throttle never spuriously defers.
+      // Report the real filesystem free bytes when available so headless hosts
+      // (CLI) reflect the device; fall back to an ample constant (1 TB) if
+      // statfs is unavailable, so the paced throttle never spuriously defers.
       try {
         const st = await fs.statfs(filesDir)
-        return {
-          freeBytes: st.bavail * st.bsize,
-          totalBytes: st.blocks * st.bsize,
-        }
+        return { freeBytes: st.bavail * st.bsize }
       } catch {
-        const ONE_TB = 1024 ** 4
-        return { freeBytes: ONE_TB, totalBytes: ONE_TB }
+        return { freeBytes: 1024 ** 4 }
       }
     },
   }

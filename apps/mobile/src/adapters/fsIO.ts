@@ -186,13 +186,11 @@ export function createFsIOAdapter(): FsIOAdapter {
       }
     },
     async getDeviceSpace() {
-      // RNFS.getFSInfo reports statfs free blocks, which include the root
-      // reserve the app can never write (hundreds of MB on a real device), so
-      // the storage gates would trip late. getFreeDiskStorageAsync reports
-      // usable space: getAvailableBytes on Android, available-for-important-
-      // usage on iOS.
-      const [free, info] = await Promise.all([getFreeDiskStorageAsync(), RNFS.getFSInfo()])
-      return { freeBytes: free, totalBytes: info.totalSpace }
+      // getFreeDiskStorageAsync reports usable space (getAvailableBytes on
+      // Android, available-for-important-usage on iOS), not statfs free blocks,
+      // which include the root reserve the app can never write; using the raw
+      // figure would trip the storage gates late.
+      return { freeBytes: await getFreeDiskStorageAsync() }
     },
   }
 }

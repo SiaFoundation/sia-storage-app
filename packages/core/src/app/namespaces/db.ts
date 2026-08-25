@@ -175,7 +175,7 @@ export function buildDbNamespaces(
       // storage-headroom branch never defers; the upload-backlog branch still
       // applies (integration/core run without a real device).
       if (!fsIO.getDeviceSpace) {
-        return { freeBytes: Number.MAX_SAFE_INTEGER, totalBytes: Number.MAX_SAFE_INTEGER }
+        return { freeBytes: Number.MAX_SAFE_INTEGER }
       }
       return fsIO.getDeviceSpace()
     },
