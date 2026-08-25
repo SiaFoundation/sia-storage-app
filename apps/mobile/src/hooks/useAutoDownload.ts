@@ -57,6 +57,8 @@ export function useAutoDownloadFromShareURL(
     if (!status.data.canAutoFetch) return
     if (status.data.download.state !== 'idle') return
     if (!shouldDownload(file)) return
-    download(file.id, shareUrl)
+    // Fire-and-forget: a share download that won't fit rejects with
+    // InsufficientSpaceError, which would otherwise go unhandled here.
+    download(file.id, shareUrl).catch(() => {})
   }, [file.id, shareUrl, isInitializing, isConnected, status.data, download, file, shouldDownload])
 }

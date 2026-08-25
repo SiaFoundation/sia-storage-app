@@ -9,8 +9,10 @@ import {
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import useSWR from 'swr'
+import type { FileRecord } from '@siastorage/core/types'
 import { fetchBulkCounts, getFileCapabilities } from '../lib/file'
 import { useToast } from '../lib/toastContext'
+import { INSUFFICIENT_SPACE_MESSAGE } from '@siastorage/core/config'
 import { downloadFile } from '../managers/downloader'
 import { queueUploadForFileId } from '../managers/uploader'
 import { app } from '../stores/appService'
@@ -49,15 +51,31 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
   const handleDownload = useCallback(async () => {
     if (!counts) return
     try {
+      const downloadable: FileRecord[] = []
       for (const file of counts.files) {
         const uri = await app().fs.getFileUri(file)
         if (getFileCapabilities(file, uri).canDownload) {
-          void downloadFile(file, 0)
+          downloadable.push(file)
         }
       }
-      if (counts.downloadable > 0) {
-        toast.show(`Downloading ${counts.downloadable.toLocaleString()} files`)
+      if (downloadable.length === 0) {
+        onComplete?.()
+        return
       }
+      // All-or-nothing: if the whole selection won't fit (plus the preserved
+      // reserve), refuse the batch and start nothing, rather than filling the
+      // disk partway through.
+      const hasSpace = await app().downloads.checkSpaceFor(downloadable.map((f) => f.size))
+      if (!hasSpace) {
+        toast.show(INSUFFICIENT_SPACE_MESSAGE)
+        return
+      }
+      for (const file of downloadable) {
+        void downloadFile(file, 0).catch((e) => {
+          logger.error('SelectionBar', 'download_failed', { id: file.id, error: e as Error })
+        })
+      }
+      toast.show(`Downloading ${downloadable.length.toLocaleString()} files`)
       onComplete?.()
     } catch (e) {
       logger.error('SelectionBar', 'download_failed', { error: e as Error })
