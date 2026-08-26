@@ -279,6 +279,30 @@ describe('container refinement', () => {
   })
 })
 
+describe('bytes that match a signature at offset 0 and hold an ftyp box', () => {
+  // `prefix`, padded to four bytes, then "ftyp" and the mp4 brand "isom".
+  const withFtyp = (prefix: number[]) =>
+    new Uint8Array([
+      ...prefix,
+      ...Array<number>(4 - prefix.length).fill(0),
+      ...[0x66, 0x74, 0x79, 0x70],
+      ...[0x69, 0x73, 0x6f, 0x6d],
+    ])
+
+  it('an image signature wins over the ftyp brand', () => {
+    expect(detectMimeType({ bytes: withFtyp([0xff, 0xd8, 0xff]) })).toBe('image/jpeg')
+    expect(detectMimeType({ bytes: withFtyp([0x47, 0x49, 0x46, 0x38]) })).toBe('image/gif')
+    expect(detectMimeType({ bytes: withFtyp([0x42, 0x4d]) })).toBe('image/bmp')
+  })
+
+  it('the ftyp brand wins over every other signature', () => {
+    // An ID3 tag, gzip and bzip2.
+    expect(detectMimeType({ bytes: withFtyp([0x49, 0x44, 0x33]) })).toBe('video/mp4')
+    expect(detectMimeType({ bytes: withFtyp([0x1f, 0x8b]) })).toBe('video/mp4')
+    expect(detectMimeType({ bytes: withFtyp([0x42, 0x5a, 0x68]) })).toBe('video/mp4')
+  })
+})
+
 describe('absorbed ftyp brands', () => {
   const ftyp = (brand: string) =>
     new Uint8Array([
