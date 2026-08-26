@@ -183,8 +183,9 @@ final PR's changeset carries `Closes`.
 
 ## Prose and comments
 
-Applies to comments, commit bodies, changeset copy, PR descriptions, test names, and
-markdown.
+The rules down to the end of this paragraph's section apply to every kind of prose here:
+comments, commit bodies, changeset copy, PR descriptions, test names, and markdown. The
+`### Comments` subsection below applies to code comments only.
 
 **Accuracy.** A sentence stating a checkable fact (a field list, a state set, a count, a
 returned shape, a script name, a path) must match the code. Verify it or leave it out; a
@@ -210,6 +211,8 @@ em-dashes, no arrows, no "not just X, it's Y" pivot, no rule of three, no over-b
 
 ### Comments
 
+Comments only. Do not apply these to a changeset, a PR description, or a commit body.
+
 Two kinds only. **A genuine why**: an ordering constraint, race, invariant, platform
 quirk, or past bug, where the reasoning cannot be re-derived from the code. The sharpest
 form names the alternative a reader would reach for and the failure it prevents.
@@ -234,6 +237,10 @@ formatting. Never hedge where the code is definite.
 justification of ordinary design ("a helper so call sites don't drift", "DRY", "single
 source of truth"); a section divider or "defense in depth"; a reference to a file, spec,
 or plan the reader does not have.
+
+The edit-history ban is about comments. A changelog reads against the previous release,
+so "Downloads now check for free space" is the right tense in a changeset or a PR
+description. A comment has no previous release to read against, only code that is gone.
 
 When refactoring, carry a genuine-why comment with its code. For each comment a diff
 deletes, restore it if the why still holds.

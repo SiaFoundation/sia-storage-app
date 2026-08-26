@@ -60,7 +60,9 @@ The rules this repo keeps breaking. Flag every new violation.
 Prose defects are findings, not decoration. No em-dashes and no arrows in any category
 below.
 
-**Comments.** Flag one that:
+**Comments.** These apply to code comments only. Do not carry them over to a changeset,
+a PR description, or a commit body, which have their own rules below. Flag a comment
+that:
 
 - Restates the line beneath it or paraphrases the signature.
 - Narrates the change rather than the state: "now uses X", "no longer Y", "previously".
@@ -98,7 +100,9 @@ behavior the diff does not contain, walks the diff file by file, or is hard-wrap
 **Changesets.** CI checks the frontmatter key, so review the copy. Flag a description
 that names the mechanism instead of the outcome, bullet-lists one line per package,
 repeats the commit subject verbatim, or carries `Closes` on a PR that is not last in its
-stack. An app entry says what a user sees or can now do; a library entry says what a
+stack. "Now" is correct here: a changelog reads against the previous release, so
+"Downloads now check for free space" is not edit-history narration. An app entry says
+what a user sees or can now do; a library entry says what a
 caller must change. Also flag the miss: a user-facing change to `mobile`, `web`,
 `desktop`, or `cli`, or an API change in `core` or `logger`, shipping with no changeset.
 
