@@ -221,7 +221,15 @@ export type Ext =
   // other
   | '.bin'
 
-const extensionToMimeMap: Record<string, MimeType> = {
+/**
+ * A lookup table as a Map. A plain object would answer a lookup for a name
+ * like "constructor" or "__proto__" with a member every object inherits.
+ */
+function lookupTable<V>(entries: Record<string, V>): ReadonlyMap<string, V> {
+  return new Map(Object.entries(entries))
+}
+
+const extensionToMimeMap = lookupTable<MimeType>({
   // video
   mov: 'video/quicktime',
   qt: 'video/quicktime',
@@ -373,124 +381,133 @@ const extensionToMimeMap: Record<string, MimeType> = {
   conf: 'text/plain',
   env: 'text/plain',
   log: 'text/plain',
-}
+})
 
 export function getMimeTypeFromExtension(path: string | undefined): MimeType | null {
   if (!path) return null
   const ext = path.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
   if (!ext) return null
-  return extensionToMimeMap[ext] ?? null
+  return extensionToMimeMap.get(ext) ?? null
 }
 
-export function extFromMime(mime?: string | null): Ext {
+// Not the inverse of extensionToMimeMap: several extensions share one MIME type
+// (qt/mov, mpg/mpeg), so the canonical extension per type is chosen here.
+const mimeToExtMap = lookupTable<Ext>({
   // video
-  if (mime === 'video/quicktime') return '.mov'
-  if (mime === 'video/mp4') return '.mp4'
-  if (mime === 'video/x-m4v') return '.m4v'
-  if (mime === 'video/x-msvideo' || mime === 'video/avi') return '.avi'
-  if (mime === 'video/x-matroska') return '.mkv'
-  if (mime === 'video/webm') return '.webm'
-  if (mime === 'video/3gpp') return '.3gp'
-  if (mime === 'video/3gpp2') return '.3g2'
-  if (mime === 'video/mpeg') return '.mpeg'
-  if (mime === 'video/x-ms-wmv') return '.wmv'
-  if (mime === 'video/x-flv') return '.flv'
-  if (mime === 'video/ogg') return '.ogv'
+  'video/quicktime': '.mov',
+  'video/mp4': '.mp4',
+  'video/x-m4v': '.m4v',
+  'video/x-msvideo': '.avi',
+  'video/avi': '.avi',
+  'video/x-matroska': '.mkv',
+  'video/webm': '.webm',
+  'video/3gpp': '.3gp',
+  'video/3gpp2': '.3g2',
+  'video/mpeg': '.mpeg',
+  'video/x-ms-wmv': '.wmv',
+  'video/x-flv': '.flv',
+  'video/ogg': '.ogv',
   // image
-  if (mime === 'image/dng' || mime === 'image/x-adobe-dng' || mime === 'image/x-apple-proraw')
-    return '.dng'
-  if (mime === 'image/heic') return '.heic'
-  if (mime === 'image/heif') return '.heif'
-  if (mime === 'image/heic-sequence' || mime === 'image/heif-sequence') return '.heics'
-  if (mime === 'image/avci') return '.avci'
-  if (mime === 'image/avcs') return '.avcs'
-  if (mime === 'image/jpeg') return '.jpg'
-  if (mime === 'image/png') return '.png'
-  if (mime === 'image/webp') return '.webp'
-  if (mime === 'image/gif') return '.gif'
-  if (mime === 'image/tiff') return '.tiff'
-  if (mime === 'image/bmp') return '.bmp'
-  if (mime === 'image/vnd.microsoft.icon' || mime === 'image/x-icon') return '.ico'
-  if (mime === 'image/avif') return '.avif'
-  if (mime === 'image/jxl') return '.jxl'
-  if (mime === 'image/vnd.adobe.photoshop') return '.psd'
-  if (mime === 'image/x-canon-cr2') return '.cr2'
-  if (mime === 'image/x-canon-cr3') return '.cr3'
-  if (mime === 'image/x-nikon-nef') return '.nef'
-  if (mime === 'image/x-nikon-nrw') return '.nrw'
-  if (mime === 'image/x-sony-arw') return '.arw'
-  if (mime === 'image/x-fuji-raf') return '.raf'
-  if (mime === 'image/x-olympus-orf') return '.orf'
-  if (mime === 'image/x-panasonic-rw2') return '.rw2'
-  if (mime === 'image/x-pentax-pef') return '.pef'
+  'image/dng': '.dng',
+  'image/x-adobe-dng': '.dng',
+  'image/x-apple-proraw': '.dng',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'image/heic-sequence': '.heics',
+  'image/heif-sequence': '.heics',
+  'image/avci': '.avci',
+  'image/avcs': '.avcs',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/tiff': '.tiff',
+  'image/bmp': '.bmp',
+  'image/vnd.microsoft.icon': '.ico',
+  'image/x-icon': '.ico',
+  'image/avif': '.avif',
+  'image/jxl': '.jxl',
+  'image/vnd.adobe.photoshop': '.psd',
+  'image/x-canon-cr2': '.cr2',
+  'image/x-canon-cr3': '.cr3',
+  'image/x-nikon-nef': '.nef',
+  'image/x-nikon-nrw': '.nrw',
+  'image/x-sony-arw': '.arw',
+  'image/x-fuji-raf': '.raf',
+  'image/x-olympus-orf': '.orf',
+  'image/x-panasonic-rw2': '.rw2',
+  'image/x-pentax-pef': '.pef',
   // audio
-  if (mime === 'audio/mpeg') return '.mp3'
-  if (mime === 'audio/mp4' || mime === 'audio/x-m4a') return '.m4a'
-  if (mime === 'audio/aac') return '.aac'
-  if (mime === 'audio/wav') return '.wav'
-  if (mime === 'audio/flac') return '.flac'
-  if (mime === 'audio/ogg') return '.ogg'
-  if (mime === 'audio/opus') return '.opus'
-  if (mime === 'audio/aiff') return '.aiff'
-  if (mime === 'audio/x-caf') return '.caf'
-  if (mime === 'audio/amr') return '.amr'
-  if (mime === 'audio/x-ms-wma') return '.wma'
-  if (mime === 'audio/midi') return '.midi'
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/x-m4a': '.m4a',
+  'audio/aac': '.aac',
+  'audio/wav': '.wav',
+  'audio/flac': '.flac',
+  'audio/ogg': '.ogg',
+  'audio/opus': '.opus',
+  'audio/aiff': '.aiff',
+  'audio/x-caf': '.caf',
+  'audio/amr': '.amr',
+  'audio/x-ms-wma': '.wma',
+  'audio/midi': '.midi',
   // text/docs
-  if (mime === 'text/html') return '.html'
-  if (mime === 'text/css') return '.css'
-  if (mime === 'text/javascript') return '.js'
-  if (mime === 'text/plain') return '.txt'
-  if (mime === 'text/markdown' || mime === 'text/x-markdown') return '.md'
-  if (mime === 'application/json') return '.json'
-  if (mime === 'application/yaml') return '.yaml'
-  if (mime === 'application/toml') return '.toml'
-  if (mime === 'application/pdf') return '.pdf'
-  if (mime === 'text/xml') return '.xml'
-  if (mime === 'text/csv') return '.csv'
-  if (mime === 'image/svg+xml') return '.svg'
+  'text/html': '.html',
+  'text/css': '.css',
+  'text/javascript': '.js',
+  'text/plain': '.txt',
+  'text/markdown': '.md',
+  'text/x-markdown': '.md',
+  'application/json': '.json',
+  'application/yaml': '.yaml',
+  'application/toml': '.toml',
+  'application/pdf': '.pdf',
+  'text/xml': '.xml',
+  'text/csv': '.csv',
+  'image/svg+xml': '.svg',
   // office / iwork / opendocument
-  if (mime === 'application/msword') return '.doc'
-  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    return '.docx'
-  if (mime === 'application/vnd.ms-excel') return '.xls'
-  if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '.xlsx'
-  if (mime === 'application/vnd.ms-powerpoint') return '.ppt'
-  if (mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
-    return '.pptx'
-  if (mime === 'application/rtf') return '.rtf'
-  if (mime === 'application/vnd.apple.pages') return '.pages'
-  if (mime === 'application/vnd.apple.numbers') return '.numbers'
-  if (mime === 'application/vnd.apple.keynote') return '.key'
-  if (mime === 'application/vnd.oasis.opendocument.text') return '.odt'
-  if (mime === 'application/vnd.oasis.opendocument.spreadsheet') return '.ods'
-  if (mime === 'application/vnd.oasis.opendocument.presentation') return '.odp'
-  if (mime === 'application/epub+zip') return '.epub'
-  if (mime === 'application/x-mobipocket-ebook') return '.mobi'
-  if (mime === 'application/vnd.amazon.ebook') return '.azw3'
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/rtf': '.rtf',
+  'application/vnd.apple.pages': '.pages',
+  'application/vnd.apple.numbers': '.numbers',
+  'application/vnd.apple.keynote': '.key',
+  'application/vnd.oasis.opendocument.text': '.odt',
+  'application/vnd.oasis.opendocument.spreadsheet': '.ods',
+  'application/vnd.oasis.opendocument.presentation': '.odp',
+  'application/epub+zip': '.epub',
+  'application/x-mobipocket-ebook': '.mobi',
+  'application/vnd.amazon.ebook': '.azw3',
   // archives
-  if (mime === 'application/zip') return '.zip'
-  if (mime === 'application/gzip') return '.gz'
-  if (mime === 'application/x-tar') return '.tar'
-  if (mime === 'application/x-7z-compressed') return '.7z'
-  if (mime === 'application/vnd.rar') return '.rar'
-  if (mime === 'application/x-bzip2') return '.bz2'
-  if (mime === 'application/x-xz') return '.xz'
-  if (mime === 'application/zstd') return '.zst'
-  if (mime === 'application/x-iso9660-image') return '.iso'
-  if (mime === 'application/vnd.ms-cab-compressed') return '.cab'
+  'application/zip': '.zip',
+  'application/gzip': '.gz',
+  'application/x-tar': '.tar',
+  'application/x-7z-compressed': '.7z',
+  'application/vnd.rar': '.rar',
+  'application/x-bzip2': '.bz2',
+  'application/x-xz': '.xz',
+  'application/zstd': '.zst',
+  'application/x-iso9660-image': '.iso',
+  'application/vnd.ms-cab-compressed': '.cab',
   // installers
-  if (mime === 'application/x-apple-diskimage') return '.dmg'
-  if (mime === 'application/vnd.microsoft.portable-executable') return '.exe'
-  if (mime === 'application/x-msi') return '.msi'
-  if (mime === 'application/vnd.debian.binary-package') return '.deb'
-  if (mime === 'application/x-rpm') return '.rpm'
-  if (mime === 'application/vnd.android.package-archive') return '.apk'
-  if (mime === 'application/vnd.apple.installer+xml') return '.pkg'
-  if (mime === 'application/x-iso9660-appimage') return '.appimage'
-  if (mime === 'application/vnd.snap') return '.snap'
-  if (mime === 'application/vnd.flatpak') return '.flatpak'
-  return '.bin'
+  'application/x-apple-diskimage': '.dmg',
+  'application/vnd.microsoft.portable-executable': '.exe',
+  'application/x-msi': '.msi',
+  'application/vnd.debian.binary-package': '.deb',
+  'application/x-rpm': '.rpm',
+  'application/vnd.android.package-archive': '.apk',
+  'application/vnd.apple.installer+xml': '.pkg',
+  'application/x-iso9660-appimage': '.appimage',
+  'application/vnd.snap': '.snap',
+  'application/vnd.flatpak': '.flatpak',
+})
+
+export function extFromMime(mime?: string | null): Ext {
+  return mimeToExtMap.get(mime ?? '') ?? '.bin'
 }
 
 export function isMimeType(type?: string): type is MimeType {
