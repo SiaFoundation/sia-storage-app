@@ -40,7 +40,8 @@ android-release.keystore
 !.env.test
 
 # Claude Code
-CLAUDE.md
+# CLAUDE.md, AGENTS.md and REVIEW.md are checked in; personal notes go in CLAUDE.local.md.
+CLAUDE.local.md
 .claude/
 .claude
 
