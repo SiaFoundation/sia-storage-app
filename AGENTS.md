@@ -191,10 +191,13 @@ comments, commit bodies, changeset copy, PR descriptions, test names, and markdo
 returned shape, a script name, a path) must match the code. Verify it or leave it out; a
 reader trusts a comment over the code.
 
-**Numbers.** Use one the code or the contract fixes: an interval, a limit, a retry cap.
-Never a measurement. A benchmark result or profile percentage was true once under
-conditions the file does not record, so it drifts while still reading as fact. Give the
-mechanism instead, and put the number in the PR description where its conditions live.
+**Numbers.** The test is whether a reader can confirm it from the code. A number the code
+or the contract fixes (a 200ms interval, a retry cap) passes, and so does one derived from
+the mechanism (2x disk while a copy has both files on disk, two round trips). Keep those,
+and do not hedge them: peak disk during a copy is 2x, not ~2x. A number someone had to run
+something to get (a benchmark result, a profile percentage, a device timing) fails; it
+drifts while still reading as fact. Give the mechanism in the comment and put the
+measurement in the PR description, where its conditions live.
 
 **Plain words.** Name the real thing: the function, the column, the platform, the
 failure. Use the word you would say out loud, and prefer a verb to a noun built from one
@@ -202,12 +205,14 @@ failure. Use the word you would say out loud, and prefer a verb to a noun built 
 codebase already uses. No abstract sentence where a fact belongs.
 
 **Never write**: load-bearing, delve, leverage, utilize, robust, seamless, crucial,
-pivotal, paramount, realm, underscore, foster, elevate, unlock, streamline, ensure,
-boast, navigate, landscape, holistic, bespoke, groundbreaking, testament, synergy,
-endeavor, meticulous, nuanced, notably, importantly, essentially, effectively, simply,
-basically, additionally, furthermore, moreover, comprehensive, myriad, plethora,
-facilitate, elegant, or "pins" as a verb for anything but a dependency version. No
+pivotal, paramount, realm, underscore, foster, elevate, unlock, streamline, boast,
+landscape, holistic, bespoke, groundbreaking, testament, synergy, endeavor, meticulous,
+nuanced, notably, importantly, essentially, effectively, simply, basically, additionally,
+furthermore, moreover, comprehensive, myriad, plethora, facilitate, or elegant. No
 em-dashes, no arrows, no "not just X, it's Y" pivot, no rule of three, no over-bolding.
+
+A word on that list is fine where it is the codebase's own term: a function name, an API
+verb, a field, a character. The list targets filler, not vocabulary.
 
 ### Comments
 

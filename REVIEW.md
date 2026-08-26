@@ -78,10 +78,13 @@ that:
 - Hedges where the code is definite: "might", "could", "may want to".
 - Reaches for a technical word where a plain one exists, or builds a noun out of a verb
   ("performs validation of" for "validates").
-- Cites a measurement: a benchmark number, a profile percentage, a device timing. It was
-  true once under conditions the file does not record. Ask for the mechanism.
-- Runs long: over two lines inline, or over six for a header, without a constraint that
-  needs the room. Say which sentences to cut.
+- Cites a number a reader cannot confirm from the code: a benchmark result, a profile
+  percentage, a device timing. Someone had to run something to get it, so it drifts. Ask
+  for the mechanism. A number the code fixes (a 200ms interval) or one derived from the
+  mechanism (2x disk while a copy has both files on disk) is correct; do not flag it.
+- Runs long. Count the lines: an inline comment over two, or a header over six, is a
+  finding. Migrations and wire-format schemas are the only exemption. Say which sentences
+  to cut. This is the check most often skipped, so run it on every comment the diff adds.
 
 Flag the absence too: an ordering constraint, race, or platform workaround introduced
 with nothing explaining why, and a genuine-why comment the diff deletes whose reason
@@ -112,9 +115,11 @@ delve, leverage, utilize, robust, seamless, crucial, pivotal, paramount, realm,
 underscore, foster, elevate, unlock, streamline, ensure, boast, navigate, landscape,
 holistic, bespoke, groundbreaking, testament, synergy, endeavor, meticulous, nuanced,
 notably, importantly, essentially, effectively, simply, basically, additionally,
-furthermore, moreover, comprehensive, myriad, plethora, facilitate, elegant, or "pins" as
-a verb for anything but a dependency version. A test name must state the behavior in
-plain words and match what it asserts.
+furthermore, moreover, comprehensive, myriad, plethora, facilitate, or elegant. A word on
+that list is fine where it is the codebase's own term (a function name, an API verb, a
+field, a character), so "ensure" next to `ensureDirectory`, "navigate" for React
+Navigation, and a "pinned" dependency version are all correct. A test name must state the
+behavior in plain words and match what it asserts.
 
 ## Do not report
 
