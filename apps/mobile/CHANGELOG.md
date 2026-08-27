@@ -2,6 +2,20 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.14.1 (2026-08-27)
+
+### Fixes
+
+- Clear local files now clears every backed-up file, instead of only those past the size and age thresholds.
+- File download status updates more promptly when local copies are removed.
+- Every screen shown before the library loads now has a settings menu in the top right for clearing local data, so a sign-in or a sync that will not finish can always be backed out of.
+- Added the app version number to the top of the settings screen. Closes https://github.com/SiaFoundation/sia-storage-app/issues/778
+- Signing in now continues to the recovery phrase screen when the indexer no longer has an account for the credentials saved on the device, instead of stopping with an error that reinstalling the app could not clear.
+- Fixed the Support button not opening the email app on Android. Closes https://github.com/SiaFoundation/sia-storage-app/issues/693
+- Fixed the app crashing when opening large videos.
+- Fixed a crash when leaving fullscreen video on Android.
+- A video now shows its thumbnail until you press play.
+
 ## 1.14.1-rc.0 (2026-08-25)
 
 ### Fixes
