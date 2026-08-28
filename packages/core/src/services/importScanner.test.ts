@@ -115,7 +115,7 @@ function createMocks(opts?: {
     getDeviceSpace: jest.fn(async () => {
       if (opts?.deviceSpaceThrows) throw new Error('device space unavailable')
       const freeBytes = opts?.deviceFreeBytes ?? AMPLE_FREE
-      return { freeBytes, totalBytes: AMPLE_FREE }
+      return { freeBytes }
     }),
   }
 

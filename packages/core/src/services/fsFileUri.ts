@@ -104,11 +104,10 @@ export type FsIOAdapter = FsFileUriAdapter & {
   list(): Promise<string[]>
   ensureDirectory(): Promise<void>
   /**
-   * Reports the device's usable free bytes and total. Optional: an adapter
-   * that omits it reports `Number.MAX_SAFE_INTEGER` free, so callers gating
-   * on space see ample room.
+   * Reports the device's usable free bytes. Optional: an adapter that omits it
+   * reports `Number.MAX_SAFE_INTEGER`, so callers gating on space see ample room.
    */
-  getDeviceSpace?(): Promise<{ freeBytes: number; totalBytes: number }>
+  getDeviceSpace?(): Promise<{ freeBytes: number }>
 }
 
 export async function getFsFileUri(

@@ -226,8 +226,10 @@ export function createTestApp(
   indexerStorage?: MockIndexerStorage,
   options?: TestAppOptions,
 ): TestApp {
-  const hasMockAdapters = options?.fsIO || options?.thumbnail
-  const tempDir = hasMockAdapters ? '' : nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
+  // Always a real dir, even with a mock fsIO: generateTestFiles writes fixture
+  // bytes here via addFiles(), and a mock-adapter run still needs somewhere
+  // real (and cleaned up in teardown) to put them rather than the cwd.
+  const tempDir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-'))
   const dbDir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'core-test-db-'))
   const dbPath = path.join(dbDir, 'test.db')
 

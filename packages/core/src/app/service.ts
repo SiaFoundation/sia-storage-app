@@ -579,11 +579,11 @@ export interface AppService {
     /** Creates the managed storage directory if it does not exist. */
     ensureStorageDirectory(): Promise<void>
     /**
-     * Reports device-level free/total storage, which drives the paced copy
-     * throttle. An adapter without `getDeviceSpace` reports ample free space,
-     * so the storage-headroom branch never defers.
+     * Reports device-level free storage, which drives the paced copy throttle.
+     * An adapter without `getDeviceSpace` reports ample free space, so the
+     * storage-headroom branch never defers.
      */
-    getDeviceSpace(): Promise<{ freeBytes: number; totalBytes: number }>
+    getDeviceSpace(): Promise<{ freeBytes: number }>
   }
   /** Library aggregate queries: counts, positions, and sorted ID lists. */
   library: {
@@ -1002,6 +1002,14 @@ export interface AppService {
     getState(): DownloadsState
     /** Returns a single download entry by ID. */
     getEntry(id: string): DownloadEntry | undefined
+    /**
+     * True when the device has room for `sizes` (in bytes) plus the
+     * preserved-disk reserve. Reads device free space (an async probe), returns
+     * a verdict rather than throwing. Callers check it up front and bail with a
+     * message when it is false. Fails open when free space can't be read. Cheap
+     * but not free; call once per user action, not per item.
+     */
+    checkSpaceFor(sizes: number[]): Promise<boolean>
     /** Downloads a file to local storage. Lower priority numbers are served first. */
     downloadFile(fileId: string, priority?: number): Promise<void>
     /** Resolves a share URL via the SDK and downloads its contents to local storage. */

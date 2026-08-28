@@ -18,6 +18,8 @@ import useSWR from 'swr'
 import { useShareAction } from '../hooks/useShareAction'
 import { fetchBulkCounts, getFileCapabilities, useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
+import type { FileRecord } from '@siastorage/core/types'
+import { INSUFFICIENT_SPACE_MESSAGE } from '@siastorage/core/config'
 import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
 import type { MainStackParamList } from '../stacks/types'
@@ -138,7 +140,7 @@ function SingleFileActionsSheet({
     }
   }, [file, navigation, toast, onComplete])
 
-  const handleDownload = useDownload(file, 0)
+  const handleDownload = useDownload(file, 0, { notifyOnInsufficientSpace: true })
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
@@ -260,11 +262,31 @@ function BulkFileActionsSheet({
   const handleDownloadToDevice = useCallback(async () => {
     if (!counts) return
     try {
+      const downloadable: FileRecord[] = []
       for (const file of counts.files) {
         const uri = await app().fs.getFileUri(file)
         if (getFileCapabilities(file, uri).canDownload) {
-          void downloadFile(file, 0)
+          downloadable.push(file)
         }
+      }
+      if (downloadable.length === 0) {
+        onComplete?.()
+        return
+      }
+      // All-or-nothing: refuse the whole batch if it won't fit (plus the
+      // preserved reserve) rather than filling the disk partway through.
+      const hasSpace = await app().downloads.checkSpaceFor(downloadable.map((f) => f.size))
+      if (!hasSpace) {
+        toast.show(INSUFFICIENT_SPACE_MESSAGE)
+        return
+      }
+      for (const file of downloadable) {
+        void downloadFile(file, 0).catch((e) => {
+          logger.error('FileActionsSheet', 'queue_downloads_failed', {
+            id: file.id,
+            error: e as Error,
+          })
+        })
       }
       onComplete?.()
     } catch (e) {
