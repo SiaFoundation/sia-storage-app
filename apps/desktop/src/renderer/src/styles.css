@@ -1,0 +1,275 @@
+/*
+ * The inset-grouped look: a header with a state dot, sections of rounded cards,
+ * hairline dividers between rows inset to the label column, an icon column,
+ * label left and value right, and a divided footer.
+ *
+ * Neither the popover nor the window paints a background; both let the system
+ * vibrancy through.
+ */
+
+:root {
+  --content-inset: 14px;
+  --card-radius: 8px;
+  --row-h-inset: 12px;
+  --row-v-inset: 7px;
+  --section-gap: 12px;
+  --header-gap: 5px;
+
+  --label: rgba(255, 255, 255, 0.92);
+  --secondary: rgba(255, 255, 255, 0.55);
+  --card: rgba(255, 255, 255, 0.08);
+  --divider: rgba(255, 255, 255, 0.12);
+
+  --green: #32d74b;
+  --orange: #ff9f0a;
+  --red: #ff453a;
+  --accent: #0a84ff;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--label);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --label: rgba(0, 0, 0, 0.9);
+    --secondary: rgba(0, 0, 0, 0.5);
+    --card: rgba(0, 0, 0, 0.05);
+    --divider: rgba(0, 0, 0, 0.1);
+    --green: #28cd41;
+    --orange: #ff9500;
+    --red: #ff3b30;
+    --accent: #007aff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+.status-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.status-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: var(--content-inset) var(--content-inset) 0;
+}
+
+.activity {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.activity-detail {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+
+.dot.green {
+  background: var(--green);
+}
+
+.dot.orange {
+  background: var(--orange);
+}
+
+.dot.red {
+  background: var(--red);
+}
+
+.dot.accent {
+  background: var(--accent);
+}
+
+/* A halo only while something is in flight, so a steady state never draws the eye. */
+.dot.pulsing {
+  animation: halo 1.6s ease-in-out infinite;
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(10 132 255 / 45%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgb(10 132 255 / 0%);
+  }
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  padding: var(--section-gap) var(--content-inset) calc(var(--section-gap) + 6px);
+}
+
+.section-header {
+  margin: 0 0 var(--header-gap) 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--row-v-inset) var(--row-h-inset);
+  min-height: 30px;
+}
+
+/*
+ * The divider is inset to the label column, but the row itself is not: drawing
+ * it as a border would shift every row after the first out of alignment with the
+ * one above, which is the tell that gives away a hand-rolled inset group.
+ */
+.row + .row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(var(--row-h-inset) + 15px + 8px);
+  right: 0;
+  border-top: 1px solid var(--divider);
+}
+
+.row-icon {
+  flex: 0 0 15px;
+  display: flex;
+  color: var(--secondary);
+}
+
+.row-icon.green {
+  color: var(--green);
+}
+
+.row-icon.orange {
+  color: var(--orange);
+}
+
+.row-icon.accent {
+  color: var(--accent);
+}
+
+.row-label {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row-description {
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.row-value {
+  flex: 0 1 auto;
+  padding-right: var(--row-h-inset);
+  color: var(--secondary);
+  text-align: right;
+}
+
+/* Keeps the host visible when a URL outgrows the row. */
+.row-value.truncate-middle {
+  direction: rtl;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.progress-row {
+  padding-top: 2px;
+  padding-bottom: 10px;
+}
+
+.progress-row progress {
+  width: 100%;
+  height: 4px;
+  margin-right: var(--row-h-inset);
+  accent-color: var(--accent);
+}
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 9px calc(var(--content-inset) - 4px) 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.footer button {
+  display: flex;
+  outline: none;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--label);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: default;
+}
+
+.footer button:hover:not(:disabled) {
+  background: var(--card);
+}
+
+/* Keyboard focus still needs to be visible; a mouse click should not ring. */
+.footer button:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.footer button:disabled {
+  color: var(--secondary);
+  opacity: 0.5;
+}
+
+/* Pushed right, away from the actions that are safe to click by accident. */
+.footer button.quit {
+  margin-left: auto;
+}
+
+/* The window until the library is built into it. */
+.placeholder {
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  color: var(--secondary);
+}
