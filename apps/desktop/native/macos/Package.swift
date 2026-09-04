@@ -12,11 +12,17 @@ let package = Package(
     products: [
         .library(name: "SiaShared", targets: ["SiaShared"]),
         .library(name: "SiaFileProvider", targets: ["SiaFileProvider"]),
+        .library(name: "SiaDomainAgent", targets: ["SiaDomainAgent"]),
     ],
     targets: [
         .target(name: "SiaShared", path: "Shared"),
         .target(name: "SiaFileProvider", dependencies: ["SiaShared"], path: "Ext"),
+        // The agent's entry point is excluded: top-level code cannot be built
+        // into a library, and the packaging script compiles both files together
+        // as the executable.
+        .target(name: "SiaDomainAgent", path: "Agent", exclude: ["main.swift"]),
         .testTarget(
-            name: "SiaDesktopTests", dependencies: ["SiaShared", "SiaFileProvider"], path: "Tests"),
+            name: "SiaDesktopTests",
+            dependencies: ["SiaShared", "SiaFileProvider", "SiaDomainAgent"], path: "Tests"),
     ]
 )
