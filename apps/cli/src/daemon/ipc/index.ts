@@ -17,7 +17,11 @@ export type IpcHandlerMap = Map<string, IpcHandler>
  * `uploadState` and `shutdown` are registered by hand, and every AppService
  * namespace is reflected onto `ds:<namespace>:<method>` channels.
  */
-export function buildHandlerMap(app: CliApp, onShutdown: () => void): IpcHandlerMap {
+export function buildHandlerMap(
+  app: CliApp,
+  onShutdown: () => void,
+  broadcast?: (message: unknown) => void,
+): IpcHandlerMap {
   const handlers: IpcHandlerMap = new Map()
 
   registerStatusHandlers(handlers, app, onShutdown)
@@ -34,6 +38,9 @@ export function buildHandlerMap(app: CliApp, onShutdown: () => void): IpcHandler
       },
     },
     app.service,
+    // Each mutation, named and uncoalesced, so a client holding its own caches
+    // makes the same change. One without caches ignores these.
+    broadcast ? (_channel, data) => broadcast(data) : undefined,
   )
 
   return handlers
@@ -52,16 +59,59 @@ export function pushChanges(app: CliApp, connection: IpcConnection): Promise<nev
   return new Promise<never>(() => {})
 }
 
+/**
+ * Everyone currently holding this socket's push stream open.
+ *
+ * Cache mutations go to all of them, and they arrive uncoalesced. A client
+ * replaying them into its own caches needs the key each one names, and a
+ * coalesced burst has no single key to name.
+ */
+export type Subscribers = {
+  add(connection: IpcConnection): void
+  broadcast(message: unknown): void
+}
+
+export function createSubscribers(): Subscribers {
+  const connections = new Set<IpcConnection>()
+  return {
+    add(connection) {
+      connections.add(connection)
+      connection.onClose(() => connections.delete(connection))
+    },
+    broadcast(message) {
+      for (const connection of connections) connection.push(message)
+    },
+  }
+}
+
+/**
+ * A handler map and the subscribers its cache broadcasts reach.
+ *
+ * One value rather than two arguments: the map is built around a specific
+ * subscriber set, so a caller that supplied one and defaulted the other would
+ * broadcast into an empty set while real subscribers collected in another, and
+ * the cache relay would go quiet with nothing to show for it.
+ */
+export type IpcSurface = { handlers: IpcHandlerMap; subscribers: Subscribers }
+
+export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface {
+  const subscribers = createSubscribers()
+  return { handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast), subscribers }
+}
+
 /** Serves the full handler map on the CLI socket. */
 export function startIpcDispatcher(
   app: CliApp,
   sockPath: string,
-  onShutdown: () => void,
-  handlers: IpcHandlerMap = buildHandlerMap(app, onShutdown),
+  surface: IpcSurface,
 ): ReturnType<typeof startIpcServer> {
+  const { handlers: map, subscribers } = surface
   return startIpcServer(sockPath, async (method, params, connection) => {
-    if (method === 'subscribe') return pushChanges(app, connection)
-    const handler = handlers.get(method)
+    if (method === 'subscribe') {
+      subscribers.add(connection)
+      return pushChanges(app, connection)
+    }
+    const handler = map.get(method)
     if (!handler) throw new Error(`Unknown method: ${method}`)
     return handler(params, connection)
   })

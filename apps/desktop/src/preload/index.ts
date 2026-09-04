@@ -6,6 +6,14 @@
  */
 
 import type { ChangeEvent } from '@siastorage/core/types'
+
+/** One cache mutation the daemon made, replayed by a client holding its own. */
+export type CacheMessage = {
+  kind: 'cache'
+  path: string[]
+  method: string
+  args: unknown[]
+}
 import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
@@ -28,6 +36,13 @@ const api = {
     const handler = (_event: unknown, payload: ChangeEvent) => listener(payload)
     ipcRenderer.on('change', handler)
     return () => ipcRenderer.removeListener('change', handler)
+  },
+
+  /** Fires with each cache change the daemon made, for this window to apply. */
+  onCache: (listener: (message: CacheMessage) => void) => {
+    const handler = (_event: unknown, payload: CacheMessage) => listener(payload)
+    ipcRenderer.on('cache', handler)
+    return () => ipcRenderer.removeListener('cache', handler)
   },
   platform: process.platform,
 }

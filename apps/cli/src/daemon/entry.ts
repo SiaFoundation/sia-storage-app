@@ -2,7 +2,7 @@ import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
 import packageJson from '../../package.json'
 import { writeState } from '@siastorage/node-adapters'
 import { connectSdk, createCliAppService } from '../app'
-import { buildHandlerMap, startIpcDispatcher } from './ipc'
+import { buildIpcSurface, startIpcDispatcher } from './ipc'
 import { startProviderListener } from './ipc/provider'
 import {
   acquireLockOrExit,
@@ -70,19 +70,14 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
     if (!ctx) return
     return executeShutdown(ctx)
   }
-  const handlers = buildHandlerMap(app, () => {
+  // Cache mutations reach this socket only. A storage-provider shell holds no
+  // caches, so the provider socket carries the change signal alone.
+  const surface = buildIpcSurface(app, () => {
     void shutdown()
   })
-  const ipcServer = startIpcDispatcher(
-    app,
-    app.paths.sockPath,
-    () => {
-      void shutdown()
-    },
-    handlers,
-  )
+  const ipcServer = startIpcDispatcher(app, app.paths.sockPath, surface)
   const providerServer = providerSocket
-    ? startProviderListener(app, handlers, {
+    ? startProviderListener(app, surface.handlers, {
         socketPath: providerSocket,
         version: DAEMON_VERSION,
       })

@@ -60,6 +60,11 @@ export function call(method: string, args: unknown[] = [], timeoutMs = 15_000): 
  * Holds one connection open for everything the daemon pushes, reconnecting when
  * it drops. The daemon outlives this process and restarts under it, so a dropped
  * stream is expected rather than exceptional.
+ *
+ * Two kinds of frame arrive on it. A change signal says a scope moved, for a
+ * reader that re-reads whatever it wants. A cache message names a key the daemon
+ * just changed and carries the new value when it has one, for a reader holding
+ * its own copy of the same caches.
  */
 export class DaemonStream {
   private socket: Socket | null = null
@@ -73,6 +78,7 @@ export class DaemonStream {
    */
   constructor(
     private readonly onEvent: (event: ChangeEvent) => void,
+    private readonly onCache: (message: unknown) => void = () => {},
     private readonly onDown: () => void = () => {},
   ) {}
 
@@ -98,9 +104,10 @@ export class DaemonStream {
           try {
             const parsed = JSON.parse(line)
             if (parsed.event === 'change') this.onEvent(parsed as ChangeEvent)
+            else if (parsed.kind === 'cache') this.onCache(parsed)
           } catch {
-            // Anything that is not an event is a reply to a request this stream
-            // never sends, so it is ignored rather than treated as an error.
+            // Anything else is a reply to a request this stream never sends, so
+            // it is ignored rather than treated as an error.
           }
         }
         newline = buffer.indexOf('\n')
