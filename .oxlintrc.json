@@ -45,5 +45,5 @@
     "typescript/no-non-null-assertion": "off",
     "typescript/no-explicit-any": "off"
   },
-  "ignorePatterns": ["**/wasm"]
+  "ignorePatterns": ["**/out", "**/wasm"]
 }
