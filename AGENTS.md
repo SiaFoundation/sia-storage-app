@@ -3,9 +3,9 @@
 Sia decentralized storage. A Bun monorepo of TypeScript client apps over a shared TS
 core, plus a Rust port of that core under `crates/`.
 
-The shared contract for every coding agent and PR reviewer here. Claude reads it through
-the import in `CLAUDE.md`; Copilot reads it directly. Review calibration is in
-`REVIEW.md`.
+The shared contract for every coding agent and PR reviewer here. Copilot reads it
+directly, and `CLAUDE.md` is a symlink to it, so a tool looking for either name gets
+this file. Review calibration is in `REVIEW.md`.
 
 ## Repo map
 
@@ -43,6 +43,34 @@ cargo test --workspace --lib --bins --tests
 
 A failure that looks unrelated to your change is still a failure. Fix it. "Pre-existing"
 is not a disposition.
+
+## Agent sessions
+
+For any coding agent driving this repo from a terminal: context is finite, so a
+command that prints tens of thousands of lines has to be backgrounded rather than
+run in the foreground.
+
+Builds handle this themselves: `bun run mobile:dev:*` prints a progress line and
+writes the full output to `.build-cache/<target>/build.log`. Run them directly and
+read that file if something fails.
+
+Tests do not. `bun run test` runs jest across five packages and prints a line per
+suite, so background it and read the `Test Suites:` and `Tests:` summary lines per
+package rather than the stream. Background it for a second reason too: an open
+handle from an async loop hangs the run instead of failing it, and a hung foreground
+run costs the whole session. If output stops growing for 30 seconds or more, kill it
+and find the leak.
+
+Never leave a `.log` file in the tracked tree: ad hoc output goes to `/tmp`, and
+build logs stay under the gitignored `.build-cache/`.
+
+A run that exits 0 with almost no output has not passed; it has failed to capture.
+Check the line count against the summary lines before believing it.
+
+`node_modules` is not shared between worktrees. After `bun install`, if core tests
+fail with "Could not locate the bindings file" for `better-sqlite3`, build it:
+`cd node_modules/better-sqlite3 && PYTHON=/usr/bin/python3 npm run build-release`.
+`npm rebuild better-sqlite3` reports success without producing a binding.
 
 ## Architecture
 
@@ -208,7 +236,8 @@ codebase already uses. No abstract sentence where a fact belongs.
 pivotal, paramount, realm, underscore, foster, elevate, unlock, streamline, boast,
 landscape, holistic, bespoke, groundbreaking, testament, synergy, endeavor, meticulous,
 nuanced, notably, importantly, essentially, effectively, simply, basically, additionally,
-furthermore, moreover, comprehensive, myriad, plethora, facilitate, or elegant. No
+furthermore, moreover, comprehensive, myriad, plethora, facilitate, elegant, or landed
+for shipped or merged. "Landed mid-round-trip" for something that arrived is correct. No
 em-dashes, no arrows, no "not just X, it's Y" pivot, no rule of three, no over-bolding.
 
 A word on that list is fine where it is the codebase's own term: a function name, an API
@@ -227,13 +256,20 @@ must hold for a reader with only this file.
 A file, schema, or non-trivial function opens with a header saying what it is and the
 problem it solves. Not the mechanics; comment non-obvious fields and steps inline.
 
-**Length.** Inline: one or two lines. Header: six at most. A header is the comment
-opening a file, a type, or a function, in whatever syntax the language uses, so a
-three-line `///` block on a function is a header and within budget. Inline means a
-comment inside a body. Count only the lines carrying words: a `/*` or `*/` alone is a
-delimiter and a bare ` *` between paragraphs is a separator. Past that, the comment is
-doing the code's job or the function needs splitting. Migrations and wire-format schemas
-may run longer, because the before-and-after is the content.
+**Length.** Inline: one or two lines, counting only the lines carrying words: a `/*` or
+`*/` alone is a delimiter and a bare ` *` between paragraphs is a separator. Past two,
+the comment is doing the code's job or the function needs splitting. A header is the
+comment opening a file, a type, or a function, in whatever syntax the language uses, so
+a `///` block on a function is a header, not an inline comment. A header has no line
+count, because the constraints one carries take the room they take; it is too long only
+when a sentence in it restates the code, sets up, or softens. Cut those and keep the
+rest, however many lines that leaves. Migrations and wire-format schemas are exempt from
+the inline count as well, because the before-and-after is the content.
+
+This length rule, and the shape rules below it, are for whoever writes the comment. They
+are not review findings: a reviewer flags a comment only where it is wrong or misleading,
+per `REVIEW.md`. Getting it right here costs nothing; asking for it in review costs a
+round trip.
 
 **Every sentence carries a new fact.** Cut one that sets up, restates, or softens. Never
 open with "This is important because", "The reason for this is", "It's worth
@@ -261,6 +297,15 @@ removed row draws no result mark" is a name; "absence is not information" is an 
 
 `AGENTS.md` holds what every agent and reviewer needs. `REVIEW.md` holds review
 calibration. Machine-specific setup belongs in a gitignored `CLAUDE.local.md`.
+
+`AGENTS.md` is always the real file; every other name is a symlink to it. Per-area
+rules live in the area's own `AGENTS.md`, opening with the `applyTo` glob Copilot
+scopes by; `CLAUDE.md` beside it and the matching `.github/instructions/` name are
+links. The links are git symlinks: a tool reading the raw tree sees a link's
+target path as its content, not the file it names. Renaming a directory moves the
+file but not the glob inside it, and strands the `.github` link, so change all
+three together; a test in `apps/integration` fails on a link that no longer
+resolves.
 
 `REVIEW.md` repeats rules from here on purpose: the review agents read it as plain text
 and do not follow references out of it, so a rule they must enforce has to be stated
