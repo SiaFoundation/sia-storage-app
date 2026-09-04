@@ -13,6 +13,14 @@ public func mapError(_ error: Error) -> NSError {
     let ns = error as NSError
     if ns.domain == NSFileProviderErrorDomain || ns.domain == NSCocoaErrorDomain { return ns }
 
+    // A staging failure is a file error, not a connection one. Without this it
+    // falls to the catch-all below and reports the daemon as unreachable.
+    if let handoff = error as? HandoffError {
+        return NSError(
+            domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError,
+            userInfo: [NSLocalizedDescriptionKey: handoff.localizedDescription])
+    }
+
     if let rpc = error as? RpcError {
         switch rpc {
         case .unreachable:
