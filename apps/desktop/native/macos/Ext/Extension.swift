@@ -21,6 +21,11 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     private let handoff: Handoff
     private let domain: NSFileProviderDomain
     private let handshake: Handshake
+    private let availability = Availability(grace: FileProviderExtension.gracePeriod)
+    private var changes: RpcStream?
+    /// Set once teardown starts. Stopping the stream reports a disconnect the
+    /// same way a dead daemon does, which would otherwise unmount on the way out.
+    private var invalidated = false
 
     public required init(domain: NSFileProviderDomain) {
         self.domain = domain
@@ -48,9 +53,101 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             }
             handoff.sweep()
         }
+        subscribeToChanges()
     }
 
-    public func invalidate() {}
+    /// Signals the working set when the library changes, reconnecting on drop:
+    /// only the provider may signal its own domain, and the OS keeps this
+    /// process alive across daemon restarts.
+    private func subscribeToChanges() {
+        let stream = RpcStream(socketPath: SiaPaths.providerSocketFromExtension()) {
+            [weak self] event in
+            guard event.scope == "library", let self else { return }
+            guard let manager = NSFileProviderManager(for: self.domain) else {
+                fpLog.error("self-signal: no manager for this domain")
+                return
+            }
+            manager.signalEnumerator(for: .workingSet) { error in
+                if let error {
+                    fpLog.error(
+                        "self-signal failed: \(error.localizedDescription, privacy: .public)")
+                } else {
+                    fpLog.info("self-signal ok")
+                }
+            }
+        }
+        stream.start(
+            onConnected: { [weak self] in
+                guard let self else { return }
+                Task { await self.apply(self.availability.succeeded()) }
+            },
+            onDisconnect: { [weak self] error in
+                fpLog.error("change stream ended: \(error.localizedDescription, privacy: .public)")
+                self?.noteDaemonAway()
+                self?.scheduleResubscribe()
+            })
+        changes = stream
+    }
+
+    /// Waits before reconnecting, so a daemon that is down rather than restarting
+    /// costs one connect a second instead of a spin.
+    private func scheduleResubscribe() {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.changes != nil else { return }
+            self.subscribeToChanges()
+        }
+    }
+
+    /// Starts the clock on an outage, and comes back when it is up.
+    private func noteDaemonAway() {
+        Task { [weak self] in
+            guard let self, !self.invalidated else { return }
+            guard await self.availability.failed(at: Self.now()) else { return }
+            try? await Task.sleep(nanoseconds: UInt64(Self.gracePeriod * 1_000_000_000))
+            // Checked again: teardown inside the grace window would otherwise
+            // still reach the disconnect below.
+            guard !self.invalidated else { return }
+            await self.apply(self.availability.settle(at: Self.now()))
+        }
+    }
+
+    /// Tells the system the mount is not being served, or that it is again.
+    ///
+    /// The user keeps browsing either way; what changes is that a disconnected
+    /// domain stops being asked for updates, and Finder says why at the top of
+    /// the folder instead of failing one operation at a time.
+    private func apply(_ action: AvailabilityAction) async {
+        guard action != .none, let manager = NSFileProviderManager(for: domain) else { return }
+        do {
+            switch action {
+            case .disconnect:
+                try await manager.disconnect(
+                    reason: "Sia Storage isn't running. Open it to reconnect.",
+                    options: .temporary)
+                fpLog.info("disconnected: the daemon is not answering")
+            case .reconnect:
+                try await manager.reconnect()
+                fpLog.info("reconnected: the daemon is back")
+            case .none:
+                break
+            }
+        } catch {
+            fpLog.error("availability: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// The wait before `settle` and the actor's threshold are one value, or
+    /// `settle` refuses every outage and nothing says why.
+    static let gracePeriod: Double = 5
+    static func now() -> Double { ProcessInfo.processInfo.systemUptime }
+
+    public func invalidate() {
+        // Both set before the stop, which is what fires the handler reading them.
+        invalidated = true
+        let stream = changes
+        changes = nil
+        stream?.stop()
+    }
 
     /// Every callback that reaches the daemon waits on this. The OS keeps an
     /// extension alive across app upgrades, so a stale one would otherwise drive

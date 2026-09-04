@@ -498,3 +498,79 @@ final class ContainerArgumentTests: XCTestCase {
     }
 }
 
+final class AvailabilityTests: XCTestCase {
+    func testFirstFailureArmsTheGracePeriod() async {
+        let availability = Availability(grace: 5)
+
+        let armed = await availability.failed(at: 100)
+
+        XCTAssertTrue(armed)
+    }
+
+    func testFurtherFailuresDoNotRearmIt() async {
+        let availability = Availability(grace: 5)
+
+        _ = await availability.failed(at: 100)
+        let again = await availability.failed(at: 101)
+
+        XCTAssertFalse(again)
+    }
+
+    func testDisconnectsOnlyAfterTheGracePeriod() async {
+        let availability = Availability(grace: 5)
+        _ = await availability.failed(at: 100)
+
+        let early = await availability.settle(at: 103)
+        let due = await availability.settle(at: 105)
+
+        XCTAssertEqual(early, .none)
+        XCTAssertEqual(due, .disconnect)
+    }
+
+    func testADaemonRestartInsideTheGracePeriodNeverDisconnects() async {
+        let availability = Availability(grace: 5)
+        _ = await availability.failed(at: 100)
+
+        let back = await availability.succeeded()
+        let settled = await availability.settle(at: 106)
+
+        XCTAssertEqual(back, .none)
+        XCTAssertEqual(settled, .none)
+    }
+
+    func testReconnectsOnlyAfterADisconnect() async {
+        let availability = Availability(grace: 5)
+
+        let withoutOutage = await availability.succeeded()
+        _ = await availability.failed(at: 100)
+        _ = await availability.settle(at: 110)
+        let afterOutage = await availability.succeeded()
+
+        XCTAssertEqual(withoutOutage, .none)
+        XCTAssertEqual(afterOutage, .reconnect)
+    }
+
+    func testDisconnectsOnceForOneOutage() async {
+        let availability = Availability(grace: 5)
+        _ = await availability.failed(at: 100)
+
+        let first = await availability.settle(at: 110)
+        let second = await availability.settle(at: 120)
+
+        XCTAssertEqual(first, .disconnect)
+        XCTAssertEqual(second, .none)
+    }
+
+    func testASecondOutageDisconnectsAgain() async {
+        let availability = Availability(grace: 5)
+        _ = await availability.failed(at: 100)
+        _ = await availability.settle(at: 110)
+        _ = await availability.succeeded()
+
+        let armed = await availability.failed(at: 200)
+        let settled = await availability.settle(at: 210)
+
+        XCTAssertTrue(armed)
+        XCTAssertEqual(settled, .disconnect)
+    }
+}
