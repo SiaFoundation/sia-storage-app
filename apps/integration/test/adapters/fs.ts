@@ -27,7 +27,7 @@ export function createFsAdapter(params: { tempDir: string }) {
       }
       return size
     },
-    async adoptFile(file, sourceUri) {
+    async adoptFile(file, sourceUri, opts) {
       const source = sourceUri.replace(/^file:\/\//, '')
       // Same refusal as the production adapter, so the containment tests run
       // against the semantics they claim to cover.
@@ -37,9 +37,12 @@ export function createFsAdapter(params: { tempDir: string }) {
       const target = fsFilePath(file.id, file.type)
       nodeFs.mkdirSync(path.dirname(target), { recursive: true })
       nodeFs.renameSync(source, target)
-      const bytes = nodeFs.readFileSync(target)
-      const hash = createHash('sha256').update(bytes).digest('hex')
-      return { uri: `file://${target}`, size: bytes.byteLength, hash: `sha256:${hash}` }
+      const size = nodeFs.statSync(target).size
+      if (opts?.hash === false) {
+        return { kind: 'plain', uri: `file://${target}`, size }
+      }
+      const hash = createHash('sha256').update(nodeFs.readFileSync(target)).digest('hex')
+      return { kind: 'hashed', uri: `file://${target}`, size, hash: `sha256:${hash}` }
     },
     async size(fileId, type) {
       try {

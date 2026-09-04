@@ -15,6 +15,15 @@ export type ImportCopyResult =
   | { kind: 'asset'; uri: string; size: number; sha256: string; mediaMime: string }
   | { kind: 'plain'; uri: string; size: number }
 
+/**
+ * What `adoptFile` produced. `hashed` ran the full read and carries the
+ * `sha256:<hex>` string callers write to the file record; `plain` skipped the
+ * hash (download path) and has only the size.
+ */
+export type AdoptFileResult =
+  | { kind: 'hashed'; uri: string; size: number; hash: string }
+  | { kind: 'plain'; uri: string; size: number }
+
 export type SizeResult =
   | { value: number; error?: undefined }
   | { value: null; error: 'not_found' | 'stat_error' }
@@ -71,10 +80,18 @@ export type FsIOAdapter = FsFileUriAdapter & {
    * Optional: only a host that hands bytes to another process by path needs it.
    */
   exportTo?(file: { id: string; type: string }, destPath: string): Promise<number>
+  /**
+   * Take ownership of a source file by renaming it into the file's slot,
+   * consuming the source. Hashes the result by default (`hashed` arm); the
+   * download path passes `hash: false` to skip the extra full read (`plain`
+   * arm), because it already knows the size and never reads a hash back.
+   * Optional: only a host that takes ownership of a file by path implements it.
+   */
   adoptFile?(
     file: { id: string; type: string },
     sourceUri: string,
-  ): Promise<{ uri: string; size: number; hash: string }>
+    opts?: { hash?: boolean },
+  ): Promise<AdoptFileResult>
   /**
    * Move a file's on-disk path to match a new mime type. No-op when
    * extensions match. **Overwrites** any existing file at the destination

@@ -122,7 +122,7 @@ export function createFsIOAdapter(): FsIOAdapter {
       const stat = await RNFS.stat(targetUri)
       return { uri: targetUri, size: stat.size }
     },
-    async adoptFile(file, sourceUri) {
+    async adoptFile(file, sourceUri, opts) {
       const targetUri = fsFileUri(file.id, file.type)
       if (!(await RNFS.exists(fsStorageDirectoryUri))) {
         await RNFS.mkdir(fsStorageDirectoryUri)
@@ -132,8 +132,14 @@ export function createFsIOAdapter(): FsIOAdapter {
       }
       await RNFS.moveFile(fileUriToPath(sourceUri), targetUri)
       const stat = await RNFS.stat(targetUri)
+      if (opts?.hash === false) {
+        return { kind: 'plain', uri: targetUri, size: stat.size }
+      }
+      // RNFS.hash returns bare hex; core and the other adapters carry the
+      // normalized `sha256:<hex>` form, and a bare hex written to a file record
+      // would not match the same file's hash on another client.
       const hash = await RNFS.hash(targetUri, 'sha256')
-      return { uri: targetUri, size: stat.size, hash }
+      return { kind: 'hashed', uri: targetUri, size: stat.size, hash: `sha256:${hash}` }
     },
     async renameToType(file, newType) {
       const oldUri = fsFileUri(file.id, file.type)

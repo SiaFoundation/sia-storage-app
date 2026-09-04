@@ -420,6 +420,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         (await service.fs.detectMimeType(source)) ??
         'application/octet-stream'
       const adopted = await fsIO.adoptFile({ id, type }, source)
+      if (adopted.kind !== 'hashed') {
+        throw new Error(`adoptFile returned '${adopted.kind}' without a hash for ${id}`)
+      }
       const now = Date.now()
       await service.files.create({
         id,
@@ -456,6 +459,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       const file = await service.files.getById(id)
       if (!file) throw new Error(`No file with id ${id}`)
       const adopted = await fsIO.adoptFile({ id: file.id, type: file.type }, source)
+      if (adopted.kind !== 'hashed') {
+        throw new Error(`adoptFile returned '${adopted.kind}' without a hash for ${file.id}`)
+      }
       await service.files.update(
         { id: file.id, size: adopted.size, hash: adopted.hash },
         { updatedAt: 'preserve' },

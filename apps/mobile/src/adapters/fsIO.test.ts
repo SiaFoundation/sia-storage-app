@@ -160,12 +160,20 @@ describe('fsIO adapter adoptFile()', () => {
     hashMock.mockResolvedValue('deadbeef')
   })
 
-  it('moves the file natively, stats it, and returns a sha256 hash', async () => {
+  it('moves the file natively, stats it, and returns a normalized sha256 hash', async () => {
     if (!adapter.adoptFile) throw new Error('adoptFile missing')
     const result = await adapter.adoptFile(file, 'file:///tmp/abc.webp')
     expect(moveFileMock).toHaveBeenCalledWith('/tmp/abc.webp', expect.any(String))
     expect(hashMock).toHaveBeenCalledWith(expect.any(String), 'sha256')
-    expect(result).toMatchObject({ size: 2048, hash: 'deadbeef' })
+    expect(result).toMatchObject({ kind: 'hashed', size: 2048, hash: 'sha256:deadbeef' })
+  })
+
+  it('skips the hash when hash is false', async () => {
+    if (!adapter.adoptFile) throw new Error('adoptFile missing')
+    const result = await adapter.adoptFile(file, 'file:///tmp/abc.webp', { hash: false })
+    expect(moveFileMock).toHaveBeenCalledWith('/tmp/abc.webp', expect.any(String))
+    expect(hashMock).not.toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'plain', uri: expect.any(String), size: 2048 })
   })
 
   it('removes an existing target before moving', async () => {

@@ -28,7 +28,7 @@ import type {
   ProviderPage,
   ProviderProgress,
 } from '../types/provider'
-import type { ImportCopyResult } from '../services/fsFileUri'
+import type { AdoptFileResult, ImportCopyResult } from '../services/fsFileUri'
 import type {
   FileKind,
   FileMetadata,
@@ -561,11 +561,15 @@ export interface AppService {
       file: { id: string; type: string },
       data: ArrayBuffer,
     ): Promise<{ uri: string; size: number; hash: string }>
-    /** Moves an existing file into managed storage, hashes it natively, and upserts metadata. */
+    /** Takes ownership of a source file by moving it into managed storage and
+     * upserts metadata. Hashes by default (`hashed` result); the download path
+     * passes `hash: false` to skip the extra read (`plain` result), since it
+     * already knows the size and never reads the hash back. */
     adoptFile(
       file: { id: string; type: string },
       sourceUri: string,
-    ): Promise<{ uri: string; size: number; hash: string }>
+      opts?: { hash?: boolean },
+    ): Promise<AdoptFileResult>
     /** Renames the on-disk path to match a new mime type. Call before persisting `type`. */
     renameToType(file: { id: string; type: string }, newType: string): Promise<{ uri: string }>
     /** Detects the MIME type of a file at the given path. */
