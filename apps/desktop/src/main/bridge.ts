@@ -12,7 +12,7 @@ import { log } from './log'
 import { daemonLogPath, desktopLogPath } from './paths'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
-import { beginQuit, resizeToContent } from './windows'
+import { beginQuit, hideMainWindow, openWebUrl, resizeToContent } from './windows'
 
 async function openPath(path: string): Promise<void> {
   const reason = await shell.openPath(path)
@@ -20,12 +20,24 @@ async function openPath(path: string): Promise<void> {
 }
 
 export function registerBridge(platform: PlatformIntegration): void {
-  // The renderer supplies both, so neither is trusted: a non-string method
-  // would reach the daemon as whatever it happens to serialise to.
-  ipcMain.handle('rpc', (_event, method: unknown, args: unknown) => {
+  // The caller sets the timeout because only it knows how long its call takes.
+  // Method and args arrive from the renderer, so neither is taken on trust.
+  ipcMain.handle('rpc', (_event, method: unknown, args: unknown, timeoutMs?: number) => {
     if (typeof method !== 'string') throw new Error('rpc needs a method name')
-    return call(method, Array.isArray(args) ? args : [])
+    return call(method, Array.isArray(args) ? args : [], timeoutMs)
   })
+
+  ipcMain.handle('open:url', async (_event, url: string) => {
+    // Awaited, and a refused URL rejects too: resolving here tells sign-in
+    // the approval page is open, and it would wait on one that never appeared.
+    const opened = openWebUrl(url)
+    if (opened === null) throw new Error('Not an openable web URL')
+    await opened
+  })
+
+  // Not a facade method: `connect` is the daemon's own, alongside ping and
+  // shutdown, so it does not arrive through the reflected `rpc` channel.
+  ipcMain.handle('daemon:connect', () => call('connect', [], 60_000))
 
   // The popover sizes to its content the way a menu does, so a section that
   // only appears mid-transfer does not leave dead space when it is gone.
@@ -50,6 +62,10 @@ export function registerBridge(platform: PlatformIntegration): void {
   ipcMain.handle('open:logs', async () => {
     await openPath(desktopLogPath())
     await openPath(daemonLogPath())
+  })
+
+  ipcMain.handle('window:close', () => {
+    hideMainWindow()
   })
 
   ipcMain.handle('app:quit', () => {

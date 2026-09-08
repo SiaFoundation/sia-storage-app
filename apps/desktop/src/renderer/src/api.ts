@@ -12,11 +12,14 @@ import type { DomainState } from './model'
 export type { ChangeEvent }
 
 export type SiaApi = {
-  rpc(method: string, args?: unknown[]): Promise<unknown>
+  rpc(method: string, args?: unknown[], timeoutMs?: number): Promise<unknown>
   daemonReachable(): Promise<boolean>
   shellStatus(): Promise<DomainState>
   mountPath(): Promise<string | null>
   reportHeight(height: number): void
+  openUrl(url: string): Promise<void>
+  connectDaemon(): Promise<{ connected: boolean }>
+  closeWindow(): Promise<void>
   openMount(): Promise<void>
   openLogs(): Promise<void>
   quit(): Promise<void>

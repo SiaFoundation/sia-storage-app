@@ -8,12 +8,26 @@
  * socket, so inferring it there would strand our own.
  */
 
+import { createRemoteAppService } from '@siastorage/core/app'
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { log } from './log'
 import { daemonLogPath, daemonSocketPath } from './paths'
 import { call } from './rpc'
+
+/** The facade, typed, for this process's own reads. No cache subscription:
+ *  nothing here renders, so nothing needs invalidating. */
+const facade = createRemoteAppService(
+  (channel, args, timeoutMs) => call(channel, args, timeoutMs),
+  undefined,
+  {
+    // Read on a tray click. Each call is bounded at three seconds and the two
+    // run in sequence, so a hung daemon degrades to the sign-in window inside
+    // six rather than holding the click for the transport default.
+    timeouts: { 'ds:settings:getIndexerURL': 3_000, 'ds:auth:hasAppKey': 3_000 },
+  },
+)
 
 export type DaemonStatus = 'unreachable' | 'running' | 'running-without-shell'
 
@@ -33,6 +47,20 @@ export class Daemon {
   /** True once this app has launched the daemon itself. */
   get owned(): boolean {
     return this.startedHere
+  }
+
+  /**
+   * Whether this machine has been paired with its indexer.
+   *
+   * False when the daemon cannot be asked, which sends the click to the window:
+   * signing in is the one thing worth offering when nothing else works.
+   */
+  static async hasAccount(): Promise<boolean> {
+    try {
+      return await facade.auth.hasAppKey(await facade.settings.getIndexerURL())
+    } catch {
+      return false
+    }
   }
 
   static async isReachable(): Promise<boolean> {
