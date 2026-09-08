@@ -31,6 +31,9 @@ the daemon's, and the daemon quotes container paths, which hold the account
 name. Marking anything else `.public` is fine only for a value that cannot
 carry user data: a count, a state, a version, or a provider identifier.
 
+Levels are not interchangeable. `notice` and `error` persist to disk, `info` is
+held in memory and dropped, and `debug` is off until someone streams it.
+
 ## Errors that reach the user
 
 `mapError` decides what Finder puts in an alert, and passes several messages

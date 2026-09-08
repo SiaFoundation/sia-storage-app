@@ -10,7 +10,7 @@
  */
 
 import { app, BrowserWindow } from 'electron'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
@@ -223,7 +223,20 @@ if (!app.requestSingleInstanceLock()) {
         shellSocket,
         handoffDir,
       }
-      log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
+      // A source build and an installed one each pick these for themselves, so
+      // a mismatch here is how the extension ends up served by the wrong daemon.
+      log.info('app', 'library', { path: dataDir() })
+      log.info('app', 'serving_extension', { container: dirname(shellSocket) })
+      const hadSocket = existsSync(shellSocket)
+      const attached = await daemon.attach(spawn)
+      log.info('daemon', 'attached', { state: attached })
+      // A socket file is normal on relaunch, when the daemon from the last
+      // launch still answers it. A socket nothing answers is left over from a
+      // crash or belongs to another data directory, and the extension hangs
+      // on it.
+      if (hadSocket && attached === 'unreachable') {
+        log.error('app', 'stale_provider_socket', { socket: shellSocket })
+      }
       // Sign-out relaunches into this path. Without the check the user lands
       // at a bare menu bar and has to find the tray icon to reach sign-in.
       void Daemon.hasAccount().then((has) => {

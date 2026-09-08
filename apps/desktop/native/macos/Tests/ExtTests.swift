@@ -261,6 +261,13 @@ private final class Mutable<T>: @unchecked Sendable {
     }
 }
 
+/// A hello from a daemon at `version`, serving `library`.
+private func hello(_ version: String = "0.0.5", library: String = "/tmp/lib") throws -> ProviderHello
+{
+    let json = "{\"version\":\"\(version)\",\"library\":\"\(library)\"}"
+    return try JSONDecoder().decode(ProviderHello.self, from: Data(json.utf8))
+}
+
 final class HandshakeTests: XCTestCase {
     func testARefusedDaemonIsRetriedByTheNextCallback() async {
         let attempts = Attempts()
@@ -269,7 +276,7 @@ final class HandshakeTests: XCTestCase {
         let handshake = Handshake(retryAfter: 1, now: { clock.value }) {
             attempts.bump()
             if !reachable.value { throw Unreachable() }
-            return "0.0.5"
+            return try hello()
         }
 
         // The daemon is not up: this callback fails, as it should.
@@ -293,7 +300,7 @@ final class HandshakeTests: XCTestCase {
         let attempts = Attempts()
         let handshake = Handshake(retryAfter: 0, now: { 0 }) {
             attempts.bump()
-            return "0.0.5"
+            return try hello()
         }
 
         try await handshake.ready()
@@ -322,7 +329,7 @@ final class HandshakeTests: XCTestCase {
             // Yields, which is where a re-entrant actor would let the next
             // caller start its own attempt.
             try await Task.sleep(nanoseconds: 10_000_000)
-            return "0.0.5"
+            return try hello()
         }
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -331,6 +338,24 @@ final class HandshakeTests: XCTestCase {
         }
 
         XCTAssertEqual(attempts.count, 1)
+    }
+
+    func testAHelloAnsweredAfterAResetDoesNotCommitAgreement() async throws {
+        let attempts = Attempts()
+        let handshake = Handshake(retryAfter: 0, now: { 0 }) {
+            attempts.bump()
+            try await Task.sleep(nanoseconds: 20_000_000)
+            return try hello()
+        }
+
+        let inFlight = Task { try? await handshake.ready() }
+        // The reset must land while the attempt is suspended, not before it starts.
+        while attempts.count == 0 { await Task.yield() }
+        await handshake.reset()
+        _ = await inFlight.value
+
+        let agreed = await handshake.isAgreed
+        XCTAssertFalse(agreed)
     }
 
 }
