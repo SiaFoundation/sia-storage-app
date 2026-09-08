@@ -21,7 +21,8 @@ export type SiaApi = {
   connectDaemon(): Promise<{ connected: boolean }>
   closeWindow(): Promise<void>
   openMount(): Promise<void>
-  openLogs(): Promise<void>
+  /** Opens the menu holding the actions the footer has no room for. */
+  showMoreMenu(): Promise<void>
   quit(): Promise<void>
   onChange(listener: (event: ChangeEvent) => void): () => void
   onCache(listener: (message: IpcMessage) => void): () => void

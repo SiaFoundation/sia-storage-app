@@ -1,5 +1,5 @@
 /*
- * Six inline icons, drawn rather than imported.
+ * The inline icons, drawn rather than imported.
  *
  * A 16-unit viewBox rendered at 15px, stroked with currentColor so each takes
  * the colour of the text beside it.
@@ -76,17 +76,18 @@ export const ArrowCircle = ({ className, down }: Props & { down?: boolean }) => 
   </svg>
 )
 
-/** folder, doc.text and power, for the footer */
+/** folder, ellipsis and power, for the footer */
 export const Folder = ({ className }: Props) => (
   <svg {...box} className={className} aria-hidden="true">
     <path d="M1.8 4.4A1.4 1.4 0 0 1 3.2 3h2.6l1.4 1.6h5.6a1.4 1.4 0 0 1 1.4 1.4v6a1.4 1.4 0 0 1-1.4 1.4H3.2a1.4 1.4 0 0 1-1.4-1.4z" />
   </svg>
 )
 
-export const DocText = ({ className }: Props) => (
+export const Ellipsis = ({ className }: Props) => (
   <svg {...box} className={className} aria-hidden="true">
-    <path d="M3.4 2.4h6L12.6 5.6v8a1 1 0 0 1-1 1h-8.2a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" />
-    <path d="M9.2 2.5v3.2h3.2M5 8.6h6M5 11h4" />
+    <circle cx="3.4" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="12.6" cy="8" r="0.9" fill="currentColor" stroke="none" />
   </svg>
 )
 
