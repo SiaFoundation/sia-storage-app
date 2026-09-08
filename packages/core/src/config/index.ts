@@ -42,29 +42,33 @@ export const STORAGE_FULL_POLL_INTERVAL = secondsInMs(30)
 export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
 // Sync new photos interval.
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
+/**
+ * Reads an environment variable where there is an environment to read.
+ *
+ * Core runs in a browser window as well as under Expo and the CLI, where
+ * `process` does not exist. The constants below initialise at module load, so
+ * an unguarded read throws before the module finishes and takes the window down.
+ */
+function getEnv(name: string): string | undefined {
+  // `env` is optional-chained as well: a bundler shim can define `process`
+  // without one, and reading a name off it would throw at module load.
+  return typeof process === 'undefined' ? undefined : process.env?.[name]
+}
+
 // Resume fetching archive photos when pending local-only bytes drop below this threshold.
 export const SYNC_ARCHIVE_RESUME_THRESHOLD = 4 * SLAB_SIZE
-// Unuploaded local bytes allowed before paceable copies defer. A simulator
-// suite imports far faster than its uploads drain, so a run tunes it at bundle
-// time the same way as the storage headroom below. A zero or non-numeric
-// override falls back to the default.
+// Unuploaded bytes allowed before paceable copies defer. A simulator imports
+// faster than it uploads, so a run tunes this at bundle time; zero falls back.
 export const IMPORT_PACED_BACKLOG_BYTES =
-  Number(process.env.EXPO_PUBLIC_IMPORT_BACKLOG_BYTES) || 512 * 1024 ** 2 // 512 MB
-// Paced storage headroom: defer the next paced copy when (device free bytes
-// minus pending-local unuploaded bytes) drops under this. Applies to durable
-// rows from the background sources (new-photos, library-scan, legacy).
-// Small-disk emulators sit below any realistic fixed floor, so a simulator run
-// tunes it at bundle time. A zero or non-numeric override falls back to the default.
+  Number(getEnv('EXPO_PUBLIC_IMPORT_BACKLOG_BYTES')) || 512 * 1024 ** 2 // 512 MB
+// Defer the next paced copy when free bytes minus pending-local unuploaded
+// bytes drops under this. Background sources only; zero falls back.
 export const IMPORT_PACED_STORAGE_HEADROOM_BYTES =
-  Number(process.env.EXPO_PUBLIC_IMPORT_HEADROOM_BYTES) || 2 * 1024 ** 3 // 2 GB
-// Import copies stop entirely below this much free space, whatever the source.
-// The paced headroom above is a soft yield that only background sources respect;
-// this is the floor that keeps a runaway import from driving the device to zero
-// and wedging the OS for every other app. Deliberately small: it is insurance,
-// not storage management. Emulators sit below any realistic device floor, so a
-// simulator run tunes it at bundle time; zero or non-numeric falls back.
+  Number(getEnv('EXPO_PUBLIC_IMPORT_HEADROOM_BYTES')) || 2 * 1024 ** 3 // 2 GB
+// The hard floor, whatever the source, so a runaway import cannot drive the
+// device to zero and wedge the OS. Insurance, not storage management.
 export const IMPORT_CRITICAL_FREE_BYTES =
-  Number(process.env.EXPO_PUBLIC_IMPORT_CRITICAL_FREE_BYTES) || 500 * 1024 ** 2 // 500 MB
+  Number(getEnv('EXPO_PUBLIC_IMPORT_CRITICAL_FREE_BYTES')) || 500 * 1024 ** 2 // 500 MB
 // Import scanner: max candidate import_files claimed per tick.
 export const IMPORT_MAX_PER_TICK = 20
 // Import retry backoff: max attempts before an import_file is marked `failed`.
