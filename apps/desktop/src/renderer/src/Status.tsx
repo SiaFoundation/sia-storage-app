@@ -12,7 +12,7 @@ import {
   CheckCircle,
   Clock,
   DocOnDoc,
-  DocText,
+  Ellipsis,
   Folder,
   InternalDrive,
   Link,
@@ -189,13 +189,14 @@ export function Status() {
           <Folder />
           Open Folder
         </button>
+        {/* Square, because the glyph is the whole label. */}
         <button
           type="button"
-          className={`${FOOTER_BUTTON} px-2`}
-          onClick={() => void sia.openLogs()}
+          className={`${FOOTER_BUTTON} px-1.5`}
+          aria-label="More"
+          onClick={() => void sia.showMoreMenu()}
         >
-          <DocText />
-          Logs
+          <Ellipsis />
         </button>
         {/* Pushed right, away from the actions that are safe to click by accident. */}
         <button

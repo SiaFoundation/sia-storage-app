@@ -10,10 +10,13 @@
  */
 
 import { app, BrowserWindow } from 'electron'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
+import { dataDir } from './paths'
 import { Daemon, type DaemonSpawn } from './daemon'
+import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
 import { createPlatformIntegration } from './platform'
 import { DaemonStream } from './rpc'
@@ -80,6 +83,70 @@ if (!app.requestSingleInstanceLock()) {
   }
 
   /**
+   * Whether a live daemon still holds `daemon.lock`. The daemon closes its
+   * socket before it closes the database and unlinks the lock, so an
+   * unreachable socket is not yet a finished shutdown. The lock file holds
+   * the owner's pid, and a dead owner means a crash leftover, which must not
+   * block the wipe: the wipe removes the stale file with everything else.
+   */
+  function daemonHoldsLock(): boolean {
+    try {
+      const pid = Number.parseInt(readFileSync(join(dataDir(), 'daemon.lock'), 'utf8'), 10)
+      if (!Number.isInteger(pid)) return false
+      // Signal 0 delivers nothing; it only reports whether the pid exists.
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Polls the lock out, bounded so a hung daemon fails the wipe rather than the app. */
+  async function daemonLockHeld(): Promise<boolean> {
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      if (!daemonHoldsLock()) return false
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    return true
+  }
+
+  /**
+   * Relaunches rather than re-initialising in place: bringing the daemon, the
+   * mount and the window back up against an empty library is what startup
+   * already does, and a second path for it would only ever run here. Only
+   * this app starts daemons and it is already quitting, so nothing acquires
+   * the lock between the check and the wipe.
+   */
+  async function signOut(): Promise<void> {
+    if (!(await confirmSignOut())) return
+    beginQuit()
+    // Assigned to `quitting` like the before-quit path: `reviveDaemon` checks
+    // it, and a revive already awaiting its reachability probe would otherwise
+    // resume mid-teardown and respawn the daemon while the wipe runs.
+    quitting = teardown().catch((e) => log.error('app', 'sign_out_failed', { error: e as Error }))
+    await quitting
+    // stop() leaves an attached daemon alone and can time out on an owned one,
+    // and a wipe under a live daemon deletes the database it is still writing.
+    if (await Daemon.isReachable()) {
+      log.error('app', 'sign_out_daemon_still_up')
+      await warnWipeBlocked('A Sia daemon still holds the library. Stop it, then sign out again.')
+    } else if (await daemonLockHeld()) {
+      log.error('app', 'sign_out_daemon_still_closing')
+      await warnWipeBlocked('The daemon is still shutting down. Sign out again in a moment.')
+    } else {
+      try {
+        wipeLibrary()
+      } catch (e) {
+        log.error('app', 'wipe_failed', { error: e as Error })
+        await warnWipeBlocked('Clearing the local library failed. Open Logs, then sign out again.')
+      }
+    }
+    app.relaunch()
+    app.exit(0)
+  }
+
+  /**
    * Brings the daemon back if it dies while the app is up.
    *
    * The app owns the daemon's lifetime, so an app running over a dead daemon is
@@ -121,6 +188,9 @@ if (!app.requestSingleInstanceLock()) {
       // Reached once the window has rolled off enough restarts to try again.
       gaveUp = false
       restarts.push(now)
+      // Re-checked past the awaits above: a teardown that began while this
+      // was probing reachability must not have the daemon respawned under it.
+      if (quitting) return
       log.info('daemon', 'restarting')
       log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
     } finally {
@@ -138,7 +208,7 @@ if (!app.requestSingleInstanceLock()) {
     // Startup is the one place a failure leaves a running process with nothing
     // working and no window to report it in, so each step says what it did.
     try {
-      registerBridge(platform)
+      registerBridge(platform, () => void signOut())
       createTray()
       trayUp = true
       log.info('app', 'tray_ready')
@@ -154,6 +224,11 @@ if (!app.requestSingleInstanceLock()) {
         handoffDir,
       }
       log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
+      // Sign-out relaunches into this path. Without the check the user lands
+      // at a bare menu bar and has to find the tray icon to reach sign-in.
+      void Daemon.hasAccount().then((has) => {
+        if (!has) showMainWindow()
+      })
 
       try {
         await platform.start({
