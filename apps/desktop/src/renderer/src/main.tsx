@@ -11,6 +11,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createWindowService } from './service'
 import { Status } from './Status'
+import { Window } from './Window'
 import './styles.css'
 
 const isPopover = window.location.hash === '#popover'
@@ -25,8 +26,6 @@ const service = createWindowService()
 
 createRoot(root).render(
   <StrictMode>
-    <AppProvider value={service}>
-      {isPopover ? <Status /> : <p className="m-0 p-6 text-center text-secondary">Sia Storage</p>}
-    </AppProvider>
+    <AppProvider value={service}>{isPopover ? <Status /> : <Window />}</AppProvider>
   </StrictMode>,
 )

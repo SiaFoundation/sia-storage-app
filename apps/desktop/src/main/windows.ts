@@ -136,6 +136,14 @@ export function createMainWindow(): BrowserWindow {
   return window
 }
 
+/**
+ * Hides the window through its own close handler, so the dock tile goes with it
+ * rather than leaving the app looking like it still has a window open.
+ */
+export function hideMainWindow(): void {
+  mainWindow?.close()
+}
+
 export function showMainWindow(): void {
   const window = createMainWindow()
   if (process.platform === 'darwin') void app.dock?.show()

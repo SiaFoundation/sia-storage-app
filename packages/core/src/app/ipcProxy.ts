@@ -119,8 +119,15 @@ function applyCacheMessage(caches: AppCaches, msg: IpcMessage) {
 }
 
 export function createRemoteAppService(
-  invoke: (channel: string, ...args: any[]) => Promise<any>,
+  invoke: (channel: string, args: unknown[], timeoutMs?: number) => Promise<any>,
   onMessage?: (handler: (msg: IpcMessage) => void) => () => void,
+  opts?: {
+    /**
+     * Transport timeout per channel, for the few calls that outlive any
+     * default: an approval wait sits in a browser tab while a person decides.
+     */
+    timeouts?: Record<string, number>
+  },
 ): AppService {
   const caches: AppCaches = {
     tags: swrCacheBy(),
@@ -163,7 +170,7 @@ export function createRemoteAppService(
           if (key === 'caches') return caches
           if (!(key in memo)) {
             const channel = `${prefix}:${key}`
-            const fn = (...args: any[]) => invoke(channel, ...args)
+            const fn = (...args: any[]) => invoke(channel, args, opts?.timeouts?.[channel])
             memo[key] = new Proxy(fn, {
               get(_, subKey: string) {
                 if (subKey === 'caches') return caches
