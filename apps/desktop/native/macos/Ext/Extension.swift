@@ -10,9 +10,9 @@ import Foundation
 import OSLog
 import SiaShared
 
-// fileproviderd runs the extension out of reach of a terminal, so os_log is the
-// only way to see what it did. Read it with:
-//   log show --predicate 'subsystem == "sia.storage.fileprovider"' --last 5m
+/// fileproviderd runs the extension out of reach of a terminal, so os_log is
+/// the only way to see what it did:
+///   log show --predicate 'subsystem == "sia.storage.fileprovider"' --last 5m
 let fpLog = Logger(subsystem: "sia.storage.fileprovider", category: "extension")
 
 extension Logger {
@@ -51,20 +51,20 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     public required init(domain: NSFileProviderDomain) {
         self.domain = domain
         let rpc = Rpc(socketPath: SiaPaths.providerSocketFromExtension())
-        // Stamped into Info.plist at build time from the daemon's own version,
-        // so the two cannot drift apart within a build.
+        // This is the daemon's version, not the extension's: the build stamps
+        // apps/cli's package version into every bundle's Info.plist.
         let version =
             (Bundle.main.infoDictionary?["SiaDaemonVersion"] as? String) ?? "unknown"
         self.rpc = rpc
         self.handoff = Handoff()
         self.handshake = Handshake {
-            try await rpc.callDecoding(ProviderHello.self, Channel.hello, [version]).version
+            try await rpc.callDecoding(ProviderHello.self, Channel.hello, [version])
         }
         super.init()
 
         // Not .public: the socket sits in this extension's container, and a
         // container path holds the account name.
-        fpLog.info("init socket=\(SiaPaths.providerSocketFromExtension())")
+        fpLog.notice("init socket=\(SiaPaths.providerSocketFromExtension())")
         // Off the caller's thread: fileproviderd constructs the extension on a
         // thread it is waiting on, and both of these walk the filesystem.
         let handoff = self.handoff
@@ -79,24 +79,33 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         subscribeToChanges()
     }
 
-    /// Signals the working set when the library changes, reconnecting on drop:
-    /// only the provider may signal its own domain, and the OS keeps this
-    /// process alive across daemon restarts.
+    /// Tells the system the library moved, so it re-reads the working set.
+    ///
+    /// That set feeds search and the system's own change tracking. It does not
+    /// put folders on disk: the system drops items whose parent it has not
+    /// written out, which is what `warm` is for.
+    private func signalWorkingSet() {
+        guard let manager = NSFileProviderManager(for: domain) else {
+            fpLog.error("self-signal: no manager for this domain")
+            return
+        }
+        manager.signalEnumerator(for: .workingSet) { error in
+            if let error {
+                fpLog.failure("self-signal failed", error)
+            } else {
+                fpLog.debug("self-signal ok")
+            }
+        }
+    }
+
+    /// Holds the daemon's change stream open, reconnecting on drop, and signals
+    /// the working set from it. Only the provider may signal its own domain,
+    /// and the OS keeps this process alive across daemon restarts.
     private func subscribeToChanges() {
         let stream = RpcStream(socketPath: SiaPaths.providerSocketFromExtension()) {
             [weak self] event in
             guard event.scope == "library", let self else { return }
-            guard let manager = NSFileProviderManager(for: self.domain) else {
-                fpLog.error("self-signal: no manager for this domain")
-                return
-            }
-            manager.signalEnumerator(for: .workingSet) { error in
-                if let error {
-                    fpLog.failure("self-signal failed", error)
-                } else {
-                    fpLog.info("self-signal ok")
-                }
-            }
+            self.signalWorkingSet()
         }
         // Published before it starts: the other order leaves a window where
         // invalidate() finds no stream and the one just started outlives it.
@@ -113,12 +122,24 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 Task { [weak self] in
                     guard let self, !self.withLifecycle({ self.invalidated }) else { return }
                     await self.apply(self.availability.succeeded())
+                    // A library that never changes is never signalled, so the
+                    // system would hear about the working set only on an edit.
+                    self.signalWorkingSet()
                 }
             },
             onDisconnect: { [weak self] error in
                 fpLog.failure("change stream ended", error)
-                self?.noteDaemonAway()
-                self?.scheduleResubscribe()
+                // Synchronous, before any task hop: ready() compares it, so
+                // the cached agreement dies with the connection, not after it.
+                self?.streamEpoch.mutate { $0 += 1 }
+                // The reset completes before the reconnect is scheduled: the
+                // resubscribed stream's first callback must handshake afresh,
+                // not be served from the agreement cached for the old daemon.
+                Task { [weak self] in
+                    await self?.handshake.reset()
+                    self?.noteDaemonAway()
+                    self?.scheduleResubscribe()
+                }
             })
     }
 
@@ -156,7 +177,10 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// The user keeps browsing either way; what changes is that a disconnected
     /// domain stops being asked for updates, and Finder says why at the top of
     /// the folder instead of failing one operation at a time.
-    private func apply(_ action: AvailabilityAction) async {
+    private func apply(
+        _ action: AvailabilityAction,
+        reason: String = unreachableMessage
+    ) async {
         guard action != .none else { return }
         guard let manager = NSFileProviderManager(for: domain) else {
             // The domain went away underneath us, which is the one case where
@@ -167,13 +191,15 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         do {
             switch action {
             case .disconnect:
-                try await manager.disconnect(
-                    reason: unreachableMessage,
-                    options: .temporary)
-                fpLog.info("disconnected: the daemon is not answering")
+                try await manager.disconnect(reason: reason, options: .temporary)
+                // Two causes share this path, and the persisted line has to
+                // match the banner Finder shows for it.
+                fpLog.notice(
+                    "disconnected: \(reason == unreachableMessage ? "the daemon is not answering" : "the library changed", privacy: .public)"
+                )
             case .reconnect:
                 try await manager.reconnect()
-                fpLog.info("reconnected: the daemon is back")
+                fpLog.notice("reconnected: the daemon is back")
             case .none:
                 break
             }
@@ -186,6 +212,8 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// `settle` refuses every outage and nothing says why.
     static let gracePeriod: Double = 5
     static func now() -> Double { ProcessInfo.processInfo.systemUptime }
+
+    private let streamEpoch = LockedBox<Int>(0)
 
     private func withLifecycle<T>(_ body: () -> T) -> T {
         lifecycle.lock()
@@ -208,7 +236,19 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// extension alive across app upgrades, so a stale one would otherwise drive
     /// a surface it was not built against.
     private func ready() async throws {
-        try await handshake.ready()
+        do {
+            // The epoch marker is bumped synchronously when the stream drops,
+            // so a callback landing before the asynchronous reset still forces
+            // a fresh hello instead of riding the old daemon's agreement.
+            try await handshake.ready(epoch: streamEpoch.get())
+        } catch let error as HandshakeError {
+            // A mismatch is permanent, so it says so once at the top of the
+            // folder rather than failing every file the user touches.
+            if case .incompatible(let why) = error {
+                await apply(availability.incompatible(at: Self.now()), reason: why)
+            }
+            throw error
+        }
     }
 
     // MARK: - reads
@@ -243,7 +283,12 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     ) throws -> NSFileProviderEnumerator {
         // Its own scope, not an alias for the root: only its change feed spans
         // folders, which is what makes a file moving between two of them visible.
-        let gate = { [handshake] in try await handshake.ready() }
+        // Through the wrapper, not the handshake directly: a mismatch found
+        // while enumerating must disconnect the domain like any other callback.
+        let gate: @Sendable () async throws -> Void = { [weak self] in
+            guard let self else { throw HandshakeError.notEstablished }
+            try await self.ready()
+        }
         if containerItemIdentifier == .workingSet {
             return SiaEnumerator(rpc: rpc, containerId: Container.workingSet, ready: gate)
         }
@@ -264,7 +309,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         let progress = Progress(totalUnitCount: 100)
         Task {
             let destination = handoff.fetchDestination()
-            fpLog.info("fetch \(identifier.rawValue, privacy: .public)")
+            fpLog.debug("fetch \(identifier.rawValue, privacy: .public)")
             let poller = ProgressPoller(rpc: rpc, id: identifier.rawValue, progress: progress)
             defer { poller.stop() }
             do {
@@ -275,7 +320,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 let result = try await rpc.callDecoding(
                     ProviderFetchResult.self, Channel.fetch, [identifier.rawValue, destination])
                 progress.completedUnitCount = 100
-                fpLog.info("fetch ok \(result.bytes, privacy: .public) bytes")
+                fpLog.debug("fetch ok \(result.bytes, privacy: .public) bytes")
                 completionHandler(
                     URL(fileURLWithPath: destination), SiaItem(result.item), nil)
             } catch {
@@ -318,11 +363,11 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 }
                 // The name stays private: os_log redacts by default and this is
                 // the user's data, unlike the ids either side of it.
-                fpLog.info("create \(itemTemplate.filename) kind=\(isFolder ? "dir" : "file", privacy: .public)")
+                fpLog.debug("create \(itemTemplate.filename) kind=\(isFolder ? "dir" : "file", privacy: .public)")
                 let created = try await rpc.callDecoding(
                     ProviderItem.self, Channel.create, args)
                 staged = nil
-                fpLog.info("create ok \(created.id, privacy: .public)")
+                fpLog.debug("create ok \(created.id, privacy: .public)")
                 completionHandler(SiaItem(created), [], false, nil)
             } catch {
                 if let staged { handoff.discard(staged) }
@@ -347,7 +392,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 try await ready()
                 var latest: ProviderItem?
 
-                fpLog.info(
+                fpLog.debug(
                     "modify \(item.itemIdentifier.rawValue, privacy: .public) fields=\(changedFields.rawValue, privacy: .public)"
                 )
                 if changedFields.contains(.contents) {
@@ -380,7 +425,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                     completionHandler(nil, [], false, fpError(.noSuchItem, "Item vanished"))
                     return
                 }
-                fpLog.info("modify ok \(latest.id, privacy: .public)")
+                fpLog.debug("modify ok \(latest.id, privacy: .public)")
                 completionHandler(SiaItem(latest), [], false, nil)
             } catch {
                 if let staged { handoff.discard(staged) }
@@ -400,7 +445,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             do {
                 try await ready()
                 _ = try await rpc.call(Channel.trash, [identifier.rawValue])
-                fpLog.info("trashed \(identifier.rawValue, privacy: .public)")
+                fpLog.debug("trashed \(identifier.rawValue, privacy: .public)")
                 completionHandler(nil)
             } catch {
                 fpLog.failure("trash failed", error)
