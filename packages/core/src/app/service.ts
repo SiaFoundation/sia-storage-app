@@ -341,6 +341,8 @@ export interface AppService {
   directories: {
     /** Returns all directories with their file and subdirectory counts. */
     getAll(): Promise<DirectoryWithCount[]>
+    /** Returns the number of directories, without loading or counting into them. */
+    count(): Promise<number>
     /** Returns a directory by ID. */
     getById(id: string): Promise<Directory | null>
     /** Returns a directory by exact path match. */

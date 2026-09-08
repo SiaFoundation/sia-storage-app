@@ -31,6 +31,13 @@ extension Logger {
         self.error(
             "\(event, privacy: .public) \(id, privacy: .public): \(error.localizedDescription)")
     }
+
+    /// The same at `debug`, for one a retry is expected to clear. Only the
+    /// outcome of the last attempt is worth an entry that reaches disk.
+    func attemptFailed(_ event: StaticString, _ id: String, _ error: Error) {
+        self.debug(
+            "\(event, privacy: .public) \(id, privacy: .public): \(error.localizedDescription)")
+    }
 }
 
 @objc(FileProviderExtension)
@@ -98,6 +105,33 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         }
     }
 
+    /// Asks the system to write out every folder, so the first time one is
+    /// opened it is already on disk.
+    private func warm() {
+        guard let manager = NSFileProviderManager(for: domain) else { return }
+        let rpc = self.rpc
+        // Behind the same handshake as every callback: warming drives list and
+        // download requests, which must not reach a daemon whose version and
+        // library have not been agreed. Retained so a reconnect replaces the
+        // pass instead of racing it: two passes would interleave their
+        // completions in the shared progress tracker.
+        let task = Task { [handshake] in
+            do { try await handshake.ready() } catch { return }
+            await warmFolders(rpc: rpc, manager: manager)
+        }
+        let previous = withLifecycle { () -> Task<Void, Never>? in
+            let old = self.warmTask
+            self.warmTask = task
+            return old
+        }
+        previous?.cancel()
+    }
+
+    /// Stops a pass whose daemon went away; the next connect starts a new one.
+    private func cancelWarm() {
+        withLifecycle { warmTask }?.cancel()
+    }
+
     /// Holds the daemon's change stream open, reconnecting on drop, and signals
     /// the working set from it. Only the provider may signal its own domain,
     /// and the OS keeps this process alive across daemon restarts.
@@ -122,9 +156,10 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 Task { [weak self] in
                     guard let self, !self.withLifecycle({ self.invalidated }) else { return }
                     await self.apply(self.availability.succeeded())
-                    // A library that never changes is never signalled, so the
-                    // system would hear about the working set only on an edit.
+                    // Never-changing libraries are never signalled, and folders
+                    // are otherwise written out one at a time as they open.
                     self.signalWorkingSet()
+                    self.warm()
                 }
             },
             onDisconnect: { [weak self] error in
@@ -132,6 +167,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 // The reset completes before the reconnect is scheduled: the
                 // resubscribed stream's first callback must handshake afresh,
                 // not be served from the agreement cached for the old daemon.
+                self?.cancelWarm()
                 Task { [weak self] in
                     await self?.handshake.reset()
                     self?.noteDaemonAway()
@@ -209,6 +245,8 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// `settle` refuses every outage and nothing says why.
     static let gracePeriod: Double = 5
     static func now() -> Double { ProcessInfo.processInfo.systemUptime }
+
+    private var warmTask: Task<Void, Never>?
 
     private func withLifecycle<T>(_ body: () -> T) -> T {
         lifecycle.lock()

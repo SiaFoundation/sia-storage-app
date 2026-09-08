@@ -1,5 +1,6 @@
 import { readState, writeState } from '@siastorage/node-adapters'
 import { connectSdk, type CliApp } from '../../app'
+import type { Materializing } from '../materializing'
 import type { IpcHandlerMap } from './index'
 
 /** Handlers for daemon-process-level queries (not app state). */
@@ -7,6 +8,7 @@ export function registerStatusHandlers(
   handlers: IpcHandlerMap,
   app: CliApp,
   onShutdown: () => void,
+  materializing: Materializing,
 ): void {
   handlers.set('ping', async () => ({ ok: true }))
 
@@ -34,6 +36,21 @@ export function registerStatusHandlers(
       if (state) writeState(app.paths.statePath, { ...state, connected: true })
     }
     return { connected }
+  })
+
+  /**
+   * How far the OS shell has got through writing the library out. The folder
+   * total comes from the library rather than the shell, which only ever reports
+   * what it has already done.
+   */
+  handlers.set('materializing', async () => {
+    const { active, done } = materializing.state()
+    // A bare COUNT: getAll() scans every active file to build per-folder
+    // counts, real work to repeat on a 2-second poll while listings run.
+    const total = await app.service.directories.count()
+    // `done` is cumulative for the pass and `total` is live, so a folder
+    // deleted mid-pass could otherwise read as "3 of 2 ready".
+    return { active, done: Math.min(done, total), total }
   })
 
   handlers.set('shutdown', async () => {
