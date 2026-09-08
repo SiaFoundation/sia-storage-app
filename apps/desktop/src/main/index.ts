@@ -66,7 +66,7 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting) return
     beginQuit()
     quitting = teardown()
-      .catch((e) => log.error(`shutdown: ${(e as Error).message}`))
+      .catch((e) => log.error('app', 'shutdown_failed', { error: e as Error }))
       .finally(() => app.exit(0))
   })
 
@@ -114,15 +114,15 @@ if (!app.requestSingleInstanceLock()) {
       if (restarts.length >= MAX_RESTARTS) {
         if (!gaveUp) {
           gaveUp = true
-          log.error('daemon keeps dying; leaving it stopped')
+          log.error('daemon', 'gave_up_restarting')
         }
         return
       }
       // Reached once the window has rolled off enough restarts to try again.
       gaveUp = false
       restarts.push(now)
-      log.info('daemon is gone; starting it again')
-      log.info(`daemon ${await daemon.attach(spawn)}`)
+      log.info('daemon', 'restarting')
+      log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
     } finally {
       reviving = false
     }
@@ -141,7 +141,7 @@ if (!app.requestSingleInstanceLock()) {
       registerBridge(platform)
       createTray()
       trayUp = true
-      log.info('tray ready')
+      log.info('app', 'tray_ready')
 
       // The sandboxed extension can only reach a socket inside its own
       // container, so that path is what the daemon has to be told to serve.
@@ -153,7 +153,7 @@ if (!app.requestSingleInstanceLock()) {
         shellSocket,
         handoffDir,
       }
-      log.info(`daemon ${await daemon.attach(spawn)}`)
+      log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
 
       try {
         await platform.start({
@@ -161,11 +161,11 @@ if (!app.requestSingleInstanceLock()) {
           domainId: config.domainId,
           displayName: config.displayName,
         })
-        log.info(`mount ${platform.status()}`)
+        log.info('mount', 'state', { state: platform.status() })
       } catch (e) {
         // A missing shell is not fatal: the tray and the window still work, and
         // the status surface reads the mount state itself through `shellStatus`.
-        log.error(`mount unavailable: ${(e as Error).message}`)
+        log.error('mount', 'unavailable', { error: e as Error })
       }
 
       changes = new DaemonStream(
@@ -179,9 +179,19 @@ if (!app.requestSingleInstanceLock()) {
         },
       )
       changes.start()
-      log.info('subscribed to the daemon')
+      log.info('app', 'subscribed')
     } catch (e) {
-      log.error(`startup failed: ${(e as Error).stack ?? String(e)}`)
+      const err = e as Error
+      // The formatter keeps an Error to name and message, and here the stack
+      // is the diagnostic: it names the startup step that threw. Flattened,
+      // because the plain log format is one line per entry.
+      log.error('app', 'startup_failed', {
+        error: err,
+        stack: (err.stack ?? '')
+          .split('\n')
+          .map((frame) => frame.trim())
+          .join(' | '),
+      })
       // The tray carries the only Quit, so failing before it exists leaves a
       // process with no window and no icon that can only be force-quit.
       if (!trayUp) app.exit(1)

@@ -1,13 +1,13 @@
 /*
- * Main-process logging.
+ * Main-process logging, through the same logger the daemon uses.
  *
- * A tray app has nowhere to show a startup failure: there is no window yet and
- * the tray icon looks the same whether everything worked or nothing did. It
- * also has no terminal once packaged, and Electron's main process does not
- * reliably reach stdout on macOS even when started from one, so the log is a
- * file next to the daemon's.
+ * A tray app has nowhere to show a startup failure: no window yet, an icon that
+ * looks the same either way, and no terminal once packaged. So the log is a
+ * file next to the daemon's. The appender is here rather than from the node
+ * adapters because those carry database bindings this process has no use for.
  */
 
+import { addAppender, formatPlainLog, logger, type LogEntry } from '@siastorage/logger'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { desktopLogPath } from './paths'
@@ -16,8 +16,8 @@ const LOG_PATH = desktopLogPath()
 
 let ready = false
 
-function write(level: string, message: string): void {
-  const line = `${new Date().toISOString()} ${level} [main] ${message}\n`
+function write(entry: LogEntry): void {
+  const line = `${formatPlainLog(entry)}\n`
   try {
     if (!ready) {
       // 0700: this directory also holds the account secrets, the socket and
@@ -34,13 +34,7 @@ function write(level: string, message: string): void {
   }
 }
 
-export const logPath = LOG_PATH
+addAppender({ write })
 
-export const log = {
-  info(message: string): void {
-    write('INFO ', message)
-  },
-  error(message: string): void {
-    write('ERROR', message)
-  },
-}
+export const logPath = LOG_PATH
+export { logger as log }
