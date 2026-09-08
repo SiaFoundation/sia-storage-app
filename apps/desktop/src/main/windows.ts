@@ -63,12 +63,19 @@ function load(window: BrowserWindow, hash: string): void {
  * whatever claims it, so an unchecked URL is a way out of the sandbox the
  * renderer is otherwise held to.
  */
-export function openExternally(url: string): { action: 'deny' } {
+export function openWebUrl(url: string): Promise<void> | null {
   try {
-    if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url)
+    if (/^https?:$/.test(new URL(url).protocol)) return shell.openExternal(url)
   } catch {
     // An unparseable URL is not one worth opening.
   }
+  return null
+}
+
+/** The window-open form: the handler must answer synchronously, so a browser
+ * that fails to launch can only be dropped here, not reported. */
+export function openExternally(url: string): { action: 'deny' } {
+  void openWebUrl(url)?.catch(() => {})
   return { action: 'deny' }
 }
 
@@ -134,6 +141,14 @@ export function createMainWindow(): BrowserWindow {
   load(window, 'main')
   mainWindow = window
   return window
+}
+
+/**
+ * Hides the window through its own close handler, so the dock tile goes with it
+ * rather than leaving the app looking like it still has a window open.
+ */
+export function hideMainWindow(): void {
+  mainWindow?.close()
 }
 
 export function showMainWindow(): void {
