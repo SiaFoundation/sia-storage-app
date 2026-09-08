@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import * as fs from 'fs'
 import * as net from 'net'
+import * as path from 'path'
 
 /**
  * The connection a request arrived on, for the rare handler that outlives its
@@ -26,6 +27,13 @@ export type IpcServer = {
 }
 
 export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer {
+  // The provider socket lives in the File Provider extension's container,
+  // which does not exist until the system first loads the extension, so on a
+  // fresh machine the bind would fail with ENOENT and never be retried.
+  // Owner-only: in a directory a permissive umask left group-writable, any
+  // local user could replace the socket, and the chmod below only covers the
+  // socket file itself.
+  fs.mkdirSync(path.dirname(sockPath), { recursive: true, mode: 0o700 })
   // Remove stale socket file
   try {
     fs.unlinkSync(sockPath)
@@ -103,10 +111,41 @@ async function handleMessage(
 ): Promise<void> {
   try {
     const { id, method, params } = JSON.parse(line)
+    // The client picks `method`, and the plain log format is line-oriented,
+    // so an unprintable character in it could forge or break log lines.
+    const logMethod = String(method)
+      .replace(/[^\x20-\x7e]/g, '?')
+      .slice(0, 128)
+    // The only record of what a client asked for, and clients are separate
+    // processes, so a slow caller is otherwise a slow daemon. Logged on
+    // arrival too: a subscribe holds its promise open for the connection's
+    // lifetime and would never reach the completion line.
+    logger.debug('ipc', 'request', { method: logMethod })
+    const started = performance.now()
     try {
       const result = await handler(method, params ?? {}, connection)
-      socket.write(`${JSON.stringify({ id, ok: true, result })}\n`)
+      // Serialized before the completion log: a result JSON cannot represent
+      // throws here, and logging first would record the same request as both
+      // done and failed.
+      const frame = `${JSON.stringify({ id, ok: true, result })}\n`
+      logger.debug('ipc', 'request_done', {
+        method: logMethod,
+        ms: Math.round(performance.now() - started),
+      })
+      socket.write(frame)
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      logger.debug('ipc', 'request_failed', {
+        method: logMethod,
+        ms: Math.round(performance.now() - started),
+        // An error can quote a URL, and a user-entered indexer URL can carry
+        // credentials in its authority part. Unprintables go the way of the
+        // method's: an upstream newline would forge extra log lines.
+        error: message
+          .replace(/\/\/[^/\s]+@/g, '//<redacted>@')
+          .replace(/[^\x20-\x7e]/g, '?')
+          .slice(0, 512),
+      })
       socket.write(
         `${JSON.stringify({
           id,
@@ -116,6 +155,8 @@ async function handleMessage(
       )
     }
   } catch {
+    // The only record of an unparseable frame; there is no method to name.
+    logger.debug('ipc', 'request_failed', { method: '(malformed)', error: 'invalid JSON' })
     socket.write(`${JSON.stringify({ ok: false, error: 'Invalid JSON' })}\n`)
   }
 }
