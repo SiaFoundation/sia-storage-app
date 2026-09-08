@@ -31,19 +31,20 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
     openExternally(url)
   })
 
-  // Not a facade method: `connect` is the daemon's own, alongside ping and
-  // shutdown, so it does not arrive through the reflected `rpc` channel.
-  ipcMain.handle('daemon:connect', () => call('connect', [], 60_000))
-
   // The popover sizes to its content the way a menu does, so a section that
   // only appears mid-transfer does not leave dead space when it is gone.
   ipcMain.on('window:height', (event, height: number) => {
     if (typeof height === 'number' && height > 0) resizeToContent(event.sender, height)
   })
 
-  // Asked rather than remembered: the window cannot infer this from a library
-  // read, which keeps its last answer when the daemon stops answering.
+  // Asked, not inferred from a library read that keeps its last answer. Not a
+  // facade method either: `connect` is the daemon's own, like ping and shutdown.
+  ipcMain.handle('daemon:connect', () => call('connect', [], 60_000))
+
   ipcMain.handle('shell:daemon', () => Daemon.isReachable())
+  // The daemon's own channel: how far the OS shell has got through writing the
+  // library out, which it infers from what the shell has asked it for.
+  ipcMain.handle('shell:materializing', () => call('materializing'))
   ipcMain.handle('shell:status', () => platform.status())
   ipcMain.handle('shell:mountPath', () => platform.mountPath())
 

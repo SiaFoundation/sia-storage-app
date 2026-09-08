@@ -29,7 +29,11 @@ export type Status = {
   domain: DomainState
   daemonReachable: boolean
   mountPath: string | null
+  materializing: Materializing
 }
+
+/** How far the OS shell has got through writing the library out. */
+export type Materializing = { active: boolean; done: number; total: number }
 
 /** Never past the total, so a retry pass cannot read as finished or overflow. */
 const uploadsDone = (s: Status): number => Math.min(s.uploadsDone, s.uploadsTotal)
@@ -90,6 +94,7 @@ export function indicator(s: Status): 'red' | 'orange' | 'green' | 'accent' {
     case 'disconnected':
       return s.connectionError ? 'red' : 'orange'
     case 'transferring':
+    case 'preparing':
       return 'accent'
     case 'ok':
       return 'green'
@@ -103,13 +108,22 @@ export function indicator(s: Status): 'red' | 'orange' | 'green' | 'accent' {
  * end up describing different problems. Problems outrank progress: a transfer
  * running over a broken mount is still a broken mount.
  */
-type Condition = 'daemon-down' | 'disconnected' | 'mount-error' | 'transferring' | 'ok'
+type Condition =
+  | 'daemon-down'
+  | 'disconnected'
+  | 'mount-error'
+  | 'transferring'
+  | 'preparing'
+  | 'ok'
 
 function condition(s: Status): Condition {
   if (!s.daemonReachable) return 'daemon-down'
   if (!s.connected) return 'disconnected'
   if (s.domain === 'error') return 'mount-error'
   if (transferInFlight(s)) return 'transferring'
+  // Below a transfer: someone's files moving matters more than a one-off pass
+  // the system makes over a library that already works.
+  if (s.materializing.active) return 'preparing'
   return 'ok'
 }
 
@@ -124,9 +138,22 @@ export function activity(s: Status): string {
       return 'Finder folder unavailable'
     case 'transferring':
       return transferLabel(s)
+    case 'preparing':
+      return 'Preparing folders'
     case 'ok':
       return 'Up to date'
   }
+}
+
+/**
+ * What macOS is doing, in the words of someone waiting for it. The count is
+ * what the system has written out, not what it has been asked for, so it only
+ * ever moves forwards.
+ */
+function preparingDetail(s: Status): string {
+  const { done, total } = s.materializing
+  const folders = total > 0 ? `${done} of ${total}` : String(done)
+  return `macOS is reading your folders, ${folders} ready`
 }
 
 export function activityDetail(s: Status): string | null {
@@ -137,6 +164,8 @@ export function activityDetail(s: Status): string | null {
       return s.connectionError ?? 'Waiting to reach the indexer'
     case 'mount-error':
       return 'The folder could not be registered with macOS'
+    case 'preparing':
+      return preparingDetail(s)
     default:
       return null
   }
