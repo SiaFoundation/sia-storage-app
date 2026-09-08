@@ -45,7 +45,7 @@ function read(): DesktopConfig {
     }
     return parsed as DesktopConfig
   } catch (e) {
-    log.info(`no packaged config at ${path} (${(e as Error).message}), using the dev identity`)
+    log.info('config', 'using_dev_identity', { path, error: e as Error })
     return DEVELOPMENT
   }
 }

@@ -95,14 +95,14 @@ export class Daemon {
     // Only checked when it names a path: `SIA_DAEMON_RUNTIME` can point at an
     // interpreter on PATH, and testing a bare command would reject every one.
     if (config.runtime.includes('/') && !existsSync(config.runtime)) {
-      log.error(`cannot start the daemon: ${config.runtime} is missing`)
+      log.error('daemon', 'runtime_missing', { runtime: config.runtime })
       return
     }
     if (!existsSync(config.script)) {
-      log.error(`cannot start the daemon: ${config.script} is missing`)
+      log.error('daemon', 'script_missing', { script: config.script })
       return
     }
-    log.info(`starting the daemon with ${config.runtime}`)
+    log.info('daemon', 'starting', { runtime: config.runtime })
     this.startedHere = true
     // The daemon logs to stdout, so this redirect is its file: ignoring stdio
     // would leave `daemon.log` empty and a failed start undiagnosable.
@@ -127,7 +127,7 @@ export class Daemon {
       // Ownership goes back: a spawn that never produced a process must not
       // leave this app quitting a daemon someone else started later.
       this.startedHere = false
-      log.error(`the daemon did not start: ${e.message}`)
+      log.error('daemon', 'start_failed', { error: e })
     })
     // Outlives this process on purpose: sync should survive the UI quitting.
     child.unref()

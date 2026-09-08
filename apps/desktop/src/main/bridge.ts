@@ -16,7 +16,7 @@ import { beginQuit, resizeToContent } from './windows'
 
 async function openPath(path: string): Promise<void> {
   const reason = await shell.openPath(path)
-  if (reason) log.error(`could not open ${path}: ${reason}`)
+  if (reason) log.error('shell', 'open_failed', { path, reason })
 }
 
 export function registerBridge(platform: PlatformIntegration): void {
