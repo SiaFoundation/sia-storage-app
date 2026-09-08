@@ -143,7 +143,7 @@ export class DaemonStream {
           } catch {
             // Reported rather than reconnected: the daemon sent something this
             // build cannot read, and retrying the same stream would loop on it.
-            log.error(`the daemon sent a frame this build cannot read: ${line.slice(0, 200)}`)
+            log.error('daemon', 'unreadable_frame', { frame: line.slice(0, 200) })
           }
         }
         newline = buffer.indexOf('\n')

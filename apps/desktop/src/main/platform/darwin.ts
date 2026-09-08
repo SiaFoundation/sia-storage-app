@@ -71,7 +71,7 @@ export function createDarwinIntegration(): PlatformIntegration {
     async start(config: ShellConfig) {
       if (!agentInstalled()) {
         state = 'unsupported'
-        log.info(`no domain agent in this build, so ${config.domainId} gets no Finder folder`)
+        log.info('mount', 'no_domain_agent', { domainId: config.domainId })
         return
       }
 
@@ -85,7 +85,7 @@ export function createDarwinIntegration(): PlatformIntegration {
       try {
         await runAgent(['register', config.domainId, config.displayName])
       } catch (e) {
-        log.error(`domain agent: ${(e as Error).message}`)
+        log.error('mount', 'agent_failed', { error: e as Error })
         state = 'error'
         return
       }
@@ -94,11 +94,11 @@ export function createDarwinIntegration(): PlatformIntegration {
         // leaves the last directory behind, which would read as a live mount.
         const { domains } = await runAgent(['list'])
         registered = domains?.includes(config.domainId) ?? false
-        if (!registered) log.error(`domain ${config.domainId} did not register`)
+        if (!registered) log.error('mount', 'register_did_not_stick', { domainId: config.domainId })
       } catch (e) {
         // The confirmation failed, not the registration, so this is unknown
         // rather than failed and `findMount` can still settle it later.
-        log.error(`domain agent: ${(e as Error).message}`)
+        log.error('mount', 'agent_failed', { error: e as Error })
         confirmed = false
       }
       // The system creates the directory on its own schedule, so a miss after a
@@ -120,7 +120,7 @@ export function createDarwinIntegration(): PlatformIntegration {
         let timer: ReturnType<typeof setTimeout> | undefined
         await Promise.race([
           runAgent(['hide', domainId]).catch((e) =>
-            log.error(`domain agent: ${(e as Error).message}`),
+            log.error('mount', 'agent_failed', { error: e as Error }),
           ),
           new Promise((resolve) => {
             timer = setTimeout(resolve, HIDE_TIMEOUT_MS)

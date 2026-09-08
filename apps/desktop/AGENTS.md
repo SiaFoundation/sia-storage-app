@@ -10,12 +10,12 @@ the rules differ by destination.
 
 ## Logging from the app and the daemon
 
-Both write files in the daemon's data directory, `~/.sia` unless
-`SIA_DATA_DIR` says otherwise: `desktop.log` and `daemon.log`.
-Nothing forwards them, and they leave the machine only when someone attaches
-them to a report, so name the directory, socket or identifier a message is
-about: "handoff directory is not writable" without saying which directory is
-not a diagnostic.
+Both write files in the daemon's data directory, `~/.sia` unless `SIA_DATA_DIR`
+says otherwise, through `@siastorage/logger`, taking a scope, a snake_case event
+name and a field object. Nothing forwards them, and they leave the machine only
+when someone attaches them to a report, so name the directory, socket or
+identifier a message is about: "handoff directory is not writable" without
+saying which directory is not a diagnostic.
 
 ## Logging from the extension
 

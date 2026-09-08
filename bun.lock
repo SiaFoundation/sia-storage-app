@@ -57,6 +57,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@siastorage/core": "workspace:*",
+        "@siastorage/logger": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
         "swr": "2.4.1",
