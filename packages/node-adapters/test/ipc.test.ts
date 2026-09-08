@@ -1,7 +1,9 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { sendIpcCommand, startIpcServer } from '../src/ipc'
+import { addAppender, removeAppender } from '@siastorage/logger'
+import type { LogEntry } from '@siastorage/logger'
+import { connectToIpc, sendIpcCommand, startIpcServer } from '../src/ipc'
 import type { IpcServer } from '../src/ipc'
 
 let tempDir: string
@@ -22,6 +24,116 @@ afterEach(() => {
 function waitForServer(): Promise<void> {
   return new Promise((r) => setTimeout(r, 50))
 }
+
+describe('request logging', () => {
+  it('logs a request on arrival and its completion with a duration', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => 'ok')
+      await waitForServer()
+      await sendIpcCommand(sockPath, 'ping')
+      const events = entries.filter((e) => e.scope === 'ipc').map((e) => e.message)
+      expect(events).toEqual(expect.arrayContaining(['request', 'request_done']))
+      const done = entries.find((e) => e.message === 'request_done')
+      expect(typeof done?.data?.ms).toBe('number')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+
+  it('redacts credentials quoted in a failed request error', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => {
+        throw new Error('fetch https://user:pa@ss@indexer.test failed')
+      })
+      await waitForServer()
+      await expect(sendIpcCommand(sockPath, 'boom')).rejects.toThrow()
+      const failed = entries.find((e) => e.message === 'request_failed')
+      expect(failed?.data?.error).toBe('fetch https://<redacted>@indexer.test failed')
+      expect(typeof failed?.data?.ms).toBe('number')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+
+  it('a result JSON cannot serialize logs one failure, never done and failed both', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => ({ big: 1n }))
+      await waitForServer()
+      await expect(sendIpcCommand(sockPath, 'big')).rejects.toThrow()
+      const events = entries.filter((e) => e.scope === 'ipc').map((e) => e.message)
+      expect(events.filter((event) => event === 'request_failed')).toHaveLength(1)
+      expect(events).not.toContain('request_done')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+
+  it('an unprintable character in a method cannot break the log line', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => 'ok')
+      await waitForServer()
+      await sendIpcCommand(sockPath, 'ping\nfake=line')
+      const request = entries.find((e) => e.message === 'request')
+      expect(request?.data?.method).toBe('ping?fake=line')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+
+  it('creates the socket directory when it does not exist yet', async () => {
+    const nested = path.join(tempDir, 'container', 'not', 'yet', 'made', 'test.sock')
+    server = startIpcServer(nested, async () => 'ok')
+    await waitForServer()
+    expect(await sendIpcCommand(nested, 'ping')).toBe('ok')
+  })
+
+  it('a newline in an error message cannot forge a log line', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => {
+        throw new Error('first line\nforged=line')
+      })
+      await waitForServer()
+      await expect(sendIpcCommand(sockPath, 'boom')).rejects.toThrow()
+      const failed = entries.find((e) => e.message === 'request_failed')
+      expect(failed?.data?.error).toBe('first line?forged=line')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+
+  it('a malformed frame is logged as a failed request', async () => {
+    const entries: LogEntry[] = []
+    const appender = { write: (e: LogEntry) => entries.push(e) }
+    addAppender(appender)
+    try {
+      server = startIpcServer(sockPath, async () => 'ok')
+      await waitForServer()
+      const socket = await connectToIpc(sockPath)
+      socket.write('not json\n')
+      await new Promise((resolve) => socket.once('data', resolve))
+      socket.end()
+      const failed = entries.find((e) => e.message === 'request_failed')
+      expect(failed?.data?.method).toBe('(malformed)')
+    } finally {
+      removeAppender(appender)
+    }
+  })
+})
 
 describe('IPC server and client', () => {
   it('server starts and client can send command', async () => {
