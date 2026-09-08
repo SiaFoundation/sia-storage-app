@@ -25,6 +25,12 @@ describe('Change events', () => {
     await app.waitForCondition(() => seen.includes('library'), 5000)
   })
 
+  it('signals a library change when a folder is created', async () => {
+    await app.app.directories.create('Docs')
+
+    await app.waitForCondition(() => seen.includes('library'), 5000)
+  })
+
   it('signals a connection change when connectivity flips', async () => {
     app.setConnected(false)
 

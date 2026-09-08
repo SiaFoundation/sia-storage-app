@@ -39,6 +39,8 @@ public struct ProviderItem: Decodable, Equatable {
 public struct ProviderPage: Decodable {
     public let items: [ProviderItem]
     public let cursor: String?
+    /// Only on the final page: the change anchor where the listing stopped.
+    public let anchor: String?
 }
 
 public struct ProviderChanges: Decodable {

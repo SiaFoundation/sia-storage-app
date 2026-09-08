@@ -26,12 +26,15 @@ import {
   parseDirectoryProviderId,
   WORKING_SET_ID,
   type ProviderItem,
+  type ProviderPage,
 } from '../../types/provider'
 import type { AppService } from '../service'
-import { folderFingerprint, formatAnchor, parseAnchor } from '../providerAnchor'
+import { ANCHOR_START, folderFingerprint, formatAnchor, parseAnchor } from '../providerAnchor'
 
 /** Rows per page. */
 const MAX_PAGE_SIZE = 500
+/** Marks a working set cursor as still working through folders. */
+const FOLDER_CURSOR = 'dirs:'
 
 export type ProviderNamespaceDeps = {
   getService: () => AppService
@@ -212,17 +215,82 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
   }
 
   /**
+   * The offset into the working set's folders plus the folder-set fingerprint
+   * taken as the listing began, or null once it has moved on to files. An
+   * absent cursor is the start, which is the first page of folders.
+   */
+  function parseFolderCursor(
+    cursor: string | undefined,
+  ): { offset: number; fingerprint: string | null } | null {
+    if (cursor === undefined) return { offset: 0, fingerprint: null }
+    if (!cursor.startsWith(FOLDER_CURSOR)) return null
+    const match = /^(\d+):(.*)$/.exec(cursor.slice(FOLDER_CURSOR.length))
+    if (!match) return null
+    const offset = Number(match[1])
+    return Number.isSafeInteger(offset) ? { offset, fingerprint: match[2] || null } : null
+  }
+
+  /**
+   * The working set's folder fingerprint covers path as well as id: a renamed
+   * or moved folder keeps its id, and this scope re-sends no folder items that
+   * could carry the new name, so only an expiry makes the change visible.
+   */
+  function workingSetFingerprint(directories: Directory[]): string {
+    return folderFingerprint(directories.map((dir) => `${dir.id}:${dir.path}`))
+  }
+
+  /**
+   * One page of the library's folders, each under its parent.
+   *
+   * Shallowest first, then by path. A client working through this in order
+   * reaches the folders someone sees on opening the mount before it reaches
+   * anything nested, which is the order they are most likely to be wanted in.
+   * It also puts every parent on the same page as its children or an earlier
+   * one, and gives the offset the same meaning from one page to the next.
+   *
+   * The fingerprint is taken on the first page and carried through the
+   * cursor: pages read the live table, so a change mid-listing can skip or
+   * repeat a folder, and handing the starting fingerprint to the delta feed
+   * is what makes the first change request after such a listing expire.
+   */
+  async function listWorkingSetFolders(
+    offset: number,
+    fingerprint: string | null,
+  ): Promise<ProviderPage> {
+    const depth = (path: string) => path.split('/').length
+    const directories = await ops.queryAllDirectories(db)
+    directories.sort(
+      (a, b) => depth(a.path) - depth(b.path) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    )
+    // Parents are resolved against the whole set, not the page: a folder's
+    // parent is named by path and the system wants the parent's id.
+    const idByPath = new Map(directories.map((dir) => [dir.path, dir.id]))
+
+    const items = directories.slice(offset, offset + pageSize).map((dir) => {
+      const parentPath = ops.directoryParentPath(dir.path)
+      const parentId = parentPath === null ? undefined : idByPath.get(parentPath)
+      return directoryToItem(dir, parentId ? directoryProviderId(parentId) : null)
+    })
+
+    const started = fingerprint ?? workingSetFingerprint(directories)
+    const next = offset + items.length
+    // Handing over to the file phase, which starts from the beginning of the
+    // change clock, is what makes the two read as one listing.
+    const cursor =
+      next < directories.length
+        ? `${FOLDER_CURSOR}${next}:${started}`
+        : formatAnchor(ANCHOR_START, started)
+    return { items, cursor }
+  }
+
+  /**
    * Rejects any handoff path outside the directory the host nominated.
    *
-   * The shell runs in a different trust domain, so an unchecked path would let
-   * it name any file the daemon can reach, both to read from and to overwrite.
-   * The check resolves `..` before comparing, and requires a separator after
-   * the prefix so a sibling directory sharing a name prefix cannot pass.
-   *
-   * A path is text here and nothing else, so a symlink planted inside the
-   * handoff directory passes this test. It is refused where it is opened, in
-   * the adapter, the only place the link is still distinguishable from what it
-   * points at.
+   * The shell is a different trust domain, so an unchecked path would name any
+   * file the daemon can reach. `..` resolves before comparing and a separator
+   * is required after the prefix, so a sibling name cannot pass. A path is text
+   * here, so a planted symlink passes and is refused in the adapter, the only
+   * place it is still distinguishable from what it points at.
    */
   function requireHandoffPath(candidate: string): string {
     if (!handoffDir) {
@@ -279,8 +347,28 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     item,
 
     async list(folderId, cursor) {
-      // The working set has no listing; it exists for the change feed.
-      if (folderId === WORKING_SET_ID) return { items: [] }
+      /*
+       * The whole library: what the system is told about without anyone having
+       * browsed to it, because an extension tracking nothing owes it everything.
+       * Folders first a page at a time, then files, so no reply is unbounded.
+       * The file phase pages on the change cursor the delta feed uses, so a
+       * client that reads the set and then follows changes never translates
+       * between two cursor spaces.
+       */
+      if (folderId === WORKING_SET_ID) {
+        const folderPage = parseFolderCursor(cursor)
+        if (folderPage !== null) {
+          return listWorkingSetFolders(folderPage.offset, folderPage.fingerprint)
+        }
+
+        const anchor = parseAnchor(cursor ?? '')
+        const page = await ops.queryProviderChanges(db, null, anchor, pageSize)
+        const items = await itemsForFiles(page.changed, parentOf)
+        // The file phase carries the folder-phase fingerprint forward, and the
+        // final page hands both to the delta feed as its starting anchor.
+        const next = formatAnchor(page.cursor, anchor.folders)
+        return page.hasMore ? { items, cursor: next } : { items, anchor: next }
+      }
 
       const path = await folderPath(folderId)
       // A folder that vanished between the OS listing it and asking for its
@@ -313,14 +401,26 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
       // Every folder at once. A file leaving one changes neither that folder's
       // contents nor the new one's in a way a per-folder read can express, so
-      // this is where a move becomes visible. It lists no folders of its own,
-      // so it has no folder set to compare.
+      // this is where a move becomes visible. The listing reported every
+      // folder, so a created, renamed, moved or deleted one expires the anchor
+      // the same way a changed child set does per folder: there is no row to
+      // report a deletion from, and no folder item is re-sent for a rename.
       if (folderId === WORKING_SET_ID) {
+        const folders = workingSetFingerprint(await ops.queryAllDirectories(db))
+        if (since.folders !== '' && since.folders !== folders) {
+          return {
+            items: [],
+            deletedIds: [],
+            anchor: formatAnchor(since, folders),
+            hasMore: false,
+            expired: true,
+          }
+        }
         const page = await ops.queryProviderChanges(db, null, since, pageSize)
         return {
           items: await itemsForFiles(page.changed, parentOf),
           deletedIds: page.removed,
-          anchor: formatAnchor(page.cursor, ''),
+          anchor: formatAnchor(page.cursor, folders),
           hasMore: page.hasMore,
           expired: false,
         }
