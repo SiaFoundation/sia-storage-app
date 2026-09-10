@@ -525,7 +525,7 @@ mod tests {
                   VALUES (?, 0, ?, 0, '', 0, ?, '')",
                 params![id, name, updated_at],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -536,7 +536,7 @@ mod tests {
     async fn needs_sync_up(db: &Db, object_id: &str, indexer_url: &str) -> i64 {
         let (object_id, indexer_url) = (object_id.to_string(), indexer_url.to_string());
         db.transaction(move |c| {
-            Ok(c.query_row(
+            Ok::<_, DbError>(c.query_row(
                 "SELECT needsSyncUp FROM objects WHERE id = ? AND indexerURL = ?",
                 params![object_id, indexer_url],
                 |r| r.get::<_, i64>(0),

@@ -305,9 +305,11 @@ mod tests {
     }
 
     async fn log_count(db: &Db) -> i64 {
-        db.transaction(|c| Ok(c.query_row("SELECT COUNT(*) FROM logs", [], |r| r.get(0))?))
-            .await
-            .unwrap()
+        db.transaction(|c| {
+            Ok::<_, DbError>(c.query_row("SELECT COUNT(*) FROM logs", [], |r| r.get(0))?)
+        })
+        .await
+        .unwrap()
     }
 
     fn entry(level: LogLevel, scope: &str, created_at: i64) -> LogInsert {
@@ -336,7 +338,7 @@ mod tests {
                     created_at,
                 ],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
