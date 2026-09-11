@@ -1,3 +1,11 @@
+## 0.0.21-rc.0 (2026-09-11)
+
+### Fixes
+
+- Importing the package no longer throws where `process` is undefined, such as a browser renderer.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+
 ## 0.0.20 (2026-08-27)
 
 ### Features
