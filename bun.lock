@@ -91,7 +91,7 @@
     },
     "apps/mobile": {
       "name": "@siastorage/mobile",
-      "version": "1.14.1",
+      "version": "1.14.2-rc.0",
       "dependencies": {
         "@azure/core-asynciterator-polyfill": "1.0.2",
         "@bacons/text-decoder": "0.0.0",
@@ -180,7 +180,7 @@
     },
     "packages/core": {
       "name": "@siastorage/core",
-      "version": "0.0.20",
+      "version": "0.0.21-rc.0",
       "dependencies": {
         "@siastorage/logger": "workspace:*",
         "zod": "4.3.6",

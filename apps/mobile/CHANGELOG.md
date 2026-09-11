@@ -2,6 +2,14 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.14.2-rc.0 (2026-09-11)
+
+### Fixes
+
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- Log video playback failures so they can be diagnosed instead of failing silently.
+
 ## 1.14.1 (2026-08-27)
 
 ### Fixes
