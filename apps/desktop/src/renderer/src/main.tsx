@@ -26,7 +26,7 @@ const service = createWindowService()
 createRoot(root).render(
   <StrictMode>
     <AppProvider value={service}>
-      {isPopover ? <Status /> : <p className="placeholder">Sia Storage</p>}
+      {isPopover ? <Status /> : <p className="m-0 p-6 text-center text-secondary">Sia Storage</p>}
     </AppProvider>
   </StrictMode>,
 )
