@@ -23,6 +23,10 @@ const api = {
   /** Reports the height the content needs, so the popover can size to it. */
   reportHeight: (height: number) => ipcRenderer.send('window:height', height),
 
+  openUrl: (url: string) => ipcRenderer.invoke('open:url', url),
+  /** Asks the daemon to wire an SDK from a key stored since it came up. */
+  connectDaemon: () => ipcRenderer.invoke('daemon:connect'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
   openMount: () => ipcRenderer.invoke('open:mount'),
   openLogs: () => ipcRenderer.invoke('open:logs'),
   quit: () => ipcRenderer.invoke('app:quit'),

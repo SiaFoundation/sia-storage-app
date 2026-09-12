@@ -5,8 +5,8 @@
  * state, which `useStatus` polls while a mount is settling.
  */
 
-import { useEffect, useRef } from 'react'
 import { sia } from './api'
+import { useReportedHeight } from './height'
 import {
   ArrowCircle,
   CheckCircle,
@@ -105,19 +105,7 @@ function Row({
 
 export function Status() {
   const status = useStatus()
-  const root = useRef<HTMLDivElement>(null)
-
-  // Observed rather than measured once, because rows come and go with state and
-  // the window should be only as tall as what it shows.
-  useEffect(() => {
-    const element = root.current
-    if (!element) return
-    const report = () => sia.reportHeight(element.getBoundingClientRect().height)
-    report()
-    const observer = new ResizeObserver(report)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
+  const root = useReportedHeight<HTMLDivElement>()
 
   const mounted = status.domain === 'mounted'
   // A build that cannot mount is not a mount that failed, so it does not warn.

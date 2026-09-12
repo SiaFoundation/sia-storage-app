@@ -13,7 +13,15 @@ import { sia } from './api'
 
 export function createWindowService(): AppService {
   return createRemoteAppService(
-    (channel: string, ...args: unknown[]) => sia.rpc(channel, args),
+    (channel, args, timeoutMs) => sia.rpc(channel, args, timeoutMs),
     (handler) => sia.onCache(handler),
+    {
+      // Both outlive the transport's default: approval waits on a person in a
+      // browser tab, and register round-trips the indexer with the new key.
+      timeouts: {
+        'ds:auth:builder:waitForApproval': 5 * 60 * 1000,
+        'ds:auth:builder:register': 60 * 1000,
+      },
+    },
   )
 }

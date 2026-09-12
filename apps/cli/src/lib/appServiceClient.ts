@@ -9,7 +9,7 @@ import { sendIpcCommand } from '@siastorage/node-adapters'
  * and this client invokes them over the Unix socket.
  */
 export function createDaemonClient(sockPath: string, timeout = 30_000): AppService {
-  return createRemoteAppService((channel: string, ...args: any[]) =>
-    sendIpcCommand(sockPath, channel, { args }, timeout),
+  return createRemoteAppService((channel, args, timeoutMs) =>
+    sendIpcCommand(sockPath, channel, { args }, timeoutMs ?? timeout),
   )
 }
