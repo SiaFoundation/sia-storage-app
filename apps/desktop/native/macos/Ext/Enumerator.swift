@@ -11,6 +11,11 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
     /// The version handshake. The daemon checks it only on the handshake itself,
     /// so a stale extension is stopped here or not at all.
     private let ready: @Sendable () async throws -> Void
+    /// The anchor the last finished enumeration ended at, reported as the
+    /// current sync anchor so the first delta starts where the listing
+    /// stopped instead of replaying from zero with no folder fingerprint.
+    /// Locked: enumeration and the anchor request arrive on different queues.
+    private let finalAnchor = LockedBox<String?>(nil)
 
     public init(
         rpc: Rpc, containerId: String?, ready: @escaping @Sendable () async throws -> Void
@@ -37,6 +42,7 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
                 if let next = result.cursor {
                     observer.finishEnumerating(upTo: NSFileProviderPage(Data(next.utf8)))
                 } else {
+                    if let anchor = result.anchor { finalAnchor.set(anchor) }
                     observer.finishEnumerating(upTo: nil)
                 }
             } catch {
@@ -88,9 +94,10 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
     public func currentSyncAnchor(
         completionHandler: @escaping (NSFileProviderSyncAnchor?) -> Void
     ) {
-        // Zero rather than the current clock: a fresh anchor would tell the OS
-        // it is already up to date with changes it has never seen.
-        completionHandler(NSFileProviderSyncAnchor(Data("0".utf8)))
+        // Zero until an enumeration has finished: a fresh anchor would tell
+        // the OS it is up to date with changes it has never seen. After one,
+        // the anchor its final page reported.
+        completionHandler(NSFileProviderSyncAnchor(Data((finalAnchor.get() ?? "0").utf8)))
     }
 
     private var containerArg: Any { containerId ?? NSNull() }
@@ -102,4 +109,14 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
         if page.rawValue == NSFileProviderPage.initialPageSortedByDate as Data { return nil }
         return String(data: page.rawValue, encoding: .utf8)
     }
+}
+
+/// A value behind a lock. Enumeration and the sync-anchor request arrive on
+/// arbitrary queues, so shared state here cannot be a bare stored property.
+final class LockedBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+    init(_ value: Value) { self.value = value }
+    func get() -> Value { lock.withLock { value } }
+    func set(_ new: Value) { lock.withLock { value = new } }
 }
