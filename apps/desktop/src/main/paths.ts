@@ -24,3 +24,12 @@ export function daemonLogPath(): string {
 export function desktopLogPath(): string {
   return join(dataDir(), 'desktop.log')
 }
+
+/**
+ * Where the extension's entries are collected to. The extension cannot write
+ * here itself: it is sandboxed to its own container and logs through the system
+ * instead, so this file is a copy made when someone asks to see the logs.
+ */
+export function extensionLogPath(): string {
+  return join(dataDir(), 'fileprovider.log')
+}

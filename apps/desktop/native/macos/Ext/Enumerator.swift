@@ -32,7 +32,7 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
                 let args: [Any] = cursor.map { [containerArg, $0] } ?? [containerArg]
                 let result = try await rpc.callDecoding(ProviderPage.self, Channel.list, args)
 
-                fpLog.info("enumerated \(result.items.count, privacy: .public) item(s)")
+                fpLog.debug("enumerated \(result.items.count, privacy: .public) item(s)")
                 observer.didEnumerate(result.items.map { SiaItem($0) })
                 if let next = result.cursor {
                     observer.finishEnumerating(upTo: NSFileProviderPage(Data(next.utf8)))
@@ -59,7 +59,7 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
                 // A deletion is reported by naming what went, and a deleted
                 // folder leaves nothing to name, so the anchor expires instead.
                 if result.expired {
-                    fpLog.info("anchor expired; relisting")
+                    fpLog.notice("anchor expired; relisting")
                     observer.finishEnumeratingWithError(
                         fpError(.syncAnchorExpired, "The folder list changed"))
                     return

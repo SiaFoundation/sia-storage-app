@@ -64,6 +64,9 @@ public struct ProviderFetchResult: Decodable {
 
 public struct ProviderHello: Decodable {
     public let version: String
+    /// Which library the daemon is serving. Optional so a daemon that predates
+    /// the field still answers; nil means it did not say.
+    public let library: String?
 }
 
 /// The scope spanning every folder. Only this one can report a file leaving one
