@@ -29,13 +29,13 @@ export type DaemonContext = ShutdownContext & {
 /**
  * Boots the daemon end-to-end: app service, single-instance lock, SDK
  * connection, scheduled background services, IPC server, signal handlers.
- * Shared by both `sia daemon start` and `sia serve`; the latter wraps the
- * returned context with an HTTP server.
+ * Booted by `sia daemon start`, detached by default or in the terminal with
+ * `--foreground`.
  */
 export async function startServices(dataDir?: string): Promise<DaemonContext> {
-  // Daemon stdio is captured to daemon.log by spawnDaemon — the console
-  // appender's output flows there.
-  addAppender(createConsoleAppender({ ansi: true }))
+  // Spawned detached, stdout is the daemon.log file, and escape codes would
+  // garble it, so colour only when stdout is a real terminal (`--foreground`).
+  addAppender(createConsoleAppender({ ansi: process.stdout.isTTY === true }))
 
   // Env rather than flags: `spawnDaemon` re-spawns this with no argv, so the
   // environment is the only channel that survives. Absent means no shell.

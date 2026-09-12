@@ -81,16 +81,22 @@ export function openExternally(url: string): { action: 'deny' } {
  */
 function watchForFailure(window: BrowserWindow, which: string): void {
   window.webContents.on('did-fail-load', (_event, code, description, url) => {
-    log.error(`${which} failed to load ${url}: ${description} (${code})`)
+    log.error('window', 'load_failed', { window: which, url, description, code })
   })
   window.webContents.on('render-process-gone', (_event, details) => {
-    log.error(`${which} renderer gone: ${details.reason}`)
+    log.error('window', 'renderer_gone', { window: which, reason: details.reason })
   })
   window.webContents.on('preload-error', (_event, path, error) => {
-    log.error(`${which} preload ${path} threw: ${error.message}`)
+    log.error('window', 'preload_failed', { window: which, path, error })
   })
   window.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
-    if (level === 'error') log.error(`${which} renderer: ${message} (${sourceId}:${lineNumber})`)
+    if (level === 'error')
+      log.error('window', 'renderer_error', {
+        window: which,
+        message,
+        source: sourceId,
+        line: lineNumber,
+      })
   })
 }
 
