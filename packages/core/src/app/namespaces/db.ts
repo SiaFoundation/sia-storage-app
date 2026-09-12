@@ -595,6 +595,7 @@ export function buildDbNamespaces(
     },
     directories: {
       getAll: () => ops.queryAllDirectoriesWithCounts(db),
+      count: () => ops.queryCountDirectories(db),
       getById: (id) => ops.queryDirectoryById(db, id),
       getByPath: (path) => ops.queryDirectoryByPath(db, path),
       getPathForFile: (fileId) => ops.queryDirectoryPathForFile(db, fileId),

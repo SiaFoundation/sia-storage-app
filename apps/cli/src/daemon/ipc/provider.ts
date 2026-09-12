@@ -10,6 +10,7 @@ import { logger } from '@siastorage/logger'
 import { startIpcServer } from '@siastorage/node-adapters'
 import { createHash } from 'node:crypto'
 import type { CliApp } from '../../app'
+import type { Materializing } from '../materializing'
 import { pushChanges, type IpcHandlerMap } from './index'
 
 /** `sun_path` is 104 bytes on macOS including the terminator. */
@@ -78,6 +79,7 @@ export function startProviderListener(
   app: CliApp,
   reflected: IpcHandlerMap,
   opts: ProviderListenerOptions,
+  materializing?: Materializing,
 ): ReturnType<typeof startIpcServer> {
   assertSocketPathFits(opts.socketPath)
 
@@ -94,6 +96,11 @@ export function startProviderListener(
     if (method === 'subscribe') return pushChanges(app, connection)
     const handler = reflected.get(method)
     if (!handler) throw new Error(`Unknown method: ${method}`)
-    return handler(params, connection)
+    const result = await handler(params, connection)
+    // Observed after the handler returns: a listing that threw materialized
+    // nothing, and counting it would report a folder as ready that the
+    // system never received. A failed hello keeps the tracker as it was too.
+    materializing?.observe(method, ((params as { args?: unknown[] }).args ?? []) as unknown[])
+    return result
   })
 }

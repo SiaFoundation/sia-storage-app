@@ -31,6 +31,13 @@ extension Logger {
         self.error(
             "\(event, privacy: .public) \(id, privacy: .public): \(error.localizedDescription)")
     }
+
+    /// The same at `debug`, for one a retry is expected to clear. Only the
+    /// outcome of the last attempt is worth an entry that reaches disk.
+    func attemptFailed(_ event: StaticString, _ id: String, _ error: Error) {
+        self.debug(
+            "\(event, privacy: .public) \(id, privacy: .public): \(error.localizedDescription)")
+    }
 }
 
 @objc(FileProviderExtension)
@@ -98,6 +105,20 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         }
     }
 
+    /// Asks the system to write out every folder, so the first time one is
+    /// opened it is already on disk.
+    private func warm() {
+        guard let manager = NSFileProviderManager(for: domain) else { return }
+        let rpc = self.rpc
+        // Behind the same handshake as every callback: warming drives list and
+        // download requests, which must not reach a daemon whose version and
+        // library have not been agreed.
+        Task { [handshake] in
+            do { try await handshake.ready() } catch { return }
+            await warmFolders(rpc: rpc, manager: manager)
+        }
+    }
+
     /// Holds the daemon's change stream open, reconnecting on drop, and signals
     /// the working set from it. Only the provider may signal its own domain,
     /// and the OS keeps this process alive across daemon restarts.
@@ -122,9 +143,10 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 Task { [weak self] in
                     guard let self, !self.withLifecycle({ self.invalidated }) else { return }
                     await self.apply(self.availability.succeeded())
-                    // A library that never changes is never signalled, so the
-                    // system would hear about the working set only on an edit.
+                    // Never-changing libraries are never signalled, and folders
+                    // are otherwise written out one at a time as they open.
                     self.signalWorkingSet()
+                    self.warm()
                 }
             },
             onDisconnect: { [weak self] error in

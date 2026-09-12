@@ -301,6 +301,11 @@ export async function queryAllDirectories(db: DatabaseAdapter): Promise<Director
   return rows.map(toDirectory)
 }
 
+export async function queryCountDirectories(db: DatabaseAdapter): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM directories')
+  return row?.n ?? 0
+}
+
 export async function queryAllDirectoriesWithCounts(
   db: DatabaseAdapter,
 ): Promise<DirectoryWithCount[]> {

@@ -24,12 +24,13 @@ The extension is sandboxed and cannot reach those files, so it logs to
 a sysdiagnose carries the persisted lines off the machine, so the default is
 the safe one and `.public` is a decision.
 
-Log a failure through `Logger.failure`, never by interpolating an error. It
-takes the event as a `StaticString`, which the compiler will only accept as a
-literal, and leaves the reason redacted. Error text reaching the extension is
-the daemon's, and the daemon quotes container paths, which hold the account
-name. Marking anything else `.public` is fine only for a value that cannot
-carry user data: a count, a state, a version, or a provider identifier.
+Log a failure through `Logger.failure`, or `Logger.attemptFailed` where a retry
+is expected to clear it, never by interpolating an error. Both take the event as
+a `StaticString`, which the compiler will only accept as a literal, and leave
+the reason redacted. Error text reaching the extension is the daemon's, and the
+daemon quotes container paths, which hold the account name. Marking anything
+else `.public` is fine only for a value that cannot carry user data: a count, a
+state, a version, or a provider identifier.
 
 Levels are not interchangeable. `notice` and `error` persist to disk, `info` is
 held in memory and dropped, and `debug` is off until someone streams it.
