@@ -27,6 +27,7 @@
   --spacing-inset: 14px;
   --spacing-row-x: 12px;
   --spacing-row-y: 7px;
+  --color-menu: var(--menu);
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, system-ui, sans-serif;
 
   --animate-halo: halo 1.6s ease-in-out infinite;
@@ -48,6 +49,8 @@
   --secondary: rgba(255, 255, 255, 0.55);
   --card: rgba(255, 255, 255, 0.08);
   --divider: rgba(255, 255, 255, 0.12);
+  /* A popup floats over vibrancy, so it needs a material of its own to stay readable. */
+  --menu: rgba(48, 48, 50, 0.92);
 
   --green: #32d74b;
   --orange: #ff9f0a;
@@ -65,6 +68,7 @@
     --secondary: rgba(0, 0, 0, 0.5);
     --card: rgba(0, 0, 0, 0.05);
     --divider: rgba(0, 0, 0, 0.1);
+    --menu: rgba(250, 250, 250, 0.94);
     --green: #28cd41;
     --orange: #ff9500;
     --red: #ff3b30;

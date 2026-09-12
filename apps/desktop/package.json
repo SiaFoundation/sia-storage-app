@@ -14,6 +14,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@scure/bip39": "2.4.0",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
     "react": "19.2.0",
