@@ -9,7 +9,7 @@
 import { app, ipcMain, shell } from 'electron'
 import { Daemon } from './daemon'
 import { log } from './log'
-import { daemonLogPath, desktopLogPath } from './paths'
+import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
 import { beginQuit, hideMainWindow, openExternally, resizeToContent } from './windows'
@@ -19,7 +19,7 @@ async function openPath(path: string): Promise<void> {
   if (reason) log.error('shell', 'open_failed', { path, reason })
 }
 
-export function registerBridge(platform: PlatformIntegration): void {
+export function registerBridge(platform: PlatformIntegration, signOut: () => void): void {
   // The caller sets the timeout because only it knows how long its call takes.
   // Method and args arrive from the renderer, so neither is taken on trust.
   ipcMain.handle('rpc', (_event, method: unknown, args: unknown, timeoutMs?: number) => {
@@ -53,11 +53,8 @@ export function registerBridge(platform: PlatformIntegration): void {
     const path = platform.mountPath()
     if (path) await openPath(path)
   })
-  // Both, because which one holds the answer depends on what went wrong: a
-  // mount that will not register is in this process's, not the daemon's.
-  ipcMain.handle('open:logs', async () => {
-    await openPath(desktopLogPath())
-    await openPath(daemonLogPath())
+  ipcMain.handle('menu:more', () => {
+    showMoreMenu(signOut)
   })
 
   ipcMain.handle('window:close', () => {

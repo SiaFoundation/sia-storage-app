@@ -35,6 +35,8 @@ const POPOVER_GAP = 6
 let mainWindow: BrowserWindow | null = null
 let popover: BrowserWindow | null = null
 let quitting = false
+/** Set while a menu the popover opened holds the focus. See `holdPopover`. */
+let held = false
 /** Kept so a resized popover can be re-anchored to the icon it opened from. */
 let lastTrayBounds: Rectangle | null = null
 
@@ -174,9 +176,10 @@ export function createPopover(): BrowserWindow {
 
   watchForFailure(window, 'popover')
 
-  // Dismiss on focus loss, the way a menu does. Guarded in dev so devtools
-  // focus does not fight it.
+  // Dismiss on focus loss, the way a menu does. Guarded in dev against devtools
+  // focus, and while something the popover opened holds it instead.
   window.on('blur', () => {
+    if (held) return
     if (!window.webContents.isDevToolsOpened()) window.hide()
   })
 
@@ -185,6 +188,22 @@ export function createPopover(): BrowserWindow {
   load(window, 'popover')
   popover = window
   return window
+}
+
+/**
+ * Keeps the popover up while something it opened takes the focus, and returns
+ * the release. Without it, opening a menu dismisses the surface the menu is
+ * about, and the menu is left pointing at nothing.
+ */
+export function holdPopover(): () => void {
+  held = true
+  return () => {
+    held = false
+    // The blur that would have hidden the popover may have fired while held,
+    // e.g. when the menu closed by a switch to another app, so it is replayed
+    // rather than waiting for a focus change that is not coming.
+    if (popover && !popover.isDestroyed() && !popover.isFocused()) popover.hide()
+  }
 }
 
 /**

@@ -28,7 +28,7 @@ const api = {
   connectDaemon: () => ipcRenderer.invoke('daemon:connect'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
   openMount: () => ipcRenderer.invoke('open:mount'),
-  openLogs: () => ipcRenderer.invoke('open:logs'),
+  showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),
 
   /** Fires when the library, the connection or sync state changes. */
