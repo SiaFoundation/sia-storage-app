@@ -226,14 +226,65 @@ describe('Provider changes', () => {
       expect(changes.deletedIds).toContain(first.id)
     })
 
-    it('never expires, because it lists no folders', async () => {
+    it('asks for a fresh listing when a folder goes away', async () => {
       const dir = await app.app.directories.create('Docs')
       const first = await app.app.provider.changes(WORKING_SET_ID, '0')
 
       await app.app.directories.deleteAndTrashFiles(dir.id)
       const second = await app.app.provider.changes(WORKING_SET_ID, first.anchor)
 
+      expect(second.expired).toBe(true)
+    })
+
+    it('asks for a fresh listing when a folder is renamed, since it re-sends no folder items', async () => {
+      const dir = await app.app.directories.create('Docs')
+      const first = await app.app.provider.changes(WORKING_SET_ID, '0')
+
+      await app.app.directories.rename(dir.id, 'Papers')
+      const second = await app.app.provider.changes(WORKING_SET_ID, first.anchor)
+
+      expect(second.expired).toBe(true)
+    })
+
+    it('does not ask twice for the same disappearance', async () => {
+      const dir = await app.app.directories.create('Docs')
+      const first = await app.app.provider.changes(WORKING_SET_ID, '0')
+      await app.app.directories.deleteAndTrashFiles(dir.id)
+
+      const second = await app.app.provider.changes(WORKING_SET_ID, first.anchor)
+      const third = await app.app.provider.changes(WORKING_SET_ID, second.anchor)
+
+      expect(third.expired).toBe(false)
+    })
+
+    it('hands the listing an anchor whose fingerprint catches the next folder change', async () => {
+      await app.app.directories.create('Docs')
+      let cursor: string | undefined
+      let anchor: string | undefined
+      do {
+        const page = await app.app.provider.list(WORKING_SET_ID, cursor)
+        cursor = page.cursor
+        anchor = page.anchor ?? anchor
+      } while (cursor)
+      expect(anchor).toBeDefined()
+
+      const before = await app.app.provider.changes(WORKING_SET_ID, anchor as string)
+      expect(before.expired).toBe(false)
+
+      await app.app.directories.create('Papers')
+      const after = await app.app.provider.changes(WORKING_SET_ID, anchor as string)
+      expect(after.expired).toBe(true)
+    })
+
+    it('leaves the listing alone when only files change', async () => {
+      await app.app.directories.create('Docs')
+      const first = await app.app.provider.changes(WORKING_SET_ID, '0')
+
+      await app.addFiles(generateTestFiles(2, { startId: 610 }))
+      const second = await app.app.provider.changes(WORKING_SET_ID, first.anchor)
+
       expect(second.expired).toBe(false)
+      expect(second.items.length).toBeGreaterThan(0)
     })
   })
 })

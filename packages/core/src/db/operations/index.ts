@@ -13,6 +13,7 @@ export {
   insertDirectory,
   moveDirectory,
   moveFileToDirectory,
+  queryAllDirectories,
   queryAllDirectoriesWithCounts,
   queryCountFilesWithDirectories,
   queryDirectoryById,

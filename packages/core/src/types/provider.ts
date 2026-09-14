@@ -75,6 +75,12 @@ export type ProviderItem = {
 export type ProviderPage = {
   items: ProviderItem[]
   cursor?: string
+  /**
+   * Only on the working set's final page: the change anchor where the listing
+   * stopped reading, for the delta feed to start from. Without it the first
+   * delta request starts at zero and has no folder fingerprint to compare.
+   */
+  anchor?: string
 }
 
 /**
