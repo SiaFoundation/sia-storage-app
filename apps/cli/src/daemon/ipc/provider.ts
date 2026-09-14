@@ -8,6 +8,7 @@
  */
 import { logger } from '@siastorage/logger'
 import { startIpcServer } from '@siastorage/node-adapters'
+import { createHash } from 'node:crypto'
 import type { CliApp } from '../../app'
 import { pushChanges, type IpcHandlerMap } from './index'
 
@@ -20,6 +21,17 @@ export type ProviderListenerOptions = {
   socketPath: string
   /** Build identifier the shell must match. */
   version: string
+  /** Data directory of the library being served. */
+  libraryPath: string
+}
+
+/**
+ * Names the library on the wire without putting the path there. The shell only
+ * ever compares this for equality, to tell a cache of someone else's library
+ * from its own, and the data directory sits under the account's home.
+ */
+export function libraryId(libraryPath: string): string {
+  return createHash('sha256').update(libraryPath).digest('hex').slice(0, 16)
 }
 
 /**
@@ -48,13 +60,17 @@ export function isProviderChannel(channel: string): boolean {
  * upgrades and can pair a stale one with a new daemon, so a mismatch serves
  * errors rather than guessing, and the version is never negotiated down.
  */
-function registerProviderHandlers(reflected: IpcHandlerMap, version: string): void {
+function registerProviderHandlers(
+  reflected: IpcHandlerMap,
+  version: string,
+  library: string,
+): void {
   reflected.set('hello', async (params) => {
     const theirs = ((params as { args?: unknown[] }).args?.[0] as string) ?? undefined
     if (theirs !== version) {
       throw new Error(`Version mismatch: shell ${theirs ?? 'unknown'}, daemon ${version}`)
     }
-    return { version }
+    return { version, library }
   })
 }
 
@@ -65,8 +81,11 @@ export function startProviderListener(
 ): ReturnType<typeof startIpcServer> {
   assertSocketPathFits(opts.socketPath)
 
-  registerProviderHandlers(reflected, opts.version)
-  logger.info('ipc', 'provider_listener_ready', { path: opts.socketPath })
+  registerProviderHandlers(reflected, opts.version, libraryId(opts.libraryPath))
+  logger.info('ipc', 'provider_listener_ready', {
+    path: opts.socketPath,
+    library: opts.libraryPath,
+  })
 
   return startIpcServer(opts.socketPath, async (method, params, connection) => {
     if (!isProviderChannel(method)) {

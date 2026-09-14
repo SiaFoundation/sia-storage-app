@@ -121,4 +121,10 @@ export type ProviderFetchResult = {
  */
 export type ProviderHello = {
   version: string
+  /**
+   * Names the library being served, as an identifier rather than a path. The
+   * shell compares it for equality, to tell a cache of another library from
+   * its own.
+   */
+  library: string
 }

@@ -40,6 +40,16 @@ public actor Availability {
         return .disconnect
     }
 
+    /// The daemon answered but is serving a different library than the one
+    /// this domain was built from. Unlike an outage this does not come back
+    /// by waiting, so there is no grace period to serve errors through.
+    public func incompatible(at now: Double) -> AvailabilityAction {
+        downSince = now
+        guard !disconnected else { return .none }
+        disconnected = true
+        return .disconnect
+    }
+
     /// The daemon answered. Clears the outage, and reconnects if one lasted.
     public func succeeded() -> AvailabilityAction {
         downSince = nil
