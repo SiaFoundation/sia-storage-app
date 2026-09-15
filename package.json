@@ -52,6 +52,7 @@
     "desktop:lint": "bun run --cwd apps/desktop lint",
     "desktop:macos:test": "swift test --package-path apps/desktop/native/macos",
     "desktop:package": "bun run --cwd apps/desktop package",
+    "desktop:release": "bun run --cwd apps/desktop release",
     "desktop:setup": "node node_modules/electron/install.js",
     "desktop:start": "bun run --cwd apps/desktop start",
     "desktop:typecheck": "bun run --cwd apps/desktop typecheck",

@@ -20,8 +20,12 @@ import { createReleasePr } from './create-release-pr'
 const CANDIDATE_FILE = '.release-candidate'
 
 // Packages whose releases pass through an external gate between cut and ship
-// (store review, manual promotion), so their trains need the rc cycle.
-const rcPackages = [{ name: 'mobile', packageJson: 'apps/mobile/package.json' }]
+// (store review, a beta round, manual promotion), so their trains need the rc
+// cycle.
+const rcPackages = [
+  { name: 'mobile', packageJson: 'apps/mobile/package.json' },
+  { name: 'desktop', packageJson: 'apps/desktop/package.json' },
+]
 
 const rcKeyPattern = new RegExp(`^(${rcPackages.map((p) => p.name).join('|')})\\s*:`, 'm')
 

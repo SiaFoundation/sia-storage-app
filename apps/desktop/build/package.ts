@@ -1,37 +1,23 @@
 /*
  * Build, sign, install, launch, and hand back what to look for.
  *
- * The renderer and main bundles come from electron-vite, which runs first
- * because the assembled bundle copies its output rather than building it.
- *
  * `bun run desktop:package <context>` is the whole of it. The development loop
  * in `dev.ts` runs the same steps and then swaps the renderer for a dev server,
- * which is why this is a function rather than a script body.
+ * which is why this is a function rather than a script body. The bundling and
+ * signing half is `buildSigned` in `release.ts`, which CI runs without an install.
  */
 
-import { $ } from 'bun'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { build } from './darwin'
+import { dirname } from 'node:path'
 import { type BuildEnv, loadEnv } from './env'
 import { install, isExtensionRegistered, launch, linkCli } from './install'
-import { sign } from './sign'
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+import { buildSigned } from './release'
 
 export async function packageApp(
   env: BuildEnv,
   /** What the launched app gets on top of a normal launch context. */
   launchEnv: Record<string, string> = {},
 ): Promise<string> {
-  console.log('Bundling…')
-  await $`bun run build`.cwd(root)
-
-  console.log('Assembling…')
-  const result = await build(env)
-
-  console.log('Signing…')
-  await sign(result, env)
+  const result = await buildSigned(env)
 
   console.log('Installing…')
   const installed = await install(result.appPath)

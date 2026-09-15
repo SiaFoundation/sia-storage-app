@@ -135,6 +135,13 @@ different bundle ids.
 work with no account or signing setup. The app reports it: the popover's Finder row
 reads "Not in this build".
 
+Beta and release builds come from `.github/workflows/release-desktop.yml`, which runs
+`bun run desktop:release` on a `desktop/v*` GitHub release: a candidate tag
+(`-rc.N`) builds the beta app, the stable tag builds the shipping one, and each
+attaches a notarized disk image to its release. The same script runs locally with a
+Developer ID identity in the keychain and `APPLE_API_KEY`, `APPLE_API_ISSUER` and
+`APPLE_KEY_B64` set; `DRY_RUN=true` skips notarization.
+
 ## Tests
 
 | Tier                  | Command (repo root)                        | Proves                                                | CI  |

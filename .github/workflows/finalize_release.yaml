@@ -1,6 +1,7 @@
-# The manual step of a mobile release: run after the chosen release candidate has
-# shipped to the stores. Regenerates the release PR as the stable version
-# (X.Y.Z-rc.N becomes X.Y.Z) and records which candidate it graduated. Merging it
+# The manual step of a mobile or desktop release: run after the chosen release
+# candidate has shipped to the stores, or the beta desktop app has been tried.
+# Regenerates the release PR as the stable version (X.Y.Z-rc.N becomes X.Y.Z)
+# and records which candidate it graduated. Merging it
 # brings main's versions and changelogs forward, and Publish Release then tags
 # the candidate's own commit, so the stable tag names the source that shipped
 # rather than main's tip. Safe to run after newer changes have merged: it
