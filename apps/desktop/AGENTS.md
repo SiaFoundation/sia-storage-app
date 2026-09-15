@@ -52,3 +52,11 @@ lifetime is wrong on the second launch.
 Swift is here only where the OS requires it: the sandboxed extension, which
 cannot be Electron, and the helper bundle carrying the entitlement to add the
 Finder domain. New surface goes in TypeScript.
+
+## Releases
+
+`build/release.ts` is the build CI runs: bundle, sign, notarize and staple the
+app, then wrap it in a disk image and notarize and staple that. It installs
+nothing. When `RELEASE_TAG` is set the tag is
+the version, not `package.json`: a stable `desktop/vX.Y.Z` tag is created on
+the release candidate's commit, where `package.json` still reads `X.Y.Z-rc.N`.

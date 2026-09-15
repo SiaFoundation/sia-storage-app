@@ -18,13 +18,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = join(root, '..', '..')
 // Apple Silicon only, as is the daemon's native addon below. An Intel build
 // would need both, and there is no consumer asking for one.
-const TARGET = 'arm64-apple-macos13.0'
+export const ARCH = 'arm64'
+const TARGET = `${ARCH}-apple-macos13.0`
 /** Also the executable name inside the helper bundle, and what Electron spawns. */
 const AGENT_NAME = 'SiaDomainAgent'
 // What Finder and Get Info show. The desktop package is what a desktop
 // release bumps, so the CLI's version would go stale on the bundle.
-const APP_VERSION = (await Bun.file(join(repoRoot, 'apps', 'desktop', 'package.json')).json())
-  .version as string
+export const APP_VERSION = (
+  await Bun.file(join(repoRoot, 'apps', 'desktop', 'package.json')).json()
+).version as string
 // The version the extension presents in its handshake, via its own plist key.
 // Read from the CLI so the extension and the daemon it talks to can never
 // disagree about which build they are.
@@ -39,7 +41,18 @@ export type BuildResult = {
   frameworksPath: string
 }
 
-export async function build(env: BuildEnv): Promise<BuildResult> {
+export type BuildOptions = {
+  /** CFBundleShortVersionString. A release passes the tag's version; package.json otherwise. */
+  version?: string
+  /** CFBundleVersion. A release passes the CI run number so two builds of one tag differ. */
+  buildNumber?: string
+}
+
+export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<BuildResult> {
+  const stamp: Stamp = {
+    version: options.version ?? APP_VERSION,
+    build: options.buildNumber ?? '1',
+  }
   const out = join(root, 'dist')
   const appPath = join(out, `${env.appName}.app`)
   rmSync(appPath, { recursive: true, force: true })
@@ -65,15 +78,15 @@ export async function build(env: BuildEnv): Promise<BuildResult> {
   mkdirSync(join(agentContents, 'MacOS'), { recursive: true })
 
   const swiftBuild = join(out, 'swift-build')
-  await installApp(resources, env)
+  await installApp(resources, env, stamp)
   await buildDaemon(resources)
   await compileShared(swiftBuild)
   await compileExtension(join(appexContents, 'MacOS', 'SiaFileProvider'), swiftBuild)
   await compileAgent(join(agentContents, 'MacOS', AGENT_NAME))
-  writeFileSync(join(agentContents, 'Info.plist'), agentInfoPlist(env))
+  writeFileSync(join(agentContents, 'Info.plist'), agentInfoPlist(env, stamp))
 
-  writeFileSync(join(contents, 'Info.plist'), appInfoPlist(env, executable))
-  writeFileSync(join(appexContents, 'Info.plist'), extensionInfoPlist(env))
+  writeFileSync(join(contents, 'Info.plist'), appInfoPlist(env, executable, stamp))
+  writeFileSync(join(appexContents, 'Info.plist'), extensionInfoPlist(env, stamp))
   // Apple's own File Provider bundles carry this, and its absence correlates
   // with PluginKit declining to register the extension.
   writeFileSync(join(appexContents, 'PkgInfo'), 'XPC!')
@@ -95,7 +108,7 @@ export async function build(env: BuildEnv): Promise<BuildResult> {
  * folder. Electron prefers it over Resources/app, so leaving it in place gives a
  * signed bundle that launches into the wrong program.
  */
-async function installApp(resources: string, env: BuildEnv): Promise<void> {
+async function installApp(resources: string, env: BuildEnv, stamp: Stamp): Promise<void> {
   const built = join(root, 'out')
   if (!existsSync(built)) throw new Error(`No build at ${built}. Run bun run desktop:build.`)
 
@@ -108,7 +121,7 @@ async function installApp(resources: string, env: BuildEnv): Promise<void> {
   // to launch would exit as a duplicate instance of the first.
   writeFileSync(
     join(app, 'package.json'),
-    `${JSON.stringify({ name: env.appBundleId, version: APP_VERSION, main: 'out/main/index.js' }, null, 2)}\n`,
+    `${JSON.stringify({ name: env.appBundleId, version: stamp.version, main: 'out/main/index.js' }, null, 2)}\n`,
   )
   // Written rather than hardcoded: the container and the mount both follow the
   // bundle id this build was signed with.
@@ -201,14 +214,17 @@ async function compileAgent(destination: string): Promise<void> {
   await $`swiftc -O -o ${destination} ${sources} -framework FileProvider -target ${TARGET}`
 }
 
-function agentInfoPlist(env: BuildEnv): string {
+/** The two version keys every bundle in the app carries. */
+type Stamp = { version: string; build: string }
+
+function agentInfoPlist(env: BuildEnv, stamp: Stamp): string {
   return plist({
     CFBundleIdentifier: `${env.appBundleId}.domain-agent`,
     CFBundleName: AGENT_NAME,
     CFBundleExecutable: AGENT_NAME,
     CFBundlePackageType: 'APPL',
-    CFBundleShortVersionString: APP_VERSION,
-    CFBundleVersion: '1',
+    CFBundleShortVersionString: stamp.version,
+    CFBundleVersion: stamp.build,
     // Spawned with argv and never shown, so it must not take focus from the app
     // that spawned it.
     LSBackgroundOnly: true,
@@ -216,14 +232,14 @@ function agentInfoPlist(env: BuildEnv): string {
   })
 }
 
-function appInfoPlist(env: BuildEnv, executable: string): string {
+function appInfoPlist(env: BuildEnv, executable: string, stamp: Stamp): string {
   return plist({
     CFBundleIdentifier: env.appBundleId,
     CFBundleName: env.appName,
     CFBundleExecutable: executable,
     CFBundlePackageType: 'APPL',
-    CFBundleShortVersionString: APP_VERSION,
-    CFBundleVersion: '1',
+    CFBundleShortVersionString: stamp.version,
+    CFBundleVersion: stamp.build,
     // The app is its menu bar item; a dock tile would be noise.
     LSUIElement: true,
     // Electron's NSApplication subclass, named in its stock Info.plist. This
@@ -233,17 +249,17 @@ function appInfoPlist(env: BuildEnv, executable: string): string {
   })
 }
 
-function extensionInfoPlist(env: BuildEnv): string {
+function extensionInfoPlist(env: BuildEnv, stamp: Stamp): string {
   return plist({
     CFBundleIdentifier: env.extBundleId,
     CFBundleName: 'SiaFileProvider',
     CFBundleExecutable: 'SiaFileProvider',
     CFBundlePackageType: 'XPC!',
-    CFBundleShortVersionString: APP_VERSION,
+    CFBundleShortVersionString: stamp.version,
     // The handshake version. Distinct from the bundle version: this must
     // match the daemon's build exactly, and that is the CLI's version.
     SiaDaemonVersion: DAEMON_VERSION,
-    CFBundleVersion: '1',
+    CFBundleVersion: stamp.build,
     NSExtension: {
       NSExtensionPointIdentifier: 'com.apple.fileprovider-nonui',
       // Matches the @objc name on the class. fileproviderd resolves it through
