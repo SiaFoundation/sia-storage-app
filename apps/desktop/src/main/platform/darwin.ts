@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import type { DesktopConfig } from '../config'
 import { log } from '../log'
 import { agentInstalled, runAgent } from './agent'
-import type { PlatformIntegration, ShellConfig, ShellPaths, ShellState } from './types'
+import type { PlatformIntegration, ShellConfig, ShellPaths, ShellState, StopOptions } from './types'
 
 /** How long a quit waits on the helper. It is not cancelled, so a slow hide
  * still lands, just after the app is gone. */
@@ -113,20 +113,28 @@ export function createDarwinIntegration(): PlatformIntegration {
      * leaves every downloaded file on disk, and the `register` at the next
      * launch brings it back untouched.
      */
-    async stop() {
+    async stop(opts?: StopOptions) {
       if (domainId) {
-        // Bounded rather than awaited outright: the helper's timeout is 20s,
-        // and a quit that hangs that long is worse than a folder that lingers.
-        let timer: ReturnType<typeof setTimeout> | undefined
-        await Promise.race([
-          runAgent(['hide', domainId]).catch((e) =>
-            log.error('mount', 'agent_failed', { error: e as Error }),
-          ),
-          new Promise((resolve) => {
-            timer = setTimeout(resolve, HIDE_TIMEOUT_MS)
-          }),
-        ])
-        clearTimeout(timer)
+        // Bounded on quit: the helper's own timeout is 20s, and a quit that
+        // hangs that long is worse than a folder that lingers. Sign-out waits
+        // the helper out instead: its relaunch registers the domain anew, and
+        // a hide landing after that registration hides the fresh mount and
+        // leaves the signed-in account without Finder access.
+        const hide = runAgent(['hide', domainId]).catch((e) =>
+          log.error('mount', 'agent_failed', { error: e as Error }),
+        )
+        if (opts?.waitForHide) {
+          await hide
+        } else {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          await Promise.race([
+            hide,
+            new Promise((resolve) => {
+              timer = setTimeout(resolve, HIDE_TIMEOUT_MS)
+            }),
+          ])
+          clearTimeout(timer)
+        }
       }
       state = 'absent'
       displayName = null

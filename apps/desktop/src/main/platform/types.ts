@@ -34,6 +34,8 @@ export type ShellPaths = {
   handoffDir?: string
 }
 
+export type StopOptions = { waitForHide?: boolean }
+
 export interface PlatformIntegration {
   /**
    * Where this platform's shell and the daemon meet. Separate from `start`
@@ -44,8 +46,10 @@ export interface PlatformIntegration {
   /** Brings the OS mount up. Calling it twice is not an error. */
   start(config: ShellConfig): Promise<void>
   /** Stops serving the mount. Whether the registration survives is the
-   * platform's call: macOS hides the domain so downloaded files stay. */
-  stop(): Promise<void>
+   * platform's call: macOS hides the domain so downloaded files stay. The
+   * hide is waited on only for a bounded window unless `waitForHide` asks
+   * to see it through. */
+  stop(opts?: StopOptions): Promise<void>
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
   mountPath(): string | null
