@@ -1,6 +1,12 @@
 /*
  * Reads the signing and identity settings for a build context.
  *
+ * Three layers, later ones winning: the committed `<context>.example.env`
+ * carries the identity (bundle ids, names) and blanks for the five values
+ * that are one machine's or one team's secrets; a gitignored `<context>.env`
+ * fills those in on a developer Mac; and `SIA_*` variables in the environment
+ * fill them in on a CI runner, which has no env file to write.
+ *
  * Every value is required. A missing one is reported by name rather than left to
  * surface later as a codesign or fileproviderd failure that names nothing.
  */
@@ -65,12 +71,47 @@ export function resolveEnv(values: Record<string, string>, source: string): Buil
   return out
 }
 
-export function loadEnv(context = process.env.SIA_CONTEXT ?? 'dev'): BuildEnv {
+/** The `SIA_*` settings present and non-blank in an environment. */
+export function envOverrides(
+  environment: Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [, key] of FIELDS) {
+    const value = environment[key]
+    if (value?.trim()) out[key] = value
+  }
+  return out
+}
+
+/** The merged settings before validation, and where to say they came from. */
+export function readEnvValues(
+  context: string,
+  environment: Record<string, string | undefined>,
+): { values: Record<string, string>; source: string } {
+  const example = join(envDir, `${context}.example.env`)
+  if (!existsSync(example)) throw new Error(`No such build context: ${context}`)
   const file = join(envDir, `${context}.env`)
-  if (!existsSync(file)) {
+  const local = existsSync(file)
+  const overrides = envOverrides(environment)
+  if (!local && Object.keys(overrides).length === 0) {
     throw new Error(
       `No ${context}.env in apps/desktop/env. Copy ${context}.example.env and fill in the five blanks.`,
     )
   }
-  return resolveEnv(parseEnv(readFileSync(file, 'utf8')), file)
+  return {
+    values: {
+      ...parseEnv(readFileSync(example, 'utf8')),
+      ...(local ? parseEnv(readFileSync(file, 'utf8')) : {}),
+      ...overrides,
+    },
+    source: local ? file : `${example} plus the SIA_* environment`,
+  }
+}
+
+export function loadEnv(
+  context = process.env.SIA_CONTEXT ?? 'dev',
+  environment: Record<string, string | undefined> = process.env,
+): BuildEnv {
+  const { values, source } = readEnvValues(context, environment)
+  return resolveEnv(values, source)
 }

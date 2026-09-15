@@ -5,12 +5,21 @@
  * breaks that seal: dylibs, helpers, frameworks and the daemon runtime first,
  * then the agent and extension, then the app. A versioned framework seals at
  * Versions/A, and the outer path leaves symlinks `--deep --strict` rejects.
- * Nothing notarizes, so a build runs only on a Mac its profile names.
+ * Nothing here notarizes: `release.ts` does that afterwards, so a bare
+ * `desktop:package` build runs only on a Mac its profile names.
  */
 
 import { $, Glob } from 'bun'
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, join, relative } from 'node:path'
 import { plist, type BuildResult } from './darwin'
 import type { BuildEnv } from './env'
 
@@ -109,6 +118,11 @@ export async function sign(build: BuildResult, env: BuildEnv): Promise<void> {
     } ${identifier ? ['--identifier', identifier] : []} ${target}`
 
   for (const dylib of find(build.frameworksPath, '**/*.dylib')) await seal(dylib)
+  // Electron's frameworks carry bare executables (chrome_crashpad_handler,
+  // Squirrel's ShipIt) that arrive ad-hoc signed. Sealing a framework does not
+  // reach them, and the notary service rejects any Mach-O without a Developer
+  // ID signature and the hardened runtime.
+  for (const executable of nestedExecutables(build.frameworksPath)) await seal(executable)
   for (const helper of find(build.frameworksPath, '*.app')) await seal(helper, helperEntPath)
   for (const framework of find(build.frameworksPath, '*.framework')) {
     const versioned = join(framework, 'Versions', 'A')
@@ -135,6 +149,34 @@ export async function sign(build: BuildResult, env: BuildEnv): Promise<void> {
 function find(root: string, pattern: string): string[] {
   if (!existsSync(root)) return []
   return [...new Glob(pattern).scanSync({ cwd: root, absolute: true, onlyFiles: false })]
+}
+
+const MACH_O_MAGIC = new Set([0xfeedface, 0xfeedfacf, 0xcafebabe, 0xcefaedfe, 0xcffaedfe])
+
+/**
+ * Mach-O files inside the frameworks that the other passes do not reach: not a
+ * dylib, not inside a helper app, and not a framework's own binary. Checked by
+ * magic number, not by name, because Electron adds and renames these between
+ * releases.
+ */
+export function nestedExecutables(frameworksPath: string): string[] {
+  return find(frameworksPath, '**/*').filter((path) => {
+    // Relative, because the frameworks directory itself sits inside the .app.
+    const inside = relative(frameworksPath, path)
+    if (path.endsWith('.dylib') || inside.includes('.app/')) return false
+    const framework = inside.split('/')[0]!
+    if (basename(path) === basename(framework, '.framework')) return false
+    // lstat, so the Versions/Current and top-level links are not signed twice.
+    const stat = lstatSync(path, { throwIfNoEntry: false })
+    if (!stat?.isFile() || !(stat.mode & 0o111)) return false
+    const fd = openSync(path, 'r')
+    try {
+      const header = Buffer.alloc(4)
+      return readSync(fd, header, 0, 4, 0) === 4 && MACH_O_MAGIC.has(header.readUInt32BE(0))
+    } finally {
+      closeSync(fd)
+    }
+  })
 }
 
 /** Re-reads what actually got sealed, rather than trusting what was passed in. */
