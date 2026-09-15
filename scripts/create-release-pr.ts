@@ -119,9 +119,9 @@ export function createReleasePr(candidate: string): void {
   const isRc = versions.some((v) => v.includes('-rc.'))
   const final = candidate !== ''
   const note = final
-    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip.`
+    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip. A desktop tag builds the release app and attaches its disk image.`
     : isRc
-      ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing. Run the Finalize Release workflow to cut the stable release.'
+      ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing, and desktop attaches a notarized beta disk image to its prerelease. Run the Finalize Release workflow to cut the stable release.'
       : 'Merging this PR will create a GitHub release.'
   const body = `${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
 

@@ -1,9 +1,10 @@
 # Creates/updates a release PR on every push to main.
 # The PR bumps package.json version and updates CHANGELOG.md based on changesets.
 #
-# Trains carrying mobile changes are versioned X.Y.Z-rc.N (see
-# scripts/prepare-release.ts); once a candidate has shipped to the stores, the
-# Finalize Release workflow regenerates the PR as the final stable release.
+# Trains carrying mobile or desktop changes are versioned X.Y.Z-rc.N (see
+# scripts/prepare-release.ts); once a candidate has shipped to the stores and
+# the beta desktop app has been tried, the Finalize Release workflow
+# regenerates the PR as the final stable release.
 name: Prepare Release
 
 on:

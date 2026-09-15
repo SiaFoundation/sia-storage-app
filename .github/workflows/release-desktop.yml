@@ -1,0 +1,166 @@
+name: Release Desktop
+
+# Builds the macOS app as a notarized disk image and attaches it to a desktop
+# release. A prerelease (desktop/vX.Y.Z-rc.N) is the beta app; the stable tag
+# the Finalize Release workflow promotes it to is the shipping app. Both tags
+# name the same commit, so the two builds differ only in identity and version.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      context:
+        description: 'Which app to build when no tag is given: beta or prod.'
+        required: false
+        type: choice
+        options: [beta, prod]
+        default: beta
+      tag:
+        description: 'Release to build and attach to (e.g. desktop/v0.1.0-rc.0). A candidate builds beta, a stable tag builds prod. Dispatch from that tag.'
+        required: false
+        type: string
+      upload:
+        description: 'Attach the disk image to the release named by tag. Off = build only, the artifact stays on the run.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'desktop/')) }}
+    runs-on: macos-26
+    outputs:
+      dmg: ${{ steps.release.outputs.dmg }}
+    env:
+      # The tag decides, as it does in release.ts, not the release's prerelease
+      # flag, so the profiles always match the app the script builds. The
+      # context input applies only to a dispatch without a tag.
+      BETA: ${{ contains(github.event.release.tag_name || inputs.tag || '', '-rc.') || (github.event_name == 'workflow_dispatch' && inputs.tag == '' && inputs.context == 'beta') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+
+      # The bun on PATH ships inside the app as the daemon runtime, so this is
+      # the lockfile's version, not mobile's older pin.
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Fetch Electron
+        run: bun run desktop:setup
+
+      - name: Install Apple certificate
+        env:
+          APPLE_CERT_B64: ${{ secrets.APPLE_CERT_B64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          printf '%s' "$APPLE_CERT_B64" | base64 -d > "$CERTIFICATE_PATH"
+
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+
+      # Profiles are per App ID, so each context installs its own pair.
+      - name: Install provisioning profiles
+        env:
+          APP_PROFILE_BASE64: ${{ env.BETA == 'true' && secrets.MACOS_PROVISIONING_PROFILE_BETA_BASE64 || secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ env.BETA == 'true' && secrets.MACOS_PROVISIONING_PROFILE_EXTENSION_BETA_BASE64 || secrets.MACOS_PROVISIONING_PROFILE_EXTENSION_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/profiles"
+          printf '%s' "$APP_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/profiles/app.provisionprofile"
+          printf '%s' "$EXT_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/profiles/ext.provisionprofile"
+          echo "SIA_APP_PROFILE=$RUNNER_TEMP/profiles/app.provisionprofile" >> "$GITHUB_ENV"
+          echo "SIA_EXT_PROFILE=$RUNNER_TEMP/profiles/ext.provisionprofile" >> "$GITHUB_ENV"
+
+      # The signing identity is looked up in the keychain, not stored: see
+      # apps/desktop/build/identity.ts.
+      - name: Build, sign and notarize
+        id: release
+        working-directory: apps/desktop
+        env:
+          # Empty whenever there is a tag, so the input's default cannot
+          # contradict it.
+          SIA_CONTEXT: ${{ inputs.tag == '' && inputs.context || '' }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          SIA_BUILD_NUMBER: ${{ github.run_number }}
+          SIA_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SIA_FILEPROVIDER_GROUP: ${{ env.BETA == 'true' && secrets.MACOS_FILEPROVIDER_GROUP_BETA || secrets.MACOS_FILEPROVIDER_GROUP }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_KEY_B64: ${{ secrets.APPLE_KEY_B64 }}
+        run: bun run release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-dmg
+          path: ${{ steps.release.outputs.dmg }}
+          if-no-files-found: error
+          retention-days: 7
+
+  upload:
+    # Attach on real release events, or on manual dispatch when the operator
+    # opts in, which is how an asset is re-attached after a failed build
+    # without cutting a new tag.
+    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.upload) }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: desktop-dmg
+          path: dist
+
+      # The image is only ever attached to the release whose commit produced
+      # it: a retarget deletes and recreates a release while a build is still
+      # in flight, and a dispatch off a branch would attach a branch build to
+      # a tagged release. Dispatch from the tag you are attaching to.
+      - name: Check the release points at what we built
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          BUILT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "No release to upload to: set the tag input."
+            exit 1
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null \
+            || { echo "Release $TAG not found."; exit 1; }
+          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
+          if [ "$TAG_SHA" != "$BUILT_SHA" ]; then
+            echo "$TAG points at $TAG_SHA but this image was built from $BUILT_SHA."
+            exit 1
+          fi
+
+      - name: Upload disk image to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        # --clobber lets a re-run replace the asset. --repo because this job
+        # has no checkout, so gh cannot infer the repo from git.
+        run: gh release upload "$TAG" dist/*.dmg --clobber --repo "$GITHUB_REPOSITORY"

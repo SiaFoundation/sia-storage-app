@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { parseEnv, resolveEnv } from './env'
+import { envOverrides, loadEnv, parseEnv, resolveEnv } from './env'
 import { plist } from './darwin'
 import { replaceableShim, resolveCli } from './install'
 import {
@@ -10,6 +10,7 @@ import {
   assertNoForbiddenEntitlements,
   extensionEntitlements,
   helperEntitlements,
+  nestedExecutables,
 } from './sign'
 
 const env = {
@@ -65,6 +66,43 @@ describe('entitlements', () => {
   it('scopes each application identifier to its own bundle', () => {
     expect(appEntitlements(env)).toContain('TEAM123.sia.storage.desktop.dev<')
     expect(extensionEntitlements(env)).toContain('TEAM123.sia.storage.desktop.dev.file-provider<')
+  })
+})
+
+describe('executables nested in the frameworks', () => {
+  it('finds a bare Mach-O by its magic and skips dylibs, helper apps, framework binaries, links and scripts', () => {
+    // Under an .app, as in a real bundle, so the helper-app exclusion has to
+    // look at the path inside the frameworks directory and not above it.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sia-frameworks-'))
+    const dir = path.join(root, 'Sia Storage.app', 'Contents', 'Frameworks')
+    const machO = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0, 0, 0, 0])
+    const write = (rel: string, content: Buffer | string) => {
+      const target = path.join(dir, rel)
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(target, content, { mode: 0o755 })
+      return target
+    }
+    try {
+      const crashpad = write(
+        'Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler',
+        machO,
+      )
+      const shipIt = write('Squirrel.framework/Versions/A/Resources/ShipIt', machO)
+      write('Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib', machO)
+      write('Electron Helper.app/Contents/MacOS/Electron Helper', machO)
+      write('Squirrel.framework/Versions/A/Resources/script.sh', '#!/bin/sh\n')
+      fs.writeFileSync(path.join(dir, 'Squirrel.framework/Versions/A/Resources/data'), machO, {
+        mode: 0o644,
+      })
+      // The framework's own binary and the links Apple's layout puts over it.
+      write('Squirrel.framework/Versions/A/Squirrel', machO)
+      fs.symlinkSync('A', path.join(dir, 'Squirrel.framework/Versions/Current'))
+      fs.symlinkSync('Versions/Current/Squirrel', path.join(dir, 'Squirrel.framework/Squirrel'))
+
+      expect(nestedExecutables(dir).sort()).toEqual([crashpad, shipIt].sort())
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 
@@ -157,5 +195,46 @@ describe('build settings', () => {
     ])
 
     expect(() => resolveEnv(values, 'dev.env')).toThrow(/SIA_APP_PROFILE names no file/)
+  })
+
+  it('takes only the SIA_* settings from an environment, and not blank ones', () => {
+    expect(envOverrides({ SIA_TEAM_ID: 'ABC', SIA_APP_NAME: ' ', PATH: '/bin' })).toEqual({
+      SIA_TEAM_ID: 'ABC',
+    })
+  })
+
+  // The beta context has no gitignored beta.env on a CI runner or a fresh
+  // checkout, so these read the committed example plus an environment.
+  describe('from the example file plus the environment', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sia-profiles-'))
+    const profile = path.join(dir, 'app.provisionprofile')
+    fs.writeFileSync(profile, '')
+    const environment = {
+      SIA_TEAM_ID: 'TEAM123',
+      SIA_SIGN_IDENTITY: 'ABCDEF',
+      SIA_FILEPROVIDER_GROUP: 'group.TEAM123.sia.storage.desktop.beta.fileprovider',
+      SIA_APP_PROFILE: profile,
+      SIA_EXT_PROFILE: profile,
+    }
+
+    it('fills the five blanks and keeps the identity from the file', () => {
+      const env = loadEnv('beta', environment)
+
+      expect(env.teamId).toBe('TEAM123')
+      expect(env.appBundleId).toBe('sia.storage.desktop.beta')
+      expect(env.appName).toBe('Sia Storage Beta')
+    })
+
+    it('lets the environment override an identity value too', () => {
+      expect(loadEnv('beta', { ...environment, SIA_APP_NAME: 'Renamed' }).appName).toBe('Renamed')
+    })
+
+    it('asks for the env file when the environment carries nothing', () => {
+      expect(() => loadEnv('beta', { PATH: '/bin' })).toThrow(/Copy beta.example.env/)
+    })
+
+    it('rejects a context with no example file', () => {
+      expect(() => loadEnv('staging', environment)).toThrow(/No such build context: staging/)
+    })
   })
 })
