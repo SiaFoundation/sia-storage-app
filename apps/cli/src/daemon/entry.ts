@@ -74,11 +74,16 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   })
   const ipcServer = startIpcDispatcher(app, app.paths.sockPath, surface)
   const providerServer = providerSocket
-    ? startProviderListener(app, surface.handlers, {
-        socketPath: providerSocket,
-        version: DAEMON_VERSION,
-        libraryPath: app.paths.dataDir,
-      })
+    ? startProviderListener(
+        app,
+        surface.handlers,
+        {
+          socketPath: providerSocket,
+          version: DAEMON_VERSION,
+          libraryPath: app.paths.dataDir,
+        },
+        surface.materializing,
+      )
     : undefined
   ctx = { app, scheduler, ipcServer, providerServer, lock }
 

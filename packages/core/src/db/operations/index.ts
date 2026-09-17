@@ -16,6 +16,7 @@ export {
   moveFileToDirectory,
   queryAllDirectoriesWithCounts,
   queryDirectoriesAfterPath,
+  queryCountDirectories,
   queryCountFilesWithDirectories,
   queryDirectoryById,
   queryDirectoryByPath,
