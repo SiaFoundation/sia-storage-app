@@ -11,6 +11,16 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
     /// The version handshake. The daemon checks it only on the handshake itself,
     /// so a stale extension is stopped here or not at all.
     private let ready: @Sendable () async throws -> Void
+    /// The anchor the last finished enumeration ended at, reported as the
+    /// current sync anchor so the first delta starts where the listing
+    /// began. Backed by UserDefaults: fileproviderd builds a fresh
+    /// enumerator per batch and restarts the process between them, and an
+    /// instance-only anchor would expire into a relist each time. The
+    /// anchor embeds the daemon's feed epoch, so one persisted against a
+    /// wiped library expires daemon-side instead of resuming a foreign
+    /// clock. Locked: callbacks arrive on different queues.
+    private let finalAnchor = LockedBox<String?>(nil)
+    private var anchorKey: String { "finalAnchor:\(containerId ?? "workingSet")" }
 
     public init(
         rpc: Rpc, containerId: String?, ready: @escaping @Sendable () async throws -> Void
@@ -37,6 +47,10 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
                 if let next = result.cursor {
                     observer.finishEnumerating(upTo: NSFileProviderPage(Data(next.utf8)))
                 } else {
+                    if let anchor = result.anchor {
+                        finalAnchor.set(anchor)
+                        UserDefaults.standard.set(anchor, forKey: anchorKey)
+                    }
                     observer.finishEnumerating(upTo: nil)
                 }
             } catch {
@@ -56,8 +70,8 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
                 let result = try await rpc.callDecoding(
                     ProviderChanges.self, Channel.changes, [containerArg, from])
 
-                // A deletion is reported by naming what went, and a deleted
-                // folder leaves nothing to name, so the anchor expires instead.
+                // An anchor from another library or format, or one below
+                // the daemon's prune horizon; relisting is the answer.
                 if result.expired {
                     fpLog.notice("anchor expired; relisting")
                     observer.finishEnumeratingWithError(
@@ -88,9 +102,13 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
     public func currentSyncAnchor(
         completionHandler: @escaping (NSFileProviderSyncAnchor?) -> Void
     ) {
-        // Zero rather than the current clock: a fresh anchor would tell the OS
-        // it is already up to date with changes it has never seen.
-        completionHandler(NSFileProviderSyncAnchor(Data("0".utf8)))
+        // Zero until an enumeration has ever finished: a fresh anchor would
+        // tell the OS it is up to date with changes it has never seen, and
+        // the daemon expires "0" into exactly one relist. After one, the
+        // anchor its final page reported, surviving process restarts.
+        let anchor =
+            finalAnchor.get() ?? UserDefaults.standard.string(forKey: anchorKey) ?? "0"
+        completionHandler(NSFileProviderSyncAnchor(Data(anchor.utf8)))
     }
 
     private var containerArg: Any { containerId ?? NSNull() }

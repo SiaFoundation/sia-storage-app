@@ -75,6 +75,12 @@ export type ProviderItem = {
 export type ProviderPage = {
   items: ProviderItem[]
   cursor?: string
+  /**
+   * Only on a listing's final page: the change anchor covering the whole
+   * listing window, for the delta feed to start from. Every scope mints one;
+   * without it a cold enumerator would hold no anchor this library accepts.
+   */
+  anchor?: string
 }
 
 /**
@@ -94,10 +100,10 @@ export type ProviderChanges = {
    */
   hasMore: boolean
   /**
-   * The anchor is too old to answer from; list the folder again instead.
-   * `items` and `deletedIds` are empty. A deleted folder leaves no row to name,
-   * so a listing, which says what exists rather than what changed, is the only
-   * way its disappearance reaches the shell.
+   * The anchor cannot be answered from; list the container again instead.
+   * `items` and `deletedIds` are empty. Fires for an anchor from another
+   * library or format, and for one below the prune horizon; folder renames
+   * and deletions arrive as ordinary deltas, never as expiry.
    */
   expired: boolean
 }

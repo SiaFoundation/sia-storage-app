@@ -35,25 +35,29 @@ export async function ingestFile(
   const { hash, size } = await streamCopyAndHash(absPath, targetPath)
 
   try {
-    await app.service.files.create({
-      id: fileId,
-      name: fileName,
-      size,
-      createdAt: now,
-      updatedAt: now,
-      addedAt: now,
-      type,
-      kind: 'file',
-      mediaAssetId: null,
-      hash,
-      trashedAt: null,
-      deletedAt: null,
-    })
-
-    if (opts.directory) {
-      const dir = await app.service.directories.getOrCreateAtPath(opts.directory)
-      await app.service.directories.moveFile(fileId, dir.id)
-    }
+    // Created already filed: an insert at root followed by a move would
+    // journal a departure from root that no reader ever saw.
+    const dir = opts.directory
+      ? await app.service.directories.getOrCreateAtPath(opts.directory)
+      : null
+    await app.service.files.create(
+      {
+        id: fileId,
+        name: fileName,
+        size,
+        createdAt: now,
+        updatedAt: now,
+        addedAt: now,
+        type,
+        kind: 'file',
+        mediaAssetId: null,
+        hash,
+        trashedAt: null,
+        deletedAt: null,
+      },
+      undefined,
+      { directoryId: dir?.id ?? null },
+    )
 
     await app.service.fs.upsertMeta({ fileId, size, addedAt: now, usedAt: now })
 

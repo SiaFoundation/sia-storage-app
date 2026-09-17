@@ -288,33 +288,63 @@ export async function queryDirectoryChildren(
 }
 
 /**
- * The children of one directory, without the per-row descendant counts.
- *
- * The provider surface reads children on every listing and every change poll,
- * and draws nothing from the counts; the counted variant runs a recursive
- * COUNT over `files` per row, which is real work to throw away that often.
+ * One keyset page of a directory's children in name order, without the
+ * per-row descendant counts: the provider reads children on every listing
+ * and draws nothing from counts, and the counted variant scans every active
+ * file to build them.
  */
-export async function queryDirectorySubdirectories(
+export async function queryDirectoriesByParent(
   db: DatabaseAdapter,
-  parentPath: string | null,
+  parentId: string | null,
+  after: { nameSortKey: string; id: string } | null,
+  limit: number,
+): Promise<(Directory & { nameSortKey: string })[]> {
+  const cond = parentId === null ? 'parentId IS NULL' : 'parentId = ?'
+  const params = parentId === null ? [] : [parentId]
+  const cursorCond = after === null ? '' : 'AND (nameSortKey > ? OR (nameSortKey = ? AND id > ?))'
+  const cursorParams = after === null ? [] : [after.nameSortKey, after.nameSortKey, after.id]
+  const rows = await db.getAllAsync<DirectoryRow & { nameSortKey: string }>(
+    `SELECT id, path, createdAt, parentId, nameSortKey FROM directories
+     WHERE ${cond} ${cursorCond}
+     ORDER BY nameSortKey ASC, id ASC
+     LIMIT ?`,
+    ...params,
+    ...cursorParams,
+    limit,
+  )
+  return rows.map((row) => ({ ...toDirectory(row), nameSortKey: row.nameSortKey }))
+}
+
+/** Directory rows for a set of ids; departed folders resolve their current state through this. */
+export async function queryDirectoriesByIds(
+  db: DatabaseAdapter,
+  ids: string[],
 ): Promise<Directory[]> {
-  let rows: DirectoryRow[]
-  if (parentPath === null) {
-    rows = await db.getAllAsync<DirectoryRow>(
-      `SELECT d.id, d.path, d.createdAt FROM directories d
-       WHERE d.path NOT LIKE '%/%' ESCAPE '\\'
-       ORDER BY d.nameSortKey`,
-    )
-  } else {
-    const escaped = escapeLikePattern(parentPath)
-    rows = await db.getAllAsync<DirectoryRow>(
-      `SELECT d.id, d.path, d.createdAt FROM directories d
-       WHERE d.path LIKE ? || '/%' ESCAPE '\\' AND d.path NOT LIKE ? || '/%/%' ESCAPE '\\'
-       ORDER BY d.nameSortKey`,
-      escaped,
-      escaped,
-    )
-  }
+  if (ids.length === 0) return []
+  const ph = ids.map(() => '?').join(',')
+  const rows = await db.getAllAsync<DirectoryRow>(
+    `SELECT id, path, createdAt, parentId FROM directories WHERE id IN (${ph})`,
+    ...ids,
+  )
+  return rows.map(toDirectory)
+}
+
+/**
+ * One keyset page of directories in path order. A strict prefix sorts before
+ * all its extensions, so a parent always precedes its own descendants,
+ * which is the delivery order the OS shell needs.
+ */
+export async function queryDirectoriesAfterPath(
+  db: DatabaseAdapter,
+  afterPath: string,
+  limit: number,
+): Promise<Directory[]> {
+  const rows = await db.getAllAsync<DirectoryRow>(
+    `SELECT d.id, d.path, d.createdAt, d.parentId FROM directories d
+     WHERE d.path > ? ORDER BY d.path LIMIT ?`,
+    afterPath,
+    limit,
+  )
   return rows.map(toDirectory)
 }
 

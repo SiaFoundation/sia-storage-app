@@ -766,9 +766,10 @@ export async function createFileWithLocalObject(
   db: DatabaseAdapter,
   record: Omit<FileRecord, 'objects'>,
   localObject: LocalObject,
+  opts?: { directoryId?: string | null },
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
-    await insertFile(db, record)
+    await insertFile(db, record, { directoryId: opts?.directoryId })
     await insertObject(db, localObject)
   })
 }
