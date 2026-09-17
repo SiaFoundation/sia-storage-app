@@ -127,6 +127,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       parentId,
       name: row.name,
       kind: 'file',
+      mimeType: row.type,
       size: row.size,
       createdAt: row.createdAt,
       modifiedAt: row.updatedAt,
@@ -138,7 +139,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The edit clock has millisecond resolution, so a rename landing in the
       // same millisecond as the previous write leaves it unchanged and the OS
       // keeps showing the old name indefinitely.
-      metadataVersion: [row.updatedAt, row.name, row.size, parentId ?? ''].join(':'),
+      metadataVersion: [row.updatedAt, row.name, row.size, row.type, parentId ?? ''].join(':'),
       uploaded: flags.uploaded.has(row.id),
       uploading: uploading !== undefined,
       downloaded: (row.fsExists ?? 0) === 1,
@@ -153,6 +154,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       parentId,
       name: dir.name,
       kind: 'dir',
+      mimeType: '',
       size: 0,
       createdAt: dir.createdAt,
       modifiedAt: dir.createdAt,
@@ -773,9 +775,15 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       const file = await service.files.getById(id)
       if (!file) throw new Error(`No file with id ${id}`)
       const adopted = await fsIO.adoptFile({ id: file.id, type: file.type }, source)
+      // The clock moves with the content, and past the row's own stamp: sync
+      // orders metadata by updatedAt, sync-down stores the other device's wall
+      // clock verbatim, so a frozen or plain-now stamp can tie with or trail the
+      // state this write replaces and lose the sync race. 'bump' stamps
+      // max(now, updatedAt + 1) in SQL, so a sync-down landing a future clock
+      // during the slow adoptFile above cannot beat it.
       await service.files.update(
         { id: file.id, size: adopted.size, hash: adopted.hash },
-        { updatedAt: 'preserve' },
+        { updatedAt: 'bump' },
       )
       await service.fs.upsertMeta({
         fileId: file.id,

@@ -558,8 +558,10 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
   )
   const affectedIds = affected.map((f) => f.id)
   await db.withTransactionAsync(async () => {
+    // max() per row: a plain stamp would move a future-clocked row (a remote
+    // wall clock via sync-down) backwards and lose its reparent to sync.
     await db.runAsync(
-      `UPDATE files SET directoryId = NULL, updatedAt = ? WHERE directoryId IN (${dirPh})`,
+      `UPDATE files SET directoryId = NULL, updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (${dirPh})`,
       now,
       ...dirIds,
     )
@@ -842,8 +844,9 @@ async function rebaseDirectoryTree(
       )
     }
 
+    // max() per row, same reason as deleteDirectory's child stamp.
     await db.runAsync(
-      `UPDATE files SET updatedAt = ? WHERE directoryId IN (
+      `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
         SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
       )`,
       now,

@@ -46,7 +46,24 @@ public final class SiaItem: NSObject, NSFileProviderItem {
 
     public var contentType: UTType {
         guard let item, !item.isDirectory else { return .folder }
-        return UTType(filenameExtension: (item.name as NSString).pathExtension) ?? .data
+        let ext = (item.name as NSString).pathExtension
+        if !ext.isEmpty, let byExtension = UTType(filenameExtension: ext) {
+            return byExtension
+        }
+        // The library stores the MIME type, so a name without an extension
+        // still opens as its real type inside the mount. The extension wins
+        // when both exist, so a renamed file behaves like any other Mac file.
+        if let byMime = UTType(mimeType: item.mimeType) {
+            return byMime
+        }
+        return .data
+    }
+
+    /// Declared so extensions render: the system default for an item that
+    /// does not implement this hides them, and every synced file then
+    /// displays bare while Finder-created neighbours show theirs.
+    public var fileSystemFlags: NSFileProviderFileSystemFlags {
+        [.userReadable, .userWritable]
     }
 
     public var documentSize: NSNumber? {
