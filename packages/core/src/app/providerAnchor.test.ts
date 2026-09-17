@@ -1,46 +1,35 @@
-import { ANCHOR_START, folderFingerprint, formatAnchor, parseAnchor } from './providerAnchor'
+import { ANCHOR_START, formatAnchor, parseAnchor } from './providerAnchor'
 
-describe('the anchor round trip', () => {
-  it('carries the cursor and the fingerprint through a round trip', () => {
-    const folders = folderFingerprint(['d1', 'd2'])
-    const raw = formatAnchor({ updatedAt: 1234, id: 'abc9' }, folders)
+const EPOCH = 'testepoch1'
 
-    expect(parseAnchor(raw)).toEqual({ updatedAt: 1234, id: 'abc9', folders })
+describe('provider anchors', () => {
+  it('round-trips a cursor through the wire form', () => {
+    const anchor = formatAnchor(EPOCH, { feedSeq: 42, id: 'abc123' })
+    expect(parseAnchor(anchor, EPOCH)).toEqual({ feedSeq: 42, id: 'abc123', startSeq: '' })
   })
 
-  it('survives an id containing the delimiter', () => {
-    const raw = formatAnchor({ updatedAt: 5, id: 'a:b:c' }, '2-xyz')
-
-    expect(parseAnchor(raw)).toEqual({ updatedAt: 5, id: 'a:b:c', folders: '2-xyz' })
+  it('round-trips the fourth segment, which the parse never rejects', () => {
+    const anchor = formatAnchor(EPOCH, { feedSeq: 7, id: 'x1' }, '900')
+    expect(parseAnchor(anchor, EPOCH)).toEqual({ feedSeq: 7, id: 'x1', startSeq: '900' })
   })
 
-  it('reads an anchor with no folder field as one that never expires', () => {
-    expect(parseAnchor('42:abc')).toEqual({ updatedAt: 42, id: 'abc', folders: '' })
-    expect(parseAnchor('42')).toEqual({ updatedAt: 42, id: '', folders: '' })
+  it('another epoch means another library, and the anchor dies with it', () => {
+    const anchor = formatAnchor(EPOCH, { feedSeq: 42, id: 'abc' })
+    expect(parseAnchor(anchor, 'otherepoch')).toBeNull()
   })
 
-  it('starts from the beginning on an unreadable anchor', () => {
-    expect(parseAnchor('')).toEqual(ANCHOR_START)
-    expect(parseAnchor('soon:x:y')).toEqual(ANCHOR_START)
-    expect(parseAnchor('-1:x:y')).toEqual(ANCHOR_START)
-  })
-})
-
-describe('the folder fingerprint', () => {
-  it('ignores order', () => {
-    expect(folderFingerprint(['a', 'b', 'c'])).toBe(folderFingerprint(['c', 'a', 'b']))
+  it('unrecognized anchor forms expire rather than parse', () => {
+    expect(parseAnchor('1757890000000:f1:12-x9', EPOCH)).toBeNull()
+    expect(parseAnchor('0', EPOCH)).toBeNull()
+    expect(parseAnchor('', EPOCH)).toBeNull()
   })
 
-  it('tells apart sets a hash alone could confuse', () => {
-    expect(folderFingerprint(['a'])).not.toBe(folderFingerprint(['b']))
-    expect(folderFingerprint(['a'])).not.toBe(folderFingerprint(['a', 'b']))
+  it('a corrupt sequence expires instead of resuming from a guessed spot', () => {
+    expect(parseAnchor(`${EPOCH}:12abc:f1`, EPOCH)).toBeNull()
+    expect(parseAnchor(`${EPOCH}::f1`, EPOCH)).toBeNull()
   })
 
-  it('never contains the anchor delimiter', () => {
-    expect(folderFingerprint(['a:b', 'c'])).not.toContain(':')
-  })
-
-  it('starts over for a clock that is only partly a number', () => {
-    expect(parseAnchor('12abc:f1:2-x')).toEqual(ANCHOR_START)
+  it('the feed start formats without a fourth segment', () => {
+    expect(formatAnchor(EPOCH, ANCHOR_START)).toBe(`${EPOCH}:0:`)
   })
 })

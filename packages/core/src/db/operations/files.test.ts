@@ -1,4 +1,5 @@
 import {
+  createFileWithLocalObject,
   deleteFileAndThumbnails,
   deleteFileById,
   deleteFilesAndThumbnails,
@@ -106,6 +107,20 @@ describe('insertFile', () => {
     expect(result!.id).toBe('file-1')
     expect(result!.name).toBe('file-1.jpg')
     expect(result!.size).toBe(100)
+  })
+})
+
+describe('createFileWithLocalObject', () => {
+  it('lands the file in its directory in the same insert', async () => {
+    const dir = await insertDirectory(db(), 'Docs')
+    await createFileWithLocalObject(db(), makeFileRecord('file-1'), makeLocalObject('file-1'), {
+      directoryId: dir.id,
+    })
+    const row = await db().getFirstAsync<{ directoryId: string | null }>(
+      'SELECT directoryId FROM files WHERE id = ?',
+      'file-1',
+    )
+    expect(row?.directoryId).toBe(dir.id)
   })
 })
 

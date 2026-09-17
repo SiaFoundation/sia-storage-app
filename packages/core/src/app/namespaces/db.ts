@@ -405,10 +405,13 @@ export function buildDbNamespaces(
       queryLibrary: (opts) => ops.queryLibraryFiles(db, opts),
       create: async (record, localObject, opts) => {
         if (localObject) {
-          await ops.createFileWithLocalObject(db, record, localObject)
+          await ops.createFileWithLocalObject(db, record, localObject, {
+            directoryId: opts?.directoryId,
+          })
         } else {
           await ops.insertFile(db, record, {
             skipCurrentRecalc: opts?.skipCurrentRecalc,
+            directoryId: opts?.directoryId,
           })
         }
         if (!opts?.skipInvalidation) {
@@ -603,10 +606,26 @@ export function buildDbNamespaces(
       create: async (name, parentPath) => {
         const dir = await ops.insertDirectory(db, name, parentPath)
         caches.directories.invalidateAll()
+        // The library version is the change signal clients relist on, and a
+        // new folder alters what a listing returns as much as a deletion.
+        caches.libraryVersion.invalidate()
         return dir
       },
-      getOrCreate: (name, parentPath) => ops.getOrCreateDirectory(db, name, parentPath),
-      getOrCreateAtPath: (path) => ops.getOrCreateDirectoryAtPath(db, path),
+      // Invalidated like `create`: `sia mkdir` and the import flows come
+      // through here, and a folder that arrives without the library signal
+      // stays invisible to an enumerated working set until an unrelated edit.
+      getOrCreate: async (name, parentPath) => {
+        const dir = await ops.getOrCreateDirectory(db, name, parentPath)
+        caches.directories.invalidateAll()
+        caches.libraryVersion.invalidate()
+        return dir
+      },
+      getOrCreateAtPath: async (path) => {
+        const dir = await ops.getOrCreateDirectoryAtPath(db, path)
+        caches.directories.invalidateAll()
+        caches.libraryVersion.invalidate()
+        return dir
+      },
       delete: async (id) => {
         await ops.deleteDirectory(db, id)
         caches.directories.invalidateAll()
@@ -628,7 +647,10 @@ export function buildDbNamespaces(
       },
       deleteEmpty: async (directoryIds, opts) => {
         const count = await ops.deleteEmptyDirectories(db, directoryIds)
-        if (count > 0 && !opts?.skipInvalidation) caches.directories.invalidateAll()
+        if (count > 0 && !opts?.skipInvalidation) {
+          caches.directories.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
         return count
       },
       rename: async (id, name) => {

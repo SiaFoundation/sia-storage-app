@@ -268,6 +268,114 @@ private func hello(_ version: String = "0.0.5", library: String = "/tmp/lib") th
     return try JSONDecoder().decode(ProviderHello.self, from: Data(json.utf8))
 }
 
+/// A raw listening unix socket for tests that need a server end.
+enum TestSocket {
+    static func listen(at path: String) throws -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw RpcError.unreachable("socket() failed: \(errno)") }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(path.utf8)
+        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
+            close(fd)
+            throw RpcError.unreachable("test socket path is too long: \(path)")
+        }
+        withUnsafeMutableBytes(of: &address.sun_path) { raw in
+            let buffer = raw.bindMemory(to: CChar.self)
+            for (i, byte) in bytes.enumerated() { buffer[i] = CChar(bitPattern: byte) }
+            buffer[bytes.count] = 0
+        }
+        let bound = withUnsafePointer(to: &address) { pointer -> Int32 in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard bound == 0, Darwin.listen(fd, 8) == 0 else {
+            close(fd)
+            throw RpcError.unreachable("could not listen at \(path)")
+        }
+        return fd
+    }
+}
+
+/// Serves one canned reply per request line, so an enumerator can run a real
+/// listing round trip without a daemon.
+final class SyncAnchorHandoffTests: XCTestCase {
+    private final class Observer: NSObject, NSFileProviderEnumerationObserver {
+        var finished = false
+        let done = XCTestExpectation(description: "enumerate returned")
+        func didEnumerate(_ updatedItems: [any NSFileProviderItemProtocol]) {}
+        func finishEnumerating(upTo nextPage: NSFileProviderPage?) {
+            finished = true
+            done.fulfill()
+        }
+        func finishEnumeratingWithError(_ error: any Error) { done.fulfill() }
+    }
+
+    func testTheFinalPagesAnchorBecomesTheCurrentSyncAnchor() throws {
+        // Persistence would leak across runs otherwise: the enumerator backs
+        // its anchor with UserDefaults so process restarts resume.
+        UserDefaults.standard.removeObject(forKey: "finalAnchor:workingSet")
+        let path = NSTemporaryDirectory() + "sia-anchor-\(getpid()).sock"
+        unlink(path)
+        let listener = try TestSocket.listen(at: path)
+        defer {
+            close(listener)
+            unlink(path)
+        }
+        DispatchQueue(label: "test.anchor.serve").async {
+            let conn = accept(listener, nil, nil)
+            guard conn >= 0 else { return }
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            let n = read(conn, &buffer, buffer.count)
+            guard n > 0, let line = String(bytes: buffer[0..<n], encoding: .utf8),
+                let idRange = line.range(of: #""id":"[^"]+""#, options: .regularExpression)
+            else {
+                close(conn)
+                return
+            }
+            let id = line[idRange].dropFirst(5)
+            let reply = "{\"id\":\(id),\"ok\":true,\"result\":{\"items\":[],\"anchor\":\"7:fp\"}}\n"
+            _ = reply.withCString { write(conn, $0, strlen($0)) }
+            close(conn)
+        }
+
+        let enumerator = SiaEnumerator(rpc: Rpc(socketPath: path), containerId: nil) {}
+
+        let before = expectation(description: "anchor before")
+        enumerator.currentSyncAnchor { anchor in
+            XCTAssertEqual(anchor.flatMap { String(data: $0.rawValue, encoding: .utf8) }, "0")
+            before.fulfill()
+        }
+        wait(for: [before], timeout: 5)
+
+        let observer = Observer()
+        enumerator.enumerateItems(
+            for: observer,
+            startingAt: NSFileProviderPage.initialPageSortedByName as NSFileProviderPage)
+        wait(for: [observer.done], timeout: 5)
+        XCTAssertTrue(observer.finished)
+
+        let after = expectation(description: "anchor after")
+        enumerator.currentSyncAnchor { anchor in
+            XCTAssertEqual(anchor.flatMap { String(data: $0.rawValue, encoding: .utf8) }, "7:fp")
+            after.fulfill()
+        }
+        wait(for: [after], timeout: 5)
+
+        // A fresh instance, as fileproviderd builds per batch, resumes from
+        // the persisted anchor instead of replaying the feed from zero.
+        let restarted = SiaEnumerator(rpc: Rpc(socketPath: path), containerId: nil) {}
+        let resumed = expectation(description: "anchor after restart")
+        restarted.currentSyncAnchor { anchor in
+            XCTAssertEqual(anchor.flatMap { String(data: $0.rawValue, encoding: .utf8) }, "7:fp")
+            resumed.fulfill()
+        }
+        wait(for: [resumed], timeout: 5)
+        UserDefaults.standard.removeObject(forKey: "finalAnchor:workingSet")
+    }
+}
+
 final class HandshakeTests: XCTestCase {
     func testARefusedDaemonIsRetriedByTheNextCallback() async {
         let attempts = Attempts()

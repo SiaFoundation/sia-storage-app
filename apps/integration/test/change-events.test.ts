@@ -1,6 +1,7 @@
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import type { ChangeScope } from '@siastorage/core/types'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
+import { assertFeedConverges } from './utils'
 
 describe('Change events', () => {
   let app: TestApp
@@ -15,12 +16,19 @@ describe('Change events', () => {
   })
 
   afterEach(async () => {
+    await assertFeedConverges(app)
     unsubscribe()
     await app.shutdown()
   })
 
   it('signals a library change when files are added', async () => {
     await app.addFiles(generateTestFiles(2, { startId: 1 }))
+
+    await app.waitForCondition(() => seen.includes('library'), 5000)
+  })
+
+  it('signals a library change when a folder is created', async () => {
+    await app.app.directories.create('Docs')
 
     await app.waitForCondition(() => seen.includes('library'), 5000)
   })
