@@ -32,6 +32,7 @@ export function DirectoriesGrid({
         name: 'No folder',
         path: '',
         createdAt: 0,
+        parentId: null,
         fileCount: unfiledCount.data ?? 0,
         subdirectoryCount: 0,
       })

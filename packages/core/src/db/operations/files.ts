@@ -24,6 +24,8 @@ export async function recalculateCurrentForGroup(
   const dirCondition = directoryId === null ? 'directoryId IS NULL' : 'directoryId = ?'
   const dirParams = directoryId === null ? [name] : [name, directoryId]
 
+  // Demote before promote: a provider feed page cut through the flip then
+  // reads as the file briefly absent, never as two files with one name.
   await db.runAsync(
     `UPDATE files SET current = 0
      WHERE name = ? AND ${dirCondition} AND kind = 'file'
@@ -74,6 +76,7 @@ export async function recalculateCurrentForFileIds(
   if (fileIds.length === 0) return
   const ph = fileIds.map(() => '?').join(',')
   const groupsCte = `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`
+  // Demote before promote, same feed-ordering reason as recalculateCurrentForGroup.
   await db.runAsync(
     `UPDATE files SET current = 0
      WHERE current = 1 AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL
@@ -973,7 +976,17 @@ const FILE_UPSERT_UPDATE_COLUMNS = [
 export async function upsertManyFiles(
   db: DatabaseAdapter,
   records: Omit<FileRecord, 'objects'>[],
-  options?: { skipCurrentRecalc?: boolean },
+  options?: {
+    skipCurrentRecalc?: boolean
+    /**
+     * directoryId for rows this call creates. Ingest resolves directories
+     * first and carries the id in the insert, so creation never looks like a
+     * move out of root to the departure trigger; a conflicting existing row
+     * ignores it, since directoryId is not an upsert update column and real
+     * moves go through the directory-sync path.
+     */
+    directoryIdByFileId?: Map<string, string>
+  },
 ): Promise<void> {
   if (records.length === 0) return
   const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
@@ -1001,6 +1014,9 @@ export async function upsertManyFiles(
       trashedAt: r.trashedAt,
       deletedAt: r.deletedAt,
       lostReason: r.lostReason,
+      ...(options?.directoryIdByFileId
+        ? { directoryId: options.directoryIdByFileId.get(r.id) ?? null }
+        : {}),
     })),
     {
       conflictColumn: 'id',

@@ -3,6 +3,7 @@ export {
   type DirectoryWithCount,
   deleteDirectory,
   deleteDirectoryAndTrashFiles,
+  ensureDirectoriesAtPaths,
   deleteEmptyDirectories,
   directoryBreadcrumbs,
   directoryDisplayName,
