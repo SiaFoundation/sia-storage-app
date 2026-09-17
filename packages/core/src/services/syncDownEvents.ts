@@ -194,6 +194,9 @@ export async function syncDownEventsBatch(
         })
         if (batchChanged) {
           app.caches.library.invalidateAll()
+          // Directories too: ensureAtPaths deferred its own invalidation so it
+          // would not fire inside the transaction above.
+          app.caches.directories.invalidateAll()
           app.caches.libraryVersion.invalidate()
         }
 
@@ -476,7 +479,20 @@ async function processBatch(
       fileUpserts.filter((r) => r.kind === 'file').map((r) => r.id),
     )
     if (fileUpserts.length > 0) {
-      await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true })
+      // Directories resolve before the upsert so a created row carries its
+      // directoryId in the insert. An insert-then-assign shape reads to the
+      // departure trigger as a move out of root and journals a departure no
+      // observer ever saw, once per remote-created file placed in a folder.
+      const dirIdByPath = await app.directories.ensureAtPaths(
+        dirEntries.map((entry) => entry.directoryPath),
+        { skipInvalidation: true },
+      )
+      const directoryIdByFileId = new Map<string, string>()
+      for (const entry of dirEntries) {
+        const dirId = dirIdByPath.get(entry.directoryPath)
+        if (dirId) directoryIdByFileId.set(entry.fileId, dirId)
+      }
+      await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true, directoryIdByFileId })
     }
 
     // Refresh every object's sealed metadata (creates + all updates), but leave
