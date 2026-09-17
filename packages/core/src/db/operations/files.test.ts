@@ -1,5 +1,7 @@
 import {
   createFileWithLocalObject,
+  moveFilesAllVersions,
+  renameAllFileVersions,
   deleteFileAndThumbnails,
   deleteFileById,
   deleteFilesAndThumbnails,
@@ -107,6 +109,41 @@ describe('insertFile', () => {
     expect(result!.id).toBe('file-1')
     expect(result!.name).toBe('file-1.jpg')
     expect(result!.size).toBe(100)
+  })
+})
+
+describe('renameAllFileVersions', () => {
+  it('never moves a version clock backwards, even past a future stamp', async () => {
+    const future = Date.now() + 600_000
+    await insertFile(db(), makeFileRecord('v-old', { name: 'pair.bin', updatedAt: future - 1 }))
+    await insertFile(db(), makeFileRecord('v-new', { name: 'pair.bin', updatedAt: future }))
+
+    await renameAllFileVersions(db(), 'pair.bin', null, 'renamed.bin')
+
+    const rows = await db().getAllAsync<{ id: string; updatedAt: number }>(
+      `SELECT id, updatedAt FROM files WHERE name = 'renamed.bin' ORDER BY updatedAt DESC`,
+    )
+    expect(rows[0].id).toBe('v-new')
+    expect(rows[0].updatedAt).toBeGreaterThan(future)
+    expect(rows[1].updatedAt).toBeGreaterThan(future - 1)
+  })
+})
+
+describe('moveFilesAllVersions', () => {
+  it('never moves a version clock backwards, even past a future stamp', async () => {
+    const future = Date.now() + 600_000
+    const dir = await insertDirectory(db(), 'Dest')
+    await insertFile(db(), makeFileRecord('m-old', { name: 'mv.bin', updatedAt: future - 1 }))
+    await insertFile(db(), makeFileRecord('m-new', { name: 'mv.bin', updatedAt: future }))
+
+    await moveFilesAllVersions(db(), ['m-new'], dir.id)
+
+    const rows = await db().getAllAsync<{ id: string; updatedAt: number }>(
+      `SELECT id, updatedAt FROM files WHERE name = 'mv.bin' ORDER BY updatedAt DESC`,
+    )
+    expect(rows[0].id).toBe('m-new')
+    expect(rows[0].updatedAt).toBeGreaterThan(future)
+    expect(rows[1].updatedAt).toBeGreaterThan(future - 1)
   })
 })
 

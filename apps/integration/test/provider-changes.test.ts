@@ -134,6 +134,20 @@ describe('Provider changes', () => {
 
       expect(second.items.map((i) => i.id)).toEqual([existing.id])
     })
+
+    it('re-announces a file whose type changed, carrying the new mime', async () => {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 700 }))
+      const before = (await drainListing(app, null)).items.find((i) => i.id === file.id)
+      const anchor = await listedAnchor(app, null)
+
+      await app.app.files.update({ id: file.id, type: 'image/png' }, { updatedAt: 'now' })
+      const changes = await app.app.provider.changes(null, anchor)
+
+      const item = changes.items.find((i) => i.id === file.id)
+      expect(before?.mimeType).toBe('application/octet-stream')
+      expect(item?.mimeType).toBe('image/png')
+      expect(item?.metadataVersion).not.toBe(before?.metadataVersion)
+    })
   })
 
   describe('disappearances', () => {

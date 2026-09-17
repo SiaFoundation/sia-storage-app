@@ -14,6 +14,7 @@ const item: ProviderItem = {
   parentId: 'dir:d1',
   name: 'photo.jpg',
   kind: 'file',
+  mimeType: 'image/jpeg',
   size: 2048,
   createdAt: 1_700_000_000_000,
   modifiedAt: 1_700_000_100_000,
