@@ -121,9 +121,10 @@ export function Status() {
         <span
           aria-hidden
           className={`mt-[5px] size-2 shrink-0 rounded-full ${DOT_BG[indicator(status)]} ${
-            // A halo only while something is in flight, so a steady state
-            // never draws the eye.
-            transferInFlight(status) ? 'animate-halo' : ''
+            // A halo only on the accent state, a transfer or the folder
+            // warm-up: reading it from the same precedence as the dot keeps a
+            // stale materializing flag from animating beside a red daemon-down.
+            indicator(status) === 'accent' ? 'animate-halo' : ''
           }`}
         />
         <div>

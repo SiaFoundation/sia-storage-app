@@ -14,20 +14,26 @@ export type CacheMessage = IpcMessage
 
 const api = {
   /** Calls a reflected AppService method, e.g. `ds:settings:getIndexerURL`. */
-  rpc: (method: string, args: unknown[] = []) => ipcRenderer.invoke('rpc', method, args),
+  rpc: (method: string, args: unknown[] = [], timeoutMs?: number) =>
+    ipcRenderer.invoke('rpc', method, args, timeoutMs),
+
+  /** Opens a link in the browser. Web schemes only, checked in the main process. */
+  openUrl: (url: string) => ipcRenderer.invoke('open:url', url),
 
   daemonReachable: () => ipcRenderer.invoke('shell:daemon'),
+  /** Asks the daemon to wire an SDK from a key stored since it started. */
+  connectDaemon: () => ipcRenderer.invoke('daemon:connect'),
   shellStatus: () => ipcRenderer.invoke('shell:status'),
+  materializing: () => ipcRenderer.invoke('shell:materializing'),
   mountPath: () => ipcRenderer.invoke('shell:mountPath'),
 
   /** Reports the height the content needs, so the popover can size to it. */
   reportHeight: (height: number) => ipcRenderer.send('window:height', height),
 
-  openUrl: (url: string) => ipcRenderer.invoke('open:url', url),
-  /** Asks the daemon to wire an SDK from a key stored since it came up. */
-  connectDaemon: () => ipcRenderer.invoke('daemon:connect'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
+
   openMount: () => ipcRenderer.invoke('open:mount'),
+  /** Opens the menu holding the actions the footer has no room for. */
   showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),
 
