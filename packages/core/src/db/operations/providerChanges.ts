@@ -160,3 +160,31 @@ const ROW_COLUMNS = [
 ]
   .map((column) => `f.${column}`)
   .join(', ')
+
+/**
+ * The feed's epoch and high-water mark. The epoch is minted once per
+ * database life; a listing captures the seq so its delta handover starts
+ * where the listing started reading.
+ */
+export async function queryFeedMeta(
+  db: DatabaseAdapter,
+): Promise<{ seq: number; epoch: string; horizon: number }> {
+  const row = await db.getFirstAsync<{ seq: number; epoch: string; horizon: number }>(
+    'SELECT seq, epoch, horizon FROM feed_meta WHERE id = 1',
+  )
+  if (!row) throw new Error('feed_meta is missing; migrations have not run')
+  return row
+}
+
+/**
+ * Prunes ledger rows below a new horizon. Safe only because every poll,
+ * including an empty one, advances its anchor to the high-water mark: an
+ * anchor below the horizon means an enumerator that has not polled since,
+ * and changes() answers it with one relist instead of silence.
+ */
+export async function pruneFeedDepartures(db: DatabaseAdapter, horizon: number): Promise<void> {
+  await db.runAsync(`UPDATE feed_meta SET horizon = max(horizon, ?) WHERE id = 1`, horizon)
+  await db.runAsync(
+    `DELETE FROM feed_departures WHERE feedSeq < (SELECT horizon FROM feed_meta WHERE id = 1)`,
+  )
+}
