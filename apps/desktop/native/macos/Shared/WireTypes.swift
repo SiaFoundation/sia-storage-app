@@ -13,6 +13,8 @@ public struct ProviderItem: Decodable, Equatable {
     /// "file" or "dir". A String rather than an enum so an unknown kind from a
     /// newer daemon decodes instead of failing the whole response.
     public let kind: String
+    /// The library's MIME type; "" when unknown and for directories.
+    public let mimeType: String
     /// Always 0 for a directory.
     public let size: Int64
     /// Milliseconds since the epoch, not seconds. Divide before making a Date.

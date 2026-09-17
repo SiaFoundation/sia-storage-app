@@ -586,7 +586,7 @@ async function updateFileInner(
   }
 
   const { updatedAt } = options
-  if (updatedAt !== 'preserve') {
+  if (updatedAt !== 'preserve' && updatedAt !== 'bump') {
     assignments.updatedAt = updatedAt === 'now' ? Date.now() : updatedAt
   }
 
@@ -607,6 +607,15 @@ async function updateFileInner(
   }
 
   await sql.update(db, 'files', assignments, { id })
+  if (updatedAt === 'bump') {
+    // max() reads the committed row, so the stamp clears a clock a concurrent
+    // write may have raised between this call and here; +1 breaks a same-ms tie.
+    await db.runAsync(
+      'UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE id = ?',
+      Date.now(),
+      id,
+    )
+  }
   // Flag the file's objects so sync-up pushes the edit.
   await flagObjectsForFiles(db, [id])
 
@@ -1224,9 +1233,9 @@ export async function queryFileVersions(
 
 /**
  * Renames all versions of a file (all records sharing the same name and
- * directory). Uses staggered updatedAt timestamps to preserve version
- * ordering: the current version gets `now`, the next gets `now - 1ms`, etc.
- * This bumps all timestamps (triggering sync-up) while keeping relative order.
+ * directory). Stamps staggered, strictly descending updatedAt values from a
+ * base above every version's own clock, so ordering is preserved and no row's
+ * clock moves backwards. This bumps all timestamps, triggering sync-up.
  */
 export async function renameAllFileVersions(
   db: DatabaseAdapter,
@@ -1236,14 +1245,19 @@ export async function renameAllFileVersions(
 ): Promise<string[]> {
   const versions = await queryFileVersions(db, currentName, directoryId)
   if (versions.length === 0) return []
-  const now = Date.now()
+  // Above every version's own clock, not the wall clock: rows can carry a
+  // future stamp (sync-down stores the other device's clock, a provider write
+  // bumps past it), and a raw now would move such a row backwards and lose
+  // the sync race to the state it replaced. versions[0] is the newest, and
+  // + length keeps every staggered stamp above every old one.
+  const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < versions.length; i++) {
       await db.runAsync(
         'UPDATE files SET name = ?, nameSortKey = ?, updatedAt = ? WHERE id = ?',
         newName,
         naturalSortKey(newName),
-        now - i,
+        base - i,
         versions[i].id,
       )
     }
@@ -1268,13 +1282,14 @@ export async function moveAllFileVersions(
 ): Promise<string[]> {
   const versions = await queryFileVersions(db, name, fromDirectoryId)
   if (versions.length === 0) return []
-  const now = Date.now()
+  // Monotonic for the same reason as renameAllFileVersions.
+  const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < versions.length; i++) {
       await db.runAsync(
         'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
         toDirectoryId,
-        now - i,
+        base - i,
         versions[i].id,
       )
     }
@@ -1312,15 +1327,20 @@ export async function moveFilesAllVersions(
   await db.withTransactionAsync(async () => {
     // Every active version of every selected stack, newest-first, in one query.
     // `f.directoryId IS g.directoryId` is null-safe, so unfiled stacks match too.
-    const versions = await db.getAllAsync<{ id: string }>(
-      `SELECT f.id FROM files f
+    const versions = await db.getAllAsync<{ id: string; updatedAt: number }>(
+      `SELECT f.id, f.updatedAt FROM files f
        JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file') g
          ON f.name = g.name AND f.directoryId IS g.directoryId
        WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        ORDER BY f.updatedAt DESC, f.id DESC`,
       ...fileIds,
     )
-    let stamp = Date.now()
+    // Monotonic for the same reason as renameAllFileVersions: a raw now would
+    // move a future-clocked row backwards and lose the sync race.
+    let stamp =
+      versions.length === 0
+        ? Date.now()
+        : Math.max(Date.now(), versions[0].updatedAt + versions.length)
     for (const v of versions) {
       await db.runAsync(
         'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',

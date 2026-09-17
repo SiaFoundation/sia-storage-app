@@ -72,10 +72,11 @@ export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
 
 /**
  * How a write moves the file's version clock: 'now' stamps a local edit, a number carries the
- * timestamp of a change made elsewhere, and 'preserve' leaves the clock where it is for a
- * correction that changes nothing the user did.
+ * timestamp of a change made elsewhere, 'preserve' leaves the clock where it is for a correction
+ * that changes nothing the user did, and 'bump' sets max(now, current + 1) in SQL so the new
+ * value outranks the row even under a concurrent write.
  */
-export type UpdatedAtWrite = 'now' | 'preserve' | number
+export type UpdatedAtWrite = 'now' | 'preserve' | 'bump' | number
 
 /** Fields a write may set. updatedAt is absent because UpdatedAtWrite decides it. */
 export type FileUpdate = Omit<Partial<FileRecordRow>, 'updatedAt'> & { id: string }

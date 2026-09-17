@@ -53,6 +53,12 @@ export type ProviderItem = {
   parentId: string | null
   name: string
   kind: ProviderItemKind
+  /**
+   * The library's MIME type; '' for directories. A display fallback: the
+   * shell resolves type from the name's extension first, so a name without
+   * one still opens as what it is inside the mount.
+   */
+  mimeType: string
   /** Always 0 for a directory. */
   size: number
   createdAt: number
