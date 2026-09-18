@@ -19,6 +19,7 @@ import { Daemon, type DaemonSpawn } from './daemon'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
 import { createPlatformIntegration } from './platform'
+import type { StopOptions } from './platform/types'
 import { DaemonStream } from './rpc'
 import { createTray, destroyTray } from './tray'
 import { beginQuit, broadcast, createMainWindow, showMainWindow } from './windows'
@@ -73,12 +74,12 @@ if (!app.requestSingleInstanceLock()) {
       .finally(() => app.exit(0))
   })
 
-  async function teardown(): Promise<void> {
+  async function teardown(opts?: StopOptions): Promise<void> {
     changes?.stop()
     destroyTray()
     // The mount goes first. Stopping the daemon while the domain is still up
     // would leave Finder holding a live folder over nothing.
-    await platform.stop()
+    await platform.stop(opts)
     await daemon.stop()
   }
 
@@ -124,7 +125,9 @@ if (!app.requestSingleInstanceLock()) {
     // Assigned to `quitting` like the before-quit path: `reviveDaemon` checks
     // it, and a revive already awaiting its reachability probe would otherwise
     // resume mid-teardown and respawn the daemon while the wipe runs.
-    quitting = teardown().catch((e) => log.error('app', 'sign_out_failed', { error: e as Error }))
+    quitting = teardown({ waitForHide: true }).catch((e) =>
+      log.error('app', 'sign_out_failed', { error: e as Error }),
+    )
     await quitting
     // stop() leaves an attached daemon alone and can time out on an owned one,
     // and a wipe under a live daemon deletes the database it is still writing.
