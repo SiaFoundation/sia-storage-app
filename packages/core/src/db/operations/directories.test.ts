@@ -11,6 +11,7 @@ import {
   moveDirectory,
   moveFileToDirectory,
   queryAllDirectoriesWithCounts,
+  queryCountDirectories,
   queryCountFilesWithDirectories,
   queryDirectoryById,
   queryDirectoryChildren,
@@ -465,6 +466,15 @@ describe('queryDirectoryChildren', () => {
     const children = await queryDirectoryChildren(db(), '50% off')
     expect(children).toHaveLength(1)
     expect(children[0].name).toBe('child')
+  })
+})
+
+describe('queryCountDirectories', () => {
+  it('counts zero for an empty library and every directory otherwise', async () => {
+    expect(await queryCountDirectories(db())).toBe(0)
+    await insertDirectory(db(), 'Photos')
+    await insertDirectory(db(), 'Vacation', 'Photos')
+    expect(await queryCountDirectories(db())).toBe(2)
   })
 })
 

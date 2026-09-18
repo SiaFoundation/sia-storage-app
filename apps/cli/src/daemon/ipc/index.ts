@@ -2,6 +2,7 @@ import { registerAppServiceIpc } from '@siastorage/core/app'
 import { startIpcServer, type IpcConnection } from '@siastorage/node-adapters'
 import type { ChangeEvent } from '@siastorage/core/types'
 import type { CliApp } from '../../app'
+import { createMaterializing, type Materializing } from '../materializing'
 import { registerDownloadHandlers } from './download'
 import { registerStatusHandlers } from './status'
 import { registerUploadHandlers } from './upload'
@@ -22,10 +23,11 @@ export function buildHandlerMap(
   app: CliApp,
   onShutdown: () => void,
   broadcast?: (message: unknown) => void,
+  materializing: Materializing = createMaterializing(),
 ): IpcHandlerMap {
   const handlers: IpcHandlerMap = new Map()
 
-  registerStatusHandlers(handlers, app, onShutdown)
+  registerStatusHandlers(handlers, app, onShutdown, materializing)
   registerUploadHandlers(handlers, app)
   registerDownloadHandlers(handlers, app)
 
@@ -90,11 +92,21 @@ export function createSubscribers(): Subscribers {
  * One value rather than two arguments, because the map closes over a specific
  * `Subscribers`, and passing a different one would broadcast into an empty set.
  */
-export type IpcSurface = { handlers: IpcHandlerMap; subscribers: Subscribers }
+export type IpcSurface = {
+  handlers: IpcHandlerMap
+  subscribers: Subscribers
+  /** Shared with the provider socket, which is where the evidence arrives. */
+  materializing: Materializing
+}
 
 export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface {
   const subscribers = createSubscribers()
-  return { handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast), subscribers }
+  const materializing = createMaterializing()
+  return {
+    handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast, materializing),
+    subscribers,
+    materializing,
+  }
 }
 
 /** Serves the full handler map on the CLI socket. */

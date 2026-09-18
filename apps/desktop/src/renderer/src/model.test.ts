@@ -26,6 +26,7 @@ function status(over: Partial<Status> = {}): Status {
     domain: 'mounted',
     daemonReachable: true,
     mountPath: '/mount',
+    materializing: { active: false, done: 0, total: 0 },
     ...over,
   }
 }
@@ -37,25 +38,54 @@ describe('what the popover says', () => {
     expect(indicator(status())).toBe('green')
   })
 
+  it('names the folders macOS has read while it is reading them', () => {
+    const s = status({ materializing: { active: true, done: 3, total: 20 } })
+
+    expect(activity(s)).toBe('Preparing folders')
+    expect(activityDetail(s)).toBe('macOS is reading your folders, 3 of 20 ready')
+    expect(indicator(s)).toBe('accent')
+  })
+
+  it('drops the total when the library reports none', () => {
+    const s = status({ materializing: { active: true, done: 3, total: 0 } })
+
+    expect(activityDetail(s)).toBe('macOS is reading your folders, 3 ready')
+  })
+
+  it('says nothing about preparing once it has stopped', () => {
+    const s = status({ materializing: { active: false, done: 20, total: 20 } })
+
+    expect(activity(s)).toBe('Up to date')
+  })
+
   /*
    * The headline, the line under it and the dot all read the same decision, so
    * they cannot describe different problems at once. These pin the order.
    */
-  it('reports an upload ahead of a steady library', () => {
-    const s = status({ uploadsTotal: 2, uploadsDone: 1 })
+  it('reports an upload ahead of the folders being read', () => {
+    const s = status({
+      uploadsTotal: 2,
+      uploadsDone: 1,
+      materializing: { active: true, done: 3, total: 20 },
+    })
 
     expect(activity(s)).toBe('Uploading')
   })
 
-  it('reports a broken mount ahead of a transfer', () => {
-    const s = status({ domain: 'error', uploadsTotal: 2, uploadsDone: 1 })
+  it('reports a broken mount ahead of the folders being read', () => {
+    const s = status({ domain: 'error', materializing: { active: true, done: 3, total: 20 } })
 
     expect(activity(s)).toBe('Finder folder unavailable')
     expect(indicator(s)).toBe('red')
   })
 
   it('reports a missing daemon ahead of everything else', () => {
-    const s = status({ daemonReachable: false, connected: false, domain: 'error' })
+    const s = status({
+      daemonReachable: false,
+      connected: false,
+      domain: 'error',
+      materializing: { active: true, done: 3, total: 20 },
+    })
 
     expect(activity(s)).toBe('Not running')
   })

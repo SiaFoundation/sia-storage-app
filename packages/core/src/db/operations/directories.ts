@@ -315,6 +315,11 @@ export async function queryDirectoriesByParent(
   return rows.map((row) => ({ ...toDirectory(row), nameSortKey: row.nameSortKey }))
 }
 
+export async function queryCountDirectories(db: DatabaseAdapter): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM directories')
+  return row?.n ?? 0
+}
+
 /** Directory rows for a set of ids; departed folders resolve their current state through this. */
 export async function queryDirectoriesByIds(
   db: DatabaseAdapter,

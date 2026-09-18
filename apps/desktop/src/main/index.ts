@@ -268,6 +268,11 @@ if (!app.requestSingleInstanceLock()) {
           broadcast('change', { event: 'change', scope: 'connection' })
           void reviveDaemon()
         },
+        () => {
+          // A reconnected stream is what starts the extension's warm pass,
+          // and this scope is what re-arms the popover's bounded polling.
+          broadcast('change', { event: 'change', scope: 'connection' })
+        },
       )
       changes.start()
       log.info('app', 'subscribed')
