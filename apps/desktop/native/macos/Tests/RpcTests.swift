@@ -95,7 +95,7 @@ final class WireTypeTests: XCTestCase {
         {"id":"f1","parentId":null,"name":"a.txt","kind":"file","size":12,
          "createdAt":1700000000000,"modifiedAt":1700000001000,
          "contentVersion":"sha256:abc","metadataVersion":"1700000001000:a.txt:12:",
-         "uploaded":true,"uploading":false,"downloaded":true,"downloading":false,"progress":0}
+         "uploaded":true,"uploading":false,"downloaded":true,"downloading":false,"progress":0,"mimeType":"text/plain"}
         """
 
     func testDecodesAnItem() throws {

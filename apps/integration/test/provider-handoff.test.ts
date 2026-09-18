@@ -176,6 +176,29 @@ describe('Provider handoff', () => {
       expect(updated.size).toBe('second version, longer'.length)
       expect(updated.contentVersion).not.toBe(created.contentVersion)
     })
+
+    it('moves the edit clock, so the write outranks the state it replaced', async () => {
+      const staged = dest('clock-v1.txt')
+      nodeFs.writeFileSync(staged, 'first')
+      const created = await app.app.provider.create(null, 'clock.txt', 'file', staged)
+      // Backdated so a same-millisecond write cannot hide a preserved clock.
+      await app.app.files.update({ id: created.id }, { updatedAt: 1000 })
+
+      const staged2 = dest('clock-v2.txt')
+      nodeFs.writeFileSync(staged2, 'replacement')
+      const updated = await app.app.provider.write(created.id, staged2)
+
+      expect(updated.modifiedAt).toBeGreaterThan(1000)
+
+      // A row can carry another device's future wall clock via sync-down; the
+      // write must outrank that too, not only the frozen-tie case.
+      const future = Date.now() + 600_000
+      await app.app.files.update({ id: created.id }, { updatedAt: future })
+      const staged3 = dest('clock-v3.txt')
+      nodeFs.writeFileSync(staged3, 'third bytes')
+      const updated2 = await app.app.provider.write(created.id, staged3)
+      expect(updated2.modifiedAt).toBeGreaterThan(future)
+    })
   })
 
   describe('rename', () => {

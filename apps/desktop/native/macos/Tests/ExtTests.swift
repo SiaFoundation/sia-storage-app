@@ -8,16 +8,40 @@ private func makeItem(
     id: String = "f1", parentId: String? = nil, name: String = "a.txt", kind: String = "file",
     size: Int64 = 12, contentVersion: String = "sha256:abc", metadataVersion: String = "m1",
     uploaded: Bool = true, uploading: Bool = false, downloaded: Bool = true,
-    downloading: Bool = false
+    downloading: Bool = false, mimeType: String = ""
 ) throws -> ProviderItem {
     let json = """
         {"id":"\(id)","parentId":\(parentId.map { "\"\($0)\"" } ?? "null"),"name":"\(name)",
          "kind":"\(kind)","size":\(size),"createdAt":1700000000000,"modifiedAt":1700000001000,
          "contentVersion":"\(contentVersion)","metadataVersion":"\(metadataVersion)",
          "uploaded":\(uploaded),"uploading":\(uploading),"downloaded":\(downloaded),
-         "downloading":\(downloading),"progress":0}
+         "downloading":\(downloading),"progress":0,"mimeType":"\(mimeType)"}
         """
     return try JSONDecoder().decode(ProviderItem.self, from: Data(json.utf8))
+}
+
+final class ItemTypeTests: XCTestCase {
+    func testAnExtensionlessNameTakesItsTypeFromTheMime() throws {
+        let item = try makeItem(name: "Test1", mimeType: "image/jpeg")
+        XCTAssertEqual(SiaItem(item).contentType, .jpeg)
+    }
+
+    func testTheNameExtensionWinsOverTheMime() throws {
+        let item = try makeItem(name: "a.png", mimeType: "image/jpeg")
+        XCTAssertEqual(SiaItem(item).contentType, .png)
+    }
+
+    func testNoExtensionAndNoMimeReadsAsPlainData() throws {
+        let item = try makeItem(name: "Test1")
+        XCTAssertEqual(SiaItem(item).contentType, .data)
+    }
+
+    func testFlagsShowExtensionsAndAllowReadWrite() throws {
+        let flags = SiaItem(try makeItem()).fileSystemFlags
+        XCTAssertFalse(flags.contains(.pathExtensionHidden))
+        XCTAssertTrue(flags.contains(.userReadable))
+        XCTAssertTrue(flags.contains(.userWritable))
+    }
 }
 
 final class ItemVersionTests: XCTestCase {
