@@ -210,7 +210,15 @@ export interface AppService {
     create(
       record: Omit<FileRecord, 'objects'>,
       localObject?: LocalObject,
-      opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
+      opts?: {
+        skipInvalidation?: boolean
+        skipCurrentRecalc?: boolean
+        /**
+         * Files the row at insert. Creating at root and moving after would
+         * journal a departure from root that no reader ever saw.
+         */
+        directoryId?: string | null
+      },
     ): Promise<void>
     /** Creates multiple files. Optionally places them all in a directory in the same insert. */
     createMany(

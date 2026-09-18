@@ -25,13 +25,17 @@ import {
   directoryProviderId,
   parseDirectoryProviderId,
   WORKING_SET_ID,
+  type ProviderChanges,
   type ProviderItem,
+  type ProviderPage,
 } from '../../types/provider'
 import type { AppService } from '../service'
-import { folderFingerprint, formatAnchor, parseAnchor } from '../providerAnchor'
+import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
 /** Rows per page. */
 const MAX_PAGE_SIZE = 500
+/** Marks a working set cursor as still working through folders. */
+const FOLDER_CURSOR = 'dirs:'
 
 export type ProviderNamespaceDeps = {
   getService: () => AppService
@@ -153,7 +157,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       createdAt: dir.createdAt,
       modifiedAt: dir.createdAt,
       contentVersion: dir.id,
-      metadataVersion: `${dir.path}:${dir.createdAt}`,
+      // Stable across ancestor renames: a descendant's name and parent id do
+      // not change when a folder above it moves, so redelivering it is a
+      // no-op at the OS instead of a metadata re-apply per row.
+      metadataVersion: JSON.stringify([dir.name, parentId ?? '']),
       // A folder is never a transfer, so it carries no badge.
       uploaded: true,
       uploading: false,
@@ -187,42 +194,330 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return dir ? dir.id : null
   }
 
-  async function listFiles(
-    path: string | null,
-    limit: number,
-    offset: number,
-  ): Promise<Array<FileRecordRow & { fsExists: number }>> {
-    const service = getService()
-    // A directory row is addressed by path in the library but by id at the OS
-    // boundary; the root has no row at all, so it filters on the unfiled
-    // sentinel rather than a real id.
-    let directoryId: string
-    if (path === null) {
-      directoryId = UNFILED_DIRECTORY_ID
-    } else {
-      const dir = await service.directories.getByPath(path)
-      if (!dir) return []
-      directoryId = dir.id
-    }
-    return service.files.queryLibrary({ directoryId, limit, offset })
+  /** This database's feed epoch, immutable for its lifetime. */
+  let feedEpoch: string | null = null
+  async function epoch(): Promise<string> {
+    if (feedEpoch === null) feedEpoch = (await ops.queryFeedMeta(db)).epoch
+    return feedEpoch
   }
 
-  function subdirectories(path: string | null): Promise<Directory[]> {
-    return ops.queryDirectorySubdirectories(db, path)
+  /**
+   * Ids are base36, and '~' sorts above every one of them, so a cursor of
+   * (seq, PAST_ALL_IDS) means "past everything at this sequence". Minted
+   * anchors use it: (seq, '') would sit before the ids written at the
+   * captured high-water and re-deliver the newest rows on every first delta.
+   */
+  const PAST_ALL_IDS = '~'
+
+  /**
+   * The working-set folder listing's cursor: the last path served, hex
+   * encoded because paths may contain the delimiter (hex rather than
+   * base64 keeps this file free of Node's Buffer, which mobile bundles),
+   * plus the feed position captured on the first page. The final file page
+   * returns that position as the delta anchor, so the shell's first change
+   * request covers everything that happened during the listing;
+   * near-boundary duplicates are the safe direction, and the delta drain
+   * is what heals mid-listing mutations.
+   */
+  function encodePath(path: string): string {
+    return Array.from(new TextEncoder().encode(path), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join('')
+  }
+
+  function decodePath(hex: string): string | null {
+    if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/.test(hex)) return null
+    const bytes = new Uint8Array(hex.length / 2)
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+    }
+    return new TextDecoder().decode(bytes)
+  }
+
+  function parseFolderCursor(
+    cursor: string | undefined,
+  ): { afterPath: string; startSeq: number } | null {
+    if (cursor === undefined) return { afterPath: '', startSeq: -1 }
+    if (!cursor.startsWith(FOLDER_CURSOR)) return null
+    const [encoded, seq] = cursor.slice(FOLDER_CURSOR.length).split(':')
+    if (encoded === undefined || seq === undefined || !/^\d+$/.test(seq)) return null
+    const startSeq = Number.parseInt(seq, 10)
+    if (!Number.isSafeInteger(startSeq)) return null
+    const afterPath = decodePath(encoded)
+    if (afterPath === null) return null
+    return { afterPath, startSeq }
+  }
+
+  /**
+   * One page of the library's folders, in path order: a strict prefix sorts
+   * before its extensions, so every parent is served before its own
+   * descendants, which the OS needs because it may drop a child whose
+   * parent it has not met.
+   */
+  async function listWorkingSetFolders(afterPath: string, startSeq: number): Promise<ProviderPage> {
+    const started = startSeq >= 0 ? startSeq : (await ops.queryFeedMeta(db)).seq
+    const directories = await ops.queryDirectoriesAfterPath(db, afterPath, pageSize)
+    const items = directories.map((dir) =>
+      directoryToItem(dir, dir.parentId ? directoryProviderId(dir.parentId) : null),
+    )
+
+    const last = directories[directories.length - 1]
+    const cursor =
+      directories.length === pageSize && last
+        ? `${FOLDER_CURSOR}${encodePath(last.path)}:${started}`
+        : await fileCursor(ANCHOR_START, started)
+    return { items, cursor }
+  }
+
+  /**
+   * The file phase's cursor: the anchor's fourth segment carries the
+   * listing's start position. The delta paths never read the segment, so
+   * only this listing consumes it.
+   */
+  async function fileCursor(
+    position: { feedSeq: number; id: string },
+    startSeq: number,
+  ): Promise<string> {
+    return formatAnchor(await epoch(), position, String(startSeq))
+  }
+
+  function expiredResponse(e: string): ProviderChanges {
+    return {
+      items: [],
+      deletedIds: [],
+      anchor: formatAnchor(e, ANCHOR_START),
+      hasMore: false,
+      expired: true,
+    }
+  }
+
+  /**
+   * Every folder at once: the whole library's deltas on one anchor, the
+   * backbone the OS polls without any folder open. Folders ride the same
+   * feed as files: created and renamed rows past the cursor become items,
+   * and destructions come from the ledger, because the dead row itself is
+   * gone.
+   */
+  async function workingSetChanges(
+    e: string,
+    since: ProviderAnchor,
+    highWater: number,
+  ): Promise<ProviderChanges> {
+    const [dirRows, deletions, filePage] = await Promise.all([
+      ops.queryDirectoryChangesSince(db, since, pageSize),
+      ops.queryDeletedDeparturesSince(db, since, pageSize),
+      ops.queryProviderChanges(db, null, since, pageSize),
+    ])
+    // One ordered stream: every entry keyed (feedSeq, id), cut at the page
+    // budget, cursor = the last key taken. Each source read the same lower
+    // bound with the same limit, so nothing below the cut can be missing.
+    // The reads issue in one synchronous tick; an await between them would
+    // let a write commit under an already-read source and above the cut.
+    type Kind = 'dir' | 'deletedDir' | 'deletedFile' | 'file'
+    const entries: { feedSeq: number; id: string; kind: Kind }[] = [
+      ...dirRows.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'dir' as Kind })),
+      ...deletions.map((r) => ({
+        feedSeq: r.feedSeq,
+        id: r.id,
+        kind: (r.kind === 'dir' ? 'deletedDir' : 'deletedFile') as Kind,
+      })),
+      ...filePage.changed.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'file' as Kind })),
+      ...filePage.removed.map((r) => ({
+        feedSeq: r.feedSeq,
+        id: r.id,
+        kind: 'deletedFile' as Kind,
+      })),
+    ]
+    entries.sort((a, b) => a.feedSeq - b.feedSeq || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    const page = entries.slice(0, pageSize)
+    const last = page[page.length - 1]
+
+    const dirById = new Map(dirRows.map((r) => [r.id, r]))
+    const fileById = new Map(filePage.changed.map((r) => [r.id, r]))
+    const pageDirs = page.flatMap((entry) => {
+      const dir = entry.kind === 'dir' ? dirById.get(entry.id) : undefined
+      return dir ? [dir] : []
+    })
+
+    const fileRows: typeof filePage.changed = []
+    const deletedIds: string[] = []
+    for (const entry of page) {
+      if (entry.kind === 'deletedDir') deletedIds.push(directoryProviderId(entry.id))
+      else if (entry.kind === 'deletedFile') deletedIds.push(entry.id)
+      else if (entry.kind === 'file') {
+        const row = fileById.get(entry.id)
+        if (row) fileRows.push(row)
+      }
+    }
+    // Delivery order, not cursor order: folders first, parents before
+    // their descendants by path, then files, because the OS may drop an
+    // item whose parent it has not met. The cursor cut above is what
+    // guarantees nothing is lost; this only arranges the page.
+    pageDirs.sort((a, b) => (a.path < b.path ? -1 : 1))
+    const dirItems = pageDirs.map((dir) =>
+      directoryToItem(
+        {
+          id: dir.id,
+          path: dir.path,
+          name: ops.directoryDisplayName(dir.path),
+          createdAt: dir.createdAt,
+          parentId: dir.parentId,
+        },
+        dir.parentId ? directoryProviderId(dir.parentId) : null,
+      ),
+    )
+    const items = [...dirItems, ...(await itemsForFiles(fileRows, parentOf))]
+    return {
+      items,
+      deletedIds,
+      anchor: last
+        ? formatAnchor(e, { feedSeq: last.feedSeq, id: last.id })
+        : formatAnchor(e, { feedSeq: highWater, id: PAST_ALL_IDS }),
+      hasMore: page.length === pageSize,
+      expired: false,
+    }
+  }
+
+  /** One folder's deltas, on the same cursor mechanics as the working set. */
+  async function folderChanges(
+    folderId: string | null,
+    anchor: string,
+    e: string,
+    since: ProviderAnchor,
+    highWater: number,
+  ): Promise<ProviderChanges> {
+    const empty = { items: [], deletedIds: [], anchor, hasMore: false, expired: false }
+    const path = await folderPath(folderId)
+    if (path === undefined) return empty
+
+    // The root scope has three spellings, mapped once: child folders hang
+    // off parentId NULL, files off the unfiled sentinel, and ledger rows
+    // off '' (a NULL ledger key would never REPLACE-compact).
+    let dirScope: string | null = null
+    let fileScope: string = UNFILED_DIRECTORY_ID
+    let departKey = ''
+    if (path !== null) {
+      const idFor = await dirIdFor(path)
+      if (idFor === null) return empty
+      dirScope = idFor
+      fileScope = idFor
+      departKey = idFor
+    }
+
+    const [childDirs, departures, filePage] = await Promise.all([
+      ops.queryDirectoryChangesForParent(db, dirScope, since, pageSize),
+      ops.queryDeparturesForParent(db, departKey, since, pageSize),
+      ops.queryProviderChanges(db, fileScope, since, pageSize),
+    ])
+    // One ordered stream, cut and cursored exactly like the working set:
+    // every source read the same lower bound with the same limit, so
+    // nothing below the cut can be missing.
+    type Kind = 'dir' | 'file' | 'removedFile' | 'departure'
+    const entries: { feedSeq: number; id: string; kind: Kind }[] = [
+      ...childDirs.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'dir' as Kind })),
+      ...filePage.changed.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'file' as Kind })),
+      ...filePage.removed.map((r) => ({
+        feedSeq: r.feedSeq,
+        id: r.id,
+        kind: 'removedFile' as Kind,
+      })),
+      ...departures.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'departure' as Kind })),
+    ]
+    entries.sort((a, b) => a.feedSeq - b.feedSeq || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    const page = entries.slice(0, pageSize)
+    const last = page[page.length - 1]
+
+    const dirById = new Map(childDirs.map((r) => [r.id, r]))
+    const fileById = new Map(filePage.changed.map((r) => [r.id, r]))
+    const departureById = new Map(departures.map((r) => [r.id, r]))
+    const pageDirs: typeof childDirs = []
+    const fileRows: typeof filePage.changed = []
+    const removedIds = new Set<string>()
+    const departedIds: string[] = []
+    for (const entry of page) {
+      if (entry.kind === 'dir') {
+        const dir = dirById.get(entry.id)
+        if (dir) pageDirs.push(dir)
+      } else if (entry.kind === 'file') {
+        const row = fileById.get(entry.id)
+        if (row) fileRows.push(row)
+      } else if (entry.kind === 'removedFile') {
+        removedIds.add(entry.id)
+      } else {
+        departedIds.push(entry.id)
+      }
+    }
+
+    // A departure never delivers from its own row. To the OS a removed id
+    // is a domain-wide deletion, so an id that merely left this folder must
+    // arrive as an updated item carrying its new parent, and only current
+    // state can tell that from "moved away, then destroyed". An id that is
+    // a live child again in this same page is already delivered above.
+    const live = new Set([...pageDirs.map((d) => d.id), ...fileRows.map((r) => r.id)])
+    const departedFiles: string[] = []
+    const departedDirs: string[] = []
+    for (const id of departedIds) {
+      if (live.has(id) || removedIds.has(id)) continue
+      if (departureById.get(id)?.kind === 'dir') departedDirs.push(id)
+      else departedFiles.push(id)
+    }
+    const movedFileRows: typeof filePage.changed = []
+    const fileStates = await ops.queryProviderRowsByIds(db, departedFiles)
+    const fileStateById = new Map(fileStates.map((r) => [r.id, r]))
+    for (const id of departedFiles) {
+      const row = fileStateById.get(id)
+      if (row && row.visible === 1) movedFileRows.push(row)
+      else removedIds.add(id)
+    }
+    const dirStates = await ops.queryDirectoriesByIds(db, departedDirs)
+    const dirStateById = new Map(dirStates.map((d) => [d.id, d]))
+    const movedDirItems: ProviderItem[] = []
+    for (const id of departedDirs) {
+      const dir = dirStateById.get(id)
+      if (dir) {
+        movedDirItems.push(
+          directoryToItem(dir, dir.parentId ? directoryProviderId(dir.parentId) : null),
+        )
+      } else {
+        removedIds.add(directoryProviderId(id))
+      }
+    }
+
+    const items = [
+      ...pageDirs.map((dir) =>
+        directoryToItem(
+          {
+            id: dir.id,
+            path: dir.path,
+            name: ops.directoryDisplayName(dir.path),
+            createdAt: dir.createdAt,
+            parentId: dir.parentId,
+          },
+          folderId,
+        ),
+      ),
+      ...movedDirItems,
+      ...(await itemsForFiles([...fileRows, ...movedFileRows], parentOf)),
+    ]
+    return {
+      items,
+      deletedIds: [...removedIds],
+      anchor: last
+        ? formatAnchor(e, { feedSeq: last.feedSeq, id: last.id })
+        : formatAnchor(e, { feedSeq: highWater, id: PAST_ALL_IDS }),
+      hasMore: page.length === pageSize,
+      expired: false,
+    }
   }
 
   /**
    * Rejects any handoff path outside the directory the host nominated.
    *
-   * The shell runs in a different trust domain, so an unchecked path would let
-   * it name any file the daemon can reach, both to read from and to overwrite.
-   * The check resolves `..` before comparing, and requires a separator after
-   * the prefix so a sibling directory sharing a name prefix cannot pass.
-   *
-   * A path is text here and nothing else, so a symlink planted inside the
-   * handoff directory passes this test. It is refused where it is opened, in
-   * the adapter, the only place the link is still distinguishable from what it
-   * points at.
+   * The shell is a different trust domain, so an unchecked path would name any
+   * file the daemon can reach. `..` resolves before comparing and a separator
+   * is required after the prefix, so a sibling name cannot pass. A path is text
+   * here, so a planted symlink passes and is refused in the adapter, the only
+   * place it is still distinguishable from what it points at.
    */
   function requireHandoffPath(candidate: string): string {
     if (!handoffDir) {
@@ -264,9 +559,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     if (directoryId !== null) {
       const dir = await service.directories.getById(directoryId)
       if (!dir) return null
-      const parentPath = directoryParent(dir.path)
-      const parent = parentPath === null ? null : await service.directories.getByPath(parentPath)
-      return directoryToItem(dir, parent ? directoryProviderId(parent.id) : null)
+      return directoryToItem(dir, dir.parentId ? directoryProviderId(dir.parentId) : null)
     }
 
     const row = await ops.queryProviderItem(db, id)
@@ -279,8 +572,35 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     item,
 
     async list(folderId, cursor) {
-      // The working set has no listing; it exists for the change feed.
-      if (folderId === WORKING_SET_ID) return { items: [] }
+      /*
+       * The whole library: what the system is told about without anyone having
+       * browsed to it, because an extension tracking nothing owes it everything.
+       * Folders first a page at a time, then files, so no reply is unbounded.
+       * The file phase pages on the change cursor the delta feed uses, so a
+       * client that reads the set and then follows changes never translates
+       * between two cursor spaces.
+       */
+      if (folderId === WORKING_SET_ID) {
+        const folderPage = parseFolderCursor(cursor)
+        if (folderPage !== null) {
+          return listWorkingSetFolders(folderPage.afterPath, folderPage.startSeq)
+        }
+
+        const parsed = cursor === undefined ? null : parseAnchor(cursor, await epoch())
+        // An unreadable file-phase cursor restarts the listing from the top.
+        // Reachable: a wipe mid-listing changes the epoch, and the shell's
+        // in-flight cursor fails the check.
+        if (parsed === null) return listWorkingSetFolders('', -1)
+        const startSeq = /^\d+$/.test(parsed.startSeq) ? Number.parseInt(parsed.startSeq, 10) : 0
+        const page = await ops.queryProviderChanges(db, null, parsed, pageSize)
+        const items = await itemsForFiles(page.changed, parentOf)
+        // The final page hands over the position captured when the listing
+        // began, so the first delta request re-covers the whole listing
+        // window; duplicates are the safe direction.
+        return page.hasMore
+          ? { items, cursor: await fileCursor(page.cursor, startSeq) }
+          : { items, anchor: formatAnchor(await epoch(), { feedSeq: startSeq, id: PAST_ALL_IDS }) }
+      }
 
       const path = await folderPath(folderId)
       // A folder that vanished between the OS listing it and asking for its
@@ -288,85 +608,79 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // browser show a failure for a folder the user already deleted.
       if (path === undefined) return { items: [] }
 
-      const offset = cursor ? Number.parseInt(cursor, 10) : 0
-      if (!Number.isInteger(offset) || offset < 0) return { items: [] }
+      // Subfolders page first, then files, each on a name keyset rather than
+      // an offset, because an offset page re-skips every prior row and a
+      // 100k-file folder pays that per page: `d:<hexSortKey>:<id>:<startSeq>`
+      // pages children and `k:<hexSortKey>:<id>:<startSeq>` pages files. A
+      // page that exhausts the children fills its remainder with the first
+      // files, so a folder with few subfolders lists in one reply. The feed
+      // position is captured before the first page and carried through, so
+      // the final page's anchor covers the whole listing window; an
+      // unreadable cursor restarts the listing, which re-delivers
+      // idempotently.
+      const dirPage = /^d:([0-9a-f]*):([^:]+):(\d+)$/.exec(cursor ?? '')
+      const filePage = /^k:([0-9a-f]*):([^:]+):(\d+)$/.exec(cursor ?? '')
+      const carried = dirPage?.[3] ?? filePage?.[3]
+      const startSeq =
+        carried !== undefined && Number.isSafeInteger(Number.parseInt(carried, 10))
+          ? Number.parseInt(carried, 10)
+          : (await ops.queryFeedMeta(db)).seq
+
+      const scopeId = path === null ? UNFILED_DIRECTORY_ID : ((await dirIdFor(path)) ?? null)
+      if (scopeId === null) return { items: [] }
 
       const items: ProviderItem[] = []
-      // Subfolders are only reported on the first page: they are read whole,
-      // so paging them alongside files would repeat them on every page.
-      if (offset === 0) {
-        for (const dir of await subdirectories(path)) {
-          items.push(directoryToItem(dir, folderId))
+      let fileAfter: { nameSortKey: string; id: string } | null = null
+      let fileBudget = pageSize
+      if (filePage === null) {
+        const after =
+          dirPage === null ? null : { nameSortKey: decodePath(dirPage[1]) ?? '', id: dirPage[2] }
+        const children = await ops.queryDirectoriesByParent(
+          db,
+          path === null ? null : scopeId,
+          after,
+          pageSize,
+        )
+        items.push(...children.map((dir) => directoryToItem(dir, folderId)))
+        const last = children[children.length - 1]
+        if (children.length === pageSize && last) {
+          return { items, cursor: `d:${encodePath(last.nameSortKey)}:${last.id}:${startSeq}` }
         }
+        fileBudget = pageSize - children.length
+      } else {
+        fileAfter = { nameSortKey: decodePath(filePage[1]) ?? '', id: filePage[2] }
       }
 
-      const rows = await listFiles(path, pageSize, offset)
+      const rows = await ops.queryProviderFolderFiles(db, scopeId, fileAfter, fileBudget)
       items.push(...(await itemsForFiles(rows, () => folderId)))
 
-      const nextCursor = rows.length === pageSize ? String(offset + rows.length) : undefined
-      return nextCursor === undefined ? { items } : { items, cursor: nextCursor }
+      if (rows.length === fileBudget && rows.length > 0) {
+        const last = rows[rows.length - 1]
+        return { items, cursor: `k:${encodePath(last.nameSortKey)}:${last.id}:${startSeq}` }
+      }
+      // The scope's first valid anchor: without it a cold enumerator would
+      // expire, relist, and expire again forever, since only anchors this
+      // namespace mints can pass the epoch check.
+      const anchor = formatAnchor(await epoch(), { feedSeq: startSeq, id: PAST_ALL_IDS })
+      return { items, anchor }
     },
 
     async changes(folderId, anchor) {
-      const since = parseAnchor(anchor)
-      const empty = { items: [], deletedIds: [], anchor, hasMore: false, expired: false }
-
-      // Every folder at once. A file leaving one changes neither that folder's
-      // contents nor the new one's in a way a per-folder read can express, so
-      // this is where a move becomes visible. It lists no folders of its own,
-      // so it has no folder set to compare.
-      if (folderId === WORKING_SET_ID) {
-        const page = await ops.queryProviderChanges(db, null, since, pageSize)
-        return {
-          items: await itemsForFiles(page.changed, parentOf),
-          deletedIds: page.removed,
-          anchor: formatAnchor(page.cursor, ''),
-          hasMore: page.hasMore,
-          expired: false,
-        }
-      }
-
-      const path = await folderPath(folderId)
-      if (path === undefined) return empty
-
-      const directoryId = path === null ? UNFILED_DIRECTORY_ID : ((await dirIdFor(path)) ?? null)
-      if (directoryId === null) return empty
-
-      const children = await subdirectories(path)
-      const folders = folderFingerprint(children.map((dir) => dir.id))
-
-      // A deleted folder leaves no row to name, so it can only be reported by
-      // expiring the anchor and letting the caller list, which says what exists
-      // rather than what changed. Any difference expires: a fingerprint cannot
-      // tell an addition from an addition beside a removal, and a missed
-      // removal is a folder that never goes away.
-      if (since.folders !== '' && since.folders !== folders) {
-        return {
-          items: [],
-          deletedIds: [],
-          anchor: formatAnchor(since, folders),
-          hasMore: false,
-          expired: true,
-        }
-      }
-
-      const page = await ops.queryProviderChanges(db, directoryId, since, pageSize)
-      const items = await itemsForFiles(page.changed, parentOf)
-
-      // Every subfolder, every time. A folder carries no edit clock, so there
-      // is nothing to compare an anchor against; the OS drops the ones whose
-      // metadata version it already holds.
-      for (const dir of children) {
-        items.push(directoryToItem(dir, folderId))
-      }
-
-      return {
-        items,
-        deletedIds: page.removed,
-        anchor: formatAnchor(page.cursor, folders),
-        hasMore: page.hasMore,
-        expired: false,
-      }
+      const e = await epoch()
+      const since = parseAnchor(anchor, e)
+      // Another library's anchor, or noise: one expiry, the shell relists,
+      // and the listing mints a fresh anchor.
+      if (since === null) return expiredResponse(e)
+      // The high-water mark is read before the window queries on purpose: a
+      // window verified empty afterwards proves nothing landed in
+      // (since, meta.seq], so advancing an idle anchor to meta.seq skips
+      // nothing. Anchors that track the present are what make the departure
+      // ledger prunable: below the horizon means "has not polled since".
+      const meta = await ops.queryFeedMeta(db)
+      if (since.feedSeq < meta.horizon) return expiredResponse(e)
+      return folderId === WORKING_SET_ID
+        ? workingSetChanges(e, since, meta.seq)
+        : folderChanges(folderId, anchor, e, since, meta.seq)
     },
 
     async fetch(id, destPath) {
@@ -421,25 +735,28 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         'application/octet-stream'
       const adopted = await fsIO.adoptFile({ id, type }, source)
       const now = Date.now()
-      await service.files.create({
-        id,
-        name,
-        type,
-        kind: 'file',
-        size: adopted.size,
-        hash: adopted.hash,
-        trashedAt: null,
-        createdAt: now,
-        updatedAt: now,
-        mediaAssetId: null,
-        addedAt: now,
-        deletedAt: null,
-      })
+      // Created already filed: an insert at root followed by a move would
+      // journal a departure from root that no reader ever saw.
+      const dir = path === null ? null : await service.directories.getByPath(path)
+      await service.files.create(
+        {
+          id,
+          name,
+          type,
+          kind: 'file',
+          size: adopted.size,
+          hash: adopted.hash,
+          trashedAt: null,
+          createdAt: now,
+          updatedAt: now,
+          mediaAssetId: null,
+          addedAt: now,
+          deletedAt: null,
+        },
+        undefined,
+        { directoryId: dir?.id ?? null },
+      )
       await service.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
-      if (path !== null) {
-        const dir = await service.directories.getByPath(path)
-        if (dir) await service.directories.moveFile(id, dir.id)
-      }
       // The uploader owns getting it to the indexer; this call only stages it.
       await service.uploader.enqueueByIds([id])
 
@@ -484,7 +801,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         const destination = await folderPath(newParentId)
         if (destination === undefined) throw new Error('No directory with that id')
         const current = await service.directories.getById(directoryId)
-        if (current && directoryParent(current.path) !== destination) {
+        if (current && ops.directoryParentPath(current.path) !== destination) {
           await service.directories.moveDirectory(directoryId, destination)
         }
         const moved = await item(id)
@@ -521,12 +838,6 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       await service.files.trashFile(id)
     },
   }
-}
-
-/** The parent of a directory path, or null when it sits at the root. */
-function directoryParent(path: string): string | null {
-  const i = path.lastIndexOf('/')
-  return i === -1 ? null : path.slice(0, i)
 }
 
 /**

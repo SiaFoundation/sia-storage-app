@@ -1,3 +1,4 @@
+import { directoryProviderId, WORKING_SET_ID, type ProviderItem } from '@siastorage/core/types'
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -112,4 +113,72 @@ export async function createNewerVersion(
     addedAt: now,
     deletedAt: null,
   })
+}
+
+/** The provider surface the feed helpers walk, as the extension calls it. */
+export type ProviderFeedHost = {
+  app: {
+    provider: {
+      list(
+        container: string | null,
+        cursor?: string,
+      ): Promise<{ items: ProviderItem[]; cursor?: string; anchor?: string }>
+      changes(
+        container: string | null,
+        anchor: string,
+      ): Promise<{
+        items: ProviderItem[]
+        deletedIds: string[]
+        anchor: string
+        hasMore: boolean
+        expired: boolean
+      }>
+    }
+    directories: { getAll(): Promise<{ id: string }[]> }
+    files: { queryLibrary(opts: { limit: number }): Promise<{ id: string }[]> }
+  }
+}
+
+/** Walks a container's listing to completion and returns the minted anchor. */
+export async function drainListing(
+  host: ProviderFeedHost,
+  container: string | null,
+): Promise<{ items: ProviderItem[]; anchor: string }> {
+  const items: ProviderItem[] = []
+  let cursor: string | undefined
+  for (;;) {
+    const page = await host.app.provider.list(container, cursor)
+    items.push(...page.items)
+    if (page.anchor !== undefined) return { items, anchor: page.anchor }
+    if (page.cursor === undefined) throw new Error('listing ended without an anchor')
+    cursor = page.cursor
+  }
+}
+
+/**
+ * Drains a fresh working-set listing plus its deltas and asserts the result
+ * matches what the library actually contains. Wired into suite teardowns so
+ * every flow already written exercises the feed's triggers.
+ */
+export async function assertFeedConverges(host: ProviderFeedHost): Promise<void> {
+  const listed = await drainListing(host, WORKING_SET_ID)
+  const mirror = new Set(listed.items.map((item) => item.id))
+  let anchor = listed.anchor
+  let hasMore = true
+  while (hasMore) {
+    const page = await host.app.provider.changes(WORKING_SET_ID, anchor)
+    if (page.expired) throw new Error('the feed expired during teardown convergence')
+    for (const item of page.items) mirror.add(item.id)
+    for (const id of page.deletedIds) mirror.delete(id)
+    anchor = page.anchor
+    hasMore = page.hasMore
+  }
+  const expected = new Set<string>()
+  for (const dir of await host.app.directories.getAll()) {
+    expected.add(directoryProviderId(dir.id))
+  }
+  for (const file of await host.app.files.queryLibrary({ limit: 100000 })) {
+    expected.add(file.id)
+  }
+  expect([...mirror].sort()).toEqual([...expected].sort())
 }

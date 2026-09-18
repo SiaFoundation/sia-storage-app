@@ -1,33 +1,36 @@
 /*
  * What the library looks like to an OS storage-provider shell: one file per
- * name in each folder, and what changed since a point in the edit stream.
+ * name in each folder, and what changed since a point in the feed sequence.
  *
  * A file here is its current version, which is the only thing a file browser
  * can show, so every version behind it is invisible through these queries.
  * Keeping that in one place is what lets `app.provider` deal in files without
  * knowing the library keeps a stack of them.
  *
- * The change feed's position is a cursor over `(updatedAt, id)`, not a
- * timestamp: a bulk write lands many rows in one millisecond, and a timestamp
- * alone cannot say where a cut page stopped. It reports three ways an item
- * stops being visible, trashed, tombstoned, and superseded; the last is found
- * through the file that replaced it, because demotion writes nothing to the
- * losing row and no read of the clock would ever find it.
+ * The feed's position is a cursor over `(feedSeq, id)`. feedSeq is the
+ * trigger-maintained apply-order sequence, never domain time: remote edits
+ * carry another device's wall clock in `updatedAt`, and a cursor over that
+ * could pass a row before it lands. Every way a row stops being visible,
+ * trashed, tombstoned, superseded, moves the row's own feedSeq (the
+ * `current` flip fires the trigger), so removals are rows in the window that
+ * are no longer visible, and nothing needs to be found backwards. Rows from
+ * before the feed migration sit at feedSeq 0 and page by id inside that
+ * band.
  */
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecordRow } from '../../types/files'
 import { buildRecordFilter, UNFILED_DIRECTORY_ID } from './library'
 
-/** Where a reader stopped. `id` breaks the tie between rows sharing a millisecond. */
+/** Where a reader stopped. `id` breaks the tie between rows sharing a sequence. */
 export type ProviderChangeCursor = {
-  updatedAt: number
+  feedSeq: number
   id: string
 }
 
 export type ProviderChangeRows = {
   changed: ProviderChangeRow[]
-  /** Ids that were visible before and are not now: trashed, tombstoned or superseded. */
-  removed: string[]
+  /** Rows in the window that are not visible now: trashed, tombstoned or superseded. */
+  removed: { id: string; feedSeq: number }[]
   /** Where the next read resumes. Unchanged from the input when nothing matched. */
   cursor: ProviderChangeCursor
   /** A full page came back, so more may be waiting past `cursor`. */
@@ -37,6 +40,7 @@ export type ProviderChangeRows = {
 export type ProviderChangeRow = FileRecordRow & {
   fsExists: number
   directoryId: string | null
+  feedSeq: number
 }
 
 /**
@@ -48,7 +52,7 @@ export async function queryProviderItem(
   id: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId, (fs.fileId IS NOT NULL) AS fsExists
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.id = ? AND ${VISIBLE}`,
@@ -77,89 +81,196 @@ export async function queryProviderChanges(
   const scopeParams =
     directoryId === null || directoryId === UNFILED_DIRECTORY_ID ? [] : [directoryId]
 
-  // One pass over both: the page is a window on the edit clock, and whether a
-  // row inside it is still visible is a property of the row.
+  // One pass over both: the page is a window on the feed, and whether a row
+  // inside it is still visible is a property of the row.
   const rows = await db.getAllAsync<ProviderChangeRow & { visible: number }>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId,
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
             (fs.fileId IS NOT NULL) AS fsExists,
             (${VISIBLE}) AS visible
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.kind = 'file' ${scope}
-       AND (f.updatedAt > ? OR (f.updatedAt = ? AND f.id > ?))
-     ORDER BY f.updatedAt ASC, f.id ASC
+       AND (f.feedSeq > ? OR (f.feedSeq = ? AND f.id > ?))
+     ORDER BY f.feedSeq ASC, f.id ASC
      LIMIT ?`,
     ...scopeParams,
-    since.updatedAt,
-    since.updatedAt,
+    since.feedSeq,
+    since.feedSeq,
     since.id,
     limit,
   )
 
   const changed: ProviderChangeRow[] = []
-  const removed: string[] = []
+  const removed: { id: string; feedSeq: number }[] = []
   for (const row of rows) {
     if (row.visible === 1) changed.push(row)
-    else removed.push(row.id)
+    else removed.push({ id: row.id, feedSeq: row.feedSeq })
   }
-  removed.push(...(await supersededIn(db, changed)))
 
   const last = rows[rows.length - 1]
   const hasMore = rows.length === limit
+  // The position is exact in both cases: a later transaction always takes a
+  // larger sequence, so nothing can land at or below a position already read.
   return {
     changed,
     removed,
-    // Mid-page the position is exact. At the end of the run it rewinds to the
-    // start of the last millisecond: a row updated into that millisecond after
-    // this read sorts by id, and half of them would land below an exact
-    // position and never be read. Re-reporting a millisecond is the cheaper
-    // mistake.
-    cursor: last ? { updatedAt: last.updatedAt, id: hasMore ? last.id : '' } : since,
+    cursor: last ? { feedSeq: last.feedSeq, id: last.id } : since,
     hasMore,
   }
 }
 
 /**
- * The versions the files in a page replaced: whatever else lives under the
- * same name in the same folder is behind the current one, and behind means
- * gone as far as a file browser is concerned.
+ * A ledger row: id left `parentId` at `feedSeq`, by moving or by its row
+ * being destroyed. Never delivered as-is; the reader resolves the id's
+ * current state, because "moved from A then deleted in B" must read as a
+ * deletion in A's scope and only the live tables know.
  */
-async function supersededIn(db: DatabaseAdapter, current: ProviderChangeRow[]): Promise<string[]> {
-  if (current.length === 0) return []
-  const groups = current.map(() => '(f.name = ? AND f.directoryId IS ?)').join(' OR ')
-  const params = current.flatMap((row) => [row.name, row.directoryId])
-  const rows = await db.getAllAsync<{ id: string }>(
-    `SELECT f.id FROM files f
-     WHERE f.kind = 'file' AND NOT (${VISIBLE}) AND (${groups})`,
-    ...params,
+export type ProviderDepartureRow = {
+  id: string
+  kind: 'file' | 'dir'
+  /** The parent's row id at departure; '' encodes root. */
+  parentId: string
+  reason: 'moved' | 'deleted'
+  feedSeq: number
+}
+
+export type ProviderDirectoryChangeRow = {
+  id: string
+  path: string
+  createdAt: number
+  parentId: string | null
+  feedSeq: number
+}
+
+/** Directory rows past the cursor, for the working set's folder deltas. */
+export async function queryDirectoryChangesSince(
+  db: DatabaseAdapter,
+  since: ProviderChangeCursor,
+  limit: number,
+): Promise<ProviderDirectoryChangeRow[]> {
+  return db.getAllAsync(
+    `SELECT id, path, createdAt, parentId, feedSeq FROM directories
+     WHERE feedSeq > ? OR (feedSeq = ? AND id > ?)
+     ORDER BY feedSeq ASC, id ASC
+     LIMIT ?`,
+    since.feedSeq,
+    since.feedSeq,
+    since.id,
+    limit,
   )
-  return rows.map((row) => row.id)
+}
+
+/** One folder's child directory rows past the cursor, for its scoped delta. */
+export async function queryDirectoryChangesForParent(
+  db: DatabaseAdapter,
+  parentId: string | null,
+  since: ProviderChangeCursor,
+  limit: number,
+): Promise<ProviderDirectoryChangeRow[]> {
+  const cond = parentId === null ? 'parentId IS NULL' : 'parentId = ?'
+  const params = parentId === null ? [] : [parentId]
+  return db.getAllAsync(
+    `SELECT id, path, createdAt, parentId, feedSeq FROM directories
+     WHERE ${cond} AND (feedSeq > ? OR (feedSeq = ? AND id > ?))
+     ORDER BY feedSeq ASC, id ASC
+     LIMIT ?`,
+    ...params,
+    since.feedSeq,
+    since.feedSeq,
+    since.id,
+    limit,
+  )
+}
+
+/** Destructions past the cursor; the working set's removals. */
+export async function queryDeletedDeparturesSince(
+  db: DatabaseAdapter,
+  since: ProviderChangeCursor,
+  limit: number,
+): Promise<ProviderDepartureRow[]> {
+  return db.getAllAsync(
+    `SELECT id, kind, parentId, reason, feedSeq FROM feed_departures
+     WHERE reason = 'deleted' AND (feedSeq > ? OR (feedSeq = ? AND id > ?))
+     ORDER BY feedSeq ASC, id ASC
+     LIMIT ?`,
+    since.feedSeq,
+    since.feedSeq,
+    since.id,
+    limit,
+  )
+}
+
+/** Departures from one folder past the cursor; '' is the root partition. */
+export async function queryDeparturesForParent(
+  db: DatabaseAdapter,
+  parentId: string,
+  since: ProviderChangeCursor,
+  limit: number,
+): Promise<ProviderDepartureRow[]> {
+  return db.getAllAsync(
+    `SELECT id, kind, parentId, reason, feedSeq FROM feed_departures
+     WHERE parentId = ? AND (feedSeq > ? OR (feedSeq = ? AND id > ?))
+     ORDER BY feedSeq ASC, id ASC
+     LIMIT ?`,
+    parentId,
+    since.feedSeq,
+    since.feedSeq,
+    since.id,
+    limit,
+  )
 }
 
 /**
- * What the library counts as a visible record, from the one place that decides
- * it.
+ * Current state for a page of departure ids, visibility included, so the
+ * reader can tell a moved row (deliver its item) from a dead or invisible
+ * one (deliver the deletion).
  */
-const VISIBLE = buildRecordFilter('f')
+export async function queryProviderRowsByIds(
+  db: DatabaseAdapter,
+  ids: string[],
+): Promise<(ProviderChangeRow & { visible: number })[]> {
+  if (ids.length === 0) return []
+  const ph = ids.map(() => '?').join(',')
+  return db.getAllAsync(
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
+            (fs.fileId IS NOT NULL) AS fsExists,
+            (${VISIBLE}) AS visible
+     FROM files f
+     LEFT JOIN fs ON fs.fileId = f.id
+     WHERE f.id IN (${ph})`,
+    ...ids,
+  )
+}
 
-const ROW_COLUMNS = [
-  'id',
-  'name',
-  'size',
-  'createdAt',
-  'updatedAt',
-  'type',
-  'kind',
-  'mediaAssetId',
-  'hash',
-  'addedAt',
-  'thumbForId',
-  'thumbSize',
-  'trashedAt',
-  'deletedAt',
-]
-  .map((column) => `f.${column}`)
-  .join(', ')
+/**
+ * One keyset page of a folder's visible files in name order, for the
+ * per-folder listing; offset paging re-skips every prior row on each page,
+ * which is quadratic across a big folder.
+ */
+export async function queryProviderFolderFiles(
+  db: DatabaseAdapter,
+  directoryId: string,
+  after: { nameSortKey: string; id: string } | null,
+  limit: number,
+): Promise<(ProviderChangeRow & { nameSortKey: string })[]> {
+  const scope = directoryId === UNFILED_DIRECTORY_ID ? 'f.directoryId IS NULL' : 'f.directoryId = ?'
+  const scopeParams = directoryId === UNFILED_DIRECTORY_ID ? [] : [directoryId]
+  const cursorCond =
+    after === null ? '' : 'AND (f.nameSortKey > ? OR (f.nameSortKey = ? AND f.id > ?))'
+  const cursorParams = after === null ? [] : [after.nameSortKey, after.nameSortKey, after.id]
+  return db.getAllAsync(
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, f.nameSortKey,
+            (fs.fileId IS NOT NULL) AS fsExists
+     FROM files f
+     LEFT JOIN fs ON fs.fileId = f.id
+     WHERE ${scope} AND ${VISIBLE} ${cursorCond}
+     ORDER BY f.nameSortKey ASC, f.id ASC
+     LIMIT ?`,
+    ...scopeParams,
+    ...cursorParams,
+    limit,
+  )
+}
 
 /**
  * The feed's epoch and high-water mark. The epoch is minted once per
@@ -188,3 +299,28 @@ export async function pruneFeedDepartures(db: DatabaseAdapter, horizon: number):
     `DELETE FROM feed_departures WHERE feedSeq < (SELECT horizon FROM feed_meta WHERE id = 1)`,
   )
 }
+
+/**
+ * What the library counts as a visible record, from the one place that decides
+ * it.
+ */
+const VISIBLE = buildRecordFilter('f')
+
+const ROW_COLUMNS = [
+  'id',
+  'name',
+  'size',
+  'createdAt',
+  'updatedAt',
+  'type',
+  'kind',
+  'mediaAssetId',
+  'hash',
+  'addedAt',
+  'thumbForId',
+  'thumbSize',
+  'trashedAt',
+  'deletedAt',
+]
+  .map((column) => `f.${column}`)
+  .join(', ')

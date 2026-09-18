@@ -1,7 +1,7 @@
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { directoryProviderId, WORKING_SET_ID } from '@siastorage/core/types'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
-import { createNewerVersion } from './utils'
+import { assertFeedConverges, createNewerVersion, drainListing } from './utils'
 
 describe('Provider reads', () => {
   let app: TestApp
@@ -12,6 +12,7 @@ describe('Provider reads', () => {
   })
 
   afterEach(async () => {
+    await assertFeedConverges(app)
     await app.shutdown()
   })
 
@@ -90,12 +91,133 @@ describe('Provider reads', () => {
       expect(page.items).toEqual([])
     })
 
-    it('has no listing for the working set', async () => {
-      await app.addFiles(generateTestFiles(2, { startId: 300 }))
+    it('lists every file in the library for the working set', async () => {
+      const dir = await app.app.directories.create('Trips')
+      const filed = await app.addFiles(generateTestFiles(2, { startId: 300 }))
+      for (const f of filed) await app.app.files.moveFile(f.id, dir.id)
+      const unfiled = await app.addFiles(generateTestFiles(2, { startId: 310 }))
 
-      const page = await app.app.provider.list(WORKING_SET_ID)
+      const items = (await drainListing(app, WORKING_SET_ID)).items
 
-      expect(page.items).toEqual([])
+      const files = items.filter((i) => i.kind === 'file').map((i) => i.id)
+      expect(files.sort()).toEqual([...filed, ...unfiled].map((f) => f.id).sort())
+    })
+
+    it('gives each working set file the folder it is in', async () => {
+      const dir = await app.app.directories.create('Trips')
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 320 }))
+      await app.app.files.moveFile(file.id, dir.id)
+
+      const items = (await drainListing(app, WORKING_SET_ID)).items
+
+      expect(items.find((i) => i.id === file.id)?.parentId).toBe(directoryProviderId(dir.id))
+    })
+
+    it('lists every folder in the working set, each under its parent', async () => {
+      const parent = await app.app.directories.create('Trips')
+      const child = await app.app.directories.create('2026', parent.path)
+
+      const items = (await drainListing(app, WORKING_SET_ID)).items
+
+      const folders = items.filter((i) => i.kind === 'dir')
+      expect(folders.map((i) => i.name).sort()).toEqual(['2026', 'Trips'])
+      expect(folders.find((i) => i.id === directoryProviderId(child.id))?.parentId).toBe(
+        directoryProviderId(parent.id),
+      )
+      expect(folders.find((i) => i.id === directoryProviderId(parent.id))?.parentId).toBeNull()
+    })
+
+    it('lists a folder before the folders inside it', async () => {
+      const parent = await app.app.directories.create('Trips')
+      await app.app.directories.create('2026', parent.path)
+      await app.app.directories.create('Work')
+
+      const items = (await drainListing(app, WORKING_SET_ID)).items
+
+      // Path order: a strict prefix sorts before its extensions, so a parent
+      // always precedes its own descendants, which is what the OS needs.
+      const names = items.filter((i) => i.kind === 'dir').map((i) => i.name)
+      expect(names).toEqual(['Trips', '2026', 'Work'])
+    })
+
+    it('lists every folder before any file', async () => {
+      await app.app.directories.create('Trips')
+      await app.addFiles(generateTestFiles(1, { startId: 340 }))
+
+      const items = (await drainListing(app, WORKING_SET_ID)).items
+
+      const kinds = items.map((i) => i.kind)
+      expect(kinds.lastIndexOf('dir')).toBeLessThan(kinds.indexOf('file'))
+    })
+
+    it('pages folders across the dirs cursor and hands over to files once each', async () => {
+      const paged = createTestApp(createEmptyIndexerStorage(), { maxPageSize: 2 })
+      await paged.start()
+      try {
+        for (const name of ['A', 'B', 'C', 'D', 'E']) {
+          await paged.app.directories.create(name)
+        }
+        const [file] = await paged.addFiles(generateTestFiles(1, { startId: 360 }))
+
+        const items = (await drainListing(paged, WORKING_SET_ID)).items
+        const dirs = items.filter((i) => i.kind === 'dir').map((i) => i.name)
+        const files = items.filter((i) => i.kind === 'file').map((i) => i.id)
+
+        expect(dirs.sort()).toEqual(['A', 'B', 'C', 'D', 'E'])
+        expect(files).toEqual([file.id])
+      } finally {
+        await paged.shutdown()
+      }
+    })
+
+    it("a folder's subfolders page with its files, every page bounded", async () => {
+      const paged = createTestApp(createEmptyIndexerStorage(), { maxPageSize: 2 })
+      await paged.start()
+      try {
+        const parent = await paged.app.directories.create('Big')
+        for (const name of ['A', 'B', 'C', 'D', 'E']) {
+          await paged.app.directories.create(name, parent.path)
+        }
+        const files = await paged.addFiles(generateTestFiles(3, { startId: 370 }))
+        for (const f of files) await paged.app.files.moveFile(f.id, parent.id)
+
+        const pageSizes: number[] = []
+        const items = []
+        let cursor: string | undefined
+        for (;;) {
+          const page = await paged.app.provider.list(directoryProviderId(parent.id), cursor)
+          pageSizes.push(page.items.length)
+          items.push(...page.items)
+          if (page.anchor !== undefined) break
+          if (page.cursor === undefined) throw new Error('listing ended without an anchor')
+          cursor = page.cursor
+        }
+
+        expect(Math.max(...pageSizes)).toBeLessThanOrEqual(2)
+        const dirs = items.filter((i) => i.kind === 'dir').map((i) => i.name)
+        const fileIds = items.filter((i) => i.kind === 'file').map((i) => i.id)
+        expect(dirs.sort()).toEqual(['A', 'B', 'C', 'D', 'E'])
+        expect([...fileIds].sort()).toEqual(files.map((f) => f.id).sort())
+        const kinds = items.map((i) => i.kind)
+        expect(kinds.lastIndexOf('dir')).toBeLessThan(kinds.indexOf('file'))
+      } finally {
+        await paged.shutdown()
+      }
+    })
+
+    it('pages the working set without repeating a file', async () => {
+      const paged = createTestApp(createEmptyIndexerStorage(), { maxPageSize: 2 })
+      await paged.start()
+      try {
+        const added = await paged.addFiles(generateTestFiles(5, { startId: 330 }))
+
+        const items = (await drainListing(paged, WORKING_SET_ID)).items
+        const seen = items.filter((i) => i.kind === 'file').map((i) => i.id)
+
+        expect(seen.sort()).toEqual(added.map((f) => f.id).sort())
+      } finally {
+        await paged.shutdown()
+      }
     })
   })
 
