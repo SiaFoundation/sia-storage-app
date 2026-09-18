@@ -224,7 +224,7 @@ export interface AppService {
     /** Upserts multiple files. */
     upsertMany(
       records: Omit<FileRecord, 'objects'>[],
-      opts?: { skipCurrentRecalc?: boolean },
+      opts?: { skipCurrentRecalc?: boolean; directoryIdByFileId?: Map<string, string> },
     ): Promise<void>
     /** Returns full metadata for a file, including tags and directory. */
     getMetadata(id: string): Promise<FileMetadata | null>
@@ -379,6 +379,11 @@ export interface AppService {
       dirPath: string | undefined,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
+    /** Creates every missing directory in the given paths and returns input path to row id. */
+    ensureAtPaths(
+      paths: Iterable<string>,
+      opts?: { skipInvalidation?: boolean },
+    ): Promise<Map<string, string>>
     /** Batch reconciles directory assignments from metadata. Returns old version groups for recalculation. */
     syncManyFromMetadata(
       entries: { fileId: string; directoryPath: string }[],

@@ -428,6 +428,7 @@ export function buildDbNamespaces(
       upsertMany: async (records, opts) => {
         await ops.upsertManyFiles(db, records, {
           skipCurrentRecalc: opts?.skipCurrentRecalc,
+          directoryIdByFileId: opts?.directoryIdByFileId,
         })
         if (records.length > 0 && !opts?.skipCurrentRecalc) {
           invalidateLibrary()
@@ -658,6 +659,17 @@ export function buildDbNamespaces(
           caches.directories.invalidate(`file/${fileId}`)
           caches.libraryVersion.invalidate()
         }
+      },
+      ensureAtPaths: async (paths, opts) => {
+        const map = await ops.ensureDirectoriesAtPaths(db, paths)
+        // A caller inside a transaction skips this: notifying subscribers before
+        // commit would surface rows that a rollback then removes. It invalidates
+        // after commit instead.
+        if (!opts?.skipInvalidation) {
+          caches.directories.invalidateAll()
+          caches.libraryVersion.invalidate()
+        }
+        return map
       },
       syncManyFromMetadata: async (entries, opts) => {
         const oldGroups = await ops.syncManyDirectoriesFromMetadata(db, entries)
