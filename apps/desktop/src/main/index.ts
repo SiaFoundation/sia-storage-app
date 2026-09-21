@@ -125,13 +125,19 @@ if (!app.requestSingleInstanceLock()) {
     // Assigned to `quitting` like the before-quit path: `reviveDaemon` checks
     // it, and a revive already awaiting its reachability probe would otherwise
     // resume mid-teardown and respawn the daemon while the wipe runs.
-    quitting = teardown({ waitForHide: true }).catch((e) =>
+    quitting = teardown({ remove: true }).catch((e) =>
       log.error('app', 'sign_out_failed', { error: e as Error }),
     )
     await quitting
     // stop() leaves an attached daemon alone and can time out on an owned one,
     // and a wipe under a live daemon deletes the database it is still writing.
-    if (await Daemon.isReachable()) {
+    if (platform.status() !== 'absent' && platform.status() !== 'unsupported') {
+      // The system's copy outlives the library, so wiping without taking the
+      // folder away leaves this account's file names and downloaded contents
+      // on the Mac with nothing left that explains where they came from.
+      log.error('app', 'sign_out_mount_still_registered')
+      await warnWipeBlocked('The Finder folder could not be removed. Sign out again in a moment.')
+    } else if (await Daemon.isReachable()) {
       log.error('app', 'sign_out_daemon_still_up')
       await warnWipeBlocked('A Sia daemon still holds the library. Stop it, then sign out again.')
     } else if (await daemonLockHeld()) {

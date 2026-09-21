@@ -54,6 +54,45 @@ function findMount(displayName: string): string | null {
   return null
 }
 
+/**
+ * Awaited to completion rather than left running, because sign-out wipes the
+ * library as soon as this returns and the two overlapping would have the
+ * system reading a database being deleted under it.
+ *
+ * False when the system still has the domain, which the caller must treat as
+ * a reason not to wipe. Removing is what deletes the system's copy, so a
+ * sign-out that wiped anyway would leave that copy holding the account's
+ * file names and downloaded contents with nothing left to explain it.
+ */
+async function removeDomain(domainId: string): Promise<boolean> {
+  try {
+    const { preserved } = await runAgent(['unregister', domainId])
+    // The system keeps local changes it could not sync anywhere it likes, and
+    // says where only here.
+    if (preserved) log.info('mount', 'unsynced_changes_preserved', { path: preserved })
+    return true
+  } catch (e) {
+    log.error('mount', 'unregister_failed', { error: e as Error })
+    return false
+  }
+}
+
+/** The helper waits up to 20s of its own (`agent.ts`), and a quit that hangs
+ *  that long is worse than a folder that lingers, so this gives up first. */
+async function hideDomain(domainId: string): Promise<void> {
+  const hide = runAgent(['hide', domainId]).catch((e) =>
+    log.error('mount', 'agent_failed', { error: e as Error }),
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    hide,
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, HIDE_TIMEOUT_MS)
+    }),
+  ])
+  clearTimeout(timer)
+}
+
 export function createDarwinIntegration(): PlatformIntegration {
   let state: ShellState = 'absent'
   let displayName: string | null = null
@@ -108,33 +147,22 @@ export function createDarwinIntegration(): PlatformIntegration {
     },
 
     /**
-     * Hides the mount rather than removing it. A folder left in Finder would be
-     * a live-looking view of a library that may have nothing serving it. Hiding
-     * leaves every downloaded file on disk, and the `register` at the next
-     * launch brings it back untouched.
+     * Quitting hides the mount and signing out removes it.
+     *
+     * A folder left in Finder would be a live-looking view of a library that
+     * may have nothing serving it, so both take it away. What differs is the
+     * system's copy. Hiding keeps it, which is what makes a relaunch cheap and
+     * leaves downloaded files on disk. Removing makes the system delete it,
+     * which sign-out needs: the copy holds the account's file names and the
+     * contents of everything it downloaded, and registering again would hand
+     * all of it to whoever signs in next.
      */
     async stop(opts?: StopOptions) {
-      if (domainId) {
-        // Bounded on quit: the helper's own timeout is 20s, and a quit that
-        // hangs that long is worse than a folder that lingers. Sign-out waits
-        // the helper out instead: its relaunch registers the domain anew, and
-        // a hide landing after that registration hides the fresh mount and
-        // leaves the signed-in account without Finder access.
-        const hide = runAgent(['hide', domainId]).catch((e) =>
-          log.error('mount', 'agent_failed', { error: e as Error }),
-        )
-        if (opts?.waitForHide) {
-          await hide
-        } else {
-          let timer: ReturnType<typeof setTimeout> | undefined
-          await Promise.race([
-            hide,
-            new Promise((resolve) => {
-              timer = setTimeout(resolve, HIDE_TIMEOUT_MS)
-            }),
-          ])
-          clearTimeout(timer)
-        }
+      if (domainId && opts?.remove) {
+        // Left mounted on failure so the caller can see it and hold the wipe.
+        if (!(await removeDomain(domainId))) return
+      } else if (domainId) {
+        await hideDomain(domainId)
       }
       state = 'absent'
       displayName = null

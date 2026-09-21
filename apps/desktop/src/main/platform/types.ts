@@ -34,7 +34,10 @@ export type ShellPaths = {
   handoffDir?: string
 }
 
-export type StopOptions = { waitForHide?: boolean }
+export type StopOptions = {
+  /** Sign-out: take the mount away and have the system delete its copy. */
+  remove?: boolean
+}
 
 export interface PlatformIntegration {
   /**
@@ -45,10 +48,9 @@ export interface PlatformIntegration {
   shellPaths(config: DesktopConfig): ShellPaths
   /** Brings the OS mount up. Calling it twice is not an error. */
   start(config: ShellConfig): Promise<void>
-  /** Stops serving the mount. Whether the registration survives is the
-   * platform's call: macOS hides the domain so downloaded files stay. The
-   * hide is waited on only for a bounded window unless `waitForHide` asks
-   * to see it through. */
+  /** Stops serving the mount. Without `remove` the platform may keep the
+   * registration and its copy of the files, which is what makes a relaunch
+   * cheap. With `remove` the copy is deleted. */
   stop(opts?: StopOptions): Promise<void>
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
