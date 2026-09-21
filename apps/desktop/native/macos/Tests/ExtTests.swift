@@ -863,3 +863,97 @@ final class SettleWatcherTests: XCTestCase {
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 }
+
+final class AlignedRangeTests: XCTestCase {
+    func testTheStartRoundsDownAndTheEndRoundsUp() {
+        let range = alignedRange(
+            NSRange(location: 5_000, length: 100), alignment: 4_096, documentSize: 1_000_000)
+
+        XCTAssertEqual(range.location, 4_096)
+        XCTAssertEqual(range.location + range.length, 8_192)
+    }
+
+    func testAnAlreadyAlignedRangeIsUnchanged() {
+        let range = alignedRange(
+            NSRange(location: 8_192, length: 4_096), alignment: 4_096, documentSize: 1_000_000)
+
+        XCTAssertEqual(range, NSRange(location: 8_192, length: 4_096))
+    }
+
+    func testTheLastRangeOfAFileStopsAtItsEnd() {
+        // Rounding up would run past the file, which the system checks against
+        // the document size it was given.
+        let range = alignedRange(
+            NSRange(location: 4_096, length: 100), alignment: 4_096, documentSize: 5_000)
+
+        XCTAssertEqual(range, NSRange(location: 4_096, length: 904))
+    }
+
+    func testARequestBeyondTheEndServesNothing() {
+        let range = alignedRange(
+            NSRange(location: 9_000, length: 100), alignment: 4_096, documentSize: 5_000)
+
+        XCTAssertEqual(range.length, 0)
+    }
+
+    func testAnAlignmentOfOneLeavesTheRangeAlone() {
+        let range = alignedRange(
+            NSRange(location: 7, length: 13), alignment: 1, documentSize: 1_000)
+
+        XCTAssertEqual(range, NSRange(location: 7, length: 13))
+    }
+
+    func testEveryPowerOfTwoAlignmentCoversTheRequest() {
+        for shift in 0..<20 {
+            let alignment = 1 << shift
+            let requested = NSRange(location: 123_456, length: 789)
+            let range = alignedRange(requested, alignment: alignment, documentSize: 10_000_000)
+
+            XCTAssertEqual(range.location % alignment, 0, "start aligned for \(alignment)")
+            XCTAssertLessThanOrEqual(range.location, requested.location)
+            XCTAssertGreaterThanOrEqual(
+                range.location + range.length, requested.location + requested.length,
+                "covers the request for \(alignment)")
+        }
+    }
+}
+
+final class FetchWindowTests: XCTestCase {
+    func testASmallRequestReadsAWholeWindowAhead() {
+        let range = fetchWindow(
+            NSRange(location: 475_922_432, length: 32_768), alignment: 4_096,
+            documentSize: 673_223_862)
+
+        XCTAssertEqual(range.location, 475_922_432)
+        XCTAssertEqual(range.length, readAheadBytes)
+    }
+
+    func testTheWindowStopsAtTheEndOfTheFile() {
+        let range = fetchWindow(
+            NSRange(location: 1_000, length: 4_096), alignment: 4_096, documentSize: 20_000)
+
+        XCTAssertEqual(range, NSRange(location: 0, length: 20_000))
+    }
+
+    func testARequestLargerThanTheWindowIsNotShrunk() {
+        let asked = readAheadBytes * 2
+        let range = fetchWindow(
+            NSRange(location: 0, length: asked), alignment: 4_096, documentSize: 1 << 30)
+
+        XCTAssertEqual(range.length, asked)
+    }
+
+    func testTheWindowStillCoversTheRangeTheSystemAskedFor() {
+        for shift in 0..<20 {
+            let alignment = 1 << shift
+            let requested = NSRange(location: 123_456, length: 789)
+            let range = fetchWindow(requested, alignment: alignment, documentSize: 10_000_000)
+
+            XCTAssertEqual(range.location % alignment, 0, "start aligned for \(alignment)")
+            XCTAssertLessThanOrEqual(range.location, requested.location)
+            XCTAssertGreaterThanOrEqual(
+                range.location + range.length, requested.location + requested.length,
+                "covers the request for \(alignment)")
+        }
+    }
+}

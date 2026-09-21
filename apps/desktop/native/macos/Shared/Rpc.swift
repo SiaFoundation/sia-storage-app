@@ -39,7 +39,9 @@ public final class Rpc: @unchecked Sendable {
     }
 
     /// Issues one call and returns its `result`, or throws.
-    public func call(_ method: String, _ args: [Any] = []) async throws -> Any? {
+    public func call(_ method: String, _ args: [Any] = [], receiveTimeout: timeval? = nil)
+        async throws -> Any?
+    {
         let request: [String: Any] = [
             "id": "c\(counter.next())",
             "method": method,
@@ -51,7 +53,9 @@ public final class Rpc: @unchecked Sendable {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    continuation.resume(returning: try self.roundTrip(body))
+                    continuation.resume(
+                        returning: try self.roundTrip(
+                            body, receiveTimeout: receiveTimeout ?? Rpc.ioTimeout))
                 } catch {
                     continuation.resume(throwing: error)
                 }
@@ -60,10 +64,10 @@ public final class Rpc: @unchecked Sendable {
     }
 
     /// Decodes a call's result into a `Decodable`, for the typed wire shapes.
-    public func callDecoding<T: Decodable>(_ type: T.Type, _ method: String, _ args: [Any] = [])
-        async throws -> T
-    {
-        let raw = try await call(method, args)
+    public func callDecoding<T: Decodable>(
+        _ type: T.Type, _ method: String, _ args: [Any] = [], receiveTimeout: timeval? = nil
+    ) async throws -> T {
+        let raw = try await call(method, args, receiveTimeout: receiveTimeout)
         guard let raw else { throw RpcError.decoding("\(method) returned nothing") }
         do {
             let data = try JSONSerialization.data(withJSONObject: raw)
@@ -89,8 +93,8 @@ public final class Rpc: @unchecked Sendable {
         }
     }
 
-    private func roundTrip(_ body: Data) throws -> Any? {
-        let fd = try Self.openSocket(at: socketPath)
+    private func roundTrip(_ body: Data, receiveTimeout: timeval) throws -> Any? {
+        let fd = try Self.openSocket(at: socketPath, receiveTimeout: receiveTimeout)
         defer { close(fd) }
 
         try Self.writeAll(fd: fd, data: Self.terminated(body))
@@ -107,7 +111,7 @@ public final class Rpc: @unchecked Sendable {
                 // daemon accepted and then said nothing for the whole window.
                 let reason =
                     errno == EAGAIN
-                    ? "no reply within \(Self.ioTimeout.tv_sec)s" : "recv() failed: \(errno)"
+                    ? "no reply within \(receiveTimeout.tv_sec)s" : "recv() failed: \(errno)"
                 throw RpcError.unreachable(reason)
             }
             if n == 0 { break }
@@ -137,6 +141,20 @@ public final class Rpc: @unchecked Sendable {
     /// A daemon that accepts and then stalls would otherwise block a Finder
     /// callback until the user force-quits, so every read and write is bounded.
     static let ioTimeout = timeval(tv_sec: 15, tv_usec: 0)
+
+    /// Receive timeout for the four calls that move file bytes:
+    /// `fetchContents`, `fetchPartialContents`, `createItem` and
+    /// `modifyItem`. Each returns only once the daemon has finished the
+    /// transfer, which takes as long as the file and the connection take, so
+    /// the 15s above is far too short.
+    ///
+    /// Expiring does not stop the daemon. This side abandons the socket while
+    /// the daemon keeps writing, and the timeout throws
+    /// `RpcError.unreachable`, which `mapError` turns into "Sia Storage isn't
+    /// running" for a transfer that was progressing normally. An hour is an
+    /// upper bound rather than a deadline, because the system cancels a fetch
+    /// it has given up on.
+    public static let transferTimeout = timeval(tv_sec: 3600, tv_usec: 0)
 
     /// `receiveTimeout: nil` for a connection that waits indefinitely: on a
     /// subscription an expired read is indistinguishable from a hang-up, so a

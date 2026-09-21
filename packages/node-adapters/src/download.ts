@@ -5,20 +5,23 @@ import { createWriteStream } from 'fs'
 import { unlink } from 'fs/promises'
 
 /**
- * Streams a pull-based download into the file backing `fsIO.uri(file.id, file.type)`.
+ * Streams a pull-based download to a path.
  * Bounded memory: one chunk in flight at a time. Cleans up the partial file on error.
  */
-async function streamToFs(
+async function streamToPath(
   dl: DownloadLikeRef,
-  file: { id: string; type: string },
+  targetPath: string,
   totalSize: number | undefined,
-  fsIO: FsIOAdapter,
   signal: AbortSignal,
   onProgress: (progress: number) => void,
-): Promise<void> {
-  await fsIO.ensureDirectory()
-  const targetPath = fsIO.uri(file.id, file.type)
-  const writeStream = createWriteStream(targetPath)
+  startAt = 0,
+): Promise<number> {
+  // A caller reads an extent's position from where its bytes sit, so a range
+  // written at the front reads back as a file ending where the range does.
+  const writeStream =
+    startAt === 0
+      ? createWriteStream(targetPath)
+      : createWriteStream(targetPath, { flags: 'w+', start: startAt })
   let bytesWritten = 0
 
   try {
@@ -47,6 +50,7 @@ async function streamToFs(
       )
     })
     onProgress(1)
+    return bytesWritten
   } catch (e) {
     // The stream opens its file lazily, so an open still pending here would
     // land after the unlink below and recreate the file it just removed.
@@ -79,7 +83,30 @@ export function createNodeDownloadAdapter(deps: {
         length: undefined,
       })
 
-      await streamToFs(dl, file, file.size, deps.fsIO, signal, onProgress)
+      await deps.fsIO.ensureDirectory()
+      await streamToPath(dl, deps.fsIO.uri(file.id, file.type), file.size, signal, onProgress)
+    },
+
+    async downloadRangeToPath({ object, sdk, destPath, offset, length, signal }) {
+      const keyBytes = await deps.getAppKey(object.indexerURL)
+      if (!keyBytes) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
+
+      const appKey = sdk.openAppKey(keyBytes)
+      const pinnedObject = sdk.openPinnedObject(appKey, object)
+
+      const dl = await sdk.download(pinnedObject, {
+        offset: BigInt(offset),
+        length: BigInt(length),
+      })
+
+      // createWriteStream follows a symlink at the destination and writes
+      // through to its target, so the link is removed first. The managed-file
+      // path in fsIO.exportTo unlinks for the same reason.
+      await unlink(destPath).catch(() => {})
+      // Written to the caller's path rather than into managed storage. A
+      // range is not the file, and storing it there would make the next
+      // reader see a partial file as fully downloaded.
+      return streamToPath(dl, destPath, length, signal, () => {}, offset)
     },
 
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
@@ -91,7 +118,8 @@ export function createNodeDownloadAdapter(deps: {
         length: undefined,
       })
 
-      await streamToFs(dl, file, totalSize, deps.fsIO, signal, onProgress)
+      await deps.fsIO.ensureDirectory()
+      await streamToPath(dl, deps.fsIO.uri(file.id, file.type), totalSize, signal, onProgress)
     },
   }
 }

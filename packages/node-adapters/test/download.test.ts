@@ -102,6 +102,59 @@ describe('a download the caller aborted', () => {
   })
 })
 
+describe('a ranged download', () => {
+  /*
+   * The system reads an extent's position from where its bytes sit in the
+   * file and treats anything past the file's end as absent, so a range
+   * written at the front reads back as a file ending where the range does.
+   */
+  it('writes the bytes at their own offset, leaving a hole before them', async () => {
+    const payload = new Uint8Array(256).fill(7)
+    const download = createNodeDownloadAdapter({
+      fsIO,
+      getAppKey: async () => new Uint8Array([1, 2, 3]),
+    })
+    const dest = path.join(filesDir, 'ranged.bin')
+
+    const bytes = await download.downloadRangeToPath!({
+      object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
+      sdk: sdkYielding([payload]),
+      destPath: dest,
+      offset: 1024,
+      length: 256,
+      signal: new AbortController().signal,
+    })
+
+    expect(bytes).toBe(256)
+    const written = fs.readFileSync(dest)
+    expect(written.length).toBe(1280)
+    expect(written.subarray(1024, 1280)).toEqual(Buffer.from(payload))
+  })
+
+  it('replaces a symlink at the destination instead of writing through it', async () => {
+    const outside = path.join(filesDir, 'outside.bin')
+    fs.writeFileSync(outside, 'untouched')
+    const dest = path.join(filesDir, 'linked.bin')
+    fs.symlinkSync(outside, dest)
+    const download = createNodeDownloadAdapter({
+      fsIO,
+      getAppKey: async () => new Uint8Array([1, 2, 3]),
+    })
+
+    await download.downloadRangeToPath!({
+      object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
+      sdk: sdkYielding([new Uint8Array(64).fill(9)]),
+      destPath: dest,
+      offset: 0,
+      length: 64,
+      signal: new AbortController().signal,
+    })
+
+    expect(fs.readFileSync(outside, 'utf8')).toBe('untouched')
+    expect(fs.lstatSync(dest).isSymbolicLink()).toBe(false)
+  })
+})
+
 describe('a download that delivers every byte', () => {
   it('writes the file and keeps it', async () => {
     const run = adapter([new Uint8Array(512), new Uint8Array(512)])

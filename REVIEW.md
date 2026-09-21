@@ -55,11 +55,14 @@ are never Important.
 Flag a comment where it is wrong or misleading, never for being long: a
 wrong field list or behaviour, edit-history narration ("now uses X",
 "previously") outside a migration, a pointer to a file or plan the reader
-cannot open, or a number nobody can confirm from the
-code (a number the code fixes is fine). Do not count lines, in headers or
-inline; length is an authoring rule in `AGENTS.md`. Flag the absence too: an
-ordering constraint or platform workaround introduced with no why, and a
-genuine-why comment deleted while its reason holds.
+cannot open, a number nobody can confirm from the code (a number the code
+fixes is fine), or one a reader cannot follow without already knowing the
+mechanism it describes. That last one is about what the comment leaves out,
+never about its size: a short comment naming the real call and the real
+failure is fine, a long one alluding to both is not. Do not count lines, in
+headers or inline. Length is an authoring rule in `AGENTS.md`. Flag the
+absence too: an ordering constraint or platform workaround introduced with
+no why, and a genuine-why comment deleted while its reason holds.
 
 All prose including test names: flag an em-dash, an arrow, an aphorism where
 a fact belongs, the "not just X, it's Y" pivot, and filler words such as

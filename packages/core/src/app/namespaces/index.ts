@@ -211,6 +211,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       fsIO: adapters.fsIO,
       handoffDir: adapters.handoffDir,
       maxPageSize: adapters.maxPageSize,
+      getSdk: () => sdkRef,
+      downloadObject: adapters.downloadObject,
     }),
     downloads: downloadsNamespace,
     shares: sharesNamespace,

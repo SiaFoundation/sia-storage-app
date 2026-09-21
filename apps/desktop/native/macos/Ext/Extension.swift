@@ -371,15 +371,26 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             fpLog.debug("fetch \(identifier.rawValue, privacy: .public)")
             let poller = ProgressPoller(rpc: rpc, id: identifier.rawValue, progress: progress)
             defer { poller.stop() }
+            // Without this the task keeps running after the system gives up
+            // and its result is discarded, which the next read sees as a
+            // file that stopped short.
+            progress.cancellationHandler = {
+                fpLog.notice("fetch cancelled by the system \(identifier.rawValue, privacy: .public)")
+            }
             do {
                 // Started past the gate: the poller's calls are not gated, so
                 // polling early would reach a daemon this extension just refused.
                 try await ready()
                 poller.start()
                 let result = try await rpc.callDecoding(
-                    ProviderFetchResult.self, Channel.fetch, [identifier.rawValue, destination])
+                    ProviderFetchResult.self, Channel.fetch, [identifier.rawValue, destination],
+                    receiveTimeout: Rpc.transferTimeout)
                 progress.completedUnitCount = 100
-                fpLog.debug("fetch ok \(result.bytes, privacy: .public) bytes")
+                // notice, not debug: a fetch returning fewer bytes than the
+                // item claims is a truncation, and debug does not persist.
+                fpLog.notice(
+                    "fetch ok \(result.bytes, privacy: .public) of \(result.item.size, privacy: .public) bytes"
+                )
                 completionHandler(
                     URL(fileURLWithPath: destination), SiaItem(result.item), nil)
             } catch {
@@ -424,7 +435,8 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                 // the user's data, unlike the ids either side of it.
                 fpLog.debug("create \(itemTemplate.filename) kind=\(isFolder ? "dir" : "file", privacy: .public)")
                 let created = try await rpc.callDecoding(
-                    ProviderItem.self, Channel.create, args)
+                    ProviderItem.self, Channel.create, args,
+                    receiveTimeout: Rpc.transferTimeout)
                 staged = nil
                 fpLog.debug("create ok \(created.id, privacy: .public)")
                 completionHandler(SiaItem(created), [], false, nil)
@@ -464,7 +476,8 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                     staged = path
                     latest = try await rpc.callDecoding(
                         ProviderItem.self, Channel.write,
-                        [item.itemIdentifier.rawValue, path])
+                        [item.itemIdentifier.rawValue, path],
+                        receiveTimeout: Rpc.transferTimeout)
                     staged = nil
                 }
                 if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier)
@@ -580,5 +593,52 @@ final class ProgressPoller: @unchecked Sendable {
         lock.lock()
         polling = false
         lock.unlock()
+    }
+}
+
+
+/// Serving one extent of a file rather than the whole thing.
+///
+/// Without this the system falls back to whole-file fetching, so seeking a
+/// video waits for every byte before it.
+extension FileProviderExtension: NSFileProviderPartialContentFetching {
+    public func fetchPartialContents(
+        for identifier: NSFileProviderItemIdentifier, version _: NSFileProviderItemVersion,
+        request _: NSFileProviderRequest, minimalRange requestedRange: NSRange,
+        aligningTo alignment: Int, options _: NSFileProviderFetchContentsOptions = [],
+        completionHandler: @escaping (
+            URL?, NSFileProviderItem?, NSRange, NSFileProviderMaterializationFlags, Error?
+        ) -> Void
+    ) -> Progress {
+        let progress = Progress(totalUnitCount: 100)
+        Task {
+            let destination = handoff.fetchDestination()
+            do {
+                try await ready()
+                let item = try await rpc.callDecoding(
+                    ProviderItem.self, Channel.item, [identifier.rawValue])
+                let range = fetchWindow(
+                    requestedRange, alignment: alignment, documentSize: item.size)
+                fpLog.debug(
+                    "fetch range \(identifier.rawValue, privacy: .public) at \(range.location, privacy: .public) len \(range.length, privacy: .public)"
+                )
+                let result = try await rpc.callDecoding(
+                    ProviderRangeResult.self, Channel.fetchRange,
+                    [identifier.rawValue, destination, range.location, range.length],
+                    receiveTimeout: Rpc.transferTimeout)
+                progress.completedUnitCount = 100
+                fpLog.notice(
+                    "fetch range ok \(result.offset, privacy: .public)+\(result.bytes, privacy: .public) of \(item.size, privacy: .public)"
+                )
+                completionHandler(
+                    URL(fileURLWithPath: destination), SiaItem(item),
+                    NSRange(location: Int(result.offset), length: Int(result.bytes)), [], nil)
+            } catch {
+                fpLog.failure("fetch range failed", error)
+                try? FileManager.default.removeItem(atPath: destination)
+                completionHandler(nil, nil, NSRange(location: 0, length: 0), [], mapError(error))
+            }
+        }
+        return progress
     }
 }

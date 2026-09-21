@@ -23,6 +23,7 @@ import type { ChangeSource } from './events'
 import type {
   ProviderChanges,
   ProviderFetchResult,
+  ProviderRangeResult,
   ProviderItem,
   ProviderItemKind,
   ProviderPage,
@@ -992,6 +993,13 @@ export interface AppService {
      * handed the path instead, when such a host exists.
      */
     fetch(id: string, destPath: string): Promise<ProviderFetchResult>
+    /** Places one byte range of a file at a path, for a shell serving a seek. */
+    fetchRange(
+      id: string,
+      destPath: string,
+      offset: number,
+      length: number,
+    ): Promise<ProviderRangeResult>
     /** Bytes moved so far for an in-flight transfer of this item, never a fraction. */
     progress(id: string): Promise<ProviderProgress>
     /**

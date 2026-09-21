@@ -13,6 +13,7 @@ export type { ChangeEvent, ChangeScope } from './changes'
 export type {
   ProviderChanges,
   ProviderFetchResult,
+  ProviderRangeResult,
   ProviderHello,
   ProviderItem,
   ProviderItemKind,
