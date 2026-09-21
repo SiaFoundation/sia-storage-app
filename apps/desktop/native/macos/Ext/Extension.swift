@@ -116,11 +116,15 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         // pass instead of racing it: two passes would interleave their
         // completions in the shared progress tracker.
         let epoch = streamEpoch
+        let foundNothing = warmFoundNothing
         let task = Task { [handshake] in
             // The epoch marker, like every other callback: without it a task
             // straddling a disconnect could reuse the old daemon's agreement.
             do { try await handshake.ready(epoch: epoch.get()) } catch { return }
-            await warmFolders(rpc: rpc, manager: manager)
+            let outcome = await warmFolders(rpc: rpc, manager: manager)
+            // A cancelled pass stores nothing: its replacement is running and
+            // would otherwise have its result overwritten by this one.
+            if outcome != .cancelled { foundNothing.set(outcome == .nothingToWarm) }
         }
         let previous = withLifecycle { () -> Task<Void, Never>? in
             let old = self.warmTask
@@ -150,6 +154,9 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             [weak self] event in
             guard event.scope == "library", let self else { return }
             self.signalWorkingSet()
+            // The pass runs only on connect, so signing in before the first
+            // sync warms an empty library and the folders arrive cold.
+            if self.warmFoundNothing.get() { self.warm() }
         }
         // Published before it starts: the other order leaves a window where
         // invalidate() finds no stream and the one just started outlives it.
@@ -261,6 +268,8 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
 
     private let streamEpoch = LockedBox<Int>(0)
     private var warmTask: Task<Void, Never>?
+    /// The last pass found nothing to warm, so a library change starts one.
+    private let warmFoundNothing = LockedBox<Bool>(false)
 
     private func withLifecycle<T>(_ body: () -> T) -> T {
         lifecycle.lock()
