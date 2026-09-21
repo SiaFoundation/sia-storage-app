@@ -48,8 +48,8 @@ export function registerStatusHandlers(
     // A bare COUNT: getAll() scans every active file to build per-folder
     // counts, real work to repeat on a 2-second poll while listings run.
     const total = await app.service.directories.count()
-    // `done` is cumulative for the pass and `total` is live, so a folder
-    // deleted mid-pass could otherwise read as "3 of 2 ready".
+    // `done` counts folders the system read during the pass and `total` is
+    // live, so a folder deleted mid-pass could otherwise read as "3 of 2".
     return { active, done: Math.min(done, total), total }
   })
 

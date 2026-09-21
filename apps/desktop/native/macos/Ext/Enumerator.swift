@@ -37,6 +37,9 @@ public final class SiaEnumerator: NSObject, NSFileProviderEnumerator {
     ) {
         Task {
             do {
+                // The system enumerates a folder as it writes it out, so this
+                // is what tells the warm pass the work is still going.
+                SettleWatcher.shared.noteChange()
                 try await ready()
                 let cursor = Self.cursor(from: page)
                 let args: [Any] = cursor.map { [containerArg, $0] } ?? [containerArg]

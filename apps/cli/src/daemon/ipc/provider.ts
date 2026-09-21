@@ -52,7 +52,10 @@ export function assertSocketPathFits(socketPath: string): void {
 /** Channels the provider socket serves. Everything else is refused. */
 export function isProviderChannel(channel: string): boolean {
   return (
-    channel.startsWith(PROVIDER_CHANNEL_PREFIX) || channel === 'hello' || channel === 'subscribe'
+    channel.startsWith(PROVIDER_CHANNEL_PREFIX) ||
+    channel === 'hello' ||
+    channel === 'subscribe' ||
+    channel === 'warm'
   )
 }
 
@@ -65,6 +68,7 @@ function registerProviderHandlers(
   reflected: IpcHandlerMap,
   version: string,
   library: string,
+  materializing: Materializing | undefined,
 ): void {
   reflected.set('hello', async (params) => {
     const theirs = ((params as { args?: unknown[] }).args?.[0] as string) ?? undefined
@@ -72,6 +76,17 @@ function registerProviderHandlers(
       throw new Error(`Version mismatch: shell ${theirs ?? 'unknown'}, daemon ${version}`)
     }
     return { version, library }
+  })
+
+  // The shell states when its warm pass starts and when the system has
+  // stopped writing folders out.
+  reflected.set('warm', async (params) => {
+    const phase = (params as { args?: unknown[] }).args?.[0]
+    if (phase !== 'start' && phase !== 'settled') {
+      throw new Error(`Unknown warm phase: ${String(phase)}`)
+    }
+    materializing?.report(phase)
+    return { ok: true }
   })
 }
 
@@ -84,7 +99,7 @@ export function startProviderListener(
   assertSocketPathFits(opts.socketPath)
 
   const library = libraryId(opts.libraryPath)
-  registerProviderHandlers(reflected, opts.version, library)
+  registerProviderHandlers(reflected, opts.version, library, materializing)
   // The hashed id, never the path: the path sits under the user's home and
   // these logs are attached to bug reports, which is why the handshake hashes it.
   logger.info('ipc', 'provider_listener_ready', { path: opts.socketPath, library })
@@ -93,7 +108,13 @@ export function startProviderListener(
     if (!isProviderChannel(method)) {
       throw new Error(`Channel not available on the provider socket: ${method}`)
     }
-    if (method === 'subscribe') return pushChanges(app, connection)
+    if (method === 'subscribe') {
+      // Only this connection, because it is the only one that outlives a
+      // request: every other call opens a socket and closes it on return,
+      // so watching those would end the pass as soon as it began.
+      connection.onClose(() => materializing?.disconnected())
+      return pushChanges(app, connection)
+    }
     const handler = reflected.get(method)
     if (!handler) throw new Error(`Unknown method: ${method}`)
     const result = await handler(params, connection)

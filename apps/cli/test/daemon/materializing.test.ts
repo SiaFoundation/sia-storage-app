@@ -1,18 +1,13 @@
 import { createMaterializing } from '../../src/daemon/materializing'
 
 describe('materializing', () => {
-  let clock = 1_000
-  const at = (ms: number) => {
-    clock = ms
-  }
-  const tracker = () => createMaterializing(() => clock)
-
-  beforeEach(() => {
-    clock = 1_000
+  it('reports nothing in progress before a pass starts', () => {
+    expect(createMaterializing().state()).toEqual({ active: false, done: 0 })
   })
 
-  it('counts each folder the system reads', () => {
-    const m = tracker()
+  it('counts each folder the system reads during a pass', () => {
+    const m = createMaterializing()
+    m.report('start')
 
     m.observe('ds:provider:list', ['dir:a'])
     m.observe('ds:provider:list', ['dir:b'])
@@ -21,7 +16,8 @@ describe('materializing', () => {
   })
 
   it('counts a folder read twice only once', () => {
-    const m = tracker()
+    const m = createMaterializing()
+    m.report('start')
 
     m.observe('ds:provider:list', ['dir:a'])
     m.observe('ds:provider:list', ['dir:a'])
@@ -30,47 +26,55 @@ describe('materializing', () => {
   })
 
   it('ignores containers that are not folders', () => {
-    const m = tracker()
+    const m = createMaterializing()
+    m.report('start')
 
     m.observe('ds:provider:list', [null])
     m.observe('ds:provider:list', ['workingset'])
     m.observe('ds:provider:list', ['NSFileProviderTrashContainerItemIdentifier'])
 
-    expect(m.state()).toEqual({ active: false, done: 0 })
+    expect(m.state()).toEqual({ active: true, done: 0 })
   })
 
-  it('reports nothing in progress before any folder is read', () => {
-    expect(tracker().state()).toEqual({ active: false, done: 0 })
-  })
-
-  it('stops reporting progress once the reads go quiet', () => {
-    const m = tracker()
+  it('reports finished once the shell says the system settled', () => {
+    const m = createMaterializing()
+    m.report('start')
     m.observe('ds:provider:list', ['dir:a'])
 
-    at(1_000 + 8_000)
+    m.report('settled')
 
     expect(m.state()).toEqual({ active: false, done: 1 })
   })
 
-  it('ignores folder opens once the warm pass has gone quiet', () => {
-    const m = tracker()
+  it('leaves the tray idle for a folder the user opens after the pass', () => {
+    const m = createMaterializing()
+    m.report('start')
     m.observe('ds:provider:list', ['dir:a'])
+    m.report('settled')
 
-    // The burst ends, then the user opens a folder by hand: that listing must
-    // not revive "Preparing folders".
-    at(1_000 + 8_000)
     m.observe('ds:provider:list', ['dir:b'])
 
     expect(m.state()).toEqual({ active: false, done: 1 })
   })
 
-  it('starts over when the extension reconnects', () => {
-    const m = tracker()
+  it('starts the count over on the next pass', () => {
+    const m = createMaterializing()
+    m.report('start')
+    m.observe('ds:provider:list', ['dir:a'])
+    m.report('settled')
+
+    m.report('start')
+
+    expect(m.state()).toEqual({ active: true, done: 0 })
+  })
+
+  it('ends a pass the shell can no longer finish when the socket drops', () => {
+    const m = createMaterializing()
+    m.report('start')
     m.observe('ds:provider:list', ['dir:a'])
 
-    // A fresh extension means the system's copy is being rebuilt from nothing.
-    m.observe('hello', ['0.0.1'])
+    m.disconnected()
 
-    expect(m.state()).toEqual({ active: false, done: 0 })
+    expect(m.state()).toEqual({ active: false, done: 1 })
   })
 })

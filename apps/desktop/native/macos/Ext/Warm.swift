@@ -17,27 +17,58 @@ import SiaShared
 private let attempts = 4
 private let retryDelay = Duration.seconds(5)
 
-/// Asks the system to write out every folder in the library.
+/// What a pass did, which is what decides whether the caller runs another.
+public enum WarmOutcome {
+    case warmed
+    /// No folders to warm, so a later library change is worth another pass.
+    /// Covers an empty library and a listing that never came back.
+    case nothingToWarm
+    /// A replacement pass or teardown took over and owns the reporting from
+    /// here, so this one must not report and its result must not be stored.
+    case cancelled
+}
+
+/// Asks the system to write out every folder in the library, and reports when
+/// it has finished doing so.
 ///
-/// The requests are only queued, not waited on: a request's completion means
-/// the system accepted it, not that the folder is on disk. There is nothing to
-/// pace here, and the system schedules the work against whatever else it is
-/// doing.
-public func warmFolders(rpc: Rpc, manager: NSFileProviderManager) async {
-    // The listing retries like the folder requests below: this task only runs
-    // when the provider stream connects, so a transient failure here would
-    // otherwise leave every folder cold until a later reconnect.
+/// A request's completion means the system accepted the work, so the pass
+/// ends by waiting for the writes to go quiet. There is nothing to pace
+/// here, because the system schedules the work against whatever else it
+/// is doing.
+@discardableResult
+public func warmFolders(rpc: Rpc, manager: NSFileProviderManager) async -> WarmOutcome {
+    // This task runs only when the provider stream connects, so a listing
+    // that failed once would leave every folder cold until the next connect.
+    // Retried here for the same reason the folder requests below are.
     var listed: [String]?
     for attempt in 0..<attempts {
         if attempt > 0 { try? await Task.sleep(for: retryDelay) }
-        if Task.isCancelled { return }
+        if Task.isCancelled { return .cancelled }
         listed = await libraryFolders(rpc)
         if listed != nil { break }
     }
-    guard let folders = listed else { return }
-    let total = folders.count
-    var pending = folders
+    guard let folders = listed, !folders.isEmpty else {
+        return Task.isCancelled ? .cancelled : .nothingToWarm
+    }
 
+    // Shared and long-lived, so enumerations the system makes while the pass
+    // is still submitting count toward the quiet window.
+    let settle = SettleWatcher.shared
+    await report(rpc, phase: "start")
+    await submit(folders, to: manager)
+    // A cancelled pass sends no settled: its replacement has already sent
+    // start, and a late one from here would mark that pass finished. The
+    // socket dropping is what ends a pass nothing replaces.
+    if Task.isCancelled { return .cancelled }
+    await settle.waitUntilQuiet()
+    fpLog.notice("warm: system settled for \(folders.count, privacy: .public) folder(s)")
+    await report(rpc, phase: "settled")
+    return .warmed
+}
+
+/// Queues every folder, retrying the ones the system refused.
+private func submit(_ folders: [String], to manager: NSFileProviderManager) async {
+    var pending = folders
     for attempt in 0..<attempts {
         if attempt > 0 { try? await Task.sleep(for: retryDelay) }
         if Task.isCancelled { return }
@@ -54,11 +85,21 @@ public func warmFolders(rpc: Rpc, manager: NSFileProviderManager) async {
     }
 
     if pending.isEmpty {
-        fpLog.notice("warm: asked for \(total, privacy: .public) folder(s)")
+        fpLog.notice("warm: asked for \(folders.count, privacy: .public) folder(s)")
     } else {
         fpLog.error(
-            "warm: \(pending.count, privacy: .public) of \(total, privacy: .public) folder(s) never accepted"
+            "warm: \(pending.count, privacy: .public) of \(folders.count, privacy: .public) folder(s) never accepted"
         )
+    }
+}
+
+/// Tells the daemon where the pass begins and ends, so the menu bar can say
+/// "finished" only once the folders are on disk rather than served.
+private func report(_ rpc: Rpc, phase: String) async {
+    do {
+        _ = try await rpc.call(Channel.warm, [phase])
+    } catch {
+        fpLog.attemptFailed("warm: progress report", phase, error)
     }
 }
 

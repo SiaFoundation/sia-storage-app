@@ -807,3 +807,59 @@ final class AvailabilityTests: XCTestCase {
         XCTAssertEqual(settled, .disconnect)
     }
 }
+
+final class SettleWatcherTests: XCTestCase {
+    func testReportsSettledWhenNoWriteEverLands() async {
+        let watcher = SettleWatcher()
+        let started = ContinuousClock.now
+
+        await watcher.waitUntilQuiet(
+            quiet: .milliseconds(100), ceiling: .seconds(5), poll: .milliseconds(10))
+
+        // A pass where the system never asks for anything must still end,
+        // or the menu bar would sit on "Preparing" from the first launch.
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - started, .milliseconds(100))
+    }
+
+    func testWaitsOutWritesThatKeepLanding() async {
+        let watcher = SettleWatcher()
+        let keepWriting = Task {
+            for _ in 0..<5 {
+                watcher.noteChange()
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+        }
+        let started = ContinuousClock.now
+
+        await watcher.waitUntilQuiet(
+            quiet: .milliseconds(100), ceiling: .seconds(5), poll: .milliseconds(10))
+        // Measured here rather than after awaiting the producer below. The
+        // producer's five sleeps total 200ms on their own, so timing it
+        // instead would pass however early waitUntilQuiet returned.
+        let elapsed = ContinuousClock.now - started
+
+        await keepWriting.value
+        XCTAssertGreaterThanOrEqual(elapsed, .milliseconds(200))
+    }
+
+    func testTheCeilingEndsAWaitWritesNeverStop() async {
+        let watcher = SettleWatcher()
+        let keepWriting = Task {
+            while !Task.isCancelled {
+                watcher.noteChange()
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let started = ContinuousClock.now
+
+        await watcher.waitUntilQuiet(
+            quiet: .seconds(30), ceiling: .milliseconds(200), poll: .milliseconds(10))
+        let elapsed = ContinuousClock.now - started
+
+        keepWriting.cancel()
+        // The writes never stop, so only the ceiling can end this. Bounded
+        // above as well, or a wait that ignored it would still pass here.
+        XCTAssertGreaterThanOrEqual(elapsed, .milliseconds(200))
+        XCTAssertLessThan(elapsed, .seconds(5))
+    }
+}

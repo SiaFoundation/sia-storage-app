@@ -84,6 +84,7 @@ public enum Container {
 public enum Channel {
     public static let hello = "hello"
     public static let subscribe = "subscribe"
+    public static let warm = "warm"
     public static let item = "ds:provider:item"
     public static let list = "ds:provider:list"
     public static let changes = "ds:provider:changes"
