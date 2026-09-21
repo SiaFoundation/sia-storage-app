@@ -59,6 +59,14 @@ export async function streamToCache(params: {
       }
     }
 
+    // Checked after the writer closes and before the caller takes the file.
+    // The SDK ends a stream and answers a cancelled download the same way,
+    // with a read of nothing, so a transfer that stopped partway would be
+    // handed on as the whole file. The catch below removes the temp.
+    if (!signal?.aborted && typeof totalSize === 'number' && bytesWritten !== totalSize) {
+      throw new Error(`Download ended at ${bytesWritten} of ${totalSize} bytes`)
+    }
+
     if (onAfterClose) {
       await onAfterClose(targetFile)
     }

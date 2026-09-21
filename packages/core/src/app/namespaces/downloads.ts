@@ -143,8 +143,10 @@ export function buildDownloadsNamespace(
       const file = await ops.readFile(db, fileId)
       if (!file) throw new Error('File record not found')
 
+      // Complete, not merely present: a file left short would otherwise
+      // count as downloaded forever and be served to every reader.
       const { value: size } = await fsIO.size(fileId, file.type)
-      if (size !== null) {
+      if (size === file.size) {
         remove(fileId)
         return
       }

@@ -36,6 +36,11 @@ async function streamToFs(
         onProgress(Math.min(1, bytesWritten / totalSize))
       }
     }
+    // The SDK ends a stream and answers a cancelled download the same way,
+    // with a read of nothing, so a short transfer would finalize as whole.
+    if (!signal.aborted && typeof totalSize === 'number' && bytesWritten !== totalSize) {
+      throw new Error(`Download ended at ${bytesWritten} of ${totalSize} bytes`)
+    }
     await new Promise<void>((resolve, reject) => {
       writeStream.end((err: NodeJS.ErrnoException | null | undefined) =>
         err ? reject(err) : resolve(),
@@ -43,7 +48,13 @@ async function streamToFs(
     })
     onProgress(1)
   } catch (e) {
+    // The stream opens its file lazily, so an open still pending here would
+    // land after the unlink below and recreate the file it just removed.
+    // Closing first is what makes the unlink stick.
     writeStream.destroy()
+    if (!writeStream.closed) {
+      await new Promise<void>((resolve) => writeStream.once('close', () => resolve()))
+    }
     await unlink(targetPath).catch(() => {})
     throw e
   } finally {

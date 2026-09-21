@@ -7,6 +7,7 @@ export type ExpoFileSystemMock = {
     write: jest.Mock
     delete: jest.Mock
     copy: jest.Mock
+    writableStream: jest.Mock
   }
   Directory: new (...args: any[]) => {
     uri: string
@@ -30,6 +31,7 @@ type CustomMocks = {
     create?: jest.Mock
     delete?: jest.Mock
     copy?: jest.Mock
+    writableStream?: jest.Mock
   }
   Directory?: {
     info?: jest.Mock
@@ -48,6 +50,7 @@ type ExpoFileSystemMockMethods = {
     create: jest.Mock
     delete: jest.Mock
     copy: jest.Mock
+    writableStream: jest.Mock
   }
   Directory: {
     info: jest.Mock
@@ -67,6 +70,12 @@ function buildExpoFileSystemMockMethods(customMocks: CustomMocks = {}): ExpoFile
       create: jest.fn(() => {}),
       delete: jest.fn(() => {}),
       copy: jest.fn(() => {}),
+      // Streaming downloads open a writer on the target file. Without this
+      // the call throws before any of that code runs, so nothing that
+      // streams to disk can be tested.
+      writableStream: jest.fn(() => ({
+        getWriter: () => ({ write: jest.fn(async () => {}), close: jest.fn(async () => {}) }),
+      })),
       ...customMocks.File,
     },
     Directory: {
@@ -120,6 +129,7 @@ export function buildExpoFileSystemMock(): ExpoFileSystemMock {
     create = methods.File.create
     delete = methods.File.delete
     copy = methods.File.copy
+    writableStream = methods.File.writableStream
   }
   const mock = {
     File: MockFile,

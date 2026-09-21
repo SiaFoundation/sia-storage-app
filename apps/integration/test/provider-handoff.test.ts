@@ -2,7 +2,8 @@ import * as nodeFs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import { createTestApp, generateTestFiles, type TestApp } from './app'
+import { fileURLToPath } from 'node:url'
+import { createTestApp, generateTestFiles, waitForCondition, type TestApp } from './app'
 
 describe('Provider handoff', () => {
   let app: TestApp
@@ -201,6 +202,32 @@ describe('Provider handoff', () => {
     })
   })
 
+  describe('a local copy left short by an interrupted download', () => {
+    /*
+     * A download writes into the file it will finish as, so the file exists
+     * from the first chunk. The system asks for the same item more than once
+     * while one fetch is still running, and treating presence as completeness
+     * hands the second caller the part written so far.
+     */
+    it('is re-fetched rather than served as the whole file', async () => {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 950, sizeBytes: 4096 }))
+      await waitForCondition(() => app.getUploadState(file.id) !== undefined, {
+        timeout: 10_000,
+        message: 'the scanner to pick the file up',
+      })
+      await app.waitForNoActiveUploads()
+
+      // Stands in for a download that stopped partway: the file exists and
+      // is short.
+      const local = fileURLToPath(app.app.fs.uri({ id: file.id, type: file.type }))
+      nodeFs.writeFileSync(local, Buffer.alloc(1024))
+
+      const result = await app.app.provider.fetch(file.id, dest('short-local.bin'))
+
+      expect(result.bytes).toBe(4096)
+      expect(nodeFs.statSync(dest('short-local.bin')).size).toBe(4096)
+    })
+  })
   describe('rename', () => {
     it('renames a file in place', async () => {
       const [file] = await app.addFiles(generateTestFiles(1, { startId: 40 }))
