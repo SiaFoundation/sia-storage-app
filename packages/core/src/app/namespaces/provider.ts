@@ -546,10 +546,19 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     const file = await service.files.getById(fileId)
     if (!file) throw new Error(`No file with id ${fileId}`)
     const target = { id: file.id, type: file.type }
-    if (await service.fs.getFileUri(target)) return target
+    // Complete, not merely present: a download creates the file with its
+    // first chunk, so existence alone serves a concurrent caller a partial.
+    if ((await fsIO.size(file.id, file.type)).value === file.size) {
+      // Through the service, which is what records the read against the
+      // cache's eviction clock. A size check alone leaves a file opened
+      // from Finder every day looking untouched.
+      await service.fs.getFileUri(target)
+      return target
+    }
     await service.downloads.downloadFile(fileId)
-    if (!(await service.fs.getFileUri(target))) {
-      throw new Error(`Download did not produce local bytes for ${fileId}`)
+    const local = (await fsIO.size(file.id, file.type)).value
+    if (local !== file.size) {
+      throw new Error(`Local copy is ${local ?? 0} of ${file.size} bytes for ${fileId}`)
     }
     return target
   }
