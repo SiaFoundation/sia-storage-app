@@ -127,6 +127,16 @@ export type ProviderFetchResult = {
 }
 
 /**
+ * One byte range placed at a caller-supplied path. `offset` and `bytes` are
+ * the range actually written, which the shell must report back to the system:
+ * a request running past the end of the file is served short.
+ */
+export type ProviderRangeResult = {
+  offset: number
+  bytes: number
+}
+
+/**
  * What the shell and the daemon agree on before any other call. A shell built
  * against a different daemon serves errors rather than guessing, because the OS
  * caches extensions across upgrades and can pair a stale one with a new daemon.

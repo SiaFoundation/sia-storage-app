@@ -13,7 +13,9 @@
  * It reads through the other namespaces and its own queries, and owns no
  * storage.
  */
+import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
+import type { SdkAdapter } from '../../adapters/sdk'
 import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
 import type { Directory } from '../../db/operations'
@@ -30,6 +32,7 @@ import {
   type ProviderPage,
 } from '../../types/provider'
 import type { AppService } from '../service'
+import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
 /** Rows per page. */
@@ -50,6 +53,8 @@ export type ProviderNamespaceDeps = {
   handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
+  getSdk: () => SdkAdapter | null
+  downloadObject: DownloadObjectAdapter
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -60,7 +65,7 @@ type TransferFlags = {
 }
 
 export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService['provider'] {
-  const { getService, db, fsIO, handoffDir } = deps
+  const { getService, db, fsIO, handoffDir, getSdk, downloadObject } = deps
   const pageSize = deps.maxPageSize ?? MAX_PAGE_SIZE
 
   /**
@@ -701,6 +706,45 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       const fetched = await item(id)
       if (!fetched) throw new Error(`No file with id ${id}`)
       return { bytes, item: fetched }
+    },
+
+    async fetchRange(id, destPath, offset, length) {
+      const dest = requireHandoffPath(destPath)
+      const service = getService()
+      const file = await service.files.getById(id)
+      if (!file) throw new Error(`No file with id ${id}`)
+      if (!downloadObject.downloadRangeToPath) {
+        throw new Error('This host cannot fetch a byte range')
+      }
+      const sdk = getSdk()
+      if (!sdk) throw new Error('SDK not initialized')
+      const objects = await ops.queryObjectsForFile(db, id)
+      if (!objects.length) throw new Error('No object available for download')
+
+      // The shell rounds a request up to the alignment the system asked for,
+      // so the last range of a file routinely asks for more bytes than the
+      // file has. Clamping here is what keeps the served extent truthful.
+      const start = Math.max(0, Math.min(offset, file.size))
+      const want = Math.max(0, Math.min(length, file.size - start))
+      if (want === 0) return { offset: start, bytes: 0 }
+
+      const bytes = await downloadObject.downloadRangeToPath({
+        object: objects[0],
+        sdk,
+        destPath: dest,
+        offset: start,
+        length: want,
+        signal: new AbortController().signal,
+      })
+      // The shell reports this back as the range the system can now read. A
+      // wrong one is invisible until a file reads short, so it is logged.
+      logger.info('provider', 'range_served', {
+        fileId: id,
+        asked: `${offset}+${length}`,
+        served: `${start}+${bytes}`,
+        fileSize: file.size,
+      })
+      return { offset: start, bytes }
     },
 
     async progress(id) {

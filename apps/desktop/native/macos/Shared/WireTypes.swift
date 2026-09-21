@@ -79,6 +79,14 @@ public enum Container {
     public static let workingSet = "workingset"
 }
 
+/// One byte range written to the path the shell named. The daemon serves a
+/// request running past the end of the file short, so the reply states what
+/// it actually wrote.
+public struct ProviderRangeResult: Decodable {
+    public let offset: Int64
+    public let bytes: Int64
+}
+
 /// Channel names, kept in one place so a typo is a compile error rather than a
 /// runtime "unknown method".
 public enum Channel {
@@ -89,6 +97,7 @@ public enum Channel {
     public static let list = "ds:provider:list"
     public static let changes = "ds:provider:changes"
     public static let fetch = "ds:provider:fetch"
+    public static let fetchRange = "ds:provider:fetchRange"
     public static let progress = "ds:provider:progress"
     public static let create = "ds:provider:create"
     public static let write = "ds:provider:write"

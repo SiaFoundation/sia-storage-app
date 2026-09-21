@@ -286,6 +286,16 @@ export function createTestApp(
         if (!fsIO.writeFile) throw new Error('writeFile not implemented')
         await fsIO.writeFile(file, data)
       },
+      // Writes at the offset, as the real adapter does. A slice put at the
+      // front would read back as a file ending where the range does.
+      async downloadRangeToPath({ object, sdk, destPath, offset, length }) {
+        const data = await sdk.downloadByObjectId(object.id)
+        const slice = Buffer.from(data).subarray(offset, offset + length)
+        const file = Buffer.alloc(offset + slice.byteLength)
+        slice.copy(file, offset)
+        nodeFs.writeFileSync(destPath, file)
+        return slice.byteLength
+      },
       async downloadFromShareUrl() {
         throw new Error('downloadFromShareUrl not implemented in integration tests')
       },

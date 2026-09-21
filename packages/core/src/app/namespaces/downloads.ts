@@ -30,6 +30,21 @@ export type DownloadObjectAdapter = {
     onProgress: (progress: number) => void
     signal: AbortSignal
   }): Promise<void>
+  /**
+   * Streams one byte range of an object straight to an absolute path.
+   *
+   * Optional: only a host that serves ranges to another process by path needs
+   * it. Nothing is recorded in managed storage, because a range is not the
+   * file and storing it would make a partial file read as downloaded.
+   */
+  downloadRangeToPath?(params: {
+    object: LocalObject
+    sdk: SdkAdapter
+    destPath: string
+    offset: number
+    length: number
+    signal: AbortSignal
+  }): Promise<number>
   /** Resolves a share URL via the SDK and streams its contents to local storage.
    * The share object's size is only known after the SDK resolves it, so the
    * free-space guard is passed in as `ensureSpace`: the adapter awaits it with

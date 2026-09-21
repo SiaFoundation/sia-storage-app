@@ -287,26 +287,42 @@ must hold for a reader with only this file.
 A file, schema, or non-trivial function opens with a header saying what it is and the
 problem it solves. Not the mechanics; comment non-obvious fields and steps inline.
 
-**Length.** Inline: one or two lines, counting only the lines carrying words: a `/*` or
-`*/` alone is a delimiter and a bare ` *` between paragraphs is a separator. Past two,
-the comment is doing the code's job or the function needs splitting. A header is the
-comment opening a file, a type, or a function, in whatever syntax the language uses, so
-a `///` block on a function is a header, not an inline comment. A header has no line
-count, because the constraints one carries take the room they take; it is too long only
-when a sentence in it restates the code, sets up, or softens. Cut those and keep the
-rest, however many lines that leaves. Migrations and wire-format schemas are exempt from
-the inline count as well, because the before-and-after is the content.
+**Length.** Inline: one or two lines is the usual size, counting only the lines carrying
+words, where a `/*` or `*/` alone is a delimiter and a bare ` *` between paragraphs is a
+separator. Go past two when the why rests on a premise a reader of this file cannot see,
+and state that premise instead of compressing it into an allusion. Never go past two to
+restate the code or to soften. A header is the comment opening a file, a type, or a
+function, in whatever syntax the language uses, so a `///` block on a function is a
+header, not an inline comment. A header has no line count, because the constraints one
+carries take the room they take. It is too long only when a sentence in it restates the
+code or softens. Cut those and keep the rest, however many lines that leaves. Migrations
+and wire-format schemas are exempt from the count as well, because the before-and-after
+is the content.
 
 This length rule, and the shape rules below it, are for whoever writes the comment. They
 are not review findings: a reviewer flags a comment only where it is wrong or misleading,
 per `REVIEW.md`. Getting it right here costs nothing; asking for it in review costs a
 round trip.
 
-**Every sentence carries a new fact.** Cut one that sets up, restates, or softens. Never
-open with "This is important because", "The reason for this is", "It's worth
-understanding that", "Note that", "Here we", "In order to", or "For clarity". Never
-retell control flow: "first we load the rows, then we filter" is the code with worse
-formatting. Never hedge where the code is definite.
+**Every sentence carries a new fact.** Cut one that restates or softens. Never open with
+"This is important because", "The reason for this is", "It's worth understanding that",
+"Note that", "Here we", "In order to", or "For clarity". Never retell control flow:
+"first we load the rows, then we filter" is the code with worse formatting. Never hedge
+where the code is definite.
+
+A premise is not setup. Where the why depends on something a reader cannot see from this
+file, that premise is the comment's first fact and gets stated outright. Dropping it to
+save a line is what turns a why into an assertion the reader has to take on faith.
+
+**Name the mechanism, do not allude to it.** Say which functions, states and boundaries
+are involved and in what order, and where something goes wrong, say what a person would
+see. "A download runs for as long as the file and the network make it" leaves the reader
+to work out which call, which failure and which consequence. "`fetchContents` and
+`fetchPartialContents` return only once the daemon has finished the transfer, and a
+timeout surfaces as `.serverUnreachable`, so the user is told the app is not running"
+tells them. Three shapes produce the first kind and are out: a statement followed by a
+colon and the reveal, a noun phrase standing in for a clause ("the part alignment does
+not explain"), and an inversion that withholds the subject until after the point.
 
 **Never write**: a restatement of the line beneath; edit-history narration ("now uses X",
 "previously"), except in a migration or shim whose subject is the before-and-after; a

@@ -228,6 +228,67 @@ describe('Provider handoff', () => {
       expect(nodeFs.statSync(dest('short-local.bin')).size).toBe(4096)
     })
   })
+
+  describe('fetchRange', () => {
+    /** An uploaded file, so a range has a remote object to read from, plus
+     *  the bytes it was made of. */
+    async function uploaded() {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 900, sizeBytes: 4096 }))
+      await waitForCondition(() => app.getUploadState(file.id) !== undefined, {
+        timeout: 10_000,
+        message: 'the scanner to pick the file up',
+      })
+      await app.waitForNoActiveUploads()
+      const uri = await app.app.fs.getFileUri({ id: file.id, type: file.type })
+      if (!uri) throw new Error('the uploaded file has no local copy to compare against')
+      return { file, contents: nodeFs.readFileSync(fileURLToPath(uri)) }
+    }
+
+    it('writes the requested bytes at their own offset in the file', async () => {
+      const { file, contents } = await uploaded()
+
+      const out = dest('range-out.bin')
+      const result = await app.app.provider.fetchRange(file.id, out, 1024, 512)
+
+      expect(result).toEqual({ offset: 1024, bytes: 512 })
+      // The system reads an extent's position from where its bytes sit, so
+      // the file runs to the end of the range with a hole in front of it.
+      const written = nodeFs.readFileSync(out)
+      expect(written.length).toBe(1536)
+      expect(written.subarray(1024, 1536)).toEqual(contents.subarray(1024, 1536))
+    })
+
+    it('serves a range running past the end short rather than failing', async () => {
+      const { file, contents } = await uploaded()
+
+      const out = dest('short-out.bin')
+      const result = await app.app.provider.fetchRange(file.id, out, 4000, 4096)
+
+      // The shell rounds a request up to the system's alignment, so the last
+      // range of a file routinely asks for more than is there.
+      expect(result).toEqual({ offset: 4000, bytes: 96 })
+      const written = nodeFs.readFileSync(out)
+      expect(written.length).toBe(4096)
+      expect(written.subarray(4000)).toEqual(contents.subarray(4000))
+    })
+
+    it('serves nothing for a range that starts past the end', async () => {
+      const { file } = await uploaded()
+
+      const result = await app.app.provider.fetchRange(file.id, dest('past-out.bin'), 9999, 10)
+
+      expect(result).toEqual({ offset: 4096, bytes: 0 })
+    })
+
+    it('refuses a destination outside the handoff directory', async () => {
+      const { file } = await uploaded()
+
+      await expect(
+        app.app.provider.fetchRange(file.id, '/tmp/not-the-handoff-dir.bin', 0, 4),
+      ).rejects.toThrow()
+    })
+  })
+
   describe('rename', () => {
     it('renames a file in place', async () => {
       const [file] = await app.addFiles(generateTestFiles(1, { startId: 40 }))
