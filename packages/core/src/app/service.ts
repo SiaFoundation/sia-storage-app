@@ -333,6 +333,16 @@ export interface AppService {
     getLost(indexerURL: string): Promise<FileRecordRow[]>
     /** Returns all versions of a file, ordered by updatedAt DESC. */
     getVersionHistory(name: string, directoryId: string | null): Promise<FileRecord[]>
+    /**
+     * Adds bytes already in managed storage under `version.id` as the newest
+     * version of the file `replacesId` belongs to, with its tags and a local
+     * copy record. 'missing' when `replacesId` names no live file, and
+     * 'unchanged' when the file's newest version already holds these bytes.
+     */
+    addVersion(
+      replacesId: string,
+      version: { id: string; size: number; hash: string },
+    ): Promise<'added' | 'unchanged' | 'missing'>
     /** Renames all versions of a file. */
     renameFile(id: string, newName: string): Promise<void>
     /** Moves all versions of a file to a directory. */

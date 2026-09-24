@@ -559,6 +559,11 @@ export function buildDbNamespaces(
         const rows = await ops.queryFileVersions(db, name, directoryId)
         return rows.map((r) => ops.transformRow(r))
       },
+      addVersion: async (replacesId, version) => {
+        const outcome = await ops.insertNextVersion(db, replacesId, version)
+        if (outcome === 'added') invalidateLibrary()
+        return outcome
+      },
       renameFile: async (id, newName) => {
         const renamed = await forStack(id, (tx, stack) =>
           ops.renameAllFileVersions(tx, stack.name, stack.directoryId, newName),

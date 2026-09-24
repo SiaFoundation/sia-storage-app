@@ -3,6 +3,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRef, LocalObjectRefRow } from '../../encoding/localObject'
 import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import { naturalSortKey } from '../../lib/naturalSortKey'
+import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow, FileUpdate, UpdatedAtWrite } from '../../types/files'
 import * as sql from '../sql'
 import { markImportFileAdded, markImportFileDuplicate } from './imports'
@@ -13,8 +14,89 @@ import {
   queryObjectRefsForFile,
   queryObjectsForFile,
 } from './localObjects'
+import { upsertFsMeta } from './fs'
 import { getOrCreateTag, insertFileTag } from './tags'
 import { tombstoneFilesAndThumbnails, trashFilesAndThumbnails } from './trash'
+
+/*
+ * A version stack is every live row (kind 'file', neither trashed nor
+ * tombstoned) sharing a name and directoryId. Recalculating a stack picks its
+ * current row, the newest by (updatedAt, id), and settles its stackId, the
+ * file-level id every live row of the stack carries.
+ *
+ * A new row takes its stack's id when inserted (a trigger in the feed
+ * migration). When stacks merge, the id of the newest row wins. When one id
+ * ends up on two stacks, because sync-down applies a rename one object event
+ * at a time or a restored version's stack has since been renamed, the stack
+ * holding its newest row keeps it, except that a stack outside this
+ * recalculation keeps it while it still has a current row, so a restored old
+ * version never takes over the live file's item. A stack left without an id
+ * takes its newest row's id, or a fresh one while another stack still carries
+ * that id.
+ */
+type StackRow = {
+  id: string
+  name: string
+  directoryId: string | null
+  stackId: string
+  updatedAt: number
+  current: number
+}
+
+const LIVE_FILE = `kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`
+const STACK_COLUMNS = 'id, name, directoryId, stackId, updatedAt, current'
+
+const isNewer = (a: StackRow, b: StackRow) =>
+  a.updatedAt > b.updatedAt || (a.updatedAt === b.updatedAt && a.id > b.id)
+const stackKey = (row: StackRow) => `${row.name}\0${row.directoryId ?? ''}`
+
+/** Writes each stack's id onto its rows, given every live row of the stacks in scope. */
+async function assignStackIds(db: DatabaseAdapter, rows: StackRow[]): Promise<void> {
+  const stacks = new Map<string, StackRow[]>()
+  for (const row of rows) {
+    const stack = stacks.get(stackKey(row))
+    if (stack) stack.push(row)
+    else stacks.set(stackKey(row), [row])
+  }
+  const ids = new Set(rows.map((r) => r.stackId))
+  for (const stack of stacks.values()) {
+    stack.sort((a, b) => (isNewer(a, b) ? -1 : 1))
+    ids.add(stack[0].id)
+  }
+  if (ids.size === 0) return
+  // Named because a library the planner has no statistics for yet, which is
+  // every new one, gets this list read through the kind index: every file row.
+  const carriers = await db.getAllAsync<StackRow>(
+    `SELECT ${STACK_COLUMNS} FROM files INDEXED BY idx_files_stackId
+     WHERE stackId IN (${[...ids].map(() => '?').join(',')}) AND ${LIVE_FILE}`,
+    ...ids,
+  )
+  const byStackId = new Map<string, StackRow[]>()
+  for (const carrier of carriers) {
+    const group = byStackId.get(carrier.stackId)
+    if (group) group.push(carrier)
+    else byStackId.set(carrier.stackId, [carrier])
+  }
+  const elsewhere = (id: string, key: string) =>
+    (byStackId.get(id) ?? []).filter((c) => stackKey(c) !== key)
+
+  for (const [key, stack] of stacks) {
+    const kept = stack.find((row) =>
+      elsewhere(row.stackId, key).every((c) =>
+        stacks.has(stackKey(c)) ? isNewer(row, c) : c.current === 0,
+      ),
+    )
+    const target =
+      kept?.stackId ?? (elsewhere(stack[0].id, key).length > 0 ? uniqueId() : stack[0].id)
+    const stale = stack.filter((row) => row.stackId !== target).map((row) => row.id)
+    if (stale.length === 0) continue
+    await db.runAsync(
+      `UPDATE files SET stackId = ? WHERE id IN (${stale.map(() => '?').join(',')})`,
+      target,
+      ...stale,
+    )
+  }
+}
 
 export async function recalculateCurrentForGroup(
   db: DatabaseAdapter,
@@ -24,21 +106,26 @@ export async function recalculateCurrentForGroup(
   const dirCondition = directoryId === null ? 'directoryId IS NULL' : 'directoryId = ?'
   const dirParams = directoryId === null ? [name] : [name, directoryId]
 
-  // Demote before promote: a provider feed page cut through the flip then
-  // reads as the file briefly absent, never as two files with one name.
-  await db.runAsync(
-    `UPDATE files SET current = 0
-     WHERE name = ? AND ${dirCondition} AND kind = 'file'
-       AND trashedAt IS NULL AND deletedAt IS NULL AND current = 1`,
-    ...dirParams,
+  // Both statements order by the version-group index's columns. Unordered, the
+  // planner picks the kind index and reads every file row, once per recalculation.
+  const stackRows = `SELECT id FROM files WHERE name = ? AND ${dirCondition} AND ${LIVE_FILE}
+     ORDER BY updatedAt DESC, id DESC`
+  await assignStackIds(
+    db,
+    await db.getAllAsync<StackRow>(
+      `SELECT ${STACK_COLUMNS} FROM files WHERE name = ? AND ${dirCondition} AND ${LIVE_FILE}
+       ORDER BY updatedAt DESC, id DESC`,
+      ...dirParams,
+    ),
   )
+  // One statement, so no reader sees the stack with no current row: a provider feed page read
+  // between a demote and a promote would report the file deleted.
+  const winner = `(${stackRows} LIMIT 1)`
   await db.runAsync(
-    `UPDATE files SET current = 1 WHERE id = (
-       SELECT id FROM files
-       WHERE name = ? AND ${dirCondition} AND kind = 'file'
-         AND trashedAt IS NULL AND deletedAt IS NULL
-       ORDER BY updatedAt DESC, id DESC LIMIT 1
-     )`,
+    `UPDATE files SET current = (id = ${winner})
+     WHERE id IN (${stackRows}) AND current IS NOT (id = ${winner})`,
+    ...dirParams,
+    ...dirParams,
     ...dirParams,
   )
 }
@@ -76,32 +163,30 @@ export async function recalculateCurrentForFileIds(
   if (fileIds.length === 0) return
   const ph = fileIds.map(() => '?').join(',')
   const groupsCte = `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`
-  // Demote before promote, same feed-ordering reason as recalculateCurrentForGroup.
-  await db.runAsync(
-    `UPDATE files SET current = 0
-     WHERE current = 1 AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL
-       AND id IN (
-         SELECT f2.id FROM files f2
-         INNER JOIN (${groupsCte}) g
-           ON f2.name = g.name AND f2.directoryId IS g.directoryId
-         WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
-       )`,
-    ...fileIds,
+  await assignStackIds(
+    db,
+    await db.getAllAsync<StackRow>(
+      `SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM files f2
+       INNER JOIN (${groupsCte}) g ON f2.name = g.name AND f2.directoryId IS g.directoryId
+       WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL`,
+      ...fileIds,
+    ),
   )
+  // One statement for the same reason as recalculateCurrentForGroup.
   await db.runAsync(
-    `UPDATE files SET current = 1
-     WHERE id IN (
-       SELECT id FROM (
-         SELECT f2.id, ROW_NUMBER() OVER (
-           PARTITION BY f2.name, f2.directoryId
-           ORDER BY f2.updatedAt DESC, f2.id DESC
-         ) AS rn
-         FROM files f2
-         INNER JOIN (${groupsCte}) g
-           ON f2.name = g.name AND f2.directoryId IS g.directoryId
-         WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
-       ) sub WHERE sub.rn = 1
-     )`,
+    `WITH ranked AS (
+       SELECT f2.id AS id, ROW_NUMBER() OVER (
+         PARTITION BY f2.name, f2.directoryId
+         ORDER BY f2.updatedAt DESC, f2.id DESC
+       ) AS rn
+       FROM files f2
+       INNER JOIN (${groupsCte}) g
+         ON f2.name = g.name AND f2.directoryId IS g.directoryId
+       WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
+     )
+     UPDATE files SET current = (id IN (SELECT id FROM ranked WHERE rn = 1))
+     WHERE id IN (SELECT id FROM ranked)
+       AND current IS NOT (id IN (SELECT id FROM ranked WHERE rn = 1))`,
     ...fileIds,
   )
 }
@@ -245,6 +330,77 @@ export async function insertFile(
       )
       await recalculateCurrentForGroup(tx, name, row?.directoryId ?? null)
     }
+  })
+}
+
+/**
+ * Adds new bytes as the next version of the stack `replacesId` sits in: a row
+ * with the replaced row's name, folder, type, creation time and tags, and the
+ * new size and hash, with its local copy recorded. The replaced row keeps its
+ * objects, which still hold its own bytes.
+ *
+ * Its clock is stamped past every live version's, so it becomes current even
+ * over another device's version carrying a skewed future clock.
+ *
+ * One transaction, because a row with no fs record is never picked up by the
+ * uploader's scan: a crash between the two would strand the save locally.
+ * Returns 'missing' when `replacesId` names no live file, and 'unchanged' when
+ * the stack's newest version already holds these bytes. Checked inside the
+ * transaction: another device's identical version can arrive while the
+ * caller is still adopting the bytes.
+ */
+export async function insertNextVersion(
+  db: DatabaseAdapter,
+  replacesId: string,
+  version: { id: string; size: number; hash: string },
+): Promise<'added' | 'unchanged' | 'missing'> {
+  return sql.transaction(db, async (tx) => {
+    const replaced = await tx.getFirstAsync<{
+      name: string
+      type: string
+      createdAt: number
+      directoryId: string | null
+    }>(
+      `SELECT name, type, createdAt, directoryId FROM files WHERE id = ? AND ${LIVE_FILE}`,
+      replacesId,
+    )
+    if (!replaced) return 'missing'
+    const newest = await tx.getFirstAsync<{ updatedAt: number; hash: string }>(
+      `SELECT updatedAt, hash FROM files
+       WHERE name = ? AND directoryId IS ? AND ${LIVE_FILE}
+       ORDER BY updatedAt DESC, id DESC
+       LIMIT 1`,
+      replaced.name,
+      replaced.directoryId,
+    )
+    if (newest?.hash === version.hash) return 'unchanged'
+    const now = Date.now()
+    await insertFile(
+      tx,
+      {
+        id: version.id,
+        name: replaced.name,
+        type: replaced.type,
+        kind: 'file',
+        size: version.size,
+        hash: version.hash,
+        createdAt: replaced.createdAt,
+        updatedAt: Math.max(now, (newest?.updatedAt ?? 0) + 1),
+        addedAt: now,
+        mediaAssetId: null,
+        trashedAt: null,
+        deletedAt: null,
+        lostReason: null,
+      },
+      { directoryId: replaced.directoryId },
+    )
+    await tx.runAsync(
+      'INSERT INTO file_tags (fileId, tagId) SELECT ?, tagId FROM file_tags WHERE fileId = ?',
+      version.id,
+      replacesId,
+    )
+    await upsertFsMeta(tx, { fileId: version.id, size: version.size, addedAt: now, usedAt: now })
+    return 'added'
   })
 }
 
@@ -549,12 +705,11 @@ export async function updateFile(
   await db.withTransactionAsync(async (tx) => {
     const { id } = update
     const assignments: Record<string, string | number | boolean | null> = {}
-    const updatableFields: (keyof Omit<FileRecordRow, 'tags' | 'updatedAt'>)[] = [
+    const updatableFields: (keyof Omit<FileRecordRow, 'tags' | 'updatedAt' | 'hash'>)[] = [
       'name',
       'type',
       'kind',
       'size',
-      'hash',
       'createdAt',
       'thumbForId',
       'thumbSize',

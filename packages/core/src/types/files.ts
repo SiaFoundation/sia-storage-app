@@ -78,8 +78,12 @@ export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
  */
 export type UpdatedAtWrite = 'now' | 'preserve' | 'bump' | number
 
-/** Fields a write may set. updatedAt is absent because UpdatedAtWrite decides it. */
-export type FileUpdate = Omit<Partial<FileRecordRow>, 'updatedAt'> & { id: string }
+/**
+ * Fields a write may set. updatedAt is absent because UpdatedAtWrite decides
+ * it, and hash because a row's bytes never change: its objects on the indexer
+ * cannot. New bytes are a new version row (`files.addVersion`).
+ */
+export type FileUpdate = Omit<Partial<FileRecordRow>, 'updatedAt' | 'hash'> & { id: string }
 
 export type FileRecord = FileRecordRow & {
   objects: Record<string, LocalObjectRef>
