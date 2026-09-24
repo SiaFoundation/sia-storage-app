@@ -1506,9 +1506,20 @@ describe('syncDownEvents', () => {
         appKey: () => mockAppKey,
       } as any)
 
-      const dirSpy = jest
-        .spyOn(app().directories, 'syncManyFromMetadata')
-        .mockRejectedValueOnce(new Error('directory sync failed'))
+      // The batch body calls the facade bound to its transaction, so the
+      // failure goes on that facade.
+      const withTransaction = internal().withTransaction
+      const txSpy = jest.spyOn(internal(), 'withTransaction').mockImplementationOnce((fn) =>
+        withTransaction((tx) =>
+          fn({
+            ...tx,
+            directories: {
+              ...tx.directories,
+              syncManyFromMetadata: () => Promise.reject(new Error('directory sync failed')),
+            },
+          }),
+        ),
+      )
 
       await run(new AbortController().signal)
 
@@ -1520,7 +1531,7 @@ describe('syncDownEvents', () => {
       const cursor = await app().sync.getSyncDownCursor()
       expect(cursor).toBeUndefined()
 
-      dirSpy.mockRestore()
+      txSpy.mockRestore()
     })
   })
 

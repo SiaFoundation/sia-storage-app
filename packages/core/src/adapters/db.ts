@@ -25,7 +25,20 @@ export interface DatabaseAdapter {
   getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null>
   runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult>
   execAsync(sql: string): Promise<void>
-  withTransactionAsync(fn: () => Promise<void>): Promise<void>
+  /**
+   * Runs `fn` as the only open transaction, committing when it returns and
+   * rolling back when it throws. A statement issued on this adapter meanwhile
+   * waits for it to end rather than running inside it.
+   *
+   * `fn` reaches the database only through `tx`, whose statements run inside
+   * the transaction. `tx.withTransactionAsync(g)` runs `g(tx)` in place, so an
+   * op that opens its own transaction composes into its caller's.
+   *
+   * `fn` must not use this adapter. On node that throws TransactionMisuseError
+   * at once, and on mobile the call waits for `fn`'s own transaction and never
+   * settles.
+   */
+  withTransactionAsync(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void>
 
   /**
    * Resolves when the suspension gate is open. Call BEFORE any sequence

@@ -44,7 +44,7 @@ describe('migration 0003_create_imports', () => {
 
   beforeEach(async () => {
     db = createBetterSqlite3Database()
-    await db.withTransactionAsync(() => migration_0001_init_schema.up(db))
+    await db.withTransactionAsync((tx) => migration_0001_init_schema.up(tx))
   })
 
   afterEach(() => {
@@ -52,7 +52,7 @@ describe('migration 0003_create_imports', () => {
   })
 
   async function runMigration() {
-    await db.withTransactionAsync(() => migration_0003_create_imports.up(db))
+    await db.withTransactionAsync((tx) => migration_0003_create_imports.up(tx))
   }
 
   it('creates no legacy import when nothing is left to adopt', async () => {

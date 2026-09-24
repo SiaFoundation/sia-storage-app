@@ -15,7 +15,7 @@ module.exports = {
           baseUrl: '.',
           paths: {
             '@siastorage/logger': ['../logger/src/index.ts'],
-            '@siastorage/core/*': ['src/*/index.ts'],
+            '@siastorage/core/*': ['src/*/index.ts', 'src/*.ts'],
             '@siastorage/node-adapters/*': ['../node-adapters/src/*'],
           },
         },
@@ -24,7 +24,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@siastorage/logger$': '<rootDir>/../logger/src/index.ts',
-    '^@siastorage/core/(.*)$': '<rootDir>/src/$1/index.ts',
+    '^@siastorage/core/(.*)$': ['<rootDir>/src/$1/index.ts', '<rootDir>/src/$1.ts'],
     '^@siastorage/node-adapters/(.*)$': '<rootDir>/../node-adapters/src/$1',
   },
 }

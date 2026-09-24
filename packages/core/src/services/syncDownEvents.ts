@@ -461,7 +461,7 @@ async function processBatch(
     .filter((e) => e.tags !== undefined && e.tags.length > 0)
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
 
-  await internal.withTransaction(async () => {
+  await internal.withTransaction(async (tx) => {
     // Apply remote metadata only for creates and remote-newer, non-tombstoned
     // updates. ON CONFLICT(id) preserves addedAt/mediaAssetId/deletedAt/lostReason,
     // and a locally-tombstoned row is skipped so a delete-in-progress isn't
@@ -475,7 +475,7 @@ async function processBatch(
     // different (name, directoryId) group. Read the groups these rows sit in before that
     // rewrite, so the recalc below can also recompute the group a rename empties. Creates have
     // no pre-existing row to contribute; directory moves come through `oldDirGroups`.
-    const preUpsertGroups = await app.files.queryNameDirGroups(
+    const preUpsertGroups = await tx.files.queryNameDirGroups(
       fileUpserts.filter((r) => r.kind === 'file').map((r) => r.id),
     )
     if (fileUpserts.length > 0) {
@@ -483,7 +483,7 @@ async function processBatch(
       // directoryId in the insert. An insert-then-assign shape reads to the
       // departure trigger as a move out of root and journals a departure no
       // observer ever saw, once per remote-created file placed in a folder.
-      const dirIdByPath = await app.directories.ensureAtPaths(
+      const dirIdByPath = await tx.directories.ensureAtPaths(
         dirEntries.map((entry) => entry.directoryPath),
         { skipInvalidation: true },
       )
@@ -492,7 +492,7 @@ async function processBatch(
         const dirId = dirIdByPath.get(entry.directoryPath)
         if (dirId) directoryIdByFileId.set(entry.fileId, dirId)
       }
-      await app.files.upsertMany(fileUpserts, { skipCurrentRecalc: true, directoryIdByFileId })
+      await tx.files.upsertMany(fileUpserts, { skipCurrentRecalc: true, directoryIdByFileId })
     }
 
     // Refresh every object's sealed metadata (creates + all updates), but leave
@@ -503,20 +503,20 @@ async function processBatch(
       ...updates.map((e) => e.localObject),
     ]
     if (allLocalObjects.length > 0) {
-      await app.localObjects.upsertMany(allLocalObjects, { skipInvalidation: true })
+      await tx.localObjects.upsertMany(allLocalObjects, { skipInvalidation: true })
     }
 
     // Remote won the metadata, so clear the flag on those objects (locally-newer
     // and tombstoned objects are excluded above).
     const remoteWonObjectIds = remoteWins.map((e) => e.localObject.id)
     if (remoteWonObjectIds.length > 0) {
-      await app.localObjects.clearMany(indexerURL, remoteWonObjectIds)
+      await tx.localObjects.clearMany(indexerURL, remoteWonObjectIds)
     }
 
     // Apply deletes: drop localObjects, tombstone files that aren't already
     // tombstoned, then identify files with no remaining objects (fully deleted).
     if (deletes.length > 0) {
-      await app.localObjects.deleteManyByObjectIds(
+      await tx.localObjects.deleteManyByObjectIds(
         deletes.map((e) => e.objectId),
         indexerURL,
         { skipInvalidation: true },
@@ -527,24 +527,24 @@ async function processBatch(
         // Remote-originated delete: don't flag the objects (setNeedsSyncUp:false).
         // They were just dropped locally and removed remotely, so there is
         // nothing to push.
-        await app.files.tombstone(toTombstone, { skipInvalidation: true, setNeedsSyncUp: false })
+        await tx.files.tombstone(toTombstone, { skipInvalidation: true, setNeedsSyncUp: false })
       }
 
       const deleteFileIdSet = [...new Set(deletes.map((e) => e.fileId))]
-      deletedFileIds = await app.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
+      deletedFileIds = await tx.localObjects.queryFilesWithNoObjects(deleteFileIdSet)
     }
 
     // Sync directory associations from metadata. This writes directoryId without touching the
     // version clock: the file upsert above already carried the remote updatedAt for these rows.
     if (dirEntries.length > 0) {
-      oldDirGroups = await app.directories.syncManyFromMetadata(dirEntries, {
+      oldDirGroups = await tx.directories.syncManyFromMetadata(dirEntries, {
         skipInvalidation: true,
       })
     }
 
     // Sync tag associations from metadata.
     if (tagEntries.length > 0) {
-      await app.tags.syncManyFromMetadata(tagEntries, {
+      await tx.tags.syncManyFromMetadata(tagEntries, {
         skipInvalidation: true,
       })
     }
@@ -560,17 +560,17 @@ async function processBatch(
       }
     }
     if (affectedFileIds.length > 0) {
-      await app.files.recalculateCurrent(affectedFileIds)
+      await tx.files.recalculateCurrent(affectedFileIds)
     }
     // Recalculate old directory groups. When a file moves from dir-A to dir-B,
     // the file-ID-based recalc above handles dir-B (the file's current dir).
     // dir-A needs separate recalc to promote the next version as current.
     if (oldDirGroups.length > 0) {
-      await app.files.recalculateCurrentForGroups(oldDirGroups)
+      await tx.files.recalculateCurrentForGroups(oldDirGroups)
     }
     // Recalculate the groups renames vacated (captured before the upsert above).
     if (preUpsertGroups.length > 0) {
-      await app.files.recalculateCurrentForGroups(preUpsertGroups)
+      await tx.files.recalculateCurrentForGroups(preUpsertGroups)
     }
 
     // Clean up directories left empty by this batch. Must run after the
@@ -584,12 +584,12 @@ async function processBatch(
     }
     const newlyInactiveFiles = [...new Set([...toTombstone, ...deletedFileIds])]
     if (newlyInactiveFiles.length > 0) {
-      for (const id of await app.files.getDirectoryIdsForFiles(newlyInactiveFiles)) {
+      for (const id of await tx.files.getDirectoryIdsForFiles(newlyInactiveFiles)) {
         candidateDirIds.add(id)
       }
     }
     if (candidateDirIds.size > 0) {
-      emptyDirsDeleted = await app.directories.deleteEmpty([...candidateDirIds], {
+      emptyDirsDeleted = await tx.directories.deleteEmpty([...candidateDirIds], {
         skipInvalidation: true,
       })
     }

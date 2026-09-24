@@ -43,9 +43,9 @@ export async function runMigrations(
       id: m.id,
       message: m.description,
     })
-    await db.withTransactionAsync(async () => {
-      await m.up(db, onProgress)
-      await db.runAsync('INSERT INTO migrations (id, appliedAt) VALUES (?, ?)', m.id, Date.now())
+    await db.withTransactionAsync(async (tx) => {
+      await m.up(tx, onProgress)
+      await tx.runAsync('INSERT INTO migrations (id, appliedAt) VALUES (?, ?)', m.id, Date.now())
     })
   }
   log?.info('db', 'migrations_complete')
