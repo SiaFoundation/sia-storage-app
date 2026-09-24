@@ -5,7 +5,8 @@
  * A file here is its current version, which is the only thing a file browser
  * can show, so every version behind it is invisible through these queries.
  * Keeping that in one place is what lets `app.provider` deal in files without
- * knowing the library keeps a stack of them.
+ * knowing the library keeps a stack of them. A file is named by its stackId,
+ * which every version carries, so the name outlives any one version.
  *
  * The feed's position is a cursor over `(feedSeq, id)`. feedSeq is the
  * trigger-maintained apply-order sequence, never domain time: remote edits
@@ -29,8 +30,11 @@ export type ProviderChangeCursor = {
 
 export type ProviderChangeRows = {
   changed: ProviderChangeRow[]
-  /** Rows in the window that are not visible now: trashed, tombstoned or superseded. */
-  removed: { id: string; feedSeq: number }[]
+  /**
+   * Rows in the window that are not visible now: trashed, tombstoned or
+   * superseded. A superseded row's stackId lives on in its replacement.
+   */
+  removed: { id: string; stackId: string; feedSeq: number }[]
   /** Where the next read resumes. Unchanged from the input when nothing matched. */
   cursor: ProviderChangeCursor
   /** A full page came back, so more may be waiting past `cursor`. */
@@ -38,27 +42,59 @@ export type ProviderChangeRows = {
 }
 
 export type ProviderChangeRow = FileRecordRow & {
+  stackId: string
   fsExists: number
   directoryId: string | null
   feedSeq: number
 }
 
 /**
- * One file by the identifier the shell holds, or null when that identifier no
- * longer names a file: trashed, tombstoned, or replaced by a newer version.
+ * The current version of the file the shell names by `stackId`, or null
+ * when no visible file carries it: trashed, tombstoned, or merged into
+ * another. Newest first: a batch insert leaves a new version current beside
+ * the old one until its transaction recalculates the stack.
  */
 export async function queryProviderItem(
   db: DatabaseAdapter,
-  id: string,
+  stackId: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
-     WHERE f.id = ? AND ${VISIBLE}`,
-    id,
+     WHERE f.stackId = ? AND ${VISIBLE}
+     ORDER BY f.updatedAt DESC, f.id DESC
+     LIMIT 1`,
+    stackId,
   )
   return row ?? null
+}
+
+/** A file row by its own id, whether or not it is its stack's current version. */
+export async function queryProviderRow(
+  db: DatabaseAdapter,
+  rowId: string,
+): Promise<ProviderChangeRow | null> {
+  const row = await db.getFirstAsync<ProviderChangeRow>(
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
+     FROM files f
+     LEFT JOIN fs ON fs.fileId = f.id
+     WHERE f.id = ? AND f.kind = 'file'`,
+    rowId,
+  )
+  return row ?? null
+}
+
+/** The stack id a file row carries, or null for an unknown row. */
+export async function queryStackIdForRow(
+  db: DatabaseAdapter,
+  rowId: string,
+): Promise<string | null> {
+  const row = await db.getFirstAsync<{ stackId: string | null }>(
+    `SELECT stackId FROM files WHERE id = ? AND kind = 'file'`,
+    rowId,
+  )
+  return row?.stackId ?? null
 }
 
 /**
@@ -101,10 +137,10 @@ export async function queryProviderChanges(
   )
 
   const changed: ProviderChangeRow[] = []
-  const removed: { id: string; feedSeq: number }[] = []
+  const removed: { id: string; stackId: string; feedSeq: number }[] = []
   for (const row of rows) {
     if (row.visible === 1) changed.push(row)
-    else removed.push({ id: row.id, feedSeq: row.feedSeq })
+    else removed.push({ id: row.id, stackId: row.stackId, feedSeq: row.feedSeq })
   }
 
   const last = rows[rows.length - 1]
@@ -126,6 +162,7 @@ export async function queryProviderChanges(
  * deletion in A's scope and only the live tables know.
  */
 export type ProviderDepartureRow = {
+  /** A file's stackId, or a directory's row id. */
   id: string
   kind: 'file' | 'dir'
   /** The parent's row id at departure; '' encodes root. */
@@ -221,24 +258,25 @@ export async function queryDeparturesForParent(
 }
 
 /**
- * Current state for a page of departure ids, visibility included, so the
- * reader can tell a moved row (deliver its item) from a dead or invisible
- * one (deliver the deletion).
+ * The visible file carrying each of these stack ids, for ids the feed saw
+ * leave a folder or a row. An id with no row here is gone and is reported as
+ * deleted. One with a row is delivered as that row, wherever it now sits.
+ * The index is named because without planner statistics a list of ids is
+ * read through the kind index instead.
  */
-export async function queryProviderRowsByIds(
+export async function queryProviderRowsByStackIds(
   db: DatabaseAdapter,
-  ids: string[],
-): Promise<(ProviderChangeRow & { visible: number })[]> {
-  if (ids.length === 0) return []
-  const ph = ids.map(() => '?').join(',')
+  stackIds: string[],
+): Promise<ProviderChangeRow[]> {
+  if (stackIds.length === 0) return []
+  const ph = stackIds.map(() => '?').join(',')
   return db.getAllAsync(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
-            (fs.fileId IS NOT NULL) AS fsExists,
-            (${VISIBLE}) AS visible
-     FROM files f
+            (fs.fileId IS NOT NULL) AS fsExists
+     FROM files f INDEXED BY idx_files_stackId
      LEFT JOIN fs ON fs.fileId = f.id
-     WHERE f.id IN (${ph})`,
-    ...ids,
+     WHERE f.stackId IN (${ph}) AND ${VISIBLE}`,
+    ...stackIds,
   )
 }
 
@@ -308,6 +346,7 @@ const VISIBLE = buildRecordFilter('f')
 
 const ROW_COLUMNS = [
   'id',
+  'stackId',
   'name',
   'size',
   'createdAt',

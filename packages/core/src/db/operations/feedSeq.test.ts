@@ -73,13 +73,34 @@ describe('feed sequence triggers', () => {
   it.each([
     ['name', { name: 'renamed.jpg' }],
     ['size', { size: 200 }],
-    ['hash', { hash: 'other' }],
     ['type', { type: 'image/png' }],
     ['trashedAt', { trashedAt: 2000 }],
   ] as const)('a %s change re-stamps the row', async (_field, patch) => {
     await makeFile('f1')
     const stamped = await fileSeq('f1')
     await updateFile(db(), { id: 'f1', ...patch }, { updatedAt: 'preserve' })
+    expect(await fileSeq('f1')).toBeGreaterThan(stamped)
+  })
+
+  it('a hash change, which only sync-down writes, re-stamps the row', async () => {
+    await makeFile('f1')
+    const stamped = await fileSeq('f1')
+    await upsertManyFiles(db(), [
+      {
+        id: 'f1',
+        name: 'f1.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: 'other',
+        createdAt: 1000,
+        updatedAt: 1000,
+        mediaAssetId: null,
+        addedAt: 1000,
+        trashedAt: null,
+        deletedAt: null,
+      },
+    ])
     expect(await fileSeq('f1')).toBeGreaterThan(stamped)
   })
 
@@ -219,13 +240,13 @@ describe('feed sequence triggers', () => {
     expect(rows.map((r) => r.path)).toEqual(['a', 'a/b', 'a/b/c'])
   })
 
-  it('a current flip stamps the demoted row before the promoted one', async () => {
+  it('a current flip re-stamps both the demoted and the promoted row', async () => {
     await makeFile('older', { name: 'pair.jpg', updatedAt: 2000 })
     await makeFile('newer', { name: 'pair.jpg', updatedAt: 1000 })
+    const before = await seq()
     await updateFile(db(), { id: 'newer' }, { updatedAt: 3000 })
-    // A feed page cut through the flip must read as the file briefly
-    // absent, never as two files with one name.
-    expect(await fileSeq('older')).toBeLessThan(await fileSeq('newer'))
+    expect(await fileSeq('older')).toBeGreaterThan(before)
+    expect(await fileSeq('newer')).toBeGreaterThan(before)
   })
 
   it('a rename re-stamps every row whose path was rewritten, and journals none', async () => {

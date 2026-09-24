@@ -156,6 +156,31 @@ export async function drainListing(
 }
 
 /**
+ * Every item id the library holds, read outside the delta feed: folders from
+ * the directory table, files from each folder's own listing. Items name files
+ * by stack id, which library rows do not carry, so the library's own count
+ * checks the listings missed nothing.
+ */
+export async function libraryItemIds(host: ProviderFeedHost): Promise<Set<string>> {
+  const ids = new Set<string>()
+  const folders: (string | null)[] = [null]
+  for (const dir of await host.app.directories.getAll()) {
+    ids.add(directoryProviderId(dir.id))
+    folders.push(directoryProviderId(dir.id))
+  }
+  let listedFiles = 0
+  for (const folder of folders) {
+    for (const item of (await drainListing(host, folder)).items) {
+      if (item.kind !== 'file') continue
+      ids.add(item.id)
+      listedFiles += 1
+    }
+  }
+  expect(listedFiles).toBe((await host.app.files.queryLibrary({ limit: 100000 })).length)
+  return ids
+}
+
+/**
  * Drains a fresh working-set listing plus its deltas and asserts the result
  * matches what the library actually contains. Wired into suite teardowns so
  * every flow already written exercises the feed's triggers.
@@ -173,12 +198,6 @@ export async function assertFeedConverges(host: ProviderFeedHost): Promise<void>
     anchor = page.anchor
     hasMore = page.hasMore
   }
-  const expected = new Set<string>()
-  for (const dir of await host.app.directories.getAll()) {
-    expected.add(directoryProviderId(dir.id))
-  }
-  for (const file of await host.app.files.queryLibrary({ limit: 100000 })) {
-    expected.add(file.id)
-  }
+  const expected = await libraryItemIds(host)
   expect([...mirror].sort()).toEqual([...expected].sort())
 }
