@@ -55,6 +55,32 @@ export interface AppServiceResult {
  * Creates the AppService facade with all namespaces wired together.
  * Called once per platform (mobile, desktop main, CLI, web).
  */
+const DEFERRED_CACHE_METHODS = new Set(['invalidate', 'invalidateAll', 'set'])
+
+/**
+ * The caches as a transaction body sees them: invalidations queue in
+ * `invalidations` and run once the transaction commits, and are dropped if it
+ * rolls back. Run inside the body, an invalidation can refresh a mounted
+ * query, which on mobile waits for the open transaction to end, so a body
+ * awaiting that refresh would never finish.
+ */
+function afterCommit(caches: AppCaches, invalidations: Array<() => void>): AppCaches {
+  const wrap = <T extends object>(target: T): T =>
+    new Proxy(target, {
+      get(obj, prop, receiver) {
+        const value = Reflect.get(obj, prop, receiver)
+        if (typeof value === 'function') {
+          if (!DEFERRED_CACHE_METHODS.has(String(prop))) return value
+          return (...args: unknown[]) => {
+            invalidations.push(() => value.apply(obj, args))
+          }
+        }
+        return value && typeof value === 'object' ? wrap(value) : value
+      },
+    })
+  return wrap(caches)
+}
+
 export function createAppService(adapters: AppServiceAdapters): AppServiceResult {
   const caches: AppCaches = {
     tags: swrCacheBy(),
@@ -148,6 +174,20 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     (indexerURL) => authNamespace.getAppKey(indexerURL),
   )
 
+  const databaseNamespaces = (db: DatabaseAdapter, namespaceCaches: AppCaches = caches) =>
+    buildDbNamespaces(db, namespaceCaches, uploadsNamespace, adapters.fsIO, {
+      crypto: adapters.crypto,
+      thumbnail: adapters.thumbnail,
+      detectMimeType: adapters.detectMimeType,
+    })
+  const withTransaction: AppServiceInternal['withTransaction'] = async (fn) => {
+    const invalidations: Array<() => void> = []
+    await adapters.db.withTransactionAsync((tx) =>
+      fn(databaseNamespaces(tx, afterCommit(caches, invalidations))),
+    )
+    for (const invalidate of invalidations) invalidate()
+  }
+
   const service: AppService = {
     // PRAGMA optimize refreshes query planner stats for tables flagged as
     // having stale sqlite_stat*. WAL trimming is delegated to SQLite's own
@@ -161,11 +201,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     db: {
       waitUntilActive: () => adapters.db.waitUntilActive?.() ?? Promise.resolve(),
     },
-    ...buildDbNamespaces(adapters.db, caches, uploadsNamespace, adapters.fsIO, {
-      crypto: adapters.crypto,
-      thumbnail: adapters.thumbnail,
-      detectMimeType: adapters.detectMimeType,
-    }),
+    ...databaseNamespaces(adapters.db),
     settings: settingsNamespace,
     storage: {
       getItem: (k) => adapters.storage.getItem(k),
@@ -265,7 +301,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       return sdkRef
     },
     initUploader: () => initUploader(uploadManager, service, internal, adapters.uploader),
-    withTransaction: (fn) => adapters.db.withTransactionAsync(fn),
+    withTransaction,
     events,
   }
 

@@ -546,7 +546,7 @@ export async function updateFile(
 ): Promise<void> {
   // Commit the file write and the object flag in one transaction. Callers already
   // inside a transaction use updateFileInner.
-  await db.withTransactionAsync(() => updateFileInner(db, update, options))
+  await db.withTransactionAsync((tx) => updateFileInner(tx, update, options))
 }
 
 async function updateFileInner(
@@ -667,9 +667,9 @@ export async function deleteFileAndThumbnails(db: DatabaseAdapter, id: string): 
     directoryId: string | null
     kind: string
   }>('SELECT name, directoryId, kind FROM files WHERE id = ?', id)
-  await db.withTransactionAsync(async () => {
-    await sql.del(db, 'files', { thumbForId: id })
-    await sql.del(db, 'files', { id })
+  await db.withTransactionAsync(async (tx) => {
+    await sql.del(tx, 'files', { thumbForId: id })
+    await sql.del(tx, 'files', { id })
   })
   if (row?.kind === 'file') {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
@@ -683,9 +683,9 @@ export async function deleteFilesAndThumbnails(db: DatabaseAdapter, ids: string[
     name: string
     directoryId: string | null
   }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM files WHERE thumbForId IN (${ph})`, ...ids)
-    await db.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(`DELETE FROM files WHERE thumbForId IN (${ph})`, ...ids)
+    await tx.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
   })
   await recalculateCurrentForGroups(db, rows)
 }
@@ -777,9 +777,9 @@ export async function createFileWithLocalObject(
   localObject: LocalObject,
   opts?: { directoryId?: string | null },
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await insertFile(db, record, { directoryId: opts?.directoryId })
-    await insertObject(db, localObject)
+  await db.withTransactionAsync(async (tx) => {
+    await insertFile(tx, record, { directoryId: opts?.directoryId })
+    await insertObject(tx, localObject)
   })
 }
 
@@ -789,9 +789,9 @@ export async function updateFileWithLocalObject(
   localObject: LocalObject,
   options: { updatedAt: UpdatedAtWrite },
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await updateFileInner(db, update, options)
-    await insertObject(db, localObject)
+  await db.withTransactionAsync(async (tx) => {
+    await updateFileInner(tx, update, options)
+    await insertObject(tx, localObject)
   })
 }
 
@@ -1049,9 +1049,9 @@ export async function updateManyFiles(
   },
 ): Promise<void> {
   if (updates.length === 0) return
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     for (const update of updates) {
-      await updateFileInner(db, update, options)
+      await updateFileInner(tx, update, options)
     }
   })
 }
@@ -1251,9 +1251,9 @@ export async function renameAllFileVersions(
   // the sync race to the state it replaced. versions[0] is the newest, and
   // + length keeps every staggered stamp above every old one.
   const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     for (let i = 0; i < versions.length; i++) {
-      await db.runAsync(
+      await tx.runAsync(
         'UPDATE files SET name = ?, nameSortKey = ?, updatedAt = ? WHERE id = ?',
         newName,
         naturalSortKey(newName),
@@ -1262,7 +1262,7 @@ export async function renameAllFileVersions(
       )
     }
     await flagObjectsForFiles(
-      db,
+      tx,
       versions.map((v) => v.id),
     )
   })
@@ -1284,9 +1284,9 @@ export async function moveAllFileVersions(
   if (versions.length === 0) return []
   // Monotonic for the same reason as renameAllFileVersions.
   const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     for (let i = 0; i < versions.length; i++) {
-      await db.runAsync(
+      await tx.runAsync(
         'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
         toDirectoryId,
         base - i,
@@ -1294,7 +1294,7 @@ export async function moveAllFileVersions(
       )
     }
     await flagObjectsForFiles(
-      db,
+      tx,
       versions.map((v) => v.id),
     )
   })
@@ -1324,10 +1324,10 @@ export async function moveFilesAllVersions(
   if (fileIds.length === 0) return []
   const ph = fileIds.map(() => '?').join(',')
   const movedIds: string[] = []
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     // Every active version of every selected stack, newest-first, in one query.
     // `f.directoryId IS g.directoryId` is null-safe, so unfiled stacks match too.
-    const versions = await db.getAllAsync<{ id: string; updatedAt: number }>(
+    const versions = await tx.getAllAsync<{ id: string; updatedAt: number }>(
       `SELECT f.id, f.updatedAt FROM files f
        JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file') g
          ON f.name = g.name AND f.directoryId IS g.directoryId
@@ -1342,7 +1342,7 @@ export async function moveFilesAllVersions(
         ? Date.now()
         : Math.max(Date.now(), versions[0].updatedAt + versions.length)
     for (const v of versions) {
-      await db.runAsync(
+      await tx.runAsync(
         'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
         toDirectoryId,
         stamp--,
@@ -1352,10 +1352,10 @@ export async function moveFilesAllVersions(
     }
     // The directory change must propagate to the indexer, so mark the moved
     // files' objects dirty for sync-up.
-    await flagObjectsForFiles(db, movedIds)
+    await flagObjectsForFiles(tx, movedIds)
     // The moved rows now all sit in toDirectoryId; recompute current per
     // destination group in a single bulk pass (handles merges by name+dir).
-    await recalculateCurrentForFileIds(db, movedIds)
+    await recalculateCurrentForFileIds(tx, movedIds)
   })
   return movedIds
 }
@@ -1414,10 +1414,10 @@ export async function finalizeImportFile(
   token: string,
 ): Promise<FinalizeResult> {
   let result: FinalizeResult = { outcome: 'noop' }
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     // The row must still be this worker's active claim; the join pulls the
     // import's dedupByHash and pendingTags along in the same read.
-    const row = await db.getFirstAsync<{
+    const row = await tx.getFirstAsync<{
       name: string
       type: string
       size: number
@@ -1447,19 +1447,19 @@ export async function finalizeImportFile(
     // inserts nothing into `files`.
     if (row.dedupByHash === 1 && row.hash) {
       const dupId = await queryFinalizedFileIdByContentHashInDirectory(
-        db,
+        tx,
         row.hash,
         row.directoryId,
       )
       if (dupId) {
-        await markImportFileDuplicate(db, id, token, 'duplicate-content')
+        await markImportFileDuplicate(tx, id, token, 'duplicate-content')
         result = { outcome: 'duplicate' }
         return
       }
     }
 
     await insertFile(
-      db,
+      tx,
       {
         id,
         name: row.name,
@@ -1488,16 +1488,16 @@ export async function finalizeImportFile(
         if (Array.isArray(parsed)) names = parsed.filter((n): n is string => typeof n === 'string')
       } catch {}
       for (const name of names) {
-        const tag = await getOrCreateTag(db, name)
-        await insertFileTag(db, id, tag.id)
+        const tag = await getOrCreateTag(tx, name)
+        await insertFileTag(tx, id, tag.id)
       }
     }
 
     // Recalculate current for the name+directory group, so a same-name import
     // becomes the newest version.
-    await recalculateCurrentForGroup(db, row.name, row.directoryId)
+    await recalculateCurrentForGroup(tx, row.name, row.directoryId)
 
-    await markImportFileAdded(db, id, token)
+    await markImportFileAdded(tx, id, token)
     result = { outcome: 'added' }
   })
   return result

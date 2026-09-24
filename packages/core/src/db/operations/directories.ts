@@ -520,9 +520,9 @@ export async function moveFileToDirectory(
     name: string
     directoryId: string | null
   }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-  await db.withTransactionAsync(async () => {
-    await sql.update(db, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(db, [fileId])
+  await db.withTransactionAsync(async (tx) => {
+    await sql.update(tx, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(tx, [fileId])
   })
   if (row) {
     await recalculateCurrentForGroup(db, row.name, row.directoryId)
@@ -557,16 +557,16 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
     ...dirIds,
   )
   const affectedIds = affected.map((f) => f.id)
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     // max() per row: a plain stamp would move a future-clocked row (a remote
     // wall clock via sync-down) backwards and lose its reparent to sync.
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE files SET directoryId = NULL, updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (${dirPh})`,
       now,
       ...dirIds,
     )
-    await flagObjectsForFiles(db, affectedIds)
-    await db.runAsync(
+    await flagObjectsForFiles(tx, affectedIds)
+    await tx.runAsync(
       `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
       dir.path,
       escaped,
@@ -824,10 +824,10 @@ async function rebaseDirectoryTree(
   const now = Date.now()
   const newEscaped = escapeLikePattern(newPath)
 
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     // Descendants keep their parentId: only the root row re-parents, which
     // is what keeps a rename cascade free of departure journal writes.
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE directories SET path = ?, nameSortKey = ?, parentId = ? WHERE id = ?`,
       newPath,
       naturalSortKey(newPath),
@@ -836,7 +836,7 @@ async function rebaseDirectoryTree(
     )
 
     for (const u of updates) {
-      await db.runAsync(
+      await tx.runAsync(
         `UPDATE directories SET path = ?, nameSortKey = ? WHERE id = ?`,
         u.path,
         u.nameSortKey,
@@ -845,7 +845,7 @@ async function rebaseDirectoryTree(
     }
 
     // max() per row, same reason as deleteDirectory's child stamp.
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
         SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
       )`,
@@ -853,7 +853,7 @@ async function rebaseDirectoryTree(
       newPath,
       newEscaped,
     )
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (
         SELECT id FROM files WHERE directoryId IN (
           SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'

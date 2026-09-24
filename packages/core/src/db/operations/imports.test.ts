@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
-import type { SQLParam } from '../../adapters/db'
+import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import { IMPORT_MAX_ATTEMPTS } from '../../config'
 import {
   appendToOpenImportOrCreate,
@@ -522,19 +522,25 @@ describe('imports ops', () => {
     await insertImport(db(), imp({ id: 'open', source: 'new-photos', sealed: 0 }))
     await insertManyImportFiles(db(), [file({ id: 'p1', importId: 'open', state: 'pending' })])
 
+    // The seal runs inside the op's transaction, so the failure goes on the
+    // transaction's handle.
     const adapter = db()
-    const realRun = adapter.runAsync.bind(adapter)
-    adapter.runAsync = (sql: string, ...params: SQLParam[]) =>
-      sql.includes('SET sealed = 1')
-        ? Promise.reject(new Error('suspended mid-cancel'))
-        : realRun(sql, ...params)
-    try {
-      await expect(cancelInFlightImportFiles(adapter, 'open')).rejects.toThrow(
-        'suspended mid-cancel',
-      )
-    } finally {
-      adapter.runAsync = realRun
+    const failingSeal: DatabaseAdapter = {
+      ...adapter,
+      withTransactionAsync: (fn) =>
+        adapter.withTransactionAsync((tx) =>
+          fn({
+            ...tx,
+            runAsync: (sql: string, ...params: SQLParam[]) =>
+              sql.includes('SET sealed = 1')
+                ? Promise.reject(new Error('suspended mid-cancel'))
+                : tx.runAsync(sql, ...params),
+          }),
+        ),
     }
+    await expect(cancelInFlightImportFiles(failingSeal, 'open')).rejects.toThrow(
+      'suspended mid-cancel',
+    )
 
     const row = await db().getFirstAsync<{ state: string }>(
       `SELECT state FROM import_files WHERE id = 'p1'`,

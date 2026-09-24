@@ -7,7 +7,7 @@ import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
 import { IMPORTS_CACHE_COALESCE_MS } from '../../config'
 import { createCoalescer } from '../../lib/coalescer'
-import type { AppCaches, AppService } from '../service'
+import type { AppCaches, AppService, DatabaseNamespaces } from '../service'
 
 function parseLogRow(row: {
   timestamp: string
@@ -42,26 +42,7 @@ export function buildDbNamespaces(
     thumbnail?: ThumbnailAdapter
     detectMimeType?: (path: string) => Promise<string | null>
   },
-): Omit<
-  AppService,
-  | 'settings'
-  | 'storage'
-  | 'secrets'
-  | 'auth'
-  | 'caches'
-  | 'sync'
-  | 'uploads'
-  | 'provider'
-  | 'downloads'
-  | 'shares'
-  | 'connection'
-  | 'init'
-  | 'uploader'
-  | 'hosts'
-  | 'account'
-  | 'optimize'
-  | 'db'
-> {
+): DatabaseNamespaces {
   // Runs after any copy's bytes land: gate so the read+upsert can't leave the
   // file invisible to cache eviction, then correct files.size to the real
   // on-disk length (Android often reports the wrong size at import).
@@ -241,9 +222,9 @@ export function buildDbNamespaces(
       getByMediaAssetIds: (mediaAssetIds, directoryId) =>
         ops.queryImportFilesByMediaAssetIds(db, mediaAssetIds, directoryId),
       create: async (imp, files) => {
-        await db.withTransactionAsync(async () => {
-          await ops.insertImport(db, imp)
-          await ops.insertManyImportFiles(db, files)
+        await db.withTransactionAsync(async (tx) => {
+          await ops.insertImport(tx, imp)
+          await ops.insertManyImportFiles(tx, files)
         })
         invalidateImports()
       },

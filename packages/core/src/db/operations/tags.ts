@@ -128,8 +128,8 @@ export async function syncTagsFromMetadata(
     return
   }
   await ensureSystemTags(db)
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(
       `DELETE FROM file_tags WHERE fileId = ? AND tagId NOT IN (
         SELECT id FROM tags WHERE system = 1
       )`,
@@ -137,8 +137,8 @@ export async function syncTagsFromMetadata(
     )
 
     for (const name of tagNames) {
-      const tag = await getOrCreateTag(db, name)
-      await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
+      const tag = await getOrCreateTag(tx, name)
+      await sql.insert(tx, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
   })
 }
@@ -275,14 +275,14 @@ export async function toggleFavorite(db: DatabaseAdapter, fileId: string): Promi
     tagId,
   )
 
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     if (existing) {
-      await sql.del(db, 'file_tags', { fileId, tagId })
+      await sql.del(tx, 'file_tags', { fileId, tagId })
     } else {
-      await sql.insert(db, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
+      await sql.insert(tx, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
     }
-    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(db, [fileId])
+    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(tx, [fileId])
   })
 }
 
@@ -338,9 +338,9 @@ export async function renameTag(db: DatabaseAdapter, tagId: string, name: string
   }
 
   const now = Date.now()
-  await db.withTransactionAsync(async () => {
-    await sql.update(db, 'tags', { name: trimmed }, { id: tagId })
-    await flagFilesCarryingTag(db, tagId, now)
+  await db.withTransactionAsync(async (tx) => {
+    await sql.update(tx, 'tags', { name: trimmed }, { id: tagId })
+    await flagFilesCarryingTag(tx, tagId, now)
   })
 }
 
@@ -353,11 +353,11 @@ export async function deleteTag(db: DatabaseAdapter, tagId: string): Promise<voi
   if (tag.system) {
     throw new Error('System tags cannot be deleted')
   }
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     // Flag before deleting the file_tags links — flagFilesCarryingTag reads them.
-    await flagFilesCarryingTag(db, tagId, Date.now())
-    await sql.del(db, 'file_tags', { tagId })
-    await sql.del(db, 'tags', { id: tagId })
+    await flagFilesCarryingTag(tx, tagId, Date.now())
+    await sql.del(tx, 'file_tags', { tagId })
+    await sql.del(tx, 'tags', { id: tagId })
   })
 }
 
@@ -366,11 +366,11 @@ export async function addTagToFile(
   fileId: string,
   tagName: string,
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    const tag = await getOrCreateTag(db, tagName)
-    await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
-    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(db, [fileId])
+  await db.withTransactionAsync(async (tx) => {
+    const tag = await getOrCreateTag(tx, tagName)
+    await sql.insert(tx, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
+    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(tx, [fileId])
   })
 }
 
@@ -380,15 +380,15 @@ export async function addTagToFiles(
   tagName: string,
 ): Promise<void> {
   if (fileIds.length === 0) return
-  await db.withTransactionAsync(async () => {
-    const tag = await getOrCreateTag(db, tagName)
+  await db.withTransactionAsync(async (tx) => {
+    const tag = await getOrCreateTag(tx, tagName)
     for (const fileId of fileIds) {
-      await sql.insert(db, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
+      await sql.insert(tx, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
     const now = Date.now()
     const ph = fileIds.map(() => '?').join(',')
-    await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
-    await flagObjectsForFiles(db, fileIds)
+    await tx.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
+    await flagObjectsForFiles(tx, fileIds)
   })
 }
 
@@ -397,10 +397,10 @@ export async function removeTagFromFile(
   fileId: string,
   tagId: string,
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await sql.del(db, 'file_tags', { fileId, tagId })
-    await sql.update(db, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(db, [fileId])
+  await db.withTransactionAsync(async (tx) => {
+    await sql.del(tx, 'file_tags', { fileId, tagId })
+    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
+    await flagObjectsForFiles(tx, [fileId])
   })
 }
 
@@ -410,15 +410,15 @@ export async function removeTagFromFiles(
   tagId: string,
 ): Promise<void> {
   if (fileIds.length === 0) return
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     const now = Date.now()
     const ph = fileIds.map(() => '?').join(',')
-    await db.runAsync(
+    await tx.runAsync(
       `DELETE FROM file_tags WHERE tagId = ? AND fileId IN (${ph})`,
       tagId,
       ...fileIds,
     )
-    await db.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
-    await flagObjectsForFiles(db, fileIds)
+    await tx.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
+    await flagObjectsForFiles(tx, fileIds)
   })
 }
