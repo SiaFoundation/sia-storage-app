@@ -15,11 +15,12 @@ import { Platform } from 'react-native'
 import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
 import {
-  dbInitialized,
+  endOpenTransaction,
   getInflightCount,
   getWalPath,
   interruptDatabase,
   resumeDb,
+  suspendBlocker,
   suspendDb,
   waitForQueriesIdle,
 } from '../db'
@@ -73,11 +74,19 @@ const manager = createSuspensionManager(
       waitForIdle: waitForQueriesIdle,
       interrupt: interruptDatabase,
       getInflightCount,
+      endOpenTransaction,
     },
     platform: {
       getBackgroundTimeRemainingMs,
     },
     hooks: {
+      suspendBlocker: () => {
+        const dbBlocker = suspendBlocker()
+        if (dbBlocker) return dbBlocker
+        // Init's cleanup steps issue many DB queries; let init finish first.
+        if (app().init.getState().isInitializing) return 'init_in_progress'
+        return null
+      },
       onBeforeSuspend: flushDbLogAppenderBeforeSuspend,
       onAfterSuspend: async () => {
         await logSuspendDiagnostics()
@@ -152,15 +161,6 @@ export function initSuspensionManager(): void {
     // only fires when the user actually leaves.
     if (Platform.OS !== 'ios') return
     if (next === 'background') {
-      if (!dbInitialized) {
-        logger.debug('suspension', 'skipped', { reason: 'db_not_initialized' })
-        return
-      }
-      // Init's cleanup steps issue many DB queries; let init finish first.
-      if (app().init.getState().isInitializing) {
-        logger.debug('suspension', 'skipped', { reason: 'init_in_progress' })
-        return
-      }
       // The setAppState Promise resolves after the enqueued doSuspend
       // settles; withIosExecutionTime keeps iOS from freezing us mid-drain.
       void withIosExecutionTime(() => manager.setAppState('background'))

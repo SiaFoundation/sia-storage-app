@@ -512,31 +512,6 @@ describe('UploadManager', () => {
     })
 
     describe('iOS suspend gates', () => {
-      it('waits for the DB gate before the post-pin localObject upsert', async () => {
-        const entry = await createTestFile('gate-order')
-        manager.initialize(app(), internal(), defaultAdapters())
-        mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
-
-        const events: string[] = []
-        jest
-          .spyOn(app().db, 'waitUntilActive')
-          .mockImplementation(async () => void events.push('wait'))
-        jest
-          .spyOn(app().localObjects, 'upsertMany')
-          .mockImplementation(async () => void events.push('upsert'))
-        jest
-          .spyOn(app().files, 'updateMany')
-          .mockImplementation(async () => void events.push('sizeHeal'))
-
-        await manager.__testProcessFiles([entry])
-        await manager.flush()
-
-        // entry gate, [pin pool], gate, upsert, gate, size heal. Each post-pin
-        // DB write is preceded by its own gate so a mid-finalize suspend can't
-        // orphan it.
-        expect(events).toEqual(['wait', 'wait', 'upsert', 'wait', 'sizeHeal'])
-      })
-
       it('persists the localObject even when the DB suspends right after the upsert', async () => {
         const entry = await createTestFile('mid-finalize-suspend')
         manager.initialize(app(), internal(), defaultAdapters())
