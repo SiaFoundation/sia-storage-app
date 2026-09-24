@@ -46,22 +46,25 @@ export function buildDbNamespaces(
   // Runs after any copy's bytes land: gate so the read+upsert can't leave the
   // file invisible to cache eviction, then correct files.size to the real
   // on-disk length (Android often reports the wrong size at import).
-  // updatedAt is preserved so the size fix can't trip sync-up.
+  // updatedAt is preserved, because the size fix is not an edit another
+  // device should see as newer.
   async function recordCopiedMeta(
     file: { id: string; type: string },
     size: number,
     usedAt?: number,
   ) {
     await db.waitUntilActive?.()
-    const previous = await ops.readFsMeta(db, file.id)
-    await ops.upsertFsMeta(db, {
-      fileId: file.id,
-      size,
-      addedAt: previous?.addedAt ?? Date.now(),
-      usedAt: usedAt ?? Date.now(),
+    await db.withTransactionAsync(async (tx) => {
+      const previous = await ops.readFsMeta(tx, file.id)
+      await ops.upsertFsMeta(tx, {
+        fileId: file.id,
+        size,
+        addedAt: previous?.addedAt ?? Date.now(),
+        usedAt: usedAt ?? Date.now(),
+      })
+      // Writing the file to disk told us its real size; it is not an edit, so the clock stays put.
+      await ops.updateFile(tx, { id: file.id, size }, { updatedAt: 'preserve' })
     })
-    // Writing the file to disk told us its real size; it is not an edit, so the clock stays put.
-    await ops.updateFile(db, { id: file.id, size }, { updatedAt: 'preserve' })
   }
 
   async function removeFile(file: { id: string; type: string }) {
@@ -73,6 +76,24 @@ export function buildDbNamespaces(
     // Callers read on-device state from here, not from the fsMeta row, so a
     // stale entry hands out the path of a file that no longer exists.
     await caches.fsFileUri.set(null, file.id)
+  }
+
+  // Finds the stack a file belongs to and acts on it in one transaction, so a
+  // rename committed in between cannot send the change to the stack it left.
+  // Resolves to the ids acted on, none when the file is gone.
+  async function forStack(
+    id: string,
+    act: (
+      tx: DatabaseAdapter,
+      stack: { name: string; directoryId: string | null },
+    ) => Promise<string[]>,
+  ): Promise<string[]> {
+    let ids: string[] = []
+    await db.withTransactionAsync(async (tx) => {
+      const stack = await ops.queryFileStackKey(tx, id)
+      ids = stack ? await act(tx, stack) : []
+    })
+    return ids
   }
 
   function invalidateLibrary() {
@@ -539,15 +560,16 @@ export function buildDbNamespaces(
         return rows.map((r) => ops.transformRow(r))
       },
       renameFile: async (id, newName) => {
-        const stack = await ops.queryFileStackKey(db, id)
-        if (!stack) return
-        await ops.renameAllFileVersions(db, stack.name, stack.directoryId, newName)
-        invalidateLibrary()
+        const renamed = await forStack(id, (tx, stack) =>
+          ops.renameAllFileVersions(tx, stack.name, stack.directoryId, newName),
+        )
+        if (renamed.length > 0) invalidateLibrary()
       },
       moveFile: async (id, dirId) => {
-        const stack = await ops.queryFileStackKey(db, id)
-        if (!stack) return
-        await ops.moveAllFileVersions(db, stack.name, stack.directoryId, dirId)
+        const moved = await forStack(id, (tx, stack) =>
+          ops.moveAllFileVersions(tx, stack.name, stack.directoryId, dirId),
+        )
+        if (moved.length === 0) return
         caches.directories.invalidateAll()
         invalidateLibrary()
       },
@@ -557,16 +579,18 @@ export function buildDbNamespaces(
         invalidateLibrary()
       },
       trashFile: async (id) => {
-        const stack = await ops.queryFileStackKey(db, id)
-        if (!stack) return
-        const ids = await ops.trashAllFileVersions(db, stack.name, stack.directoryId)
+        const ids = await forStack(id, (tx, stack) =>
+          ops.trashAllFileVersions(tx, stack.name, stack.directoryId),
+        )
+        if (ids.length === 0) return
         uploads.removeMany(ids)
         invalidateLibrary()
       },
       tombstoneFile: async (id) => {
-        const stack = await ops.queryFileStackKey(db, id)
-        if (!stack) return
-        const ids = await ops.tombstoneAllFileVersions(db, stack.name, stack.directoryId)
+        const ids = await forStack(id, (tx, stack) =>
+          ops.tombstoneAllFileVersions(tx, stack.name, stack.directoryId),
+        )
+        if (ids.length === 0) return
         uploads.removeMany(ids)
         invalidateLibrary()
       },

@@ -218,32 +218,34 @@ export async function insertFile(
   // directoryId is a files column but not a FileRecord field; it arrives
   // separately via options.directoryId.
   const hasDirectoryId = options?.directoryId !== undefined
-  await sql.insert(db, 'files', {
-    id,
-    name,
-    nameSortKey: naturalSortKey(name),
-    size,
-    createdAt,
-    updatedAt,
-    type,
-    kind,
-    mediaAssetId,
-    hash,
-    addedAt,
-    thumbForId,
-    thumbSize,
-    trashedAt,
-    deletedAt,
-    lostReason,
-    ...(hasDirectoryId ? { directoryId: options?.directoryId ?? null } : {}),
-  })
-  if (kind === 'file' && !options?.skipCurrentRecalc) {
-    const row = await db.getFirstAsync<{ directoryId: string | null }>(
-      'SELECT directoryId FROM files WHERE id = ?',
+  await db.withTransactionAsync(async (tx) => {
+    await sql.insert(tx, 'files', {
       id,
-    )
-    await recalculateCurrentForGroup(db, name, row?.directoryId ?? null)
-  }
+      name,
+      nameSortKey: naturalSortKey(name),
+      size,
+      createdAt,
+      updatedAt,
+      type,
+      kind,
+      mediaAssetId,
+      hash,
+      addedAt,
+      thumbForId,
+      thumbSize,
+      trashedAt,
+      deletedAt,
+      lostReason,
+      ...(hasDirectoryId ? { directoryId: options?.directoryId ?? null } : {}),
+    })
+    if (kind === 'file' && !options?.skipCurrentRecalc) {
+      const row = await tx.getFirstAsync<{ directoryId: string | null }>(
+        'SELECT directoryId FROM files WHERE id = ?',
+        id,
+      )
+      await recalculateCurrentForGroup(tx, name, row?.directoryId ?? null)
+    }
+  })
 }
 
 type FileRecordCursorColumn = 'createdAt' | 'updatedAt' | 'addedAt'
@@ -544,87 +546,77 @@ export async function updateFile(
     skipCurrentRecalc?: boolean
   },
 ): Promise<void> {
-  // Commit the file write and the object flag in one transaction. Callers already
-  // inside a transaction use updateFileInner.
-  await db.withTransactionAsync((tx) => updateFileInner(tx, update, options))
-}
-
-async function updateFileInner(
-  db: DatabaseAdapter,
-  update: FileUpdate,
-  options: {
-    updatedAt: UpdatedAtWrite
-    skipCurrentRecalc?: boolean
-  },
-): Promise<void> {
-  const { id } = update
-  const assignments: Record<string, string | number | boolean | null> = {}
-  const updatableFields: (keyof Omit<FileRecordRow, 'tags' | 'updatedAt'>)[] = [
-    'name',
-    'type',
-    'kind',
-    'size',
-    'hash',
-    'createdAt',
-    'thumbForId',
-    'thumbSize',
-    'mediaAssetId',
-    'trashedAt',
-    'deletedAt',
-    'lostReason',
-  ]
-  for (const field of updatableFields) {
-    const value = update[field]
-    if (value === undefined) {
-      continue
+  await db.withTransactionAsync(async (tx) => {
+    const { id } = update
+    const assignments: Record<string, string | number | boolean | null> = {}
+    const updatableFields: (keyof Omit<FileRecordRow, 'tags' | 'updatedAt'>)[] = [
+      'name',
+      'type',
+      'kind',
+      'size',
+      'hash',
+      'createdAt',
+      'thumbForId',
+      'thumbSize',
+      'mediaAssetId',
+      'trashedAt',
+      'deletedAt',
+      'lostReason',
+    ]
+    for (const field of updatableFields) {
+      const value = update[field]
+      if (value === undefined) {
+        continue
+      }
+      assignments[field] = value
     }
-    assignments[field] = value
-  }
 
-  if (update.name !== undefined) {
-    assignments.nameSortKey = naturalSortKey(update.name)
-  }
-
-  const { updatedAt } = options
-  if (updatedAt !== 'preserve' && updatedAt !== 'bump') {
-    assignments.updatedAt = updatedAt === 'now' ? Date.now() : updatedAt
-  }
-
-  // A written updatedAt can make a non-current row its group's newest, so currency follows it.
-  const needsRecalc =
-    !options.skipCurrentRecalc &&
-    (update.name !== undefined ||
-      update.trashedAt !== undefined ||
-      update.deletedAt !== undefined ||
-      updatedAt !== 'preserve')
-
-  let oldRow: { name: string; directoryId: string | null } | null = null
-  if (needsRecalc) {
-    oldRow = await db.getFirstAsync<{
-      name: string
-      directoryId: string | null
-    }>('SELECT name, directoryId FROM files WHERE id = ?', id)
-  }
-
-  await sql.update(db, 'files', assignments, { id })
-  if (updatedAt === 'bump') {
-    // max() reads the committed row, so the stamp clears a clock a concurrent
-    // write may have raised between this call and here; +1 breaks a same-ms tie.
-    await db.runAsync(
-      'UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE id = ?',
-      Date.now(),
-      id,
-    )
-  }
-  // Flag the file's objects so sync-up pushes the edit.
-  await flagObjectsForFiles(db, [id])
-
-  if (oldRow) {
-    await recalculateCurrentForGroup(db, oldRow.name, oldRow.directoryId)
-    if (update.name !== undefined && update.name !== oldRow.name) {
-      await recalculateCurrentForGroup(db, update.name, oldRow.directoryId)
+    if (update.name !== undefined) {
+      assignments.nameSortKey = naturalSortKey(update.name)
     }
-  }
+
+    const { updatedAt } = options
+    if (updatedAt !== 'preserve' && updatedAt !== 'bump') {
+      assignments.updatedAt = updatedAt === 'now' ? Date.now() : updatedAt
+    }
+
+    // A written updatedAt can make a non-current row its group's newest, so currency follows it.
+    const needsRecalc =
+      !options.skipCurrentRecalc &&
+      (update.name !== undefined ||
+        update.trashedAt !== undefined ||
+        update.deletedAt !== undefined ||
+        updatedAt !== 'preserve')
+
+    let oldRow: { name: string; directoryId: string | null } | null = null
+    if (needsRecalc) {
+      oldRow = await tx.getFirstAsync<{
+        name: string
+        directoryId: string | null
+      }>('SELECT name, directoryId FROM files WHERE id = ?', id)
+    }
+
+    await sql.update(tx, 'files', assignments, { id })
+    if (updatedAt === 'bump') {
+      // max(): a row can carry a clock from another device that runs ahead of
+      // this one, and a plain stamp would move it backwards. +1 breaks a
+      // same-ms tie.
+      await tx.runAsync(
+        'UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE id = ?',
+        Date.now(),
+        id,
+      )
+    }
+    // Flag the file's objects so sync-up pushes the edit.
+    await flagObjectsForFiles(tx, [id])
+
+    if (oldRow) {
+      await recalculateCurrentForGroup(tx, oldRow.name, oldRow.directoryId)
+      if (update.name !== undefined && update.name !== oldRow.name) {
+        await recalculateCurrentForGroup(tx, update.name, oldRow.directoryId)
+      }
+    }
+  })
 }
 
 export async function deleteFileById(db: DatabaseAdapter, id: string): Promise<void> {
@@ -662,32 +654,32 @@ export async function deleteThumbnailsByFileId(
 }
 
 export async function deleteFileAndThumbnails(db: DatabaseAdapter, id: string): Promise<void> {
-  const row = await db.getFirstAsync<{
-    name: string
-    directoryId: string | null
-    kind: string
-  }>('SELECT name, directoryId, kind FROM files WHERE id = ?', id)
   await db.withTransactionAsync(async (tx) => {
+    const row = await tx.getFirstAsync<{
+      name: string
+      directoryId: string | null
+      kind: string
+    }>('SELECT name, directoryId, kind FROM files WHERE id = ?', id)
     await sql.del(tx, 'files', { thumbForId: id })
     await sql.del(tx, 'files', { id })
+    if (row?.kind === 'file') {
+      await recalculateCurrentForGroup(tx, row.name, row.directoryId)
+    }
   })
-  if (row?.kind === 'file') {
-    await recalculateCurrentForGroup(db, row.name, row.directoryId)
-  }
 }
 
 export async function deleteFilesAndThumbnails(db: DatabaseAdapter, ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const ph = ids.map(() => '?').join(',')
-  const rows = await db.getAllAsync<{
-    name: string
-    directoryId: string | null
-  }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
   await db.withTransactionAsync(async (tx) => {
+    const rows = await tx.getAllAsync<{
+      name: string
+      directoryId: string | null
+    }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
     await tx.runAsync(`DELETE FROM files WHERE thumbForId IN (${ph})`, ...ids)
     await tx.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
+    await recalculateCurrentForGroups(tx, rows)
   })
-  await recalculateCurrentForGroups(db, rows)
 }
 
 export async function deleteAllFiles(db: DatabaseAdapter): Promise<void> {
@@ -790,7 +782,7 @@ export async function updateFileWithLocalObject(
   options: { updatedAt: UpdatedAtWrite },
 ): Promise<void> {
   await db.withTransactionAsync(async (tx) => {
-    await updateFileInner(tx, update, options)
+    await updateFile(tx, update, options)
     await insertObject(tx, localObject)
   })
 }
@@ -927,44 +919,46 @@ export async function insertManyFiles(
   },
 ): Promise<void> {
   if (records.length === 0) return
-  const directoryId = options?.directoryId ?? null
-  await sql.insertMany(
-    db,
-    'files',
-    records.map((r) => ({
-      id: r.id,
-      name: r.name,
-      nameSortKey: naturalSortKey(r.name),
-      directoryId,
-      size: r.size,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      type: r.type,
-      kind: r.kind,
-      mediaAssetId: r.mediaAssetId,
-      hash: r.hash,
-      addedAt: r.addedAt,
-      thumbForId: r.thumbForId,
-      thumbSize: r.thumbSize,
-      trashedAt: r.trashedAt,
-      deletedAt: r.deletedAt,
-      lostReason: r.lostReason,
-    })),
-    options,
-  )
-  if (options?.skipCurrentRecalc) return
-  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
-  if (fileIds.length > 0) {
-    const ph = fileIds.map(() => '?').join(',')
-    const groups = await db.getAllAsync<{
-      name: string
-      directoryId: string | null
-    }>(
-      `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
-      ...fileIds,
+  await db.withTransactionAsync(async (tx) => {
+    const directoryId = options?.directoryId ?? null
+    await sql.insertMany(
+      tx,
+      'files',
+      records.map((r) => ({
+        id: r.id,
+        name: r.name,
+        nameSortKey: naturalSortKey(r.name),
+        directoryId,
+        size: r.size,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        type: r.type,
+        kind: r.kind,
+        mediaAssetId: r.mediaAssetId,
+        hash: r.hash,
+        addedAt: r.addedAt,
+        thumbForId: r.thumbForId,
+        thumbSize: r.thumbSize,
+        trashedAt: r.trashedAt,
+        deletedAt: r.deletedAt,
+        lostReason: r.lostReason,
+      })),
+      options,
     )
-    await recalculateCurrentForGroups(db, groups)
-  }
+    if (options?.skipCurrentRecalc) return
+    const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
+    if (fileIds.length > 0) {
+      const ph = fileIds.map(() => '?').join(',')
+      const groups = await tx.getAllAsync<{
+        name: string
+        directoryId: string | null
+      }>(
+        `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
+        ...fileIds,
+      )
+      await recalculateCurrentForGroups(tx, groups)
+    }
+  })
 }
 
 const FILE_UPSERT_UPDATE_COLUMNS = [
@@ -999,45 +993,47 @@ export async function upsertManyFiles(
   },
 ): Promise<void> {
   if (records.length === 0) return
-  const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
-  // Read the groups these rows sit in before the upsert rewrites their names. The recalc below
-  // sees only each row's new group, so a rename that carries the current row out of a group
-  // leaves that group without one unless the vacated side is recomputed too.
-  const preUpsertGroups = options?.skipCurrentRecalc ? [] : await queryNameDirGroups(db, fileIds)
-  await sql.upsertMany(
-    db,
-    'files',
-    records.map((r) => ({
-      id: r.id,
-      name: r.name,
-      nameSortKey: naturalSortKey(r.name),
-      size: r.size,
-      type: r.type,
-      kind: r.kind,
-      hash: r.hash,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      mediaAssetId: r.mediaAssetId,
-      addedAt: r.addedAt,
-      thumbForId: r.thumbForId,
-      thumbSize: r.thumbSize,
-      trashedAt: r.trashedAt,
-      deletedAt: r.deletedAt,
-      lostReason: r.lostReason,
-      ...(options?.directoryIdByFileId
-        ? { directoryId: options.directoryIdByFileId.get(r.id) ?? null }
-        : {}),
-    })),
-    {
-      conflictColumn: 'id',
-      updateColumns: FILE_UPSERT_UPDATE_COLUMNS,
-    },
-  )
-  if (options?.skipCurrentRecalc) return
-  if (fileIds.length > 0) {
-    const groups = await queryNameDirGroups(db, fileIds)
-    await recalculateCurrentForGroups(db, [...groups, ...preUpsertGroups])
-  }
+  await db.withTransactionAsync(async (tx) => {
+    const fileIds = records.filter((r) => r.kind === 'file').map((r) => r.id)
+    // Read the groups these rows sit in before the upsert rewrites their names. The recalc below
+    // sees only each row's new group, so a rename that carries the current row out of a group
+    // leaves that group without one unless the vacated side is recomputed too.
+    const preUpsertGroups = options?.skipCurrentRecalc ? [] : await queryNameDirGroups(tx, fileIds)
+    await sql.upsertMany(
+      tx,
+      'files',
+      records.map((r) => ({
+        id: r.id,
+        name: r.name,
+        nameSortKey: naturalSortKey(r.name),
+        size: r.size,
+        type: r.type,
+        kind: r.kind,
+        hash: r.hash,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        mediaAssetId: r.mediaAssetId,
+        addedAt: r.addedAt,
+        thumbForId: r.thumbForId,
+        thumbSize: r.thumbSize,
+        trashedAt: r.trashedAt,
+        deletedAt: r.deletedAt,
+        lostReason: r.lostReason,
+        ...(options?.directoryIdByFileId
+          ? { directoryId: options.directoryIdByFileId.get(r.id) ?? null }
+          : {}),
+      })),
+      {
+        conflictColumn: 'id',
+        updateColumns: FILE_UPSERT_UPDATE_COLUMNS,
+      },
+    )
+    if (options?.skipCurrentRecalc) return
+    if (fileIds.length > 0) {
+      const groups = await queryNameDirGroups(tx, fileIds)
+      await recalculateCurrentForGroups(tx, [...groups, ...preUpsertGroups])
+    }
+  })
 }
 
 export async function updateManyFiles(
@@ -1051,7 +1047,7 @@ export async function updateManyFiles(
   if (updates.length === 0) return
   await db.withTransactionAsync(async (tx) => {
     for (const update of updates) {
-      await updateFileInner(tx, update, options)
+      await updateFile(tx, update, options)
     }
   })
 }
@@ -1059,12 +1055,14 @@ export async function updateManyFiles(
 export async function deleteManyFilesByIds(db: DatabaseAdapter, ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const ph = ids.map(() => '?').join(',')
-  const groups = await db.getAllAsync<{
-    name: string
-    directoryId: string | null
-  }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
-  await db.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
-  await recalculateCurrentForGroups(db, groups)
+  await db.withTransactionAsync(async (tx) => {
+    const groups = await tx.getAllAsync<{
+      name: string
+      directoryId: string | null
+    }>(`SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`, ...ids)
+    await tx.runAsync(`DELETE FROM files WHERE id IN (${ph})`, ...ids)
+    await recalculateCurrentForGroups(tx, groups)
+  })
 }
 
 export async function queryFileByName(
@@ -1243,15 +1241,15 @@ export async function renameAllFileVersions(
   directoryId: string | null,
   newName: string,
 ): Promise<string[]> {
-  const versions = await queryFileVersions(db, currentName, directoryId)
-  if (versions.length === 0) return []
-  // Above every version's own clock, not the wall clock: rows can carry a
-  // future stamp (sync-down stores the other device's clock, a provider write
-  // bumps past it), and a raw now would move such a row backwards and lose
-  // the sync race to the state it replaced. versions[0] is the newest, and
-  // + length keeps every staggered stamp above every old one.
-  const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
-  await db.withTransactionAsync(async (tx) => {
+  return sql.transaction(db, async (tx) => {
+    const versions = await queryFileVersions(tx, currentName, directoryId)
+    if (versions.length === 0) return []
+    // Above every version's own clock, not the wall clock: rows can carry a
+    // future stamp (sync-down stores the other device's clock, a provider write
+    // bumps past it), and a raw now would move such a row backwards and lose
+    // the sync race to the state it replaced. versions[0] is the newest, and
+    // + length keeps every staggered stamp above every old one.
+    const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
     for (let i = 0; i < versions.length; i++) {
       await tx.runAsync(
         'UPDATE files SET name = ?, nameSortKey = ?, updatedAt = ? WHERE id = ?',
@@ -1265,9 +1263,11 @@ export async function renameAllFileVersions(
       tx,
       versions.map((v) => v.id),
     )
+    // The new name may already hold a file in this folder, and until this runs
+    // both stacks keep a current row.
+    await recalculateCurrentForGroup(tx, newName, directoryId)
+    return versions.map((v) => v.id)
   })
-  await recalculateCurrentForGroup(db, newName, directoryId)
-  return versions.map((v) => v.id)
 }
 
 /**
@@ -1280,11 +1280,11 @@ export async function moveAllFileVersions(
   fromDirectoryId: string | null,
   toDirectoryId: string | null,
 ): Promise<string[]> {
-  const versions = await queryFileVersions(db, name, fromDirectoryId)
-  if (versions.length === 0) return []
-  // Monotonic for the same reason as renameAllFileVersions.
-  const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
-  await db.withTransactionAsync(async (tx) => {
+  return sql.transaction(db, async (tx) => {
+    const versions = await queryFileVersions(tx, name, fromDirectoryId)
+    if (versions.length === 0) return []
+    // Monotonic for the same reason as renameAllFileVersions.
+    const base = Math.max(Date.now(), versions[0].updatedAt + versions.length)
     for (let i = 0; i < versions.length; i++) {
       await tx.runAsync(
         'UPDATE files SET directoryId = ?, updatedAt = ? WHERE id = ?',
@@ -1297,9 +1297,9 @@ export async function moveAllFileVersions(
       tx,
       versions.map((v) => v.id),
     )
+    await recalculateCurrentForGroup(tx, name, toDirectoryId)
+    return versions.map((v) => v.id)
   })
-  await recalculateCurrentForGroup(db, name, toDirectoryId)
-  return versions.map((v) => v.id)
 }
 
 /**
@@ -1323,8 +1323,7 @@ export async function moveFilesAllVersions(
 ): Promise<string[]> {
   if (fileIds.length === 0) return []
   const ph = fileIds.map(() => '?').join(',')
-  const movedIds: string[] = []
-  await db.withTransactionAsync(async (tx) => {
+  return sql.transaction(db, async (tx) => {
     // Every active version of every selected stack, newest-first, in one query.
     // `f.directoryId IS g.directoryId` is null-safe, so unfiled stacks match too.
     const versions = await tx.getAllAsync<{ id: string; updatedAt: number }>(
@@ -1337,6 +1336,7 @@ export async function moveFilesAllVersions(
     )
     // Monotonic for the same reason as renameAllFileVersions: a raw now would
     // move a future-clocked row backwards and lose the sync race.
+    const movedIds: string[] = []
     let stamp =
       versions.length === 0
         ? Date.now()
@@ -1356,8 +1356,8 @@ export async function moveFilesAllVersions(
     // The moved rows now all sit in toDirectoryId; recompute current per
     // destination group in a single bulk pass (handles merges by name+dir).
     await recalculateCurrentForFileIds(tx, movedIds)
+    return movedIds
   })
-  return movedIds
 }
 
 export async function trashAllFileVersions(
@@ -1365,13 +1365,13 @@ export async function trashAllFileVersions(
   name: string,
   directoryId: string | null,
 ): Promise<string[]> {
-  const versions = await queryFileVersions(db, name, directoryId)
-  if (versions.length === 0) return []
-  await trashFilesAndThumbnails(
-    db,
-    versions.map((v) => v.id),
-  )
-  return versions.map((v) => v.id)
+  return sql.transaction(db, async (tx) => {
+    const versions = await queryFileVersions(tx, name, directoryId)
+    if (versions.length === 0) return []
+    const ids = versions.map((v) => v.id)
+    await trashFilesAndThumbnails(tx, ids)
+    return ids
+  })
 }
 
 /**
@@ -1384,13 +1384,13 @@ export async function tombstoneAllFileVersions(
   name: string,
   directoryId: string | null,
 ): Promise<string[]> {
-  const versions = await queryFileVersions(db, name, directoryId)
-  if (versions.length === 0) return []
-  await tombstoneFilesAndThumbnails(
-    db,
-    versions.map((v) => v.id),
-  )
-  return versions.map((v) => v.id)
+  return sql.transaction(db, async (tx) => {
+    const versions = await queryFileVersions(tx, name, directoryId)
+    if (versions.length === 0) return []
+    const ids = versions.map((v) => v.id)
+    await tombstoneFilesAndThumbnails(tx, ids)
+    return ids
+  })
 }
 
 /** Outcome of a finalize attempt; the scanner uses it to drive fs cleanup. */
@@ -1413,8 +1413,7 @@ export async function finalizeImportFile(
   id: string,
   token: string,
 ): Promise<FinalizeResult> {
-  let result: FinalizeResult = { outcome: 'noop' }
-  await db.withTransactionAsync(async (tx) => {
+  return sql.transaction(db, async (tx): Promise<FinalizeResult> => {
     // The row must still be this worker's active claim; the join pulls the
     // import's dedupByHash and pendingTags along in the same read.
     const row = await tx.getFirstAsync<{
@@ -1440,7 +1439,7 @@ export async function finalizeImportFile(
       id,
       token,
     )
-    if (!row) return // claim lost (swept and reclaimed), mutate nothing
+    if (!row) return { outcome: 'noop' } // claim lost (swept and reclaimed), mutate nothing
 
     // Content dedup, only when the import opts in (dedupByHash=1: new-photos,
     // library-scan, and the migration's legacy import). A hit keeps the import_files row as `duplicate` and
@@ -1453,8 +1452,7 @@ export async function finalizeImportFile(
       )
       if (dupId) {
         await markImportFileDuplicate(tx, id, token, 'duplicate-content')
-        result = { outcome: 'duplicate' }
-        return
+        return { outcome: 'duplicate' }
       }
     }
 
@@ -1498,7 +1496,6 @@ export async function finalizeImportFile(
     await recalculateCurrentForGroup(tx, row.name, row.directoryId)
 
     await markImportFileAdded(tx, id, token)
-    result = { outcome: 'added' }
+    return { outcome: 'added' }
   })
-  return result
 }

@@ -149,6 +149,18 @@ function normalizeSqlValue(value: SqlValue): string | number {
   return String(value)
 }
 
+/** withTransactionAsync for a body that returns a value. */
+export async function transaction<T>(
+  db: DatabaseAdapter,
+  fn: (tx: DatabaseAdapter) => Promise<T>,
+): Promise<T> {
+  let result!: T
+  await db.withTransactionAsync(async (tx) => {
+    result = await fn(tx)
+  })
+  return result
+}
+
 export async function run(
   db: DatabaseAdapter,
   sql: string,
