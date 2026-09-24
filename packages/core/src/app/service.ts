@@ -1111,6 +1111,28 @@ export interface AppService {
   caches: AppCaches
 }
 
+/** The database-backed namespaces, which a transaction binds to its own handle. */
+export type DatabaseNamespaces = Omit<
+  AppService,
+  | 'settings'
+  | 'storage'
+  | 'secrets'
+  | 'auth'
+  | 'caches'
+  | 'sync'
+  | 'uploads'
+  | 'provider'
+  | 'downloads'
+  | 'shares'
+  | 'connection'
+  | 'init'
+  | 'uploader'
+  | 'hosts'
+  | 'account'
+  | 'optimize'
+  | 'db'
+>
+
 /** Non-serializable APIs that cannot cross an IPC/RPC boundary. Only used by bootstrap code. */
 export interface AppServiceInternal {
   /** Injects the live SDK instance after auth completes. */
@@ -1127,6 +1149,11 @@ export interface AppServiceInternal {
    * still crosses it while it runs.
    */
   events: ChangeSource & { dispose(): void }
-  /** Runs a function inside a database transaction. */
-  withTransaction(fn: () => Promise<void>): Promise<void>
+  /**
+   * Runs `fn` as one database transaction. `tx` is the database facade bound to
+   * it, so every call through `tx` lands inside the transaction. `fn` must not
+   * call the app facade: on node that throws TransactionMisuseError, and on
+   * mobile the call waits for `fn`'s own transaction and never settles.
+   */
+  withTransaction(fn: (tx: DatabaseNamespaces) => Promise<void>): Promise<void>
 }

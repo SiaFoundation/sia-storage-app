@@ -38,20 +38,20 @@ export async function trashFilesAndThumbnails(
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(
       `UPDATE files SET trashedAt = ?, updatedAt = ? WHERE id IN (${ph})`,
       now,
       now,
       ...fileIds,
     )
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE files SET trashedAt = ?, updatedAt = ? WHERE thumbForId IN (${ph})`,
       now,
       now,
       ...fileIds,
     )
-    await flagObjectsForFiles(db, fileIds)
+    await flagObjectsForFiles(tx, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }
@@ -64,18 +64,18 @@ export async function restoreFilesAndThumbnails(
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(
       `UPDATE files SET trashedAt = NULL, updatedAt = ? WHERE id IN (${ph})`,
       now,
       ...fileIds,
     )
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE files SET trashedAt = NULL, updatedAt = ? WHERE thumbForId IN (${ph})`,
       now,
       ...fileIds,
     )
-    await flagObjectsForFiles(db, fileIds)
+    await flagObjectsForFiles(tx, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }
@@ -88,22 +88,22 @@ export async function tombstoneFilesAndThumbnails(
   const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(
       `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ? WHERE id IN (${ph})`,
       now,
       now,
       now,
       ...fileIds,
     )
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ? WHERE thumbForId IN (${ph})`,
       now,
       now,
       now,
       ...fileIds,
     )
-    await flagObjectsForTombstonedFilesAndThumbnails(db, fileIds)
+    await flagObjectsForTombstonedFilesAndThumbnails(tx, fileIds)
   })
   await recalculateCurrentForGroups(db, groups)
 }

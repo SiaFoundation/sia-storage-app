@@ -56,7 +56,8 @@ writes the full output to `.build-cache/<target>/build.log`. Run them directly a
 read that file if something fails.
 
 Tests do not. `bun run test` runs six packages, five under jest and the desktop app
-under bun test, and prints a line per suite, so background it and read the
+under bun test, with node-adapters also running its bun:sqlite cases under bun test,
+and prints a line per suite, so background it and read the
 `Test Suites:` and `Tests:` summary lines per package rather than the stream. Background it for a second reason too: an open
 handle from an async loop hangs the run instead of failing it, and a hung foreground
 run costs the whole session. If output stops growing for 30 seconds or more, kill it

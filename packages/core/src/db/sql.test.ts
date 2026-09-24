@@ -3,7 +3,7 @@ import { processInBatches } from './sql'
 
 function mockDb(batches: Record<string, unknown>[][]): DatabaseAdapter {
   let callCount = 0
-  return {
+  const db: DatabaseAdapter = {
     getAllAsync: async () => {
       const result = batches[callCount] ?? []
       callCount++
@@ -12,8 +12,9 @@ function mockDb(batches: Record<string, unknown>[][]): DatabaseAdapter {
     getFirstAsync: async () => null,
     runAsync: async () => ({ changes: 0, lastInsertRowId: 0 }),
     execAsync: async () => {},
-    withTransactionAsync: async (fn) => fn(),
+    withTransactionAsync: (fn) => fn(db),
   }
+  return db
 }
 
 describe('processInBatches', () => {
@@ -72,7 +73,7 @@ describe('processInBatches', () => {
       getFirstAsync: async () => null,
       runAsync: async () => ({ changes: 0, lastInsertRowId: 0 }),
       execAsync: async () => {},
-      withTransactionAsync: async (fn) => fn(),
+      withTransactionAsync: (fn) => fn(db),
     }
     await processInBatches(db, 'SELECT id FROM t WHERE x = ?', [42], 100, async () => {})
     expect(calls[0].sql).toBe('SELECT id FROM t WHERE x = ? LIMIT ?')
