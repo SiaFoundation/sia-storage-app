@@ -230,6 +230,24 @@ describe('while suspending', () => {
     await expect(write).rejects.toThrow(DatabaseSuspendedError)
   })
 
+  it('reports a suspension for an interrupted read on the writer, with no reader pool', async () => {
+    // An in-memory database opens no readers, so reads run on the writer.
+    const running = deferred()
+    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(async () => {
+      await running.promise
+      throw new Error('interrupted')
+    })
+    const read = db().getAllAsync('SELECT x FROM t')
+    await new Promise((r) => setTimeout(r, 10))
+
+    suspendDb()
+    interruptDatabase()
+    resumeDb()
+    running.resolve()
+
+    await expect(read).rejects.toThrow(DatabaseSuspendedError)
+  })
+
   it('rolls back a transaction left open after the drain', async () => {
     await database.execAsync('BEGIN')
     expect(await endOpenTransaction()).toBe(true)
@@ -466,6 +484,15 @@ describe('withRecovery', () => {
       .mockResolvedValueOnce('recovered')
     expect(await withRecovery(fn)).toBe('recovered')
     expect(fn).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('read pool on an unshared database', () => {
+  it('opens no readers and runs reads on the writer', async () => {
+    const onWriter = jest.spyOn(database, 'getAllAsync')
+
+    expect(await rows()).toEqual([])
+    expect(onWriter).toHaveBeenCalledTimes(1)
   })
 })
 
