@@ -392,8 +392,8 @@ its sign-in window shows only after Sign Out.
 - Check: `bun sim device background`, `device kill`, `device locks` (iOS)
 - Tests: scenarios `mobile/suspend-mid-upload`,
   `mobile/suspend-during-finalize`, `mobile/sign-in-during-statement`,
-  `mobile/rapid-app-switching`, `mobile/database-uses-wal`,
-  `mobile/import-resumes-after-suspension`; integration `suspension`, `app-boot`
+  `mobile/rapid-app-switching`, `mobile/import-resumes-after-suspension`;
+  integration `suspension`, `app-boot`
 
 ### Account and onboarding
 

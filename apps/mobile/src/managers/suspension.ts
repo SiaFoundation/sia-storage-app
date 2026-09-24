@@ -16,7 +16,6 @@ import BackgroundTimer from 'react-native-background-timer'
 import RNFS from 'react-native-fs'
 import {
   dbInitialized,
-  getActiveJournalMode,
   getInflightCount,
   getWalPath,
   interruptDatabase,
@@ -37,15 +36,10 @@ import { getUploadManager } from './uploader'
  * any future RunningBoard kill from the surrounding log context. */
 async function logSuspendDiagnostics(): Promise<void> {
   try {
-    // Only stat the WAL file when it can exist; in DELETE journal mode
-    // there's no -wal sidecar and the stat would log a spurious warning.
-    const walStat =
-      getActiveJournalMode() === 'WAL'
-        ? await RNFS.stat(getWalPath()).catch((e) => {
-            logger.warn('suspension', 'wal_stat_failed', { error: e as Error })
-            return null
-          })
-        : null
+    const walStat = await RNFS.stat(getWalPath()).catch((e) => {
+      logger.warn('suspension', 'wal_stat_failed', { error: e as Error })
+      return null
+    })
     logger.info('suspension', 'diagnostics', {
       inflightQueries: getInflightCount(),
       uploader: getUploadManager()?.getDiagnostics() ?? null,

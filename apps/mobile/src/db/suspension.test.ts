@@ -4,12 +4,10 @@ import {
   database,
   db,
   dbInitialized,
-  getActiveJournalMode,
   getDbState,
   initializeDB,
   resetDb,
   resumeDb,
-  setJournalMode,
   suspendDb,
   waitUntilDbActive,
   waitForQueriesIdle,
@@ -465,42 +463,16 @@ describe('full suspend/resume cycle', () => {
 })
 
 describe('journal mode', () => {
-  afterEach(() => {
-    setJournalMode('DELETE')
-  })
-
-  it('defaults to DELETE', () => {
-    expect(getActiveJournalMode()).toBe('DELETE')
-  })
-
-  it('round-trips through setJournalMode', () => {
-    setJournalMode('WAL')
-    expect(getActiveJournalMode()).toBe('WAL')
-    setJournalMode('DELETE')
-    expect(getActiveJournalMode()).toBe('DELETE')
-  })
-
-  it('initializeDB applies the DELETE pragma when mode is DELETE', async () => {
-    setJournalMode('DELETE')
-    await initializeDB({ databaseName: ':memory:' })
-    const row = await db().getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode')
-    // :memory: forces 'memory' regardless, so assert the pragma at least
-    // executed by also checking auto_checkpoint is at the SQLite default
-    // (1000 pages) rather than the WAL-tuned 500.
-    expect(row?.journal_mode).toBeDefined()
-    const auto = await db().getFirstAsync<{ wal_autocheckpoint: number }>(
-      'PRAGMA wal_autocheckpoint',
-    )
-    expect(auto?.wal_autocheckpoint).toBe(1000)
-  })
-
-  it('initializeDB applies the WAL pragma when mode is WAL', async () => {
-    setJournalMode('WAL')
+  it('opens with a 500-page autocheckpoint and a 4MB WAL size limit', async () => {
     await initializeDB({ databaseName: ':memory:' })
     const auto = await db().getFirstAsync<{ wal_autocheckpoint: number }>(
       'PRAGMA wal_autocheckpoint',
     )
     expect(auto?.wal_autocheckpoint).toBe(500)
+    const limit = await db().getFirstAsync<{ journal_size_limit: number }>(
+      'PRAGMA journal_size_limit',
+    )
+    expect(limit?.journal_size_limit).toBe(4194304)
   })
 })
 

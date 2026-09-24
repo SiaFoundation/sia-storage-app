@@ -169,37 +169,19 @@ export let dbInitialized = false
 let dbName = 'app.db'
 const dbDirectory = getSharedDbDirectory()
 
-export type JournalMode = 'WAL' | 'DELETE'
+// synchronous=NORMAL under WAL fsyncs at checkpoint instead of every commit,
+// so a commit is rarely mid-fsync when iOS suspends the app (the mechanism
+// behind 0xdead10cc). An app kill loses nothing, because the WAL file
+// survives. An OS crash can lose the last uncheckpointed commits. Sync-down
+// restores the ones that had already synced up, and a local-only change such
+// as a staged import or an unpushed edit is gone. wal_autocheckpoint=500 pages
+// (2MB at 4KB pages, half the default) keeps each checkpoint fsync short under
+// disk contention from Photos exports and large copies. SQLite reuses the WAL
+// file after a checkpoint and never shrinks it, so journal_size_limit cuts it
+// back to 4MB once a large transaction has grown it.
+const INIT_PRAGMAS =
+  'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA journal_size_limit = 4194304; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
 
-// The mode the next initializeDB / reopenDb / resetDb will open the database
-// with. Set once during bootstrap from the persisted developer preference.
-// Defaults to DELETE; WAL is exposed as a developer toggle (Settings →
-// Advanced → Database) so we can test it in the field. Once a feature
-// requires WAL, the toggle and this default both go away.
-let currentJournalMode: JournalMode = 'DELETE'
-
-export function setJournalMode(mode: JournalMode): void {
-  currentJournalMode = mode
-}
-
-export function getActiveJournalMode(): JournalMode {
-  return currentJournalMode
-}
-
-function buildInitPragmas(mode: JournalMode): string {
-  if (mode === 'WAL') {
-    // synchronous=NORMAL under WAL trades fsync-per-commit for fsync-per-checkpoint,
-    // drastically reducing the chance a commit is mid-fsync at iOS suspension time
-    // (the mechanism behind 0xdead10cc). Durable across app kills — the WAL file
-    // survives; only a full OS crash loses the last few uncheckpointed seconds,
-    // which syncDown recovers from the indexer on next launch.
-    // wal_autocheckpoint=500 (~2MB at 4KB pages, down from default 1000/~4MB) keeps
-    // each checkpoint's fsync small so the fsyncs that remain finish in tens of ms
-    // even under disk I/O contention from Photos exports or large file copies.
-    return 'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
-  }
-  return 'PRAGMA journal_mode = DELETE; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
-}
 /**
  * A connection as a DatabaseAdapter for migrations, which run on the raw
  * connection outside the gate, the lock and in-flight tracking.
@@ -242,7 +224,7 @@ export async function initializeDB(options?: {
   database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
-  await database.execAsync(buildInitPragmas(currentJournalMode))
+  await database.execAsync(INIT_PRAGMAS)
   await runMigrations(migrationAdapter(database), migrations, {
     log: logger,
     onProgress: options?.onProgress,
@@ -286,7 +268,7 @@ async function reopenDb(): Promise<boolean> {
       } catch {}
       // useNewConnection bypasses expo-sqlite's per-name connection cache.
       database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-      await database.execAsync(buildInitPragmas(currentJournalMode))
+      await database.execAsync(INIT_PRAGMAS)
       dbInitialized = true
       logger.warn('db', 'reopened_successfully')
       return true
@@ -355,6 +337,13 @@ export async function closeDb(): Promise<void> {
   }
 }
 
+// Recent commits sit in app.db-wal until a checkpoint, so sharing app.db
+// alone loses them. VACUUM INTO writes one file from a single read snapshot,
+// which holds every committed write.
+export async function copyDatabaseTo(path: string): Promise<void> {
+  await db().execAsync(`VACUUM INTO '${path.replace(/'/g, "''")}'`)
+}
+
 const txMutex = new Mutex()
 
 // Settles when the open transaction ends. A statement issued on the outer
@@ -395,7 +384,7 @@ export async function resetDb() {
       }
     }
     database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
-    await database.execAsync(buildInitPragmas(currentJournalMode))
+    await database.execAsync(INIT_PRAGMAS)
     await runMigrations(migrationAdapter(database), migrations, { log: logger })
     dbInitialized = true
   } finally {
