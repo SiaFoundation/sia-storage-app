@@ -36,9 +36,9 @@ import { getUploadManager } from './uploader'
 export async function initApp(): Promise<void> {
   // Attach the AppState listener first so foreground/background
   // transitions during init are observed. Idempotent; safe to call on
-  // re-init from a forced reset / OnboardingFinishedScreen. The suspend
-  // flow itself is gated on isInitializing inside onAppStateChange so
-  // an early 'background' event during init doesn't race the
+  // re-init from a forced reset / OnboardingFinishedScreen. The suspension
+  // manager's suspendBlocker hook declines to suspend while isInitializing,
+  // so an early 'background' event during init doesn't race the
   // cleanup/services steps.
   initSuspensionManager()
 

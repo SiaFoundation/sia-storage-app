@@ -76,6 +76,19 @@ describe('DbLogAppender', () => {
     expect(state.appended.map((e) => e.message)).toEqual(['a', 'b'])
   })
 
+  it('flushBeforeSuspend puts the batch back when the write fails', async () => {
+    const state = makeApp({ failNext: true })
+    const appender = new DbLogAppender(state.app)
+    appender.write(entry('a'))
+
+    appender.flushBeforeSuspend()
+    await Promise.resolve()
+    await Promise.resolve()
+    await appender.flush()
+
+    expect(state.appended.map((e) => e.message)).toEqual(['a'])
+  })
+
   it('reinstates the batch on append failure so the next drain retries', async () => {
     const state = makeApp({ failNext: true })
     const appender = new DbLogAppender(state.app)

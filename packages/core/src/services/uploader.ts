@@ -372,14 +372,12 @@ export class UploadManager {
     this.wake()
   }
 
-  // Non-blocking. Sets the flag and wakes the loop; the loop parks itself
-  // at the top of its next iteration. Return type stays Promise<void> for
-  // the SuspensionAdapters interface, but resolves immediately — Diff A's
-  // DB gate (reads reject, writes park during 'suspending'/'closed') is
-  // the synchronization primitive now, so we don't need to await the loop
-  // reaching its park point before proceeding with the rest of the suspend
-  // flow. Lets Phase 1 finish in milliseconds even when the loop is
-  // mid-iteration on a slow file.
+  // Non-blocking. Sets the flag and wakes the loop, which parks itself at
+  // the top of its next iteration. Returns Promise<void> for the
+  // SuspensionAdapters interface but resolves at once: the DB gate holds
+  // any statement the loop issues after this, so the suspend flow need not
+  // wait for the loop to reach its park point, even mid-way through a slow
+  // file.
   suspend(): Promise<void> {
     logger.info('uploadManager', 'suspending')
     this._suspended = true
@@ -1141,11 +1139,6 @@ export class UploadManager {
     const sdk = this.internal.requireSdk()
     const indexerURL = await this.app.settings.getIndexerURL()
 
-    // Slab upload is done; gate before the pin/save phases so a
-    // mid-flight suspend can't reject the first DB call and drop the
-    // network-side pin work on the floor.
-    await this.app.db.waitUntilActive()
-
     type PinResult =
       | {
           type: 'success'
@@ -1213,13 +1206,10 @@ export class UploadManager {
       ),
     )
 
-    // Phase 2: Batch DB write. Re-gate: Phase 1's pin pool yields
-    // across pinObject awaits, so the entry gate can be stale before
-    // we reach these writes.
+    // Phase 2: Batch DB write.
     const localObjects = results
       .filter((r): r is Extract<PinResult, { type: 'success' }> => r.type === 'success')
       .map((r) => r.localObject)
-    await this.app.db.waitUntilActive()
     // Insert dirty so the next sync-up pass reconciles the uploaded metadata.
     await this.app.localObjects.upsertMany(localObjects, {
       skipInvalidation: true,
@@ -1237,9 +1227,6 @@ export class UploadManager {
       .filter((r) => r.type !== 'error' && r.type !== 'missing')
       .map((r) => r.fileId)
     if (successfulFileIds.length > 0) {
-      // Re-gate (see upsert above): the size heal and the upsert must commit on
-      // the same side of the suspend gate.
-      await this.app.db.waitUntilActive()
       // Persist the SDK size so the local row matches what we uploaded. The upload is not an
       // edit, so the version clock stays put. The object was already flagged when it was
       // inserted, so sync-up pushes the corrected size on the next pass.

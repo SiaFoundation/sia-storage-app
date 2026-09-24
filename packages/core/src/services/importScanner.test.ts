@@ -1,4 +1,5 @@
 import { IMPORT_STALE_CLAIM_MS } from '../config'
+import { DatabaseSuspendedError } from '../lib/errors'
 import type { FinalizeResult } from '../db/operations/files'
 import type { ImportFileRow, ImportRow } from '../db/operations/imports'
 import { ImportScanner, type ResolveSourceResult } from './importScanner'
@@ -587,6 +588,17 @@ describe('ImportScanner claim-loop', () => {
       8,
     )
     expect(result.failed).toBe(1)
+  })
+
+  it('a finalize cut off by the suspend gate leaves the row active with no attempt spent', async () => {
+    const m = createMocks({ candidates: [fileRow({ id: 'a', importId: 'imp1' })] })
+    m.imports.finalize.mockRejectedValue(new DatabaseSuspendedError())
+
+    const result = await scanner(m).runScan()
+
+    expect(result.failed).toBe(0)
+    expect(m.imports.markFailure).not.toHaveBeenCalled()
+    expect(m.imports.markUnavailable).not.toHaveBeenCalled()
   })
 
   it('a copy ENOENT on an app-owned source is marked unavailable immediately as deleted', async () => {

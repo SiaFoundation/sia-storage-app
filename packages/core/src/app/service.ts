@@ -121,16 +121,6 @@ export interface AppService {
    * through finalizeAsync under concurrent reader load.
    */
   optimize(): Promise<void>
-  /** Database lifecycle hooks. */
-  db: {
-    /**
-     * Resolves when the DB suspension gate is open. Call right after an
-     * irrecoverable network/FS commit and before the DB sequence that
-     * records it, so an iOS suspend landing in the gap can't orphan the
-     * prior commit. No-op on adapters that don't gate (Node, web, tests).
-     */
-    waitUntilActive(): Promise<void>
-  }
   /** Tag operations: create, query, and manage file tags. */
   tags: {
     /** Returns all tags with their associated file counts. */
@@ -1197,7 +1187,6 @@ export type DatabaseNamespaces = Omit<
   | 'hosts'
   | 'account'
   | 'optimize'
-  | 'db'
 >
 
 /** Non-serializable APIs that cannot cross an IPC/RPC boundary. Only used by bootstrap code. */

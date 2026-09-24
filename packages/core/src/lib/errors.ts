@@ -24,7 +24,14 @@ export function isAbortError(e: unknown): boolean {
   return false
 }
 
-/** Thrown by the mobile DB adapter when the suspension gate is closed. */
+/**
+ * Thrown by the mobile DB adapter, whose gate closes for a background
+ * suspension and while resetDb replaces the connection, in three cases. A
+ * call through failFast() gets it at once while the gate is closed. A
+ * transaction the suspension drain cut off gets it from its next statement
+ * and rolls back. A call parked at the gate gets it once it has waited 30s
+ * while the app was running.
+ */
 export class DatabaseSuspendedError extends Error {
   constructor() {
     super('Database is suspended for background transition')

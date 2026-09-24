@@ -1,3 +1,34 @@
+/*
+ * The app's SQLite connection behind the core's DatabaseAdapter, with the gate
+ * that makes iOS background suspension safe.
+ *
+ * iOS kills a suspended app with 0xdead10cc if it holds a lock on a file in
+ * the shared app group, which SQLite does while a statement writes. It exempts
+ * SQLite files, recognized by their header, once no write is mid-flight, so
+ * the connection stays open across suspension. The suspension manager closes
+ * the gate, waits a grace period for the work already dispatched to settle
+ * (the drain), then interrupts statements until it does.
+ *
+ * | gate                | new call | statement inside an open transaction    |
+ * |---------------------|----------|-----------------------------------------|
+ * | active              | runs     | runs                                    |
+ * | suspending          | parks    | runs, so the transaction can commit     |
+ * | suspending, cut off | parks    | rejects, and the transaction rolls back |
+ * | closed              | parks    | runs, and resetDb waits for it          |
+ *
+ * The drain's first interrupt cuts off open transactions. 'closed' is resetDb
+ * replacing the connection. A parked call runs once the gate reopens, or
+ * rejects with DatabaseSuspendedError after 30s of the app running, so a
+ * caller never has to wait for resume itself. Parking a statement inside a
+ * transaction instead would keep that transaction, and so the drain, open
+ * across the freeze. A call through failFast() rejects where one would park.
+ *
+ * Everything on the connection holds the writer lock: a transaction for its
+ * whole body, a statement outside one until it settles. expo-sqlite runs one
+ * statement as several native calls (prepare, execute, finalize), so without
+ * the lock another flow's BEGIN could land between them and pull the rest of
+ * that statement into its transaction, to commit or roll back with it.
+ */
 import type { DatabaseAdapter, SQLParam, SQLRunResult } from '@siastorage/core/adapters'
 import type { MigrationProgressHandler } from '@siastorage/core/db'
 import { runMigrations } from '@siastorage/core/db'
@@ -9,105 +40,103 @@ import { Platform } from 'react-native'
 import { getSharedDbDirectory } from '../lib/sharedContainer'
 import { migrations } from './migrations'
 
-// Suspension lifecycle state. The DB connection stays open across
-// suspension; iOS exempts SQLite files (recognized by magic bytes) from
-// the 0xDEAD10CC kill as long as no write/fsync is mid-flight — the
-// drain ensures that.
-//
-// - 'active':     queries flow normally.
-// - 'suspending': queries fast-reject; callers that need to wait for
-//                 resume call waitUntilDbActive() BEFORE the query.
-//                 Calling it inside withTransactionAsync's fn deadlocks
-//                 the drain (txMutex held while waiting).
-// - 'closed':     handle destroyed, reopen imminent — queries park.
-//                 Today only reachable via resetDb (manual reset).
 type DbState = 'active' | 'suspending' | 'closed'
 
 let state: DbState = 'active'
 
-// Callers parked inside enterGate() or waitUntilDbActive(). Drained by
-// resumeDb() when state returns to 'active'.
 let activeWaiters: Array<() => void> = []
+
+// Set by the drain's first interrupt and cleared on resume. Until then a
+// transaction that held the writer lock when the gate closed keeps running,
+// so it can commit inside the drain's grace period instead of rolling back.
+let cutOff = false
 
 // Safety valve for a resume that never fires.
 const WAIT_TIMEOUT_MS = 30_000
 
+// iOS stops timers while the app is frozen and fires the overdue ones as it
+// wakes, which can be before the foreground event that reopens the gate. A
+// timer this late means the wait spanned a freeze, so the wait starts over
+// rather than failing a call that is about to be able to run.
+const FROZEN_LATENESS_MS = 1_000
+
 function parkUntilActive(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    let settled = false
-    const resolveOnce = () => {
-      if (settled) return
-      settled = true
+    let timer: ReturnType<typeof setTimeout>
+    const wake = () => {
       clearTimeout(timer)
       resolve()
     }
-    activeWaiters.push(resolveOnce)
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      activeWaiters = activeWaiters.filter((w) => w !== resolveOnce)
-      reject(new DatabaseSuspendedError())
-    }, WAIT_TIMEOUT_MS)
+    const arm = () => {
+      const due = Date.now() + WAIT_TIMEOUT_MS
+      timer = setTimeout(() => {
+        if (Date.now() - due > FROZEN_LATENESS_MS) return arm()
+        activeWaiters = activeWaiters.filter((w) => w !== wake)
+        reject(new DatabaseSuspendedError())
+      }, WAIT_TIMEOUT_MS)
+    }
+    activeWaiters.push(wake)
+    arm()
   })
 }
 
-// Per-query gate. Fast-rejects during 'suspending' so in-flight
-// transactions release the txMutex and let the drain finish; parking
-// here would deadlock (fn awaits the parked write → mutex never
-// releases → inflightCount stays high).
-function enterGate(_intent: 'read' | 'write'): Promise<void> {
-  if (state === 'active') return Promise.resolve()
-  if (state === 'suspending') {
-    return Promise.reject(new DatabaseSuspendedError())
+/** What a call does while the gate is not active. */
+type WhenGated = 'park' | 'reject'
+
+function gated(when: WhenGated): Promise<void> {
+  return when === 'park' ? parkUntilActive() : Promise.reject(new DatabaseSuspendedError())
+}
+
+function openGate(): number {
+  state = 'active'
+  cutOff = false
+  const waiters = activeWaiters
+  activeWaiters = []
+  for (const w of waiters) w()
+  return waiters.length
+}
+
+/** Work dispatched to native and not yet settled. */
+class InFlight {
+  private count = 0
+  private idle: Array<() => void> = []
+
+  get size(): number {
+    return this.count
   }
-  // 'closed': park so picker / share-intent callbacks land their
-  // INSERTs against the new handle after reopen.
-  return parkUntilActive()
-}
 
-/**
- * Resolves when state returns to 'active'. Call BEFORE any sequence of
- * reads/writes that must land on the same side of the suspend gate —
- * typically right after an irrecoverable network or filesystem commit.
- *
- * Do NOT call from inside withTransactionAsync's fn — the txMutex is
- * held by then and the drain can't finish. Gate the whole logical
- * operation (txn included) instead.
- */
-export function waitUntilDbActive(): Promise<void> {
-  if (state === 'active') return Promise.resolve()
-  return parkUntilActive()
-}
+  start(): void {
+    this.count++
+  }
 
-// Tracks how many queries are currently dispatched to native but haven't
-// resolved yet. The suspension manager's drain awaits this hitting 0 so
-// no SQL statement is mid-fsync at iOS suspension time (= 0xDEAD10CC).
-let inflightCount = 0
-let idleResolvers: Array<() => void> = []
+  end(): void {
+    this.count--
+    if (this.count === 0) {
+      const resolvers = this.idle
+      this.idle = []
+      for (const r of resolvers) r()
+    }
+  }
 
-function trackStart(): void {
-  inflightCount++
-}
-
-function trackEnd(): void {
-  inflightCount--
-  if (inflightCount === 0) {
-    const resolvers = idleResolvers
-    idleResolvers = []
-    for (const r of resolvers) r()
+  settled(): Promise<void> {
+    if (this.count === 0) return Promise.resolve()
+    return new Promise<void>((r) => {
+      this.idle.push(r)
+    })
   }
 }
+
+// What the drain waits for: each statement from dispatch to settle, and each
+// transaction from BEGIN to its end. Work waiting for the writer lock or
+// parked at the gate holds no file lock, so it is not counted.
+const inflight = new InFlight()
 
 export function getDbState(): DbState {
   return state
 }
 
 export function getInflightCount(): number {
-  return inflightCount
-}
-
-export function getWaiterCount(): number {
-  return activeWaiters.length
+  return inflight.size
 }
 
 /** Path to the SQLite WAL file, for diagnostic stat() calls. */
@@ -115,46 +144,63 @@ export function getWalPath(): string {
   return `${dbDirectory}/${dbName}-wal`
 }
 
-// First step when the app backgrounds. Queries through db() then
-// fast-reject; callers that want to wait for resume call
-// waitUntilDbActive() BEFORE issuing the query.
 export function suspendDb(): void {
   state = 'suspending'
   logger.debug('db', 'suspended')
 }
 
-// Called on foreground. Drains waiters parked via waitUntilDbActive()
-// or the 'closed'-state enterGate path.
-//
-// Do NOT reset inflightCount: queries dispatched BEFORE the gate already
-// incremented inflight, and their pending trackEnd calls would drive
-// the count negative — pinning waitForQueriesIdle and stalling the next
-// drain until MAX_DRAIN_MS.
+// inflight is left alone: work dispatched before the gate closed still ends,
+// and resetting the count would drive it negative and stall the next drain.
 export function resumeDb(): void {
-  state = 'active'
-  const waiters = activeWaiters
-  activeWaiters = []
-  for (const w of waiters) w()
-  logger.debug('db', 'resumed', { drained: waiters.length })
+  const drained = openGate()
+  logger.debug('db', 'resumed', { drained })
 }
 
-// Resolves when all in-flight queries have completed. Used by the
-// suspension manager's drain loop to confirm no statement is currently
-// executing on the connection before iOS freezes the process.
-export function waitForQueriesIdle(): Promise<void> {
-  if (inflightCount === 0) return Promise.resolve()
-  return new Promise<void>((r) => {
-    idleResolvers.push(r)
-  })
+// Settles when the reset in progress ends. The drain waits for a reset from
+// its first line, the wait for the writer lock included, because a freeze
+// partway through leaves the app with no database or a half-migrated one.
+let resetting: Promise<void> = Promise.resolve()
+
+export async function waitForQueriesIdle(): Promise<void> {
+  await Promise.all([inflight.settled(), resetting])
+}
+
+// Set when the first initializeDB finishes. Its migrations run on the raw
+// connection, outside the drain's count, so a suspend before then is declined.
+// resetDb and reopenDb clear dbInitialized later, and the drain waits for both.
+let opened = false
+
+export function suspendBlocker(): string | null {
+  return opened ? null : 'db_not_initialized'
+}
+
+export function isInTransaction(): boolean {
+  return dbInitialized && database.isInTransactionSync()
+}
+
+/**
+ * Rolls back a transaction still open after the drain, when none should be,
+ * and reports whether one was open. It runs on the connection itself, since
+ * the gate is closed.
+ */
+export async function endOpenTransaction(): Promise<boolean> {
+  if (!isInTransaction()) return false
+  try {
+    await database.execAsync('ROLLBACK')
+  } catch (e) {
+    logger.warn('db', 'rollback_after_drain_failed', { error: e as Error })
+  }
+  return true
 }
 
 // Cancels any statement currently executing on the active connection.
-// iOS only — the patch that adds interruptSync to NativeDatabase only ships
-// the Swift side. sqlite3_interrupt is documented thread-safe and signals
-// across threads, so this returns immediately and the running statement
-// fails with SQLITE_INTERRUPT, releasing the SQLite mutex and the WAL lock
-// — the actual mechanism behind 0xdead10cc on suspend.
+// iOS only, because the patch that adds interruptSync to NativeDatabase only
+// ships the Swift side. sqlite3_interrupt is documented thread-safe and
+// signals across threads, so this returns immediately and the running
+// statement fails with SQLITE_INTERRUPT, releasing the SQLite mutex and the
+// WAL lock.
 export function interruptDatabase(): void {
+  cutOff = true
   if (Platform.OS !== 'ios') return
   if (!dbInitialized || !database) return
   try {
@@ -166,6 +212,21 @@ export function interruptDatabase(): void {
 
 export let database: SQLite.SQLiteDatabase
 export let dbInitialized = false
+
+/**
+ * A connection as a DatabaseAdapter for migrations, which run on the raw
+ * connection outside the gate, the lock and in-flight tracking.
+ */
+function migrationAdapter(conn: SQLite.SQLiteDatabase): DatabaseAdapter {
+  const statements = {
+    getAllAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getAllAsync<T>(sql, ...params),
+    getFirstAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getFirstAsync<T>(sql, ...params),
+    runAsync: (sql: string, ...params: SQLParam[]) => conn.runAsync(sql, ...params),
+    execAsync: (sql: string) => conn.execAsync(sql),
+  }
+  const tx: DatabaseAdapter = { ...statements, withTransactionAsync: (nested) => nested(tx) }
+  return { ...statements, withTransactionAsync: (fn) => conn.withTransactionAsync(() => fn(tx)) }
+}
 let dbName = 'app.db'
 const dbDirectory = getSharedDbDirectory()
 
@@ -182,46 +243,22 @@ const dbDirectory = getSharedDbDirectory()
 const INIT_PRAGMAS =
   'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA wal_autocheckpoint = 500; PRAGMA journal_size_limit = 4194304; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
 
-/**
- * A connection as a DatabaseAdapter for migrations, which run on the raw
- * connection outside the gate, the lock and in-flight tracking.
- */
-function migrationAdapter(conn: SQLite.SQLiteDatabase): DatabaseAdapter {
-  const statements = {
-    getAllAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getAllAsync<T>(sql, ...params),
-    getFirstAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getFirstAsync<T>(sql, ...params),
-    runAsync: (sql: string, ...params: SQLParam[]) => conn.runAsync(sql, ...params),
-    execAsync: (sql: string) => conn.execAsync(sql),
-  }
-  const tx: DatabaseAdapter = { ...statements, withTransactionAsync: (nested) => nested(tx) }
-  return { ...statements, withTransactionAsync: (fn) => conn.withTransactionAsync(() => fn(tx)) }
-}
-
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
   databaseName?: string
-  /** Bypass expo-sqlite connection cache when reopening after suspension. */
-  reopen?: boolean
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
   dbName = name
-  // Close any existing connection before opening a new one. Without this,
-  // a suspend → resume (reopen=true) → full reinit (reopen=false) sequence
-  // leaks the intermediate connection, and expo-sqlite refuses to delete
-  // the database file while any connection is open.
+  // expo-sqlite refuses to delete the database file while any connection is
+  // open, so a second initializeDB must not leak the first connection.
   if (database) {
     try {
       await database.closeAsync()
     } catch {}
   }
-  const openOptions = options?.reopen ? { useNewConnection: true } : undefined
-  logger.info('db', 'initializing', {
-    name,
-    directory: dbDirectory,
-    reopen: !!options?.reopen,
-  })
-  database = await SQLite.openDatabaseAsync(name, openOptions, dbDirectory)
+  logger.info('db', 'initializing', { name, directory: dbDirectory })
+  database = await SQLite.openDatabaseAsync(name, undefined, dbDirectory)
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
   await database.execAsync(INIT_PRAGMAS)
@@ -230,15 +267,14 @@ export async function initializeDB(options?: {
     onProgress: options?.onProgress,
   })
   dbInitialized = true
+  opened = true
   logger.info('db', 'initialized')
 }
 
 /**
  * Detects errors from an invalidated native database handle:
  * - Android NullPointerException: SharedObject lifecycle issue.
- * - "Access to closed resource": DB closed underneath a racing call —
- *   today only reachable via resetDb (manual settings reset). The
- *   suspension flow no longer closes the connection.
+ * - "Access to closed resource": the connection closed underneath a call.
  * In both cases, reopening the connection and retrying resolves it.
  */
 function isNativeHandleError(error: unknown): boolean {
@@ -253,7 +289,7 @@ let recovering: Promise<boolean> | null = null
 
 /**
  * Reopens the database connection after a native handle invalidation.
- * The database file is intact — only the native handle needs replacing.
+ * The database file is intact, only the native handle needs replacing.
  * Serializes concurrent recovery attempts.
  */
 async function reopenDb(): Promise<boolean> {
@@ -291,14 +327,13 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
   } catch (error) {
-    // During suspension or close, never attempt to reopen — the close is
-    // intentional and reopening would fight the suspension manager.
+    // With the gate closed, reopening would open a second connection behind
+    // the drain or resetDb, so the error goes back to the caller.
     if (state !== 'active') {
       throw error
     }
     if (isNativeHandleError(error)) {
-      // If the DB was already reopened by the suspension manager,
-      // just retry against the current connection.
+      // Another call may already have reopened it; retry on the current one.
       if (dbInitialized || (await reopenDb())) {
         return await fn()
       }
@@ -307,35 +342,7 @@ export async function withRecovery<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function closeDb(): Promise<void> {
-  if (database && dbInitialized) {
-    // Set these BEFORE any async work so that withRecovery — which may be
-    // triggered by racing queries — sees the closed state and doesn't reopen.
-    dbInitialized = false
-    state = 'closed'
-    // Wait for in-flight native calls to finish before destroying the
-    // handle. Closing while a getAllAsync is mid-iteration produces a
-    // use-after-free in sqlite3_mutex_enter (TestFlight crash #29).
-    // The suspension manager owns the outer deadline; no timeout here.
-    await waitForQueriesIdle()
-    try {
-      // Zero the busy timeout so any straggler query blocked on the SQLite
-      // mutex fails immediately instead of waiting up to 5 seconds.
-      await database.execAsync('PRAGMA busy_timeout = 0')
-      // Flush WAL pages to the main database file and truncate the WAL.
-      // This releases the WAL file lock — the actual cause of 0xdead10cc —
-      // even if closeAsync() subsequently fails.
-      await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE)')
-    } catch (e) {
-      logger.debug('db', 'pre_close_pragma_error', { error: e as Error })
-    }
-    try {
-      await database.closeAsync()
-    } catch (e) {
-      logger.debug('db', 'close_error', { error: e as Error })
-    }
-  }
-}
+const writerLock = new Mutex()
 
 // Recent commits sit in app.db-wal until a checkpoint, so sharing app.db
 // alone loses them. VACUUM INTO writes one file from a single read snapshot,
@@ -344,28 +351,22 @@ export async function copyDatabaseTo(path: string): Promise<void> {
   await db().execAsync(`VACUUM INTO '${path.replace(/'/g, "''")}'`)
 }
 
-const txMutex = new Mutex()
+// Delete the database and start fresh. Runs only in the foreground (the
+// settings reset and the forced reset at boot), so the gate ends active.
+export function resetDb(): Promise<void> {
+  const reset = replaceDatabase()
+  resetting = reset.catch(() => {})
+  return reset
+}
 
-// Settles when the open transaction ends. A statement issued on the outer
-// adapter meanwhile waits for it, because on one connection it would otherwise
-// run inside that transaction and commit or roll back with it.
-let openTransaction: Promise<void> | null = null
-
-// Delete the database and start fresh. Closes the existing connection,
-// removes the DB file, and reopens so migrations can run on next init.
-// Also resets the suspension state machine — resetDb is only called from
-// the foreground (settings reset button / forced reset on boot), so the
-// suspension state should always be active afterward.
-export async function resetDb() {
-  dbInitialized = false
-  state = 'active'
-  inflightCount = 0
-  idleResolvers = []
-  const waiters = activeWaiters
-  activeWaiters = []
-  for (const w of waiters) w()
-  const release = await txMutex.acquire()
+async function replaceDatabase(): Promise<void> {
+  state = 'closed'
+  const release = await writerLock.acquire()
   try {
+    // Closing while a statement iterates the native handle is a
+    // use-after-free in sqlite3_mutex_enter (TestFlight crash #29).
+    await inflight.settled()
+    dbInitialized = false
     if (database) {
       try {
         await database.closeAsync()
@@ -389,118 +390,125 @@ export async function resetDb() {
     dbInitialized = true
   } finally {
     release()
+    // A suspend that landed mid-reset owns the gate now, and its resume reopens it.
+    if (state === 'closed') openGate()
   }
 }
 
-// Wraps the raw expo-sqlite connection with recovery (automatic reopen on
-// native handle invalidation), transaction mutex serialization, and slow
-// query logging. Reads the module-level `database` variable on every call,
-// so connection swaps from initializeDB/resetDb/reopenDb are transparent.
-class MobileDbAdapter implements DatabaseAdapter {
-  private query<T>(method: string, intent: 'read' | 'write', args: unknown[]): Promise<T> {
-    const dispatch = (): Promise<T> => {
-      trackStart()
-      return withRecovery(async () => {
-        const start = performance.now()
-        const result = await (database as any)[method](...args)
-        const duration = performance.now() - start
-        const sql = typeof args[0] === 'string' ? args[0] : undefined
-        if (duration > 500 && !sql?.startsWith('INSERT INTO logs')) {
-          logger.warn('db', 'slow_query', {
-            method,
-            duration: Math.round(duration),
-            sql,
-          })
-        }
-        return result
-      }).finally(trackEnd)
+// Runs one statement on the connection with recovery (automatic reopen on
+// native handle invalidation), in-flight tracking and slow-query logging.
+// Reads the module-level `database` on every call, so connection swaps from
+// initializeDB/resetDb/reopenDb are transparent.
+function query<T>(method: string, args: unknown[]): Promise<T> {
+  inflight.start()
+  return withRecovery(async () => {
+    const start = performance.now()
+    const result = await (database as any)[method](...args)
+    const duration = performance.now() - start
+    const sql = typeof args[0] === 'string' ? args[0] : undefined
+    if (duration > 500 && !sql?.startsWith('INSERT INTO logs')) {
+      logger.warn('db', 'slow_query', {
+        method,
+        duration: Math.round(duration),
+        sql,
+      })
     }
-    if (state === 'active') return dispatch()
-    return enterGate(intent).then(dispatch)
-  }
+    return result
+  }).finally(() => inflight.end())
+}
 
-  // Waits for the open transaction, then runs in the same tick as the check
-  // that finds none open, so a queued transaction cannot begin in between.
-  private outer<T>(method: string, intent: 'read' | 'write', args: unknown[]): Promise<T> {
-    if (!openTransaction) return this.query(method, intent, args)
-    return (async () => {
-      while (openTransaction) await openTransaction
-      return this.query<T>(method, intent, args)
-    })()
-  }
-
-  getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
-    return this.outer('getAllAsync', 'read', [sql, ...params])
-  }
-
-  getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
-    return this.outer('getFirstAsync', 'read', [sql, ...params])
-  }
-
-  runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult> {
-    return this.outer('runAsync', 'write', [sql, ...params])
-  }
-
-  // 'write' because execAsync runs arbitrary SQL — used for PRAGMA + DDL
-  // during init/recovery. Defaulting to write is the safe lock-out.
-  execAsync(sql: string): Promise<void> {
-    return this.outer('execAsync', 'write', [sql])
-  }
-
-  withTransactionAsync(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void> {
-    const dispatch = (): Promise<void> => {
-      trackStart()
-      return txMutex
-        .runExclusive(async () => {
-          let live = true
-          const ended = () => new Error('This transaction has ended. Its handle is closed.')
-          const run = <T>(method: string, intent: 'read' | 'write', args: unknown[]) =>
-            live ? this.query<T>(method, intent, args) : Promise.reject<T>(ended())
-          const tx: DatabaseAdapter = {
-            getAllAsync: <T>(sql: string, ...params: SQLParam[]) =>
-              run<T[]>('getAllAsync', 'read', [sql, ...params]),
-            getFirstAsync: <T>(sql: string, ...params: SQLParam[]) =>
-              run<T | null>('getFirstAsync', 'read', [sql, ...params]),
-            runAsync: (sql: string, ...params: SQLParam[]) =>
-              run<SQLRunResult>('runAsync', 'write', [sql, ...params]),
-            execAsync: (sql: string) => run<void>('execAsync', 'write', [sql]),
-            // A nested op joins, with no savepoint: a throw that escapes the
-            // body rolls all of it back, and one the body catches commits what
-            // the nested op already wrote.
-            withTransactionAsync: (nested) => (live ? nested(tx) : Promise.reject(ended())),
-          }
-          let end!: () => void
-          openTransaction = new Promise((resolve) => {
-            end = resolve
-          })
-          try {
-            await withRecovery(() => database.withTransactionAsync(() => fn(tx)))
-          } catch (e) {
-            // If expo-sqlite's own ROLLBACK got hit by our interrupt loop,
-            // the connection is left mid-transaction and the next BEGIN
-            // fails. One best-effort retry recovers it.
-            try {
-              await database.execAsync('ROLLBACK')
-            } catch {}
-            throw e
-          } finally {
-            live = false
-            openTransaction = null
-            end()
-          }
-        })
-        .finally(trackEnd)
+/**
+ * Runs `run` holding the writer lock once the gate is open. The lock is taken
+ * in the calling tick when it is free, so a statement made just before
+ * suspendDb, such as the log flush fired from onBeforeSuspend, is in flight
+ * before the gate closes. A call that waited for the lock checks the gate
+ * again, and if it closed meanwhile gives the lock back, having written
+ * nothing, and waits for resume, or rejects through failFast.
+ */
+function withWriter<T>(when: WhenGated, run: () => Promise<T>): Promise<T> {
+  const release = state === 'active' ? writerLock.tryAcquire() : null
+  if (release) return run().finally(release)
+  return (async () => {
+    for (;;) {
+      if (state !== 'active') {
+        await gated(when)
+        continue
+      }
+      const acquired = await writerLock.acquire()
+      if (state === 'active') return run().finally(acquired)
+      acquired()
     }
-    if (state === 'active') return dispatch()
-    return enterGate('write').then(dispatch)
-  }
+  })()
+}
 
-  waitUntilActive(): Promise<void> {
-    return waitUntilDbActive()
+async function runTransaction(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void> {
+  inflight.start()
+  let live = true
+  const ended = () => new Error('This transaction has ended. Its handle is closed.')
+  const tx: DatabaseAdapter = {
+    ...statements((method, args) => {
+      if (!live) return Promise.reject(ended())
+      if (cutOff) return Promise.reject(new DatabaseSuspendedError())
+      return query(method, args)
+    }),
+    // A nested op joins, with no savepoint: a throw that escapes the body
+    // rolls all of it back, and one the body catches commits what the nested
+    // op already wrote.
+    withTransactionAsync: (nested) => (live ? nested(tx) : Promise.reject(ended())),
+  }
+  try {
+    await withRecovery(() => database.withTransactionAsync(() => fn(tx)))
+  } catch (e) {
+    // If expo-sqlite's own ROLLBACK got hit by the drain's interrupt loop,
+    // the connection is left mid-transaction and the next BEGIN fails. One
+    // best-effort retry recovers it.
+    try {
+      await database.execAsync('ROLLBACK')
+    } catch {}
+    // An interrupted statement makes SQLite roll back on its own, and
+    // expo-sqlite's ROLLBACK then fails with "no transaction is active",
+    // which replaces the interrupt's error. The caller needs to see a
+    // suspension to know the work is retried after resume, not failed.
+    throw cutOff ? new DatabaseSuspendedError() : e
+  } finally {
+    live = false
+    inflight.end()
   }
 }
 
-const adapter = new MobileDbAdapter()
+type Statements = Pick<DatabaseAdapter, 'getAllAsync' | 'getFirstAsync' | 'runAsync' | 'execAsync'>
+
+function statements(run: <T>(method: string, args: unknown[]) => Promise<T>): Statements {
+  return {
+    getAllAsync: <T>(sql: string, ...params: SQLParam[]) =>
+      run<T[]>('getAllAsync', [sql, ...params]),
+    getFirstAsync: <T>(sql: string, ...params: SQLParam[]) =>
+      run<T | null>('getFirstAsync', [sql, ...params]),
+    runAsync: (sql: string, ...params: SQLParam[]) =>
+      run<SQLRunResult>('runAsync', [sql, ...params]),
+    execAsync: (sql: string) => run<void>('execAsync', [sql]),
+  }
+}
+
+function gatedAdapter(when: WhenGated): DatabaseAdapter {
+  return {
+    // A statement the drain interrupts fails with SQLite's own error, which
+    // reads as a real failure. The caller has to see a suspension, so the work
+    // is retried after resume rather than counted as failed.
+    ...statements(<T>(method: string, args: unknown[]) =>
+      withWriter(when, () =>
+        query<T>(method, args).catch((e): never => {
+          throw cutOff ? new DatabaseSuspendedError() : e
+        }),
+      ),
+    ),
+    withTransactionAsync: (fn) => withWriter(when, () => runTransaction(fn)),
+    failFast: () => failFastAdapter,
+  }
+}
+
+const adapter = gatedAdapter('park')
+const failFastAdapter = gatedAdapter('reject')
 
 export function db(): DatabaseAdapter {
   return adapter
