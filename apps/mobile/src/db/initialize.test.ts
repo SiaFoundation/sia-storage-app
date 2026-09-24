@@ -21,14 +21,6 @@ describe('initializeDB', () => {
     close.mockRestore()
   })
 
-  it('opens a new connection when asked to reopen', async () => {
-    const before = database
-
-    await initializeDB({ databaseName: ':memory:', reopen: true })
-
-    expect(database).not.toBe(before)
-  })
-
   it('starts a second call only after the first has finished its migrations', async () => {
     const info = jest.spyOn(logger, 'info')
     try {

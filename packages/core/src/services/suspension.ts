@@ -28,9 +28,14 @@ export type SuspensionAdapters = {
      * freezes the process (= 0xDEAD10CC trigger).
      */
     interrupt(): void
-    /** Diagnostics-only: current trackStart - trackEnd delta. Lets the
-     * drain loop log whether interrupts are actually advancing inflight. */
+    /** Diagnostics-only: how much work waitForIdle is still waiting on. Lets
+     * the drain loop log whether interrupts are actually advancing it. */
     getInflightCount(): number
+    /**
+     * Rolls back a transaction still open after the drain, on the connection
+     * itself, and reports whether one was open.
+     */
+    endOpenTransaction?(): Promise<boolean>
   }
   platform: {
     /**
@@ -46,9 +51,20 @@ export type SuspensionAdapters = {
     getBackgroundTimeRemainingMs(): number
   }
   hooks?: {
-    /** Called sync before `db.gate()`. Fire queries here without
-     * awaiting — they enter the adapter's in-flight set and are covered
-     * by drainDb's interrupt loop. Errors are caught and logged. */
+    /**
+     * Returns why the app cannot suspend right now, or null when it can.
+     * Read when a suspend runs rather than when it is requested, so the
+     * manager still records a background transition it declines to act on,
+     * and the next background-task release suspends normally.
+     */
+    suspendBlocker?(): string | null
+    /**
+     * Called synchronously just before `db.gate()`. A query fired here
+     * without awaiting is covered by the drain only if the adapter counts it
+     * in flight before returning. On mobile that holds when the writer lock
+     * is free, and otherwise the query waits for resume or, through
+     * failFast, rejects. Errors are caught and logged.
+     */
     onBeforeSuspend?(): void
     /**
      * Fired (fire-and-forget) once the manager has marked itself
@@ -86,15 +102,22 @@ const FINISH_RESERVE_MS = 200
 // interrupt + loop.
 const INTERRUPT_TICK_MS = 50
 
+// How long the drain waits before its first interrupt. Interrupting a write
+// rolls it back to be redone after resume, and nearly every transaction the
+// app runs commits well inside this, so waiting first lets it commit. Capped
+// at half of iOS's remaining time, which leaves the other half for
+// interrupting when the budget is short.
+const DRAIN_GRACE_MS = 1_000
+
 // Hard ceiling on total drain time, independent of iOS's reported
 // budget. Backstops two scenarios where the dynamic budget alone fails:
 //   (a) UIApplication.backgroundTimeRemaining returns DBL_MAX (logged
 //       as "null" via JSON.stringify) when iOS isn't actually moving us
 //       toward suspension — e.g. foreground re-arrives mid-drain — so
 //       the `budget - reserve > 0` check never trips.
-//   (b) The mobile DatabaseAdapter's withTransactionAsync increments
-//       inflightCount BEFORE waiting for txMutex; a large backlog of
-//       queued transactions can keep waitForIdle pending for minutes.
+//   (b) A transaction body awaiting something other than SQL, such as a
+//       network call, stays in flight until the body returns, and the
+//       interrupt has no statement to cancel meanwhile.
 // 5s sits comfortably under iOS's 30s beginBackgroundTask grant in the
 // normal app-backgrounding path and matches the 5s expiration grace in
 // the BG-task path; whichever ceiling iOS actually enforces fires
@@ -121,13 +144,16 @@ export function createSuspensionManager(
   const runningTasks = new Set<string>()
   const queue = new CoalescingQueue()
 
-  // Loops db.interrupt + waitForIdle until the active connection is idle
+  // After the grace period, loops db.interrupt + waitForIdle until the
+  // active connection is idle
   // or iOS's remaining background time (minus FINISH_RESERVE_MS) is
   // exhausted. sqlite3_interrupt cancels the statement currently
   // executing, releasing the SQLite mutex and any held WAL file lock —
-  // the mechanism behind 0xDEAD10CC. A worker iterating cursor rows may
-  // dispatch a follow-up after the interrupted call returns, so the
-  // loop re-checks idle each tick until quiet or out of budget.
+  // the mechanism behind 0xDEAD10CC. Work dispatched before the gate
+  // closed can still issue native calls (an interrupted statement's
+  // finalize, the ROLLBACK of a transaction whose statement failed), so
+  // the loop re-checks idle each tick until quiet or out of budget.
+  // Returns true when the connection went idle.
   //
   // The dynamic budget (UIApplication.backgroundTimeRemaining) is
   // strictly better than a static cap: in the normal app-backgrounding
@@ -136,16 +162,20 @@ export function createSuspensionManager(
   // this invocation (sometimes less than 5s). See DTS thread 740117 —
   // there is no documented mechanism to extend past the BGTask budget,
   // so the ceiling we read here IS the deadline.
-  async function drainDb(): Promise<void> {
+  async function drainDb(): Promise<boolean> {
     const drainStart = Date.now()
     const enteredFromBackground = appState === 'background'
+    const graceMs = Math.min(
+      DRAIN_GRACE_MS,
+      Math.max(0, (platform.getBackgroundTimeRemainingMs() - FINISH_RESERVE_MS) / 2),
+    )
     let attempts = 0
     while (true) {
       // If we entered drain from a background transition AND the user
       // re-foregrounded mid-drain, iOS will not freeze the process —
       // there is nothing left to protect against. Continuing to
-      // interrupt while the DB is gated just keeps UI queries rejecting
-      // (DatabaseSuspendedError) while the user is actively in the app.
+      // interrupt while the DB is gated just keeps the user's own database
+      // calls waiting while they are back in the app.
       // Bail and let doResume ungate. Direct suspend() calls (state was
       // already 'foreground') are honored to completion since the
       // caller explicitly asked for it.
@@ -154,20 +184,20 @@ export function createSuspensionManager(
           drainMs: Date.now() - drainStart,
           attempts,
         })
-        return
+        return false
       }
       const elapsedMs = Date.now() - drainStart
       // Hard ceiling — see MAX_DRAIN_MS comment. iOS's dynamic budget
       // can read as Infinity (foreground state surface or pre-suspend
-      // grace), and a large worker backlog can keep waitForIdle pending
-      // for minutes. Bail at MAX_DRAIN_MS regardless.
+      // grace), and a transaction body awaiting a network call keeps
+      // waitForIdle pending until it returns. Bail at MAX_DRAIN_MS regardless.
       if (elapsedMs >= MAX_DRAIN_MS) {
         logger.warn('suspension', 'drain_deadline', {
           drainMs: elapsedMs,
           attempts,
           reason: 'max_drain_ms',
         })
-        return
+        return false
       }
       const idle = await raceWithTimeout(db.waitForIdle(), INTERRUPT_TICK_MS)
       if (idle.ok) {
@@ -179,7 +209,7 @@ export function createSuspensionManager(
           // (logged as null), while backgrounded counts down.
           iosRemainingMs: platform.getBackgroundTimeRemainingMs(),
         })
-        return
+        return true
       }
       const iosBudgetMs = platform.getBackgroundTimeRemainingMs()
       const remainingMs = iosBudgetMs - FINISH_RESERVE_MS
@@ -191,8 +221,9 @@ export function createSuspensionManager(
           remainingMs,
           reason: 'ios_budget',
         })
-        return
+        return false
       }
+      if (Date.now() - drainStart < graceMs) continue
       // Per-iteration trace: proves the budget check ran AND we
       // proceeded to interrupt. inflight before the interrupt — if it
       // doesn't decrease across consecutive ticks, the interrupt isn't
@@ -237,6 +268,12 @@ export function createSuspensionManager(
       return
     }
 
+    const blocker = hooks?.suspendBlocker?.() ?? null
+    if (blocker) {
+      logger.debug('suspension', 'skipped', { reason: blocker })
+      return
+    }
+
     state = 'suspending'
     logger.info('suspension', 'starting')
 
@@ -250,7 +287,13 @@ export function createSuspensionManager(
       scheduler.pause()
       scheduler.abort()
       await uploader.suspend()
-      await drainDb()
+      // After a clean drain nothing is in flight, so an open transaction is one
+      // whose ROLLBACK failed. Left open it holds the WAL write lock through the
+      // freeze, which is what 0xdead10cc kills for, and the calls parked until
+      // resume would run inside it.
+      if ((await drainDb()) && (await db.endOpenTransaction?.())) {
+        logger.error('suspension', 'open_transaction_after_drain')
+      }
       state = 'suspended'
       logger.info('suspension', 'suspended')
       fireAfterSuspendHook()

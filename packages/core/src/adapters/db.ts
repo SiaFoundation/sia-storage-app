@@ -16,7 +16,7 @@ export interface SQLRunResult {
  * | runAsync          | yes      | all             |
  * | execAsync         | yes      | all             |
  * | withTransactionAsync | yes   | all             |
- * | waitUntilActive   | no       | mobile only     |
+ * | failFast          | no       | mobile only     |
  * | finalize          | no       | node-adapters   |
  * | close             | no       | node-adapters   |
  */
@@ -41,17 +41,12 @@ export interface DatabaseAdapter {
   withTransactionAsync(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void>
 
   /**
-   * Resolves when the suspension gate is open. Call BEFORE any sequence
-   * of reads/writes that must run on the same side of the iOS background
-   * gate — typically right after an irrecoverable network/FS commit.
-   * Never call from inside `withTransactionAsync`'s fn (would deadlock
-   * the drain against the txMutex).
-   *
-   * Barrier, not a lease: a re-suspend mid-query still interrupts. This
-   * only closes the gap between an irrecoverable commit and its DB
-   * record. Adapters that don't gate (Node, web, tests) omit it.
+   * The same database, but a call made while the adapter's suspension gate is
+   * closed rejects with DatabaseSuspendedError instead of waiting for it to
+   * reopen. For writes that are retried anyway and must not run late, such as
+   * log lines. Adapters without a gate omit it.
    */
-  waitUntilActive?(): Promise<void>
+  failFast?(): DatabaseAdapter
 
   /**
    * Refreshes query planner stats and (for WAL adapters) truncates the WAL.
