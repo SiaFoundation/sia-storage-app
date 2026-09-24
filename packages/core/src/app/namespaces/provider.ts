@@ -31,7 +31,7 @@ import {
   type ProviderItem,
   type ProviderPage,
 } from '../../types/provider'
-import type { AppService } from '../service'
+import type { AppService, AppServiceInternal } from '../service'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
@@ -43,6 +43,7 @@ const FOLDER_CURSOR = 'dirs:'
 export type ProviderNamespaceDeps = {
   getService: () => AppService
   db: DatabaseAdapter
+  withTransaction: AppServiceInternal['withTransaction']
   fsIO: FsIOAdapter
   /**
    * Absolute directory both this process and the OS shell can reach. Every
@@ -65,7 +66,7 @@ type TransferFlags = {
 }
 
 export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService['provider'] {
-  const { getService, db, fsIO, handoffDir, getSdk, downloadObject } = deps
+  const { getService, db, withTransaction, fsIO, handoffDir, getSdk, downloadObject } = deps
   const pageSize = deps.maxPageSize ?? MAX_PAGE_SIZE
 
   /**
@@ -81,6 +82,22 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     if (directoryId === null) return undefined
     const dir = await getService().directories.getById(directoryId)
     return dir ? dir.path : undefined
+  }
+
+  /**
+   * The directory row a shell folder id names, or null for the root. A file is
+   * filed by this id rather than by the folder's path, which a rename synced
+   * down between the lookup and the write would leave naming nothing, and the
+   * file would then land at the root. A folder deleted in that gap fails the
+   * write on the files.directoryId foreign key instead.
+   */
+  async function folderRowId(folderId: string | null): Promise<string | null> {
+    if (folderId === null) return null
+    const directoryId = parseDirectoryProviderId(folderId)
+    if (directoryId === null || !(await getService().directories.getById(directoryId))) {
+      throw new Error('No directory with that id')
+    }
+    return directoryId
   }
 
   /**
@@ -768,14 +785,14 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async create(parentId, name, kind, srcPath) {
       const service = getService()
-      const path = await folderPath(parentId)
-      if (path === undefined) throw new Error('No directory with that id')
-
       if (kind === 'dir') {
+        const path = await folderPath(parentId)
+        if (path === undefined) throw new Error('No directory with that id')
         const dir = await service.directories.create(name, path ?? undefined)
         return directoryToItem(dir, parentId)
       }
 
+      const directoryId = await folderRowId(parentId)
       if (!srcPath) throw new Error('Creating a file needs the path holding its bytes')
       const source = requireHandoffPath(srcPath)
       if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
@@ -790,28 +807,38 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         'application/octet-stream'
       const adopted = await fsIO.adoptFile({ id, type }, source)
       const now = Date.now()
-      // Created already filed: an insert at root followed by a move would
-      // journal a departure from root that no reader ever saw.
-      const dir = path === null ? null : await service.directories.getByPath(path)
-      await service.files.create(
-        {
-          id,
-          name,
-          type,
-          kind: 'file',
-          size: adopted.size,
-          hash: adopted.hash,
-          trashedAt: null,
-          createdAt: now,
-          updatedAt: now,
-          mediaAssetId: null,
-          addedAt: now,
-          deletedAt: null,
-        },
-        undefined,
-        { directoryId: dir?.id ?? null },
-      )
-      await service.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
+      // One transaction: the uploader scans only files with a local copy
+      // recorded, so a row committed without its fs record never uploads.
+      try {
+        await withTransaction(async (tx) => {
+          await tx.files.create(
+            {
+              id,
+              name,
+              type,
+              kind: 'file',
+              size: adopted.size,
+              hash: adopted.hash,
+              trashedAt: null,
+              createdAt: now,
+              updatedAt: now,
+              mediaAssetId: null,
+              addedAt: now,
+              deletedAt: null,
+            },
+            undefined,
+            // Created already filed: an insert at root followed by a move would
+            // journal a departure from root that no reader ever saw.
+            { directoryId },
+          )
+          await tx.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
+        })
+      } catch (e) {
+        // The bytes are already in the file's slot but no row names them, and
+        // the daemon runs no orphan sweep, so they would stay on disk for good.
+        await fsIO.remove(id, type).catch(() => {})
+        throw e
+      }
       // The uploader owns getting it to the indexer; this call only stages it.
       await service.uploader.enqueueByIds([id])
 
@@ -874,12 +901,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       if (!file) throw new Error(`No file with id ${id}`)
       if (file.name !== newName) await service.files.renameFile(id, newName)
 
-      const destination = await folderPath(newParentId)
-      if (destination === undefined) throw new Error('No directory with that id')
       // Moves the whole version stack. Moving the single current row would
       // split a file's history across two folders.
-      const dir = destination === null ? null : await service.directories.getByPath(destination)
-      await service.files.moveFile(id, dir ? dir.id : null)
+      await service.files.moveFile(id, await folderRowId(newParentId))
 
       const updated = await item(id)
       if (!updated) throw new Error(`No file with id ${id}`)

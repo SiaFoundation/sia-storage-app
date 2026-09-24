@@ -244,6 +244,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     provider: buildProviderNamespace({
       getService: () => service,
       db: adapters.db,
+      withTransaction,
       fsIO: adapters.fsIO,
       handoffDir: adapters.handoffDir,
       maxPageSize: adapters.maxPageSize,

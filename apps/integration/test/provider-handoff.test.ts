@@ -3,6 +3,9 @@ import * as os from 'os'
 import * as path from 'path'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { fileURLToPath } from 'node:url'
+import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
+import { parseDirectoryProviderId } from '@siastorage/core/types/provider'
+import { createFsAdapter } from './adapters/fs'
 import { createTestApp, generateTestFiles, waitForCondition, type TestApp } from './app'
 
 describe('Provider handoff', () => {
@@ -126,6 +129,27 @@ describe('Provider handoff', () => {
       expect(item.size).toBe('hello from finder'.length)
     })
 
+    it('leaves no file behind when recording the local copy fails', async () => {
+      const staged = dest('staged-lost.txt')
+      nodeFs.writeFileSync(staged, 'bytes that never land')
+      const localFiles = (await app.app.fs.listFiles()).length
+      const restore = await app.failInserts('fs', 'fs write failed')
+
+      // A trigger's error is built by better-sqlite3's native code, which can hold
+      // the Error class of another test file in this Jest worker, so toThrow does
+      // not always recognise it. Matching the message works either way.
+      await expect(app.app.provider.create(null, 'lost.txt', 'file', staged)).rejects.toMatchObject(
+        {
+          message: expect.stringContaining('fs write failed'),
+        },
+      )
+      await restore()
+
+      const names = (await app.app.files.query({ order: 'ASC' })).map((f) => f.name)
+      expect(names).not.toContain('lost.txt')
+      expect(await app.app.fs.listFiles()).toHaveLength(localFiles)
+    })
+
     it('files a created file into its folder', async () => {
       const folder = await app.app.provider.create(null, 'Inbox', 'dir')
       const staged = dest('staged2.txt')
@@ -135,6 +159,37 @@ describe('Provider handoff', () => {
 
       const page = await app.app.provider.list(folder.id)
       expect(page.items.map((i) => i.id)).toContain(item.id)
+    })
+
+    it('files a created file into its folder when the folder is renamed while its bytes are adopted', async () => {
+      const storage = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'provider-handoff-fs-'))
+      const real = createFsAdapter({ tempDir: storage }).fsIO
+      let duringAdopt: (() => Promise<void>) | null = null
+      const adoptFile = (async (file: { id: string; type: string }, source: string) => {
+        await duringAdopt?.()
+        return real.adoptFile!(file, source)
+      }) as FsIOAdapter['adoptFile']
+      const racing = createTestApp(createEmptyIndexerStorage(), {
+        handoffDir,
+        fsIO: { ...real, adoptFile },
+      })
+      await racing.start()
+      try {
+        const folder = await racing.app.provider.create(null, 'Inbox', 'dir')
+        const directoryId = parseDirectoryProviderId(folder.id)!
+        duringAdopt = async () => {
+          await racing.app.directories.rename(directoryId, 'Renamed')
+        }
+        const staged = dest('staged-racing.txt')
+        nodeFs.writeFileSync(staged, 'x')
+
+        const item = await racing.app.provider.create(folder.id, 'note.txt', 'file', staged)
+
+        expect(item.parentId).toBe(folder.id)
+      } finally {
+        await racing.shutdown()
+        nodeFs.rmSync(storage, { recursive: true, force: true })
+      }
     })
 
     it('types a created file from its name, not the staged file', async () => {
