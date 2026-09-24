@@ -1,3 +1,20 @@
+## 0.0.21-rc.1 (2026-09-24)
+
+### Features
+
+- Adds `directories.count`, the number of directories in the library.
+- The library keeps a local apply-order record of every file and folder change, including which folder each moved or deleted item left. `directories.ensureAtPaths` and upsertMany's `directoryIdByFileId` option let bulk writers create files directly in their folders.
+- `app.provider.fetchRange` places one byte range of a file at a path, for a shell that serves a read of part of a file rather than the whole thing.
+- The provider surface lists the whole library on one cursor, folders before files, and answers "what changed since this anchor" for one folder or everything. A moved item arrives as an update carrying its new parent, deletions and folder renames as ordinary deltas, and an anchor stays answerable for as long as a client keeps polling.
+- `createRemoteAppService` takes per-channel timeouts, and its `invoke` callback now receives `(channel, args, timeoutMs)` in place of variadic arguments.
+
+### Fixes
+
+- Importing the package no longer throws where `process` is undefined, such as a browser renderer.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+
 ## 0.0.21-rc.0 (2026-09-21)
 
 ### Features
