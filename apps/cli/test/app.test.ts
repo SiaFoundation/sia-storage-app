@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { applyForcedReset } from '../src/daemon/forcedReset'
 import { createTestApp } from './helpers'
 
 let tempDir: string
@@ -14,6 +15,22 @@ afterEach(() => {
 })
 
 describe('createCliAppService', () => {
+  it('records the reset nonce on a library it creates, so the daemon leaves it alone', async () => {
+    const inherited = process.env.SIA_BUILD_VARIANT
+    process.env.SIA_BUILD_VARIANT = 'beta'
+    try {
+      const app = await createTestApp(tempDir)
+      app.db.close?.()
+
+      await applyForcedReset(app.paths, 'beta')
+
+      expect(fs.existsSync(app.paths.dbPath)).toBe(true)
+    } finally {
+      if (inherited === undefined) delete process.env.SIA_BUILD_VARIANT
+      else process.env.SIA_BUILD_VARIANT = inherited
+    }
+  })
+
   it('creates AppService and returns all required components', async () => {
     const app = await createTestApp(tempDir)
     expect(app.service).toBeDefined()

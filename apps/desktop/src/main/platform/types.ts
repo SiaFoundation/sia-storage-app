@@ -52,6 +52,12 @@ export interface PlatformIntegration {
    * registration and its copy of the files, which is what makes a relaunch
    * cheap. With `remove` the copy is deleted. */
   stop(opts?: StopOptions): Promise<void>
+  /**
+   * Has the system delete its copy of a mount this app is not serving yet,
+   * for a library about to be rebuilt. False when the system kept it, or when
+   * this build has no Finder folder to discard.
+   */
+  discard(domainId: string): Promise<boolean>
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
   mountPath(): string | null

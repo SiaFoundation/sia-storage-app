@@ -1,9 +1,12 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import type { BuildVariant } from '@siastorage/core/lib/forcedReset'
 
-export function getDataDir(): string {
-  return process.env.SIA_DATA_DIR || path.join(os.homedir(), '.sia')
+/** `~/.sia` for production, `~/.sia-beta` and `~/.sia-dev` beside it, as the desktop app uses. */
+export function getDataDir(variant: BuildVariant = 'prod'): string {
+  const name = variant === 'prod' ? '.sia' : `.sia-${variant}`
+  return process.env.SIA_DATA_DIR || path.join(os.homedir(), name)
 }
 
 export function getPaths(dataDir: string) {

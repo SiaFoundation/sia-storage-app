@@ -1,12 +1,6 @@
 import Constants from 'expo-constants'
 import { app } from '../stores/appService'
-import {
-  RESET_MARKER_KEYS,
-  recordForcedReset,
-  resolveForcedReset,
-  resolveVariant,
-  selectForcedResetAction,
-} from './forcedReset'
+import { recordForcedReset, resolveForcedReset } from './forcedReset'
 
 // A jest.mock here does not displace the expo-constants mock in jest.setup.cjs,
 // so the variant is set on that object instead.
@@ -16,41 +10,14 @@ const extra: Record<string, unknown> = {}
 beforeEach(async () => {
   // Emptied rather than removed: a missing key reads as '' anyway, and the test
   // environment's AsyncStorage has no removeItem.
-  for (const key of RESET_MARKER_KEYS) {
+  for (const key of [
+    'completedDevResetNonce',
+    'completedBetaResetNonce',
+    'completedProdResetNonce',
+  ]) {
     await app().storage.setItem(key, '')
   }
   delete extra.variant
-})
-
-describe('resolveVariant', () => {
-  it('recognizes dev and beta', () => {
-    expect(resolveVariant('dev')).toBe('dev')
-    expect(resolveVariant('beta')).toBe('beta')
-  })
-
-  it('falls back to prod for every value that is not an exact match', () => {
-    for (const variant of ['prod', 'production', 'Beta', 'BETA', '', undefined, null, 0, {}, []]) {
-      expect(resolveVariant(variant)).toBe('prod')
-    }
-  })
-})
-
-describe('selectForcedResetAction', () => {
-  it('does nothing while the marker matches', () => {
-    expect(selectForcedResetAction('a', 'a', true)).toBe('none')
-  })
-
-  it('does nothing for an unset nonce', () => {
-    expect(selectForcedResetAction(null, 'anything', true)).toBe('none')
-  })
-
-  it('resets an onboarded device once the nonce has moved on', () => {
-    expect(selectForcedResetAction('a2', 'a', true)).toBe('reset')
-  })
-
-  it('records instead of resetting before onboarding', () => {
-    expect(selectForcedResetAction('a2', 'a', false)).toBe('record')
-  })
 })
 
 describe('resolveForcedReset', () => {
