@@ -1,3 +1,4 @@
+import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import { insertFile } from './files'
 import { insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
@@ -87,6 +88,39 @@ describe('needsSyncUp flagging', () => {
     await db().runAsync('UPDATE objects SET needsSyncUp = 0 WHERE fileId = ?', 'f1')
     await tombstoneFilesAndThumbnails(db(), ['f1'])
     expect(await syncUpFlag('f1')).toBe(1)
+  })
+})
+
+describe('atomicity', () => {
+  // Fails the version recalculation, the last write trashing makes, on the
+  // transaction's handle.
+  function failingRecalculation(): DatabaseAdapter {
+    const adapter = db()
+    return {
+      ...adapter,
+      withTransactionAsync: (fn) =>
+        adapter.withTransactionAsync((tx) =>
+          fn({
+            ...tx,
+            runAsync: (sql: string, ...params: SQLParam[]) =>
+              sql.includes('SET current')
+                ? Promise.reject(new Error('recalculation failed'))
+                : tx.runAsync(sql, ...params),
+          }),
+        ),
+    }
+  }
+
+  it('trashing writes nothing when the version recalculation fails', async () => {
+    await insertFile(db(), makeFileRecord('f1'))
+    await createCleanObject('f1', 'obj-f1')
+
+    await expect(trashFilesAndThumbnails(failingRecalculation(), ['f1'])).rejects.toThrow(
+      'recalculation failed',
+    )
+
+    expect((await getFile('f1'))!.trashedAt).toBeNull()
+    expect(await syncUpFlag('f1')).toBe(0)
   })
 })
 

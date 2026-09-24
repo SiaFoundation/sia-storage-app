@@ -1,3 +1,4 @@
+import type { DatabaseAdapter } from '../../adapters/db'
 import {
   createFileWithLocalObject,
   moveFilesAllVersions,
@@ -129,7 +130,55 @@ describe('renameAllFileVersions', () => {
   })
 })
 
+describe('renameAllFileVersions', () => {
+  it('renames a version that arrives while the rename waits for its transaction', async () => {
+    await insertFile(db(), makeFileRecord('v1', { name: 'doc.txt', updatedAt: 1000 }))
+    const adapter = db()
+    // Sync-down commits another device's version just before the rename's
+    // transaction begins.
+    const late: DatabaseAdapter = {
+      ...adapter,
+      withTransactionAsync: async (fn) => {
+        await insertFile(adapter, makeFileRecord('v2', { name: 'doc.txt', updatedAt: 2000 }))
+        return adapter.withTransactionAsync(fn)
+      },
+    }
+
+    await renameAllFileVersions(late, 'doc.txt', null, 'renamed.txt')
+
+    expect(await db().getAllAsync(`SELECT id, name FROM files ORDER BY id`)).toEqual([
+      { id: 'v1', name: 'renamed.txt' },
+      { id: 'v2', name: 'renamed.txt' },
+    ])
+  })
+})
+
 describe('moveFilesAllVersions', () => {
+  it('returns each moved id once when the transaction body runs a second time', async () => {
+    // The mobile adapter runs a body again after a native-handle error. Here
+    // the first attempt rolls back and the second commits.
+    const adapter = db()
+    const retrying: DatabaseAdapter = {
+      ...adapter,
+      withTransactionAsync: async (fn) => {
+        await adapter
+          .withTransactionAsync(async (tx) => {
+            await fn(tx)
+            throw new Error('native handle lost')
+          })
+          .catch(() => {})
+        await adapter.withTransactionAsync(fn)
+      },
+    }
+    const dir = await insertDirectory(db(), 'Dest')
+    await insertFile(db(), makeFileRecord('r-old', { name: 'retry.bin', updatedAt: 1000 }))
+    await insertFile(db(), makeFileRecord('r-new', { name: 'retry.bin', updatedAt: 2000 }))
+
+    const moved = await moveFilesAllVersions(retrying, ['r-new'], dir.id)
+
+    expect(moved).toEqual(['r-new', 'r-old'])
+  })
+
   it('never moves a version clock backwards, even past a future stamp', async () => {
     const future = Date.now() + 600_000
     const dir = await insertDirectory(db(), 'Dest')

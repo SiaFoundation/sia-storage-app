@@ -126,6 +126,25 @@ describe('Provider handoff', () => {
       expect(item.size).toBe('hello from finder'.length)
     })
 
+    it('leaves no file behind when recording the local copy fails', async () => {
+      const staged = dest('staged-lost.txt')
+      nodeFs.writeFileSync(staged, 'bytes that never land')
+      const restore = await app.failInserts('fs', 'fs write failed')
+
+      // A trigger's error is built by better-sqlite3's native code, which can hold
+      // the Error class of another test file in this Jest worker, so toThrow does
+      // not always recognise it. Matching the message works either way.
+      await expect(app.app.provider.create(null, 'lost.txt', 'file', staged)).rejects.toMatchObject(
+        {
+          message: expect.stringContaining('fs write failed'),
+        },
+      )
+      await restore()
+
+      const names = (await app.app.files.query({ order: 'ASC' })).map((f) => f.name)
+      expect(names).not.toContain('lost.txt')
+    })
+
     it('files a created file into its folder', async () => {
       const folder = await app.app.provider.create(null, 'Inbox', 'dir')
       const staged = dest('staged2.txt')
