@@ -13,7 +13,7 @@ import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { log } from './log'
-import { daemonLogPath, daemonSocketPath, dataDir } from './paths'
+import { buildVariant, daemonLogPath, daemonSocketPath, dataDir } from './paths'
 import { call } from './rpc'
 
 /** The facade, typed, for this process's own reads. No cache subscription:
@@ -142,10 +142,11 @@ export class Daemon {
     const child = spawn(config.runtime, [config.script, 'daemon', 'start', '--foreground'], {
       env: {
         ...process.env,
-        // The daemon resolves SIA_DATA_DIR for itself and falls back to the
-        // plain directory, so a beta or dev app that left this unset would
-        // spawn a daemon serving the shipping build's library.
+        // Passed rather than left for the daemon to derive, so the app and the
+        // daemon it spawns always name the same library.
         SIA_DATA_DIR: dataDir(),
+        // Picks the forced-reset nonce the daemon answers to.
+        SIA_BUILD_VARIANT: buildVariant(),
         SIA_PROVIDER_SOCKET: config.shellSocket,
         ...(config.handoffDir ? { SIA_HANDOFF_DIR: config.handoffDir } : {}),
       },

@@ -19,6 +19,12 @@ describe('getDataDir', () => {
     expect(getDataDir()).toBe(path.join(os.homedir(), '.sia'))
   })
 
+  it('keeps a beta or dev build beside the production library', () => {
+    delete process.env.SIA_DATA_DIR
+    expect(getDataDir('beta')).toBe(path.join(os.homedir(), '.sia-beta'))
+    expect(getDataDir('dev')).toBe(path.join(os.homedir(), '.sia-dev'))
+  })
+
   it('respects SIA_DATA_DIR env var', () => {
     process.env.SIA_DATA_DIR = '/tmp/custom-sia'
     expect(getDataDir()).toBe('/tmp/custom-sia')

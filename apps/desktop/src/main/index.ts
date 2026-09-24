@@ -16,6 +16,7 @@ import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
 import { dataDir } from './paths'
 import { Daemon, type DaemonSpawn } from './daemon'
+import { forcedResetPending } from './forcedReset'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
 import { createPlatformIntegration } from './platform'
@@ -236,6 +237,14 @@ if (!app.requestSingleInstanceLock()) {
       // a mismatch here is how the extension ends up served by the wrong daemon.
       log.info('app', 'library', { path: dataDir() })
       log.info('app', 'serving_extension', { container: dirname(shellSocket) })
+      // A daemon starting on a new reset nonce rebuilds the library. One that
+      // is already up keeps its library, and its folder with it. A daemon the
+      // CLI started has already rebuilt by the time the app attaches, so its
+      // Finder copy is not discarded here.
+      if (!(await Daemon.isReachable()) && (await forcedResetPending())) {
+        const discarded = await platform.discard(config.domainId)
+        log.info('app', 'forced_reset', { folderDiscarded: discarded })
+      }
       const hadSocket = existsSync(shellSocket)
       const attached = await daemon.attach(spawn)
       log.info('daemon', 'attached', { state: attached })

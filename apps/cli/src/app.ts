@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { uint8ToHex } from '@siastorage/core'
 import type { DatabaseAdapter, SdkAdapter, SdkAuthAdapters } from '@siastorage/core/adapters'
 // oxlint-disable-next-line no-restricted-imports -- CLI daemon needs internal API to set SDK
@@ -6,6 +7,7 @@ import { createAppService } from '@siastorage/core/app'
 import { APP_META } from '@siastorage/core/config'
 import { runMigrations } from '@siastorage/core/db'
 import { coreMigrations, sortMigrations } from '@siastorage/core/db/migrations'
+import { recordForcedReset } from '@siastorage/core/lib/forcedReset'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import type { UploadManager } from '@siastorage/core/services/uploader'
 import {
@@ -24,6 +26,7 @@ import {
   type NodeSdkAuthResult,
 } from '@siastorage/node-adapters'
 import { createBunDatabase } from '@siastorage/node-adapters/bunDatabase'
+import { cliVariant } from './lib/variant'
 
 export const isTestMode = process.env.SIA_TEST_MODE === '1'
 
@@ -111,15 +114,20 @@ export async function createCliAppService(
   dataDir?: string,
   opts?: { createDatabase?: CreateDatabaseFn; handoffDir?: string },
 ): Promise<CliApp> {
-  const dir = dataDir ?? getDataDir()
+  const dir = dataDir ?? getDataDir(cliVariant())
   const p = getPaths(dir)
   ensureDataDir(dir)
 
+  // A library a command creates, rather than the daemon, starts on the current
+  // reset nonce. The daemon's first start would otherwise find a library that
+  // never recorded one and reset it.
+  const fresh = !existsSync(p.dbPath)
   const createDb = opts?.createDatabase ?? createBunDatabase
   const db = createDb(p.dbPath)
   await runMigrations(db, sortMigrations(coreMigrations))
 
   const storage = createJsonFileStorage(p.storagePath)
+  if (fresh) await recordForcedReset(storage, cliVariant())
   const secrets = createJsonFileStorage(p.secretsPath, { mode: 0o600 })
   const crypto = createNodeCryptoAdapter()
   const fsIO = createNodeFsIO(p.filesDir)

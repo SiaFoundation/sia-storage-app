@@ -1,7 +1,8 @@
 import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
 import packageJson from '../../package.json'
-import { writeState } from '@siastorage/node-adapters'
+import { ensureDataDir, getDataDir, getPaths, writeState } from '@siastorage/node-adapters'
 import { connectSdk, createCliAppService } from '../app'
+import { applyForcedReset } from './forcedReset'
 import { buildIpcSurface, startIpcDispatcher } from './ipc'
 import { startProviderListener } from './ipc/provider'
 import {
@@ -11,6 +12,7 @@ import {
   type ShutdownContext,
 } from './lifecycle'
 import { initializeScheduler } from './scheduler'
+import { cliVariant } from '../lib/variant'
 
 /**
  * Build identifier a storage-provider shell must match to call anything.
@@ -42,8 +44,13 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   const providerSocket = process.env.SIA_PROVIDER_SOCKET
   const handoffDir = process.env.SIA_HANDOFF_DIR
 
-  const app = await createCliAppService(dataDir, { handoffDir })
-  const lock = acquireLockOrExit(app.paths)
+  // The lock comes first: a forced reset deletes the library, and only the one
+  // daemon allowed to run may do that.
+  const dir = dataDir ?? getDataDir(cliVariant())
+  ensureDataDir(dir)
+  const lock = acquireLockOrExit(getPaths(dir))
+  await applyForcedReset(getPaths(dir), cliVariant())
+  const app = await createCliAppService(dir, { handoffDir })
 
   let connected = false
   try {

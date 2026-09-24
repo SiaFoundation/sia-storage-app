@@ -1,5 +1,6 @@
 import { getPaths, getDataDir } from '@siastorage/node-adapters'
 import { createDaemonClient } from '../lib/appServiceClient'
+import { cliVariant } from '../lib/variant'
 
 export async function completionsCommand(_dataDir: string, shell?: string) {
   const target = shell ?? (process.env.SHELL?.includes('zsh') ? 'zsh' : 'bash')
@@ -16,7 +17,7 @@ export async function completeCommand(args: string[]) {
   const partial = args.slice(1).join(' ').toLowerCase()
 
   try {
-    const p = getPaths(getDataDir())
+    const p = getPaths(getDataDir(cliVariant()))
     const app = createDaemonClient(p.sockPath, 2000)
 
     switch (command) {

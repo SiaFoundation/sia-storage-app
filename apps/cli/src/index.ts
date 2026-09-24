@@ -9,17 +9,9 @@ import {
   getDataDir,
   getPaths,
 } from '@siastorage/node-adapters'
-import pkg from '../package.json'
 import { c } from './lib/format'
-
-// A released binary is built from the commit its tag points at, and for a
-// graduated release that commit's package.json still reads X.Y.Z-rc.N, so
-// release-cli.yml substitutes the tag's version here at build time. A build-time
-// constant rather than an env var: the version of a shipped binary is a fact
-// about the build, not something a caller should be able to change. `typeof`
-// guards the identifier not existing at all in a build that omits the define.
-declare const SIA_CLI_VERSION: string | undefined
-const releaseVersion = typeof SIA_CLI_VERSION === 'string' ? SIA_CLI_VERSION : undefined
+import { cliVariant } from './lib/variant'
+import { cliVersion } from './lib/version'
 
 // Hidden entry points for daemon mode and shell completion
 if (process.env.SIA_DAEMON_MODE === '1') {
@@ -40,13 +32,13 @@ if (process.env.SIA_DAEMON_MODE === '1') {
   const program = new Command()
     .name('sia')
     .description('Sia decentralized storage CLI')
-    .version(releaseVersion ?? pkg.version)
+    .version(cliVersion())
     .option('-d, --data-dir <path>', 'Data directory (overrides SIA_DATA_DIR)')
 
   function resolveDataDir(): string {
     const opts = program.opts<{ dataDir?: string }>()
     if (opts.dataDir) return resolve(opts.dataDir)
-    return getDataDir()
+    return getDataDir(cliVariant())
   }
 
   // File appender only — no console appender means no terminal log output.

@@ -11,7 +11,7 @@ let appName = 'sia.storage.desktop'
 
 mock.module('electron', () => ({ app: { getName: () => appName } }))
 
-const { dataDir, daemonSocketPath } = await import('./paths')
+const { buildVariant, dataDir, daemonSocketPath } = await import('./paths')
 
 // An inherited SIA_DATA_DIR would fail the default-path tests below, and
 // deleting it outright would change the environment every later suite in
@@ -25,6 +25,22 @@ beforeEach(() => {
 afterEach(() => {
   if (inheritedDataDir === undefined) delete process.env.SIA_DATA_DIR
   else process.env.SIA_DATA_DIR = inheritedDataDir
+})
+
+describe('the build variant the daemon is told', () => {
+  it('names each signed context, and a source checkout as dev', () => {
+    const variants = [
+      'sia.storage.desktop',
+      'sia.storage.desktop.beta',
+      'sia.storage.desktop.dev',
+      '@siastorage/desktop',
+    ].map((name) => {
+      appName = name
+      return buildVariant()
+    })
+
+    expect(variants).toEqual(['prod', 'beta', 'dev', 'dev'])
+  })
 })
 
 describe('the library directory', () => {

@@ -14,6 +14,7 @@
     "./lib/coalescer": "./src/lib/coalescer.ts",
     "./lib/fileTypes": "./src/lib/fileTypes.ts",
     "./lib/fileUri": "./src/lib/fileUri.ts",
+    "./lib/forcedReset": "./src/lib/forcedReset.ts",
     "./lib/errors": "./src/lib/errors.ts",
     "./lib/mutex": "./src/lib/mutex.ts",
     "./lib/retry": "./src/lib/retry.ts",

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getErrorMessage } from '@siastorage/core/lib/errors'
+import { RESET_KEEP_KEYS } from '@siastorage/core/lib/forcedReset'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
 import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { shutdownDbLogAppender } from '@siastorage/core/services/dbLogAppender'
@@ -17,7 +18,7 @@ import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
-import { RESET_MARKER_KEYS, recordForcedReset, resolveForcedReset } from './forcedReset'
+import { recordForcedReset, resolveForcedReset } from './forcedReset'
 import { runFsEvictionScanner } from './fsEvictionScanner'
 import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
@@ -179,12 +180,7 @@ export async function resetData() {
 const REMOTE_LOG_KEEP_KEYS = ['remoteLogEnabled', 'remoteLogEndpoint', 'deviceId']
 
 // Resync additionally preserves onboarding/indexer so the user stays signed in.
-const RESYNC_KEEP_KEYS = [
-  'hasOnboarded',
-  'indexerURL',
-  ...RESET_MARKER_KEYS,
-  ...REMOTE_LOG_KEEP_KEYS,
-]
+const RESYNC_KEEP_KEYS = [...RESET_KEEP_KEYS, ...REMOTE_LOG_KEEP_KEYS]
 
 async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
   // Tear down the SDK first so the rust layer stops retrying uploads against

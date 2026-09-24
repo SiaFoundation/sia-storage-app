@@ -98,7 +98,7 @@ jobs:
           bun build src/index.ts \
             --compile \
             --target=${{ matrix.target }} \
-            ${CLI_VERSION:+--define process.env.SIA_CLI_VERSION=\"$CLI_VERSION\"} \
+            ${CLI_VERSION:+--define SIA_CLI_VERSION=\"$CLI_VERSION\"} \
             --outfile dist/sia-storage-${{ matrix.name }}${{ matrix.ext }}
 
       - name: Upload artifact
