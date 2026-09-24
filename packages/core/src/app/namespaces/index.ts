@@ -60,9 +60,10 @@ const DEFERRED_CACHE_METHODS = new Set(['invalidate', 'invalidateAll', 'set'])
 /**
  * The caches as a transaction body sees them: invalidations queue in
  * `invalidations` and run once the transaction commits, and are dropped if it
- * rolls back. Run inside the body, an invalidation can refresh a mounted
- * query, which on mobile waits for the open transaction to end, so a body
- * awaiting that refresh would never finish.
+ * rolls back. Run inside the body, an invalidation would refetch a mounted
+ * query before the commit and cache what it read: the rows from before the
+ * commit on mobile, whose reads run on separate connections, or rows a
+ * rollback then discards where reads share the transaction's connection.
  */
 function afterCommit(caches: AppCaches, invalidations: Array<() => void>): AppCaches {
   const wrap = <T extends object>(target: T): T =>

@@ -433,6 +433,15 @@ describe('withRecovery', () => {
   })
 })
 
+describe('read pool on an unshared database', () => {
+  it('opens no readers and runs reads on the writer', async () => {
+    const onWriter = jest.spyOn(database, 'getAllAsync')
+
+    expect(await rows()).toEqual([])
+    expect(onWriter).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('journal mode', () => {
   it('opens with a 500-page autocheckpoint and a 4MB WAL size limit', async () => {
     const auto = await db().getFirstAsync<{ wal_autocheckpoint: number }>(
