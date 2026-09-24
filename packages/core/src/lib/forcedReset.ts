@@ -15,7 +15,7 @@ export type BuildVariant = 'dev' | 'beta' | 'prod'
 // null never resets. Any other value resets each install that has not recorded
 // it, once. The value is arbitrary and only has to differ from the last one.
 const RESET_NONCES: Record<BuildVariant, string | null> = {
-  dev: null,
+  dev: 'b2e61f09',
   beta: '3e9b02f6',
   prod: null,
 }

@@ -162,15 +162,17 @@ describe('Provider changes', () => {
       expect(second.items.map((i) => i.id)).not.toContain(file.id)
     })
 
-    it('reports a superseded version as gone in the page that adds its replacement', async () => {
+    it('reports a newer version as an update to the same item, not a replacement', async () => {
       const [first] = await app.addFiles(generateTestFiles(1, { startId: 510 }))
       const anchor = await listedAnchor(app, null)
 
       await createNewerVersion(app, first)
       const changes = await app.app.provider.changes(null, anchor)
 
-      expect(changes.items.map((i) => i.id)).toContain('newer-version')
-      expect(changes.deletedIds).toContain(first.id)
+      expect(changes.items.map((i) => [i.id, i.contentVersion])).toEqual([
+        [first.id, 'sha256:newer'],
+      ])
+      expect(changes.deletedIds).toEqual([])
     })
   })
 
@@ -365,14 +367,17 @@ describe('Provider changes', () => {
       expect(changes.deletedIds).toContain(file.id)
     })
 
-    it('reports a superseded version through it too', async () => {
+    it('reports a newer version as an update to the same item through it too', async () => {
       const [first] = await app.addFiles(generateTestFiles(1, { startId: 530 }))
       const anchor = await listedAnchor(app, WORKING_SET_ID)
 
       await createNewerVersion(app, first)
       const changes = await app.app.provider.changes(WORKING_SET_ID, anchor)
 
-      expect(changes.deletedIds).toContain(first.id)
+      expect(changes.items.map((i) => [i.id, i.contentVersion])).toEqual([
+        [first.id, 'sha256:newer'],
+      ])
+      expect(changes.deletedIds).toEqual([])
     })
 
     it('reports a deleted folder as a deletion, with no relist', async () => {
