@@ -45,7 +45,7 @@ describe('Search', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'hash-custom-photo',
+      hash: 'sha256:hash-custom-photo',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mediaAssetId: null,

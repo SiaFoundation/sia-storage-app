@@ -70,7 +70,7 @@ describe('createCliAppService', () => {
       type: 'text/plain',
       kind: 'file',
       size: 100,
-      hash: 'abc123',
+      hash: 'sha256:abc123',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: null,

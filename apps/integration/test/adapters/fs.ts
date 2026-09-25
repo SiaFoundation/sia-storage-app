@@ -3,6 +3,7 @@ import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { createHash } from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
 export function createFsAdapter(params: { tempDir: string }) {
   const { tempDir } = params
@@ -15,7 +16,7 @@ export function createFsAdapter(params: { tempDir: string }) {
   async function adoptFile(
     file: { id: string; type: string },
     sourceUri: string,
-  ): Promise<{ uri: string; size: number; hash: string }>
+  ): Promise<{ uri: string; size: number; hash: ContentHash }>
   async function adoptFile(
     file: { id: string; type: string },
     sourceUri: string,
@@ -25,7 +26,7 @@ export function createFsAdapter(params: { tempDir: string }) {
     file: { id: string; type: string },
     sourceUri: string,
     opts?: { hash: false },
-  ): Promise<{ uri: string; size: number; hash?: string }> {
+  ): Promise<{ uri: string; size: number; hash?: ContentHash }> {
     const source = sourceUri.replace(/^file:\/\//, '')
     // Same refusal as the production adapter, so the containment tests run
     // against the semantics they claim to cover.
@@ -40,7 +41,7 @@ export function createFsAdapter(params: { tempDir: string }) {
       return { uri: `file://${target}`, size }
     }
     const hash = createHash('sha256').update(nodeFs.readFileSync(target)).digest('hex')
-    return { uri: `file://${target}`, size, hash: `sha256:${hash}` }
+    return { uri: `file://${target}`, size, hash: toContentHash(hash) }
   }
 
   const fsIO: FsIOAdapter = {

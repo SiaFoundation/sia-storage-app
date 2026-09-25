@@ -17,6 +17,7 @@ import {
 } from '../db/operations/importReasons'
 import { uniqueId } from '../lib/uniqueId'
 import { raceWithAbort } from '../lib/timeout'
+import type { ContentHash } from '../lib/contentHash'
 
 // Copy pool: total in-flight bytes across concurrent copies (an idle pool always
 // admits one item regardless, so a lone huge file still runs).
@@ -130,7 +131,7 @@ export type ResolveSource = (
   opts?: { verify?: boolean },
 ) => Promise<ResolveSourceResult>
 
-export type CalculateContentHash = (uri: string) => Promise<string | null>
+export type CalculateContentHash = (uri: string) => Promise<ContentHash | null>
 /** Reads a file's first bytes (MAGIC_BYTES_LENGTH) for the type classifier. */
 export type ReadHeaderBytes = (uri: string) => Promise<Uint8Array | null>
 
@@ -361,7 +362,7 @@ export class ImportScanner {
           // (the suspend/failure paths return before hashing).
           let copiedSize = 0
           let hashedInCopy: {
-            sha256: string
+            sha256: ContentHash
             size: number
             headerBytes?: Uint8Array
             mediaMime?: string
@@ -446,7 +447,7 @@ export class ImportScanner {
           }
 
           let outcome:
-            | { action: 'finalized'; hash: string; size: number; type: string }
+            | { action: 'finalized'; hash: ContentHash; size: number; type: string }
             | { action: 'failed' }
           if (hashedInCopy) {
             // The adapter hashed during the copy's one read, so no second pass.
@@ -575,7 +576,7 @@ export class ImportScanner {
     app: AppService,
     row: ImportFileRow,
     token: string,
-    outcome: { hash: string; size: number; type: string },
+    outcome: { hash: ContentHash; size: number; type: string },
     result: ImportScannerResult,
   ): Promise<void> {
     // A zero-byte copy hashes fine (the empty-input digest is valid) but can
@@ -750,7 +751,7 @@ export class ImportScanner {
     fileUri: string,
     size: number,
   ): Promise<
-    { action: 'finalized'; hash: string; size: number; type: string } | { action: 'failed' }
+    { action: 'finalized'; hash: ContentHash; size: number; type: string } | { action: 'failed' }
   > {
     const headerBytes = this._readHeaderBytes ? await this._readHeaderBytes(fileUri) : null
     const type = classifyImportType({

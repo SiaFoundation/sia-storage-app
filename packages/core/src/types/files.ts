@@ -1,4 +1,5 @@
 import type { LocalObjectRef } from '../encoding/localObject'
+import type { ContentHash } from '../lib/contentHash'
 import { keysOf } from '../lib/types'
 
 /** Valid thumbnail sizes in pixels. */
@@ -14,7 +15,8 @@ export type FileMetadata = {
   type: string
   kind: FileKind
   size: number
-  hash: string
+  /** Empty until the bytes are hashed, as in an import still being copied. */
+  hash: ContentHash | ''
   thumbForId?: string
   thumbSize?: ThumbSize
   tags?: string[]

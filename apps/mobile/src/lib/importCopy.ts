@@ -6,6 +6,7 @@ import {
   copyToPath,
   type CopyProgressEvent,
 } from 'import-sources'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
 type ProgressCallback = (bytesCopied: number, totalBytes: number | null) => void
 
@@ -38,8 +39,8 @@ export async function copyImportFile(
   destPath: string,
   opts: { signal?: AbortSignal; onProgress?: ProgressCallback } = {},
 ): Promise<
-  | { kind: 'stream'; size: number; sha256: string; headerBytes?: Uint8Array }
-  | { kind: 'asset'; size: number; sha256: string; mediaMime: string }
+  | { kind: 'stream'; size: number; sha256: ContentHash; headerBytes?: Uint8Array }
+  | { kind: 'asset'; size: number; sha256: ContentHash; mediaMime: string }
 > {
   if (opts.signal?.aborted) {
     // Never start native work for an already-dead tick.
@@ -58,12 +59,13 @@ export async function copyImportFile(
   opts.signal?.addEventListener('abort', onAbort)
   try {
     if (srcUri.startsWith('asset://')) {
-      const { mime, ...rest } = await copyAsset(srcUri.slice('asset://'.length), destPath, {
+      const { mime, sha256, ...rest } = await copyAsset(srcUri.slice('asset://'.length), destPath, {
         copyId,
       })
-      return { kind: 'asset', ...rest, mediaMime: mime }
+      return { kind: 'asset', ...rest, sha256: toContentHash(sha256), mediaMime: mime }
     }
-    return { kind: 'stream', ...(await copyToPath(srcUri, destPath, { copyId })) }
+    const { sha256, ...rest } = await copyToPath(srcUri, destPath, { copyId })
+    return { kind: 'stream', ...rest, sha256: toContentHash(sha256) }
   } finally {
     opts.signal?.removeEventListener('abort', onAbort)
     progressCallbacks.delete(copyId)

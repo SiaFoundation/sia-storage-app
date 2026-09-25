@@ -1,4 +1,4 @@
-import { readMetadataVersion } from './fileMetadata'
+import { decodeFileMetadata, readMetadataVersion } from './fileMetadata'
 
 describe('readMetadataVersion', () => {
   const encode = (obj: unknown) =>
@@ -19,5 +19,19 @@ describe('readMetadataVersion', () => {
   it('returns 0 when version is missing or non-numeric', () => {
     expect(readMetadataVersion(encode({}))).toBe(0)
     expect(readMetadataVersion(encode({ version: 'x' }))).toBe(0)
+  })
+})
+
+describe('decodeFileMetadata', () => {
+  const encode = (obj: unknown) =>
+    new TextEncoder().encode(JSON.stringify(obj)).buffer as ArrayBuffer
+  const fields = { version: 1, id: 'f1', name: 'a.txt', type: 'text/plain', kind: 'file' }
+
+  it('prefixes a bare hex hash, the form sia add publishes', () => {
+    const hex = 'ab'.repeat(32)
+    const meta = decodeFileMetadata(
+      encode({ ...fields, size: 1, hash: hex, createdAt: 1, updatedAt: 1, trashedAt: null }),
+    )
+    expect(meta.hash).toBe(`sha256:${hex}`)
   })
 })

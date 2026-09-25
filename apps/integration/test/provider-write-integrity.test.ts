@@ -16,8 +16,9 @@ import { WORKING_SET_ID } from '@siastorage/core/types'
 import { createEmptyIndexerStorage, type MockIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
 import { assertFeedConverges, drainListing, waitForCondition } from './utils'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 
-const sha = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+const sha = (bytes: Uint8Array) => toContentHash(createHash('sha256').update(bytes).digest('hex'))
 const v1 = Buffer.from('first')
 const v2 = Buffer.from('second version, longer')
 

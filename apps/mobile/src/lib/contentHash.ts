@@ -1,7 +1,6 @@
 import { logger } from '@siastorage/logger'
 import RNFS from 'react-native-fs'
-
-export type HashResult = `sha256:${string}`
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
 /**
  * Calculate a content hash for a file.
@@ -13,13 +12,12 @@ export type HashResult = `sha256:${string}`
  * freezes with the process and thaws on resume. Callers that loop over
  * many files should check their signal at the loop boundary.
  */
-export async function calculateContentHash(uri: string): Promise<HashResult | null> {
+export async function calculateContentHash(uri: string): Promise<ContentHash | null> {
   if (!uri || uri === '') {
     return null
   }
   try {
-    const hex = await RNFS.hash(uri, 'sha256')
-    return `sha256:${hex}`
+    return toContentHash(await RNFS.hash(uri, 'sha256'))
   } catch (err) {
     logger.error('contentHash', 'sha256_failed', {
       uri,

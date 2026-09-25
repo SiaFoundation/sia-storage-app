@@ -37,7 +37,7 @@ describe('ls command logic', () => {
         type: 'text/plain',
         kind: 'file',
         size: 42,
-        hash: 'abc',
+        hash: 'sha256:abc',
         createdAt: now,
         updatedAt: now,
         mediaAssetId: null,

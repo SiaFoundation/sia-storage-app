@@ -54,6 +54,7 @@ export {
   type UploadState,
   waitForCondition,
 } from './utils'
+import { type ContentHash } from '@siastorage/core/lib/contentHash'
 
 /**
  * File-backed better-sqlite3 database with the same PRAGMAs as the mobile
@@ -189,7 +190,7 @@ export interface TestApp {
     type: string
     kind: string
     size: number
-    hash: string
+    hash: ContentHash
     createdAt: number
     updatedAt: number
     mediaAssetId?: string | null

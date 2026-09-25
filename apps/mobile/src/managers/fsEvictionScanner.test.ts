@@ -234,7 +234,7 @@ function makeFileRecord(id: string, size: number): FileRecord {
     type: 'image/jpeg',
     kind: 'file',
     size,
-    hash: `hash-${id}`,
+    hash: `sha256:hash-${id}`,
     createdAt: now,
     updatedAt: now,
     addedAt: now,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
+import type { ContentHash } from '../../lib/contentHash'
 import type { FileRecord } from '../../types/files'
 import {
   finalizeImportFile,
@@ -82,7 +83,7 @@ async function finalizedFile(
       type: 'image/jpeg',
       kind: 'file',
       size: 10,
-      hash: 'h',
+      hash: 'sha256:h',
       mediaAssetId: null,
       createdAt: 1,
       updatedAt: 1,
@@ -102,7 +103,7 @@ async function finalizedFile(
 async function arrange(
   importRow: ImportRow,
   fileRow: ImportFileRow,
-  hash: string | null,
+  hash: ContentHash | null,
   token: string,
 ): Promise<void> {
   await insertImport(db(), importRow)
@@ -160,7 +161,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
         mediaAssetId: 'asset-1',
         size: 42,
       }),
-      'h1',
+      'sha256:h1',
       'tok',
     )
 
@@ -170,7 +171,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
     // The files row reuses the import_files row's id.
     const f = await rawFileRow('if1')
     expect(f?.id).toBe('if1')
-    expect(f?.hash).toBe('h1')
+    expect(f?.hash).toBe('sha256:h1')
     expect(f?.mediaAssetId).toBe('asset-1')
     expect(f?.directoryId).toBe('D')
     expect(f?.nameSortKey).not.toBeNull() // name sorting relies on nameSortKey being computed
@@ -184,11 +185,11 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
   })
 
   it('a live same-hash file in the directory makes the import a duplicate, with no files insert', async () => {
-    await finalizedFile({ id: 'pre', hash: 'dup', name: 'a.jpg' }, { directoryId: 'D' })
+    await finalizedFile({ id: 'pre', hash: 'sha256:dup', name: 'a.jpg' }, { directoryId: 'D' })
     await arrange(
       imp({ id: 'imp1', source: 'new-photos', directoryId: 'D', dedupByHash: 1 }),
       file({ id: 'if1', importId: 'imp1', name: 'b.jpg', directoryId: 'D' }),
-      'dup',
+      'sha256:dup',
       'tok',
     )
 
@@ -201,11 +202,11 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
   })
 
   it('a same-hash file in another directory does not suppress the import', async () => {
-    await finalizedFile({ id: 'pre', hash: 'dup', name: 'a.jpg' }, { directoryId: 'D' })
+    await finalizedFile({ id: 'pre', hash: 'sha256:dup', name: 'a.jpg' }, { directoryId: 'D' })
     await arrange(
       imp({ id: 'imp1', source: 'new-photos', directoryId: 'D2', dedupByHash: 1 }),
       file({ id: 'if1', importId: 'imp1', name: 'b.jpg', directoryId: 'D2' }),
-      'dup',
+      'sha256:dup',
       'tok',
     )
 
@@ -219,16 +220,16 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
 
   it('a tombstoned same-hash file does not suppress a re-import', async () => {
     await finalizedFile(
-      { id: 'pre', hash: 'ghost', name: 'a.jpg' },
+      { id: 'pre', hash: 'sha256:ghost', name: 'a.jpg' },
       { directoryId: 'D', deletedAt: 5 },
     )
     // Guard: the live-only dedup helper itself ignores the tombstone.
-    expect(await queryFinalizedFileIdByContentHashInDirectory(db(), 'ghost', 'D')).toBeNull()
+    expect(await queryFinalizedFileIdByContentHashInDirectory(db(), 'sha256:ghost', 'D')).toBeNull()
 
     await arrange(
       imp({ id: 'imp1', source: 'new-photos', directoryId: 'D', dedupByHash: 1 }),
       file({ id: 'if1', importId: 'imp1', name: 'b.jpg', directoryId: 'D' }),
-      'ghost',
+      'sha256:ghost',
       'tok',
     )
 
@@ -240,20 +241,20 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
   })
 
   it('picker imports (dedupByHash=0) let identical content coexist, never a duplicate', async () => {
-    await finalizedFile({ id: 'pre', hash: 'p', name: 'a.jpg' }, { directoryId: 'D' })
+    await finalizedFile({ id: 'pre', hash: 'sha256:p', name: 'a.jpg' }, { directoryId: 'D' })
     await arrange(
       imp({ id: 'imp1', source: 'picker', directoryId: 'D', dedupByHash: 0 }),
       file({ id: 'if1', importId: 'imp1', name: 'b.jpg', directoryId: 'D' }),
-      'p',
+      'sha256:p',
       'tok',
     )
 
     const result = await finalizeImportFile(db(), 'if1', 'tok')
     expect(result).toEqual({ outcome: 'added' })
 
-    // Two distinct files now share hash 'p' in dir D (no content dedup for picker).
+    // Two distinct files now share one hash in dir D (no content dedup for picker).
     const sharing = await db().getAllAsync<{ id: string }>(
-      `SELECT id FROM files WHERE hash = 'p' AND directoryId = 'D' AND kind = 'file'
+      `SELECT id FROM files WHERE hash = 'sha256:p' AND directoryId = 'D' AND kind = 'file'
        AND trashedAt IS NULL AND deletedAt IS NULL ORDER BY id`,
     )
     expect(sharing.map((r) => r.id)).toEqual(['if1', 'pre'])
@@ -263,7 +264,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
     await arrange(
       imp({ id: 'imp1', source: 'new-photos', directoryId: 'D', dedupByHash: 1 }),
       file({ id: 'if1', importId: 'imp1', name: 'b.jpg', directoryId: 'D' }),
-      'h',
+      'sha256:h',
       'A',
     )
 
@@ -280,14 +281,14 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
   it('finalizing a newer same-name version makes it the current one', async () => {
     // Existing finalized 'a.jpg' in D, content hash 'old', currently the winner.
     await finalizedFile(
-      { id: 'old', hash: 'old', name: 'a.jpg', updatedAt: 100 },
+      { id: 'old', hash: 'sha256:old', name: 'a.jpg', updatedAt: 100 },
       { directoryId: 'D' },
     )
     // Import a NEW version of a.jpg with a different hash (dedupByHash=1, but not a dup).
     await arrange(
       imp({ id: 'imp1', source: 'new-photos', directoryId: 'D', dedupByHash: 1 }),
       file({ id: 'new', importId: 'imp1', name: 'a.jpg', directoryId: 'D', updatedAt: 200 }),
-      'new',
+      'sha256:new',
       'tok',
     )
 
@@ -338,7 +339,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
         pendingTags: JSON.stringify(['keep', 123]),
       }),
       file({ id: 'if1', importId: 'imp1', name: 'tagged.jpg', directoryId: 'D' }),
-      'h-tag',
+      'sha256:h-tag',
       'tok',
     )
 
@@ -351,7 +352,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
   it('a zero-byte file finalizes as added with the empty-content hash, and a second identical one is a duplicate', async () => {
     // The empty-content hash is a real, stable constant (BLAKE3 of zero bytes); the
     // ops dedup by exact hash-string equality, so the value just needs to be consistent.
-    const EMPTY_HASH = 'af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262'
+    const EMPTY_HASH = 'sha256:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262'
 
     await insertImport(
       db(),
@@ -405,7 +406,7 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
         directoryId: 'D',
         mediaAssetId: 'm1',
       }),
-      'h-m1',
+      'sha256:h-m1',
       'tok',
     )
     expect(await finalizeImportFile(db(), 'if1', 'tok')).toEqual({ outcome: 'added' })

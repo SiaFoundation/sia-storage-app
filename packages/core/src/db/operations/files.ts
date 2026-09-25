@@ -2,6 +2,7 @@ import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRef, LocalObjectRefRow } from '../../encoding/localObject'
 import { localObjectRefFromStorageRow } from '../../encoding/localObject'
+import type { ContentHash } from '../../lib/contentHash'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow, FileUpdate, UpdatedAtWrite } from '../../types/files'
@@ -352,7 +353,7 @@ export async function insertFile(
 export async function insertNextVersion(
   db: DatabaseAdapter,
   replacesId: string,
-  version: { id: string; size: number; hash: string },
+  version: { id: string; size: number; hash: ContentHash },
 ): Promise<'added' | 'unchanged' | 'missing'> {
   return sql.transaction(db, async (tx) => {
     const replaced = await tx.getFirstAsync<{
@@ -618,7 +619,7 @@ export async function queryCurrentFilesByNamesInDirectory(
 
 export async function queryFilesByContentHashes(
   db: DatabaseAdapter,
-  contentHashes: string[],
+  contentHashes: ContentHash[],
 ): Promise<FileRecordRow[]> {
   if (contentHashes.length === 0) return []
   const ph = contentHashes.map(() => '?').join(',')
@@ -630,7 +631,7 @@ export async function queryFilesByContentHashes(
 
 export async function queryFileByContentHash(
   db: DatabaseAdapter,
-  hash: string,
+  hash: ContentHash,
 ): Promise<FileRecordRow | null> {
   const row = await db.getFirstAsync<FileRecordRow>(
     `SELECT ${FILE_ROW_COLUMNS} FROM files WHERE deletedAt IS NULL AND trashedAt IS NULL AND hash = ?`,
@@ -650,7 +651,7 @@ export async function queryFileByContentHash(
  */
 export async function queryFinalizedFileIdByContentHashInDirectory(
   db: DatabaseAdapter,
-  hash: string,
+  hash: ContentHash,
   directoryId: string | null,
 ): Promise<string | null> {
   const row = await db.getFirstAsync<{ id: string }>(
@@ -871,7 +872,7 @@ export async function readFileByObjectId(
 
 export async function readFileByContentHash(
   db: DatabaseAdapter,
-  hash: string,
+  hash: ContentHash,
 ): Promise<FileRecord | null> {
   const row = await queryFileByContentHash(db, hash)
   if (!row) return null
@@ -890,12 +891,10 @@ export async function readCurrentFilesByNamesInDirectory(
 
 export async function readFilesByContentHashes(
   db: DatabaseAdapter,
-  contentHashes: string[],
-): Promise<(FileRecord & { hash: string })[]> {
+  contentHashes: ContentHash[],
+): Promise<FileRecord[]> {
   const rows = await queryFilesByContentHashes(db, contentHashes)
-  return rows.map((row) => transformRow(row)) as (FileRecord & {
-    hash: string
-  })[]
+  return rows.map((row) => transformRow(row))
 }
 
 export async function queryLocalOnlyFiles(
@@ -1575,7 +1574,7 @@ export async function finalizeImportFile(
       name: string
       type: string
       size: number
-      hash: string | null
+      hash: ContentHash | null
       createdAt: number
       updatedAt: number
       addedAt: number

@@ -12,6 +12,7 @@
 
 import { logger } from '@siastorage/logger'
 import { z } from 'zod'
+import { parseContentHash } from '../lib/contentHash'
 import type { FileKind, FileMetadata, ThumbSize } from '../types/files'
 
 export const MAX_SUPPORTED_VERSION = 1
@@ -183,7 +184,7 @@ function toFileMetadata(
     type: data.type,
     kind,
     size: data.size,
-    hash: data.hash,
+    hash: parseContentHash(data.hash),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     trashedAt: null,

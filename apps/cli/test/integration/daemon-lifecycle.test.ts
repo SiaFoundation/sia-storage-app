@@ -13,6 +13,7 @@ import {
   startIpcServer,
   writeState,
 } from '@siastorage/node-adapters'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 import { createTestApp } from '../helpers'
 
 let tempDir: string
@@ -168,7 +169,7 @@ describe('daemon with AppService', () => {
         const filePath = params.path as string
         const data = fs.readFileSync(filePath)
         const { createHash } = await import('crypto')
-        const hash = createHash('sha256').update(data).digest('hex')
+        const hash = toContentHash(createHash('sha256').update(data).digest('hex'))
         const now = Date.now()
         const fileId = `test-${now}`
 

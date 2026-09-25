@@ -59,7 +59,7 @@ describe('import-sources contract', () => {
     expect(() => mod.addCopyProgressListener(() => {})).toThrow()
   })
 
-  it('lowercases and prefixes sha256: onto the bare hex native returns from copyToPath and copyAsset', async () => {
+  it('passes the hex digest native returns from copyToPath and copyAsset through unchanged', async () => {
     const refs = {
       copyToPath: jest.fn(async () => ({ size: 5, sha256: 'ABCDEF', headBytes: 'AAECAw==' })),
     }
@@ -74,13 +74,13 @@ describe('import-sources contract', () => {
     const mod = loadModule({ refs, reader })
 
     const copied = await mod.copyToPath('file:///src', '/dest', { copyId: 'c1' })
-    expect(copied.sha256).toBe('sha256:abcdef')
+    expect(copied.sha256).toBe('ABCDEF')
     // The wire's base64 headBytes arrives decoded.
     expect(copied.headerBytes).toEqual(new Uint8Array([0, 1, 2, 3]))
     expect(refs.copyToPath).toHaveBeenCalledWith('file:///src', '/dest', 'c1')
 
     const asset = await mod.copyAsset('42', '/dest', { copyId: 'c2' })
-    expect(asset.sha256).toBe('sha256:fedcba')
+    expect(asset.sha256).toBe('FEDCBA')
   })
 
   it('createFileBookmarks makes exactly one native call for N uris and isolates per-uri failures', async () => {

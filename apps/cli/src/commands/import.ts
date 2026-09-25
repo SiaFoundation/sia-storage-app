@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'
 import { getPaths } from '@siastorage/node-adapters'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 import { daemonCommand, ensureDaemonRunning } from '../daemon/supervisor'
 import { createDaemonClient } from '../lib/appServiceClient'
 import { c, formatBytes } from '../lib/format'
@@ -69,7 +70,7 @@ export async function importCommand(
 
     if (opts.skipExisting) {
       const data = fs.readFileSync(file.absolutePath)
-      const hash = createHash('sha256').update(data).digest('hex')
+      const hash = toContentHash(createHash('sha256').update(data).digest('hex'))
       const existing = await app.files.getByContentHash(hash)
       if (existing) {
         skipped++
