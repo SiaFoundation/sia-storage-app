@@ -139,9 +139,13 @@ export class Daemon {
     // the database, which is the mode the node adapters create it with.
     mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 })
     const logFd = openSync(logPath, 'a')
-    const child = spawn(config.runtime, [config.script, 'daemon', 'start', '--foreground'], {
+    const child = spawn(config.runtime, [config.script], {
       env: {
         ...process.env,
+        // The entry the CLI's own background start uses, which logs only to
+        // stdout. `daemon start --foreground` goes through the CLI's command
+        // setup, which adds a second writer on daemon.log and doubles each line.
+        SIA_DAEMON_MODE: '1',
         // Passed rather than left for the daemon to derive, so the app and the
         // daemon it spawns always name the same library.
         SIA_DATA_DIR: dataDir(),
