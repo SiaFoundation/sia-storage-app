@@ -106,33 +106,35 @@ export async function insertDirectory(
     throw new Error('Folder name cannot be empty')
   }
 
-  // Sanitized before both uses: the child's path and its parentId must
-  // derive from the same string, or a raw 'Docs/' would store 'Docs//child'
-  // under the id of 'Docs'.
-  parentPath = parentPath ? sanitizeDirectoryPath(parentPath) || undefined : undefined
-  const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed
+  return sql.transaction(db, async (tx) => {
+    // Sanitized before both uses: the child's path and its parentId must
+    // derive from the same string, or a raw 'Docs/' would store 'Docs//child'
+    // under the id of 'Docs'.
+    const parent = parentPath ? sanitizeDirectoryPath(parentPath) || undefined : undefined
+    const fullPath = parent ? `${parent}/${trimmed}` : trimmed
 
-  const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE path = ?',
-    fullPath,
-  )
-  if (existing) {
-    throw new Error(`Folder "${trimmed}" already exists`)
-  }
+    const existing = await tx.getFirstAsync<{ id: string }>(
+      'SELECT id FROM directories WHERE path = ?',
+      fullPath,
+    )
+    if (existing) {
+      throw new Error(`Folder "${trimmed}" already exists`)
+    }
 
-  const now = Date.now()
-  const row: DirectoryRow = {
-    id: uniqueId(),
-    path: fullPath,
-    createdAt: now,
-    parentId: await parentIdForPath(db, parentPath),
-  }
+    const now = Date.now()
+    const row: DirectoryRow = {
+      id: uniqueId(),
+      path: fullPath,
+      createdAt: now,
+      parentId: await parentIdForPath(tx, parent),
+    }
 
-  await sql.insert(db, 'directories', {
-    ...row,
-    nameSortKey: naturalSortKey(fullPath),
+    await sql.insert(tx, 'directories', {
+      ...row,
+      nameSortKey: naturalSortKey(fullPath),
+    })
+    return toDirectory(row)
   })
-  return toDirectory(row)
 }
 
 export async function getOrCreateDirectory(
@@ -145,58 +147,62 @@ export async function getOrCreateDirectory(
     throw new Error('Folder name cannot be empty')
   }
 
-  // Sanitized for the same reason as insertDirectory.
-  parentPath = parentPath ? sanitizeDirectoryPath(parentPath) || undefined : undefined
-  const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed
+  return sql.transaction(db, async (tx) => {
+    // Sanitized for the same reason as insertDirectory.
+    const parent = parentPath ? sanitizeDirectoryPath(parentPath) || undefined : undefined
+    const fullPath = parent ? `${parent}/${trimmed}` : trimmed
 
-  const now = Date.now()
-  const id = uniqueId()
-  const parentId = await parentIdForPath(db, parentPath)
-  await db.runAsync(
-    `INSERT OR IGNORE INTO directories (id, path, createdAt, nameSortKey, parentId) VALUES (?, ?, ?, ?, ?)`,
-    id,
-    fullPath,
-    now,
-    naturalSortKey(fullPath),
-    parentId,
-  )
+    const now = Date.now()
+    const id = uniqueId()
+    const parentId = await parentIdForPath(tx, parent)
+    await tx.runAsync(
+      `INSERT OR IGNORE INTO directories (id, path, createdAt, nameSortKey, parentId) VALUES (?, ?, ?, ?, ?)`,
+      id,
+      fullPath,
+      now,
+      naturalSortKey(fullPath),
+      parentId,
+    )
 
-  const row = await db.getFirstAsync<DirectoryRow>(
-    'SELECT id, path, createdAt, parentId FROM directories WHERE path = ?',
-    fullPath,
-  )
+    const row = await tx.getFirstAsync<DirectoryRow>(
+      'SELECT id, path, createdAt, parentId FROM directories WHERE path = ?',
+      fullPath,
+    )
 
-  if (!row) {
-    throw new Error(`Failed to get or create directory "${trimmed}"`)
-  }
+    if (!row) {
+      throw new Error(`Failed to get or create directory "${trimmed}"`)
+    }
 
-  return toDirectory(row)
+    return toDirectory(row)
+  })
 }
 
 export async function getOrCreateDirectoryAtPath(
   db: DatabaseAdapter,
   dirPath: string,
 ): Promise<Directory> {
-  const segments = dirPath.split('/')
-  let currentPath = ''
+  return sql.transaction(db, async (tx) => {
+    const segments = dirPath.split('/')
+    let currentPath = ''
 
-  // Root to leaf, so ancestors feed-stamp before descendants: the OS shell
-  // drops an item that pages in ahead of a parent it has not met.
-  let dir: Directory | undefined
-  for (const segment of segments) {
-    const trimmed = sanitizeDirectorySegment(segment)
-    if (!trimmed) continue
+    // Root to leaf, so ancestors feed-stamp before descendants: the OS shell
+    // drops an item that pages in ahead of a parent it has not met.
+    let dir: Directory | undefined
+    for (const segment of segments) {
+      const trimmed = sanitizeDirectorySegment(segment)
+      if (!trimmed) continue
 
-    const parentPath = currentPath || undefined
-    dir = await getOrCreateDirectory(db, trimmed, parentPath)
-    currentPath = dir.path
-  }
+      const parentPath = currentPath || undefined
+      dir = await getOrCreateDirectory(tx, trimmed, parentPath)
+      currentPath = dir.path
+    }
 
-  if (!dir) {
-    throw new Error(`Invalid directory path: "${dirPath}"`)
-  }
+    if (!dir) {
+      throw new Error(`Invalid directory path: "${dirPath}"`)
+    }
 
-  return dir
+    return dir
+  })
 }
 
 export async function queryDirectoryById(
@@ -379,20 +385,22 @@ export async function syncDirectoryFromMetadata(
   options?: { skipCurrentRecalc?: boolean },
 ): Promise<void> {
   if (directoryPath === undefined) return
-  const dir = await getOrCreateDirectoryAtPath(db, directoryPath)
-  if (options?.skipCurrentRecalc) {
-    await sql.update(db, 'files', { directoryId: dir.id }, { id: fileId })
-    return
-  }
-  const row = await db.getFirstAsync<{
-    name: string
-    directoryId: string | null
-  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-  await sql.update(db, 'files', { directoryId: dir.id }, { id: fileId })
-  if (row) {
-    await recalculateCurrentForGroup(db, row.name, row.directoryId)
-    await recalculateCurrentForGroup(db, row.name, dir.id)
-  }
+  await db.withTransactionAsync(async (tx) => {
+    const dir = await getOrCreateDirectoryAtPath(tx, directoryPath)
+    if (options?.skipCurrentRecalc) {
+      await sql.update(tx, 'files', { directoryId: dir.id }, { id: fileId })
+      return
+    }
+    const row = await tx.getFirstAsync<{
+      name: string
+      directoryId: string | null
+    }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
+    await sql.update(tx, 'files', { directoryId: dir.id }, { id: fileId })
+    if (row) {
+      await recalculateCurrentForGroup(tx, row.name, row.directoryId)
+      await recalculateCurrentForGroup(tx, row.name, dir.id)
+    }
+  })
 }
 
 export async function ensureDirectoriesAtPaths(
@@ -420,63 +428,69 @@ export async function ensureDirectoriesAtPaths(
   }
   if (prefixes.size === 0) return new Map()
 
-  const arr = [...prefixes]
-  const ph = arr.map(() => '?').join(',')
-  const existing = await db.getAllAsync<{ id: string; path: string }>(
-    `SELECT id, path FROM directories WHERE path IN (${ph})`,
-    ...arr,
-  )
-  const pathToId = new Map(existing.map((r) => [r.path, r.id]))
-  // Path order is prefix order, so parents insert, and feed-stamp, before
-  // their children.
-  const missing = arr.filter((p) => !pathToId.has(p)).sort()
-  if (missing.length > 0) {
-    const now = Date.now()
-    const newIds = new Map(missing.map((path) => [path, uniqueId()]))
-    const rows = missing.map((path) => {
-      const parent = directoryParentPath(path)
-      return {
-        id: newIds.get(path)!,
-        path,
-        createdAt: now,
-        nameSortKey: naturalSortKey(path),
-        parentId: parent === null ? null : (pathToId.get(parent) ?? newIds.get(parent) ?? null),
-      }
-    })
-    await sql.insertMany(db, 'directories', rows, { conflictClause: 'OR IGNORE' })
-    // OR IGNORE may have rejected rows that another writer inserted
-    // first, re-SELECT to pick up the actual id for every missing path.
-    const phM = missing.map(() => '?').join(',')
-    const inserted = await db.getAllAsync<{ id: string; path: string }>(
-      `SELECT id, path FROM directories WHERE path IN (${phM})`,
-      ...missing,
+  return sql.transaction(db, async (tx) => {
+    const arr = [...prefixes]
+    const ph = arr.map(() => '?').join(',')
+    const existing = await tx.getAllAsync<{ id: string; path: string }>(
+      `SELECT id, path FROM directories WHERE path IN (${ph})`,
+      ...arr,
     )
-    for (const r of inserted) pathToId.set(r.path, r.id)
-    // A row inserted here whose parent lost the OR IGNORE race points at an
-    // id that was never inserted; repoint it at the row that exists. The
-    // rewrite journals a departure from the phantom id, which no scope ever
-    // queries by.
-    for (const row of rows) {
-      const parent = directoryParentPath(row.path)
-      if (parent === null) continue
-      const actualParent = pathToId.get(parent)
-      if (
-        pathToId.get(row.path) === row.id &&
-        actualParent !== undefined &&
-        actualParent !== row.parentId
-      ) {
-        await db.runAsync(`UPDATE directories SET parentId = ? WHERE id = ?`, actualParent, row.id)
+    const pathToId = new Map(existing.map((r) => [r.path, r.id]))
+    // Path order is prefix order, so parents insert, and feed-stamp, before
+    // their children.
+    const missing = arr.filter((p) => !pathToId.has(p)).sort()
+    if (missing.length > 0) {
+      const now = Date.now()
+      const newIds = new Map(missing.map((path) => [path, uniqueId()]))
+      const rows = missing.map((path) => {
+        const parent = directoryParentPath(path)
+        return {
+          id: newIds.get(path)!,
+          path,
+          createdAt: now,
+          nameSortKey: naturalSortKey(path),
+          parentId: parent === null ? null : (pathToId.get(parent) ?? newIds.get(parent) ?? null),
+        }
+      })
+      await sql.insertMany(tx, 'directories', rows, { conflictClause: 'OR IGNORE' })
+      // OR IGNORE may have rejected rows that another writer inserted
+      // first, re-SELECT to pick up the actual id for every missing path.
+      const phM = missing.map(() => '?').join(',')
+      const inserted = await tx.getAllAsync<{ id: string; path: string }>(
+        `SELECT id, path FROM directories WHERE path IN (${phM})`,
+        ...missing,
+      )
+      for (const r of inserted) pathToId.set(r.path, r.id)
+      // A row inserted here whose parent lost the OR IGNORE race points at an
+      // id that was never inserted; repoint it at the row that exists. The
+      // rewrite journals a departure from the phantom id, which no scope ever
+      // queries by.
+      for (const row of rows) {
+        const parent = directoryParentPath(row.path)
+        if (parent === null) continue
+        const actualParent = pathToId.get(parent)
+        if (
+          pathToId.get(row.path) === row.id &&
+          actualParent !== undefined &&
+          actualParent !== row.parentId
+        ) {
+          await tx.runAsync(
+            `UPDATE directories SET parentId = ? WHERE id = ?`,
+            actualParent,
+            row.id,
+          )
+        }
       }
     }
-  }
 
-  const result = new Map<string, string>()
-  for (const [input, normalized] of inputToNormalized) {
-    if (!normalized) continue
-    const id = pathToId.get(normalized)
-    if (id) result.set(input, id)
-  }
-  return result
+    const result = new Map<string, string>()
+    for (const [input, normalized] of inputToNormalized) {
+      if (!normalized) continue
+      const id = pathToId.get(normalized)
+      if (id) result.set(input, id)
+    }
+    return result
+  })
 }
 
 export async function syncManyDirectoriesFromMetadata(
@@ -484,31 +498,31 @@ export async function syncManyDirectoriesFromMetadata(
   entries: { fileId: string; directoryPath: string }[],
 ): Promise<{ name: string; directoryId: string | null }[]> {
   if (entries.length === 0) return []
+  return sql.transaction(db, async (tx) => {
+    const dirPaths = new Set(entries.map((e) => e.directoryPath))
+    const pathToId = await ensureDirectoriesAtPaths(tx, dirPaths)
 
-  const dirPaths = new Set(entries.map((e) => e.directoryPath))
-  const pathToId = await ensureDirectoriesAtPaths(db, dirPaths)
+    const fileIds = entries.map((e) => e.fileId)
+    const ph = fileIds.map(() => '?').join(',')
+    const oldGroups = await tx.getAllAsync<{ name: string; directoryId: string | null }>(
+      `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${ph}) AND f.kind = 'file'`,
+      ...fileIds,
+    )
 
-  const fileIds = entries.map((e) => e.fileId)
-  const ph = fileIds.map(() => '?').join(',')
-  const oldGroups = await db.getAllAsync<{ name: string; directoryId: string | null }>(
-    `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${ph}) AND f.kind = 'file'`,
-    ...fileIds,
-  )
-
-  const byDirId = new Map<string, string[]>()
-  for (const entry of entries) {
-    const dirId = pathToId.get(entry.directoryPath)
-    if (!dirId) continue
-    const list = byDirId.get(dirId) ?? []
-    list.push(entry.fileId)
-    byDirId.set(dirId, list)
-  }
-  for (const [dirId, ids] of byDirId) {
-    const idsPh = ids.map(() => '?').join(',')
-    await db.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${idsPh})`, dirId, ...ids)
-  }
-
-  return oldGroups
+    const byDirId = new Map<string, string[]>()
+    for (const entry of entries) {
+      const dirId = pathToId.get(entry.directoryPath)
+      if (!dirId) continue
+      const list = byDirId.get(dirId) ?? []
+      list.push(entry.fileId)
+      byDirId.set(dirId, list)
+    }
+    for (const [dirId, ids] of byDirId) {
+      const idsPh = ids.map(() => '?').join(',')
+      await tx.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${idsPh})`, dirId, ...ids)
+    }
+    return oldGroups
+  })
 }
 
 export async function moveFileToDirectory(
@@ -516,48 +530,48 @@ export async function moveFileToDirectory(
   fileId: string,
   dirId: string | null,
 ): Promise<void> {
-  const row = await db.getFirstAsync<{
-    name: string
-    directoryId: string | null
-  }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
   await db.withTransactionAsync(async (tx) => {
+    const row = await tx.getFirstAsync<{
+      name: string
+      directoryId: string | null
+    }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
     await sql.update(tx, 'files', { directoryId: dirId, updatedAt: Date.now() }, { id: fileId })
     await flagObjectsForFiles(tx, [fileId])
+    if (row) {
+      await recalculateCurrentForGroup(tx, row.name, row.directoryId)
+      await recalculateCurrentForGroup(tx, row.name, dirId)
+    }
   })
-  if (row) {
-    await recalculateCurrentForGroup(db, row.name, row.directoryId)
-    await recalculateCurrentForGroup(db, row.name, dirId)
-  }
 }
 
 export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<void> {
-  const dir = await queryDirectoryById(db, id)
-  if (!dir) return
-
-  const escaped = escapeLikePattern(dir.path)
-
-  const subtreeDirIds = await db.getAllAsync<{ id: string }>(
-    `SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
-    dir.path,
-    escaped,
-  )
-  const dirIds = subtreeDirIds.map((d) => d.id)
-
-  const dirPh = dirIds.map(() => '?').join(',')
-  const groups = await db.getAllAsync<{ name: string }>(
-    `SELECT DISTINCT name FROM files WHERE directoryId IN (${dirPh}) AND kind = 'file'`,
-    ...dirIds,
-  )
-
-  const now = Date.now()
-  // Capture ids before the UPDATE nulls directoryId, the object flag can't
-  // re-derive them afterward.
-  const affected = await db.getAllAsync<{ id: string }>(
-    `SELECT id FROM files WHERE directoryId IN (${dirPh})`,
-    ...dirIds,
-  )
-  const affectedIds = affected.map((f) => f.id)
   await db.withTransactionAsync(async (tx) => {
+    const dir = await queryDirectoryById(tx, id)
+    if (!dir) return
+
+    const escaped = escapeLikePattern(dir.path)
+
+    const subtreeDirIds = await tx.getAllAsync<{ id: string }>(
+      `SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
+      dir.path,
+      escaped,
+    )
+    const dirIds = subtreeDirIds.map((d) => d.id)
+
+    const dirPh = dirIds.map(() => '?').join(',')
+    const groups = await tx.getAllAsync<{ name: string }>(
+      `SELECT DISTINCT name FROM files WHERE directoryId IN (${dirPh}) AND kind = 'file'`,
+      ...dirIds,
+    )
+
+    const now = Date.now()
+    // Capture ids before the UPDATE nulls directoryId, the object flag can't
+    // re-derive them afterward.
+    const affected = await tx.getAllAsync<{ id: string }>(
+      `SELECT id FROM files WHERE directoryId IN (${dirPh})`,
+      ...dirIds,
+    )
+    const affectedIds = affected.map((f) => f.id)
     // max() per row: a plain stamp would move a future-clocked row (a remote
     // wall clock via sync-down) backwards and lose its reparent to sync.
     await tx.runAsync(
@@ -571,11 +585,11 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
       dir.path,
       escaped,
     )
-  })
 
-  for (const g of groups) {
-    await recalculateCurrentForGroup(db, g.name, null)
-  }
+    for (const g of groups) {
+      await recalculateCurrentForGroup(tx, g.name, null)
+    }
+  })
 }
 
 export async function deleteDirectoryAndTrashFiles(
@@ -738,29 +752,36 @@ export async function renameDirectory(
     throw new Error('Folder name cannot be empty')
   }
 
-  const dir = await queryDirectoryById(db, dirId)
-  if (!dir) {
-    throw new Error('Directory not found')
-  }
-
-  const slashIdx = dir.path.lastIndexOf('/')
-  const parentPath = slashIdx === -1 ? '' : dir.path.slice(0, slashIdx)
-  const newPath = parentPath ? `${parentPath}/${trimmed}` : trimmed
-
-  if (newPath !== dir.path) {
-    const existing = await db.getFirstAsync<{ id: string }>(
-      'SELECT id FROM directories WHERE path = ? AND id != ?',
-      newPath,
-      dirId,
-    )
-    if (existing) {
-      throw new Error(`Folder "${trimmed}" already exists`)
+  return sql.transaction(db, async (tx) => {
+    const dir = await queryDirectoryById(tx, dirId)
+    if (!dir) {
+      throw new Error('Directory not found')
     }
-  }
 
-  await rebaseDirectoryTree(db, dirId, dir.path, newPath, dir.parentId)
+    const slashIdx = dir.path.lastIndexOf('/')
+    const parentPath = slashIdx === -1 ? '' : dir.path.slice(0, slashIdx)
+    const newPath = parentPath ? `${parentPath}/${trimmed}` : trimmed
 
-  return toDirectory({ id: dirId, path: newPath, createdAt: dir.createdAt, parentId: dir.parentId })
+    if (newPath !== dir.path) {
+      const existing = await tx.getFirstAsync<{ id: string }>(
+        'SELECT id FROM directories WHERE path = ? AND id != ?',
+        newPath,
+        dirId,
+      )
+      if (existing) {
+        throw new Error(`Folder "${trimmed}" already exists`)
+      }
+    }
+
+    await rebaseDirectoryTree(tx, dirId, dir.path, newPath, dir.parentId)
+
+    return toDirectory({
+      id: dirId,
+      path: newPath,
+      createdAt: dir.createdAt,
+      parentId: dir.parentId,
+    })
+  })
 }
 
 export async function moveDirectory(
@@ -768,38 +789,40 @@ export async function moveDirectory(
   dirId: string,
   newParentPath: string | null,
 ): Promise<void> {
-  const dir = await queryDirectoryById(db, dirId)
-  if (!dir) {
-    throw new Error('Directory not found')
-  }
+  await db.withTransactionAsync(async (tx) => {
+    const dir = await queryDirectoryById(tx, dirId)
+    if (!dir) {
+      throw new Error('Directory not found')
+    }
 
-  const leafName = directoryDisplayName(dir.path)
-  const targetParent = newParentPath === null ? '' : sanitizeDirectoryPath(newParentPath)
+    const leafName = directoryDisplayName(dir.path)
+    const targetParent = newParentPath === null ? '' : sanitizeDirectoryPath(newParentPath)
 
-  if (targetParent === dir.path || targetParent.startsWith(`${dir.path}/`)) {
-    throw new Error('Cannot move a folder into itself or a subfolder of itself')
-  }
+    if (targetParent === dir.path || targetParent.startsWith(`${dir.path}/`)) {
+      throw new Error('Cannot move a folder into itself or a subfolder of itself')
+    }
 
-  // The destination chain is created rather than trusted to exist: a parent
-  // path with no row would otherwise mint an orphan whose parentId has
-  // nothing to point at.
-  const parent = targetParent === '' ? null : await getOrCreateDirectoryAtPath(db, targetParent)
-  const newPath = parent ? `${parent.path}/${leafName}` : leafName
+    // The destination chain is created rather than trusted to exist: a parent
+    // path with no row would otherwise mint an orphan whose parentId has
+    // nothing to point at.
+    const parent = targetParent === '' ? null : await getOrCreateDirectoryAtPath(tx, targetParent)
+    const newPath = parent ? `${parent.path}/${leafName}` : leafName
 
-  const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM directories WHERE path = ? AND id != ?',
-    newPath,
-    dirId,
-  )
-  if (existing) {
-    throw new Error(`Folder "${leafName}" already exists at destination`)
-  }
+    const existing = await tx.getFirstAsync<{ id: string }>(
+      'SELECT id FROM directories WHERE path = ? AND id != ?',
+      newPath,
+      dirId,
+    )
+    if (existing) {
+      throw new Error(`Folder "${leafName}" already exists at destination`)
+    }
 
-  await rebaseDirectoryTree(db, dirId, dir.path, newPath, parent ? parent.id : null)
+    await rebaseDirectoryTree(tx, dirId, dir.path, newPath, parent ? parent.id : null)
+  })
 }
 
 async function rebaseDirectoryTree(
-  db: DatabaseAdapter,
+  tx: DatabaseAdapter,
   dirId: string,
   oldPath: string,
   newPath: string,
@@ -807,7 +830,10 @@ async function rebaseDirectoryTree(
 ): Promise<void> {
   const escaped = escapeLikePattern(oldPath)
 
-  const descendants = await db.getAllAsync<{ id: string; path: string }>(
+  const now = Date.now()
+  const newEscaped = escapeLikePattern(newPath)
+
+  const descendants = await tx.getAllAsync<{ id: string; path: string }>(
     `SELECT id, path FROM directories WHERE path LIKE ? || '/%' ESCAPE '\\'`,
     escaped,
   )
@@ -821,46 +847,41 @@ async function rebaseDirectoryTree(
     }
   })
 
-  const now = Date.now()
-  const newEscaped = escapeLikePattern(newPath)
+  // Descendants keep their parentId: only the root row re-parents, which
+  // is what keeps a rename cascade free of departure journal writes.
+  await tx.runAsync(
+    `UPDATE directories SET path = ?, nameSortKey = ?, parentId = ? WHERE id = ?`,
+    newPath,
+    naturalSortKey(newPath),
+    newParentId,
+    dirId,
+  )
 
-  await db.withTransactionAsync(async (tx) => {
-    // Descendants keep their parentId: only the root row re-parents, which
-    // is what keeps a rename cascade free of departure journal writes.
+  for (const u of updates) {
     await tx.runAsync(
-      `UPDATE directories SET path = ?, nameSortKey = ?, parentId = ? WHERE id = ?`,
-      newPath,
-      naturalSortKey(newPath),
-      newParentId,
-      dirId,
+      `UPDATE directories SET path = ?, nameSortKey = ? WHERE id = ?`,
+      u.path,
+      u.nameSortKey,
+      u.id,
     )
+  }
 
-    for (const u of updates) {
-      await tx.runAsync(
-        `UPDATE directories SET path = ?, nameSortKey = ? WHERE id = ?`,
-        u.path,
-        u.nameSortKey,
-        u.id,
-      )
-    }
-
-    // max() per row, same reason as deleteDirectory's child stamp.
-    await tx.runAsync(
-      `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
+  // max() per row, same reason as deleteDirectory's child stamp.
+  await tx.runAsync(
+    `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
+      SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
+    )`,
+    now,
+    newPath,
+    newEscaped,
+  )
+  await tx.runAsync(
+    `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (
+      SELECT id FROM files WHERE directoryId IN (
         SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
-      )`,
-      now,
-      newPath,
-      newEscaped,
-    )
-    await tx.runAsync(
-      `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (
-        SELECT id FROM files WHERE directoryId IN (
-          SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
-        )
-      )`,
-      newPath,
-      newEscaped,
-    )
-  })
+      )
+    )`,
+    newPath,
+    newEscaped,
+  )
 }

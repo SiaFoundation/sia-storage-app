@@ -35,10 +35,10 @@ export async function trashFilesAndThumbnails(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async (tx) => {
+    const groups = await getGroupsForFileIds(tx, fileIds)
     await tx.runAsync(
       `UPDATE files SET trashedAt = ?, updatedAt = ? WHERE id IN (${ph})`,
       now,
@@ -52,8 +52,8 @@ export async function trashFilesAndThumbnails(
       ...fileIds,
     )
     await flagObjectsForFiles(tx, fileIds)
+    await recalculateCurrentForGroups(tx, groups)
   })
-  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function restoreFilesAndThumbnails(
@@ -61,10 +61,10 @@ export async function restoreFilesAndThumbnails(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async (tx) => {
+    const groups = await getGroupsForFileIds(tx, fileIds)
     await tx.runAsync(
       `UPDATE files SET trashedAt = NULL, updatedAt = ? WHERE id IN (${ph})`,
       now,
@@ -76,8 +76,8 @@ export async function restoreFilesAndThumbnails(
       ...fileIds,
     )
     await flagObjectsForFiles(tx, fileIds)
+    await recalculateCurrentForGroups(tx, groups)
   })
-  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function tombstoneFilesAndThumbnails(
@@ -85,10 +85,10 @@ export async function tombstoneFilesAndThumbnails(
   fileIds: string[],
 ): Promise<void> {
   if (fileIds.length === 0) return
-  const groups = await getGroupsForFileIds(db, fileIds)
   const now = Date.now()
   const ph = fileIds.map(() => '?').join(',')
   await db.withTransactionAsync(async (tx) => {
+    const groups = await getGroupsForFileIds(tx, fileIds)
     await tx.runAsync(
       `UPDATE files SET deletedAt = ?, trashedAt = COALESCE(trashedAt, ?), updatedAt = ? WHERE id IN (${ph})`,
       now,
@@ -104,8 +104,8 @@ export async function tombstoneFilesAndThumbnails(
       ...fileIds,
     )
     await flagObjectsForTombstonedFilesAndThumbnails(tx, fileIds)
+    await recalculateCurrentForGroups(tx, groups)
   })
-  await recalculateCurrentForGroups(db, groups)
 }
 
 export async function autoPurgeOldTrashedFiles(

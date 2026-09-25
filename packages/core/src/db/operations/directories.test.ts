@@ -1,3 +1,4 @@
+import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import {
   deleteDirectory,
   deleteDirectoryAndTrashFiles,
@@ -332,6 +333,31 @@ describe('getOrCreateDirectory', () => {
 })
 
 describe('getOrCreateDirectoryAtPath', () => {
+  it('commits none of a path when a later folder in it fails', async () => {
+    const adapter = db()
+    const failing: DatabaseAdapter = {
+      ...adapter,
+      withTransactionAsync: (fn) =>
+        adapter.withTransactionAsync((tx) => {
+          const handle: DatabaseAdapter = {
+            ...tx,
+            runAsync: (sql: string, ...params: SQLParam[]) =>
+              params.includes('Photos/2026')
+                ? Promise.reject(new Error('insert failed'))
+                : tx.runAsync(sql, ...params),
+            withTransactionAsync: (nested) => nested(handle),
+          }
+          return fn(handle)
+        }),
+    }
+
+    await expect(getOrCreateDirectoryAtPath(failing, 'Photos/2026')).rejects.toThrow(
+      'insert failed',
+    )
+
+    expect(await db().getAllAsync('SELECT path FROM directories')).toEqual([])
+  })
+
   it('creates single directory', async () => {
     const dir = await getOrCreateDirectoryAtPath(db(), 'Photos')
     expect(dir.path).toBe('Photos')

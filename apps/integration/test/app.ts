@@ -155,6 +155,8 @@ export interface TestApp {
 
   app: AppService
   internal: AppServiceInternal
+  /** Makes every insert into `table` fail with `message` until the returned cleanup runs. */
+  failInserts(table: string, message: string): Promise<() => Promise<void>>
   sdk: MockSdk
   uploadManager: UploadManager
   thumbnailScanner: ThumbnailScanner
@@ -401,6 +403,13 @@ export function createTestApp(
   return {
     app: appService,
     internal,
+    async failInserts(table, message) {
+      const trigger = `test_fail_${table}`
+      await db.execAsync(
+        `CREATE TRIGGER ${trigger} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, '${message}'); END`,
+      )
+      return () => db.execAsync(`DROP TRIGGER ${trigger}`)
+    },
     sdk,
     uploadManager,
     thumbnailScanner,

@@ -31,7 +31,7 @@ import {
   type ProviderItem,
   type ProviderPage,
 } from '../../types/provider'
-import type { AppService } from '../service'
+import type { AppService, AppServiceInternal } from '../service'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
@@ -43,6 +43,7 @@ const FOLDER_CURSOR = 'dirs:'
 export type ProviderNamespaceDeps = {
   getService: () => AppService
   db: DatabaseAdapter
+  withTransaction: AppServiceInternal['withTransaction']
   fsIO: FsIOAdapter
   /**
    * Absolute directory both this process and the OS shell can reach. Every
@@ -65,7 +66,7 @@ type TransferFlags = {
 }
 
 export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService['provider'] {
-  const { getService, db, fsIO, handoffDir, getSdk, downloadObject } = deps
+  const { getService, db, withTransaction, fsIO, handoffDir, getSdk, downloadObject } = deps
   const pageSize = deps.maxPageSize ?? MAX_PAGE_SIZE
 
   /**
@@ -793,25 +794,29 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // Created already filed: an insert at root followed by a move would
       // journal a departure from root that no reader ever saw.
       const dir = path === null ? null : await service.directories.getByPath(path)
-      await service.files.create(
-        {
-          id,
-          name,
-          type,
-          kind: 'file',
-          size: adopted.size,
-          hash: adopted.hash,
-          trashedAt: null,
-          createdAt: now,
-          updatedAt: now,
-          mediaAssetId: null,
-          addedAt: now,
-          deletedAt: null,
-        },
-        undefined,
-        { directoryId: dir?.id ?? null },
-      )
-      await service.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
+      // One transaction: the uploader scans only files with a local copy
+      // recorded, so a row committed without its fs record never uploads.
+      await withTransaction(async (tx) => {
+        await tx.files.create(
+          {
+            id,
+            name,
+            type,
+            kind: 'file',
+            size: adopted.size,
+            hash: adopted.hash,
+            trashedAt: null,
+            createdAt: now,
+            updatedAt: now,
+            mediaAssetId: null,
+            addedAt: now,
+            deletedAt: null,
+          },
+          undefined,
+          { directoryId: dir?.id ?? null },
+        )
+        await tx.fs.upsertMeta({ fileId: id, size: adopted.size, addedAt: now, usedAt: now })
+      })
       // The uploader owns getting it to the indexer; this call only stages it.
       await service.uploader.enqueueByIds([id])
 
