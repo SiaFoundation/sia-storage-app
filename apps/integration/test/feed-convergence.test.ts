@@ -7,9 +7,9 @@
  * the folder lifecycle.
  */
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
-import { directoryProviderId, WORKING_SET_ID, type ProviderItem } from '@siastorage/core/types'
+import { WORKING_SET_ID, type ProviderItem } from '@siastorage/core/types'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
-import { createNewerVersion, drainListing } from './utils'
+import { createNewerVersion, drainListing, libraryItemIds } from './utils'
 
 type Mirror = Map<string, ProviderItem>
 
@@ -29,19 +29,8 @@ async function drain(app: TestApp, mirror: Mirror, anchor: string): Promise<stri
   }
 }
 
-/** What the library actually contains, read outside the feed under test. */
-async function truth(app: TestApp): Promise<Set<string>> {
-  const ids = new Set<string>()
-  for (const dir of await app.app.directories.getAll()) {
-    ids.add(directoryProviderId(dir.id))
-  }
-  const files = await app.app.files.queryLibrary({ limit: 100000 })
-  for (const file of files) ids.add(file.id)
-  return ids
-}
-
 async function expectConverged(app: TestApp, mirror: Mirror): Promise<void> {
-  const expected = await truth(app)
+  const expected = await libraryItemIds(app)
   const mirrored = new Set(mirror.keys())
   expect([...mirrored].sort()).toEqual([...expected].sort())
 }

@@ -285,23 +285,23 @@ describe('Provider reads', () => {
       expect(after?.metadataVersion).not.toBe(before?.metadataVersion)
     })
 
-    it('lists the newest version and not the one behind it', async () => {
+    it('lists the newest version under the file’s id, and not the one behind it', async () => {
       const [first] = await app.addFiles(generateTestFiles(1, { startId: 500 }))
       await createNewerVersion(app, first)
 
       const page = await app.app.provider.list(null)
 
-      expect(page.items.map((i) => i.id)).toEqual(['newer-version'])
+      expect(page.items.map((i) => [i.id, i.contentVersion])).toEqual([[first.id, 'sha256:newer']])
     })
 
-    it('stops answering for a superseded id', async () => {
+    it('answers for the file’s id with the newer version, and not for the new row’s id', async () => {
       const [first] = await app.addFiles(generateTestFiles(1, { startId: 520 }))
       expect(await app.app.provider.item(first.id)).not.toBeNull()
 
       await createNewerVersion(app, first)
 
-      expect(await app.app.provider.item(first.id)).toBeNull()
-      expect(await app.app.provider.item('newer-version')).not.toBeNull()
+      expect((await app.app.provider.item(first.id))?.contentVersion).toBe('sha256:newer')
+      expect(await app.app.provider.item('newer-version')).toBeNull()
     })
   })
 

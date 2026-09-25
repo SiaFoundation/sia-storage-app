@@ -98,6 +98,7 @@ export {
   type FinalizeResult,
   insertFile,
   insertManyFiles,
+  insertNextVersion,
   moveAllFileVersions,
   moveFilesAllVersions,
   queryActiveFileSummaries,

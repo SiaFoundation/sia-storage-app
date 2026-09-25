@@ -18,11 +18,10 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { SdkAdapter } from '../../adapters/sdk'
 import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
-import type { Directory } from '../../db/operations'
+import type { Directory, ProviderChangeRow } from '../../db/operations'
 import { getMimeTypeFromExtension } from '../../lib/fileTypes'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FsIOAdapter } from '../../services/fsFileUri'
-import type { FileRecordRow } from '../../types/files'
 import {
   directoryProviderId,
   parseDirectoryProviderId,
@@ -122,14 +121,17 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
   }
 
   function fileToItem(
-    row: FileRecordRow & { fsExists?: number },
+    row: ProviderChangeRow,
     parentId: string | null,
     flags: TransferFlags,
   ): ProviderItem {
     const uploading = flags.uploading.get(row.id)
     const downloading = flags.downloading.get(row.id)
+    const uploaded = flags.uploaded.has(row.id)
     return {
-      id: row.id,
+      // The file's stackId, not the row id: a save or another device's version
+      // is a new row, and the item the OS holds must survive it.
+      id: row.stackId,
       parentId,
       name: row.name,
       kind: 'file',
@@ -145,8 +147,17 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The edit clock has millisecond resolution, so a rename landing in the
       // same millisecond as the previous write leaves it unchanged and the OS
       // keeps showing the old name indefinitely.
-      metadataVersion: [row.updatedAt, row.name, row.size, row.type, parentId ?? ''].join(':'),
-      uploaded: flags.uploaded.has(row.id),
+      // The upload flag is in it because the OS redraws the badge only for a
+      // new metadata version.
+      metadataVersion: [
+        row.updatedAt,
+        row.name,
+        row.size,
+        row.type,
+        parentId ?? '',
+        +uploaded,
+      ].join(':'),
+      uploaded,
       uploading: uploading !== undefined,
       downloaded: (row.fsExists ?? 0) === 1,
       downloading: downloading !== undefined,
@@ -178,13 +189,60 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     }
   }
 
-  async function itemsForFiles<T extends FileRecordRow & { fsExists?: number }>(
+  async function itemsForFiles<T extends ProviderChangeRow>(
     rows: T[],
     parentIdFor: (row: T) => string | null,
   ): Promise<ProviderItem[]> {
     if (rows.length === 0) return []
     const flags = await transferFlags(rows.map((r) => r.id))
     return rows.map((row) => fileToItem(row, parentIdFor(row), flags))
+  }
+
+  /**
+   * Settles file ids the feed saw leave a row or a folder. An id a visible
+   * file still carries, usually a superseded version's passed on to its
+   * replacement, is delivered as that file wherever it now sits. Only an id
+   * nothing carries is a deletion.
+   */
+  async function resolveGoneFiles(
+    stackIds: (string | undefined)[],
+    delivered: ProviderChangeRow[],
+  ): Promise<{ rows: ProviderChangeRow[]; deletedIds: string[] }> {
+    const skip = new Set(delivered.map((r) => r.stackId))
+    const pending = [...new Set(stackIds)].filter((id): id is string => !!id && !skip.has(id))
+    const carried = new Map<string, ProviderChangeRow>()
+    for (const row of await ops.queryProviderRowsByStackIds(db, pending)) {
+      const held = carried.get(row.stackId)
+      const newer =
+        !held ||
+        row.updatedAt > held.updatedAt ||
+        (row.updatedAt === held.updatedAt && row.id > held.id)
+      if (newer) carried.set(row.stackId, row)
+    }
+    return { rows: [...carried.values()], deletedIds: pending.filter((id) => !carried.has(id)) }
+  }
+
+  async function currentRow(id: string): Promise<ProviderChangeRow> {
+    const row = await ops.queryProviderItem(db, id)
+    if (!row) throw new Error(`No file with id ${id}`)
+    return row
+  }
+
+  /**
+   * The item for this exact version, even once a newer one from another device
+   * is current: its content version names the bytes this call handled.
+   */
+  async function versionItem(rowId: string): Promise<ProviderItem | null> {
+    const row = await ops.queryProviderRow(db, rowId)
+    if (!row) return null
+    const [built] = await itemsForFiles([row], parentOf)
+    return built
+  }
+
+  /** The item a row belongs to after a change that may have merged its stack into another. */
+  async function itemForRow(rowId: string): Promise<ProviderItem | null> {
+    const stackId = await ops.queryStackIdForRow(db, rowId)
+    return stackId === null ? null : item(stackId)
   }
 
   /**
@@ -321,7 +379,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     // bound with the same limit, so nothing below the cut can be missing.
     // The reads issue in one synchronous tick; an await between them would
     // let a write commit under an already-read source and above the cut.
-    type Kind = 'dir' | 'deletedDir' | 'deletedFile' | 'file'
+    // Ledger ids are stack ids and file row ids are row ids, each what its
+    // own source's cursor predicate compares.
+    type Kind = 'dir' | 'deletedDir' | 'deletedFile' | 'removedFile' | 'file'
     const entries: { feedSeq: number; id: string; kind: Kind }[] = [
       ...dirRows.map((r) => ({ feedSeq: r.feedSeq, id: r.id, kind: 'dir' as Kind })),
       ...deletions.map((r) => ({
@@ -333,7 +393,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       ...filePage.removed.map((r) => ({
         feedSeq: r.feedSeq,
         id: r.id,
-        kind: 'deletedFile' as Kind,
+        kind: 'removedFile' as Kind,
       })),
     ]
     entries.sort((a, b) => a.feedSeq - b.feedSeq || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
@@ -342,6 +402,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     const dirById = new Map(dirRows.map((r) => [r.id, r]))
     const fileById = new Map(filePage.changed.map((r) => [r.id, r]))
+    const removedById = new Map(filePage.removed.map((r) => [r.id, r.stackId]))
     const pageDirs = page.flatMap((entry) => {
       const dir = entry.kind === 'dir' ? dirById.get(entry.id) : undefined
       return dir ? [dir] : []
@@ -349,14 +410,18 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     const fileRows: typeof filePage.changed = []
     const deletedIds: string[] = []
+    const goneFiles: (string | undefined)[] = []
     for (const entry of page) {
       if (entry.kind === 'deletedDir') deletedIds.push(directoryProviderId(entry.id))
-      else if (entry.kind === 'deletedFile') deletedIds.push(entry.id)
+      else if (entry.kind === 'deletedFile') goneFiles.push(entry.id)
+      else if (entry.kind === 'removedFile') goneFiles.push(removedById.get(entry.id))
       else if (entry.kind === 'file') {
         const row = fileById.get(entry.id)
         if (row) fileRows.push(row)
       }
     }
+    const gone = await resolveGoneFiles(goneFiles, fileRows)
+    deletedIds.push(...gone.deletedIds)
     // Delivery order, not cursor order: folders first, parents before
     // their descendants by path, then files, because the OS may drop an
     // item whose parent it has not met. The cursor cut above is what
@@ -374,7 +439,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         dir.parentId ? directoryProviderId(dir.parentId) : null,
       ),
     )
-    const items = [...dirItems, ...(await itemsForFiles(fileRows, parentOf))]
+    const items = [...dirItems, ...(await itemsForFiles([...fileRows, ...gone.rows], parentOf))]
     return {
       items,
       deletedIds,
@@ -438,10 +503,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     const dirById = new Map(childDirs.map((r) => [r.id, r]))
     const fileById = new Map(filePage.changed.map((r) => [r.id, r]))
     const departureById = new Map(departures.map((r) => [r.id, r]))
+    const removedById = new Map(filePage.removed.map((r) => [r.id, r.stackId]))
     const pageDirs: typeof childDirs = []
     const fileRows: typeof filePage.changed = []
-    const removedIds = new Set<string>()
-    const departedIds: string[] = []
+    const goneFiles: (string | undefined)[] = []
+    const departedDirs: string[] = []
     for (const entry of page) {
       if (entry.kind === 'dir') {
         const dir = dirById.get(entry.id)
@@ -450,9 +516,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         const row = fileById.get(entry.id)
         if (row) fileRows.push(row)
       } else if (entry.kind === 'removedFile') {
-        removedIds.add(entry.id)
+        goneFiles.push(removedById.get(entry.id))
+      } else if (departureById.get(entry.id)?.kind === 'dir') {
+        departedDirs.push(entry.id)
       } else {
-        departedIds.push(entry.id)
+        goneFiles.push(entry.id)
       }
     }
 
@@ -461,26 +529,14 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     // arrive as an updated item carrying its new parent, and only current
     // state can tell that from "moved away, then destroyed". An id that is
     // a live child again in this same page is already delivered above.
-    const live = new Set([...pageDirs.map((d) => d.id), ...fileRows.map((r) => r.id)])
-    const departedFiles: string[] = []
-    const departedDirs: string[] = []
-    for (const id of departedIds) {
-      if (live.has(id) || removedIds.has(id)) continue
-      if (departureById.get(id)?.kind === 'dir') departedDirs.push(id)
-      else departedFiles.push(id)
-    }
-    const movedFileRows: typeof filePage.changed = []
-    const fileStates = await ops.queryProviderRowsByIds(db, departedFiles)
-    const fileStateById = new Map(fileStates.map((r) => [r.id, r]))
-    for (const id of departedFiles) {
-      const row = fileStateById.get(id)
-      if (row && row.visible === 1) movedFileRows.push(row)
-      else removedIds.add(id)
-    }
-    const dirStates = await ops.queryDirectoriesByIds(db, departedDirs)
+    const gone = await resolveGoneFiles(goneFiles, fileRows)
+    const removedIds = new Set(gone.deletedIds)
+    const liveDirs = new Set(pageDirs.map((d) => d.id))
+    const movedDirs = departedDirs.filter((id) => !liveDirs.has(id))
+    const dirStates = await ops.queryDirectoriesByIds(db, movedDirs)
     const dirStateById = new Map(dirStates.map((d) => [d.id, d]))
     const movedDirItems: ProviderItem[] = []
-    for (const id of departedDirs) {
+    for (const id of movedDirs) {
       const dir = dirStateById.get(id)
       if (dir) {
         movedDirItems.push(
@@ -505,7 +561,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         ),
       ),
       ...movedDirItems,
-      ...(await itemsForFiles([...fileRows, ...movedFileRows], parentOf)),
+      ...(await itemsForFiles([...fileRows, ...gone.rows], parentOf)),
     ]
     return {
       items,
@@ -702,24 +758,24 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async fetch(id, destPath) {
       const dest = requireHandoffPath(destPath)
-      const target = await ensureLocal(id)
+      const target = await ensureLocal((await currentRow(id)).id)
       const bytes = await requireExport()(target, dest)
-      const fetched = await item(id)
+      // A download can take minutes, and a newer version synced in meanwhile
+      // would otherwise label these bytes, so the OS would keep them as it.
+      const fetched = await versionItem(target.id)
       if (!fetched) throw new Error(`No file with id ${id}`)
       return { bytes, item: fetched }
     },
 
     async fetchRange(id, destPath, offset, length) {
       const dest = requireHandoffPath(destPath)
-      const service = getService()
-      const file = await service.files.getById(id)
-      if (!file) throw new Error(`No file with id ${id}`)
+      const file = await currentRow(id)
       if (!downloadObject.downloadRangeToPath) {
         throw new Error('This host cannot fetch a byte range')
       }
       const sdk = getSdk()
       if (!sdk) throw new Error('SDK not initialized')
-      const objects = await ops.queryObjectsForFile(db, id)
+      const objects = await ops.queryObjectsForFile(db, file.id)
       if (!objects.length) throw new Error('No object available for download')
 
       // The shell rounds a request up to the alignment the system asked for,
@@ -740,7 +796,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The shell reports this back as the range the system can now read. A
       // wrong one is invisible until a file reads short, so it is logged.
       logger.info('provider', 'range_served', {
-        fileId: id,
+        fileId: file.id,
         asked: `${offset}+${length}`,
         served: `${start}+${bytes}`,
         fileSize: file.size,
@@ -750,17 +806,17 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async progress(id) {
       const service = getService()
-      const download = service.downloads.getState().downloads[id]
+      const file = await ops.queryProviderItem(db, id)
+      if (!file) return { received: 0, total: null }
+      const download = service.downloads.getState().downloads[file.id]
       if (download) {
         // A download reports a fraction and never a byte count, so the size
         // has to come from the row. Reported in bytes anyway: a shell drawing
         // a progress bar out of these two numbers has no way to know which
         // unit it was handed.
-        const file = await service.files.getById(id)
-        const total = file?.size ?? null
-        return { received: total === null ? 0 : Math.round(download.progress * total), total }
+        return { received: Math.round(download.progress * file.size), total: file.size }
       }
-      const upload = service.uploads.getState().uploads[id]
+      const upload = service.uploads.getState().uploads[file.id]
       if (upload) {
         return { received: Math.round(upload.progress * upload.size), total: upload.size }
       }
@@ -797,6 +853,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // One transaction: the uploader scans only files with a local copy
       // recorded, so a row committed without its fs record never uploads.
       await withTransaction(async (tx) => {
+        // A same-name file from another device can carry a clock ahead of
+        // this one, and stamped at now the new row would sit behind it.
+        const [newest] = await tx.files.getVersionHistory(name, dir?.id ?? null)
         await tx.files.create(
           {
             id,
@@ -807,7 +866,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
             hash: adopted.hash,
             trashedAt: null,
             createdAt: now,
-            updatedAt: now,
+            updatedAt: Math.max(now, (newest?.updatedAt ?? 0) + 1),
             mediaAssetId: null,
             addedAt: now,
             deletedAt: null,
@@ -820,38 +879,50 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The uploader owns getting it to the indexer; this call only stages it.
       await service.uploader.enqueueByIds([id])
 
-      const created = await item(id)
+      // A name that already holds a file makes this row that file's newest
+      // version, and the item is the one that file already was.
+      const created = await itemForRow(id)
       if (!created) throw new Error(`Created file ${id} could not be read back`)
       return created
     },
 
+    /**
+     * New bytes become a new version row. Rewriting the current row would have
+     * sync-up relabel its objects, whose bytes cannot change, with the new
+     * hash. A new row has no object yet, so the uploader's scan retries it
+     * after a restart or a failed attempt, and the item reads as not uploaded.
+     */
     async write(id, srcPath) {
       const service = getService()
       const source = requireHandoffPath(srcPath)
       if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
+      const replaced = await currentRow(id)
 
-      const file = await service.files.getById(id)
-      if (!file) throw new Error(`No file with id ${id}`)
-      const adopted = await fsIO.adoptFile({ id: file.id, type: file.type }, source)
-      // The clock moves with the content, and past the row's own stamp: sync
-      // orders metadata by updatedAt, sync-down stores the other device's wall
-      // clock verbatim, so a frozen or plain-now stamp can tie with or trail the
-      // state this write replaces and lose the sync race. 'bump' stamps
-      // max(now, updatedAt + 1) in SQL, so a sync-down landing a future clock
-      // during the slow adoptFile above cannot beat it.
-      await service.files.update(
-        { id: file.id, size: adopted.size, hash: adopted.hash },
-        { updatedAt: 'bump' },
-      )
-      await service.fs.upsertMeta({
-        fileId: file.id,
+      const versionId = uniqueId()
+      const adopted = await fsIO.adoptFile({ id: versionId, type: replaced.type }, source)
+      const outcome = await service.files.addVersion(replaced.id, {
+        id: versionId,
         size: adopted.size,
-        addedAt: Date.now(),
-        usedAt: Date.now(),
+        hash: adopted.hash,
       })
-      await service.uploader.enqueueByIds([file.id])
+      if (outcome !== 'added') {
+        await fsIO.remove(versionId, replaced.type)
+        // Apps often rewrite a file without changing it. A version per such
+        // save would upload and bill the same bytes again.
+        const unchanged = outcome === 'unchanged' ? await item(id) : null
+        if (!unchanged) throw new Error(`No file with id ${id}`)
+        return unchanged
+      }
+      await service.uploader.enqueueByIds([versionId])
 
-      const updated = await item(id)
+      // Freed now rather than by the eviction pass, which leaves a superseded version's copy for an
+      // hour. One never uploaded keeps it: the uploader scans current versions, so that copy is the
+      // only one.
+      if ((await service.localObjects.countForFile(replaced.id)) > 0) {
+        await service.fs.removeFile({ id: replaced.id, type: replaced.type })
+      }
+
+      const updated = await versionItem(versionId)
       if (!updated) throw new Error(`No file with id ${id}`)
       return updated
     },
@@ -875,18 +946,19 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         return moved
       }
 
-      const file = await service.files.getById(id)
-      if (!file) throw new Error(`No file with id ${id}`)
-      if (file.name !== newName) await service.files.renameFile(id, newName)
+      const file = await currentRow(id)
+      if (file.name !== newName) await service.files.renameFile(file.id, newName)
 
       const destination = await folderPath(newParentId)
       if (destination === undefined) throw new Error('No directory with that id')
       // Moves the whole version stack. Moving the single current row would
       // split a file's history across two folders.
       const dir = destination === null ? null : await service.directories.getByPath(destination)
-      await service.files.moveFile(id, dir ? dir.id : null)
+      await service.files.moveFile(file.id, dir ? dir.id : null)
 
-      const updated = await item(id)
+      // Landing on a name another file holds merges the two, and the merged
+      // file may be the other one's item.
+      const updated = await itemForRow(file.id)
       if (!updated) throw new Error(`No file with id ${id}`)
       return updated
     },
@@ -901,7 +973,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       }
       // Always reversible. The OS owns permanent delete, and a shell mistake
       // must never be unrecoverable.
-      await service.files.trashFile(id)
+      const file = await ops.queryProviderItem(db, id)
+      if (file) await service.files.trashFile(file.id)
     },
   }
 }

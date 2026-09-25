@@ -1,5 +1,6 @@
 import {
   DB_OPTIMIZE_INTERVAL,
+  FS_EVICTION_FREQUENCY,
   PRUNE_SLABS_INTERVAL,
   SYNC_EVENTS_INTERVAL,
   SYNC_UP_METADATA_BATCH_SIZE,
@@ -9,7 +10,7 @@ import {
   TRASH_AUTO_PURGE_INTERVAL,
 } from '@siastorage/core/config'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
-import { LOG_ROTATION_INTERVAL, runLogRotation } from '@siastorage/core/services'
+import { LOG_ROTATION_INTERVAL, runCacheEviction, runLogRotation } from '@siastorage/core/services'
 import { runPruneSlabs } from '@siastorage/core/services/pruneSlabs'
 import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
@@ -69,6 +70,16 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       name: 'pruneSlabs',
       interval: PRUNE_SLABS_INTERVAL,
       worker: whenConnected(() => runPruneSlabs(app.service, app.internal)),
+    },
+    {
+      // An unbounded cap skips the size-driven pass, so this frees only local
+      // copies the network already holds: superseded versions, including one
+      // whose upload finished after a later save, and trashed files.
+      name: 'cacheEviction',
+      interval: FS_EVICTION_FREQUENCY,
+      worker: async (signal: AbortSignal) => {
+        await runCacheEviction(app.service, { maxBytes: Number.POSITIVE_INFINITY }, signal)
+      },
     },
     {
       name: 'logRotation',
