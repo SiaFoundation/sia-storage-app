@@ -28,6 +28,8 @@ export type BuildEnv = {
   domainId: string
   domainDisplay: string
   appName: string
+  /** A file in apps/desktop/assets/icons. */
+  appIcon: string
 }
 
 const FIELDS: Array<[keyof BuildEnv, string]> = [
@@ -41,6 +43,7 @@ const FIELDS: Array<[keyof BuildEnv, string]> = [
   ['domainId', 'SIA_DOMAIN_ID'],
   ['domainDisplay', 'SIA_DOMAIN_DISPLAY'],
   ['appName', 'SIA_APP_NAME'],
+  ['appIcon', 'SIA_APP_ICON'],
 ]
 
 export function parseEnv(text: string): Record<string, string> {
