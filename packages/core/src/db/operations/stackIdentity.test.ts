@@ -41,7 +41,7 @@ async function file(
       type: 'text/plain',
       kind: 'file',
       size: 10,
-      hash: `hash-${id}`,
+      hash: `sha256:hash-${id}`,
       createdAt: 1000,
       updatedAt: opts.updatedAt ?? 1000,
       mediaAssetId: null,
@@ -144,7 +144,9 @@ describe('a saved version', () => {
     await file('a', { updatedAt: Date.now() + 60_000 })
     await db().runAsync(`INSERT INTO file_tags (fileId, tagId) VALUES ('a', 'sys:favorites')`)
 
-    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'h-n' })).toBe('added')
+    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'sha256:h-n' })).toBe(
+      'added',
+    )
 
     expect(await db().getAllAsync(`SELECT id, current, stackId FROM files ORDER BY id`)).toEqual([
       { id: 'a', current: 0, stackId: 'a' },
@@ -159,7 +161,9 @@ describe('a saved version', () => {
   it('is refused for a file that is no longer live', async () => {
     await file('a', { trashedAt: 5 })
 
-    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'h' })).toBe('missing')
+    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'sha256:h' })).toBe(
+      'missing',
+    )
     expect(await db().getFirstAsync(`SELECT id FROM files WHERE id = 'n'`)).toBeNull()
   })
 
@@ -168,7 +172,7 @@ describe('a saved version', () => {
     // Another device's newer version of a.txt, carrying the bytes being saved.
     await file('b', { name: 'a.txt', updatedAt: Date.now() + 60_000 })
 
-    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'hash-b' })).toBe(
+    expect(await insertNextVersion(db(), 'a', { id: 'n', size: 3, hash: 'sha256:hash-b' })).toBe(
       'unchanged',
     )
     expect(await db().getFirstAsync(`SELECT id FROM files WHERE id = 'n'`)).toBeNull()
@@ -217,7 +221,7 @@ describe('stacks meeting and parting', () => {
   it('a moved stack is ledgered once, under its id, from the folder it left', async () => {
     const dir = await insertDirectory(db(), 'Docs')
     await file('a', { name: 'a.txt' })
-    await insertNextVersion(db(), 'a', { id: 'n', size: 1, hash: 'h' })
+    await insertNextVersion(db(), 'a', { id: 'n', size: 1, hash: 'sha256:h' })
 
     await moveAllFileVersions(db(), 'a.txt', null, dir.id)
 
@@ -332,7 +336,7 @@ describe('stack identity over random operations', () => {
         await file(`f${next++}`, { name: pick(names), directoryId: pick(dirs), updatedAt: clock })
       } else if (op === 1) {
         const id = `f${next++}`
-        await insertNextVersion(db(), target.id, { id, size: 1, hash: `h-${id}` })
+        await insertNextVersion(db(), target.id, { id, size: 1, hash: `sha256:h-${id}` })
         expect({ label, id: (await stackIdsOf(id))[0] }).toEqual({ label, id: target.stackId })
       } else if (op === 2) {
         const name = pick(names)

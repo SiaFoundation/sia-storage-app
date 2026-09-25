@@ -46,7 +46,7 @@ async function seedUploadedThumb(
       name: `${params.id}.webp`,
       kind: 'thumb',
       size: params.size,
-      hash: `hash-${params.id}`,
+      hash: `sha256:hash-${params.id}` as const,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mediaAssetId: null,
@@ -80,7 +80,7 @@ async function supersedeFile(
     type: original.type,
     kind: 'file',
     size: 500,
-    hash: `hash-${superseder.id}`,
+    hash: `sha256:hash-${superseder.id}` as const,
     createdAt: Date.now(),
     updatedAt: Date.now() + 1, // beat the original's updatedAt to win current=1
     mediaAssetId: null,

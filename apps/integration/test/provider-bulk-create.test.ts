@@ -9,7 +9,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { createEmptyIndexerStorage, type MockIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
-import { assertFeedConverges, waitForCondition } from './utils'
+import { assertFeedConverges, waitForCondition, fakeHash } from './utils'
 
 const DRAGGED = 200
 const PUBLISHED = 300
@@ -51,7 +51,7 @@ describe('Dragging many files into the provider during sync', () => {
           type: 'text/plain',
           kind: 'file',
           size: 64,
-          hash: `hash-${i}`,
+          hash: fakeHash(`hash-${i}`),
           createdAt: now,
           updatedAt: now,
           trashedAt: null,

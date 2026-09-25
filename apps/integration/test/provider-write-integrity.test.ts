@@ -16,8 +16,9 @@ import { WORKING_SET_ID } from '@siastorage/core/types'
 import { createEmptyIndexerStorage, type MockIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
 import { assertFeedConverges, drainListing, waitForCondition } from './utils'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
-const sha = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+const sha = (bytes: Uint8Array) => toContentHash(createHash('sha256').update(bytes).digest('hex'))
 const v1 = Buffer.from('first')
 const v2 = Buffer.from('second version, longer')
 
@@ -227,6 +228,34 @@ describe('Saving a file through the provider', () => {
         items: [],
         deletedIds: [],
       })
+    })
+
+    it('identical bytes over a file another client published with a bare hash make no version', async () => {
+      const now = Date.now()
+      B.sdk.injectObject({
+        metadata: {
+          id: 'bare-hash',
+          name: 'from-cli.txt',
+          type: 'text/plain',
+          kind: 'file',
+          size: v1.length,
+          // The form `sia add` in released CLI builds publishes.
+          hash: createHash('sha256').update(v1).digest('hex') as ContentHash,
+          createdAt: now,
+          updatedAt: now,
+          trashedAt: null,
+        },
+        data: v1,
+      })
+      await waitForCondition(async () => (await A.app.files.getById('bare-hash')) !== null, {
+        timeout: 30_000,
+        message: 'A to receive the file',
+      })
+      expect((await A.app.files.getById('bare-hash'))?.hash).toBe(sha(v1))
+
+      await save('bare-hash', v1)
+
+      expect(await A.app.files.getVersionHistory('from-cli.txt', null)).toHaveLength(1)
     })
 
     it('a save whose version cannot be recorded leaves no bytes behind', async () => {

@@ -10,6 +10,7 @@ import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import { createTestApp, waitForCondition } from './app'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 
 describe('Size reconcile', () => {
   it('copyFile corrects files.size to the real on-disk length without bumping updatedAt', async () => {
@@ -66,7 +67,7 @@ describe('Size reconcile', () => {
     const type = 'application/octet-stream'
     const ext = extFromMime(type)
     const content = crypto.randomBytes(2048)
-    const hash = crypto.createHash('sha256').update(content).digest('hex')
+    const hash = toContentHash(crypto.createHash('sha256').update(content).digest('hex'))
     nodeFs.writeFileSync(path.join(appA.tempDir, `wrongsize${ext}`), content)
     const now = Date.now()
     await appA.app.files.create({

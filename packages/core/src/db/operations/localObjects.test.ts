@@ -19,7 +19,7 @@ async function createTestFile(id: string, overrides?: Record<string, any>) {
     type: 'image/jpeg',
     kind: 'file',
     size: 100,
-    hash: `hash-${id}`,
+    hash: `sha256:hash-${id}`,
     createdAt: 1000,
     updatedAt: 1000,
     mediaAssetId: `local-${id}`,

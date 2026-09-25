@@ -1,5 +1,6 @@
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileRecord } from '@siastorage/core/types'
+import type { ContentHash } from '@siastorage/core/lib/contentHash'
 import { db, initializeDB, resetDb } from '../db'
 import { app, internal } from '../stores/appService'
 import { runSyncUpMetadata } from './syncUpMetadata'
@@ -35,7 +36,7 @@ function makeLocalObject(params: {
 function makeFile(params: {
   id: string
   name?: string
-  hash?: string
+  hash?: ContentHash
   size?: number
   createdAt?: number
   updatedAt?: number
@@ -49,7 +50,7 @@ function makeFile(params: {
     type: 'image/jpeg',
     kind: 'file',
     size: params.size ?? 100,
-    hash: params.hash ?? `hash-${params.id}`,
+    hash: params.hash ?? (`sha256:hash-${params.id}` as const),
     createdAt: params.createdAt ?? 100,
     updatedAt: ts,
     mediaAssetId: null,
@@ -109,7 +110,7 @@ describe('syncUpMetadata', () => {
       }),
     )
 
-    const localB = makeFile({ id: 'file-b', size: 200, hash: 'hash-b', updatedAt: 100 })
+    const localB = makeFile({ id: 'file-b', size: 200, hash: 'sha256:hash-b', updatedAt: 100 })
     await app().files.create(
       localB,
       makeLocalObject({
@@ -130,7 +131,7 @@ describe('syncUpMetadata', () => {
       name: 'file-a.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'hash-file-a',
+      hash: 'sha256:hash-file-a',
       createdAt: 100,
       updatedAt: 150,
       thumbForId: undefined,
@@ -140,7 +141,7 @@ describe('syncUpMetadata', () => {
       name: 'file-b.jpg',
       type: 'image/jpeg',
       size: 200,
-      hash: 'hash-b',
+      hash: 'sha256:hash-b',
       createdAt: 110,
       updatedAt: 200,
       thumbForId: undefined,
@@ -202,7 +203,7 @@ describe('syncUpMetadata', () => {
       name: 'pushme.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'wrong-hash',
+      hash: 'sha256:wrong-hash',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
@@ -237,7 +238,7 @@ describe('syncUpMetadata', () => {
       name: 'failpush.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'remote-hash',
+      hash: 'sha256:remote-hash',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
@@ -271,7 +272,7 @@ describe('syncUpMetadata', () => {
       name: 'concurrent.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'remote-hash',
+      hash: 'sha256:remote-hash',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
@@ -312,7 +313,7 @@ describe('syncUpMetadata', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'hash-nodiff',
+      hash: 'sha256:hash-nodiff',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
@@ -512,7 +513,7 @@ describe('syncUpMetadata', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'hash',
+      hash: 'sha256:hash',
       createdAt: NOW_BASE,
       updatedAt: NOW_BASE,
       thumbForId: undefined,
@@ -544,7 +545,7 @@ describe('syncUpMetadata', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'wrong-hash',
+      hash: 'sha256:wrong-hash',
       createdAt: 100,
       updatedAt: 200,
       thumbForId: undefined,
@@ -582,7 +583,7 @@ describe('syncUpMetadata', () => {
       name: 'newer-ver.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'hash-newer-ver',
+      hash: 'sha256:hash-newer-ver',
       createdAt: 100,
       updatedAt: 300,
     })
@@ -621,7 +622,7 @@ describe('syncUpMetadata', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 100,
-      hash: 'hash-tagonly',
+      hash: 'sha256:hash-tagonly',
       createdAt: 100,
       updatedAt,
       trashedAt: null,
@@ -661,7 +662,7 @@ describe('syncUpMetadata', () => {
       name: 'race-tomb.jpg',
       type: 'image/jpeg',
       size: 100,
-      hash: 'remote-hash',
+      hash: 'sha256:remote-hash',
       createdAt: 100,
       updatedAt: 200,
     })

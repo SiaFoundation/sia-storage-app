@@ -13,6 +13,7 @@ import type {
   UploadOptions,
 } from '@siastorage/core/adapters'
 import { SECTOR_SIZE } from '@siastorage/core/config'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 import { decodeFileMetadata, encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import type { FileMetadata } from '@siastorage/core/types'
@@ -491,7 +492,7 @@ export function generateMockFileMetadata(
     type: 'image/jpeg',
     kind: 'file',
     size: 1024 * (index + 1),
-    hash: `hash-${index}`,
+    hash: toContentHash(index.toString(16).padStart(64, '0')),
     createdAt: now - index * 1000,
     updatedAt: now - index * 1000,
     trashedAt: null,

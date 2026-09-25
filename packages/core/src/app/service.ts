@@ -18,6 +18,7 @@ import type {
   UploadStats,
 } from '../db/operations'
 import type { LocalObject, LocalObjectRef } from '../encoding/localObject'
+import type { ContentHash } from '../lib/contentHash'
 import type { TransferSpeedSnapshot } from '../lib/transferSpeed'
 import type { ChangeSource } from './events'
 import type {
@@ -191,9 +192,9 @@ export interface AppService {
     /** Returns a file by name within a directory path. */
     getByNameInDirectoryPath(name: string, directoryPath: string): Promise<FileRecord | null>
     /** Returns a file by content hash. */
-    getByContentHash(hash: string): Promise<FileRecord | null>
+    getByContentHash(hash: ContentHash): Promise<FileRecord | null>
     /** Returns files by content hashes. */
-    getByContentHashes(hashes: string[]): Promise<FileRecord[]>
+    getByContentHashes(hashes: ContentHash[]): Promise<FileRecord[]>
     /** Queries files with filtering, sorting, and pagination. */
     query(opts: FileQueryOpts): Promise<FileRecord[]>
     /** Returns the count of files matching the query. */
@@ -341,7 +342,7 @@ export interface AppService {
      */
     addVersion(
       replacesId: string,
-      version: { id: string; size: number; hash: string },
+      version: { id: string; size: number; hash: ContentHash },
     ): Promise<'added' | 'unchanged' | 'missing'>
     /** Renames all versions of a file. */
     renameFile(id: string, newName: string): Promise<void>
@@ -586,7 +587,7 @@ export interface AppService {
     writeFileData(
       file: { id: string; type: string },
       data: ArrayBuffer,
-    ): Promise<{ uri: string; size: number; hash: string }>
+    ): Promise<{ uri: string; size: number; hash: ContentHash | '' }>
     /** Takes ownership of a source file by moving it into managed storage and
      * upserts metadata. Hashes by default (returns the `sha256:<hex>` string);
      * the download path passes `hash: false` to skip the extra read (size
@@ -745,7 +746,7 @@ export interface AppService {
     recordHash(
       id: string,
       token: string,
-      meta: { hash: string; size: number; type: string },
+      meta: { hash: ContentHash; size: number; type: string },
     ): Promise<void>
     /** Finalizes a claimed file into `files` (or marks it a content duplicate). */
     finalize(id: string, token: string): Promise<FinalizeResult>

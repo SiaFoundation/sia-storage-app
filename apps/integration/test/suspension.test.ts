@@ -6,6 +6,7 @@
  */
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, sleep, type TestApp, waitForCondition } from './app'
+import { fakeHash } from './utils'
 
 describe('Suspension', () => {
   let app: TestApp
@@ -78,7 +79,7 @@ describe('Suspension', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 1024,
-          hash: `hash-${i}`,
+          hash: fakeHash(`hash-${i}`),
           createdAt: now - i * 1000,
           updatedAt: now - i * 1000,
           trashedAt: null,
@@ -313,7 +314,7 @@ describe('Suspension', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 1024,
-          hash: `drain-hash-${i}`,
+          hash: fakeHash(`drain-hash-${i}`),
           createdAt: now - i * 1000,
           updatedAt: now - i * 1000,
           trashedAt: null,

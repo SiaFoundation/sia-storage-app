@@ -86,7 +86,7 @@ describe('Multi-Device Convergence', () => {
         type: 'image/webp',
         kind: 'thumb',
         size: 256,
-        hash: 'thumb-hash-123',
+        hash: 'sha256:5b87f6ae1c32a6f52602f4f23a96b5fe34938234690ba5106c96159e544201cd',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         thumbForId: parentFileId,

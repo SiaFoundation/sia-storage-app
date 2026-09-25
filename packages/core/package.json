@@ -13,6 +13,7 @@
     "./lib/detectMimeType": "./src/lib/detectMimeType.ts",
     "./lib/coalescer": "./src/lib/coalescer.ts",
     "./lib/fileTypes": "./src/lib/fileTypes.ts",
+    "./lib/contentHash": "./src/lib/contentHash.ts",
     "./lib/fileUri": "./src/lib/fileUri.ts",
     "./lib/forcedReset": "./src/lib/forcedReset.ts",
     "./lib/errors": "./src/lib/errors.ts",

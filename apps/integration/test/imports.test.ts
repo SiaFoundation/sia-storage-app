@@ -13,6 +13,7 @@ import {
 } from '@siastorage/core/services/importScanner'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 
 /**
  * Integration coverage for the imports subsystem: the real `ImportScanner`
@@ -57,7 +58,7 @@ describe('Imports lifecycle (integration)', () => {
       const filePath = uri.replace(/^file:\/\//, '')
       if (!nodeFs.existsSync(filePath)) return null
       const bytes = nodeFs.readFileSync(filePath)
-      return createHash('sha256').update(bytes).digest('hex')
+      return toContentHash(createHash('sha256').update(bytes).digest('hex'))
     }
     // Classification falls to name/staged type; these tests assert states,
     // not types.
@@ -85,7 +86,7 @@ describe('Imports lifecycle (integration)', () => {
   }
 
   function sha256(bytes: Buffer | string): string {
-    return createHash('sha256').update(bytes).digest('hex')
+    return toContentHash(createHash('sha256').update(bytes).digest('hex'))
   }
 
   function importRow(over: Partial<ImportRow> & { id: string; source: ImportSource }): ImportRow {

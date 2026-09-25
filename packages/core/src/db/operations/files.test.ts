@@ -45,7 +45,7 @@ function makeFileRecord(id: string, overrides?: Partial<any>) {
     type: 'image/jpeg',
     kind: 'file' as const,
     size: 100,
-    hash: `hash-${id}`,
+    hash: `sha256:hash-${id}` as const,
     createdAt: 1000,
     updatedAt: 1000,
     mediaAssetId: null,
@@ -871,48 +871,48 @@ describe('queryUnuploadedFileBytes', () => {
 
 describe('queryFileByContentHash', () => {
   it('finds file by hash', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'abc123' }))
-    const row = await queryFileByContentHash(db(), 'abc123')
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:abc123' }))
+    const row = await queryFileByContentHash(db(), 'sha256:abc123')
     expect(row).not.toBeNull()
     expect(row!.id).toBe('f1')
   })
 
   it('returns null when hash not found', async () => {
-    const row = await queryFileByContentHash(db(), 'nonexistent')
+    const row = await queryFileByContentHash(db(), 'sha256:nonexistent')
     expect(row).toBeNull()
   })
 
   it('excludes trashed files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'abc123', trashedAt: 2000 }))
-    const row = await queryFileByContentHash(db(), 'abc123')
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:abc123', trashedAt: 2000 }))
+    const row = await queryFileByContentHash(db(), 'sha256:abc123')
     expect(row).toBeNull()
   })
 
   it('excludes deleted files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'abc123', deletedAt: 2000 }))
-    const row = await queryFileByContentHash(db(), 'abc123')
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:abc123', deletedAt: 2000 }))
+    const row = await queryFileByContentHash(db(), 'sha256:abc123')
     expect(row).toBeNull()
   })
 })
 
 describe('queryFilesByContentHashes', () => {
   it('finds files by content hashes', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'hash-a' }))
-    await insertFile(db(), makeFileRecord('f2', { hash: 'hash-b' }))
-    await insertFile(db(), makeFileRecord('f3', { hash: 'hash-c' }))
-    const rows = await queryFilesByContentHashes(db(), ['hash-a', 'hash-c'])
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:hash-a' }))
+    await insertFile(db(), makeFileRecord('f2', { hash: 'sha256:hash-b' }))
+    await insertFile(db(), makeFileRecord('f3', { hash: 'sha256:hash-c' }))
+    const rows = await queryFilesByContentHashes(db(), ['sha256:hash-a', 'sha256:hash-c'])
     expect(rows.map((r) => r.id).sort()).toEqual(['f1', 'f3'])
   })
 
   it('excludes trashed files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'hash-a', trashedAt: 2000 }))
-    const rows = await queryFilesByContentHashes(db(), ['hash-a'])
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:hash-a', trashedAt: 2000 }))
+    const rows = await queryFilesByContentHashes(db(), ['sha256:hash-a'])
     expect(rows).toEqual([])
   })
 
   it('excludes deleted files', async () => {
-    await insertFile(db(), makeFileRecord('f1', { hash: 'hash-a', deletedAt: 2000 }))
-    const rows = await queryFilesByContentHashes(db(), ['hash-a'])
+    await insertFile(db(), makeFileRecord('f1', { hash: 'sha256:hash-a', deletedAt: 2000 }))
+    const rows = await queryFilesByContentHashes(db(), ['sha256:hash-a'])
     expect(rows).toEqual([])
   })
 })

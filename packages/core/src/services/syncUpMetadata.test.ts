@@ -10,7 +10,7 @@ describe('diffFileMetadata', () => {
     type: 'image/jpeg',
     kind: 'file' as const,
     size: 1,
-    hash: 'h',
+    hash: 'sha256:h' as const,
     createdAt: 1,
     updatedAt: 1,
     trashedAt: null,

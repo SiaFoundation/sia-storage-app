@@ -15,7 +15,7 @@ async function createTestFile(id: string, name: string) {
     type: 'text/plain',
     kind: 'file',
     size: 10,
-    hash: `hash-${id}`,
+    hash: `sha256:hash-${id}`,
     createdAt: now,
     updatedAt: now,
     mediaAssetId: null,
