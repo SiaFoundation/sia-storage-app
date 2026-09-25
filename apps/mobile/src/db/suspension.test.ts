@@ -503,3 +503,45 @@ describe('journal mode', () => {
     expect(auto?.wal_autocheckpoint).toBe(500)
   })
 })
+
+describe('transactions', () => {
+  const rows = async () =>
+    (await db().getAllAsync<{ x: number }>('SELECT x FROM t')).map((r) => r.x)
+
+  beforeEach(async () => {
+    await db().execAsync('CREATE TABLE t (x INTEGER)')
+  })
+
+  it('keeps an outer write out of a transaction that rolls back', async () => {
+    let fail!: () => void
+    const failing = new Promise<void>((resolve) => {
+      fail = resolve
+    })
+    const txn = db()
+      .withTransactionAsync(async (tx) => {
+        await tx.runAsync('INSERT INTO t VALUES (1)')
+        await failing
+        throw new Error('batch failed')
+      })
+      .catch(() => {})
+    await new Promise((r) => setTimeout(r, 10))
+
+    const outer = db().runAsync('INSERT INTO t VALUES (2)')
+    fail()
+    await Promise.all([outer, txn])
+
+    expect(await rows()).toEqual([2])
+  })
+
+  it('closes its handle, nested transactions included, when the body ends', async () => {
+    let kept:
+      | Parameters<Parameters<ReturnType<typeof db>['withTransactionAsync']>[0]>[0]
+      | undefined
+    await db().withTransactionAsync(async (tx) => {
+      kept = tx
+    })
+
+    await expect(kept?.runAsync('INSERT INTO t VALUES (1)')).rejects.toThrow('has ended')
+    await expect(kept?.withTransactionAsync(async () => {})).rejects.toThrow('has ended')
+  })
+})

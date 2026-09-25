@@ -2,6 +2,8 @@ module.exports = {
   testEnvironment: 'node',
   testTimeout: 30000,
   testMatch: ['<rootDir>/test/**/*.test.ts'],
+  // bun:sqlite only loads under Bun, which runs these with `bun test`.
+  testPathIgnorePatterns: ['<rootDir>/test/bun/'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

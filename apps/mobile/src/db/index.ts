@@ -200,6 +200,21 @@ function buildInitPragmas(mode: JournalMode): string {
   }
   return 'PRAGMA journal_mode = DELETE; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON'
 }
+/**
+ * A connection as a DatabaseAdapter for migrations, which run on the raw
+ * connection outside the gate, the lock and in-flight tracking.
+ */
+function migrationAdapter(conn: SQLite.SQLiteDatabase): DatabaseAdapter {
+  const statements = {
+    getAllAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getAllAsync<T>(sql, ...params),
+    getFirstAsync: <T>(sql: string, ...params: SQLParam[]) => conn.getFirstAsync<T>(sql, ...params),
+    runAsync: (sql: string, ...params: SQLParam[]) => conn.runAsync(sql, ...params),
+    execAsync: (sql: string) => conn.execAsync(sql),
+  }
+  const tx: DatabaseAdapter = { ...statements, withTransactionAsync: (nested) => nested(tx) }
+  return { ...statements, withTransactionAsync: (fn) => conn.withTransactionAsync(() => fn(tx)) }
+}
+
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
@@ -228,7 +243,7 @@ export async function initializeDB(options?: {
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
   await database.execAsync(buildInitPragmas(currentJournalMode))
-  await runMigrations(database, migrations, {
+  await runMigrations(migrationAdapter(database), migrations, {
     log: logger,
     onProgress: options?.onProgress,
   })
@@ -342,6 +357,11 @@ export async function closeDb(): Promise<void> {
 
 const txMutex = new Mutex()
 
+// Settles when the open transaction ends. A statement issued on the outer
+// adapter meanwhile waits for it, because on one connection it would otherwise
+// run inside that transaction and commit or roll back with it.
+let openTransaction: Promise<void> | null = null
+
 // Delete the database and start fresh. Closes the existing connection,
 // removes the DB file, and reopens so migrations can run on next init.
 // Also resets the suspension state machine — resetDb is only called from
@@ -376,7 +396,7 @@ export async function resetDb() {
     }
     database = await SQLite.openDatabaseAsync(dbName, { useNewConnection: true }, dbDirectory)
     await database.execAsync(buildInitPragmas(currentJournalMode))
-    await runMigrations(database, migrations, { log: logger })
+    await runMigrations(migrationAdapter(database), migrations, { log: logger })
     dbInitialized = true
   } finally {
     release()
@@ -410,31 +430,62 @@ class MobileDbAdapter implements DatabaseAdapter {
     return enterGate(intent).then(dispatch)
   }
 
+  // Waits for the open transaction, then runs in the same tick as the check
+  // that finds none open, so a queued transaction cannot begin in between.
+  private outer<T>(method: string, intent: 'read' | 'write', args: unknown[]): Promise<T> {
+    if (!openTransaction) return this.query(method, intent, args)
+    return (async () => {
+      while (openTransaction) await openTransaction
+      return this.query<T>(method, intent, args)
+    })()
+  }
+
   getAllAsync<T>(sql: string, ...params: SQLParam[]): Promise<T[]> {
-    return this.query('getAllAsync', 'read', [sql, ...params])
+    return this.outer('getAllAsync', 'read', [sql, ...params])
   }
 
   getFirstAsync<T>(sql: string, ...params: SQLParam[]): Promise<T | null> {
-    return this.query('getFirstAsync', 'read', [sql, ...params])
+    return this.outer('getFirstAsync', 'read', [sql, ...params])
   }
 
   runAsync(sql: string, ...params: SQLParam[]): Promise<SQLRunResult> {
-    return this.query('runAsync', 'write', [sql, ...params])
+    return this.outer('runAsync', 'write', [sql, ...params])
   }
 
   // 'write' because execAsync runs arbitrary SQL — used for PRAGMA + DDL
   // during init/recovery. Defaulting to write is the safe lock-out.
   execAsync(sql: string): Promise<void> {
-    return this.query('execAsync', 'write', [sql])
+    return this.outer('execAsync', 'write', [sql])
   }
 
-  withTransactionAsync(fn: () => Promise<void>): Promise<void> {
+  withTransactionAsync(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void> {
     const dispatch = (): Promise<void> => {
       trackStart()
       return txMutex
         .runExclusive(async () => {
+          let live = true
+          const ended = () => new Error('This transaction has ended. Its handle is closed.')
+          const run = <T>(method: string, intent: 'read' | 'write', args: unknown[]) =>
+            live ? this.query<T>(method, intent, args) : Promise.reject<T>(ended())
+          const tx: DatabaseAdapter = {
+            getAllAsync: <T>(sql: string, ...params: SQLParam[]) =>
+              run<T[]>('getAllAsync', 'read', [sql, ...params]),
+            getFirstAsync: <T>(sql: string, ...params: SQLParam[]) =>
+              run<T | null>('getFirstAsync', 'read', [sql, ...params]),
+            runAsync: (sql: string, ...params: SQLParam[]) =>
+              run<SQLRunResult>('runAsync', 'write', [sql, ...params]),
+            execAsync: (sql: string) => run<void>('execAsync', 'write', [sql]),
+            // A nested op joins, with no savepoint: a throw that escapes the
+            // body rolls all of it back, and one the body catches commits what
+            // the nested op already wrote.
+            withTransactionAsync: (nested) => (live ? nested(tx) : Promise.reject(ended())),
+          }
+          let end!: () => void
+          openTransaction = new Promise((resolve) => {
+            end = resolve
+          })
           try {
-            await withRecovery(() => database.withTransactionAsync(fn))
+            await withRecovery(() => database.withTransactionAsync(() => fn(tx)))
           } catch (e) {
             // If expo-sqlite's own ROLLBACK got hit by our interrupt loop,
             // the connection is left mid-transaction and the next BEGIN
@@ -443,6 +494,10 @@ class MobileDbAdapter implements DatabaseAdapter {
               await database.execAsync('ROLLBACK')
             } catch {}
             throw e
+          } finally {
+            live = false
+            openTransaction = null
+            end()
           }
         })
         .finally(trackEnd)

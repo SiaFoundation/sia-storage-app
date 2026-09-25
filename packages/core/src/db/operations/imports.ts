@@ -212,22 +212,22 @@ export async function deleteImport(
   // One transaction so the returned cleanup describes exactly the rows the
   // cascade drops: a scanner finalize landing between the reads and the delete
   // would otherwise hand back a ref it had already released.
-  await db.withTransactionAsync(async () => {
-    const grants = await db.getAllAsync<{ sourceRef: string }>(
+  await db.withTransactionAsync(async (tx) => {
+    const grants = await tx.getAllAsync<{ sourceRef: string }>(
       `SELECT sourceRef FROM import_files WHERE importId = ? AND sourceRef IS NOT NULL`,
       id,
     )
-    const staged = await db.getAllAsync<{ sourceUri: string }>(
+    const staged = await tx.getAllAsync<{ sourceUri: string }>(
       `SELECT sourceUri FROM import_files
        WHERE importId = ? AND sourceKind = 'staged' AND sourceUri IS NOT NULL`,
       id,
     )
     // The folder pick's one tree grant lives on the import row itself.
-    const imp = await db.getFirstAsync<{ dirSourceRef: string | null }>(
+    const imp = await tx.getFirstAsync<{ dirSourceRef: string | null }>(
       'SELECT dirSourceRef FROM imports WHERE id = ?',
       id,
     )
-    await db.runAsync('DELETE FROM imports WHERE id = ?', id)
+    await tx.runAsync('DELETE FROM imports WHERE id = ?', id)
     refs = grants.map((g) => g.sourceRef)
     if (imp?.dirSourceRef) refs.push(imp.dirSourceRef)
     stagedUris = staged.map((s) => s.sourceUri)
@@ -276,9 +276,9 @@ export async function addFilesToImport(
   files: ImportFileRow[],
 ): Promise<void> {
   const now = Date.now()
-  await db.withTransactionAsync(async () => {
-    await insertManyImportFiles(db, files)
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await insertManyImportFiles(tx, files)
+    await tx.runAsync(
       `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?, lastActivityAt = ?
        WHERE id = ? AND sealed = 0`,
       files.length,
@@ -309,18 +309,18 @@ export async function appendToOpenImportOrCreate(
   now: number,
 ): Promise<AppendToOpenImportResult> {
   let result: AppendToOpenImportResult = { action: 'waited', importId: null }
-  await db.withTransactionAsync(async () => {
-    const inProg = await queryInProgressImport(db, source)
+  await db.withTransactionAsync(async (tx) => {
+    const inProg = await queryInProgressImport(tx, source)
     if (inProg && inProg.sealed === 0) {
       // Re-point the candidate rows at the open import: the caller built them
       // against a fresh open import id (it can't know inside-txn whether this poll
       // would append or create), so an append must retarget them or they'd
       // reference a non-existent import and never drain.
       await insertManyImportFiles(
-        db,
+        tx,
         files.map((f) => (f.importId === inProg.id ? f : { ...f, importId: inProg.id })),
       )
-      await db.runAsync(
+      await tx.runAsync(
         `UPDATE imports SET expectedCount = expectedCount + ?, updatedAt = ?, lastActivityAt = ?
          WHERE id = ? AND sealed = 0`,
         files.length,
@@ -335,8 +335,8 @@ export async function appendToOpenImportOrCreate(
       result = { action: 'waited', importId: inProg.id }
       return
     }
-    await insertImport(db, newImport)
-    await insertManyImportFiles(db, files)
+    await insertImport(tx, newImport)
+    await insertManyImportFiles(tx, files)
     result = { action: 'created', importId: newImport.id }
   })
   return result
@@ -555,19 +555,19 @@ export async function cancelInFlightImportFiles(
   // One transaction: an import whose rows were cancelled but which never got
   // sealed reads `importing` forever, since deriveStatus treats sealed=0 as
   // running whatever its children say.
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync(
       `UPDATE import_files SET state = 'cancelled', claimedAt = NULL, claimToken = NULL, updatedAt = ?
        WHERE importId = ? AND state IN ('pending','active')`,
       now,
       importId,
     )
-    await db.runAsync(
+    await tx.runAsync(
       `UPDATE imports SET sealed = 1, updatedAt = ? WHERE id = ? AND sealed = 0`,
       now,
       importId,
     )
-    await touchImportActivityById(db, importId, now)
+    await touchImportActivityById(tx, importId, now)
   })
 }
 

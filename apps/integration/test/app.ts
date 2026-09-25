@@ -81,7 +81,7 @@ function createTestDatabase(dbPath: string) {
     execAsync(sql: string): Promise<void> {
       return requireOpen().execAsync(sql)
     },
-    withTransactionAsync(fn: () => Promise<void>): Promise<void> {
+    withTransactionAsync(fn: (tx: DatabaseAdapter) => Promise<void>): Promise<void> {
       return requireOpen().withTransactionAsync(fn)
     },
   }

@@ -24,9 +24,9 @@ export async function insertLog(db: DatabaseAdapter, entry: LogInsert): Promise<
 
 export async function insertManyLogs(db: DatabaseAdapter, entries: LogInsert[]): Promise<void> {
   if (entries.length === 0) return
-  await db.withTransactionAsync(async () => {
+  await db.withTransactionAsync(async (tx) => {
     for (const entry of entries) {
-      await db.runAsync(
+      await tx.runAsync(
         'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
         entry.timestamp,
         entry.level,
