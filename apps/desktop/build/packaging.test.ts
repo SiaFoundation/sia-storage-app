@@ -24,6 +24,7 @@ const env = {
   domainId: 'sia-dev',
   domainDisplay: 'Sia Storage Dev',
   appName: 'Sia Storage Dev',
+  appIcon: 'icon-dev.icns',
 }
 
 describe('entitlements', () => {
@@ -192,6 +193,7 @@ describe('build settings', () => {
       ['SIA_DOMAIN_ID', env.domainId],
       ['SIA_DOMAIN_DISPLAY', env.domainDisplay],
       ['SIA_APP_NAME', env.appName],
+      ['SIA_APP_ICON', env.appIcon],
     ])
 
     expect(() => resolveEnv(values, 'dev.env')).toThrow(/SIA_APP_PROFILE names no file/)
@@ -231,6 +233,11 @@ describe('build settings', () => {
 
     it('asks for the env file when the environment carries nothing', () => {
       expect(() => loadEnv('beta', { PATH: '/bin' })).toThrow(/Copy beta.example.env/)
+    })
+
+    it.each(['dev', 'beta', 'prod'])('gives %s an icon that is in assets/icons', (context) => {
+      const icon = loadEnv(context, environment).appIcon
+      expect(fs.existsSync(path.join(import.meta.dir, '..', 'assets', 'icons', icon))).toBe(true)
     })
 
     it('rejects a context with no example file', () => {
