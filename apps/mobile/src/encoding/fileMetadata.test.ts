@@ -28,7 +28,7 @@ const baseFile: FileMetadata = {
   type: 'image/jpeg',
   kind: 'file',
   size: 1024,
-  hash: 'abc123',
+  hash: 'sha256:abc123',
   createdAt: 1000,
   updatedAt: 2000,
   trashedAt: null,
@@ -40,7 +40,7 @@ const baseThumb: FileMetadata = {
   type: 'image/jpeg',
   kind: 'thumb',
   size: 512,
-  hash: 'thumb-hash',
+  hash: 'sha256:thumb-hash',
   thumbForId: 'file-1',
   thumbSize: 64,
   trashedAt: null,
@@ -70,7 +70,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1024,
-        hash: 'abc123',
+        hash: 'sha256:abc123',
         createdAt: 1000,
         updatedAt: 2000,
         trashedAt: null,
@@ -87,7 +87,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'thumb',
         size: 512,
-        hash: 'thumb-hash',
+        hash: 'sha256:thumb-hash',
         thumbForId: 'file-1',
         thumbSize: 64,
         createdAt: 1000,
@@ -121,7 +121,7 @@ describe('fileMetadata', () => {
             type: 'image/jpeg',
             kind: 'file',
             size: 1024,
-            hash: 'abc123',
+            hash: 'sha256:abc123',
             createdAt: 1000,
             updatedAt: 2000,
             trashedAt: null,
@@ -139,7 +139,7 @@ describe('fileMetadata', () => {
             type: 'image/jpeg',
             kind: 'thumb',
             size: 512,
-            hash: 'thumb-hash',
+            hash: 'sha256:thumb-hash',
             thumbForId: 'file-1',
             thumbSize: 64,
             createdAt: 1000,
@@ -159,7 +159,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 2048,
-          hash: 'future-hash',
+          hash: 'sha256:future-hash',
           createdAt: 3000,
           updatedAt: 4000,
           newFieldV99: 'ignored',
@@ -168,7 +168,7 @@ describe('fileMetadata', () => {
         expect(result.id).toBe('future-1')
         expect(result.name).toBe('future.jpg')
         expect(result.kind).toBe('file')
-        expect(result.hash).toBe('future-hash')
+        expect(result.hash).toBe('sha256:future-hash')
       })
 
       it('logs a warning for future versions', () => {
@@ -179,7 +179,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 1,
-          hash: 'h',
+          hash: 'sha256:h',
           createdAt: 1,
           updatedAt: 1,
         })
@@ -209,7 +209,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'thumb',
           size: 100,
-          hash: 'fth',
+          hash: 'sha256:fth',
           thumbForId: 'fp-1',
           thumbSize: 512,
           createdAt: 1,
@@ -316,7 +316,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'thumb',
         size: 1,
-        hash: 'h',
+        hash: 'sha256:h',
         thumbForId: 'pid',
         createdAt: 1,
         updatedAt: 1,

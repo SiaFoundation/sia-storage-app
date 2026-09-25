@@ -22,7 +22,7 @@ async function createTestFile(app: CliApp, id: string, name: string, dirId?: str
     type: 'text/plain',
     kind: 'file',
     size: 42,
-    hash: 'abc-' + id,
+    hash: `sha256:abc-${id}` as const,
     createdAt: now,
     updatedAt: now,
     mediaAssetId: null,

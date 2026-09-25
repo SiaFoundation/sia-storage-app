@@ -4,6 +4,7 @@ import { migration_0002_object_needs_sync_up } from './0002_object_needs_sync_up
 import { migration_0003_create_imports } from './0003_create_imports'
 import { migration_20260916_124516_provider_feed_seq } from './20260916_124516_provider_feed_seq'
 import { migration_20260925_120000_file_stack_id } from './20260925_120000_file_stack_id'
+import { migration_20260925_130000_prefix_content_hashes } from './20260925_130000_prefix_content_hashes'
 
 export const coreMigrations: Migration[] = [
   migration_0001_init_schema,
@@ -11,6 +12,7 @@ export const coreMigrations: Migration[] = [
   migration_0003_create_imports,
   migration_20260916_124516_provider_feed_seq,
   migration_20260925_120000_file_stack_id,
+  migration_20260925_130000_prefix_content_hashes,
 ]
 
 export function sortMigrations(migrations: Migration[]): Migration[] {

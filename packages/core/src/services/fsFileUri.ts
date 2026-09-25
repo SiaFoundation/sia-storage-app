@@ -1,5 +1,6 @@
 import type { DatabaseAdapter } from '../adapters/db'
 import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
+import type { ContentHash } from '../lib/contentHash'
 
 const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
@@ -11,15 +12,15 @@ const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
  * classifies from the local file. An IPC transport must base64 `headerBytes`.
  */
 export type ImportCopyResult =
-  | { kind: 'stream'; uri: string; size: number; sha256: string; headerBytes?: Uint8Array }
-  | { kind: 'asset'; uri: string; size: number; sha256: string; mediaMime: string }
+  | { kind: 'stream'; uri: string; size: number; sha256: ContentHash; headerBytes?: Uint8Array }
+  | { kind: 'asset'; uri: string; size: number; sha256: ContentHash; mediaMime: string }
   | { kind: 'plain'; uri: string; size: number }
 
 /**
  * What `adoptFile` produced when it hashed the file (the default): the
  * `sha256:<hex>` string callers write to the file record.
  */
-export type AdoptFileHashed = { uri: string; size: number; hash: string }
+export type AdoptFileHashed = { uri: string; size: number; hash: ContentHash }
 
 /** What `adoptFile` produced with `{ hash: false }`: size only, no hash. */
 export type AdoptFilePlain = { uri: string; size: number }

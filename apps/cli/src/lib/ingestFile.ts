@@ -5,6 +5,7 @@ import { basename, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { detectMimeType, MAGIC_BYTES_LENGTH } from '@siastorage/core/lib/detectMimeType'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 import type { CliApp } from '../app'
 
 export type IngestResult = {
@@ -86,7 +87,7 @@ async function detectFileType(absPath: string, fileName: string): Promise<string
 async function streamCopyAndHash(
   sourcePath: string,
   targetPath: string,
-): Promise<{ hash: string; size: number }> {
+): Promise<{ hash: ContentHash; size: number }> {
   const hasher = createHash('sha256')
   let size = 0
   const source = createReadStream(sourcePath)
@@ -96,5 +97,5 @@ async function streamCopyAndHash(
     size += buf.byteLength
   })
   await pipeline(source, createWriteStream(targetPath))
-  return { hash: hasher.digest('hex'), size }
+  return { hash: toContentHash(hasher.digest('hex')), size }
 }

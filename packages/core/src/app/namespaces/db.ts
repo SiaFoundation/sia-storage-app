@@ -2,6 +2,7 @@ import type { CryptoAdapter } from '../../adapters/crypto'
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import * as ops from '../../db/operations'
+import { toContentHash } from '../../lib/contentHash'
 import type { AdoptFileHashed, AdoptFilePlain, FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
@@ -168,10 +169,7 @@ export function buildDbNamespaces(
     writeFileData: async (file, data) => {
       if (!fsIO.writeFile) throw new Error('writeFile not implemented')
       const result = await fsIO.writeFile(file, data)
-      let hash = ''
-      if (adapters?.crypto) {
-        hash = await adapters.crypto.sha256(data)
-      }
+      const hash = adapters?.crypto ? toContentHash(await adapters.crypto.sha256(data)) : ''
       // See copyFile above — disk write is done; gate the fsMeta upsert.
       await db.waitUntilActive?.()
       await ops.upsertFsMeta(db, {

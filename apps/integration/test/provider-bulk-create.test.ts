@@ -51,7 +51,7 @@ describe('Dragging many files into the provider during sync', () => {
           type: 'text/plain',
           kind: 'file',
           size: 64,
-          hash: `hash-${i}`,
+          hash: `sha256:hash-${i}` as const,
           createdAt: now,
           updatedAt: now,
           trashedAt: null,

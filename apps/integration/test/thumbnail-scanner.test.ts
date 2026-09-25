@@ -9,7 +9,7 @@ beforeEach(async () => {
   app = createTestApp(undefined, {
     fsIO: {},
     thumbnail: {},
-    crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+    crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
     detectMimeType: async () => 'image/jpeg',
   })
   await app.start()
@@ -34,7 +34,7 @@ describe('ThumbnailScanner', () => {
         size: async () => ({ value: null, error: 'not_found' as const }),
       },
       thumbnail: {},
-      crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
       detectMimeType: async () => 'image/jpeg',
     })
     await noSourceApp.start()
@@ -45,14 +45,14 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-file1',
     })
 
     const result = await noSourceApp.thumbnailScanner.runScan()
-    expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'hash1' }])
+    expect(result.skippedNoSource).toEqual([{ fileId: 'file1', hash: 'sha256:hash1' }])
     await noSourceApp.shutdown()
   })
 
@@ -64,7 +64,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-file1',
@@ -76,7 +76,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/webp',
         kind: 'thumb',
         size: 100,
-        hash: `thumb-hash-${size}`,
+        hash: `sha256:thumb-hash-${size}` as const,
         createdAt: now,
         updatedAt: now,
         mediaAssetId: null,
@@ -98,7 +98,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-file1',
@@ -111,7 +111,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/webp',
         kind: 'thumb',
         size: 100,
-        hash: `thumb-hash-${size}`,
+        hash: `sha256:thumb-hash-${size}` as const,
         createdAt: now,
         updatedAt: now,
         mediaAssetId: null,
@@ -142,7 +142,7 @@ describe('ThumbnailScanner', () => {
           noSourceIds.has(fileId) ? { value: null, error: 'not_found' as const } : { value: 1000 },
       },
       thumbnail: {},
-      crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
       detectMimeType: async () => 'image/jpeg',
     })
     await customApp.start()
@@ -154,7 +154,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1000,
-        hash: `nosource-hash-${i}`,
+        hash: `sha256:nosource-hash-${i}` as const,
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
@@ -170,7 +170,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1000,
-        hash: `covered-hash-${i}`,
+        hash: `sha256:covered-hash-${i}` as const,
         createdAt: now - 100 - i,
         updatedAt: now - 100 - i,
         addedAt: now - 100 - i,
@@ -183,7 +183,7 @@ describe('ThumbnailScanner', () => {
           type: 'image/webp',
           kind: 'thumb',
           size: 100,
-          hash: `${id}-thumb-hash-${size}`,
+          hash: `sha256:${id}-thumb-hash-${size}` as const,
           createdAt: now - 100 - i,
           updatedAt: now - 100 - i,
           addedAt: now - 100 - i,
@@ -200,7 +200,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'eligible-hash-1',
+      hash: 'sha256:eligible-hash-1',
       createdAt: now - 500,
       updatedAt: now - 500,
       addedAt: now - 500,
@@ -228,7 +228,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: null,
@@ -239,7 +239,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/webp',
       kind: 'thumb',
       size: 100,
-      hash: 'thumb-hash-64',
+      hash: 'sha256:thumb-hash-64',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: null,
@@ -266,7 +266,7 @@ describe('ThumbnailScanner', () => {
     const videoApp = createTestApp(undefined, {
       fsIO: {},
       thumbnail: videoAdapter,
-      crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
       detectMimeType: async () => 'video/mp4',
     })
     await videoApp.start()
@@ -277,7 +277,7 @@ describe('ThumbnailScanner', () => {
       type: 'video/mp4',
       kind: 'file',
       size: 5_000_000,
-      hash: 'video-hash-1',
+      hash: 'sha256:video-hash-1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-video1',
@@ -305,7 +305,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1000,
-        hash: `hash${i}`,
+        hash: `sha256:hash${i}` as const,
         createdAt: now,
         updatedAt: now,
         mediaAssetId: `local-${i}`,
@@ -323,7 +323,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-file1',
@@ -356,7 +356,7 @@ describe('ThumbnailScanner', () => {
           return { data: new ArrayBuffer(64), mimeType: 'image/webp' }
         },
       },
-      crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
       detectMimeType: async () => 'image/jpeg',
     })
     await abortApp.start()
@@ -368,7 +368,7 @@ describe('ThumbnailScanner', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1000,
-        hash: `hash${i}`,
+        hash: `sha256:hash${i}` as const,
         createdAt: now - i,
         updatedAt: now - i,
         addedAt: now - i,
@@ -397,7 +397,7 @@ describe('ThumbnailScanner', () => {
           throw new Error('Manipulation failed')
         },
       },
-      crypto: { sha256: async () => `thumb-hash-${++hashCounter}` },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
       detectMimeType: async () => 'image/jpeg',
     })
     await errorApp.start()
@@ -408,7 +408,7 @@ describe('ThumbnailScanner', () => {
       type: 'image/jpeg',
       kind: 'file',
       size: 1000,
-      hash: 'hash1',
+      hash: 'sha256:hash1',
       createdAt: now,
       updatedAt: now,
       mediaAssetId: 'local-file1',
@@ -418,7 +418,7 @@ describe('ThumbnailScanner', () => {
     expect(result.errors).toHaveLength(ThumbSizes.length)
     expect(result.errors[0]).toMatchObject({
       originalId: 'file1',
-      originalHash: 'hash1',
+      originalHash: 'sha256:hash1',
       size: 64,
     })
     const sizes = await errorApp.app.thumbnails.getSizesForFile('file1')

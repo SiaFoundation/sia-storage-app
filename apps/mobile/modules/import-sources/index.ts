@@ -21,10 +21,8 @@ export * from './types'
  * library asset reads with progress, and the open-in-place file picker.
  *
  * This file is the package's entire public TS surface and the only place the
- * native modules are looked up; nothing under `src/` imports `'expo'`. It is
- * also the one place hashes are normalized: native returns bare hex and this
- * file lowercases it and prefixes `sha256:`, so every other consumer passes
- * hashes through untouched.
+ * native modules are looked up; nothing under `src/` imports `'expo'`. The
+ * `sha256` fields are the hex digest as native returns it.
  */
 
 type NativeRefs = {
@@ -81,11 +79,6 @@ function requireReader(): NativeReader {
   return reader
 }
 
-const withSha256Prefix = <T extends { sha256: string }>(r: T): T => ({
-  ...r,
-  sha256: `sha256:${r.sha256.toLowerCase()}`,
-})
-
 /** Create durable refs for all picked uris in one native call; a per-uri
  * failure lands as `{ code }` in its slot and never rejects the batch. */
 export async function createFileBookmarks(uris: string[]): Promise<CreateBookmarkResult[]> {
@@ -132,8 +125,10 @@ export async function copyToPath(
   destPath: string,
   opts?: { copyId?: string },
 ): Promise<CopyToPathResult> {
-  const { headBytes, ...rest } = withSha256Prefix(
-    await requireRefs().copyToPath(srcUri, destPath, opts?.copyId ?? null),
+  const { headBytes, ...rest } = await requireRefs().copyToPath(
+    srcUri,
+    destPath,
+    opts?.copyId ?? null,
   )
   // Base64 on the wire; JS-side consumers want bytes.
   return headBytes ? { ...rest, headerBytes: base64ToBytes(headBytes) } : rest
@@ -159,7 +154,7 @@ export async function copyAsset(
   destPath: string,
   opts: { copyId: string },
 ): Promise<CopyAssetResult> {
-  return withSha256Prefix(await requireReader().copyAsset(assetId, destPath, opts.copyId))
+  return requireReader().copyAsset(assetId, destPath, opts.copyId)
 }
 
 export async function cancelCopy(copyId: string): Promise<void> {

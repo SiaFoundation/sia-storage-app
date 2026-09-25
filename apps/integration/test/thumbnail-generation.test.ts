@@ -14,6 +14,7 @@ import * as nodeFs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
 import { createTestApp, type TestApp, type TestFileFactory, waitForCondition } from './app'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 
 let app: TestApp
 let validJpegBuffer: Buffer
@@ -47,7 +48,7 @@ function createImageFileFactory(name: string, content?: Buffer): TestFileFactory
     const filePath = path.join(tempDir, `${fileId}${ext}`)
     const data = content ?? validJpegBuffer
     nodeFs.writeFileSync(filePath, data)
-    const hash = crypto.createHash('sha256').update(data).digest('hex')
+    const hash = toContentHash(crypto.createHash('sha256').update(data).digest('hex'))
     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg'
     return {
       id: fileId,

@@ -35,7 +35,7 @@ async function createTestFile(
     type: overrides?.type ?? 'image/jpeg',
     kind: 'file',
     size: overrides?.size ?? 100,
-    hash: `hash-${id}`,
+    hash: `sha256:hash-${id}`,
     createdAt: overrides?.createdAt ?? 1000,
     updatedAt: overrides?.createdAt ?? 1000,
     mediaAssetId: null,

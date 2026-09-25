@@ -9,12 +9,13 @@ import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import { createTestApp, type TestApp, waitForCondition } from './app'
+import { toContentHash } from '@siastorage/core/lib/contentHash'
 
 async function addVersionFile(app: TestApp, id: string, name: string): Promise<void> {
   const type = 'application/octet-stream'
   const ext = extFromMime(type)
   const content = crypto.randomBytes(1024)
-  const hash = crypto.createHash('sha256').update(content).digest('hex')
+  const hash = toContentHash(crypto.createHash('sha256').update(content).digest('hex'))
   const filePath = path.join(app.tempDir, `${id}${ext}`)
   nodeFs.writeFileSync(filePath, content)
   const now = Date.now()
