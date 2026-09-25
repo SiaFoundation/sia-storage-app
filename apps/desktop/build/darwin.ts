@@ -77,6 +77,13 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
   const agentContents = join(agentPath, 'Contents')
   mkdirSync(join(agentContents, 'MacOS'), { recursive: true })
 
+  // The Info.plist written below replaces Electron's and its icon entry, so the
+  // icon is copied in here and named there, or macOS shows the generic one.
+  const icon = join(root, 'assets', 'icons', env.appIcon)
+  if (!existsSync(icon))
+    throw new Error(`SIA_APP_ICON names no file in assets/icons: ${env.appIcon}`)
+  cpSync(icon, join(resources, 'icon.icns'))
+
   const swiftBuild = join(out, 'swift-build')
   await installApp(resources, env, stamp)
   await buildDaemon(resources)
@@ -238,6 +245,7 @@ function appInfoPlist(env: BuildEnv, executable: string, stamp: Stamp): string {
     CFBundleName: env.appName,
     CFBundleExecutable: executable,
     CFBundlePackageType: 'APPL',
+    CFBundleIconFile: 'icon',
     CFBundleShortVersionString: stamp.version,
     CFBundleVersion: stamp.build,
     // The app is its menu bar item; a dock tile would be noise.
