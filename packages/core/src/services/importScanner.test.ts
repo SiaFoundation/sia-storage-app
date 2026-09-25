@@ -2,6 +2,7 @@ import { IMPORT_STALE_CLAIM_MS } from '../config'
 import type { FinalizeResult } from '../db/operations/files'
 import type { ImportFileRow, ImportRow } from '../db/operations/imports'
 import { ImportScanner, type ResolveSourceResult } from './importScanner'
+import { type ContentHash, toContentHash } from '../lib/contentHash'
 
 function impRow(over: Partial<ImportRow> & { id: string }): ImportRow {
   return {
@@ -127,7 +128,7 @@ function createMocks(opts?: {
   return { app, imports, fs, files }
 }
 
-const HASH = 'h'.repeat(64)
+const HASH = toContentHash('a'.repeat(64))
 
 function scanner(
   m: Mocks,
@@ -135,7 +136,7 @@ function scanner(
     resolve?:
       | ResolveSourceResult
       | ((row: ImportFileRow, resolveOpts?: { verify?: boolean }) => ResolveSourceResult)
-    hash?: string | null
+    hash?: ContentHash | null
   },
 ): ImportScanner {
   const s = new ImportScanner()
@@ -223,12 +224,12 @@ describe('ImportScanner claim-loop', () => {
       kind: 'stream',
       uri: '/local/a',
       size: 9,
-      sha256: `sha256:${HASH}`,
+      sha256: HASH,
       headerBytes: ZIP_HEAD,
     })
     await scanner(m).runScan()
     expect(m.imports.recordHash).toHaveBeenCalledWith('a', expect.any(String), {
-      hash: `sha256:${HASH}`,
+      hash: HASH,
       size: 9,
       type: DOCX,
     })
@@ -255,14 +256,14 @@ describe('ImportScanner claim-loop', () => {
         kind: 'stream',
         uri: '/local/a',
         size: 9,
-        sha256: `sha256:${HASH}`,
+        sha256: HASH,
         headerBytes: JPEG_HEAD,
       })
       .mockResolvedValueOnce({
         kind: 'asset',
         uri: '/local/b',
         size: 9,
-        sha256: `sha256:${HASH}`,
+        sha256: HASH,
         mediaMime: 'image/jpeg',
       })
     await scanner(m).runScan()

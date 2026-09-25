@@ -10,6 +10,7 @@ import { minutesInMs } from '../../lib/time'
 import { UNRETRYABLE_REASONS } from './importReasons'
 import { UNFILED_DIRECTORY_ID } from './library'
 import { insert, insertMany } from '../sql'
+import type { ContentHash } from '../../lib/contentHash'
 
 export type ImportSource = 'picker' | 'camera' | 'share' | 'new-photos' | 'library-scan' | 'legacy'
 
@@ -99,7 +100,7 @@ export type ImportFileRow = {
   name: string
   type: string
   size: number
-  hash: string | null
+  hash: ContentHash | null
   createdAt: number
   updatedAt: number
   addedAt: number
@@ -754,7 +755,7 @@ export async function recordImportFileHash(
   db: DatabaseAdapter,
   id: string,
   token: string,
-  meta: { hash: string; size: number; type: string },
+  meta: { hash: ContentHash; size: number; type: string },
 ): Promise<void> {
   await db.runAsync(
     `UPDATE import_files SET hash = ?, size = ?, type = ?, copyBytes = ?, updatedAt = ?

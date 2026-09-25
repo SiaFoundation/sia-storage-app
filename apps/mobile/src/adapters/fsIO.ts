@@ -4,6 +4,7 @@ import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { Buffer } from 'buffer'
 import { getFreeDiskStorageAsync } from 'expo-file-system/legacy'
 import RNFS from 'react-native-fs'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 import { copyImportFile } from '../lib/importCopy'
 import { getStorageDirectoryUri } from '../lib/sharedContainer'
 
@@ -48,7 +49,7 @@ function fileUriToPath(uri: string): string {
 async function adoptFile(
   file: { id: string; type: string },
   sourceUri: string,
-): Promise<{ uri: string; size: number; hash: string }>
+): Promise<{ uri: string; size: number; hash: ContentHash }>
 async function adoptFile(
   file: { id: string; type: string },
   sourceUri: string,
@@ -71,9 +72,11 @@ async function adoptFile(
   if (opts?.hash === false) {
     return { uri: targetUri, size: stat.size }
   }
-  // Normalize RNFS.hash's bare hex to the sha256:<hex> form other clients use.
-  const hash = await RNFS.hash(targetUri, 'sha256')
-  return { uri: targetUri, size: stat.size, hash: `sha256:${hash}` }
+  return {
+    uri: targetUri,
+    size: stat.size,
+    hash: toContentHash(await RNFS.hash(targetUri, 'sha256')),
+  }
 }
 
 export function createFsIOAdapter(): FsIOAdapter {

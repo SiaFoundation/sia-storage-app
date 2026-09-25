@@ -28,7 +28,7 @@ const baseFile: FileMetadata = {
   type: 'image/jpeg',
   kind: 'file',
   size: 1024,
-  hash: 'abc123',
+  hash: 'sha256:6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090',
   createdAt: 1000,
   updatedAt: 2000,
   trashedAt: null,
@@ -40,7 +40,7 @@ const baseThumb: FileMetadata = {
   type: 'image/jpeg',
   kind: 'thumb',
   size: 512,
-  hash: 'thumb-hash',
+  hash: 'sha256:2a1ed1b9c40f4377591550e58d367affd093bdf36d3fd41cdf5cb5b7e2c9f657',
   thumbForId: 'file-1',
   thumbSize: 64,
   trashedAt: null,
@@ -70,7 +70,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'file',
         size: 1024,
-        hash: 'abc123',
+        hash: 'sha256:6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090',
         createdAt: 1000,
         updatedAt: 2000,
         trashedAt: null,
@@ -87,7 +87,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'thumb',
         size: 512,
-        hash: 'thumb-hash',
+        hash: 'sha256:2a1ed1b9c40f4377591550e58d367affd093bdf36d3fd41cdf5cb5b7e2c9f657',
         thumbForId: 'file-1',
         thumbSize: 64,
         createdAt: 1000,
@@ -121,7 +121,7 @@ describe('fileMetadata', () => {
             type: 'image/jpeg',
             kind: 'file',
             size: 1024,
-            hash: 'abc123',
+            hash: 'sha256:6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090',
             createdAt: 1000,
             updatedAt: 2000,
             trashedAt: null,
@@ -139,7 +139,7 @@ describe('fileMetadata', () => {
             type: 'image/jpeg',
             kind: 'thumb',
             size: 512,
-            hash: 'thumb-hash',
+            hash: 'sha256:2a1ed1b9c40f4377591550e58d367affd093bdf36d3fd41cdf5cb5b7e2c9f657',
             thumbForId: 'file-1',
             thumbSize: 64,
             createdAt: 1000,
@@ -159,7 +159,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 2048,
-          hash: 'future-hash',
+          hash: 'sha256:59a3422d08766f4ad15a2ed08fa9110aae2f6af2657f46f53dfc8d739357b9e1',
           createdAt: 3000,
           updatedAt: 4000,
           newFieldV99: 'ignored',
@@ -168,7 +168,9 @@ describe('fileMetadata', () => {
         expect(result.id).toBe('future-1')
         expect(result.name).toBe('future.jpg')
         expect(result.kind).toBe('file')
-        expect(result.hash).toBe('future-hash')
+        expect(result.hash).toBe(
+          'sha256:59a3422d08766f4ad15a2ed08fa9110aae2f6af2657f46f53dfc8d739357b9e1',
+        )
       })
 
       it('logs a warning for future versions', () => {
@@ -179,7 +181,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'file',
           size: 1,
-          hash: 'h',
+          hash: 'sha256:aaa9402664f1a41f40ebbc52c9993eb66aeb366602958fdfaa283b71e64db123',
           createdAt: 1,
           updatedAt: 1,
         })
@@ -209,7 +211,7 @@ describe('fileMetadata', () => {
           type: 'image/jpeg',
           kind: 'thumb',
           size: 100,
-          hash: 'fth',
+          hash: 'sha256:21a51a4cba34ba98eb56a80e557d96199fcd424ffda2ed767efa65e10a12e65f',
           thumbForId: 'fp-1',
           thumbSize: 512,
           createdAt: 1,
@@ -316,7 +318,7 @@ describe('fileMetadata', () => {
         type: 'image/jpeg',
         kind: 'thumb',
         size: 1,
-        hash: 'h',
+        hash: 'sha256:aaa9402664f1a41f40ebbc52c9993eb66aeb366602958fdfaa283b71e64db123',
         thumbForId: 'pid',
         createdAt: 1,
         updatedAt: 1,

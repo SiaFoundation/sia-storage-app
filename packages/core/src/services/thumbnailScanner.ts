@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type { AppService } from '../app/service'
+import type { ContentHash } from '../lib/contentHash'
 import { extFromMime, isMimeType } from '../lib/fileTypes'
 import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
@@ -12,15 +13,9 @@ async function writeThumbnailToStorage(
   app: AppService,
   thumbInfo: { id: string; type: string },
   result: ThumbnailResult,
-): Promise<{ uri: string; size: number; hash: string }> {
-  if ('savedUri' in result) {
-    // adoptFile already returns a normalized sha256:<hex> hash.
-    return app.fs.adoptFile(thumbInfo, result.savedUri)
-  }
-  // writeFileData returns a bare digest; normalize so both branches, and the
-  // scanner sites that consume the result, see one hash format.
-  const written = await app.fs.writeFileData(thumbInfo, result.data)
-  return { ...written, hash: `sha256:${written.hash}` }
+): Promise<{ uri: string; size: number; hash: ContentHash | '' }> {
+  if ('savedUri' in result) return app.fs.adoptFile(thumbInfo, result.savedUri)
+  return app.fs.writeFileData(thumbInfo, result.data)
 }
 
 /**

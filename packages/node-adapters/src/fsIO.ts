@@ -5,6 +5,7 @@ import { constants, createWriteStream } from 'fs'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { pipeline } from 'stream/promises'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
 export function createNodeFsIO(filesDir: string): FsIOAdapter {
   function filePath(fileId: string, type: string): string {
@@ -18,7 +19,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
   async function adoptFile(
     file: { id: string; type: string },
     sourceUri: string,
-  ): Promise<{ uri: string; size: number; hash: string }>
+  ): Promise<{ uri: string; size: number; hash: ContentHash }>
   async function adoptFile(
     file: { id: string; type: string },
     sourceUri: string,
@@ -28,7 +29,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
     file: { id: string; type: string },
     sourceUri: string,
     opts?: { hash: false },
-  ): Promise<{ uri: string; size: number; hash?: string }> {
+  ): Promise<{ uri: string; size: number; hash?: ContentHash }> {
     const target = filePath(file.id, file.type)
     const source = sourceUri.replace(/^file:\/\//, '')
     // O_NOFOLLOW refuses a symlink at open time, with no check-then-swap window
@@ -85,7 +86,7 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       await handle.close()
     }
     const stat = await fs.stat(target)
-    return { uri: target, size: stat.size, hash: `sha256:${hash.digest('hex')}` }
+    return { uri: target, size: stat.size, hash: toContentHash(hash.digest('hex')) }
   }
 
   return {

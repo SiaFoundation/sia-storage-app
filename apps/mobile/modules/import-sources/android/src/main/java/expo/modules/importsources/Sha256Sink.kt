@@ -3,8 +3,8 @@ package expo.modules.importsources
 import java.security.MessageDigest
 
 /**
- * Streaming SHA-256 updated per copy chunk. Emits bare lowercase hex; only
- * the TS package index prefixes `sha256:`.
+ * Streaming SHA-256 updated per copy chunk. Emits bare lowercase hex, and the
+ * app's TypeScript import copy (copyImportFile) adds the `sha256:` prefix.
  */
 class Sha256Sink {
   private val digest = MessageDigest.getInstance("SHA-256")

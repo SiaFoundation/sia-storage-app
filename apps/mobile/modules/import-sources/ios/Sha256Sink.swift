@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 
 /// Streaming SHA-256, updated per copy chunk so hashing rides the copy's one
-/// read. Emits bare lowercase hex; the TS package index is the only place
-/// that prefixes `sha256:`.
+/// read. Emits bare lowercase hex, and the app's TypeScript import copy
+/// (copyImportFile) adds the `sha256:` prefix.
 public struct Sha256Sink {
   private var hasher = SHA256()
 

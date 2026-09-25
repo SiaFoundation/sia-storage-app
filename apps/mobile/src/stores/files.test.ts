@@ -18,7 +18,7 @@ describe('files store (core functions with appService)', () => {
       type: 'image/jpeg',
       kind: 'file' as const,
       size: 100,
-      hash: `hash-${id}`,
+      hash: `sha256:hash-${id}` as const,
       createdAt: 1000,
       updatedAt: 1000,
       mediaAssetId: null,

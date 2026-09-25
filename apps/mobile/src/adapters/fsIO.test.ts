@@ -157,7 +157,7 @@ describe('fsIO adapter adoptFile()', () => {
     })
     moveFileMock.mockResolvedValue(undefined)
     statMock.mockResolvedValue(mockStatResult(2048))
-    hashMock.mockResolvedValue('deadbeef')
+    hashMock.mockResolvedValue('DEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDEDE')
   })
 
   it('moves the file natively, stats it, and returns a normalized sha256 hash', async () => {
@@ -165,7 +165,10 @@ describe('fsIO adapter adoptFile()', () => {
     const result = await adapter.adoptFile(file, 'file:///tmp/abc.webp')
     expect(moveFileMock).toHaveBeenCalledWith('/tmp/abc.webp', expect.any(String))
     expect(hashMock).toHaveBeenCalledWith(expect.any(String), 'sha256')
-    expect(result).toMatchObject({ size: 2048, hash: 'sha256:deadbeef' })
+    expect(result).toMatchObject({
+      size: 2048,
+      hash: 'sha256:dededededededededededededededededededededededededededededededede',
+    })
   })
 
   it('skips the hash when hash is false', async () => {
@@ -268,7 +271,7 @@ describe('fsIO adapter importCopy()', () => {
   it('routes claim-scoped copies through the native module and publishes via a move', async () => {
     jest.mocked(copyToPath).mockResolvedValueOnce({
       size: 42,
-      sha256: 'sha256:abc123',
+      sha256: 'ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB',
       headerBytes: new Uint8Array([0xff, 0xd8, 0xff]),
     })
 
@@ -282,10 +285,10 @@ describe('fsIO adapter importCopy()', () => {
     // has two concurrent writers.
     expect(jest.mocked(copyToPath).mock.calls[0][1]).toContain('f1.tok.tmp')
     expect(moveFileMock).toHaveBeenCalled()
-    // The native module returns the hash already normalized; the adapter passes it through.
+    // The native module returns the bare hex digest, and the result carries the content hash.
     expect(result).toMatchObject({
       kind: 'stream',
-      sha256: 'sha256:abc123',
+      sha256: 'sha256:abababababababababababababababababababababababababababababababab',
       headerBytes: new Uint8Array([0xff, 0xd8, 0xff]),
       size: 42,
     })
@@ -344,13 +347,19 @@ describe('fsIO adapter importCopy() staged move', () => {
 
   it('a failed move falls back to the copy path', async () => {
     moveFileMock.mockRejectedValueOnce(new Error('EXDEV'))
-    jest.mocked(copyToPath).mockResolvedValue({ size: 5, sha256: 'sha256:aa' })
+    jest.mocked(copyToPath).mockResolvedValue({
+      size: 5,
+      sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    })
     const result = await adapter.importCopy(
       { id: 'f1', type: 'image/jpeg' },
       'file:///docs/import-staging/x.jpg',
       { claimToken: 'tok', move: true },
     )
     expect(jest.mocked(copyToPath)).toHaveBeenCalled()
-    expect(result).toMatchObject({ kind: 'stream', sha256: 'sha256:aa' })
+    expect(result).toMatchObject({
+      kind: 'stream',
+      sha256: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    })
   })
 })

@@ -2,6 +2,7 @@ import { directoryProviderId, WORKING_SET_ID, type ProviderItem } from '@siastor
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
+import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 
 export interface UploadState {
   id: string
@@ -18,8 +19,13 @@ export interface TestFileInput {
   name: string
   type: string
   size: number
-  hash: string
+  hash: ContentHash
   uri: string
+}
+
+/** A content hash in the real form, derived from a label so fixtures stay readable. */
+export function fakeHash(label: string): ContentHash {
+  return toContentHash(crypto.createHash('sha256').update(label).digest('hex'))
 }
 
 export type TestFileFactory = (tempDir: string) => TestFileInput
@@ -59,7 +65,7 @@ export function generateTestFiles(
       const filePath = path.join(tempDir, `${fileId}${ext}`)
       const content = crypto.randomBytes(size)
       nodeFs.writeFileSync(filePath, content)
-      const hash = crypto.createHash('sha256').update(content).digest('hex')
+      const hash = toContentHash(crypto.createHash('sha256').update(content).digest('hex'))
       return {
         id: fileId,
         name: `file-${id}${ext}`,
