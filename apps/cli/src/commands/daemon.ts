@@ -18,9 +18,8 @@ export async function daemonCommand(
   switch (action) {
     case 'start': {
       // Ahead of the already-running check on purpose: --foreground makes this
-      // process the daemon, and its caller spawns only after finding nothing
-      // answering the socket. A pid file whose process is alive but no longer
-      // serving would otherwise exit here, leaving that caller with no daemon.
+      // process the daemon, and a pid file whose process is alive but no longer
+      // serving would otherwise make it exit with no daemon running.
       if (opts?.foreground) {
         const { startDaemon } = await import('../daemon/entry')
         await startDaemon(dataDir)
