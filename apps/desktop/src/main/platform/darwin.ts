@@ -169,6 +169,8 @@ export function createDarwinIntegration(): PlatformIntegration {
       domainId = null
     },
 
+    discard: async (id) => agentInstalled() && (await removeDomain(id)),
+
     /**
      * Re-reads the mount rather than trusting the last answer. The system
      * creates the directory after `start` returns, and a domain removed from

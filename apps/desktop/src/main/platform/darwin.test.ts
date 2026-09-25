@@ -57,6 +57,13 @@ describe('stopping the mount', () => {
     expect(calls).toEqual([['hide', 'sia-dev']])
   })
 
+  it('removes a mount it is not serving yet when discarding it before a reset', async () => {
+    const platform = createDarwinIntegration()
+
+    expect(await platform.discard('sia-dev')).toBe(true)
+    expect(calls).toEqual([['unregister', 'sia-dev']])
+  })
+
   it('still reports the mount when the helper refuses, so the wipe is held', async () => {
     const platform = await mounted()
     fails = true
