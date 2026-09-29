@@ -26,7 +26,7 @@ export function useAutoDownload(
 ): void {
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
-  const download = useDownload(file, 0)
+  const download = useDownload(file, 'user')
   const status = useFileStatus(file)
   useEffect(() => {
     if (isInitializing) return

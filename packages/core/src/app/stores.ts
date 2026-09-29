@@ -58,6 +58,16 @@ export type UploadSpeed = {
   rawBps: number
 }
 
+/**
+ * Who a download is for. `user` is a file someone asked to see or save: a
+ * tap, the viewer, a Finder open, `sia download`. It is served first and never
+ * dropped. `background` is a prefetch nobody waits on, such as a grid
+ * thumbnail. It waits behind every user download, newest first, and only the
+ * newest MAX_BACKGROUND_DOWNLOADS_QUEUED stay queued: an older one is dropped,
+ * and a thumbnail scrolled back into view asks again.
+ */
+export type DownloadPriority = 'user' | 'background'
+
 /** Lifecycle stage of a single download. */
 export type DownloadStatus = 'queued' | 'downloading' | 'done' | 'error'
 

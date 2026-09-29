@@ -2,6 +2,7 @@ import { AbortError } from './errors'
 
 type WaitEntry = {
   priority: number
+  key?: string
   grant: () => void
   evict: () => void
 }
@@ -11,6 +12,8 @@ type AcquireOptions = {
   priority?: number
   /** When set, on insert the oldest entries of this priority beyond the limit are evicted with AbortError. */
   maxQueueDepth?: number
+  /** Names the waiter, so promote() can move it while it waits. */
+  key?: string
 }
 
 /**
@@ -81,6 +84,7 @@ export class SlotPool {
 
       const entry: WaitEntry = {
         priority,
+        key: opts?.key,
         grant: () => {
           if (settled) return
           settled = true
@@ -100,13 +104,7 @@ export class SlotPool {
 
       const onAbort = () => entry.evict()
 
-      // Insert before the first entry with strictly higher priority number,
-      // which places same-priority waiters at the front (LIFO within priority).
-      let insertIdx = 0
-      while (insertIdx < this.waitQueue.length && this.waitQueue[insertIdx].priority < priority) {
-        insertIdx++
-      }
-      this.waitQueue.splice(insertIdx, 0, entry)
+      this.insert(entry)
       signal?.addEventListener('abort', onAbort, { once: true })
 
       // Evict oldest same-priority entries beyond the depth cap.
@@ -122,6 +120,30 @@ export class SlotPool {
         for (const e of toEvict) e.evict()
       }
     })
+  }
+
+  /**
+   * Moves the waiter named `key` up to `priority`, ahead of every waiter
+   * below it. Nothing happens when no such waiter is queued or it already
+   * waits at that priority or higher. A promoted waiter no longer counts
+   * toward its old priority's queue depth, so that depth cannot evict it.
+   */
+  promote(key: string, priority: number): void {
+    const at = this.waitQueue.findIndex((e) => e.key === key)
+    if (at === -1 || this.waitQueue[at].priority <= priority) return
+    const [entry] = this.waitQueue.splice(at, 1)
+    entry.priority = priority
+    this.insert(entry)
+  }
+
+  /**
+   * Inserts before the first entry with a strictly higher priority number,
+   * which puts same-priority waiters at the front (LIFO within a priority).
+   */
+  private insert(entry: WaitEntry): void {
+    let at = 0
+    while (at < this.waitQueue.length && this.waitQueue[at].priority < entry.priority) at++
+    this.waitQueue.splice(at, 0, entry)
   }
 
   /**

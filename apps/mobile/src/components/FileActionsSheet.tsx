@@ -140,7 +140,7 @@ function SingleFileActionsSheet({
     }
   }, [file, navigation, toast, onComplete])
 
-  const handleDownload = useDownload(file, 0, { notifyOnInsufficientSpace: true })
+  const handleDownload = useDownload(file, 'user', { notifyOnInsufficientSpace: true })
 
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
@@ -281,7 +281,7 @@ function BulkFileActionsSheet({
         return
       }
       for (const file of downloadable) {
-        void downloadFile(file, 0).catch((e) => {
+        void downloadFile(file, 'user').catch((e) => {
           logger.error('FileActionsSheet', 'queue_downloads_failed', {
             id: file.id,
             error: e as Error,

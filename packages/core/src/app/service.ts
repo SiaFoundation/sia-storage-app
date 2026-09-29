@@ -44,6 +44,7 @@ import type {
 import type {
   ConnectionState,
   DownloadEntry,
+  DownloadPriority,
   DownloadsState,
   InitState,
   InitStep,
@@ -1065,6 +1066,11 @@ export interface AppService {
     /** Returns a single download entry by ID. */
     getEntry(id: string): DownloadEntry | undefined
     /**
+     * True when the background queue dropped this file's last download and
+     * nothing has asked for the file since. cancelAll forgets every drop.
+     */
+    wasDropped(id: string): boolean
+    /**
      * True when the device has room for `sizes` (in bytes) plus the
      * preserved-disk reserve. Reads device free space (an async probe), returns
      * a verdict rather than throwing. Callers check it up front and bail with a
@@ -1072,8 +1078,13 @@ export interface AppService {
      * but not free; call once per user action, not per item.
      */
     checkSpaceFor(sizes: number[]): Promise<boolean>
-    /** Downloads a file to local storage. Lower priority numbers are served first. */
-    downloadFile(fileId: string, priority?: number): Promise<void>
+    /**
+     * Downloads a file to local storage. A call for a file already downloading
+     * joins that download, and a `user` call raises one waiting as `background`
+     * to `user`, so it can no longer be dropped. A `background` download the
+     * queue drops resolves without downloading anything.
+     */
+    downloadFile(fileId: string, priority: DownloadPriority): Promise<void>
     /** Resolves a share URL via the SDK and downloads its contents to local storage. */
     downloadFromShareUrl(id: string, url: string): Promise<void>
     /** Cancels a single in-progress download. */

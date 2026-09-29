@@ -22,7 +22,7 @@ export function registerDownloadHandlers(handlers: IpcHandlerMap, app: CliApp): 
 
     // The user asked for this file, so it is not queued behind, or dropped
     // for, background downloads.
-    await app.service.downloads.downloadFile(fileId, 0)
+    await app.service.downloads.downloadFile(fileId, 'user')
 
     const sourceUri = app.fsIO.uri(fileId, file.type)
     await fs.mkdir(path.dirname(output), { recursive: true })

@@ -1,6 +1,6 @@
 import { useIsInitializing } from '@siastorage/core/stores'
 import type { FileRecord, ThumbSize } from '@siastorage/core/types'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import useSWR from 'swr'
 import { useFileStatus } from '../lib/file'
 import { getOsThumbnailUri } from '../lib/mediaLibrary'
@@ -16,7 +16,7 @@ import { useIsConnected } from '../stores/sdk'
  *
  * Returns the local URI of the largest cached thumbnail that does not exceed
  * the requested size, or null when the file has none. A thumbnail that is on
- * the network but not cached is downloaded at auto priority.
+ * the network but not cached is downloaded in the background.
  */
 function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512) {
   // Skip thumbnail lookup for files still being imported (no hash yet).
@@ -26,17 +26,26 @@ function useBestThumbnailUri(file?: FileRecord, thumbSize: ThumbSize = 512) {
     () => (file ? app().thumbnails.getBest(file.id, thumbSize) : null),
   )
 
-  // Auto-download the chosen thumbnail at auto priority.
   const isInitializing = useIsInitializing()
   const isConnected = useIsConnected()
   const status = useFileStatus(thumbRecord.data ?? undefined)
-  const download = useDownload(thumbRecord.data, 1)
+  const download = useDownload(thumbRecord.data, 'background')
+  // A download the background queue dropped reads as idle again, and asking
+  // again while still on screen would drop the next tile's, round a grid of
+  // more tiles than the queue holds. So after a drop a tile asks again only
+  // once it mounts again, as when scrolled back into view. A download that
+  // was cancelled, as every one is when the app suspends, also reads as idle
+  // and is asked for again.
+  const requested = useRef<string | null>(null)
   useEffect(() => {
     if (isInitializing) return
     if (!isConnected) return
     if (!thumbRecord.data) return
     if (!status.data?.canAutoFetch) return
     if (status.data.download.state !== 'idle') return
+    const id = thumbRecord.data.id
+    if (requested.current === id && app().downloads.wasDropped(id)) return
+    requested.current = id
     download()
   }, [isInitializing, isConnected, thumbRecord.data, status.data, download])
 
