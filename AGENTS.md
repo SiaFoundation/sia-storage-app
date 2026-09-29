@@ -172,6 +172,7 @@ scenario. The PR description of a fix found or reproduced in sim gives the
 | Native unit (Android) | `bun run mobile:test:native:android`       | Kotlin under Robolectric; needs a prebuilt `android/` | yes |
 | Native device (iOS)   | `bun run mobile:test:native:ios:sim`       | real Photos-framework behavior                        | no  |
 | App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android` | the built app through its UI                          | no  |
+| Sim, CLI devices      | `bun sim run sync/`                        | real daemons syncing, killed and offline together     | yes |
 
 The native device and Maestro tiers are local-only and rot unless deliberately run. Run
 the native device tier and the Maestro flows before landing anything that touches native

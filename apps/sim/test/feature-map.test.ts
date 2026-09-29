@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Glob } from 'bun'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 
 const ROOT = join(import.meta.dir, '../../..')
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
@@ -91,9 +91,8 @@ describe('the feature map in apps/sim/FEATURES.md', () => {
     )
     const dir = join(ROOT, 'apps/sim/scenarios')
     const unlisted: string[] = []
-    if (!existsSync(dir)) return
     for await (const file of new Glob('**/*.scenario.ts').scan(dir)) {
-      const name = relative(dir, join(dir, file)).replace(/\.scenario\.ts$/, '')
+      const name = file.replace(/\.scenario\.ts$/, '')
       if (!listed.has(name)) unlisted.push(name)
     }
     expect(unlisted).toEqual([])
