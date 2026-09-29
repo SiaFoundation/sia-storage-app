@@ -279,6 +279,42 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
     expect(await appB.app.directories.getPathForFile(trashed.id)).toBe('X')
   }, 60_000)
 
+  it('unfavoriting a file reaches the other device and keeps its other tags', async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    await appA.app.tags.toggleFavorite(file.id)
+    await appA.app.tags.add(file.id, 'keep')
+    await waitForCondition(
+      async () =>
+        (await appB.app.tags.isFavorite(file.id)) &&
+        (await appB.app.tags.getForFile(file.id)).some((t) => t.name === 'keep'),
+      { timeout: 15_000, message: 'B to see the file favorited and tagged' },
+    )
+
+    await appA.app.tags.toggleFavorite(file.id)
+
+    await waitForCondition(async () => !(await appB.app.tags.isFavorite(file.id)), {
+      timeout: 15_000,
+      message: 'B to see the file unfavorited',
+    })
+    expect((await appB.app.tags.getForFile(file.id)).map((t) => t.name)).toEqual(['keep'])
+  }, 30_000)
+
+  it('unfavoriting a file whose only tag is Favorites reaches the other device', async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    await appA.app.tags.toggleFavorite(file.id)
+    await waitForCondition(() => appB.app.tags.isFavorite(file.id), {
+      timeout: 15_000,
+      message: 'B to see the file favorited',
+    })
+
+    await appA.app.tags.toggleFavorite(file.id)
+
+    await waitForCondition(async () => !(await appB.app.tags.isFavorite(file.id)), {
+      timeout: 15_000,
+      message: 'B to see the file unfavorited',
+    })
+  }, 30_000)
+
   it('three devices converge on shared state', async () => {
     const appC = createTestApp(shared)
     await appC.start()

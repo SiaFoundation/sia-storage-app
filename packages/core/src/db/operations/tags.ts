@@ -119,6 +119,10 @@ export async function queryAllTagsWithCounts(db: DatabaseAdapter): Promise<TagWi
   )
 }
 
+/**
+ * Replaces one file's tags as `syncManyTagsFromMetadata` does, and does nothing
+ * when the metadata has no tag list.
+ */
 export async function syncTagsFromMetadata(
   db: DatabaseAdapter,
   fileId: string,
@@ -129,12 +133,7 @@ export async function syncTagsFromMetadata(
   }
   await ensureSystemTags(db)
   await db.withTransactionAsync(async (tx) => {
-    await tx.runAsync(
-      `DELETE FROM file_tags WHERE fileId = ? AND tagId NOT IN (
-        SELECT id FROM tags WHERE system = 1
-      )`,
-      fileId,
-    )
+    await tx.runAsync('DELETE FROM file_tags WHERE fileId = ?', fileId)
 
     for (const name of tagNames) {
       const tag = await getOrCreateTag(tx, name)
@@ -194,6 +193,13 @@ async function ensureTagsByName(
   return result
 }
 
+/**
+ * Replaces each file's tags with the list from its metadata, Favorites
+ * included. Pushed metadata always names every tag the file has, system tags
+ * too, so a list without Favorites means another device unfavorited the file.
+ * `ensureSystemTags` runs first, so a listed "Favorites" resolves to the
+ * system tag rather than a new user tag of that name.
+ */
 export async function syncManyTagsFromMetadata(
   db: DatabaseAdapter,
   entries: { fileId: string; tagNames: string[] }[],
@@ -212,12 +218,7 @@ export async function syncManyTagsFromMetadata(
 
   const fileIds = entries.map((e) => e.fileId)
   const ph = fileIds.map(() => '?').join(',')
-  await db.runAsync(
-    `DELETE FROM file_tags WHERE fileId IN (${ph}) AND tagId NOT IN (
-      SELECT id FROM tags WHERE system = 1
-    )`,
-    ...fileIds,
-  )
+  await db.runAsync(`DELETE FROM file_tags WHERE fileId IN (${ph})`, ...fileIds)
 
   const fileTagRows: { fileId: string; tagId: string }[] = []
   for (const entry of entries) {

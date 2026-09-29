@@ -535,28 +535,31 @@ describe('syncTagsFromMetadata', () => {
     expect(names!.sort()).toEqual(['RemoteTag1', 'RemoteTag2'])
   })
 
-  it('preserves system tags', async () => {
+  it('keeps a file favorited when the list names Favorites', async () => {
     await ensureSystemTags(db())
     await createTestFile('f1')
     await toggleFavorite(db(), 'f1')
-    await syncTagsFromMetadata(db(), 'f1', ['UserTag'])
-    const isFav = await queryIsFavorite(db(), 'f1')
-    expect(isFav).toBe(true)
-    const names = await queryTagNamesForFile(db(), 'f1')
-    expect(names).toContain('UserTag')
-    expect(names).toContain('Favorites')
+    await syncTagsFromMetadata(db(), 'f1', ['Favorites', 'UserTag'])
+    expect(await queryIsFavorite(db(), 'f1')).toBe(true)
+    expect(await queryTagNamesForFile(db(), 'f1')).toEqual(['Favorites', 'UserTag'])
   })
 
-  it('preserves system tags when clearing user tags', async () => {
+  it('unfavorites a file when the list leaves out Favorites', async () => {
     await ensureSystemTags(db())
     await createTestFile('f1')
     await toggleFavorite(db(), 'f1')
     await addTagToFile(db(), 'f1', 'UserTag')
+    await syncTagsFromMetadata(db(), 'f1', ['UserTag'])
+    expect(await queryIsFavorite(db(), 'f1')).toBe(false)
+    expect(await queryTagNamesForFile(db(), 'f1')).toEqual(['UserTag'])
+  })
+
+  it('unfavorites a file when the list is empty', async () => {
+    await ensureSystemTags(db())
+    await createTestFile('f1')
+    await toggleFavorite(db(), 'f1')
     await syncTagsFromMetadata(db(), 'f1', [])
-    const isFav = await queryIsFavorite(db(), 'f1')
-    expect(isFav).toBe(true)
-    const names = await queryTagNamesForFile(db(), 'f1')
-    expect(names).toEqual(['Favorites'])
+    expect(await queryIsFavorite(db(), 'f1')).toBe(false)
   })
 
   it('no-ops on undefined', async () => {
