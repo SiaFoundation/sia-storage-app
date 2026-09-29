@@ -44,8 +44,9 @@ export function diffFileMetadata(
   if (!tagsEqual(localMeta.tags, remoteMeta.tags)) {
     diffs.tags = { local: localMeta.tags ?? null, remote: remoteMeta.tags ?? null }
   }
-  const localDir = localMeta.directory ?? null
-  const remoteDir = remoteMeta.directory ?? null
+  // '' is how metadata spells the root, which local metadata leaves unset.
+  const localDir = localMeta.directory || null
+  const remoteDir = remoteMeta.directory || null
   if (localDir !== remoteDir) {
     diffs.directory = { local: localDir, remote: remoteDir }
   }

@@ -221,6 +221,64 @@ describe('Multi-Device Sync (simultaneous instances)', () => {
     expect(dirB).toBe('Photos')
   })
 
+  it('moving a file to the root and removing its last tag reach the other device', async () => {
+    const [file] = await appA.addFiles(generateTestFiles(1, { startId: 1 }))
+    const docs = await appA.app.directories.getOrCreateAtPath('docs')
+    await appA.app.files.moveFile(file.id, docs.id)
+    await appA.app.tags.add(file.id, 'keep')
+    await waitForCondition(
+      async () =>
+        (await appB.app.directories.getPathForFile(file.id)) === 'docs' &&
+        (await appB.app.tags.getForFile(file.id)).some((t) => t.name === 'keep'),
+      { timeout: 15_000, message: 'B to see the file in docs with its tag' },
+    )
+
+    await appA.app.files.moveFile(file.id, null)
+    const [tag] = (await appA.app.tags.getForFile(file.id)).filter((t) => t.name === 'keep')
+    await appA.app.tags.remove(file.id, tag.id)
+
+    await waitForCondition(
+      async () =>
+        (await appB.app.directories.getPathForFile(file.id)) === undefined &&
+        !(await appB.app.tags.getForFile(file.id)).some((t) => t.name === 'keep'),
+      { timeout: 15_000, message: 'B to see the file at the root with no tag' },
+    )
+  }, 30_000)
+
+  it('restoring a file whose folder holds only trash on the other device keeps its folder', async () => {
+    const [trashed, deleted] = await appA.addFiles(generateTestFiles(2, { startId: 1 }))
+    const folder = await appA.app.directories.getOrCreateAtPath('X')
+    await appA.app.files.moveFiles([trashed.id, deleted.id], folder.id)
+    await waitForCondition(
+      async () =>
+        (await appB.app.directories.getPathForFile(trashed.id)) === 'X' &&
+        (await appB.app.directories.getPathForFile(deleted.id)) === 'X',
+      { timeout: 15_000, message: 'B to see both files in X' },
+    )
+
+    await appA.app.files.trashFile(trashed.id)
+    await waitForCondition(
+      async () => (await appB.app.files.getById(trashed.id))?.trashedAt != null,
+      { timeout: 15_000, message: 'B to see the file trashed' },
+    )
+    await appA.app.files.tombstoneFile(deleted.id)
+    await waitForCondition(
+      async () => {
+        const row = await appB.app.files.getById(deleted.id)
+        return row === null || row.deletedAt != null
+      },
+      { timeout: 15_000, message: 'B to see the other file deleted' },
+    )
+
+    await appB.app.files.restore([trashed.id])
+    await waitForCondition(
+      async () => (await appA.app.files.getById(trashed.id))?.trashedAt === null,
+      { timeout: 15_000, message: 'A to see the file restored' },
+    )
+    expect(await appA.app.directories.getPathForFile(trashed.id)).toBe('X')
+    expect(await appB.app.directories.getPathForFile(trashed.id)).toBe('X')
+  }, 60_000)
+
   it('three devices converge on shared state', async () => {
     const appC = createTestApp(shared)
     await appC.start()

@@ -152,34 +152,68 @@ describe('Sync Down', () => {
     expect(tags.map((t) => t.name).sort()).toEqual(['beach', 'vacation'])
   })
 
-  it('preserves local tags when remote metadata has no tag data', async () => {
-    app.sdk.injectObject({
-      metadata: generateMockFileMetadata(1, { name: 'photo.jpg' }),
+  it('two objects for one file in one batch apply the newest metadata to the row, tags and folder', async () => {
+    // Sync-up can have pushed a change to one of a file's objects and not yet
+    // the other, so a device that has never seen the file fetches both. The
+    // newer copy comes first here, so taking the last copy would be wrong.
+    const older = generateMockFileMetadata(1, { name: 'notes.txt', tags: ['keep'] })
+    older.directory = 'docs'
+    const newer = {
+      ...older,
+      name: 'renamed.txt',
+      tags: [],
+      directory: '',
+      updatedAt: older.updatedAt + 1000,
+    }
+    app.pause()
+    app.sdk.injectObject({ metadata: newer })
+    app.sdk.injectObject({ metadata: older })
+    app.resume()
+
+    await waitForCondition(async () => (await app.getFiles()).some((f) => f.id === older.id), {
+      timeout: 10_000,
+      message: 'the file to sync',
+    })
+    expect((await app.getFiles()).find((f) => f.id === older.id)?.name).toBe('renamed.txt')
+    const tags = (await app.readTagsForFile(older.id)).filter((t) => !t.system)
+    expect(tags).toEqual([])
+    expect(await app.app.directories.getPathForFile(older.id)).toBeUndefined()
+  })
+
+  it('metadata without tags or a directory leaves the local folder and tags alone', async () => {
+    const meta = generateMockFileMetadata(1, { name: 'photo.jpg' })
+    const stored = app.sdk.injectObject({ metadata: meta })
+    await waitForCondition(async () => (await app.getFileById(meta.id)) !== null, {
+      timeout: 10_000,
+      message: 'the file to sync',
     })
 
-    let fileId: string | undefined
+    const folder = await app.app.directories.getOrCreateAtPath('docs')
+    await app.app.files.moveFile(meta.id, folder.id)
+    await app.addTagToFile(meta.id, 'myTag')
+    // Sync-up publishing the local change after the injection below would overwrite it.
     await waitForCondition(
       async () => {
-        const files = await app.getFiles()
-        if (files.length === 1) {
-          fileId = files[0].id
-          return true
-        }
-        return false
+        const object = app.sdk.getStoredObjects().find((o) => o.id === stored.id)
+        const published = JSON.parse(new TextDecoder().decode(object?.metadata))
+        return published.directory === 'docs' && published.tags?.includes('myTag')
       },
-      { timeout: 10_000, message: 'File to sync' },
+      { timeout: 10_000, message: 'sync-up to publish the folder and tag' },
     )
 
-    await app.addTagToFile(fileId!, 'myTag')
-    const tagsAfterAdd = (await app.readTagsForFile(fileId!)).filter((t) => !t.system)
-    expect(tagsAfterAdd).toHaveLength(1)
-    expect(tagsAfterAdd[0].name).toBe('myTag')
+    app.sdk.injectObject({
+      id: stored.id,
+      metadata: { ...meta, name: 'renamed.jpg', updatedAt: Date.now() + 1000 },
+      omit: ['tags', 'directory'],
+    })
+    await waitForCondition(async () => (await app.getFileById(meta.id))?.name === 'renamed.jpg', {
+      timeout: 10_000,
+      message: 'the update to sync',
+    })
 
-    await new Promise((r) => setTimeout(r, 3000))
-
-    const tagsAfterSync = (await app.readTagsForFile(fileId!)).filter((t) => !t.system)
-    expect(tagsAfterSync).toHaveLength(1)
-    expect(tagsAfterSync[0].name).toBe('myTag')
+    const tags = (await app.readTagsForFile(meta.id)).filter((t) => !t.system)
+    expect(tags.map((t) => t.name)).toEqual(['myTag'])
+    expect(await app.app.directories.getPathForFile(meta.id)).toBe('docs')
   })
 
   it('syncs tag updates from server', async () => {

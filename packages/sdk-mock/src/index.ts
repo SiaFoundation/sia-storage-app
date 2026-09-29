@@ -414,15 +414,27 @@ export class MockSdk implements SdkAdapter {
     })
   }
 
-  injectObject(object: { id?: string; metadata: FileMetadata; data?: Uint8Array }): StoredObject {
+  /** `omit` drops encoded fields, to publish metadata the way an older client wrote it. */
+  injectObject(object: {
+    id?: string
+    metadata: FileMetadata
+    data?: Uint8Array
+    omit?: (keyof FileMetadata)[]
+  }): StoredObject {
     const objectId = object.id ?? generateObjectId()
     const now = new Date()
     const metadata = object.metadata
     const data = object.data ?? new Uint8Array(metadata.size)
+    let encoded = encodeFileMetadata(metadata)
+    if (object.omit) {
+      const payload = JSON.parse(new TextDecoder().decode(encoded))
+      for (const key of object.omit) delete payload[key]
+      encoded = new TextEncoder().encode(JSON.stringify(payload)).buffer as ArrayBuffer
+    }
 
     const stored: StoredObject = {
       id: objectId,
-      metadata: encodeFileMetadata(metadata),
+      metadata: encoded,
       size: BigInt(metadata.size),
       slabs: [{ id: `slab-${objectId}`, data }],
       createdAt: now,

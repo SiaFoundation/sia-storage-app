@@ -855,6 +855,14 @@ describe('queryCountFilesWithDirectories', () => {
 })
 
 describe('syncDirectoryFromMetadata', () => {
+  it('moves the file to the root for an empty path', async () => {
+    await createTestFile('f1')
+    await syncDirectoryFromMetadata(db(), 'f1', 'Photos')
+    await syncDirectoryFromMetadata(db(), 'f1', '')
+
+    expect(await queryDirectoryPathForFile(db(), 'f1')).toBeUndefined()
+  })
+
   it('creates root dir and assigns file', async () => {
     await createTestFile('f1')
     await syncDirectoryFromMetadata(db(), 'f1', 'Photos')
@@ -1063,5 +1071,29 @@ describe('syncManyDirectoriesFromMetadata', () => {
       { fileId: 'f1', directoryPath: 'new' },
     ])
     expect(oldGroups).toEqual([{ name: 'f1.jpg', directoryId: oldDir!.id }])
+  })
+
+  it('moves a file to the root for an empty path and returns the folder it left', async () => {
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a' }])
+    const dirId = await getDirectoryId('f1')
+
+    const oldGroups = await syncManyDirectoriesFromMetadata(db(), [
+      { fileId: 'f1', directoryPath: '' },
+    ])
+    expect(await getDirectoryId('f1')).toBeNull()
+    expect(oldGroups).toEqual([{ name: 'f1.jpg', directoryId: dirId }])
+  })
+
+  it('returns no groups for files already in their folder', async () => {
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'a' }])
+
+    const oldGroups = await syncManyDirectoriesFromMetadata(db(), [
+      { fileId: 'f1', directoryPath: 'a' },
+      { fileId: 'f2', directoryPath: '' },
+    ])
+    expect(oldGroups).toEqual([])
   })
 })

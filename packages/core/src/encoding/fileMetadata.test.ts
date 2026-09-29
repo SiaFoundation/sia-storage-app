@@ -1,4 +1,4 @@
-import { decodeFileMetadata, readMetadataVersion } from './fileMetadata'
+import { decodeFileMetadata, encodeFileMetadata, readMetadataVersion } from './fileMetadata'
 
 describe('readMetadataVersion', () => {
   const encode = (obj: unknown) =>
@@ -33,5 +33,33 @@ describe('decodeFileMetadata', () => {
       encode({ ...fields, size: 1, hash: hex, createdAt: 1, updatedAt: 1, trashedAt: null }),
     )
     expect(meta.hash).toBe(`sha256:${hex}`)
+  })
+})
+
+describe('encodeFileMetadata', () => {
+  const file = {
+    id: 'f1',
+    name: 'a.txt',
+    type: 'text/plain',
+    kind: 'file' as const,
+    size: 1,
+    hash: 'sha256:h' as const,
+    createdAt: 1,
+    updatedAt: 1,
+    trashedAt: null,
+  }
+
+  it('writes a root file with an empty directory and no tags, so peers can apply both', () => {
+    const decoded = decodeFileMetadata(encodeFileMetadata(file))
+    expect(decoded.directory).toBe('')
+    expect(decoded.tags).toEqual([])
+  })
+
+  it('writes a file’s directory and tags as they are', () => {
+    const decoded = decodeFileMetadata(
+      encodeFileMetadata({ ...file, directory: 'docs', tags: ['keep'] }),
+    )
+    expect(decoded.directory).toBe('docs')
+    expect(decoded.tags).toEqual(['keep'])
   })
 })

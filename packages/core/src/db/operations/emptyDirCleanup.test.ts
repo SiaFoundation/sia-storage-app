@@ -41,7 +41,7 @@ describe('deleteEmptyDirectories', () => {
     expect(deleted).toBe(0)
   })
 
-  it('deletes directory when all files are trashed', async () => {
+  it('keeps a directory whose files are all trashed', async () => {
     const dir = await insertDirectory(db(), 'trashed')
     await createTestFile('f2', 'doc.txt')
     await moveFileToDirectory(db(), 'f2', dir.id)
@@ -49,7 +49,7 @@ describe('deleteEmptyDirectories', () => {
     await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', now, 'f2')
 
     const deleted = await deleteEmptyDirectories(db(), [dir.id])
-    expect(deleted).toBe(1)
+    expect(deleted).toBe(0)
   })
 
   it('deletes directory when all files are tombstoned', async () => {
