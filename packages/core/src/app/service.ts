@@ -615,8 +615,12 @@ export interface AppService {
     ): Promise<AdoptFilePlain>
     /** Renames the on-disk path to match a new mime type. Call before persisting `type`. */
     renameToType(file: { id: string; type: string }, newType: string): Promise<{ uri: string }>
-    /** Detects the MIME type of a file at the given path. */
-    detectMimeType(path: string): Promise<string | null>
+    /**
+     * Detects the MIME type of the file at `path` from its bytes, then from the
+     * extension of `name`. With no `name`, the Node adapter falls back to the
+     * path's extension and the mobile one answers from the bytes alone.
+     */
+    detectMimeType(path: string, name?: string): Promise<string | null>
     /** Lists all filenames in the managed storage directory. */
     listFiles(): Promise<string[]>
     /** Creates the managed storage directory if it does not exist. */
