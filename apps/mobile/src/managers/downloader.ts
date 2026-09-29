@@ -1,4 +1,5 @@
 import { INSUFFICIENT_SPACE_MESSAGE } from '@siastorage/core/config'
+import type { DownloadPriority } from '@siastorage/core/app'
 import { isInsufficientSpaceError } from '@siastorage/core/lib/errors'
 import { useSdk } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
@@ -9,13 +10,13 @@ import { useToast } from '../lib/toastContext'
 import { app } from '../stores/appService'
 
 /** Non-hook version for programmatic downloads (e.g., bulk operations) */
-export async function downloadFile(file: FileRecord, priority?: number): Promise<void> {
+export async function downloadFile(file: FileRecord, priority: DownloadPriority): Promise<void> {
   await app().downloads.downloadFile(file.id, priority)
 }
 
 export function useDownload(
-  file?: FileRecord | null,
-  priority?: number,
+  file: FileRecord | null | undefined,
+  priority: DownloadPriority,
   opts?: {
     /**
      * Toast when the download won't fit. Only for explicit, user-tapped
