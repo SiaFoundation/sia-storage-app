@@ -172,12 +172,14 @@ scenario. The PR description of a fix found or reproduced in sim gives the
 | Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`           | yes                 |
 | Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | no                  |
 | App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android`      | the built app through its UI                                    | no                  |
-| Sim, CLI devices      | `bun sim run sync/ resilience/`                 | real daemons syncing, killed and offline together               | yes                 |
+| Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together               | yes                 |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
+| Sim, desktop          | `bun sim run desktop/`                          | the installed test app, its Finder extension and Finder folder  | no                  |
 
-The native device and Maestro tiers are local-only and rot unless deliberately run. Run
-the native device tier, the Maestro flows and the phone scenarios before landing
-anything that touches native code or the import flow.
+The native device, Maestro and desktop tiers are local-only and rot unless deliberately
+run. Run the native device tier, the Maestro flows and the phone scenarios before
+landing anything that touches native code or the import flow, and the desktop scenarios
+before landing a change to the desktop app or its extension.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot
