@@ -405,7 +405,10 @@ export interface AppService {
       dirPath: string | undefined,
       opts?: { skipInvalidation?: boolean; skipCurrentRecalc?: boolean },
     ): Promise<void>
-    /** Creates every missing directory in the given paths and returns input path to row id. */
+    /**
+     * Creates every missing directory in the given paths, stored in NFC, and
+     * returns a map from each path exactly as passed in to its row id.
+     */
     ensureAtPaths(
       paths: Iterable<string>,
       opts?: { skipInvalidation?: boolean },

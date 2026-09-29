@@ -103,6 +103,27 @@ describe('importAssets for picker / camera / share', () => {
     expect(newVersionCount).toBe(1)
   })
 
+  it('counts a pick with a decomposed name as a new version of the composed stored name', async () => {
+    await app().files.create({
+      id: 'existing',
+      name: 'café.jpg',
+      type: 'image/jpeg',
+      kind: 'file',
+      size: 10,
+      hash: 'sha256:h',
+      createdAt: 1,
+      updatedAt: 1,
+      addedAt: 1,
+      mediaAssetId: null,
+      trashedAt: null,
+      deletedAt: null,
+    })
+    const { newVersionCount } = await importAssets([
+      pick({ name: 'café.jpg'.normalize('NFD'), sourceUri: 'file:///v2' }),
+    ])
+    expect(newVersionCount).toBe(1)
+  })
+
   it('does not dedup picker imports by content (dedupByHash=0), so a manual re-import always lands', async () => {
     const first = await importAssets([pick({ name: 'x.jpg', sourceUri: 'file:///x1' })])
     const second = await importAssets([pick({ name: 'x.jpg', sourceUri: 'file:///x2' })])

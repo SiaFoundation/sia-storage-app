@@ -1,3 +1,4 @@
+import { normalizeName } from '@siastorage/core/lib/names'
 import { getPaths } from '@siastorage/node-adapters'
 import { ensureDaemonRunning } from '../daemon/supervisor'
 import { createDaemonClient } from '../lib/appServiceClient'
@@ -47,7 +48,7 @@ export async function untagCommand(dataDir: string, file: string, tag: string) {
     process.exit(1)
   }
   const existingTags = await app.tags.getForFile(record.id)
-  const tagRecord = existingTags.find((t: any) => t.name === tag)
+  const tagRecord = existingTags.find((t: any) => t.name === normalizeName(tag))
   if (!tagRecord) {
     console.error(`Tag "${tag}" not found on file`)
     process.exit(1)

@@ -3,6 +3,7 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import * as ops from '../../db/operations'
 import { toContentHash } from '../../lib/contentHash'
+import { normalizeName, withNormalizedName } from '../../lib/names'
 import type { AdoptFileHashed, AdoptFilePlain, FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
@@ -252,13 +253,13 @@ export function buildDbNamespaces(
       create: async (imp, files) => {
         await db.withTransactionAsync(async (tx) => {
           await ops.insertImport(tx, imp)
-          await ops.insertManyImportFiles(tx, files)
+          await ops.insertManyImportFiles(tx, files.map(withNormalizedName))
         })
         invalidateImports()
       },
       addFiles: async (importId, files) => {
         if (files.length === 0) return
-        await ops.addFilesToImport(db, importId, files)
+        await ops.addFilesToImport(db, importId, files.map(withNormalizedName))
         invalidateImports()
       },
       seal: async (id) => {
@@ -271,7 +272,13 @@ export function buildDbNamespaces(
         return sealed
       },
       appendToOpenImport: async (source, newImport, files, now) => {
-        const result = await ops.appendToOpenImportOrCreate(db, source, newImport, files, now)
+        const result = await ops.appendToOpenImportOrCreate(
+          db,
+          source,
+          newImport,
+          files.map(withNormalizedName),
+          now,
+        )
         invalidateImports()
         return result
       },
@@ -346,13 +353,13 @@ export function buildDbNamespaces(
       search: (query, limit) => ops.queryTagsByPrefix(db, query, limit ?? 10),
       isFavorite: (fileId) => ops.queryIsFavorite(db, fileId),
       add: async (fileId, tagName) => {
-        await ops.addTagToFile(db, fileId, tagName)
+        await ops.addTagToFile(db, fileId, normalizeName(tagName))
         caches.tags.invalidateAll()
         caches.libraryVersion.invalidate()
       },
       addToFiles: async (fileIds, tagName) => {
         if (fileIds.length === 0) return
-        await ops.addTagToFiles(db, fileIds, tagName)
+        await ops.addTagToFiles(db, fileIds, normalizeName(tagName))
         caches.tags.invalidateAll()
         caches.libraryVersion.invalidate()
       },
@@ -367,7 +374,7 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
       },
       rename: async (tagId, name) => {
-        await ops.renameTag(db, tagId, name)
+        await ops.renameTag(db, tagId, normalizeName(name))
         caches.tags.invalidateAll()
         caches.libraryVersion.invalidate()
       },
@@ -377,26 +384,29 @@ export function buildDbNamespaces(
         caches.libraryVersion.invalidate()
       },
       create: async (name) => {
-        const tag = await ops.insertTag(db, name)
+        const tag = await ops.insertTag(db, normalizeName(name))
         caches.tags.invalidateAll()
         return tag
       },
       getOrCreate: async (name) => {
-        const tag = await ops.getOrCreateTag(db, name)
+        const tag = await ops.getOrCreateTag(db, normalizeName(name))
         caches.tags.invalidateAll()
         return tag
       },
       ensureSystemTags: () => ops.ensureSystemTags(db),
       syncFromMetadata: async (fileId, tagNames, opts) => {
         if (tagNames === undefined) return
-        await ops.syncTagsFromMetadata(db, fileId, tagNames)
+        await ops.syncTagsFromMetadata(db, fileId, tagNames.map(normalizeName))
         if (!opts?.skipInvalidation) {
           caches.tags.invalidateAll()
           caches.libraryVersion.invalidate()
         }
       },
       syncManyFromMetadata: async (entries, opts) => {
-        await ops.syncManyTagsFromMetadata(db, entries)
+        await ops.syncManyTagsFromMetadata(
+          db,
+          entries.map((e) => ({ ...e, tagNames: e.tagNames.map(normalizeName) })),
+        )
         if (!opts?.skipInvalidation) {
           caches.tags.invalidateAll()
           caches.libraryVersion.invalidate()
@@ -410,11 +420,11 @@ export function buildDbNamespaces(
       getByIds: (ids) => ops.readFilesByIds(db, ids),
       getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
       getCurrentByNamesInDirectory: (names, directoryId) =>
-        ops.readCurrentFilesByNamesInDirectory(db, names, directoryId),
-      getByName: (name) => ops.readFileByName(db, name),
-      getByNameInUnfiled: (name) => ops.readFileByNameInUnfiled(db, name),
+        ops.readCurrentFilesByNamesInDirectory(db, names.map(normalizeName), directoryId),
+      getByName: (name) => ops.readFileByName(db, normalizeName(name)),
+      getByNameInUnfiled: (name) => ops.readFileByNameInUnfiled(db, normalizeName(name)),
       getByNameInDirectoryPath: (name, directoryPath) =>
-        ops.readFileByNameInDirectoryPath(db, name, directoryPath),
+        ops.readFileByNameInDirectoryPath(db, normalizeName(name), normalizeName(directoryPath)),
       getByContentHash: (hash) => ops.readFileByContentHash(db, hash),
       getByContentHashes: (hashes) => ops.readFilesByContentHashes(db, hashes),
       query: (opts) => ops.queryFiles(db, opts),
@@ -423,11 +433,11 @@ export function buildDbNamespaces(
       queryLibrary: (opts) => ops.queryLibraryFiles(db, opts),
       create: async (record, localObject, opts) => {
         if (localObject) {
-          await ops.createFileWithLocalObject(db, record, localObject, {
+          await ops.createFileWithLocalObject(db, withNormalizedName(record), localObject, {
             directoryId: opts?.directoryId,
           })
         } else {
-          await ops.insertFile(db, record, {
+          await ops.insertFile(db, withNormalizedName(record), {
             skipCurrentRecalc: opts?.skipCurrentRecalc,
             directoryId: opts?.directoryId,
           })
@@ -437,7 +447,7 @@ export function buildDbNamespaces(
         }
       },
       createMany: async (records, opts) => {
-        await ops.insertManyFiles(db, records, {
+        await ops.insertManyFiles(db, records.map(withNormalizedName), {
           conflictClause: opts?.conflictClause,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
           directoryId: opts?.directoryId,
@@ -447,7 +457,7 @@ export function buildDbNamespaces(
         }
       },
       upsertMany: async (records, opts) => {
-        await ops.upsertManyFiles(db, records, {
+        await ops.upsertManyFiles(db, records.map(withNormalizedName), {
           skipCurrentRecalc: opts?.skipCurrentRecalc,
           directoryIdByFileId: opts?.directoryIdByFileId,
         })
@@ -468,7 +478,7 @@ export function buildDbNamespaces(
         }
       },
       update: async (update, opts) => {
-        await ops.updateFile(db, update, {
+        await ops.updateFile(db, withNormalizedName(update), {
           updatedAt: opts.updatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
@@ -478,7 +488,7 @@ export function buildDbNamespaces(
         }
       },
       updateMany: async (updates, opts) => {
-        await ops.updateManyFiles(db, updates, {
+        await ops.updateManyFiles(db, updates.map(withNormalizedName), {
           updatedAt: opts.updatedAt,
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
@@ -572,7 +582,7 @@ export function buildDbNamespaces(
         if (total > 0) invalidateLibrary()
       },
       getVersionHistory: async (name, directoryId) => {
-        const rows = await ops.queryFileVersions(db, name, directoryId)
+        const rows = await ops.queryFileVersions(db, normalizeName(name), directoryId)
         return rows.map((r) => ops.transformRow(r))
       },
       addVersion: async (replacesId, version) => {
@@ -582,7 +592,7 @@ export function buildDbNamespaces(
       },
       renameFile: async (id, newName) => {
         const renamed = await forStack(id, (tx, stack) =>
-          ops.renameAllFileVersions(tx, stack.name, stack.directoryId, newName),
+          ops.renameAllFileVersions(tx, stack.name, stack.directoryId, normalizeName(newName)),
         )
         if (renamed.length > 0) invalidateLibrary()
       },
@@ -616,7 +626,7 @@ export function buildDbNamespaces(
         invalidateLibrary()
       },
       trashAllVersions: async (name, directoryId) => {
-        const ids = await ops.trashAllFileVersions(db, name, directoryId)
+        const ids = await ops.trashAllFileVersions(db, normalizeName(name), directoryId)
         if (ids.length > 0) {
           invalidateLibrary()
         }
@@ -627,12 +637,17 @@ export function buildDbNamespaces(
       getAll: () => ops.queryAllDirectoriesWithCounts(db),
       count: () => ops.queryCountDirectories(db),
       getById: (id) => ops.queryDirectoryById(db, id),
-      getByPath: (path) => ops.queryDirectoryByPath(db, path),
+      getByPath: (path) => ops.queryDirectoryByPath(db, normalizeName(path)),
       getPathForFile: (fileId) => ops.queryDirectoryPathForFile(db, fileId),
       getPathsForFiles: (fileIds) => ops.queryDirectoryPathsForFiles(db, fileIds),
-      getChildren: (parentPath) => ops.queryDirectoryChildren(db, parentPath),
+      getChildren: (parentPath) =>
+        ops.queryDirectoryChildren(db, parentPath === null ? null : normalizeName(parentPath)),
       create: async (name, parentPath) => {
-        const dir = await ops.insertDirectory(db, name, parentPath)
+        const dir = await ops.insertDirectory(
+          db,
+          normalizeName(name),
+          parentPath === undefined ? undefined : normalizeName(parentPath),
+        )
         caches.directories.invalidateAll()
         // The library version is the change signal clients relist on, and a
         // new folder alters what a listing returns as much as a deletion.
@@ -643,13 +658,17 @@ export function buildDbNamespaces(
       // through here, and a folder that arrives without the library signal
       // stays invisible to an enumerated working set until an unrelated edit.
       getOrCreate: async (name, parentPath) => {
-        const dir = await ops.getOrCreateDirectory(db, name, parentPath)
+        const dir = await ops.getOrCreateDirectory(
+          db,
+          normalizeName(name),
+          parentPath === undefined ? undefined : normalizeName(parentPath),
+        )
         caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
         return dir
       },
       getOrCreateAtPath: async (path) => {
-        const dir = await ops.getOrCreateDirectoryAtPath(db, path)
+        const dir = await ops.getOrCreateDirectoryAtPath(db, normalizeName(path))
         caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
         return dir
@@ -682,13 +701,19 @@ export function buildDbNamespaces(
         return count
       },
       rename: async (id, name) => {
-        const dir = await ops.renameDirectory(db, id, name)
+        const dir = await ops.renameDirectory(db, id, normalizeName(name))
         caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
         return dir
       },
       moveDirectory: async (directoryId, newParentPath) => {
-        await ops.moveDirectory(db, directoryId, newParentPath)
+        await ops.moveDirectory(
+          db,
+          directoryId,
+          newParentPath === null || newParentPath === undefined
+            ? newParentPath
+            : normalizeName(newParentPath),
+        )
         caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
       },
@@ -701,7 +726,7 @@ export function buildDbNamespaces(
       countFilesWithDirectories: (fileIds) => ops.queryCountFilesWithDirectories(db, fileIds),
       syncFromMetadata: async (fileId, dirPath, opts) => {
         if (dirPath === undefined) return
-        await ops.syncDirectoryFromMetadata(db, fileId, dirPath, {
+        await ops.syncDirectoryFromMetadata(db, fileId, normalizeName(dirPath), {
           skipCurrentRecalc: opts?.skipCurrentRecalc,
         })
         if (!opts?.skipInvalidation) {

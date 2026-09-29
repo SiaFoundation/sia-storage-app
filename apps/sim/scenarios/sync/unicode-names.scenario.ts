@@ -7,14 +7,6 @@ export default defineScenario({
   description:
     'The laptop adds a file whose name on disk is decomposed (NFD), the form macOS file systems often hand back, and renames another to a decomposed name. Both devices hold both names composed (NFC), the form phones and most apps produce.',
   devices: { laptop: 'cli', desk: 'cli' },
-  knownBug:
-    'Names are stored exactly as given, so a decomposed name differs byte for byte from the same name composed, and the library treats them as two names.',
-  // Each name is stored exactly as it was given, decomposed.
-  bugShowsAs: ['laptop', 'desk'].map((device) => ({
-    check: `${device} holds both names composed`,
-    matches: (names: string[]) =>
-      names.length === 2 && names.every((n) => n !== n.normalize('NFC')),
-  })),
   async run({ devices, seed, converge, step, checkEqual, workDir }) {
     const { laptop } = devices
     const decomposed = 'résumé-日本.txt'.normalize('NFD')
