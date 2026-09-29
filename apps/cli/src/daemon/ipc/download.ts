@@ -15,15 +15,15 @@ export function registerDownloadHandlers(handlers: IpcHandlerMap, app: CliApp): 
     const output = params?.output as string | undefined
     if (!fileId) throw new Error('Missing fileId parameter')
     if (!output) throw new Error('Missing output parameter')
+    if (!path.isAbsolute(output)) throw new Error('output must be an absolute path')
 
     const file = await app.service.files.getById(fileId)
     if (!file) throw new Error('File not found')
 
-    await app.service.downloads.downloadFile(fileId)
+    // The user asked for this file, so it is not queued behind, or dropped
+    // for, background downloads.
+    await app.service.downloads.downloadFile(fileId, 0)
 
-    if (!path.isAbsolute(output)) {
-      throw new Error('output must be an absolute path')
-    }
     const sourceUri = app.fsIO.uri(fileId, file.type)
     await fs.mkdir(path.dirname(output), { recursive: true })
     await fs.copyFile(sourceUri, output)

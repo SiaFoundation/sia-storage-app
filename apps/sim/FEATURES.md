@@ -311,7 +311,7 @@ bun sim device expect phone --label Menu
   `finder/rename-and-edit-elsewhere`, `finder/same-name-create`,
   `finder/save-survives-restart`; integration `provider-handoff`,
   `provider-reads`, `provider-changes`, `provider-bulk-create`,
-  `provider-write-integrity`
+  `provider-concurrent-opens`, `provider-write-integrity`
 - Desktop: `bun sim device finder mac` prints the folder, and `cp`, `mv`, `rm`
   and reading a file in it take the path Finder takes. `finder-state` shows what
   Finder shows for a file, `download` reads a cloud-only file through Finder,
