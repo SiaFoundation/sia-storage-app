@@ -41,6 +41,3 @@ yarn-error.*
 .env.*
 !.env.example
 !.env.test
-
-# E2E
-test/e2e/.maestro/

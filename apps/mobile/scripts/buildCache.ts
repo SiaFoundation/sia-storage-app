@@ -1,11 +1,11 @@
 /**
  * Build Cache Utilities
  *
- * Shared module for smart build caching across dev and E2E scripts.
+ * Build caching for the dev script, whose simulator and emulator builds `bun sim` also installs.
  *
  * How it works:
  * - Computes a hash from files that affect native builds (package.json, plugins, etc.)
- * - Each build target (ios-sim, ios-device, android, e2e-ios, e2e-android) has its own cache
+ * - Each build target (ios-sim, ios-device, android, and the release variants) has its own cache
  * - Skips rebuild if hash matches and artifacts exist
  * - Cache stored in .build-cache/ directory (survives rimraf ios/android)
  */
@@ -20,10 +20,9 @@ export const PROJECT_ROOT = join(import.meta.dir, '..')
 export const BUILD_CACHE_DIR = join(PROJECT_ROOT, '.build-cache')
 
 // Build targets - each has isolated cache
-// Note: E2E uses the same targets as dev since builds are identical
 // Note: Android emulator and device share the same build (same APK works for both)
 export type BuildTarget =
-  | 'ios-sim' // iOS Simulator builds (dev and e2e)
+  | 'ios-sim' // iOS Simulator builds (debug)
   | 'ios-device' // iOS real device builds (debug)
   | 'ios-device-release' // iOS real device builds (release, standalone)
   | 'android' // Android builds (emulator and device share same APK, debug)
@@ -40,10 +39,7 @@ export function getTargetPaths(target: BuildTarget) {
   }
 }
 
-/**
- * Compute hash from all files that affect native builds.
- * Same files used for both dev and E2E to ensure consistency.
- */
+/** Compute hash from all files that affect native builds. */
 export function computeBuildHash(): string {
   // Core config files that affect native builds. variants.js feeds app.config.js
   // (app identity per build variant), so a change there must bust the cache too.
