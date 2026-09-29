@@ -1,5 +1,6 @@
 import { DatabaseSuspendedError } from '@siastorage/core/lib/errors'
 import { createSuspensionManager } from '@siastorage/core/services/suspension'
+import { logger } from '@siastorage/logger'
 import {
   database,
   db,
@@ -353,6 +354,22 @@ describe('outer statements and transactions', () => {
 })
 
 describe('resetDb', () => {
+  it('a reset called after an initialization that replaces the connection runs once it finishes', async () => {
+    const order: string[] = []
+    const info = jest.spyOn(logger, 'info').mockImplementation((scope, message) => {
+      if (scope === 'db' && /^(initializ|resetting)/.test(String(message))) {
+        order.push(String(message))
+      }
+    })
+    try {
+      await Promise.all([initializeDB({ databaseName: 'other' }), resetDb()])
+      expect(order).toEqual(['initializing', 'initialized', 'resetting'])
+      expect(getDbState()).toBe('active')
+    } finally {
+      info.mockRestore()
+    }
+  })
+
   it('parks calls made during the reset and runs them on the new database', async () => {
     const reset = resetDb()
     expect(getDbState()).toBe('closed')
