@@ -633,7 +633,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       await service.fs.getFileUri(target)
       return target
     }
-    await service.downloads.downloadFile(fileId)
+    // At the priority of a download the user asked for. The background
+    // priority's queue keeps only the newest MAX_AUTO_DOWNLOAD_QUEUE waiters
+    // and drops older ones, so Finder opening a folder of files at once would
+    // lose its earliest opens.
+    await service.downloads.downloadFile(fileId, 0)
     const local = (await fsIO.size(file.id, file.type)).value
     if (local !== file.size) {
       throw new Error(`Local copy is ${local ?? 0} of ${file.size} bytes for ${fileId}`)
