@@ -215,9 +215,9 @@ bun sim device expect phone --label Menu
   local copies.
 - Code: `app.downloads`, `app.fs`; services `cacheEviction`; CLI `download`
 - Check: `call <device> downloads.getState`; tables `fs`
-- Tests: scenarios `sync/converge-and-download`,
-  `mobile/tapped-download-arrives`; integration `downloads`, `fs-eviction`,
-  `fs-adopt`, `fs-orphan`, `size-reconcile`
+- Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
+  `sync/converge-and-download`, `mobile/tapped-download-arrives`; integration
+  `downloads`, `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - CLI: `bun sim sia laptop -- download {file}`
 - Desktop: `bun sim device download mac {file}` downloads a cloud-only file by
   reading it through Finder, and `bun sim device finder-state mac {file}` shows
@@ -233,7 +233,13 @@ bun sim device expect phone --label Menu
   `packages/core/src/lib/fileTypes.ts`
 - Check:
   `bun sim sql <device> "SELECT name, type FROM files WHERE kind = 'file'"`
-- Tests: integration `thumbnail-generation`
+- Tests: scenarios `sync/file-types`, `sync/file-names-with-hash`,
+  `sync/property-named-extensions`, `sync/raw-photo-types`,
+  `sync/raw-photo-repair`, `sync/canon-raw-type`,
+  `sync/type-change-keeps-local-copy`, `sync/unicode-names`,
+  `mobile/file-types`, `mobile/raw-photo-keeps-type`, `desktop/file-types`,
+  `desktop/finder-save-types`, `desktop/finder-save-unicode-names`; integration
+  `thumbnail-generation`
 - CLI: `bun sim seed laptop --type all` adds ten real files of every type, named
   in every shape that has broken before. `--type image`, `--type png` or
   `--type application/pdf` narrow it, and `-n` sets the count per type.
@@ -285,7 +291,8 @@ bun sim device expect phone --label Menu
 - Code: `app.thumbnails`; services `thumbnailScanner`
 - Check:
   `bun sim sql <device> "SELECT thumbForId, thumbSize FROM files WHERE kind = 'thumb'"`
-- Tests: integration `thumbnail-generation`, `thumbnail-scanner`
+- Tests: scenarios `sync/file-types`, `sync/thumbnails-by-type`,
+  `mobile/file-types`; integration `thumbnail-generation`, `thumbnail-scanner`
 
 ### Finder on the Mac
 
@@ -297,12 +304,14 @@ bun sim device expect phone --label Menu
   `call` its `provider.*` methods.
 - Tests: scenarios `desktop/finder-opens-peer-files`,
   `desktop/finder-save-reaches-peer`,
-  `desktop/finder-rename-and-delete-reach-peer`, `finder/concurrent-opens`,
-  `finder/stale-base-save`, `finder/edit-against-remote-trash`,
-  `finder/offline-edit-not-stranded`, `finder/rename-and-edit-elsewhere`,
-  `finder/same-name-create`, `finder/save-survives-restart`; integration
-  `provider-handoff`, `provider-reads`, `provider-changes`,
-  `provider-bulk-create`, `provider-write-integrity`
+  `desktop/finder-rename-and-delete-reach-peer`, `desktop/file-types`,
+  `desktop/finder-save-types`, `desktop/finder-save-unicode-names`,
+  `finder/concurrent-opens`, `finder/stale-base-save`,
+  `finder/edit-against-remote-trash`, `finder/offline-edit-not-stranded`,
+  `finder/rename-and-edit-elsewhere`, `finder/same-name-create`,
+  `finder/save-survives-restart`; integration `provider-handoff`,
+  `provider-reads`, `provider-changes`, `provider-bulk-create`,
+  `provider-write-integrity`
 - Desktop: `bun sim device finder mac` prints the folder, and `cp`, `mv`, `rm`
   and reading a file in it take the path Finder takes. `finder-state` shows what
   Finder shows for a file, `download` reads a cloud-only file through Finder,
