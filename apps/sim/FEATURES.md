@@ -51,8 +51,7 @@ bun sim device tap phone --label Back
 bun sim device expect phone --label Menu
 ```
 
-- Phone, rename a file from its details. A tap on Rename while the keyboard is
-  up only closes the keyboard, so the recipe taps the sheet's title first:
+- Phone, rename a file from its details:
 
 ```sim
 bun sim device tap phone --label Files
@@ -61,7 +60,6 @@ bun sim device tap phone --contains {file}
 bun sim device tap phone --label "Toggle file details"
 bun sim device tap phone --contains "Name, "
 bun sim device type phone --label "File name" "renamed-{file}"
-bun sim device tap phone --text "Rename File"
 bun sim device tap phone --text Rename
 bun sim device expect phone --text "Rename File" --gone
 bun sim device expect phone --contains "renamed-"
