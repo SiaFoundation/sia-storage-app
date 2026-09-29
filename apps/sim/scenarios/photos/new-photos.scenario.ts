@@ -9,12 +9,6 @@ export default defineScenario({
   description:
     'The phone turns on Import new photos, which treats the photos already in its library as seen. Three new photos then appear in the library. The phone imports exactly those three, uploads them, and the laptop gets them with their bytes.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'each photo is pinned once', matches: (pins: number) => pins > 3 },
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 8 * 60_000,
   async run(ctx) {
     const { devices, converge, step, waitFor, checkEqual, checkContent, network, workDir } = ctx

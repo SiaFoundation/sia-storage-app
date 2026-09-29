@@ -6,18 +6,6 @@ export default defineScenario({
   description:
     'The phone imports one file, and sim holds the copy until the suspension has closed the database gate, so the import’s next write lands on a closed gate. Back in the foreground the import finishes, with none of its retries used. Android closes no gate for a suspension, so there the copy is released once the phone is back, and the import still has to finish without a retry.',
   devices: { phone: 'phone' },
-  intermittentBug: {
-    android:
-      'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  },
-  bugShowsAs: {
-    android: [
-      {
-        check: 'no file’s bytes are pinned twice',
-        matches: (hashes: string[]) => hashes.length > 0,
-      },
-    ],
-  },
   timeoutMs: 6 * 60_000,
   async run({ devices: { phone }, step, precondition, checkEqual, waitFor, workDir }) {
     const [path] = seedFiles(workDir, { prefix: 'cut', count: 1, size: 4 * 1024 * 1024 })

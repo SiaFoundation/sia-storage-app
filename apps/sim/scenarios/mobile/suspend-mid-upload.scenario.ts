@@ -8,12 +8,6 @@ export default defineScenario({
   description:
     'Uploads are slowed to 48 KB/s and the phone imports 6 files of 512 KB. While it uploads it goes to the background. Once iOS has suspended it, it holds no write lock and no WAL read slot on its database, which is what gets a phone killed. Back in the foreground it finishes, the laptop gets every file, nothing is uploaded twice, and the log has no suspension error.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'one pinned object per file', matches: (pins: number) => pins > 6 },
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 8 * 60_000,
   async run(ctx) {
     const { devices, network, seed, converge, step, checkEqual, checkContent } = ctx
