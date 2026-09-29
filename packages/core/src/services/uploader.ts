@@ -153,8 +153,23 @@ export class UploadManager {
   private uploadingBatch: BatchState | null = null
   /** Native packed upload handle for the batch being finalized; used by shutdown() to cancel. */
   private uploadingPacker: PackedUploadRef | null = null
+  /** The flush now finalizing, pinning and recording `uploadingBatch`. */
+  private flushing: Promise<void> | null = null
   /** Files added via enqueue() — processed before polled files. */
   private explicitQueue: FileEntry[] = []
+  /**
+   * The entries drainQueues() handed to processEntries(), and the index of
+   * the first one not yet added. shutdown() clears those from the upload
+   * store with the queues, or they would stay marked as uploading and
+   * enqueue() would refuse them.
+   */
+  private draining: { entries: FileEntry[]; next: number } | null = null
+  /**
+   * Counts started loops. shutdown() and a quick initialize() can leave the
+   * old loop inside an add while a new one starts, and the old one must stop
+   * at its next check rather than go on adding its entries beside the new one.
+   */
+  private loopGeneration = 0
   /** Files discovered by pollDB() — processed after explicit queue. */
   private polledFiles: FileEntry[] = []
   /** Whether the async loop is running; set false by shutdown() to exit. */
@@ -218,13 +233,30 @@ export class UploadManager {
     this.startLoop()
   }
 
-  /** Add files to the explicit queue and wake the loop. */
-  enqueue(files: FileEntry[]): void {
+  /**
+   * Add files to the explicit queue and wake the loop. A file already queued,
+   * packing or uploading is skipped, since adding it twice uploads and pins
+   * it twice. Returns how many files it added.
+   */
+  enqueue(files: FileEntry[]): number {
+    const fresh = this.notActive(files)
+    if (fresh.length === 0) return 0
     this.app.uploads.registerMany(
-      files.map((f) => ({ id: f.fileId, size: f.size, kind: f.file.kind })),
+      fresh.map((f) => ({ id: f.fileId, size: f.size, kind: f.file.kind })),
     )
-    this.explicitQueue.push(...files)
+    this.explicitQueue.push(...fresh)
     this.wake()
+    return fresh.length
+  }
+
+  // Each file passed is taken once, so a list naming a file twice queues it once.
+  private notActive(files: FileEntry[]): FileEntry[] {
+    const taken = new Set(this.app.uploads.getActiveIds())
+    return files.filter((f) => {
+      if (taken.has(f.fileId)) return false
+      taken.add(f.fileId)
+      return true
+    })
   }
 
   /**
@@ -283,6 +315,13 @@ export class UploadManager {
       slabUploadAdds: batch.slabUploadAdds,
     })
 
+    const work = this.uploadBatch(batch, packer)
+    this.flushing = work
+    await work
+    if (this.flushing === work) this.flushing = null
+  }
+
+  private async uploadBatch(batch: BatchState, packer: PackedUploadRef): Promise<void> {
     try {
       const fileIds = batch.files.map((f) => f.fileId)
       this.app.uploads.setBatchUploading(fileIds, batch.batchId)
@@ -355,21 +394,38 @@ export class UploadManager {
     if (this.batch) {
       for (const entry of this.batch.files) idsToRemove.push(entry.fileId)
     }
-    if (this.uploadingBatch) {
-      for (const entry of this.uploadingBatch.files) idsToRemove.push(entry.fileId)
-    }
     for (const entry of this.explicitQueue) idsToRemove.push(entry.fileId)
-
-    if (idsToRemove.length > 0) {
-      this.app.uploads.removeMany(idsToRemove)
+    for (const entry of this.polledFiles) idsToRemove.push(entry.fileId)
+    if (this.draining) {
+      const { entries, next } = this.draining
+      for (const entry of entries.slice(next)) idsToRemove.push(entry.fileId)
+      this.draining = null
+    }
+    // A batch pinning when shutdown ran can still be in the drain's remainder,
+    // since `next` moves only once its flush returns. Its files stay
+    // registered until the flush ends, so nothing enqueues them again meanwhile.
+    const uploading = new Set(this.uploadingBatch?.files.map((entry) => entry.fileId) ?? [])
+    const idle = idsToRemove.filter((id) => !uploading.has(id))
+    if (idle.length > 0) {
+      this.app.uploads.removeMany(idle)
     }
     this.explicitQueue = []
     this.polledFiles = []
-
     this.packer = null
     this.batch = null
-
     this.wake()
+
+    // Once finalize has returned, cancel() no longer stops a flush, which goes
+    // on pinning and recording the batch. A restarted uploader polling before
+    // that finishes would find the files without objects rows and upload them
+    // again, so shutdown waits for it. Everything else is cleared before the
+    // wait, so a file enqueued during it stays queued for the next loop.
+    await this.flushing?.catch(() => {})
+    // A file whose pin failed during the wait can have been enqueued again,
+    // and removing its registration would let the next poll queue it twice.
+    const requeued = new Set(this.explicitQueue.map((entry) => entry.fileId))
+    const pinned = [...uploading].filter((id) => !requeued.has(id))
+    if (pinned.length > 0) this.app.uploads.removeMany(pinned)
   }
 
   // Non-blocking. Sets the flag and wakes the loop; the loop parks itself
@@ -569,9 +625,14 @@ export class UploadManager {
   private startLoop(): void {
     if (this.active) return
     this.active = true
-    this.runLoop().catch((e) => {
+    const generation = ++this.loopGeneration
+    this.runLoop(generation).catch((e) => {
       logger.error('uploadManager', 'loop_error', { error: e as Error })
     })
+  }
+
+  private isCurrent(generation: number): boolean {
+    return this.active && this.loopGeneration === generation
   }
 
   /**
@@ -586,43 +647,50 @@ export class UploadManager {
    * The idle-wait is cancelable via wake() so new enqueue() calls
    * or shutdown() take effect immediately.
    */
-  private async runLoop(): Promise<void> {
-    while (this.active) {
+  private async runLoop(generation: number): Promise<void> {
+    while (this.isCurrent(generation)) {
       if (this._suspended) {
         await this.waitForResume()
-        if (!this.active) break
+        if (!this.isCurrent(generation)) break
         continue
       }
 
       if (this.app.sync.getState().syncGateStatus === 'active') {
         logger.debug('uploadManager', 'skipped', { reason: 'sync_gate_active' })
-        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL)
+        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL, generation)
         continue
       }
 
       const next = this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
 
       if (next) {
-        await this.processEntries(this.drainQueues(next))
+        await this.processEntries(this.drainQueues(next), generation)
         continue
       }
 
-      if (await this.isStorageFull()) {
-        await this.waitForWorkOrTimeout(STORAGE_FULL_POLL_INTERVAL)
+      // A restart can start a new loop during any await here. After each one
+      // an old loop stops, rather than waiting or flushing on the new loop's
+      // batch.
+      const storageFull = await this.isStorageFull()
+      if (!this.isCurrent(generation)) break
+      if (storageFull) {
+        await this.waitForWorkOrTimeout(STORAGE_FULL_POLL_INTERVAL, generation)
         continue
       }
 
-      const newFiles = await this.pollDB()
+      const newFiles = await this.pollDB(generation)
+      if (!this.isCurrent(generation)) break
       if (newFiles > 0) {
         continue
       }
 
       if (this.batch) {
-        const result = await this.waitForWorkOrTimeout(PACKER_IDLE_TIMEOUT)
+        const result = await this.waitForWorkOrTimeout(PACKER_IDLE_TIMEOUT, generation)
         if (result === 'timeout') {
           // Re-poll before flushing — other services (syncNewPhotos, etc.)
           // may have created file records during the idle wait.
-          const newFilesBeforeFlush = await this.pollDB()
+          const newFilesBeforeFlush = await this.pollDB(generation)
+          if (!this.isCurrent(generation)) break
           if (newFilesBeforeFlush > 0) continue
           // shutdown() or suspend() can land during that poll, and either
           // one leaves the batch for a later loop to flush or cancel.
@@ -630,7 +698,7 @@ export class UploadManager {
           await this.flush('idle_timeout')
         }
       } else {
-        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL)
+        await this.waitForWorkOrTimeout(PACKER_POLL_INTERVAL, generation)
       }
     }
   }
@@ -647,12 +715,20 @@ export class UploadManager {
    *    existing batch first so the oversized file gets its own batch.
    *
    * After adding, if slabsFilled >= PACKER_MAX_SLABS, flush immediately.
+   *
+   * A restart can start a new loop while this one waits on the SDK. Once
+   * `generation` is no longer current, the batch and packer belong to the new
+   * loop, so after every wait this returns without touching them, and a
+   * failure from the old packer is not recorded against the file. With no
+   * generation, as from `__testProcessFiles`, no loop owns the batch.
    */
-  private async processEntry(entry: FileEntry): Promise<void> {
+  private async processEntry(entry: FileEntry, generation?: number): Promise<void> {
+    const stale = () => generation !== undefined && !this.isCurrent(generation)
     let needsRollback = false
     try {
       if (this.batch && this.shouldFlushBeforeAdding(entry.size)) {
         await this.flush('slab_threshold')
+        if (stale()) return
       }
 
       // Oversized file pre-flush: if the batch already has files and adding
@@ -662,6 +738,7 @@ export class UploadManager {
         const projectedSlabs = Math.floor((this.batch.totalSize + entry.size) / SLAB_SIZE)
         if (projectedSlabs >= PACKER_MAX_SLABS) {
           await this.flush('max_slabs')
+          if (stale()) return
         }
       }
 
@@ -681,14 +758,19 @@ export class UploadManager {
           slabUploadAdds: 0,
           uploadedShardBytes: 0,
         }
-        this.batch = batch
-        this.packer = await sdk.uploadPacked({
+        const packer = await sdk.uploadPacked({
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
           shardUploaded: {
             progress: (p) => this.onShardUploaded(batch, p),
           },
         })
+        if (stale()) {
+          packer.cancel()
+          return
+        }
+        this.batch = batch
+        this.packer = packer
       }
 
       this.app.uploads.setStatus(entry.fileId, 'packing')
@@ -707,6 +789,7 @@ export class UploadManager {
       const path = this.adapters.toFilePath(entry.fileUri)
       const t0 = Date.now()
       await this.packer.addPath(path)
+      if (stale()) return
       needsRollback = false
       const addMs = Date.now() - t0
       const slabsBefore = this.batch!.slabsFilled
@@ -724,6 +807,7 @@ export class UploadManager {
         await this.flush('max_slabs')
       }
     } catch (e) {
+      if (stale()) return
       if (needsRollback && this.batch) {
         const idx = this.batch.files.indexOf(entry)
         if (idx !== -1) {
@@ -755,22 +839,26 @@ export class UploadManager {
    * computeWindowEnd simulates adding files to determine how many can
    * be added before a threshold/max_slabs flush would trigger.
    */
-  private async processEntries(entries: FileEntry[]): Promise<void> {
+  private async processEntries(entries: FileEntry[], generation: number): Promise<void> {
+    const draining = { entries, next: 0 }
+    this.draining = draining
     let i = 0
 
-    while (i < entries.length && this.active && !this._suspended) {
+    while (i < entries.length && this.isCurrent(generation) && !this._suspended) {
       // computeWindowEnd needs a packer+batch — when neither exists or
       // when the next file would trigger a pre-flush, fall back to
       // processEntry which handles packer creation and pre-flush checks.
       const windowEnd = this.packer && this.batch ? this.computeWindowEnd(entries, i) : i
 
       if (windowEnd === i) {
-        await this.processEntry(entries[i])
+        await this.processEntry(entries[i], generation)
         i++
       } else {
-        await this.processWindow(entries, i, windowEnd)
+        await this.processWindow(entries, i, windowEnd, generation)
         i = windowEnd
       }
+      draining.next = i
+      if (!this.isCurrent(generation)) break
 
       if (this.batchExceedsDuration()) {
         await this.flush('max_duration')
@@ -779,9 +867,10 @@ export class UploadManager {
 
     // Re-queue unprocessed entries so they're picked up on resume.
     // drainQueues() already removed them from the original queues.
-    if (this._suspended && i < entries.length) {
+    if (this._suspended && i < entries.length && this.isCurrent(generation)) {
       this.explicitQueue.unshift(...entries.slice(i))
     }
+    if (this.draining === draining) this.draining = null
   }
 
   /**
@@ -795,14 +884,19 @@ export class UploadManager {
    * after its add failed would shift every later file onto the object of the
    * file before it.
    */
-  private async processWindow(entries: FileEntry[], from: number, end: number): Promise<void> {
+  private async processWindow(
+    entries: FileEntry[],
+    from: number,
+    end: number,
+    generation: number,
+  ): Promise<void> {
     const packer = this.packer!
     const batch = this.batch!
 
     const inflight = []
     for (let j = from; j < end; j++) {
       // Stop launching new packer.addPath() calls on shutdown or suspension.
-      if (!this.active || this._suspended) break
+      if (!this.isCurrent(generation) || this._suspended) break
       const entry = entries[j]
       this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
@@ -832,7 +926,7 @@ export class UploadManager {
       )
       // Shutdown cancels the packer and drops the batch, so nothing is left
       // to keep in step with.
-      if (!this.active || this.batch !== batch) break
+      if (!this.isCurrent(generation) || this.batch !== batch) break
       if (failure) {
         const idx = batch.files.indexOf(entry)
         if (idx !== -1) {
@@ -861,7 +955,7 @@ export class UploadManager {
       })
     }
 
-    if (this.active && !this._suspended && this.shouldFlushDueToLimits()) {
+    if (this.isCurrent(generation) && !this._suspended && this.shouldFlushDueToLimits()) {
       await this.flush('max_slabs')
     }
   }
@@ -917,9 +1011,11 @@ export class UploadManager {
    * Returns files ordered by createdAt ASC so photos are processed before
    * their thumbnails, naturally mixing sizes for efficient slab packing.
    *
-   * @returns Number of new files added to the polledFiles queue.
+   * @returns Files waiting in either queue. That counts a file enqueue() added
+   *   while the poll ran, whose wake() found no waiter and would otherwise be
+   *   left for the next poll interval.
    */
-  private async pollDB(): Promise<number> {
+  private async pollDB(generation: number): Promise<number> {
     if (!this.app.connection.getState().isConnected) {
       logger.debug('uploadManager', 'poll_skipped', { reason: 'not_connected' })
       return 0
@@ -975,11 +1071,19 @@ export class UploadManager {
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
       }
 
-      if (newEntries.length > 0) {
+      // A shutdown during the query, such as Cancel uploads, cleared the
+      // uploads store. Registering now would show these files as queued with
+      // no loop left to take them, and the next loop's poll finds them again.
+      if (!this.isCurrent(generation)) return 0
+      // activeIds was read before the query, and enqueue() can take a file
+      // while the query runs. Checked again here, with no await before the
+      // register, so a file is never in both queues.
+      const fresh = this.notActive(newEntries)
+      if (fresh.length > 0) {
         this.app.uploads.registerMany(
-          newEntries.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
+          fresh.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
         )
-        this.polledFiles.push(...newEntries)
+        this.polledFiles.push(...fresh)
       } else {
         logger.debug('uploadManager', 'poll_empty', {
           candidates: candidateFiles.length,
@@ -987,7 +1091,7 @@ export class UploadManager {
         })
       }
 
-      return this.polledFiles.length
+      return this.explicitQueue.length + this.polledFiles.length
     } catch (e) {
       logger.error('uploadManager', 'db_poll_error', { error: e as Error })
       return 0
@@ -1006,12 +1110,13 @@ export class UploadManager {
    * Block until either wake() is called or the timeout elapses.
    * Used by the loop to idle-wait between poll cycles or before flushing.
    */
-  private waitForWorkOrTimeout(ms: number): Promise<'woken' | 'timeout'> {
+  private waitForWorkOrTimeout(ms: number, generation: number): Promise<'woken' | 'timeout'> {
     // shutdown() and suspend() call wake(), which does nothing while the loop
     // awaits the database because no wait has set wakeResolver yet. Without
     // this check that loop would sleep a full interval before stopping or
-    // parking, and with a batch open it would flush while suspended.
-    if (!this.active || this._suspended) return Promise.resolve('woken')
+    // parking, and with a batch open it would flush while suspended. A loop a
+    // restart replaced would also take the wake-up meant for the new loop.
+    if (!this.isCurrent(generation) || this._suspended) return Promise.resolve('woken')
     return new Promise<'woken' | 'timeout'>((resolve) => {
       const timer = setTimeout(() => {
         this.wakeResolver = null

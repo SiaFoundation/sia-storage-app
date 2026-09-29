@@ -8,12 +8,6 @@ export default defineScenario({
   description:
     'Uploads are slowed and the phone imports 6 files of 512 KB. It goes to the background and back five times, 700 ms apart, while they upload. Every file uploads once, both devices agree, and the phone logs no suspension error.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'one pinned object per file', matches: (pins: number) => pins > 6 },
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 8 * 60_000,
   async run(ctx) {
     const { devices, network, seed, converge, step, checkEqual, checkContent } = ctx

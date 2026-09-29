@@ -9,20 +9,10 @@ export default defineScenario({
   knownBug: {
     ios: 'A write made while the database gate is closed for a suspension fails at once, and the import scanner leaves the row claimed as a suspended one, so the file sits unimported until its claim is freed ten minutes later.',
   },
-  intermittentBug: {
-    android:
-      'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  },
   bugShowsAs: {
     ios: [
       { check: 'the file is added', got: 'active' },
       { check: 'phone has no import left in progress', got: { active: 1 } },
-    ],
-    android: [
-      {
-        check: 'no file’s bytes are pinned twice',
-        matches: (hashes: string[]) => hashes.length > 0,
-      },
     ],
   },
   timeoutMs: 6 * 60_000,
