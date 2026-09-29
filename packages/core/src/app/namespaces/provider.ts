@@ -20,6 +20,7 @@ import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
 import type { Directory, ProviderChangeRow } from '../../db/operations'
 import { uniqueId } from '../../lib/uniqueId'
+import { normalizeName } from '../../lib/names'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import {
   directoryProviderId,
@@ -852,7 +853,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       return { received: 0, total: null }
     },
 
-    async create(parentId, name, kind, srcPath) {
+    async create(parentId, finderName, kind, srcPath) {
+      // Finder hands every name over decomposed. Stored and compared as given,
+      // it would miss a same-name file another app added composed.
+      const name = normalizeName(finderName)
       const service = getService()
       if (kind === 'dir') {
         const path = await folderPath(parentId)
@@ -968,7 +972,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       return updated
     },
 
-    async rename(id, newParentId, newName) {
+    async rename(id, newParentId, finderName) {
+      // Normalized before the name comparisons below, which would otherwise
+      // read every rename Finder reports as a change and bump the file.
+      const newName = normalizeName(finderName)
       const service = getService()
       const directoryId = parseDirectoryProviderId(id)
 

@@ -7,6 +7,7 @@ import { migration_20260925_120000_file_stack_id } from './20260925_120000_file_
 import { migration_20260925_130000_prefix_content_hashes } from './20260925_130000_prefix_content_hashes'
 import { migration_20261002_120000_share_links } from './20261002_120000_share_links'
 import { migration_20261004_120000_feed_departure_upserts } from './20261004_120000_feed_departure_upserts'
+import { migration_20261007_120000_compose_stored_names } from './20261007_120000_compose_stored_names'
 
 export const coreMigrations: Migration[] = [
   migration_0001_init_schema,
@@ -17,6 +18,7 @@ export const coreMigrations: Migration[] = [
   migration_20260925_130000_prefix_content_hashes,
   migration_20261002_120000_share_links,
   migration_20261004_120000_feed_departure_upserts,
+  migration_20261007_120000_compose_stored_names,
 ]
 
 export function sortMigrations(migrations: Migration[]): Migration[] {

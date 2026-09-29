@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { normalizeName } from '../../lib/names'
 import { uniqueId } from '../../lib/uniqueId'
 import * as sql from '../sql'
 import { buildRecordFilter } from './library'
@@ -257,7 +258,7 @@ export async function queryTagsByPrefix(
     )
   }
 
-  const escaped = trimmed.replace(/[%_\\]/g, (m) => `\\${m}`)
+  const escaped = normalizeName(trimmed).replace(/[%_\\]/g, (m) => `\\${m}`)
   return db.getAllAsync<Tag>(
     `SELECT id, name, createdAt, usedAt, system FROM tags
      WHERE name LIKE ? COLLATE NOCASE ESCAPE '\\'
