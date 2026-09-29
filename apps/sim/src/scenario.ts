@@ -14,9 +14,28 @@ import { addTyped, type NameStyle, seedTypedFiles, type TypedFile } from './file
 import { seedFiles } from './seed'
 import { capture } from './evidence'
 import type { PhoneKind, Session } from './session'
+import type { StandardCheck } from './standard'
 import { asAppTimeout, Cancelled, type waitFor, waitForApp } from './wait'
 
-export type CheckRecord = { label: string; ok: boolean; detail?: string }
+export type CheckRecord = {
+  label: string
+  ok: boolean
+  detail?: string
+  /** What a failed check saw, where the check compared a value. */
+  actual?: unknown
+}
+
+/**
+ * One check a bug fails, by its exact label. `got` is the value the check sees
+ * while the bug is present, and `matches` tests that value where it changes
+ * from run to run. A bare label is for a check whose failure can only be the
+ * bug. `sometimes` marks a check the bug fails on some runs only, which may
+ * pass, but which fails only as its entry says.
+ */
+export type BugCheck =
+  | string
+  | { check: string; got: unknown; sometimes?: true }
+  | { check: string; matches: (actual: never) => boolean; sometimes?: true }
 
 /**
  * A scenario could not set up the situation it tests, such as a kill landing
@@ -127,13 +146,20 @@ export type Scenario<M extends DeviceMap = DeviceMap> = {
    */
   intermittentBug?: string | Partial<Record<PhoneKind, string>>
   /**
-   * What the known or intermittent bug shows as: parts of the labels of the
-   * checks it fails, or of the wait it times out on. A run whose failures
-   * all match one of these reports KNOWN_BUG. Any other failure reports
-   * FAIL, so a new regression in the same scenario is not taken for the bug.
-   * Required with a bug, and refused without one.
+   * The checks the known or intermittent bug fails. A failed run reports
+   * KNOWN_BUG only when the scenario ran to its end, every check listed here
+   * failed as its entry says, and no other check failed. Anything else
+   * reports FAIL, so a timeout, a crash or a second bug in the same scenario
+   * is never taken for this one. A bug given per platform lists its checks
+   * per platform. Required with a bug, and refused without one.
    */
-  bugShowsAs?: string[]
+  bugShowsAs?: BugCheck[] | Partial<Record<PhoneKind, BugCheck[]>>
+  /**
+   * Standard checks this scenario breaks on purpose, each with the reason,
+   * such as a device it leaves offline at the end. Every other standard check
+   * runs after the scenario's own steps.
+   */
+  skipStandardChecks?: Partial<Record<StandardCheck, string>>
   /**
    * The behavior this scenario asserts is what the apps do now, and nobody has
    * decided it is what they should do. The sentence says what to decide. The
@@ -144,14 +170,32 @@ export type Scenario<M extends DeviceMap = DeviceMap> = {
 }
 
 export function defineScenario<M extends DeviceMap>(scenario: Scenario<M>): Scenario<M> {
-  const hasBug = scenario.knownBug !== undefined || scenario.intermittentBug !== undefined
-  if (hasBug && !scenario.bugShowsAs?.length) {
-    throw new Error(`${scenario.name}: a known or intermittent bug needs bugShowsAs`)
+  const platforms = new Set<PhoneKind>()
+  for (const bug of [scenario.knownBug, scenario.intermittentBug]) {
+    if (typeof bug === 'string') {
+      platforms.add('ios')
+      platforms.add('android')
+    } else if (bug) {
+      for (const phone of Object.keys(bug) as PhoneKind[]) platforms.add(phone)
+    }
   }
-  if (!hasBug && scenario.bugShowsAs) {
+  if (platforms.size === 0 && scenario.bugShowsAs) {
     throw new Error(`${scenario.name}: bugShowsAs describes no bug, so it goes with the bug`)
   }
+  for (const phone of platforms) {
+    if (!bugShape(scenario.bugShowsAs, phone)?.length) {
+      throw new Error(`${scenario.name}: the bug on ${phone} needs bugShowsAs`)
+    }
+  }
   return scenario
+}
+
+/** The checks a scenario's bug fails on `phone`. */
+export function bugShape(
+  showsAs: Scenario<DeviceMap>['bugShowsAs'],
+  phone: PhoneKind,
+): BugCheck[] | undefined {
+  return Array.isArray(showsAs) ? showsAs : showsAs?.[phone]
 }
 
 export function createContext<M extends DeviceMap>(opts: {
@@ -171,6 +215,15 @@ export function createContext<M extends DeviceMap>(opts: {
   const devices = Object.fromEntries(
     Object.entries(opts.devices).map(([name, device]) => [name, cancellable(device, signal)]),
   ) as ScenarioDevices<M>
+  const record = (label: string, ok: boolean, detail?: string, actual?: unknown) => {
+    checks.push({
+      label,
+      ok,
+      ...(detail && !ok ? { detail } : {}),
+      ...(actual !== undefined && !ok ? { actual } : {}),
+    })
+    return ok
+  }
   let seedRun = 0
   const ctx: ScenarioContext<M> = {
     network: opts.network,
@@ -205,15 +258,15 @@ export function createContext<M extends DeviceMap>(opts: {
       return value
     },
     check(label, ok, detail) {
-      checks.push({ label, ok, ...(detail && !ok ? { detail } : {}) })
-      return ok
+      return record(label, ok, detail)
     },
     checkEqual(label, actual, expected) {
-      if (isDeepStrictEqual(actual, expected)) return ctx.check(label, true)
-      return ctx.check(
+      if (isDeepStrictEqual(actual, expected)) return record(label, true)
+      return record(
         label,
         false,
         `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+        actual,
       )
     },
     waitFor: wait,
@@ -251,10 +304,11 @@ export function createContext<M extends DeviceMap>(opts: {
       for (const name of names ?? deviceNames(devices)) {
         const { checked, problems } = await contentMismatches(devices[name] as Device, opts.network)
         ok =
-          ctx.check(
+          record(
             `every file on ${name} points at an object holding its own bytes`,
             checked > 0 && problems.length === 0,
             checked === 0 ? 'no uploaded files to check' : problems.slice(0, 10).join('; '),
+            problems,
           ) && ok
       }
       return ok

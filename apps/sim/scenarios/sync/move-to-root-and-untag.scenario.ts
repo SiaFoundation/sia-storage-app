@@ -7,7 +7,11 @@ export default defineScenario({
   devices: { phone: 'cli', laptop: 'cli' },
   knownBug:
     'Sync-up leaves the folder out of a root file’s metadata and the tags out of an untagged file’s, and sync-down reads a missing field as no change, so other devices keep the old folder and tag.',
-  bugShowsAs: ['shows the first file at the root', 'shows no tags on the second file'],
+  bugShowsAs: [
+    'every device holds the same library at the end',
+    { check: 'laptop shows the first file at the root', got: false },
+    { check: 'laptop shows no tags on the second file', got: [{ name: 'keep' }] },
+  ],
   async run({
     devices: { phone, laptop },
     seed,

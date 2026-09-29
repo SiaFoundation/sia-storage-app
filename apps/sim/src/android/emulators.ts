@@ -204,6 +204,11 @@ async function settle(serial: string): Promise<void> {
   // SIM_ANDROID_AVD keeps its own config.ini, so the on-screen keyboard is
   // told to show even beside a hardware one.
   await adb(serial).shell('settings put secure show_ime_with_hard_keyboard 1')
+  // On a slow CI runner System UI can stop responding, and the dialog Android
+  // shows for it covers the app, so every screen read finds the dialog. With
+  // error dialogs hidden Android kills the unresponsive process instead, and
+  // System UI, which Android keeps running, restarts.
+  await adb(serial).shell('settings put global hide_error_dialogs 1')
 }
 
 const portOf = (serial: string) => Number(serial.slice('emulator-'.length))
@@ -245,6 +250,7 @@ export function hasWindow(serial: string): boolean {
  * and one more fits the memory budget in capacity.ts.
  */
 export async function lease(session: string): Promise<string> {
+  await discardHung()
   const serial = await withPhoneRoom('android', async (room) => {
     const running = (await listEmulators()).filter((e) => e.state === 'device')
     // A member that is no longer ours is forgotten, not stopped: whatever runs
@@ -268,6 +274,35 @@ export async function lease(session: string): Promise<string> {
     throw e
   }
   return serial
+}
+
+/**
+ * Kills this pool's unleased emulators that adb calls offline and that have
+ * run for longer than any boot takes. A hung emulator is never leased, since
+ * only an online one is, but it keeps its share of the memory budget, so every
+ * later lease waits for room it never frees until the run's start deadline
+ * passes. A leased one is left alone, since adb drops a busy emulator's
+ * connection for a moment under memory pressure.
+ */
+async function discardHung(): Promise<void> {
+  for (const { serial, state } of await listEmulators()) {
+    if (state !== 'offline' || booting.has(serial) || !isOurs(serial)) continue
+    if (pool.isLeased(serial)) continue
+    const pid = emulatorOnPort(portOf(serial))
+    if (pid !== null && runningSeconds(pid) > 5 * 60) discard(serial)
+  }
+}
+
+/** How long a process has run, from ps's elapsed time, `[[dd-]hh:]mm:ss`. */
+function runningSeconds(pid: number): number {
+  const etime = Bun.spawnSync(['ps', '-o', 'etime=', '-p', String(pid)])
+    .stdout.toString()
+    .trim()
+  const [days, rest] = etime.includes('-') ? etime.split('-') : ['0', etime]
+  const parts = rest.split(':').map(Number)
+  while (parts.length < 3) parts.unshift(0)
+  const [h, m, sec] = parts
+  return Number(days) * 86_400 + h * 3600 + m * 60 + sec
 }
 
 /** Kills an emulator this pool started and drops it from the pool. */

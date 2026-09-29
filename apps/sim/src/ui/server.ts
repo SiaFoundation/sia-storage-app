@@ -6,7 +6,7 @@
  * fresh machine or CI job needs nothing set up by hand.
  */
 import { $ } from 'bun'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { BackgroundServer, httpProbe } from '../background'
 import { withFileLock } from '../lock'
@@ -37,7 +37,24 @@ function installDrivers(): Promise<void> {
   return withFileLock(join(APPIUM_HOME, 'install.lock'), installPinnedDrivers)
 }
 
+/**
+ * macOS's daily tmp_cleaner deletes each file under /tmp that nobody has read
+ * or changed for three days, and removes a directory only once it is empty.
+ * A driver tree left alone that long keeps its directories and loses its
+ * files, which npm can neither read nor install over, so a failed install
+ * clears the home's packages and installs once more.
+ */
 async function installPinnedDrivers(): Promise<void> {
+  try {
+    await installMissingDrivers()
+  } catch {
+    rmSync(join(APPIUM_HOME, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(APPIUM_HOME, 'package.json'), { force: true })
+    await installMissingDrivers()
+  }
+}
+
+async function installMissingDrivers(): Promise<void> {
   const env = { ...process.env, APPIUM_HOME }
   const listed = await $`${APPIUM} driver list --installed --json`.env(env).quiet().nothrow().text()
   const installed = (listed.trim() ? JSON.parse(listed) : {}) as Record<

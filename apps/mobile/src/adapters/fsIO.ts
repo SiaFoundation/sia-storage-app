@@ -141,6 +141,12 @@ export function createFsIOAdapter(): FsIOAdapter {
         }
       }
 
+      // A sim scenario ends this copy as cancelled, as a native copy can with
+      // nothing suspending the app.
+      if (__DEV__ && simHooks.cancelNextImportCopy) {
+        simHooks.cancelNextImportCopy = false
+        throw Object.assign(new Error('copy cancelled'), { code: 'cancelled' })
+      }
       // The native copy reads the bytes once and returns their hash plus the
       // classification inputs, saving a second full read; it deletes the temp
       // on any failure.

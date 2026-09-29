@@ -93,14 +93,14 @@ describe('progressOf', () => {
       fixed: 1,
       skipped: 1,
       running: ['g', 'h'],
-      latest: 'ERROR b: Error: no emulator',
+      latest: { verdict: 'ERROR', name: 'b', reason: 'Error: no emulator' },
     })
   })
 
-  test('a passed latest ends with an empty failure line, and none gives an empty latest', () => {
+  test('a passed latest has no reason, and none gives a null latest', () => {
     const pass = result({ verdict: 'PASS', name: 'a' })
-    expect(progressOf(1, [pass], [], pass).latest).toBe('PASS a: ')
-    expect(progressOf(1, [], ['a'], undefined).latest).toBe('')
+    expect(progressOf(1, [pass], [], pass).latest).toEqual({ verdict: 'PASS', name: 'a' })
+    expect(progressOf(1, [], ['a'], undefined).latest).toBeNull()
   })
 })
 

@@ -1,0 +1,392 @@
+name: Sim (mobile)
+
+# The real mobile app on iOS simulators and Android emulators, syncing with
+# CLI devices over the shared mock network. Too slow for every PR, so it runs
+# when the `sim-mobile` label is added to a PR, weekly and on demand. The
+# weekly run catches a runner image, simulator runtime or Appium release that
+# breaks the suite while nothing merges.
+#
+# A labelled run tests the PR's head commit and posts its result on that
+# commit as the sim/ios and sim/android statuses, which the release PR needs
+# before it can merge. `bun sim attest` posts the same statuses from a local
+# run. The label comes off once both jobs have ended, so testing a later
+# commit means adding the label again. A push while a run is going cancels it and
+# removes the label. A cancelled or timed-out run puts its commit's status back
+# to what pr.yml posts and says why, and the new head commit gets its statuses
+# from pr.yml.
+#
+# GitHub serves a job's log only once the job ends, so a labelled run posts
+# its status as pending when it starts and with its progress once a minute
+# while the suite runs. A smoke test launches one phone before the suite and
+# fails the job within 15 minutes when the app cannot start and connect,
+# which would otherwise cost every scenario its full timeout.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  # A manual run can take a few scenarios on one platform, to try a fix on
+  # the runner without the whole suite.
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Scenario filters for bun sim run
+        default: mobile/ photos/
+      platform:
+        description: Which phones to run
+        type: choice
+        options: [both, ios, android]
+        default: both
+  pull_request:
+    types: [labeled, synchronize]
+
+jobs:
+  ios:
+    if: >-
+      (github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim-mobile')) &&
+      (github.event_name != 'workflow_dispatch' || inputs.platform != 'android')
+    # On the job, not the workflow: a run started by adding some other label
+    # skips this job, and must not cancel the run already going.
+    concurrency:
+      group: ${{ github.workflow }}-ios-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+    runs-on: tenki-macos-26-large
+    timeout-minutes: 90
+    steps:
+      - if: github.event_name == 'pull_request'
+        name: Post sim/ios as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=sim/ios -f description='Starting: building and launching' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A PR event checks out the merge of the PR into its base by default,
+      # and the status goes on the head commit, so that is the one tested.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: setup
+        uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      # The simulator build depends only on native inputs, which this hash
+      # covers, so most runs reuse it and only rebuild the JavaScript.
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:ios:simulator -- --no-run
+        # CocoaPods needs a UTF-8 locale and this runner sets none, so pod
+        # install fails and its error report then crashes on the encoding.
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+      # Saved straight after the build, so a failing suite still keeps it.
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+      # `down --clean` hands the phone back to the pool still booted, so the
+      # suite leases it rather than booting another. A failed launch keeps the
+      # session directory, with the launch screenshots and the mock network's
+      # log, for the upload.
+      - id: smoke
+        name: Launch smoke test
+        timeout-minutes: 15
+        shell: bash
+        env:
+          SIM_SESSION: smoke
+        run: |
+          bun sim up --cli= --ios phone 2>&1 | tee /tmp/sim-smoke.out
+          bun sim down --clean
+      # The runner runs nothing else, so both phones can boot at once where the
+      # default budget, sized for a laptop, would boot one at a time.
+      - id: suite
+        shell: bash
+        env:
+          SCENARIOS: ${{ inputs.scenarios || 'mobile/ photos/' }}
+          SIM_PHONE_MEMORY_GB: '12'
+          SIM_PROGRESS_FILE: /tmp/sim-progress.json
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        # ci-progress finishes a post in flight before it exits, and the trap
+        # waits for that, so no pending post lands after the result.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            bun apps/sim/src/cli.ts ci-progress ios &
+            poster=$!
+            trap 'kill "$poster" 2> /dev/null || true; wait "$poster" || true' EXIT
+          fi
+          bun sim run $SCENARIOS --jobs 2 2>&1 | tee /tmp/sim-suite.out
+      # A failure before the suite ran, such as a failed build, also posts
+      # failure, so the PR shows the labelled run did not pass.
+      - if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        name: Post sim/ios
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
+          if [ "$SMOKE" = failure ]; then
+            summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
+          fi
+          description="${summary:-The run failed before the suite finished} on tenki-macos-26-large"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$STATE" -f context=sim/ios -f description="${description:0:139}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A cancelled run leaves its last pending status on the commit. On a PR
+      # other than the release PR that would block a merge nothing requires, so
+      # the status goes back to what the PR workflow posts.
+      - if: cancelled() && github.event_name == 'pull_request'
+        name: Restore sim/ios after a cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'
+          else
+            state=success description='Not required for this PR. The labelled run was cancelled or timed out'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=sim/ios -f description="$description" > /dev/null
+      # Every run uploads its report, with each step's time, and the kept
+      # session of every scenario that did not pass, so a passing run can be
+      # compared with a failing one.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-mobile-ios-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+            /tmp/sia-sim/smoke
+          retention-days: 7
+      # Skipped when Bun never installed, which would only add a second error.
+      - if: always() && steps.setup.outcome == 'success'
+        run: bun sim prune --all --force
+
+  # Runs on a push to a PR that has the label. Sharing the platform job's
+  # concurrency group cancels a run still testing the previous commit.
+  ios-stop:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'sim-mobile')
+    concurrency:
+      group: ${{ github.workflow }}-ios-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim-mobile" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err
+
+  android:
+    if: >-
+      (github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim-mobile')) &&
+      (github.event_name != 'workflow_dispatch' || inputs.platform != 'ios')
+    concurrency:
+      group: ${{ github.workflow }}-android-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+    # A larger runner, when the org has one, is named by this repository
+    # variable, and SIM_ANDROID_JOBS then runs that many emulators at once.
+    runs-on: ${{ vars.SIM_ANDROID_RUNNER || 'ubuntu-latest' }}
+    # The standard runner runs one emulator, and a first run builds the app too.
+    timeout-minutes: 120
+    steps:
+      - if: github.event_name == 'pull_request'
+        name: Post sim/android as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=sim/android -f description='Starting: building and launching' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          android: false
+          tool-cache: false
+          swap-storage: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: setup
+        uses: ./.github/actions/setup
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The emulator needs hardware acceleration, and a runner without
+      # /dev/kvm would only time out booting it much later.
+      - name: Check the runner can accelerate the emulator
+        run: |
+          [ -e /dev/kvm ] || { echo "::error::This runner has no /dev/kvm, so the Android emulator cannot run with hardware acceleration."; exit 1; }
+      # Hosted Linux runners have /dev/kvm, but only root can open it, and
+      # without it the emulator falls back to software emulation too slow to
+      # boot within sim's five minutes.
+      - run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # sim creates its own AVD from the newest installed image.
+      - run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" emulator 'system-images;android-36;google_apis;x86_64' > /dev/null
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      # sim installs the debug APK from where gradle writes it.
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:android:emulator -- --no-run
+        # The app's Gradle config builds for ARM only, as phones and Apple
+        # Silicon emulators need, and a Linux runner's emulator is x86_64. A
+        # property set in the environment overrides the one in the config.
+        # A build with no Maps key throws when the file viewer draws its map,
+        # and a placeholder only leaves the map blank. The cache key names
+        # this build apart from one made with other settings.
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: x86_64
+          GOOGLE_MAPS_API_KEY: sim-placeholder
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}
+      - id: smoke
+        name: Launch smoke test
+        timeout-minutes: 15
+        shell: bash
+        env:
+          SIM_SESSION: smoke
+        run: |
+          bun sim up --cli= --android phone 2>&1 | tee /tmp/sim-smoke.out
+          bun sim down --clean
+      - id: suite
+        shell: bash
+        env:
+          SCENARIOS: ${{ inputs.scenarios || 'mobile/ photos/' }}
+          SIM_JOBS: ${{ vars.SIM_ANDROID_JOBS || '1' }}
+          SIM_PROGRESS_FILE: /tmp/sim-progress.json
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        # ci-progress finishes a post in flight before it exits, and the trap
+        # waits for that, so no pending post lands after the result.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            bun apps/sim/src/cli.ts ci-progress android &
+            poster=$!
+            trap 'kill "$poster" 2> /dev/null || true; wait "$poster" || true' EXIT
+          fi
+          bun sim run $SCENARIOS --phone android --jobs "$SIM_JOBS" 2>&1 | tee /tmp/sim-suite.out
+      - if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        name: Post sim/android
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
+          if [ "$SMOKE" = failure ]; then
+            summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
+          fi
+          description="${summary:-The run failed before the suite finished} on ${{ vars.SIM_ANDROID_RUNNER || 'ubuntu-latest' }}"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$STATE" -f context=sim/android -f description="${description:0:139}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A cancelled run leaves its last pending status on the commit. On a PR
+      # other than the release PR that would block a merge nothing requires, so
+      # the status goes back to what the PR workflow posts.
+      - if: cancelled() && github.event_name == 'pull_request'
+        name: Restore sim/android after a cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'
+          else
+            state=success description='Not required for this PR. The labelled run was cancelled or timed out'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=sim/android -f description="$description" > /dev/null
+      # Every run uploads its report, with each step's time, and the kept
+      # session of every scenario that did not pass, so a passing run can be
+      # compared with a failing one.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-mobile-android-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+            /tmp/sia-sim/smoke
+          retention-days: 7
+      # Skipped when Bun never installed, which would only add a second error.
+      - if: always() && steps.setup.outcome == 'success'
+        run: bun sim prune --all --force
+
+  android-stop:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'sim-mobile')
+    concurrency:
+      group: ${{ github.workflow }}-android-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim-mobile" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err
+
+  # One job removes the label after both platforms end. A platform job that
+  # removed it on finishing would leave the other's stop job with no label to
+  # see, and a push would then let that platform finish on the old commit.
+  unlabel:
+    needs: [ios, android]
+    if: >-
+      always() && github.event_name == 'pull_request' && github.event.action == 'labeled' &&
+      github.event.label.name == 'sim-mobile'
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim-mobile" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err
