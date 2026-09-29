@@ -2,10 +2,12 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { DatabaseSuspendedError } from '@siastorage/core/lib/errors'
+import { logger } from '@siastorage/logger'
 import * as SQLite from 'expo-sqlite'
 import {
   database,
   db,
+  getDbState,
   getInflightCount,
   initializeDB,
   resetDb,
@@ -50,6 +52,81 @@ function deferred() {
 }
 
 const rows = async () => (await db().getAllAsync<{ x: number }>('SELECT x FROM t')).map((r) => r.x)
+
+describe('initializeDB', () => {
+  it('leaves an open, migrated database alone when called again', async () => {
+    const paused = deferred()
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (1)')
+      await paused.promise
+    })
+    await new Promise((r) => setTimeout(r, 10))
+    const before = database
+
+    await initializeDB({ databaseName: 'app.db' })
+
+    expect(database).toBe(before)
+    paused.resolve()
+    await txn
+    expect(await rows()).toEqual([1])
+  })
+
+  // A different name makes the call replace the open connection.
+  it('waits for a transaction in progress before replacing the connection under it', async () => {
+    const paused = deferred()
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (1)')
+      await paused.promise
+    })
+    await new Promise((r) => setTimeout(r, 10))
+    let reinitialized = false
+    const reinit = initializeDB({ databaseName: 'other.db' }).then(() => {
+      reinitialized = true
+    })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(reinitialized).toBe(false)
+
+    paused.resolve()
+    await txn
+    await reinit
+    expect(await rows()).toEqual([1])
+  })
+
+  it('waits out a suspension before replacing the connection, and the drain does not wait for it', async () => {
+    suspendDb()
+    let reinitialized = false
+    const reinit = initializeDB({ databaseName: 'other.db' }).then(() => {
+      reinitialized = true
+    })
+    await waitForQueriesIdle()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(reinitialized).toBe(false)
+    expect(getDbState()).toBe('suspending')
+
+    resumeDb()
+    await reinit
+    expect(getDbState()).toBe('active')
+  })
+
+  it('starts a second call only after the first has finished its migrations', async () => {
+    const info = jest.spyOn(logger, 'info')
+    try {
+      await Promise.all([
+        initializeDB({ databaseName: 'other.db' }),
+        initializeDB({ databaseName: 'app.db' }),
+      ])
+      const steps = info.mock.calls
+        .filter(([scope, message]) => scope === 'db' && /^initializ/.test(String(message)))
+        .map(([, message]) => message)
+      // Each call finishes before the next starts, so the log alternates.
+      expect(steps.length).toBeGreaterThanOrEqual(4)
+      expect(steps.every((m, i) => m === (i % 2 === 0 ? 'initializing' : 'initialized'))).toBe(true)
+      expect(await db().getFirstAsync<{ one: number }>('SELECT 1 AS one')).toEqual({ one: 1 })
+    } finally {
+      info.mockRestore()
+    }
+  })
+})
 
 describe('read pool', () => {
   it('runs outer reads off the writer', async () => {
