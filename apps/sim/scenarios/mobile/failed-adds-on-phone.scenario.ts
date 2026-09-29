@@ -1,4 +1,3 @@
-import { onlyOtherFilesBytes } from '../../src/integrity'
 import { defineScenario } from '../../src/scenario'
 import { seedFiles } from '../../src/seed'
 
@@ -8,20 +7,6 @@ export default defineScenario({
     'The phone imports 8 files in one pick, so its uploader adds several to one batch, and the next five adds fail, as an add does when it cannot read its file. The phone retries through its own uploader. Every file reaches the laptop, and each file on both devices points at an object holding that file’s bytes.',
   devices: { phone: 'phone', laptop: 'cli' },
   timeoutMs: 8 * 60_000,
-  knownBug:
-    'The uploader keeps abandoned adds in its batch after a failed add, then pins objects to files by position, so later files get other files’ bytes.',
-  bugShowsAs: [
-    ...['phone', 'laptop'].map((device) => ({
-      check: `every file on ${device} points at an object holding its own bytes`,
-      matches: onlyOtherFilesBytes,
-    })),
-    { check: 'one pinned object per file', matches: (pins: number) => pins > 8, sometimes: true },
-    {
-      check: 'no file’s bytes are pinned twice',
-      matches: (hashes: string[]) => hashes.length > 0,
-      sometimes: true,
-    },
-  ],
   async run({ devices, network, converge, step, precondition, checkEqual, checkContent, workDir }) {
     const phone = devices.phone
     const paths = seedFiles(workDir, { prefix: 'batch', count: 8, size: 16 * 1024 })

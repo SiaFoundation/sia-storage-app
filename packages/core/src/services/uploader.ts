@@ -785,11 +785,19 @@ export class UploadManager {
   }
 
   /**
-   * Fire packer.addPath() for entries[from..end) concurrently, then await
-   * each in order updating batch state after each completes.
+   * Fire packer.addPath() for entries[from..end) concurrently, then settle
+   * each in order, updating batch state as each completes.
+   *
+   * finalize() returns one object per successful add, in call order, and
+   * flush() pairs them with batch.files by position. So every add that was
+   * fired is settled here, even after an earlier one fails or the manager is
+   * suspended, and a failed add leaves batch.files. An entry left in the batch
+   * after its add failed would shift every later file onto the object of the
+   * file before it.
    */
   private async processWindow(entries: FileEntry[], from: number, end: number): Promise<void> {
     const packer = this.packer!
+    const batch = this.batch!
 
     const inflight = []
     for (let j = from; j < end; j++) {
@@ -800,75 +808,61 @@ export class UploadManager {
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
         size: entry.size,
-        batchId: this.batch!.batchId,
+        batchId: batch.batchId,
       })
       // Add to batch state before packer.addPath() so onProgress can
       // distribute progress while data streams to the network.
-      this.batch!.files.push(entry)
-      this.batch!.totalSize += entry.size
-      inflight.push({
-        entry,
-        promise: packer.addPath(this.adapters.toFilePath(entry.fileUri)),
-      })
+      batch.files.push(entry)
+      batch.totalSize += entry.size
+      const promise = packer.addPath(this.adapters.toFilePath(entry.fileUri))
+      // A shutdown ends the loop below early, and the adds it leaves
+      // unawaited reject once the packer is cancelled.
+      promise.catch(() => {})
+      inflight.push({ entry, promise })
     }
 
-    // Await each add in order. The SDK serializes the actual work, so
-    // t1->t2 measures this file's queue wait + processing + any slab upload.
+    // Settle each add in order. The SDK serializes the actual work, so an
+    // add's time, from when the loop reaches it to when it settles, covers
+    // that file's processing and any slab upload.
     for (const { entry, promise } of inflight) {
-      try {
-        const t1 = Date.now()
-        await promise
-        // Exit after current add completes if shutting down or suspending.
-        if (!this.active || !this.batch || this._suspended) break
-        const t2 = Date.now()
-        const addMs = t2 - t1
-        const slabsBefore = this.batch.slabsFilled
-        this.recordAdd(entry, addMs)
-        logger.debug('uploadManager', 'file_added', {
-          fileId: entry.fileId,
-          size: entry.size,
-          batchId: this.batch.batchId,
-          addMs,
-          slabsBefore,
-          slabsAfter: this.batch.slabsFilled,
-        })
-
-        if (this.shouldFlushDueToLimits()) {
-          await this.flush('max_slabs')
+      const t1 = Date.now()
+      const failure = await promise.then(
+        () => null,
+        (e: unknown) => ({ error: e }),
+      )
+      // Shutdown cancels the packer and drops the batch, so nothing is left
+      // to keep in step with.
+      if (!this.active || this.batch !== batch) break
+      if (failure) {
+        const idx = batch.files.indexOf(entry)
+        if (idx !== -1) {
+          batch.files.splice(idx, 1)
+          batch.totalSize -= entry.size
         }
-      } catch (e) {
-        if (!this.active) break
-        if (this.batch) {
-          const idx = this.batch.files.indexOf(entry)
-          if (idx !== -1) {
-            this.batch.files.splice(idx, 1)
-            this.batch.totalSize -= entry.size
-          }
-        }
-        const message = getErrorMessage(e)
         logger.error('uploadManager', 'file_process_error', {
           fileId: entry.fileId,
-          error: e as Error,
+          error: failure.error as Error,
         })
-        this.failEntry(entry.fileId, e, message)
-        // Abandon the rest of this window on first error; the loop below
-        // attaches .catch so skipped in-flight promises don't surface as
-        // unhandled rejections. Keep this.packer / this.batch alive — the
-        // SDK leaves the packer usable after add() errors, so the next
-        // entry continues in the same batch instead of orphaning its
-        // already-successful adds.
-        break
+        // The SDK leaves the packer usable after an add fails, so the
+        // batch carries on with the adds that succeeded.
+        this.failEntry(entry.fileId, failure.error, getErrorMessage(failure.error))
+        continue
       }
+      const addMs = Date.now() - t1
+      const slabsBefore = batch.slabsFilled
+      this.recordAdd(entry, addMs)
+      logger.debug('uploadManager', 'file_added', {
+        fileId: entry.fileId,
+        size: entry.size,
+        batchId: batch.batchId,
+        addMs,
+        slabsBefore,
+        slabsAfter: batch.slabsFilled,
+      })
     }
 
-    // Prevent uncaught rejections on promises skipped due to early break
-    for (const item of inflight) {
-      item.promise.catch((e) => {
-        logger.warn('uploadManager', 'abandoned_add_rejected', {
-          fileId: item.entry.fileId,
-          error: e as Error,
-        })
-      })
+    if (this.active && !this._suspended && this.shouldFlushDueToLimits()) {
+      await this.flush('max_slabs')
     }
   }
 
