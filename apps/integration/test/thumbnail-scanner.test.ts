@@ -90,6 +90,40 @@ describe('ThumbnailScanner', () => {
     expect(result.skippedFullyCovered).toHaveLength(0)
   })
 
+  it('thumbnails a raw photo under its stored type when its bytes sniff as the tiff it is built on', async () => {
+    const now = Date.now()
+    const rawApp = createTestApp(undefined, {
+      fsIO: {},
+      thumbnail: {
+        thumbnailableTypes: ['image/dng'],
+      },
+      crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
+      detectMimeType: async () => 'image/tiff',
+    })
+    await rawApp.start()
+    try {
+      await rawApp.createFileRecord({
+        id: 'raw1',
+        name: 'IMG_1.dng',
+        type: 'image/dng',
+        kind: 'file',
+        size: 1000,
+        hash: 'sha256:raw1',
+        createdAt: now,
+        updatedAt: now,
+        mediaAssetId: 'local-raw1',
+      })
+
+      const result = await rawApp.thumbnailScanner.runScan()
+
+      expect(result.errors).toHaveLength(0)
+      expect(result.produced.map((p) => p.size).sort()).toEqual([...ThumbSizes].sort())
+      expect((await rawApp.app.files.getById('raw1'))?.type).toBe('image/dng')
+    } finally {
+      await rawApp.shutdown()
+    }
+  })
+
   it('generates a missing thumbnail (64px)', async () => {
     const now = Date.now()
     await app.createFileRecord({

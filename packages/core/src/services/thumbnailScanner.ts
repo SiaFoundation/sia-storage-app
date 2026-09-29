@@ -2,6 +2,7 @@ import { logger } from '@siastorage/logger'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type { AppService } from '../app/service'
 import type { ContentHash } from '../lib/contentHash'
+import { refinesContainer } from '../lib/detectMimeType'
 import { extFromMime, isMimeType } from '../lib/fileTypes'
 import { raceWithAbort } from '../lib/timeout'
 import { uniqueId } from '../lib/uniqueId'
@@ -26,6 +27,9 @@ async function writeThumbnailToStorage(
 export function shouldReplaceType(declared: string, detected: string): boolean {
   if (declared === detected) return false
   if (!isMimeType(detected)) return false
+  // A DNG sniffs as TIFF, and the sniff cannot see further. Replacing it
+  // would rename a raw photo to .tiff on every device.
+  if (refinesContainer(detected, declared)) return false
   if (declared === 'application/octet-stream') return true
   if (!isMimeType(declared)) return true
   const declaredExt = extFromMime(declared)
@@ -80,13 +84,14 @@ async function prepareForCandidate(
   sourceUri: string,
 ): Promise<{ actualType: string; effectiveSourceUri: string }> {
   const detectedType = await app.fs.detectMimeType(sourceUri)
-  let effectiveSourceUri = sourceUri
-  if (detectedType && shouldReplaceType(fileType, detectedType)) {
-    effectiveSourceUri = await correctType(app, fileId, fileType, detectedType)
+  if (!detectedType || !shouldReplaceType(fileType, detectedType)) {
+    // A sniff that does not replace the stored type must not stand in for it
+    // either: a DNG sniffs as TIFF, which iOS cannot thumbnail and DNG it can.
+    return { actualType: fileType, effectiveSourceUri: sourceUri }
   }
   return {
-    actualType: detectedType ?? fileType,
-    effectiveSourceUri,
+    actualType: detectedType,
+    effectiveSourceUri: await correctType(app, fileId, fileType, detectedType),
   }
 }
 

@@ -1,4 +1,4 @@
-import { classifyImportType, detectMimeType } from './detectMimeType'
+import { classifyImportType, detectMimeType, refinesContainer } from './detectMimeType'
 
 describe('detectMimeType', () => {
   it('returns providedType when recognized', () => {
@@ -253,6 +253,11 @@ describe('detectMimeType', () => {
 })
 
 describe('container refinement', () => {
+  it('answers false for a container named like an Object member', () => {
+    expect(refinesContainer('constructor', 'image/dng')).toBe(false)
+    expect(refinesContainer('image/tiff', 'image/dng')).toBe(true)
+  })
+
   const ZIP = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0])
   const MKV = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])
   const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -271,6 +276,16 @@ describe('container refinement', () => {
 
   it('matroska bytes with a webm name classify as webm', () => {
     expect(detectMimeType({ bytes: MKV, fileName: 'clip.webm' })).toBe('video/webm')
+  })
+
+  it('tiff bytes with a camera raw name classify as that raw format', () => {
+    const TIFF = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 8, 0, 0, 0])
+    expect(detectMimeType({ bytes: TIFF, fileName: 'IMG_0001.DNG' })).toBe('image/dng')
+    expect(detectMimeType({ bytes: TIFF, fileName: 'shot.nef' })).toBe('image/x-nikon-nef')
+    expect(detectMimeType({ bytes: TIFF, providedType: 'image/x-apple-proraw' })).toBe(
+      'image/x-apple-proraw',
+    )
+    expect(detectMimeType({ bytes: TIFF, fileName: 'scan.txt' })).toBe('image/tiff')
   })
 
   it('specific non-container bytes beat a conflicting name', () => {
