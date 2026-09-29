@@ -24,8 +24,10 @@ mobile app's source.
 - Code: `app.files`; screens `Library`, `Directory`, `UnavailableFiles`; CLI
   `add`, `mv`, `rm`, `ls`
 - Check: tables `files`, `objects`; `bun sim library`
-- Tests: integration `trash-restore`, `version-sync`, `full-lifecycle`,
-  `bulk-operations`
+- Tests: scenarios `sync/edits-propagate`, `sync/delete-stays-deleted`,
+  `sync/offline-conflict`, `sync/offline-edits-survive-kill`,
+  `sync/same-name-on-three-devices`, `sync/edits-during-own-upload`; integration
+  `trash-restore`, `version-sync`, `full-lifecycle`, `bulk-operations`
 - CLI: `bun sim sia laptop -- ls`,
   `bun sim sia laptop -- mv {file} renamed.bin`,
   `bun sim call laptop files.renameFile <id> renamed.bin`
@@ -71,7 +73,8 @@ bun sim device expect phone --label Menu
 - When: creating, renaming and deleting folders, and moving files into them.
 - Code: `app.directories`; screens `Directory`; CLI `mkdir`, `mv`
 - Check: tables `directories`, `files`
-- Tests: integration `directory-cascade`
+- Tests: scenarios `sync/folder-rename-vs-offline-edit`,
+  `sync/move-to-root-and-untag`; integration `directory-cascade`
 - CLI: `bun sim sia laptop -- mkdir {folder}`,
   `bun sim sia laptop -- mv {file} {folder}/`
 - Phone, create a folder and open it:
@@ -106,7 +109,8 @@ bun sim device expect phone --label Menu
 - When: tagging files, the Favorites system tag, and browsing by tag.
 - Code: `app.tags`; screens `TagLibrary`; CLI `tags`
 - Check: tables `tags`, `file_tags`
-- Tests: integration `tag-rename`, `multi-device-sync`
+- Tests: scenarios `sync/move-to-root-and-untag`,
+  `sync/unfavorite-reaches-peer`; integration `tag-rename`, `multi-device-sync`
 - CLI: `bun sim sia laptop -- tags`
 - Phone, create a tag:
 
@@ -205,8 +209,8 @@ bun sim device expect phone --label Menu
   local copies.
 - Code: `app.downloads`, `app.fs`; services `cacheEviction`; CLI `download`
 - Check: `call <device> downloads.getState`; tables `fs`
-- Tests: integration `downloads`, `fs-eviction`, `fs-adopt`, `fs-orphan`,
-  `size-reconcile`
+- Tests: scenarios `sync/converge-and-download`; integration `downloads`,
+  `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - CLI: `bun sim sia laptop -- download {file}`
 - Desktop: `bun sim device download mac {file}` downloads a cloud-only file by
   reading it through Finder, and `bun sim device finder-state mac {file}` shows

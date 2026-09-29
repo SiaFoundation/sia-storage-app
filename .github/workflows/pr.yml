@@ -125,6 +125,26 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun --cwd apps/cli test:e2e
 
+  sim:
+    # Real CLI daemons as separate devices over the shared mock network. Each
+    # scenario gets its own network and devices, so four run at once.
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup
+      - run: bun sim run sync/ --jobs 4
+      # The reports, and the kept session of every scenario that did not pass.
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+          retention-days: 7
+
   build-cli:
     # Smoke-test the CLI compile on the cheapest runner. Per-platform builds
     # are reserved for the release workflow — PRs only need to catch obvious
