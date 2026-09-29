@@ -171,15 +171,14 @@ scenario. The PR description of a fix found or reproduced in sim gives the
 | Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                         | yes                 |
 | Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`           | yes                 |
 | Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | no                  |
-| App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android`      | the built app through its UI                                    | no                  |
 | Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together               | yes                 |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
 | Sim, desktop          | `bun sim run desktop/`                          | the installed test app, its Finder extension and Finder folder  | no                  |
 
-The native device, Maestro and desktop tiers are local-only and rot unless deliberately
-run. Run the native device tier, the Maestro flows and the phone scenarios before
-landing anything that touches native code or the import flow, and the desktop scenarios
-before landing a change to the desktop app or its extension.
+The native device and desktop tiers are local-only and rot unless deliberately run. Run
+the native device tier and the phone scenarios before landing anything that touches
+native code or the import flow, and the desktop scenarios before landing a change to the
+desktop app or its extension.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot
@@ -211,17 +210,6 @@ Sim phones are driven through their accessibility tree. Target elements by `id`,
 or `label`, never by coordinate: a coordinate tap passes on one screen size and silently
 hits the wrong thing on another. `bun sim logs <device>` reads a device's own log.
 System logs come from `adb logcat` and `xcrun simctl spawn booted log stream`.
-
-`bun run mobile:test:e2e:ios` / `:android` runs the Maestro flows in
-`apps/mobile/e2e/flows/`. Flags: `--rebuild`, `--skip-install`, `--headless`. Auth flows
-need `E2E_CONNECT_KEY`. The runner boots the device, clears its photo library (both
-platforms ship stock photos that would pollute an import test), installs, and launches.
-
-Seed the photo library from inside a flow with `addMedia`, paths relative to the flow
-file.
-
-To inspect a running app rather than script it, `maestro mcp` serves Maestro's device
-commands as MCP tools. This build has no `studio` or `hierarchy`.
 
 ## Commits, changesets, and PR descriptions
 

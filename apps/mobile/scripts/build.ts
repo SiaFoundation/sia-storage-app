@@ -1,8 +1,4 @@
-/**
- * Shared Build Functions
- *
- * Common build logic for dev.ts and e2e.ts scripts.
- */
+/** Build logic for the dev.ts script. */
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'

@@ -27,8 +27,6 @@
     "mobile:test:unit": "bun --cwd apps/mobile test:unit",
     "mobile:test:core": "bun --cwd apps/mobile test:core",
     "mobile:test:scripts": "bun --cwd apps/mobile test:scripts",
-    "mobile:test:e2e:ios": "bun --cwd apps/mobile test:e2e:ios",
-    "mobile:test:e2e:android": "bun --cwd apps/mobile test:e2e:android",
     "mobile:test:native": "bun --cwd apps/mobile test:native",
     "mobile:test:native:ios": "bun --cwd apps/mobile test:native:ios",
     "mobile:test:native:android": "bun --cwd apps/mobile test:native:android",
