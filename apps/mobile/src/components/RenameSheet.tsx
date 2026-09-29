@@ -72,6 +72,7 @@ export function RenameSheet({ sheetName, title, placeholder, initialValue, onRen
         <View style={styles.inputContainer}>
           <TextInput
             ref={inputRef}
+            accessibilityLabel={placeholder}
             style={styles.input}
             placeholder={placeholder}
             placeholderTextColor={palette.gray[500]}

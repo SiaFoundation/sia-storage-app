@@ -54,7 +54,12 @@ export function FileMeta({ file, status }: { file: FileRecord; status: FileStatu
       <InsetGroupSection
         header="Tags"
         headerRight={
-          <Pressable onPress={() => openSheet(tagSheetName)} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add tag"
+            onPress={() => openSheet(tagSheetName)}
+            hitSlop={8}
+          >
             <PlusIcon size={16} color={palette.blue[400]} />
           </Pressable>
         }

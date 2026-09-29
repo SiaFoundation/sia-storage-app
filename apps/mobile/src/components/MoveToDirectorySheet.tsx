@@ -163,6 +163,7 @@ export function MoveToDirectorySheet({
       <View style={styles.inputRow}>
         <TextInput
           ref={inputRef}
+          accessibilityLabel="Search or create folder"
           style={styles.input}
           placeholder="Search or create folder..."
           placeholderTextColor={palette.gray[500]}
@@ -250,6 +251,8 @@ export function MoveToDirectorySheet({
             </Pressable>
             {item.subdirectoryCount > 0 ? (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${item.name}`}
                 style={styles.chevronTarget}
                 onPress={() => {
                   setCurrentDirPath(item.path)

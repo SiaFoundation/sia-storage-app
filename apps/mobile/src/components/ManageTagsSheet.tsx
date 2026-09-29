@@ -112,6 +112,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
         ))}
         <TextInput
           ref={inputRef}
+          accessibilityLabel="Search or create tag"
           style={styles.input}
           placeholder={userFileTags.length > 0 ? 'Add more...' : 'Search or create tag...'}
           placeholderTextColor={palette.gray[500]}

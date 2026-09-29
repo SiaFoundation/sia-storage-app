@@ -138,6 +138,7 @@ export default function OnboardingAdvancedIndexerScreen() {
                 </View>
                 <TextInput
                   testID="advanced-indexer-url-input"
+                  accessibilityLabel="Indexer URL"
                   style={styles.textInputField}
                   placeholder="your-indexer.com"
                   placeholderTextColor={palette.gray[400]}

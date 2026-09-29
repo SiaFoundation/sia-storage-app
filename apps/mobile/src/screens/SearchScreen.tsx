@@ -231,6 +231,7 @@ export function SearchScreen({ navigation }: Props) {
           {isSelectionMode ? (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Exit selection mode"
               onPress={() => exitSelectionMode()}
               style={styles.headerPill}
             >
@@ -310,6 +311,7 @@ export function SearchScreen({ navigation }: Props) {
             ))}
             <TextInput
               ref={inputRef}
+              accessibilityLabel="Search files"
               value={text}
               onChangeText={setText}
               placeholder="Search files..."
@@ -326,7 +328,12 @@ export function SearchScreen({ navigation }: Props) {
               }}
               autoFocus
             />
-            <Pressable accessibilityRole="button" onPress={handleExit} hitSlop={8}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+              onPress={handleExit}
+              hitSlop={8}
+            >
               <XIcon size={18} color={whiteA.a70} />
             </Pressable>
           </View>

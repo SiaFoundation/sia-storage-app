@@ -66,12 +66,17 @@ export function OverflowActions({ actions, sheetName }: Props) {
     <>
       <View style={styles.container} onLayout={handleLayout}>
         {visibleActions.map((action) => (
-          <IconButton key={action.key} onPress={action.onPress} disabled={action.disabled}>
+          <IconButton
+            key={action.key}
+            onPress={action.onPress}
+            disabled={action.disabled}
+            accessibilityLabel={action.label}
+          >
             {action.icon}
           </IconButton>
         ))}
         {overflowActions.length > 0 && (
-          <IconButton onPress={handleOverflowPress}>
+          <IconButton onPress={handleOverflowPress} accessibilityLabel="More actions">
             <MoreVerticalIcon color={iconColors.white} />
           </IconButton>
         )}

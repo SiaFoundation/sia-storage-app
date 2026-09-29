@@ -231,6 +231,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
           {isSelectionMode ? (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Exit selection mode"
               onPress={() => exitSelectionMode()}
               style={styles.headerPill}
             >
@@ -289,7 +290,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
             >
               <FilePlusIcon color={palette.gray[50]} size={20} />
             </IconButton>
-            <IconButton onPress={() => openSheet('tagActions')} accessibilityLabel="More options">
+            <IconButton onPress={() => openSheet('tagActions')} accessibilityLabel="More actions">
               <MoreVerticalIcon color={palette.gray[50]} size={22} />
             </IconButton>
           </FloatingPill>

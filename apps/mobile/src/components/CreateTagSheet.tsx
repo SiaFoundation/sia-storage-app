@@ -68,6 +68,7 @@ export function CreateTagSheet() {
         <View style={styles.inputContainer}>
           <TextInput
             ref={inputRef}
+            accessibilityLabel="Tag name"
             style={styles.input}
             placeholder="Tag name"
             placeholderTextColor={palette.gray[500]}

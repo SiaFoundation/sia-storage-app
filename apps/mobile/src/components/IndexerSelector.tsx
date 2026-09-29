@@ -76,6 +76,7 @@ export function IndexerSelector({ value, onChangeText, hasErrored = false }: Ind
                 <Text style={styles.inputPrefixText}>https://</Text>
               </View>
               <TextInput
+                accessibilityLabel="Indexer URL"
                 style={styles.textInputField}
                 placeholder="your-indexer.com"
                 placeholderTextColor={palette.gray[400]}

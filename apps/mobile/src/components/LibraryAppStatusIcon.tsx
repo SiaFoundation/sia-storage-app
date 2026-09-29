@@ -10,6 +10,8 @@ export function LibraryAppStatusIcon() {
       <View style={styles.statusPillContainer}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Status"
+          accessibilityValue={{ text: appStatus.message }}
           onPress={navigateToStatusSheet}
           style={styles.statusPill}
         >

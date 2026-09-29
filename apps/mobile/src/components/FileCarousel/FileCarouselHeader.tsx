@@ -27,7 +27,10 @@ export function FileCarouselHeader({
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 2, paddingHorizontal: 12 }]}>
       <View style={styles.headerRow}>
-        <IconButton onPress={() => navigation.goBack()}>
+        <IconButton
+          onPress={() => navigation.goBack()}
+          accessibilityLabel={icon === 'back' ? 'Back' : 'Close'}
+        >
           {icon === 'back' ? (
             <ArrowLeftIcon color={palette.gray[50]} />
           ) : (

@@ -98,6 +98,7 @@ export function BulkManageTagsSheet({
       <View style={styles.inputRow}>
         <TextInput
           ref={inputRef}
+          accessibilityLabel="Search or create tag"
           style={styles.input}
           placeholder="Search or create tag..."
           placeholderTextColor={palette.gray[500]}

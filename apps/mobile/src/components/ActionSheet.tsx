@@ -94,6 +94,7 @@ export function ActionSheet({
       <BottomSheetBackdrop
         {...props}
         pressBehavior="close"
+        accessibilityLabel="Close sheet"
         appearsOnIndex={0}
         disappearsOnIndex={-1}
         opacity={backdropOpacity}
@@ -123,6 +124,9 @@ export function ActionSheet({
       keyboardBlurBehavior="restore"
       onDismiss={handleDismiss}
       overDragResistanceFactor={4.5}
+      // The library makes the sheet one accessible element by default, which
+      // on iOS hides every button in it from VoiceOver.
+      accessible={false}
     >
       <BottomSheetScrollView
         contentContainerStyle={contentContainerStyle}
