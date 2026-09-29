@@ -33,7 +33,7 @@ export interface AppServiceAdapters {
   uploader: UploaderAdapters
   sdkAuth: SdkAuthAdapters
   thumbnail?: ThumbnailAdapter
-  detectMimeType?: (path: string) => Promise<string | null>
+  detectMimeType?: (path: string, name?: string) => Promise<string | null>
   /**
    * Absolute directory an OS shell and this process both reach, for path
    * handoff. Absent means no shell is attached and every handoff call fails

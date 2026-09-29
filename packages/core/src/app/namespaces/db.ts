@@ -41,7 +41,7 @@ export function buildDbNamespaces(
   adapters?: {
     crypto?: CryptoAdapter
     thumbnail?: ThumbnailAdapter
-    detectMimeType?: (path: string) => Promise<string | null>
+    detectMimeType?: (path: string, name?: string) => Promise<string | null>
   },
 ): DatabaseNamespaces {
   // Runs after any copy's bytes land: gate so the read+upsert can't leave the
@@ -202,9 +202,9 @@ export function buildDbNamespaces(
       }
       return fsIO.getDeviceSpace()
     },
-    detectMimeType: async (path) => {
+    detectMimeType: async (path, name) => {
       if (!adapters?.detectMimeType) return null
-      return adapters.detectMimeType(path)
+      return adapters.detectMimeType(path, name)
     },
   }
 
