@@ -6,6 +6,10 @@ describe('resolveVariant', () => {
     expect(resolveVariant('beta')).toBe('beta')
   })
 
+  it('maps the desktop test build to dev', () => {
+    expect(resolveVariant('test')).toBe('dev')
+  })
+
   it('falls back to prod for every value that is not an exact match', () => {
     for (const variant of ['prod', 'production', 'Beta', 'BETA', '', undefined, null, 0, {}, []]) {
       expect(resolveVariant(variant)).toBe('prod')

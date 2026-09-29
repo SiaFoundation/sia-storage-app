@@ -128,9 +128,10 @@ about. Anything run straight from the source tree gets no folder.
 
 Signing needs `apps/desktop/env/dev.env`, which is gitignored. Copy `dev.example.env`
 and fill in the five Apple Developer values; without it the command stops before it
-builds anything and names the file. `bun run desktop:package <dev|beta|prod>` is the
-same build without the dev server, and the three contexts install side by side under
-different bundle ids.
+builds anything and names the file. `bun run desktop:package <dev|test|beta|prod>` is
+the same build without the dev server, and the four contexts install side by side under
+different bundle ids. `test` is the build automated device tests install. It needs its own
+`test.env`, with development profiles for the two test App IDs in `test.example.env`.
 
 `bun run desktop:dev:no-mount` skips all of that and runs from source. Use it for UI
 work with no account or signing setup. The app reports it: the popover's Finder row

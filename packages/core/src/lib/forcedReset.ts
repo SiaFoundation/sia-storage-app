@@ -32,10 +32,13 @@ export const RESET_KEEP_KEYS = ['hasOnboarded', 'indexerURL', ...Object.values(M
 export type ForcedResetAction = 'reset' | 'record' | 'none'
 
 /**
- * Anything but an exact dev or beta match is production, so a build that
- * cannot say what it is never resets on a beta nonce.
+ * `test` is the desktop build automated tests install, packaged from a local
+ * checkout like dev, so it answers the dev nonce. Anything but an exact dev, beta or
+ * test match is production, so a build that cannot say what it is never
+ * resets on a beta nonce.
  */
 export function resolveVariant(variant: unknown): BuildVariant {
+  if (variant === 'test') return 'dev'
   return variant === 'dev' || variant === 'beta' ? variant : 'prod'
 }
 

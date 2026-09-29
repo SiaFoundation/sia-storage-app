@@ -25,6 +25,7 @@ const env = {
   domainDisplay: 'Sia Storage Dev',
   appName: 'Sia Storage Dev',
   appIcon: 'icon-dev.icns',
+  linkCli: true,
 }
 
 describe('entitlements', () => {
@@ -200,8 +201,11 @@ describe('build settings', () => {
   })
 
   it('takes only the SIA_* settings from an environment, and not blank ones', () => {
-    expect(envOverrides({ SIA_TEAM_ID: 'ABC', SIA_APP_NAME: ' ', PATH: '/bin' })).toEqual({
+    expect(
+      envOverrides({ SIA_TEAM_ID: 'ABC', SIA_APP_NAME: ' ', SIA_LINK_CLI: 'true', PATH: '/bin' }),
+    ).toEqual({
       SIA_TEAM_ID: 'ABC',
+      SIA_LINK_CLI: 'true',
     })
   })
 
@@ -235,10 +239,30 @@ describe('build settings', () => {
       expect(() => loadEnv('beta', { PATH: '/bin' })).toThrow(/Copy beta.example.env/)
     })
 
-    it.each(['dev', 'beta', 'prod'])('gives %s an icon that is in assets/icons', (context) => {
-      const icon = loadEnv(context, environment).appIcon
-      expect(fs.existsSync(path.join(import.meta.dir, '..', 'assets', 'icons', icon))).toBe(true)
+    it('asks for the env file when the environment carries only SIA_LINK_CLI', () => {
+      expect(() => loadEnv('beta', { SIA_LINK_CLI: 'true' })).toThrow(/Copy beta.example.env/)
     })
+
+    it.each([
+      ['dev', true],
+      ['test', false],
+      ['beta', true],
+      ['prod', true],
+    ])('%s env sets linkCli to %p', (context, linked) => {
+      expect(loadEnv(context, environment).linkCli).toBe(linked)
+    })
+
+    it("lets the environment set test's linkCli back to true", () => {
+      expect(loadEnv('test', { ...environment, SIA_LINK_CLI: 'true' }).linkCli).toBe(true)
+    })
+
+    it.each(['dev', 'test', 'beta', 'prod'])(
+      'gives %s an icon that is in assets/icons',
+      (context) => {
+        const icon = loadEnv(context, environment).appIcon
+        expect(fs.existsSync(path.join(import.meta.dir, '..', 'assets', 'icons', icon))).toBe(true)
+      },
+    )
 
     it('rejects a context with no example file', () => {
       expect(() => loadEnv('staging', environment)).toThrow(/No such build context: staging/)
