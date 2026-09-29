@@ -7,14 +7,6 @@ export default defineScenario({
   description:
     'The Mac saves files named with accented letters and other scripts into its Finder folder. The laptop holds each under the composed (NFC) form of its name, the form phones and most apps produce, so the same visible name from any app is the same name to the library.',
   devices: { mac: 'desktop', laptop: 'cli' },
-  knownBug:
-    'The Finder folder hands the provider every name decomposed (NFD), and the provider stores it as given, so café.txt saved in Finder and café.txt added on a phone are two different names, and versions, which the library groups by name, do not match.',
-  bugShowsAs: [
-    {
-      check: 'the laptop holds each name in composed form',
-      matches: (names: string[]) => names.length > 0 && names.every((n) => n.endsWith(' (NFD)')),
-    },
-  ],
   timeoutMs: 6 * 60_000,
   async run({ devices: { mac, laptop }, step, checkEqual, waitFor, workDir }) {
     const saved = await seedTypedFiles(`${workDir}/finder-unicode`, {

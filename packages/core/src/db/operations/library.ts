@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { normalizeName } from '../../lib/names'
 import type { FileRecordRow } from '../../types/files'
 import { SYSTEM_TAGS } from './tags'
 
@@ -122,7 +123,7 @@ export function buildLibraryQueryParts(
   }
   if (hasQuery) {
     whereParts.push(`${tableAlias}.name LIKE ? COLLATE NOCASE ESCAPE '\\'`)
-    const escaped = (query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
+    const escaped = normalizeName(query ?? '').replace(/[%_\\]/g, (m) => `\\${m}`)
     params.push(`%${escaped}%`)
   }
   if (tags.length > 0) {

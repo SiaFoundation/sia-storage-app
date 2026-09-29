@@ -26,6 +26,7 @@
     "./lib/timeout": "./src/lib/timeout.ts",
     "./lib/types": "./src/lib/types.ts",
     "./lib/localObjects": "./src/lib/localObjects.ts",
+    "./lib/names": "./src/lib/names.ts",
     "./lib/naturalSortKey": "./src/lib/naturalSortKey.ts",
     "./lib/progressThrottle": "./src/lib/progressThrottle.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",

@@ -5,6 +5,7 @@ import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import type { ContentHash } from '../../lib/contentHash'
 import { refinesContainer } from '../../lib/detectMimeType'
 import { getMimeTypeFromExtension } from '../../lib/fileTypes'
+import { normalizeName } from '../../lib/names'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow, FileUpdate, UpdatedAtWrite } from '../../types/files'
@@ -1688,7 +1689,8 @@ export async function finalizeImportFile(
       { directoryId: row.directoryId, skipCurrentRecalc: true },
     )
 
-    // pendingTags is a JSON array of tag names; anything malformed is ignored.
+    // pendingTags is a JSON array of tag names as the import was given them,
+    // so each is put in the stored form here. Anything malformed is ignored.
     if (row.pendingTags) {
       let names: string[] = []
       try {
@@ -1696,7 +1698,7 @@ export async function finalizeImportFile(
         if (Array.isArray(parsed)) names = parsed.filter((n): n is string => typeof n === 'string')
       } catch {}
       for (const name of names) {
-        const tag = await getOrCreateTag(tx, name)
+        const tag = await getOrCreateTag(tx, normalizeName(name))
         await insertFileTag(tx, id, tag.id)
       }
     }

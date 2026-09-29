@@ -6,6 +6,7 @@
  */
 import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import { IMPORT_MAX_ATTEMPTS } from '../../config'
+import { normalizeName } from '../../lib/names'
 import { minutesInMs } from '../../lib/time'
 import { UNRETRYABLE_REASONS } from './importReasons'
 import { UNFILED_DIRECTORY_ID } from './library'
@@ -591,7 +592,7 @@ export async function queryImportFiles(
     // Substring match on name. A leading-wildcard LIKE can't use an index, but
     // the importId index bounds the scan to one import's rows first.
     search = ` AND name LIKE ? ESCAPE '\\'`
-    params.push(`%${opts.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
+    params.push(`%${normalizeName(opts.search).replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
   }
   return db.getAllAsync<ImportFileRow>(
     `SELECT * FROM import_files WHERE importId = ?${search} ORDER BY addedAt DESC, id DESC${limit}`,
