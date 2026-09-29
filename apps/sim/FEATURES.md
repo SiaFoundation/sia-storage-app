@@ -251,8 +251,8 @@ bun sim device expect phone --label Menu
 - Check: tables `feed_meta`; `bun sim converge`, `bun sim logs`
 - Tests: scenarios `resilience/kills-during-catch-up`,
   `resilience/thousand-files`, `mobile/suspend-during-sync-down`; integration
-  `sync-down`, `sync-up-metadata`, `multi-device-convergence`,
-  `feed-convergence`, `change-events`
+  `sync-down`, `sync-down-abort`, `sync-up-metadata`,
+  `multi-device-convergence`, `feed-convergence`, `change-events`
 
 ### Imports
 
