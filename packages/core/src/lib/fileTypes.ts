@@ -225,7 +225,7 @@ export type Ext =
  * A lookup for a name like "constructor" or "__proto__" must miss rather than
  * resolve to an inherited member, so these tables carry no prototype.
  */
-function lookupTable<V>(entries: Record<string, V>): Record<string, V> {
+export function lookupTable<V>(entries: Record<string, V>): Record<string, V> {
   return Object.assign(Object.create(null), entries)
 }
 
