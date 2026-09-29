@@ -225,7 +225,7 @@ export type Ext =
  * A lookup table as a Map. A plain object would answer a lookup for a name
  * like "constructor" or "__proto__" with a member every object inherits.
  */
-function lookupTable<V>(entries: Record<string, V>): ReadonlyMap<string, V> {
+export function lookupTable<V>(entries: Record<string, V>): ReadonlyMap<string, V> {
   return new Map(Object.entries(entries))
 }
 
