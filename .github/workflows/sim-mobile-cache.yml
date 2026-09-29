@@ -1,0 +1,98 @@
+name: Sim (mobile) cache
+
+# Builds the simulator app and the emulator APK that sim-mobile.yml runs, for
+# main's latest native hash, and caches them under the same keys. A push that
+# arrives while one builds cancels it, so a hash main passes straight through
+# is never built. A PR
+# can restore caches saved on its base branch and on the default branch, but
+# never ones saved by another PR, so a build cached here is the one every PR,
+# the release PR included, starts from instead of spending its run on a
+# native build.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-cache:
+    runs-on: tenki-macos-26-large
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+          lookup-only: true
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:ios:simulator -- --no-run
+        # CocoaPods needs a UTF-8 locale and this runner sets none, so pod
+        # install fails and its error report then crashes on the encoding.
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+
+  android-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}
+          lookup-only: true
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          android: false
+          tool-cache: false
+          swap-storage: false
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:android:emulator -- --no-run
+        # The app's Gradle config builds for ARM only, as phones and Apple
+        # Silicon emulators need, and a Linux runner's emulator is x86_64. A
+        # property set in the environment overrides the one in the config.
+        # A build with no Maps key throws when the file viewer draws its map,
+        # and a placeholder only leaves the map blank. The cache key names
+        # this build apart from one made with other settings.
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: x86_64
+          GOOGLE_MAPS_API_KEY: sim-placeholder
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}

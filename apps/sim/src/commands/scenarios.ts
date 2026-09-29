@@ -28,7 +28,7 @@ Environment:
                      the console until the run exits, such as a CI step:
                      {"total", "done", "passed", "failed", "errored",
                      "knownBug", "fixed", "skipped", "running": [names],
-                     "latest": "<VERDICT> <name>: <failure line or empty>"}`,
+                     "latest": {"verdict", "name", "reason"} or null}`,
     )
     .action(
       async (

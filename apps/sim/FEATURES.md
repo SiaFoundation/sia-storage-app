@@ -7,7 +7,9 @@ when the feature moves.
 
 A `sim` block is a recipe: paste its lines to reach the place and leave it
 again, from the library screen a signed-in phone opens on. `{file}`, `{folder}`
-and `{tag}` stand for a file, folder and tag you have.
+and `{tag}` stand for a file, folder and tag you have. The mobile navigation
+scenario runs every recipe on iOS and Android, so a recipe that works there
+works for you.
 
 A test in `apps/sim/test` fails when a name here no longer exists: an AppService
 group, a screen, a `sia` command, a table, a core service, a file, a scenario or
@@ -24,9 +26,10 @@ mobile app's source.
 - Code: `app.files`; screens `Library`, `Directory`, `UnavailableFiles`; CLI
   `add`, `mv`, `rm`, `ls`
 - Check: tables `files`, `objects`; `bun sim library`
-- Tests: scenarios `sync/edits-propagate`, `sync/delete-stays-deleted`,
-  `sync/offline-conflict`, `sync/offline-edits-survive-kill`,
-  `sync/same-name-on-three-devices`, `sync/edits-during-own-upload`; integration
+- Tests: scenarios `mobile/rename-in-viewer`, `sync/edits-propagate`,
+  `sync/delete-stays-deleted`, `sync/offline-conflict`,
+  `sync/offline-edits-survive-kill`, `sync/same-name-on-three-devices`,
+  `sync/edits-during-own-upload`, `mobile/phone-and-laptop`; integration
   `trash-restore`, `version-sync`, `full-lifecycle`, `bulk-operations`
 - CLI: `bun sim sia laptop -- ls`,
   `bun sim sia laptop -- mv {file} renamed.bin`,
@@ -164,7 +167,7 @@ bun sim device expect phone --label Menu
 - When: sorting, filtering and switching gallery or list, and selecting many
   files to act on together.
 - Code: screens `Library`, `Directory`, `TagLibrary`, `Search`
-- Tests: none.
+- Tests: scenarios `mobile/navigation`
 - Phone, view settings:
 
 ```sim
@@ -192,7 +195,8 @@ bun sim device expect phone --label Menu
 - Code: `app.uploader`, `app.uploads`; services `uploader`; screens `Uploads`
 - Check: tables `objects`; `bun sim net objects`, `bun sim converge`
 - Tests: scenarios `resilience/failed-adds`, `resilience/kill-mid-upload`,
-  `resilience/offline-backlog`, `resilience/upload-failures-retry`; integration
+  `resilience/offline-backlog`, `resilience/upload-failures-retry`,
+  `mobile/failed-adds-on-phone`, `mobile/kill-mid-upload`; integration
   `upload-packing`, `partial-batch-errors`, `sequential-batches-complete`,
   `files-stuck-after-batch`
 - Phone, the status sheet and the Uploads list:
@@ -211,8 +215,9 @@ bun sim device expect phone --label Menu
   local copies.
 - Code: `app.downloads`, `app.fs`; services `cacheEviction`; CLI `download`
 - Check: `call <device> downloads.getState`; tables `fs`
-- Tests: scenarios `sync/converge-and-download`; integration `downloads`,
-  `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
+- Tests: scenarios `sync/converge-and-download`,
+  `mobile/tapped-download-arrives`; integration `downloads`, `fs-eviction`,
+  `fs-adopt`, `fs-orphan`, `size-reconcile`
 - CLI: `bun sim sia laptop -- download {file}`
 - Desktop: `bun sim device download mac {file}` downloads a cloud-only file by
   reading it through Finder, and `bun sim device finder-state mac {file}` shows
@@ -239,8 +244,9 @@ bun sim device expect phone --label Menu
 - Code: `app.sync`; services `syncUpMetadata`, `syncDownEvents`; CLI `sync`
 - Check: tables `feed_meta`; `bun sim converge`, `bun sim logs`
 - Tests: scenarios `resilience/kills-during-catch-up`,
-  `resilience/thousand-files`; integration `sync-down`, `sync-up-metadata`,
-  `multi-device-convergence`, `feed-convergence`, `change-events`
+  `resilience/thousand-files`, `mobile/suspend-during-sync-down`; integration
+  `sync-down`, `sync-up-metadata`, `multi-device-convergence`,
+  `feed-convergence`, `change-events`
 
 ### Imports
 
@@ -249,7 +255,10 @@ bun sim device expect phone --label Menu
 - Code: `app.imports`; services `importScanner`; screens `Imports`,
   `ImportDetail`, `ImportFile`; CLI `import`
 - Check: tables `imports`, `import_files`
-- Tests: integration `imports`
+- Tests: scenarios `mobile/mixed-import`, `mobile/kill-mid-import`,
+  `mobile/import-after-resume`, `mobile/suspend-during-large-import`,
+  `mobile/ui-add-files-sheet`, `photos/new-photos`, `photos/photo-library`;
+  integration `imports`
 - Phone, the Add files sheet:
 
 ```sim
@@ -320,7 +329,10 @@ window shows only after Sign Out.
 - When: suspension, kills and switching apps on a phone.
 - Code: services `suspension`
 - Check: `bun sim device background`, `device kill`, `device locks` (iOS)
-- Tests: integration `suspension`, `app-boot`
+- Tests: scenarios `mobile/suspend-mid-upload`,
+  `mobile/suspend-during-finalize`, `mobile/rapid-app-switching`,
+  `mobile/database-uses-wal`, `mobile/import-resumes-after-suspension`;
+  integration `suspension`, `app-boot`
 
 ### Account and onboarding
 

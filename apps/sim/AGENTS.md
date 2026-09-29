@@ -231,6 +231,24 @@ fails as usual, and the report and the run's summary line list it.
 When you report that something works across devices, cite the run id and the
 commit in the report.
 
+## CI and attestation
+
+Every PR runs the CLI-device scenarios in CI. The phone suites run in CI only
+when the `sim-mobile` label is added to a PR, weekly, or on demand, and a push
+while one runs cancels it. A labelled run posts its result on the commit it
+tested as the `sim/ios` and `sim/android` commit statuses, and the label comes
+off when it ends. Running the workflow by hand takes scenario filters and a
+platform, to try a fix on the runner without the whole suite. Every phone
+run uploads its report and the sessions it kept, and the CLI-device run
+uploads them when it fails.
+
+`bun sim attest <ios|android|desktop>` runs that platform's suite on this
+checkout and posts the same status from the local run. It refuses unless the
+tracked files have no uncommitted changes and local HEAD is the PR's head, and
+it posts nothing when the run is interrupted or skips a scenario. The release
+PR needs `sim/ios` and `sim/android` on its head commit, and `sim/desktop` when
+it changes the desktop app's version. Every other PR gets them as not required.
+
 ## Reporting a fix
 
 A diff that changes how the apps behave shows the change in sim. The scenario
