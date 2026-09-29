@@ -7,24 +7,6 @@ export default defineScenario({
   description:
     'The phone has one download slot, held busy on the network. It queues a file in the background, then the user taps the same file, then 21 more background downloads queue behind it. Once the network lets go, the tapped file is on the phone.',
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug: {
-    ios: 'A tap on a file already queued in the background joins that download at background priority, whose queue drops its oldest waiter past 20, and a dropped download resolves as if it had finished, so the tap succeeds with nothing downloaded.',
-  },
-  intermittentBug: {
-    android:
-      'A tap on a file already queued in the background joins that download at background priority, whose queue drops its oldest waiter past 20, and a dropped download resolves as if it had finished, so the tap succeeds with nothing downloaded.',
-  },
-  bugShowsAs: [
-    {
-      check: 'the tapped download is still waiting when the network lets the downloads through',
-      got: { settled: true },
-    },
-    'the tapped file is on the phone',
-    {
-      check: 'phone has no download left queued or downloading',
-      matches: (ids: string[]) => ids.length > 0,
-    },
-  ],
   timeoutMs: 6 * 60_000,
   async run({
     devices: { phone },
@@ -48,11 +30,9 @@ export default defineScenario({
     })
     // Each returns once the app has registered the download, or joined it to
     // the one already running for that file, so they reach the app in order.
-    const start = (fileId: string, priority?: number) =>
-      priority === undefined
-        ? phone.call<number>('sim.startDownload', fileId)
-        : phone.call<number>('sim.startDownload', fileId, priority)
-    await start(blocker.id, 0)
+    const start = (fileId: string, priority: 'user' | 'background') =>
+      phone.call<number>('sim.startDownload', fileId, priority)
+    await start(blocker.id, 'user')
     await precondition('the blocker takes the slot', () =>
       waitFor('the blocker to be held on the network', async () => {
         const [hold] = await network.holds()
@@ -60,11 +40,11 @@ export default defineScenario({
       }),
     )
     const tap = await step('the file is queued in the background, then tapped', async () => {
-      await start(target.id)
-      return start(target.id, 0)
+      await start(target.id, 'background')
+      return start(target.id, 'user')
     })
     await step(`${LATER} more downloads queue in the background`, async () => {
-      for (const f of later) await start(f.id)
+      for (const f of later) await start(f.id, 'background')
     })
     // The background queue keeps 20 and drops the oldest once each later
     // download reaches it, a few database reads after it registers. A dropped

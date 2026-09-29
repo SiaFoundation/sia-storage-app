@@ -14,6 +14,7 @@ export type {
 export type {
   ConnectionState,
   DownloadEntry,
+  DownloadPriority,
   DownloadStatus,
   DownloadsState,
   InitState,
