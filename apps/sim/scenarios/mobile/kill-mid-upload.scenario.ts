@@ -7,12 +7,6 @@ export default defineScenario({
   description:
     'Uploads are slowed and the phone imports 5 files of 512 KB. The app is killed while uploading and relaunched. Every file reaches the laptop, each once, with its own bytes.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'one pinned object per file', matches: (pins: number) => pins > 5 },
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 8 * 60_000,
   async run(ctx) {
     const {

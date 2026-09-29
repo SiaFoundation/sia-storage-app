@@ -7,12 +7,6 @@ export default defineScenario({
   description:
     'The network holds the phone’s pins unanswered. Once an upload from the phone has reached the network and a pin is waiting, the phone goes to the background in the middle of pinning the objects and recording them. The pins are then released. Afterwards every pinned object belongs to a file on the phone, no import row is left in progress, and both devices agree.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'one pinned object per file', matches: (pins: number) => pins > 6 },
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 8 * 60_000,
   async run({
     devices,

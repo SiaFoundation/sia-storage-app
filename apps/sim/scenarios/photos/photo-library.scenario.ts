@@ -10,11 +10,6 @@ export default defineScenario({
   description:
     'Three photos are added to the phone’s library, then the phone imports its whole photo library, as the Import photo library sheet does. When the walk finishes every row is added, or a duplicate of a photo the library holds twice, the three photos are among the phone’s files, and the laptop gets everything the phone imported.',
   devices: { phone: 'phone', laptop: 'cli' },
-  intermittentBug:
-    'The uploader can queue a file that a database poll is about to return as well, so the file is added to the batch twice, uploaded twice and pinned twice.',
-  bugShowsAs: [
-    { check: 'no file’s bytes are pinned twice', matches: (hashes: string[]) => hashes.length > 0 },
-  ],
   timeoutMs: 10 * 60_000,
   async run(ctx) {
     const {
