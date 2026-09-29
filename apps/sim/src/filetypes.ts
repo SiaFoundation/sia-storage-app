@@ -15,6 +15,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileHash, sha256 } from './integrity'
 import type { Device } from './devices'
 import { REPO_ROOT } from './session'
 import { waitForApp } from './wait'
@@ -339,4 +340,68 @@ export async function seedTypedFiles(
     }
   }
   return out
+}
+
+export type TypeProblems = {
+  /** Files the device has no row for under the exact name. */
+  missing: string[]
+  /** `name: stored, expected`. */
+  wrongType: string[]
+  /**
+   * Files whose recorded hash, the files.hash column, is not the sha256 of the
+   * bytes that were added. The bytes the device holds are not read.
+   */
+  wrongHash: string[]
+}
+
+/**
+ * Tests a `wrongType` list, for a known bug: whether every file in it is
+ * stored as one of `types`, the types the bug gives files.
+ */
+export function storedAs(...types: string[]): (wrongType: string[]) => boolean {
+  return (wrongType) =>
+    wrongType.length > 0 &&
+    wrongType.every((e) => types.some((t) => e.includes(`: ${t}, expected `)))
+}
+
+/** How the files a device holds differ from the typed files that were added. */
+export async function typeProblems(
+  device: Device,
+  files: TypedFile[],
+  expectedOf: (f: TypedFile) => string = (f) => f.expected,
+): Promise<TypeProblems> {
+  const rows = await device.sql<{ name: string; type: string; hash: string }>(
+    "SELECT name, type, hash FROM files WHERE kind = 'file' AND deletedAt IS NULL",
+  )
+  const byName = new Map(rows.map((r) => [r.name, r]))
+  const out: TypeProblems = { missing: [], wrongType: [], wrongHash: [] }
+  for (const f of files) {
+    const row = byName.get(f.name)
+    if (!row) {
+      out.missing.push(f.name)
+      continue
+    }
+    if (row.type !== expectedOf(f))
+      out.wrongType.push(`${f.name}: ${row.type}, expected ${expectedOf(f)}`)
+    if (fileHash(row.hash) !== sha256(readFileSync(f.path))) out.wrongHash.push(f.name)
+  }
+  return out
+}
+
+/**
+ * The JPEG and PNG files, which every platform's thumbnailer decodes from this
+ * corpus. The corpus's GIF and WebP samples are the smallest valid files of
+ * their formats, which libvips, the daemon's decoder, refuses, and its AVIF
+ * sample is a stub.
+ */
+export function commonImages(files: TypedFile[]): TypedFile[] {
+  return files.filter((f) => !f.sample.stub && ['image/jpeg', 'image/png'].includes(f.expected))
+}
+
+/** The names of files on `device` that have a thumbnail row. */
+export async function thumbnailed(device: Device): Promise<Set<string>> {
+  const rows = await device.sql<{ name: string }>(
+    "SELECT f.name FROM files f WHERE f.kind = 'file' AND EXISTS (SELECT 1 FROM files t WHERE t.kind = 'thumb' AND t.thumbForId = f.id)",
+  )
+  return new Set(rows.map((r) => r.name))
 }
