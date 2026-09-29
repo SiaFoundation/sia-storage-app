@@ -197,8 +197,8 @@ bun sim device expect phone --label Menu
 - Tests: scenarios `resilience/failed-adds`, `resilience/kill-mid-upload`,
   `resilience/offline-backlog`, `resilience/upload-failures-retry`,
   `mobile/failed-adds-on-phone`, `mobile/kill-mid-upload`; integration
-  `upload-packing`, `partial-batch-errors`, `sequential-batches-complete`,
-  `files-stuck-after-batch`
+  `upload-packing`, `upload-failed-adds`, `partial-batch-errors`,
+  `sequential-batches-complete`, `files-stuck-after-batch`
 - Phone, the status sheet and the Uploads list:
 
 ```sim

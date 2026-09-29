@@ -61,6 +61,8 @@ export interface MockIndexerStorage {
   fileData: Map<string, Uint8Array>
   uploadFailures: Map<string, Error>
   sharingKeys: Map<string, StoredSharingKey>
+  /** How many of the next packer adds fail, as an add does when it cannot read its file. */
+  failingAdds: number
 }
 
 export function createEmptyIndexerStorage(): MockIndexerStorage {
@@ -70,6 +72,7 @@ export function createEmptyIndexerStorage(): MockIndexerStorage {
     fileData: new Map(),
     uploadFailures: new Map(),
     sharingKeys: new Map(),
+    failingAdds: 0,
   }
 }
 
@@ -131,6 +134,7 @@ class MockPacker implements PackedUploadRef {
   private readFile: MockFileReader
   private totalSize = 0n
   private slabSize = 120n * 1024n * 1024n
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(storage: MockIndexerStorage, options: UploadOptions, readFile: MockFileReader) {
     this.storage = storage
@@ -138,7 +142,21 @@ class MockPacker implements PackedUploadRef {
     this.readFile = readFile
   }
 
-  async addPath(path: string): Promise<bigint> {
+  /**
+   * Adds run one at a time in call order, as they do in the real SDK, so
+   * finalize's objects come back in the order the adds were made.
+   */
+  addPath(path: string): Promise<bigint> {
+    const run = this.queue.then(() => this.add(path))
+    this.queue = run.catch(() => {})
+    return run
+  }
+
+  private async add(path: string): Promise<bigint> {
+    if (this.storage.failingAdds > 0) {
+      this.storage.failingAdds--
+      throw new Error(`could not read ${path}`)
+    }
     const bytes = await this.readFile(path)
     const size = BigInt(bytes.length)
     this.files.push({ data: bytes, size })
@@ -595,6 +613,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.fileData.clear()
     this.storage.uploadFailures.clear()
     this.storage.sharingKeys.clear()
+    this.storage.failingAdds = 0
     objectIdCounter = 0
   }
 
