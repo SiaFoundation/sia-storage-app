@@ -355,8 +355,7 @@ window shows only after Sign Out.
 - Code: `app.auth`; screens `OnboardingWelcome`, `OnboardingRecoveryPhrase`,
   `OnboardingAdvancedIndexer`, `SwitchIndexer`, `SwitchRecoveryPhrase`,
   `SwitchFinished`; CLI `connect`, `reset`
-- Tests: the Maestro flows in `apps/mobile/e2e/flows/` drive these screens, run
-  by hand.
+- Tests: none drive the sign-in screens. Sim phones sign in through test mode.
 - Phone, the Switch indexer screens:
 
 ```sim

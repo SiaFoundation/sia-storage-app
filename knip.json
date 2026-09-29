@@ -25,7 +25,6 @@
       "ignore": [
         "plugins/**",
         "test/**",
-        "e2e/**",
         "scripts/syncAppVersion.ts",
         "scripts/ciTestBuildAndroid.ts",
         "scripts/ciTestBuildIos.ts"
