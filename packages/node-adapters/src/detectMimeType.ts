@@ -2,14 +2,20 @@ import { detectMimeType, MAGIC_BYTES_LENGTH } from '@siastorage/core/lib/detectM
 import * as fs from 'fs'
 import * as path from 'path'
 
-export function createNodeDetectMimeType(): (filePath: string) => Promise<string | null> {
-  return async (filePath: string): Promise<string | null> => {
+export function createNodeDetectMimeType(): (
+  filePath: string,
+  name?: string,
+) => Promise<string | null> {
+  return async (filePath: string, name?: string): Promise<string | null> => {
     const resolved = filePath.replace(/^file:\/\//, '')
-    const fileName = path.basename(resolved)
+    const fileName = name ?? path.basename(resolved)
     let bytes: Uint8Array | undefined
 
     try {
-      const fd = fs.openSync(resolved, 'r')
+      // A staged path is checked before it is adopted, so a link there must
+      // not be read through, and a FIFO must not block the daemon on open.
+      const { O_RDONLY, O_NOFOLLOW, O_NONBLOCK } = fs.constants
+      const fd = fs.openSync(resolved, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
       try {
         const buf = Buffer.alloc(MAGIC_BYTES_LENGTH)
         const bytesRead = fs.readSync(fd, buf, 0, MAGIC_BYTES_LENGTH, 0)

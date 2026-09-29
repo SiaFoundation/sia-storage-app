@@ -120,7 +120,7 @@ export interface TestAppOptions {
   fsIO?: Partial<FsIOAdapter>
   thumbnail?: Partial<ThumbnailAdapter>
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
-  detectMimeType?: (path: string) => Promise<string | null>
+  detectMimeType?: (path: string, name?: string) => Promise<string | null>
 }
 
 export interface TestApp {
@@ -264,9 +264,9 @@ export function createTestApp(
 
   const detectMimeTypeFn =
     options?.detectMimeType ??
-    (async (filePath: string) => {
+    (async (filePath: string, name?: string) => {
       const resolved = filePath.replace('file://', '')
-      const result = detectMimeType({ fileName: resolved })
+      const result = detectMimeType({ fileName: name ?? resolved })
       return result === 'application/octet-stream' ? null : result
     })
 
