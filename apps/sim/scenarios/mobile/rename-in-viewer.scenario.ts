@@ -5,15 +5,6 @@ export default defineScenario({
   description:
     'The phone opens a file, shows its details, opens Rename from the name row and types a new name, then taps Rename once. The sheet closes and the file has the new name.',
   devices: { phone: 'phone' },
-  knownBug:
-    "The rename sheet renders inside the details panel's scroll view, which dismisses the keyboard on the first tap and swallows it, so the first tap on Rename only closes the keyboard and a second is needed.",
-  bugShowsAs: [
-    {
-      check: 'one tap on Rename closes the sheet',
-      got: { sheetOpen: true, keyboardOpen: false },
-    },
-    { check: 'the file has the new name', got: 'viewer-0.bin' },
-  ],
   async run({ devices: { phone }, seed, step, precondition, checkEqual }) {
     const [file] = await step('phone imports a file', () =>
       seed('phone', { count: 1, size: 1024, prefix: 'viewer' }),

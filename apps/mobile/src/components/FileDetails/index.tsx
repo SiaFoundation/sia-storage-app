@@ -14,7 +14,14 @@ export function FileDetails({ file, header }: { file: FileRecord; header?: React
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* The rename sheet renders inside this view, and React Native routes a
+          modal's touches through its React parents. Without "handled", the
+          first tap on Rename only dismisses the keyboard. */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {header}
         <View style={styles.metaContainer}>
           {status.data ? <FileMeta file={file} status={status.data} /> : null}
