@@ -1,3 +1,4 @@
+import { onlyOtherFilesBytes } from '../../src/integrity'
 import { defineScenario } from '../../src/scenario'
 
 export default defineScenario({
@@ -8,7 +9,17 @@ export default defineScenario({
   timeoutMs: 3 * 60_000,
   knownBug:
     'The uploader keeps abandoned adds in its batch after a failed add, then pins objects to files by position, so later files get other files’ bytes.',
-  bugShowsAs: ['points at an object holding its own bytes'],
+  bugShowsAs: [
+    ...['phone', 'laptop'].map((device) => ({
+      check: `every file on ${device} points at an object holding its own bytes`,
+      matches: onlyOtherFilesBytes,
+    })),
+    {
+      check: 'no file’s bytes are pinned twice',
+      matches: (hashes: string[]) => hashes.length > 0,
+      sometimes: true,
+    },
+  ],
   async run({ network, seed, converge, step, checkEqual, checkContent }) {
     await network.addFault({
       op: 'blob',

@@ -143,6 +143,20 @@ export class AndroidDevice extends PhoneDevice {
         `am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d ${q(`file://${remote}`)}`,
       )
     }
+    // The scan the broadcast asks for runs later, and a library read before it
+    // finishes finds none of these photos, so this returns once MediaStore
+    // lists every one.
+    const names = paths.map((p) => basename(p))
+    await waitFor(
+      'MediaStore to list the added photos',
+      async () => {
+        const listed = await this.adb.shell(
+          'content query --uri content://media/external/images/media --projection _display_name',
+        )
+        return names.every((n) => listed.includes(`_display_name=${n}`)) || undefined
+      },
+      { timeoutMs: 60_000, intervalMs: 500 },
+    )
   }
 
   /** Pushes a local file to a place the app's user can copy it from, and returns that path. */

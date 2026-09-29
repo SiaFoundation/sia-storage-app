@@ -8,6 +8,7 @@
 import { Glob } from 'bun'
 import { mkdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { addDevice, type Device, PhoneStartFailed } from './devices'
 import { desktopUnavailable } from './devices/desktop'
 import { networkControl, startNetwork, stopNetwork } from './network'
@@ -20,6 +21,8 @@ import {
   writeReport,
 } from './report'
 import {
+  type BugCheck,
+  bugShape,
   type CheckRecord,
   createContext,
   type DeviceMap,
@@ -29,6 +32,7 @@ import {
   type StepRecord,
 } from './scenario'
 import { type PhoneKind, REPO_ROOT, SIM_HOME, Session } from './session'
+import { recordStandardChecks } from './standard'
 import { type StartOutcome, unstartable } from './unstartable'
 import { AppTimeout } from './wait'
 
@@ -211,21 +215,54 @@ async function teardownActive(): Promise<void> {
 }
 
 /**
- * The verdict once a scenario's known or intermittent bug is accounted for.
- * A failed run whose every failure, a failed check's label or the first line
- * of the error, contains one of `showsAs` is the bug, KNOWN_BUG. A failure
- * that matches none stays FAIL and is returned as unexplained. A pass under a
- * steady bug is FIXED, and under an intermittent one stays PASS.
+ * The verdict once a scenario's known or intermittent bug is accounted for. A
+ * failed run is the bug, KNOWN_BUG, only when it ended without an error and
+ * its failed checks are exactly the ones `shape` lists, each seeing what its
+ * entry says. Otherwise it stays FAIL, and `differences` says how the run
+ * differed from the bug. A pass under a steady bug is FIXED, and under an
+ * intermittent one stays PASS.
  */
 export function bugVerdict(
   verdict: Verdict,
-  bug: { steady: boolean; intermittent: boolean; showsAs: string[]; failures: string[] },
-): { verdict: Verdict; unexplained: string[] } {
-  if (!bug.steady && !bug.intermittent) return { verdict, unexplained: [] }
-  if (verdict === 'PASS') return { verdict: bug.steady ? 'FIXED' : 'PASS', unexplained: [] }
-  if (verdict !== 'FAIL') return { verdict, unexplained: [] }
-  const unexplained = bug.failures.filter((f) => !bug.showsAs.some((part) => f.includes(part)))
-  return { verdict: unexplained.length === 0 ? 'KNOWN_BUG' : 'FAIL', unexplained }
+  bug: {
+    steady: boolean
+    intermittent: boolean
+    shape: BugCheck[]
+    checks: CheckRecord[]
+    error?: string
+  },
+): { verdict: Verdict; differences: string[] } {
+  if (!bug.steady && !bug.intermittent) return { verdict, differences: [] }
+  if (verdict === 'PASS') return { verdict: bug.steady ? 'FIXED' : 'PASS', differences: [] }
+  if (verdict !== 'FAIL') return { verdict, differences: [] }
+  const differences: string[] = []
+  if (bug.error) differences.push(`ended on ${bug.error.split('\n')[0]}`)
+  const listed = new Set<string>()
+  for (const entry of bug.shape) {
+    const label = typeof entry === 'string' ? entry : entry.check
+    listed.add(label)
+    const check = bug.checks.find((c) => c.label === label)
+    const sometimes = typeof entry !== 'string' && entry.sometimes
+    if (!check || check.ok) {
+      if (!sometimes) differences.push(`${label} ${check ? 'passed' : 'was never checked'}`)
+    } else if (typeof entry !== 'string' && !seesBug(entry, check.actual)) {
+      differences.push(`${label} saw ${JSON.stringify(check.actual)}`)
+    }
+  }
+  for (const check of bug.checks) {
+    if (!check.ok && !listed.has(check.label)) differences.push(`${check.label} failed`)
+  }
+  return { verdict: differences.length === 0 ? 'KNOWN_BUG' : 'FAIL', differences }
+}
+
+function seesBug(entry: Exclude<BugCheck, string>, actual: unknown): boolean {
+  if ('got' in entry) return isDeepStrictEqual(actual, entry.got)
+  if (actual === undefined) return false
+  try {
+    return (entry.matches as (actual: unknown) => boolean)(actual)
+  } catch {
+    return false
+  }
 }
 
 function bugFor(
@@ -344,6 +381,17 @@ async function runOne(
     // A scenario that records no check would pass, or report FIXED under knownBug,
     // having shown nothing about the apps. With no failed check, the catch reports ERROR.
     if (checks.length === 0) throw new Error('The scenario finished without recording a check')
+    await withDeadline(
+      recordStandardChecks({
+        devices,
+        network: ctx.network,
+        checks,
+        skip: scenario.skipStandardChecks,
+        signal: entry.controller.signal,
+      }),
+      5 * 60_000,
+      'the standard checks',
+    )
     if (checks.some((c) => !c.ok)) verdict = 'FAIL'
   } catch (e) {
     if (e instanceof Skipped) {
@@ -389,15 +437,13 @@ async function runOne(
   const judged = bugVerdict(verdict, {
     steady: steadyBug !== undefined,
     intermittent: intermittentBug !== undefined,
-    showsAs: scenario?.bugShowsAs ?? [],
-    failures: [
-      ...checks.filter((c) => !c.ok).map((c) => c.label),
-      ...(error ? [error.split('\n')[0]] : []),
-    ],
+    shape: bugShape(scenario?.bugShowsAs, phoneKind) ?? [],
+    checks,
+    error,
   })
   verdict = judged.verdict
-  if (judged.unexplained.length > 0) {
-    notes.push(`not the known bug: ${judged.unexplained.join('; ')}`)
+  if (judged.differences.length > 0) {
+    notes.push(`not the known bug: ${judged.differences.join('; ')}`)
   }
   // A scenario that was never started has nothing in its session to read.
   const keep = !gaveUp && (opts.keep || (verdict !== 'PASS' && verdict !== 'SKIP'))

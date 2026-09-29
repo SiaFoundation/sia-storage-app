@@ -55,3 +55,29 @@ export async function contentMismatches(
   }
   return { checked: rows.length, problems: out }
 }
+
+/**
+ * Whether every content problem is a file pointing at another file's object,
+ * as opposed to a missing or unpinned one.
+ */
+export function onlyOtherFilesBytes(problems: string[]): boolean {
+  return problems.length > 0 && problems.every((p) => p.endsWith(', which holds other bytes'))
+}
+
+/**
+ * The hashes of file bytes pinned under more than one object. An upload that
+ * runs twice for one file pins its bytes twice, which a count of pinned
+ * objects cannot tell apart from an object pinned for no file.
+ */
+export async function pinnedTwice(network: NetworkControl): Promise<string[]> {
+  const pins = new Map<string, number>()
+  for (const o of await network.objects()) {
+    if (o.contentHash && o.metadata?.kind === 'file') {
+      pins.set(o.contentHash, (pins.get(o.contentHash) ?? 0) + 1)
+    }
+  }
+  return [...pins]
+    .filter(([, n]) => n > 1)
+    .map(([hash]) => hash)
+    .sort()
+}

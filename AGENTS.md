@@ -164,19 +164,20 @@ scenario. The PR description of a fix found or reproduced in sim gives the
 
 ## Tests
 
-| Tier                  | Command (repo root)                        | Proves                                                | CI  |
-| --------------------- | ------------------------------------------ | ----------------------------------------------------- | --- |
-| JS unit               | `bun run test`                             | core, mobile, integration, CLI logic                  | yes |
-| Rust                  | `cargo test --workspace`                   | the Rust core                                         | yes |
-| Native unit (iOS)     | `bun run mobile:test:native:ios`           | Swift logic; standalone SwiftPM package               | yes |
-| Native unit (Android) | `bun run mobile:test:native:android`       | Kotlin under Robolectric; needs a prebuilt `android/` | yes |
-| Native device (iOS)   | `bun run mobile:test:native:ios:sim`       | real Photos-framework behavior                        | no  |
-| App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android` | the built app through its UI                          | no  |
-| Sim, CLI devices      | `bun sim run sync/ resilience/`            | real daemons syncing, killed and offline together     | yes |
+| Tier                  | Command (repo root)                             | Proves                                                          | CI                  |
+| --------------------- | ----------------------------------------------- | --------------------------------------------------------------- | ------------------- |
+| JS unit               | `bun run test`                                  | core, mobile, integration, CLI logic                            | yes                 |
+| Rust                  | `cargo test --workspace`                        | the Rust core                                                   | yes                 |
+| Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                         | yes                 |
+| Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`           | yes                 |
+| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | no                  |
+| App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android`      | the built app through its UI                                    | no                  |
+| Sim, CLI devices      | `bun sim run sync/ resilience/`                 | real daemons syncing, killed and offline together               | yes                 |
+| Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
 
 The native device and Maestro tiers are local-only and rot unless deliberately run. Run
-the native device tier and the Maestro flows before landing anything that touches native
-code or the import flow.
+the native device tier, the Maestro flows and the phone scenarios before landing
+anything that touches native code or the import flow.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot

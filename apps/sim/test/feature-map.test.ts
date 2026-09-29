@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Glob } from 'bun'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseRecipes } from '../src/recipes'
 
 const ROOT = join(import.meta.dir, '../../..')
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
@@ -67,12 +68,10 @@ describe('the feature map in apps/sim/FEATURES.md', () => {
     const source = [...new Glob('**/*.{ts,tsx}').scanSync(join(ROOT, 'apps/mobile/src'))]
       .map((file) => read(`apps/mobile/src/${file}`))
       .join('\n')
-    const blocks = [...read('apps/sim/FEATURES.md').matchAll(/```sim\n([\s\S]*?)```/g)].map(
-      (m) => m[1],
-    )
-    const named = blocks.flatMap((block) =>
-      [...block.matchAll(/--(?:label|id) (?:"([^"]+)"|(\S+))/g)].map((m) => m[1] ?? m[2]),
-    )
+    const named = parseRecipes()
+      .flatMap((recipe) => recipe.steps)
+      .flatMap((step) => [step.opts.label, step.opts.id])
+      .filter((name): name is string => typeof name === 'string')
     const unknown = [...new Set(named)].filter(
       (name) =>
         !name.includes('{') &&

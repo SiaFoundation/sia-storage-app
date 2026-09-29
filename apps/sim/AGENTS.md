@@ -208,9 +208,22 @@ reports KNOWN_BUG and one where it does not reports PASS, never FIXED, since a
 pass does not show a race is gone, so the diff with the fix removes the line.
 The run's summary line counts these scenarios.
 
-Both kinds need `bugShowsAs`, parts of the check labels or the wait the bug
-fails, and a run with any other failure reports FAIL, so a new regression in
-the same scenario is not taken for the bug.
+Both kinds need `bugShowsAs`, the exact labels of the checks the bug fails.
+An entry can give the value its check sees while the bug is present, `got`, or
+a test for a value that changes between runs, `matches`. A run is the bug only
+when it reaches its end and fails exactly those checks that way. A timeout, a
+crash or any other failed check reports FAIL, and the report says how the run
+differed from the bug. A wait the bug makes time out is caught, and what the
+scenario found then is recorded as a check the bug lists.
+
+After a scenario's own steps, the runner records standard checks on every
+device: it is still running, has no download or import left in progress, holds
+the same library as the other devices, points every file at an object holding
+its own bytes, pins no file's bytes twice and no object for no file, and has the
+bytes of every file it records as local. They catch damage a scenario was not
+looking for. A scenario that breaks one on purpose names it in
+`skipStandardChecks` with the reason, and a known bug that breaks one lists its
+label in `bugShowsAs` like any other check.
 
 A scenario that asserts what the apps do now, where nobody has decided that is
 what they should do, sets `needsReview` to the decision needed. It passes or
@@ -230,6 +243,24 @@ fails as usual, and the report and the run's summary line list it.
 
 When you report that something works across devices, cite the run id and the
 commit in the report.
+
+## CI and attestation
+
+Every PR runs the CLI-device scenarios in CI. The phone suites run in CI only
+when the `sim-mobile` label is added to a PR, weekly, or on demand, and a push
+while one runs cancels it. A labelled run posts its result on the commit it
+tested as the `sim/ios` and `sim/android` commit statuses, and the label comes
+off when it ends. Running the workflow by hand takes scenario filters and a
+platform, to try a fix on the runner without the whole suite. Every phone
+run uploads its report and the sessions it kept, and the CLI-device run
+uploads them when it fails.
+
+`bun sim attest <ios|android|desktop>` runs that platform's suite on this
+checkout and posts the same status from the local run. It refuses unless the
+tracked files have no uncommitted changes and local HEAD is the PR's head, and
+it posts nothing when the run is interrupted or skips a scenario. The release
+PR needs `sim/ios` and `sim/android` on its head commit, and `sim/desktop` when
+it changes the desktop app's version. Every other PR gets them as not required.
 
 ## Reporting a fix
 

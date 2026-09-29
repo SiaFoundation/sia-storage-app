@@ -247,13 +247,19 @@ export class UiDriver {
       }
       return []
     }
-    // A section header and the row under it can share their text, and the
-    // platform's query returns the header first. findCenter prefers the row too.
-    let found = tappable ? await find(true) : []
-    if (found.length === 0) found = await find(false)
-    const elementId = found[0] ? Object.values(found[0])[0] : undefined
-    if (!elementId) throw new Error(`No element matching ${JSON.stringify(sel)}`)
-    return elementId
+    // While a screen is being pushed the tree can show an element before the
+    // platform's query finds it, so the query is retried rather than tried once.
+    return waitForApp(
+      `the platform to find an element matching ${JSON.stringify(sel)}`,
+      async () => {
+        // A section header and the row under it can share their text, and the
+        // platform's query returns the header first. findCenter prefers the row too.
+        let found = tappable ? await find(true) : []
+        if (found.length === 0) found = await find(false)
+        return found[0] ? Object.values(found[0])[0] : undefined
+      },
+      { timeoutMs, intervalMs: 250 },
+    )
   }
 
   /** Types into the field matching `sel`, after clearing it when `clear` is set. */
@@ -405,6 +411,9 @@ export class UiDriver {
   /** The system back: Android's back key, or the navigation bar's back button on iOS. */
   async back(): Promise<void> {
     await this.withSession((id) => this.request('POST', `/session/${id}/back`, {}))
+    // A back press has no element to wait for, and Android drops a second
+    // press that lands while the first one's screen transition is running.
+    await this.settled()
   }
 
   async hideKeyboard(): Promise<void> {

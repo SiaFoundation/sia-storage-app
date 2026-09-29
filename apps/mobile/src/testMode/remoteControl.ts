@@ -12,8 +12,9 @@
  * second.
  */
 import { logger } from '@siastorage/logger'
+import * as MediaLibrary from 'expo-media-library'
 import { Keyboard } from 'react-native'
-import { database } from '../db'
+import { database, db, getDbState } from '../db'
 import { importFiles } from '../lib/importFiles'
 import {
   ensureMediaLibraryPermission,
@@ -31,6 +32,9 @@ import { MOCK_PHRASE } from '@siastorage/mock-network/protocol'
 type Call = { id: string; method: string; args: unknown[] }
 
 let releaseImportCopies = () => {}
+
+/** How each download `sim.startDownload` started has ended so far, by the number it returned. */
+const startedDownloads: Array<{ settled: boolean; error?: string }> = []
 
 const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
   /** Where the app is: signed in or not, and whether startup has finished. */
@@ -91,11 +95,59 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
     })
     releaseImportCopies = release
   },
-  /** Lets every held import copy publish, and stops holding new ones. */
+  /**
+   * Lets every held import copy publish, and stops holding new ones. Resolves
+   * to whether a hold was still in place, which after
+   * `sim.holdImportCopiesUntilSuspend` means no suspension released it.
+   */
   async 'sim.releaseImportCopies'() {
+    const held = simHooks.importCopyHold !== null
     simHooks.importCopyHold = null
     releaseImportCopies()
     releaseImportCopies = () => {}
+    return held
+  },
+  /**
+   * Holds import copies as `sim.holdImportCopies` does, and releases them on
+   * its own once a suspension has closed the database gate, so the import's
+   * next write lands on a closed gate. An app frozen in the background cannot
+   * be told to release them, which is why the release is not a call.
+   */
+  async 'sim.holdImportCopiesUntilSuspend'() {
+    if (simHooks.importCopyHold) return
+    simHooks.importCopyHold = new Promise<void>((resolve) => {
+      const poll = setInterval(() => {
+        if (getDbState() === 'active') return
+        clearInterval(poll)
+        simHooks.importCopyHold = null
+        resolve()
+      }, 5)
+      releaseImportCopies = () => {
+        clearInterval(poll)
+        resolve()
+      }
+    })
+  },
+  /** Makes the next import copy end as cancelled, as a native copy can without a suspension. */
+  async 'sim.cancelNextImportCopy'() {
+    simHooks.cancelNextImportCopy = true
+  },
+  /**
+   * Starts a statement that keeps SQLite busy for several seconds, then runs
+   * the app's setup again as signing in does, and resolves once that setup
+   * returns. The statement goes through the database adapter, as the first
+   * setup's log rotation and migrations do, and is not awaited.
+   */
+  async 'sim.reinitializeDuringStatement'() {
+    db()
+      .getFirstAsync(
+        'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c LIMIT 20000000) SELECT count(*) AS n FROM c',
+      )
+      .catch(() => {})
+    // Long enough for the statement to reach SQLite before setup closes the connection.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await initApp()
+    return null
   },
   /** Whether the app can read the photo library. */
   async 'sim.photoAccess'() {
@@ -133,6 +185,44 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
    */
   async 'sim.keyboard'() {
     return { visible: Keyboard.isVisible(), height: Keyboard.metrics()?.height ?? null }
+  },
+
+  /**
+   * Starts a download as `downloads.downloadFile` does and returns once the
+   * app has registered it, or joined it to the download already running for
+   * that file, without waiting for it to end. Each call from sim reaches the
+   * app on its own request, so two calls sent in a row can arrive in either
+   * order, and a scenario that orders downloads waits for each to return.
+   */
+  async 'sim.startDownload'(fileId: string, priority?: number) {
+    const outcome: { settled: boolean; error?: string } = { settled: false }
+    startedDownloads.push(outcome)
+    app()
+      .downloads.downloadFile(fileId, priority ?? undefined)
+      .then(
+        () => {
+          outcome.settled = true
+        },
+        (e: unknown) => {
+          outcome.settled = true
+          outcome.error = e instanceof Error ? e.message : String(e)
+        },
+      )
+    return startedDownloads.length - 1
+  },
+
+  /** Whether a download `sim.startDownload` started has ended, and its error if it failed. */
+  async 'sim.downloadOutcome'(started: number) {
+    return startedDownloads[started] ?? null
+  },
+
+  /** How many photos and videos the app's own library query sees. */
+  async 'sim.photoLibraryCount'() {
+    const page = await MediaLibrary.getAssetsAsync({
+      first: 1,
+      mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
+    })
+    return page.totalCount
   },
 
   /** Starts importing the whole photo library, as the Import photo library sheet does. */

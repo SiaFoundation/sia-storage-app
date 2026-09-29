@@ -6,4 +6,6 @@
 export const simHooks: {
   /** While set, an import copy waits here after its bytes land and before it publishes them. */
   importCopyHold: Promise<void> | null
-} = { importCopyHold: null }
+  /** When set, the next import copy ends as cancelled, and the flag clears. */
+  cancelNextImportCopy: boolean
+} = { importCopyHold: null, cancelNextImportCopy: false }

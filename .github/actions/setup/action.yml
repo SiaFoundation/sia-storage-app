@@ -19,6 +19,9 @@ runs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
         bun-version: ${{ inputs.bun_version }}
+        # The cached Bun restores to a path another provider's runner does not
+        # have, so off GitHub's runners the action downloads Bun instead.
+        no-cache: ${{ runner.environment != 'github-hosted' }}
     - name: Install dependencies
       run: bun install --frozen-lockfile
       shell: bash

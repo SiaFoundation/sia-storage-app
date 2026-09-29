@@ -7,7 +7,11 @@ export default defineScenario({
   devices: { phone: 'cli', laptop: 'cli' },
   knownBug:
     'Sync-down replaces a file’s tags with the list in its metadata but leaves system tag links alone, so a Favorites link, once synced, survives every later update and the laptop keeps the file in Favorites.',
-  bugShowsAs: ['out of Favorites', 'keeps its other tag'],
+  bugShowsAs: [
+    'every device holds the same library at the end',
+    { check: 'laptop shows the file out of Favorites', got: false },
+    { check: 'laptop keeps its other tag', got: ['Favorites', 'keep'] },
+  ],
   async run({ devices: { phone, laptop }, seed, converge, step, checkEqual, waitFor }) {
     const [file] = await step('phone adds a file', () => seed('phone', { count: 1, size: 2048 }))
     await step('phone favorites it and tags it keep', async () => {
