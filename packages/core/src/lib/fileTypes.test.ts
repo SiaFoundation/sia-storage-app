@@ -31,9 +31,23 @@ describe('getMimeTypeFromExtension', () => {
     expect(getMimeTypeFromExtension('')).toBeNull()
   })
 
-  it('handles paths with query strings and fragments', () => {
-    expect(getMimeTypeFromExtension('photo.jpg?v=1')).toBe('image/jpeg')
-    expect(getMimeTypeFromExtension('photo.png#section')).toBe('image/png')
+  it('drops the query and fragment of a URL', () => {
+    expect(getMimeTypeFromExtension('https://example.com/photo.jpg?v=1')).toBe('image/jpeg')
+    expect(getMimeTypeFromExtension('https://example.com/photo.png#section')).toBe('image/png')
+    expect(getMimeTypeFromExtension('content://media/photo.jpg?id=4')).toBe('image/jpeg')
+  })
+
+  it('reads # and ? in a file name as part of the name', () => {
+    expect(getMimeTypeFromExtension('photo#1.png')).toBe('image/png')
+    expect(getMimeTypeFromExtension('what?.jpg')).toBe('image/jpeg')
+    expect(getMimeTypeFromExtension('/tmp/a#b/notes.md')).toBe('text/markdown')
+    expect(getMimeTypeFromExtension('file:///tmp/photo#1.png')).toBe('image/png')
+  })
+
+  it('returns null for a name with no extension, even one spelled like an extension', () => {
+    expect(getMimeTypeFromExtension('README')).toBeNull()
+    expect(getMimeTypeFromExtension('png')).toBeNull()
+    expect(getMimeTypeFromExtension('/tmp/json')).toBeNull()
   })
 
   it('handles full paths', () => {

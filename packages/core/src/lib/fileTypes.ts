@@ -375,10 +375,17 @@ const extensionToMimeMap: Record<string, MimeType> = {
   log: 'text/plain',
 }
 
+// `?` and `#` start a URL's query and fragment, and are ordinary characters in a
+// file name or a file:// path, so `photo#1.png` keeps its extension.
+const URL_WITH_QUERY = /^(?!file:)[a-z][a-z0-9+.-]*:\/\//i
+
 export function getMimeTypeFromExtension(path: string | undefined): MimeType | null {
   if (!path) return null
-  const ext = path.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase()
-  if (!ext) return null
+  const target = URL_WITH_QUERY.test(path) ? path.split(/[?#]/)[0] : path
+  const name = target.slice(target.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  if (dot === -1) return null
+  const ext = name.slice(dot + 1).toLowerCase()
   return extensionToMimeMap[ext] ?? null
 }
 
