@@ -15,12 +15,14 @@ this file. Review calibration is in `REVIEW.md`.
 | `apps/cli`                | Bun CLI, cross-compiled to standalone binaries.                |
 | `apps/integration`        | Cross-package tests only, no shipped code.                     |
 | `apps/benchmark`          | Query benchmarks and `EXPLAIN QUERY PLAN` reports.             |
+| `apps/sim`                | Runs real app processes as devices over a shared mock network. |
 | `apps/desktop`            | Electron macOS app with a Swift File Provider extension.       |
 | `apps/web`                | A `package.json` stub with no source. Do not assume it builds. |
 | `packages/core`           | Shared TS core: DB, sync, services, stores, AppService facade. |
 | `packages/logger`         | Logging package.                                               |
 | `packages/node-adapters`  | Node implementations of the core's platform adapters.          |
 | `packages/sdk-mock`       | In-memory indexer and SDK used by tests.                       |
+| `packages/mock-network`   | The mock SDK and indexer server that `apps/sim` devices share. |
 | `crates/sia-storage-core` | Rust port of the core. Separate CI and toolchain.              |
 
 ## Verification
@@ -55,10 +57,10 @@ Builds handle this themselves: `bun run mobile:dev:*` prints a progress line and
 writes the full output to `.build-cache/<target>/build.log`. Run them directly and
 read that file if something fails.
 
-Tests do not. `bun run test` runs six packages, five under jest and the desktop app
-under bun test, with node-adapters also running its bun:sqlite cases under bun test,
-and prints a line per suite, so background it and read the
-`Test Suites:` and `Tests:` summary lines per package rather than the stream. Background it for a second reason too: an open
+Tests do not. `bun run test` runs eight packages, some under jest and some under
+bun test, and prints a line per suite, so background it and read the summary lines
+per package (`Tests:` from jest, `N pass` and `N fail` from bun test) rather than
+the stream. Background it for a second reason too: an open
 handle from an async loop hangs the run instead of failing it, and a hung foreground
 run costs the whole session. If output stops growing for 30 seconds or more, kill it
 and find the leak.
@@ -144,6 +146,22 @@ attaches a notarized disk image to its release. The same script runs locally wit
 Developer ID identity in the keychain and `APPLE_API_KEY`, `APPLE_API_ISSUER` and
 `APPLE_KEY_B64` set; `DRY_RUN=true` skips notarization.
 
+### Developing with sim
+
+`bun sim` is the main way to develop, debug and verify a change to how the apps behave. It
+runs the real apps as devices on one mock network, CLI daemons, the mobile app on iOS
+simulators and Android emulators, and the desktop app on this Mac, and drives each through
+its UI, its Finder folder and its AppService calls. Unit and integration tests run the core
+on Node, and a device also runs what they leave out, such as the mobile app's native
+modules, its SQLite driver and its screens, the daemon's process and socket, and the
+desktop app's Finder extension. Start the devices a feature runs on, exercise the feature,
+and check each change against the device's tables, logs and accessibility tree. Reproduce a
+bug on a device before reading code for its cause. `apps/sim/FEATURES.md` maps each feature
+to its code, the state that shows it worked and the tests that cover it, with recipes that
+reach it on a phone, and `apps/sim/AGENTS.md` covers the commands and how to write a
+scenario. The PR description of a fix found or reproduced in sim gives the
+`bun sim transcript` lines that reproduced it and the captures of what they showed.
+
 ## Tests
 
 | Tier                  | Command (repo root)                        | Proves                                                | CI  |
@@ -155,8 +173,9 @@ Developer ID identity in the keychain and `APPLE_API_KEY`, `APPLE_API_ISSUER` an
 | Native device (iOS)   | `bun run mobile:test:native:ios:sim`       | real Photos-framework behavior                        | no  |
 | App E2E (Maestro)     | `bun run mobile:test:e2e:ios` / `:android` | the built app through its UI                          | no  |
 
-The last two are local-only and rot unless deliberately run. Run them before landing
-anything that touches native code or the import flow.
+The native device and Maestro tiers are local-only and rot unless deliberately run. Run
+the native device tier and the Maestro flows before landing anything that touches native
+code or the import flow.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot
@@ -164,7 +183,9 @@ cover two devices disagreeing. A new adapter method gets a unit test beside its
 siblings. Swift or Kotlin logic gets a native unit test. Anything about which resource
 the Photos framework hands back gets the iOS device tier: a host test asserts the policy,
 but only a real photo library proves the framework returns what that policy chose, and
-that gap is where cross-device hash divergence comes from.
+that gap is where cross-device hash divergence comes from. Behavior only real processes
+show, such as a kill mid-upload, a phone suspended with its database open, or a Finder
+save racing another device, gets a sim scenario.
 
 ### Integration tests (`apps/integration/test/`)
 
@@ -182,18 +203,21 @@ They only mean something if they take the paths the app takes:
 
 ### Driving a device
 
+Sim phones are driven through their accessibility tree. Target elements by `id`, `text`
+or `label`, never by coordinate: a coordinate tap passes on one screen size and silently
+hits the wrong thing on another. `bun sim logs <device>` reads a device's own log.
+System logs come from `adb logcat` and `xcrun simctl spawn booted log stream`.
+
 `bun run mobile:test:e2e:ios` / `:android` runs the Maestro flows in
 `apps/mobile/e2e/flows/`. Flags: `--rebuild`, `--skip-install`, `--headless`. Auth flows
 need `E2E_CONNECT_KEY`. The runner boots the device, clears its photo library (both
 platforms ship stock photos that would pollute an import test), installs, and launches.
 
 Seed the photo library from inside a flow with `addMedia`, paths relative to the flow
-file. Target elements by `id` or `text`, never by coordinate: a coordinate tap passes on
-one screen size and silently hits the wrong thing on another.
+file.
 
 To inspect a running app rather than script it, `maestro mcp` serves Maestro's device
-commands as MCP tools; this build has no `studio` or `hierarchy`. Device logs come from
-`adb logcat` and `xcrun simctl spawn booted log stream`. The repo wraps neither.
+commands as MCP tools. This build has no `studio` or `hierarchy`.
 
 ## Commits, changesets, and PR descriptions
 

@@ -154,8 +154,9 @@ export async function createCliAppService(
     handoffDir: opts?.handoffDir,
   })
 
-  // In test mode the MockSdk attaches before connectSdk runs, so the daemon
-  // comes up with an SDK already wired and connectSdk just flips the flag.
+  // In test mode the test SDK, MockSdk or the mock network's client, attaches
+  // before connectSdk runs, so the daemon comes up with an SDK already wired
+  // and connecting only marks it connected and starts the uploader.
   if (bootstrap.testSdkAdapter) {
     internal.setSdk(bootstrap.testSdkAdapter)
   }

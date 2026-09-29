@@ -6,6 +6,7 @@ import { getFreeDiskStorageAsync } from 'expo-file-system/legacy'
 import RNFS from 'react-native-fs'
 import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 import { copyImportFile } from '../lib/importCopy'
+import { simHooks } from '../lib/simHooks'
 import { getStorageDirectoryUri } from '../lib/sharedContainer'
 
 const fsStorageDirectoryUri = `${getStorageDirectoryUri()}/files`
@@ -147,6 +148,9 @@ export function createFsIOAdapter(): FsIOAdapter {
         signal: opts.signal,
         onProgress: opts.onProgress,
       })
+      // A sim scenario holds the copy here to suspend the app while an import
+      // is in flight, which a copy that finishes in a blink never allows.
+      if (__DEV__ && simHooks.importCopyHold) await simHooks.importCopyHold
       await publish(tempUri, targetUri)
       return { ...result, uri: targetUri }
     },

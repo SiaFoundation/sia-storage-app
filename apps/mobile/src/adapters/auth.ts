@@ -1,5 +1,5 @@
 import { hexToUint8 } from '@siastorage/core'
-import type { SdkAuthAdapters } from '@siastorage/core/adapters'
+import type { SdkAdapter, SdkAuthAdapters } from '@siastorage/core/adapters'
 import {
   AppKey,
   Builder,
@@ -7,6 +7,7 @@ import {
   type SdkInterface,
   validateRecoveryPhrase,
 } from 'react-native-sia'
+import { MobileSdkAdapter } from './sdk'
 
 function uint8ToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -14,7 +15,14 @@ function uint8ToHex(bytes: Uint8Array): string {
     .join('')
 }
 
-export class MobileSdkAuthAdapter implements SdkAuthAdapters {
+/** Sign-in as the SDK store uses it: the real SDK, or the sim network in test mode. */
+export interface MobileSdkAuth extends SdkAuthAdapters {
+  setOnConnected(handler: (appKeyHex: string, indexerUrl: string) => Promise<void>): void
+  /** The SDK the last successful connect or register produced. */
+  getLastSdkAdapter(): SdkAdapter | null
+}
+
+export class MobileSdkAuthAdapter implements MobileSdkAuth {
   private builder: Builder | null = null
   private abortController: AbortController | null = null
   private lastSdk: SdkInterface | null = null
@@ -24,8 +32,8 @@ export class MobileSdkAuthAdapter implements SdkAuthAdapters {
     this._onConnected = handler
   }
 
-  getLastSdk(): SdkInterface | null {
-    return this.lastSdk
+  getLastSdkAdapter(): SdkAdapter | null {
+    return this.lastSdk ? new MobileSdkAdapter(this.lastSdk) : null
   }
 
   createBuilder(indexerUrl: string, appMetaJson: string): void {

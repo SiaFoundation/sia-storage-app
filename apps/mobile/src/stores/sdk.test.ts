@@ -54,7 +54,7 @@ let mockBuilderWaitForApproval: jest.SpyInstance
 let mockBuilderRegister: jest.SpyInstance
 let mockBuilderCancel: jest.SpyInstance
 let mockOnConnected: jest.SpyInstance
-let _mockGetLastSdk: jest.SpyInstance
+let _mockGetLastSdkAdapter: jest.SpyInstance
 
 const BROWSER_CLOSE_GRACE_MS = 6_000
 
@@ -140,7 +140,9 @@ describe('sdk store', () => {
     mockBuilderWaitForApproval = jest.spyOn(app().auth.builder, 'waitForApproval')
     mockBuilderCancel = jest.spyOn(app().auth.builder, 'cancel')
 
-    _mockGetLastSdk = jest.spyOn(getMobileSdkAuth(), 'getLastSdk').mockReturnValue(mockSdk)
+    _mockGetLastSdkAdapter = jest
+      .spyOn(getMobileSdkAuth(), 'getLastSdkAdapter')
+      .mockReturnValue(mockSdk)
   })
 
   afterEach(() => {

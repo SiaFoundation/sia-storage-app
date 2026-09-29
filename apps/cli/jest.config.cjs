@@ -16,6 +16,7 @@ const sharedTransform = {
           '@siastorage/node-adapters': ['../../packages/node-adapters/src/index.ts'],
           '@siastorage/node-adapters/*': ['../../packages/node-adapters/src/*'],
           '@siastorage/sdk-mock': ['../../packages/sdk-mock/src/index.ts'],
+          '@siastorage/mock-network/*': ['../../packages/mock-network/src/*'],
           '@siafoundation/sia-storage': [
             '../../node_modules/@siafoundation/sia-storage/dist/index.node.d.ts',
           ],
@@ -33,6 +34,7 @@ const sharedModuleNameMapper = {
   '^@siastorage/node-adapters$': '<rootDir>/../../packages/node-adapters/src/index.ts',
   '^@siastorage/node-adapters/(.*)$': '<rootDir>/../../packages/node-adapters/src/$1',
   '^@siastorage/sdk-mock$': '<rootDir>/../../packages/sdk-mock/src/index.ts',
+  '^@siastorage/mock-network/(.*)$': '<rootDir>/../../packages/mock-network/src/$1',
   '^@siafoundation/sia-storage$': '<rootDir>/test/__mocks__/@siafoundation/sia-storage.ts',
   '^bun:sqlite$': '<rootDir>/test/__mocks__/bun-sqlite.ts',
 }

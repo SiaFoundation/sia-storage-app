@@ -1,16 +1,15 @@
 import type { DownloadObjectAdapter } from '@siastorage/core/app'
-import { PinnedObject } from 'react-native-sia'
 import { streamToCache } from '../lib/streamToCache'
-import { getAppKeyForIndexer } from '../stores/appKey'
+import { app } from '../stores/appService'
 import { adoptFileToFs } from '../stores/fs'
 
 export function createDownloadAdapter(): DownloadObjectAdapter {
   return {
     async download({ file, object, sdk, onProgress, signal }) {
-      const appKey = await getAppKeyForIndexer(object.indexerURL)
-      if (!appKey) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
+      const keyBytes = await app().auth.getAppKey(object.indexerURL)
+      if (!keyBytes) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
-      const pinnedObject = PinnedObject.open(appKey, object)
+      const pinnedObject = sdk.openPinnedObject(sdk.openAppKey(keyBytes), object)
       const dl = await sdk.download(pinnedObject, {
         offset: BigInt(0),
         length: undefined,
