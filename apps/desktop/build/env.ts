@@ -7,8 +7,9 @@
  * fills those in on a developer Mac; and `SIA_*` variables in the environment
  * fill them in on a CI runner, which has no env file to write.
  *
- * Every value is required. A missing one is reported by name rather than left to
- * surface later as a codesign or fileproviderd failure that names nothing.
+ * Every value but SIA_LINK_CLI is required. A missing one is reported by name
+ * rather than left to surface later as a codesign or fileproviderd failure that
+ * names nothing.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -30,9 +31,11 @@ export type BuildEnv = {
   appName: string
   /** A file in apps/desktop/assets/icons. */
   appIcon: string
+  /** Whether packaging points `~/.local/bin/sia` at this build. `SIA_LINK_CLI=false` turns it off. */
+  linkCli: boolean
 }
 
-const FIELDS: Array<[keyof BuildEnv, string]> = [
+const FIELDS: Array<[Exclude<keyof BuildEnv, 'linkCli'>, string]> = [
   ['teamId', 'SIA_TEAM_ID'],
   ['signIdentity', 'SIA_SIGN_IDENTITY'],
   ['appBundleId', 'SIA_APP_BUNDLE_ID'],
@@ -63,7 +66,7 @@ export function resolveEnv(values: Record<string, string>, source: string): Buil
   if (missing.length > 0) {
     throw new Error(`${source} is missing: ${missing.join(', ')}`)
   }
-  const out = {} as BuildEnv
+  const out = { linkCli: values.SIA_LINK_CLI?.trim() !== 'false' } as BuildEnv
   for (const [field, key] of FIELDS) out[field] = values[key]!.trim()
   for (const [field, key] of [
     ['appProfile', 'SIA_APP_PROFILE'],
@@ -79,7 +82,7 @@ export function envOverrides(
   environment: Record<string, string | undefined>,
 ): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const [, key] of FIELDS) {
+  for (const key of [...FIELDS.map(([, key]) => key), 'SIA_LINK_CLI']) {
     const value = environment[key]
     if (value?.trim()) out[key] = value
   }
@@ -96,7 +99,9 @@ export function readEnvValues(
   const file = join(envDir, `${context}.env`)
   const local = existsSync(file)
   const overrides = envOverrides(environment)
-  if (!local && Object.keys(overrides).length === 0) {
+  // SIA_LINK_CLI is a build switch, not a signing setting, so on its own it
+  // does not stand in for the env file.
+  if (!local && !FIELDS.some(([, key]) => key in overrides)) {
     throw new Error(
       `No ${context}.env in apps/desktop/env. Copy ${context}.example.env and fill in the five blanks.`,
     )

@@ -21,7 +21,7 @@ export async function packageApp(
 
   console.log('Installing…')
   const installed = await install(result.appPath)
-  const cli = linkCli(installed)
+  const cli = env.linkCli ? linkCli(installed) : null
   await launch(installed, launchEnv)
 
   // PluginKit registration is asynchronous after launch, and the app spends
@@ -35,13 +35,15 @@ export async function packageApp(
 
   console.log(`\nInstalled: ${installed}`)
   console.log(
-    cli.occupied
-      ? `CLI: ${cli.path} exists and is not this app's shim; left in place`
-      : cli.effective
-        ? `CLI: ${cli.path}`
-        : cli.shadowedBy
-          ? `CLI: ${cli.path} (not the \`sia\` you get: ${cli.shadowedBy} comes first on PATH)`
-          : `CLI: ${cli.path} (add ${dirname(cli.path)} to PATH to run it as \`sia\`)`,
+    !cli
+      ? 'CLI: not linked for this build'
+      : cli.occupied
+        ? `CLI: ${cli.path} exists and is not this app's shim; left in place`
+        : cli.effective
+          ? `CLI: ${cli.path}`
+          : cli.shadowedBy
+            ? `CLI: ${cli.path} (not the \`sia\` you get: ${cli.shadowedBy} comes first on PATH)`
+            : `CLI: ${cli.path} (add ${dirname(cli.path)} to PATH to run it as \`sia\`)`,
   )
   console.log(
     registered

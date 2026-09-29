@@ -6,7 +6,7 @@
  * someone runs the daemon against a scratch directory, and the app passes it
  * to the daemon it spawns.
  *
- * A library is per build context, not per machine. The three contexts install
+ * A library is per build context, not per machine. The contexts install
  * side by side and a shared directory would put them on one database, one
  * socket and one account: signing into the beta would sign the dev build in,
  * and whichever daemon came up first would serve both. The shipping build
@@ -36,7 +36,7 @@ export function buildVariant(): string {
   return 'dev'
 }
 
-/** `.sia` for the shipping build, `.sia-beta` and `.sia-dev` beside it. */
+/** `.sia` for the shipping build, `.sia-beta`, `.sia-dev` and `.sia-test` beside it. */
 export function dataDir(): string {
   const variant = buildVariant()
   return (
