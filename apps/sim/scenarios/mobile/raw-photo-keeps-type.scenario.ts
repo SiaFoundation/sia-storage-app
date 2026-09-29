@@ -6,14 +6,6 @@ export default defineScenario({
   description:
     'The phone imports a DNG under its own extension through its file picker. The phone stores it as image/dng, on iOS still does after its thumbnail scanner has tried the file, and the laptop receives it as image/dng.',
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug:
-    'The import types a file by its bytes first, and a DNG begins with TIFF’s signature, so the phone stores it as image/tiff while its bytes stay under .dng, where the uploader cannot find them, and it never reaches the laptop.',
-  bugShowsAs: [
-    'every device holds the same library at the end',
-    { check: 'phone imports it as image/dng', got: 'image/tiff' },
-    'phone finds its local copy of the DNG at the path its stored type names',
-    { check: 'laptop receives it as image/dng', got: undefined },
-  ],
   timeoutMs: 6 * 60_000,
   async run({
     devices: { phone, laptop },

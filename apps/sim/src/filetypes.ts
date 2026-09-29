@@ -10,8 +10,8 @@
  * cannot pass by agreeing with itself. The rule matches the core's bytes-first
  * detection, which the daemon's add and a phone's import both follow: the
  * format the bytes carry wins, the extension decides only when the bytes have
- * no signature, and a zip or Matroska container takes the extension's more
- * specific type when the extension names one.
+ * no signature, and a zip, Matroska or TIFF container takes the extension's
+ * more specific type when the extension names one.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -103,6 +103,16 @@ const ARCHIVES = new Set([
 
 const TEXT_APPLICATION = new Set(['application/json', 'application/yaml', 'application/toml'])
 
+/** TIFF-based raw photo types whose TIFF bytes take the extension's type. */
+const TIFF_REFINED = new Set([
+  'image/dng',
+  'image/x-canon-cr2',
+  'image/x-nikon-nef',
+  'image/x-nikon-nrw',
+  'image/x-sony-arw',
+  'image/x-pentax-pef',
+])
+
 /** Zip-based types whose zip bytes take the extension's type, as the core refines them. */
 const ZIP_REFINED = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -157,6 +167,7 @@ function withOwnExtension(s: Sample): string {
   if (s.bytesMime === null) return s.mime
   if (s.bytesMime === 'application/zip' && ZIP_REFINED.has(s.mime)) return s.mime
   if (s.bytesMime === 'video/x-matroska' && s.mime === 'video/webm') return s.mime
+  if (s.bytesMime === 'image/tiff' && TIFF_REFINED.has(s.mime)) return s.mime
   return s.bytesMime
 }
 

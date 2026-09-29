@@ -1,4 +1,4 @@
-import { getMimeTypeFromExtension, isMimeType } from './fileTypes'
+import { getMimeTypeFromExtension, isMimeType, lookupTable } from './fileTypes'
 
 const FTYP_BRANDS_HEIC = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'])
 const FTYP_BRANDS_VIDEO = new Set([
@@ -147,12 +147,13 @@ export function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
 
 /**
  * A container's bytes cannot name the format inside it: a docx, xlsx, pptx,
- * epub, or apk all read as zip, and webm reads as matroska. When the byte
- * answer is a container, metadata may refine it, but only to a member of that
- * container's family; unrelated metadata leaves the container answer standing
- * (`.txt` next to zip bytes stays zip).
+ * epub, or apk all read as zip, webm reads as matroska, and DNG and the camera
+ * raw formats built on TIFF (CR2, NEF, NRW, ARW, PEF) read as TIFF. When the
+ * byte answer is a container, metadata may refine it, but only to a member of
+ * that container's family; unrelated metadata leaves the container answer
+ * standing (`.txt` next to zip bytes stays zip).
  */
-const CONTAINER_REFINEMENTS: Record<string, ReadonlySet<string>> = {
+const CONTAINER_REFINEMENTS = lookupTable<ReadonlySet<string>>({
   'application/zip': new Set([
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -161,11 +162,25 @@ const CONTAINER_REFINEMENTS: Record<string, ReadonlySet<string>> = {
     'application/vnd.android.package-archive',
   ]),
   'video/x-matroska': new Set(['video/webm']),
+  'image/tiff': new Set([
+    'image/dng',
+    'image/x-adobe-dng',
+    'image/x-apple-proraw',
+    'image/x-canon-cr2',
+    'image/x-nikon-nef',
+    'image/x-nikon-nrw',
+    'image/x-sony-arw',
+    'image/x-pentax-pef',
+  ]),
+})
+
+/** Whether `type` names a format inside the container that `fromBytes` names. */
+export function refinesContainer(fromBytes: string, type: string): boolean {
+  return CONTAINER_REFINEMENTS.get(fromBytes)?.has(type) ?? false
 }
 
 function refineContainer(fromBytes: string, candidate: string | null): string {
-  const family = CONTAINER_REFINEMENTS[fromBytes]
-  return candidate && family?.has(candidate) ? candidate : fromBytes
+  return candidate && refinesContainer(fromBytes, candidate) ? candidate : fromBytes
 }
 
 /**
