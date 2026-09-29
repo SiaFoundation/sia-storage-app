@@ -295,7 +295,13 @@ bun sim device expect phone --label Menu
   `apps/cli/src/daemon/ipc/provider.ts`
 - Check: on a CLI device, stage bytes with `stage()` or `handoffTarget()`, then
   `call` its `provider.*` methods.
-- Tests: integration `provider-handoff`, `provider-reads`, `provider-changes`,
+- Tests: scenarios `desktop/finder-opens-peer-files`,
+  `desktop/finder-save-reaches-peer`,
+  `desktop/finder-rename-and-delete-reach-peer`, `finder/concurrent-opens`,
+  `finder/stale-base-save`, `finder/edit-against-remote-trash`,
+  `finder/offline-edit-not-stranded`, `finder/rename-and-edit-elsewhere`,
+  `finder/same-name-create`, `finder/save-survives-restart`; integration
+  `provider-handoff`, `provider-reads`, `provider-changes`,
   `provider-bulk-create`, `provider-write-integrity`
 - Desktop: `bun sim device finder mac` prints the folder, and `cp`, `mv`, `rm`
   and reading a file in it take the path Finder takes. `finder-state` shows what
