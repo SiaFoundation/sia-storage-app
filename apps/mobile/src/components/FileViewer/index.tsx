@@ -80,7 +80,12 @@ export function FileViewer({
   const DownloadPanel = useMemo(() => {
     return (
       <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
-        <TouchableHighlight onPress={onDownloadPress} disabled={isQueued}>
+        <TouchableHighlight
+          accessibilityRole="button"
+          accessibilityLabel="Download"
+          onPress={onDownloadPress}
+          disabled={isQueued}
+        >
           <CloudDownloadIcon color={colors.textPrimary} size={40} />
         </TouchableHighlight>
 

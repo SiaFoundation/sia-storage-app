@@ -101,6 +101,7 @@ export function SelectDirectorySheet({
       <View style={styles.inputRow}>
         <TextInput
           ref={inputRef}
+          accessibilityLabel="Search or create folder"
           style={styles.input}
           placeholder="Search or create folder..."
           placeholderTextColor={palette.gray[500]}

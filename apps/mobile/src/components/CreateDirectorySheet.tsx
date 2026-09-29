@@ -79,6 +79,7 @@ export function CreateDirectorySheet({
         <View style={styles.inputContainer}>
           <TextInput
             ref={inputRef}
+            accessibilityLabel="Folder name"
             style={styles.input}
             placeholder="Folder name"
             placeholderTextColor={palette.gray[500]}

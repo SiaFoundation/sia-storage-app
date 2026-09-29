@@ -286,6 +286,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
           {isSelectionMode ? (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Exit selection mode"
               onPress={() => exitSelectionMode()}
               style={styles.headerPill}
             >
@@ -360,7 +361,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
             {!isUnfiled ? (
               <IconButton
                 onPress={() => openSheet('directoryActions')}
-                accessibilityLabel="More options"
+                accessibilityLabel="More actions"
               >
                 <MoreVerticalIcon color={palette.gray[50]} size={22} />
               </IconButton>

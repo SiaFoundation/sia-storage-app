@@ -74,6 +74,7 @@ export function LibraryTabBar({
         ) : null}
         <Pressable
           accessibilityRole="tab"
+          accessibilityLabel="Media"
           accessibilityState={{ selected: activeTab === 'media' }}
           onPress={() => onChangeTab('media')}
           style={styles.segment}
@@ -82,6 +83,7 @@ export function LibraryTabBar({
         </Pressable>
         <Pressable
           accessibilityRole="tab"
+          accessibilityLabel="Files"
           accessibilityState={{ selected: activeTab === 'files' }}
           onPress={() => onChangeTab('files')}
           style={styles.segment}
@@ -90,6 +92,7 @@ export function LibraryTabBar({
         </Pressable>
         <Pressable
           accessibilityRole="tab"
+          accessibilityLabel="Tags"
           accessibilityState={{ selected: activeTab === 'tags' }}
           onPress={() => onChangeTab('tags')}
           style={styles.segment}

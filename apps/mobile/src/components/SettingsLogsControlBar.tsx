@@ -206,11 +206,25 @@ export function SettingsLogsControlBar({ navigation }: Props) {
             justifyContent: 'space-between',
           }}
         >
-          <Pressable onPress={() => openSheet('logLevel')} style={styles.filterButton}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Log level"
+            accessibilityValue={{ text: logLevel }}
+            onPress={() => openSheet('logLevel')}
+            style={styles.filterButton}
+          >
             <Text style={styles.filterButtonText}>{logLevel.toUpperCase()}</Text>
             <ChevronDownIcon size={16} color={iconColors.white} />
           </Pressable>
-          <Pressable onPress={() => openSheet('logScopes')} style={styles.filterButton}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Log scopes"
+            accessibilityValue={{
+              text: logScopes.length > 0 ? `${logScopes.length.toLocaleString()} selected` : 'All',
+            }}
+            onPress={() => openSheet('logScopes')}
+            style={styles.filterButton}
+          >
             <FilterIcon size={16} color={iconColors.white} />
             <Text style={styles.filterButtonText}>
               {logScopes.length > 0 ? `${logScopes.length.toLocaleString()}` : 'All'}

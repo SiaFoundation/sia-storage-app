@@ -152,7 +152,12 @@ export function InsetGroupToggleRow({
         <Text style={styles.label}>{label}</Text>
         {description ? <Text style={styles.description}>{description}</Text> : null}
       </View>
-      <Switch value={value} onValueChange={onValueChange} disabled={disabled} />
+      <Switch
+        accessibilityLabel={label}
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+      />
     </View>
   )
 }
@@ -186,6 +191,7 @@ export function InsetGroupInputRow({ label, description, ...inputProps }: InputR
       </View>
       <TextInput
         {...inputProps}
+        accessibilityLabel={label}
         numberOfLines={1}
         placeholderTextColor={palette.gray[500]}
         style={styles.input}

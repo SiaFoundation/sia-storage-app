@@ -33,6 +33,7 @@ export function RecoveryPhraseInput({
         ]}
       >
         <TextInput
+          accessibilityLabel="Recovery phrase"
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}

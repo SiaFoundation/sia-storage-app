@@ -11,7 +11,10 @@ export function useMenuHeader() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
-        <IconButton onPress={() => navigation.navigate('MainTab' as never)}>
+        <IconButton
+          accessibilityLabel="Back"
+          onPress={() => navigation.navigate('MainTab' as never)}
+        >
           <ArrowLeftIcon color={palette.gray[50]} size={22} />
         </IconButton>
       ),

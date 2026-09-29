@@ -32,9 +32,10 @@ export type MenuItem =
 type Props = {
   trigger: React.ReactNode
   items: MenuItem[]
+  accessibilityLabel: string
 }
 
-export function DropdownMenu({ trigger, items }: Props) {
+export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [triggerLayout, setTriggerLayout] = useState({
     x: 0,
@@ -144,8 +145,20 @@ export function DropdownMenu({ trigger, items }: Props) {
   return (
     <>
       <View ref={triggerRef} collapsable={false}>
-        <Pressable onPress={open}>
-          <View pointerEvents="none">{trigger}</View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          onPress={open}
+        >
+          {/* The trigger takes no touches, so screen readers skip it too.
+              Otherwise TalkBack stops on it as a second button that does nothing. */}
+          <View
+            pointerEvents="none"
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+          >
+            {trigger}
+          </View>
         </Pressable>
       </View>
       <Modal
@@ -155,7 +168,12 @@ export function DropdownMenu({ trigger, items }: Props) {
         onRequestClose={close}
         statusBarTranslucent
       >
-        <Pressable style={styles.backdrop} onPress={close} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close menu"
+          style={styles.backdrop}
+          onPress={close}
+        />
         <Animated.View
           style={[
             styles.menuContainer,

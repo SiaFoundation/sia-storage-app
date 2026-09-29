@@ -1,6 +1,6 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { AudioLinesIcon, PauseIcon, PlayIcon, Undo2Icon } from 'lucide-react-native'
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 function formatPlayTime(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds))
@@ -40,31 +40,41 @@ export function AudioPlayer({
       <View style={styles.audioControlsRow}>
         <View style={styles.audioControls}>
           {playing ? (
-            <PauseIcon
-              color="white"
-              size={20}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pause"
               onPress={() => {
                 onViewerControlPress?.()
                 audioPlayer.pause()
               }}
-            />
+            >
+              <PauseIcon color="white" size={20} />
+            </Pressable>
           ) : (
-            <PlayIcon
-              color="white"
-              size={20}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Play"
+              // The `disabled` prop would also drop the tap, and the tap still
+              // has to reach onViewerControlPress before audio is ready.
+              accessibilityState={{ disabled: !isReadyToPlay }}
               onPress={() => {
                 onViewerControlPress?.()
                 if (isReadyToPlay) audioPlayer.play()
               }}
-            />
+            >
+              <PlayIcon color="white" size={20} />
+            </Pressable>
           )}
-          <Undo2Icon
-            color="white"
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Restart"
             onPress={() => {
               onViewerControlPress?.()
               audioPlayer.seekTo(0)
             }}
-          />
+          >
+            <Undo2Icon color="white" />
+          </Pressable>
           <Text style={{ color: 'white' }}>
             {currentLabel} / {durationLabel}
           </Text>

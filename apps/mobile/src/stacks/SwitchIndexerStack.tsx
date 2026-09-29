@@ -14,6 +14,8 @@ function CloseButton() {
   const navigation = useNavigation()
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Close"
       onPress={() => navigation.getParent()?.goBack()}
       style={styles.closeButton}
       hitSlop={12}

@@ -61,7 +61,7 @@ export function FileCarouselControlBar({
               fill={isFavorite ? palette.red[500] : 'none'}
             />
           </IconButton>
-          <IconButton onPress={onShareFile} disabled={!canShare}>
+          <IconButton onPress={onShareFile} disabled={!canShare} accessibilityLabel="Share">
             <ShareIcon color={iconColors.white} />
           </IconButton>
           <IconButton onPress={onAddTag} accessibilityLabel="Add tag">
@@ -81,7 +81,7 @@ export function FileCarouselControlBar({
               <ImageIcon color={iconColors.white} />
             </IconButton>
           )}
-          <IconButton onPress={onPressMore}>
+          <IconButton onPress={onPressMore} accessibilityLabel="More actions">
             <MoreVerticalIcon color={iconColors.white} />
           </IconButton>
         </View>

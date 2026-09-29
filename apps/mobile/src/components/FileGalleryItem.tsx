@@ -18,6 +18,8 @@ function FileGalleryItemComponent({ file, onPressItem, onLongPressItem }: Props)
     <View collapsable={false} style={styles.thumbCell}>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={file.name}
+        accessibilityState={{ selected: isSelectionMode && isSelected }}
         onPress={() => onPressItem(file)}
         style={styles.thumbPress}
         onLongPress={onLongPressItem ? () => onLongPressItem(file) : undefined}

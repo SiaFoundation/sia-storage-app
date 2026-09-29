@@ -94,5 +94,5 @@ export function ViewSettingsMenu({ children, scope = 'library', allowedCategorie
     ]
   }, [scope, vs.sortBy, vs.sortDir, vs.viewMode, vs.selectedCategories, visibleCategories])
 
-  return <DropdownMenu trigger={children} items={items} />
+  return <DropdownMenu trigger={children} items={items} accessibilityLabel="View settings" />
 }
