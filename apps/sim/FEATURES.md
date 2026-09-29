@@ -191,8 +191,10 @@ bun sim device expect phone --label Menu
   Uploads list shows.
 - Code: `app.uploader`, `app.uploads`; services `uploader`; screens `Uploads`
 - Check: tables `objects`; `bun sim net objects`, `bun sim converge`
-- Tests: integration `upload-packing`, `partial-batch-errors`,
-  `sequential-batches-complete`, `files-stuck-after-batch`
+- Tests: scenarios `resilience/failed-adds`, `resilience/kill-mid-upload`,
+  `resilience/offline-backlog`, `resilience/upload-failures-retry`; integration
+  `upload-packing`, `partial-batch-errors`, `sequential-batches-complete`,
+  `files-stuck-after-batch`
 - Phone, the status sheet and the Uploads list:
 
 ```sim
@@ -236,7 +238,8 @@ bun sim device expect phone --label Menu
 - When: metadata pushed up, events pulled down, conflicts and convergence.
 - Code: `app.sync`; services `syncUpMetadata`, `syncDownEvents`; CLI `sync`
 - Check: tables `feed_meta`; `bun sim converge`, `bun sim logs`
-- Tests: integration `sync-down`, `sync-up-metadata`,
+- Tests: scenarios `resilience/kills-during-catch-up`,
+  `resilience/thousand-files`; integration `sync-down`, `sync-up-metadata`,
   `multi-device-convergence`, `feed-convergence`, `change-events`
 
 ### Imports
