@@ -624,6 +624,9 @@ export class UploadManager {
           // may have created file records during the idle wait.
           const newFilesBeforeFlush = await this.pollDB()
           if (newFilesBeforeFlush > 0) continue
+          // shutdown() or suspend() can land during that poll, and either
+          // one leaves the batch for a later loop to flush or cancel.
+          if (!this.active || this._suspended) continue
           await this.flush('idle_timeout')
         }
       } else {
@@ -1010,6 +1013,11 @@ export class UploadManager {
    * Used by the loop to idle-wait between poll cycles or before flushing.
    */
   private waitForWorkOrTimeout(ms: number): Promise<'woken' | 'timeout'> {
+    // shutdown() and suspend() call wake(), which does nothing while the loop
+    // awaits the database because no wait has set wakeResolver yet. Without
+    // this check that loop would sleep a full interval before stopping or
+    // parking, and with a batch open it would flush while suspended.
+    if (!this.active || this._suspended) return Promise.resolve('woken')
     return new Promise<'woken' | 'timeout'>((resolve) => {
       const timer = setTimeout(() => {
         this.wakeResolver = null

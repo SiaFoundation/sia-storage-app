@@ -1492,23 +1492,21 @@ describe('UploadManager', () => {
   describe('initializeUploader', () => {
     it('shuts down existing manager before re-initializing', async () => {
       const { initializeUploader } = require('./uploader')
-      const shutdownSpy = jest.spyOn(manager, 'shutdown')
-      const getManagerSpy = jest
-        .spyOn(require('../stores/appService'), 'getUploadManager')
-        .mockReturnValue(manager)
+      jest.spyOn(require('../stores/appService'), 'getUploadManager').mockReturnValue(manager)
+      // Stubbed: the real initUploader starts the app's own upload manager,
+      // whose loop nothing in this test stops, and it keeps jest from exiting.
+      const order: string[] = []
+      jest.spyOn(manager, 'shutdown').mockImplementation(async () => {
+        order.push('shutdown')
+      })
+      jest.spyOn(internal(), 'initUploader').mockImplementation(() => {
+        order.push('init')
+      })
 
-      // First initialization — shuts down the existing manager
       await initializeUploader()
-      expect(shutdownSpy).toHaveBeenCalledTimes(1)
-
-      shutdownSpy.mockClear()
-
-      // Second initialization — should shut down the existing manager first
       await initializeUploader()
-      expect(shutdownSpy).toHaveBeenCalledTimes(1)
 
-      shutdownSpy.mockRestore()
-      getManagerSpy.mockRestore()
+      expect(order).toEqual(['shutdown', 'init', 'shutdown', 'init'])
     })
   })
 
