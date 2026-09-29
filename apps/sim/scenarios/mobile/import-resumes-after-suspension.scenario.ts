@@ -9,25 +9,6 @@ export default defineScenario({
   description:
     'The phone starts importing 300 files of 128 KB and goes to the background five times while it works through them. Within two minutes of the last return to the foreground, every file is added.',
   devices: { phone: 'phone' },
-  knownBug: {
-    ios: 'A suspension cuts off the import tick after it has claimed rows it has not started, and the next tick frees a claim only once it is ten minutes old, so those files sit unimported until then.',
-  },
-  intermittentBug: {
-    android:
-      'A suspension can cut off the import tick after it has claimed rows it has not started, and the next tick frees a claim only once it is ten minutes old, so those files sit unimported until then.',
-  },
-  bugShowsAs: [
-    {
-      check: 'all 300 files are added within two minutes',
-      // Every file not added is still claimed by a tick the suspension cut off.
-      matches: (rows: Record<string, number>) =>
-        (rows.active ?? 0) > 0 && Object.keys(rows).every((s) => s === 'added' || s === 'active'),
-    },
-    {
-      check: 'phone has no import left in progress',
-      matches: (rows: Record<string, number>) => (rows.active ?? 0) > 0 && !rows.pending,
-    },
-  ],
   timeoutMs: 10 * 60_000,
   async run({ devices: { phone }, step, precondition, check, note, checkEqual, waitFor, workDir }) {
     const paths = seedFiles(workDir, { prefix: 'burst', count: FILES, size: 128 * 1024 })

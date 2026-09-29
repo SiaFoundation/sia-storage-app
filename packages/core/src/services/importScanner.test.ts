@@ -3,6 +3,7 @@ import type { FinalizeResult } from '../db/operations/files'
 import type { ImportFileRow, ImportRow } from '../db/operations/imports'
 import { ImportScanner, type ResolveSourceResult } from './importScanner'
 import { type ContentHash, toContentHash } from '../lib/contentHash'
+import { DatabaseSuspendedError } from '../lib/errors'
 
 function impRow(over: Partial<ImportRow> & { id: string }): ImportRow {
   return {
@@ -1114,6 +1115,51 @@ describe('ImportScanner coded-deleted classification', () => {
 })
 
 describe('ImportScanner cold-start recovery', () => {
+  it('the tick after a tick a suspension cut off reclaims every claim at once', async () => {
+    const controller = new AbortController()
+    const m = createMocks({ candidates: [fileRow({ id: 'a', importId: 'imp1' })] })
+    m.fs.importCopy.mockImplementation(async () => {
+      controller.abort()
+      return new Promise<string>(() => {})
+    })
+    const s = scanner(m)
+    await s.runScan(controller.signal)
+    m.imports.pendingFiles.mockResolvedValue([])
+    await s.runScan()
+    // The first call is the cold start; the second follows the cut-off tick.
+    expect(m.imports.resetStale).toHaveBeenNthCalledWith(
+      2,
+      0,
+      IMPORT_STALE_CLAIM_MS,
+      expect.any(Number),
+    )
+    await s.runScan()
+    expect(m.imports.resetStale).toHaveBeenNthCalledWith(
+      3,
+      IMPORT_STALE_CLAIM_MS,
+      IMPORT_STALE_CLAIM_MS,
+      expect.any(Number),
+    )
+  })
+
+  it('the tick after a suspension thrown from the claim loop reclaims every claim at once', async () => {
+    const m = createMocks({
+      candidates: [fileRow({ id: 'a', importId: 'imp1' }), fileRow({ id: 'b', importId: 'imp1' })],
+    })
+    m.fs.importCopy.mockImplementation(() => new Promise<string>(() => {}))
+    m.imports.claim.mockResolvedValueOnce(true).mockRejectedValueOnce(new DatabaseSuspendedError())
+    const s = scanner(m)
+    await s.runScan()
+    m.imports.pendingFiles.mockResolvedValue([])
+    await s.runScan()
+    expect(m.imports.resetStale).toHaveBeenNthCalledWith(
+      2,
+      0,
+      IMPORT_STALE_CLAIM_MS,
+      expect.any(Number),
+    )
+  })
+
   it('first tick reclaims ALL orphaned claims; later ticks use the stale window', async () => {
     const m = createMocks({ candidates: [] })
     const s = scanner(m)

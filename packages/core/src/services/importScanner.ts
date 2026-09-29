@@ -18,6 +18,7 @@ import {
 import { uniqueId } from '../lib/uniqueId'
 import { raceWithAbort } from '../lib/timeout'
 import type { ContentHash } from '../lib/contentHash'
+import { isSuspendedDbError } from '../lib/errors'
 
 // Copy pool: total in-flight bytes across concurrent copies (an idle pool always
 // admits one item regardless, so a lone huge file still runs).
@@ -177,8 +178,10 @@ export class ImportScanner {
   private app: AppService | null = null
   // No claim survives its process: batched pool claims can strand up to a full
   // tick's rows `active` after a kill, and the 10-minute sweep is too slow a
-  // recovery for a fresh launch. First tick reclaims them all.
-  private coldStart = true
+  // recovery for a fresh launch. First tick reclaims them all. A tick a
+  // suspension cut off strands its claimed rows the same way, and no other tick
+  // runs meanwhile, so the next one reclaims them all too.
+  private reclaimAll = true
   private _calculateContentHash: CalculateContentHash | null = null
   private _readHeaderBytes: ReadHeaderBytes | null = null
   private _resolveSource: ResolveSource | null = null
@@ -200,7 +203,7 @@ export class ImportScanner {
   }
 
   reset(): void {
-    this.coldStart = true
+    this.reclaimAll = true
     this.app = null
     this._calculateContentHash = null
     this._readHeaderBytes = null
@@ -237,14 +240,14 @@ export class ImportScanner {
       // Top-of-tick recovery: release `active` rows with stale claims back to `pending`,
       // clamp clock-skewed backoffs, seal abandoned open imports. A row left `active` by a
       // suspended raceWithAbort is recoverable ONLY here, so this must run first. Cold
-      // start zeroes only the claim window; the seal window stays put so an open import
-      // created moments ago isn't sealed at launch.
+      // start, and the first tick after a suspension, zero only the claim window; the
+      // seal window stays put so an open import created moments ago isn't sealed.
       await app.imports.resetStale(
-        this.coldStart ? 0 : IMPORT_STALE_CLAIM_MS,
+        this.reclaimAll ? 0 : IMPORT_STALE_CLAIM_MS,
         IMPORT_STALE_CLAIM_MS,
         now,
       )
-      this.coldStart = false
+      this.reclaimAll = false
 
       const pending = await app.imports.pendingFiles(IMPORT_MAX_PER_TICK, now)
       // Ephemeral rows drain first within the tick: durable kinds survive a
@@ -554,6 +557,7 @@ export class ImportScanner {
       // suspend) must not detach its siblings mid-copy; the row stays `active`
       // and resetStale recovers it.
       await Promise.allSettled(jobs)
+      if (signal?.aborted || suspending) this.reclaimAll = true
 
       if (result.deferred > 0) {
         // Once per tick: paced rows yielded to storage/upload pressure.
@@ -564,6 +568,9 @@ export class ImportScanner {
       }
       logger.debug('importScanner', 'tick_complete', result)
     } catch (e) {
+      // A suspension that throws out of the claim loop skips the flag set
+      // after allSettled, and rows claimed before the throw stay `active`.
+      if (isSuspendedDbError(e) || signal?.aborted) this.reclaimAll = true
       logger.error('importScanner', 'scan_error', { error: e as Error })
     }
 
