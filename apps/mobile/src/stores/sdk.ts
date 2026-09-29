@@ -26,10 +26,10 @@ import { useConnectionState } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 import { Platform } from 'react-native'
 import { addLifecycleListener } from '../managers/lifecycle'
-import type { SdkInterface } from 'react-native-sia'
-import { MobileSdkAdapter } from '../adapters/sdk'
+import type { SdkAdapter } from '@siastorage/core/adapters'
 import { closeAuthBrowser, openAuthURL } from '../lib/openAuthUrl'
 import { initializeUploader } from '../managers/uploader'
+import { simNetwork } from '../testMode'
 import { app, getMobileSdkAuth, internal } from './appService'
 
 const APP_META_JSON = JSON.stringify({
@@ -46,7 +46,7 @@ const CONNECTION_TIMEOUT_MS = 20_000
 const REGISTER_TIMEOUT_MS = 60_000
 
 getMobileSdkAuth().setOnConnected(async () => {
-  const sdk = getMobileSdkAuth().getLastSdk()
+  const sdk = getMobileSdkAuth().getLastSdkAdapter()
   if (sdk) {
     await setSdkWithUploader(sdk)
   }
@@ -57,7 +57,7 @@ getMobileSdkAuth().setOnConnected(async () => {
  * Shuts down existing uploader when SDK changes, initializes with new SDK.
  * Exported for use by test harness.
  */
-export async function setSdkWithUploader(sdk: SdkInterface | null): Promise<void> {
+export async function setSdkWithUploader(sdk: SdkAdapter | null): Promise<void> {
   const currentSdk = internal().getSdk()
   if (currentSdk && sdk) {
     try {
@@ -67,8 +67,7 @@ export async function setSdkWithUploader(sdk: SdkInterface | null): Promise<void
     }
   }
   if (sdk) {
-    const adapter = new MobileSdkAdapter(sdk)
-    internal().setSdk(adapter)
+    internal().setSdk(sdk)
     await initializeUploader()
   } else {
     internal().setSdk(null)
@@ -80,7 +79,7 @@ export async function setSdkWithUploader(sdk: SdkInterface | null): Promise<void
  *
  * @returns SDK if connected, null if not
  */
-export async function connectSdk(): Promise<SdkInterface | null> {
+export async function connectSdk(): Promise<SdkAdapter | null> {
   try {
     const indexerURL = await app().settings.getIndexerURL()
     const keyBytes = await app().auth.getAppKey(indexerURL)
@@ -98,7 +97,7 @@ export async function connectSdk(): Promise<SdkInterface | null> {
     )
 
     if (connected) {
-      const sdk = getMobileSdkAuth().getLastSdk()
+      const sdk = getMobileSdkAuth().getLastSdkAdapter()
       if (sdk) {
         await setSdkWithUploader(sdk)
         sdk.objectEvents(undefined, 1).catch(() => {})
@@ -215,7 +214,7 @@ export async function authenticateIndexer(indexerURL: string): Promise<Authentic
         logger.info('sdk', 'already_registered')
         app().settings.setIndexerURL(indexerURL)
         await refreshLogAccount(app())
-        const sdk = getMobileSdkAuth().getLastSdk()
+        const sdk = getMobileSdkAuth().getLastSdkAdapter()
         if (sdk) {
           await setSdkWithUploader(sdk)
         }
@@ -257,15 +256,6 @@ export async function authenticateIndexer(indexerURL: string): Promise<Authentic
 
   logger.info('sdk', 'browser_auth_complete')
   return ok({ alreadyConnected: false })
-}
-
-export function setSdk(sdk: SdkInterface | null) {
-  if (sdk) {
-    internal().setSdk(new MobileSdkAdapter(sdk))
-  } else {
-    internal().setSdk(null)
-  }
-  app().connection.setState({ isConnected: sdk !== null })
 }
 
 /**
@@ -443,7 +433,12 @@ async function runBrowserAuthFlow(indexerURL: string): Promise<Result<void, Auth
       CONNECTION_TIMEOUT_MS,
     )
 
-    const [, approvalErr] = await waitForUserApproval(responseUrl)
+    // Test mode approves at once, and there is no page to open.
+    const [, approvalErr] = simNetwork
+      ? await app()
+          .auth.builder.waitForApproval()
+          .then(() => ok(undefined))
+      : await waitForUserApproval(responseUrl)
     if (approvalErr) {
       if (approvalErr.type === 'cancelled') {
         logger.info('sdk', 'auth_cancelled')

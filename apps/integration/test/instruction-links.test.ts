@@ -17,6 +17,7 @@ const EXPECTED: Record<string, string> = {
   'apps/desktop/CLAUDE.md': 'apps/desktop/AGENTS.md',
   'apps/integration/CLAUDE.md': 'apps/integration/AGENTS.md',
   'apps/mobile/CLAUDE.md': 'apps/mobile/AGENTS.md',
+  'apps/sim/CLAUDE.md': 'apps/sim/AGENTS.md',
   'packages/core/CLAUDE.md': 'packages/core/AGENTS.md',
   'crates/CLAUDE.md': 'crates/AGENTS.md',
   '.github/instructions/core.instructions.md': 'packages/core/AGENTS.md',
@@ -24,6 +25,7 @@ const EXPECTED: Record<string, string> = {
   '.github/instructions/integration-tests.instructions.md': 'apps/integration/AGENTS.md',
   '.github/instructions/mobile.instructions.md': 'apps/mobile/AGENTS.md',
   '.github/instructions/rust.instructions.md': 'crates/AGENTS.md',
+  '.github/instructions/sim.instructions.md': 'apps/sim/AGENTS.md',
 }
 
 const SKIP = new Set(['node_modules', '.git', '.build-cache', 'ios', 'android', 'target', 'out'])

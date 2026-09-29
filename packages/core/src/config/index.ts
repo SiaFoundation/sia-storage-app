@@ -1,5 +1,10 @@
 import { daysInMs, minutesInMs, secondsInMs } from '../lib/time'
 
+// Simulation runs (the `sim` orchestrator) shorten the timers that pace upload
+// and sync, so a scenario waiting for two devices to agree takes seconds rather
+// than tens of seconds. Every other build reads the defaults.
+const SIM_FAST_TIMERS = getEnv('EXPO_PUBLIC_SIM_FAST_TIMERS') === '1'
+
 // App key, used to identify itself to the indexer. 32 bytes hex string.
 export const APP_KEY = 'ac38d91cfb250d50820a0c658628662b8c2dcfc6a5f3fe4d5755eb0a7b67eeac'
 // App metadata for indexer registration. All platforms use the same identity.
@@ -26,7 +31,7 @@ export const SECTOR_SIZE = 4 * 1024 * 1024
 // Slab data capacity = SECTOR_SIZE × data shards.
 export const SLAB_SIZE = SECTOR_SIZE * UPLOAD_DATA_SHARDS
 // Packer idle timeout - flush partial slab after this delay.
-export const PACKER_IDLE_TIMEOUT = secondsInMs(10)
+export const PACKER_IDLE_TIMEOUT = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Max batch duration before forcing flush (limits time data is unpinned).
 export const PACKER_MAX_BATCH_DURATION = secondsInMs(60)
 // Max slabs before forcing flush (limits unpinned data, ~400 MiB at 10 slabs).
@@ -35,11 +40,11 @@ export const PACKER_MAX_SLABS = 10
 // Prevents flushing when we could pack more efficiently.
 export const SLAB_FILL_THRESHOLD = 0.9
 // Packer DB poll interval.
-export const PACKER_POLL_INTERVAL = secondsInMs(5) // 5 seconds
+export const PACKER_POLL_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(5)
 // How often to re-check account when storage is full.
 export const STORAGE_FULL_POLL_INTERVAL = secondsInMs(30)
 // Sync events interval.
-export const SYNC_EVENTS_INTERVAL = secondsInMs(10) // 10 seconds
+export const SYNC_EVENTS_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Sync new photos interval.
 export const SYNC_NEW_PHOTOS_INTERVAL = secondsInMs(10) // 10 seconds
 /**
@@ -104,7 +109,7 @@ export const FS_EVICTABLE_MIN_AGE = daysInMs(1) // 1 day
 // Age threshold for evicting superseded file versions.
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.
-export const SYNC_UP_METADATA_INTERVAL = secondsInMs(10) // 10 seconds
+export const SYNC_UP_METADATA_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Sync up metadata batch size.
 export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files
 // Sync up metadata concurrency.

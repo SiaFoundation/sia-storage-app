@@ -6,7 +6,7 @@ import {
   createAppService,
 } from '@siastorage/core/app'
 import type { UploadManager } from '@siastorage/core/services/uploader'
-import { MobileSdkAuthAdapter } from '../adapters/auth'
+import { type MobileSdkAuth, MobileSdkAuthAdapter } from '../adapters/auth'
 import { createCryptoAdapter } from '../adapters/crypto'
 import { createDownloadAdapter } from '../adapters/downloadObject'
 import { createFsIOAdapter } from '../adapters/fsIO'
@@ -15,8 +15,22 @@ import { createMobileThumbnailAdapter } from '../adapters/thumbnail'
 import { createUploaderAdapters } from '../adapters/uploader'
 import { db } from '../db'
 import { detectMimeType } from '../lib/detectMimeType'
+import { simNetwork } from '../testMode'
+import type * as SimSdkAuthModule from '../testMode/sdkAuth'
 
-const mobileSdkAuth = new MobileSdkAuthAdapter()
+function createSdkAuth(): MobileSdkAuth {
+  if (__DEV__) {
+    if (simNetwork) {
+      // A require rather than an import, so a release bundle leaves out test
+      // mode and the mock network client with it.
+      const { SimSdkAuth } = require('../testMode/sdkAuth') as typeof SimSdkAuthModule
+      return new SimSdkAuth(simNetwork)
+    }
+  }
+  return new MobileSdkAuthAdapter()
+}
+
+const mobileSdkAuth = createSdkAuth()
 
 let _app: AppService | null = null
 let _internal: AppServiceInternal | null = null
@@ -51,7 +65,7 @@ export function internal(): AppServiceInternal {
   return ensureApp().internal
 }
 
-export function getMobileSdkAuth(): MobileSdkAuthAdapter {
+export function getMobileSdkAuth(): MobileSdkAuth {
   return mobileSdkAuth
 }
 

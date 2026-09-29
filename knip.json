@@ -16,6 +16,9 @@
     "packages/sdk-mock": {
       "entry": ["src/index.ts"]
     },
+    "packages/mock-network": {
+      "entry": ["src/server/main.ts", "src/*/index.ts", "test/**/*.test.ts"]
+    },
     "apps/mobile": {
       "entry": ["index.ts", "app.config.js"],
       "project": ["src/**/*.{ts,tsx}", "mocks/**/*.ts", "scripts/**/*.ts"],
@@ -35,8 +38,17 @@
     "apps/benchmark": {
       "entry": ["src/**/*.ts"]
     },
-    "apps/cli": { "ignore": ["**"] },
-    "apps/desktop": { "ignore": ["**"] },
-    "apps/web": { "ignore": ["**"] }
+    "apps/sim": {
+      "entry": ["scenarios/**/*.scenario.ts", "test/**/*.test.ts"]
+    },
+    "apps/cli": {
+      "ignore": ["**"]
+    },
+    "apps/desktop": {
+      "ignore": ["**"]
+    },
+    "apps/web": {
+      "ignore": ["**"]
+    }
   }
 }

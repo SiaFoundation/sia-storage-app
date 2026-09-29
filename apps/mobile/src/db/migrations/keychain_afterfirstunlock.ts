@@ -8,8 +8,8 @@ import {
   setSecureStoreJSON,
 } from '../../stores/secureStore'
 
-// Duplicated from src/stores/appKey.ts to keep migration self-contained
-// (importing appKey.ts would pull in react-native-sia which breaks Jest)
+// The secure-store key and encoding the app keys were stored with when this
+// migration was written, copied rather than imported so it keeps reading them.
 const APP_KEYS_SECURE_STORE_KEY = 'appKeys'
 
 type AppKeysMap = Record<string, ArrayBuffer>

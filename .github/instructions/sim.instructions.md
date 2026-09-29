@@ -1,0 +1,1 @@
+../../apps/sim/AGENTS.md

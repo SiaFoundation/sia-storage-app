@@ -23,6 +23,7 @@
     "@clack/prompts": "1.2.0",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
+    "@siastorage/mock-network": "workspace:*",
     "@siastorage/node-adapters": "workspace:*",
     "@siastorage/sdk-mock": "workspace:*",
     "commander": "14.0.3",
