@@ -151,10 +151,24 @@ export async function syncDownEventsBatch(
         await processBatch(events, counts, signal, app, internal)
         const batchChanged = counts.total > prevTotal
 
-        // Move the gate now this batch is classified. Skip empty/aborted
-        // batches: fileCreates is final only after the commit, and an aborted
-        // run leaves the gate to `finally`, which preserves it across suspension.
-        if (!signal.aborted && totalEventsFetched > 1) {
+        // processBatch returns without applying the batch once the signal
+        // aborts, as it does when the app is suspended. Stopping before the
+        // cursor is saved makes the next run fetch this batch again, where
+        // saving it would skip the batch for good. A batch that did commit is
+        // then read twice. The gate is left to `finally`, which keeps it
+        // across the suspension.
+        if (signal.aborted) {
+          // An abort during the cleanup after the commit leaves the batch
+          // applied. Its deletes are gone from the objects table by then, so
+          // the replay finds nothing to change and would not refresh either,
+          // leaving deleted files in the cached library.
+          if (batchChanged) invalidateLibrary(app)
+          break
+        }
+
+        // Move the gate now this batch is classified. Skip empty batches:
+        // fileCreates is final only after the commit.
+        if (totalEventsFetched > 1) {
           const current = app.sync.getState().syncGateStatus
           const next = nextGateStatus(current, counts.fileCreates, hydrating)
           if (next !== current) app.sync.setState({ syncGateStatus: next })
@@ -192,13 +206,7 @@ export async function syncDownEventsBatch(
           syncDownCount: counts.total,
           syncDownProgress: progress,
         })
-        if (batchChanged) {
-          app.caches.library.invalidateAll()
-          // Directories too: ensureAtPaths deferred its own invalidation so it
-          // would not fire inside the transaction above.
-          app.caches.directories.invalidateAll()
-          app.caches.libraryVersion.invalidate()
-        }
+        if (batchChanged) invalidateLibrary(app)
 
         // If the batch is not full, we're done for now.
         if (events.length < batchSize) {
@@ -251,6 +259,14 @@ export async function syncDownEventsBatch(
   if (totalEventsFetched > 1 && !signal.aborted) {
     return 0 // zero interval: poll again immediately
   }
+}
+
+function invalidateLibrary(app: AppService): void {
+  app.caches.library.invalidateAll()
+  // Directories too: ensureAtPaths deferred its own invalidation so it would
+  // not fire inside the batch's transaction.
+  app.caches.directories.invalidateAll()
+  app.caches.libraryVersion.invalidate()
 }
 
 /**

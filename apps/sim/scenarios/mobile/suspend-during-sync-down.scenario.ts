@@ -6,18 +6,6 @@ export default defineScenario({
   description:
     'Every network call is slowed by 150 ms, so the laptop publishes its 400 files over time rather than at once. Once the phone has synced some of them, the network holds its next request for events, and the phone goes to the background with that request open. Suspended on iOS, it holds no hazardous lock. The request is then released, and back in the foreground the phone finishes and both devices agree.',
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug: {
-    ios: "Suspending the app aborts a running sync-down while it applies a batch, and the loop saves the batch's last event as the cursor anyway, so the next run starts after events that were never applied and those files never appear on the phone.",
-  },
-  bugShowsAs: [
-    'both devices agree',
-    'every device holds the same library at the end',
-    {
-      check: 'the phone holds every file the laptop published',
-      matches: (missing: { beforeItsSyncPosition: string[]; afterIt: string[] }) =>
-        missing.beforeItsSyncPosition.length > 0 && missing.afterIt.length === 0,
-    },
-  ],
   timeoutMs: 8 * 60_000,
   async run({
     devices,
