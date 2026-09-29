@@ -3,18 +3,29 @@ import type { MimeType } from '@siastorage/core/lib/fileTypes'
 
 const WEBP_QUALITY = 80
 
-// Image MIMEs that Bun.Image (libvips) can decode. Video unsupported in this
-// adapter (generateVideoThumbnail throws), so video MIMEs are absent.
-const BUN_THUMBNAILABLE_TYPES: readonly string[] = [
+// Image MIMEs Bun.Image decodes on every platform. JPEG, PNG and WebP use
+// codecs compiled into Bun. BMP and GIF use a decoder built into Bun on Linux
+// and the OS codecs on macOS and Windows. It has no SVG decoder, unlike sharp.
+// Video is absent because generateVideoThumbnail throws.
+const EVERY_PLATFORM_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
+  'image/bmp',
   'image/webp',
+] as const satisfies readonly MimeType[]
+
+// Bun.Image decodes these through the OS image codecs, ImageIO on macOS and
+// WIC on Windows. A Linux build has neither and rejects them with
+// ERR_IMAGE_FORMAT_UNSUPPORTED, so listing them there would fail every such
+// file. On Windows HEIC and AVIF decode only where the OS has those codecs,
+// and a machine without them fails each such file's thumbnail. HEIF shares
+// HEIC's container.
+const OS_CODEC_TYPES = [
   'image/tiff',
   'image/avif',
   'image/heic',
   'image/heif',
-  'image/svg+xml',
 ] as const satisfies readonly MimeType[]
 
 async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailResult> {
@@ -31,12 +42,16 @@ async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailRe
 }
 
 /**
- * Thumbnail adapter backed by `Bun.Image`. Bun bundles libvips directly, so
- * `bun build --compile` produces a single binary with no native-addon dance.
+ * Thumbnail adapter backed by `Bun.Image`, which is compiled into Bun, so
+ * `bun build --compile` produces a single binary with no native addon to ship.
+ * `platform` picks which formats it offers to thumbnail.
  */
-export function createBunThumbnailAdapter(): ThumbnailAdapter {
+export function createBunThumbnailAdapter(
+  platform: NodeJS.Platform = process.platform,
+): ThumbnailAdapter {
   return {
-    thumbnailableTypes: BUN_THUMBNAILABLE_TYPES,
+    thumbnailableTypes:
+      platform === 'linux' ? EVERY_PLATFORM_TYPES : [...EVERY_PLATFORM_TYPES, ...OS_CODEC_TYPES],
     generateImageThumbnail(sourcePath: string, targetSize: number) {
       return resizeToWebp(sourcePath, targetSize)
     },

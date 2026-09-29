@@ -27,17 +27,6 @@ export default defineScenario({
   description:
     'The laptop adds a BMP image and an SVG drawing. The BMP gets a thumbnail. The SVG, which the daemon has no decoder for, gets none and logs no failed thumbnail attempt.',
   devices: { laptop: 'cli' },
-  knownBug:
-    "The daemon's thumbnailer lists SVG, which Bun.Image cannot decode, so each scan fails on every SVG, and leaves out BMP, which it decodes, so a BMP never gets a thumbnail.",
-  bugShowsAs: [
-    { check: 'the BMP has a thumbnail', got: false },
-    {
-      check: 'no thumbnail attempt on the SVG failed',
-      // Bun.Image has no SVG decoder, so preparing the source fails.
-      matches: (lines: string[]) =>
-        lines.length > 0 && lines.every((l) => l.includes('source_prepare_error')),
-    },
-  ],
   async run({ devices: { laptop }, step, check, checkEqual, waitFor, workDir }) {
     const bmpPath = join(workDir, 'swatch.bmp')
     const svgPath = join(workDir, 'drawing.svg')
