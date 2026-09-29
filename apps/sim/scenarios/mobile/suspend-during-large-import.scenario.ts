@@ -7,13 +7,6 @@ export default defineScenario({
   description:
     'The phone imports one 32 MB file, and sim holds the copy after its bytes land and before it publishes them, so the import is in flight when the phone goes to the background. Suspended on iOS, it holds no hazardous lock. Back in the foreground the hold is released, the import completes, the file is uploaded once, and the laptop gets it with its bytes.',
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug: {
-    ios: 'A suspension cuts off the import tick while it copies the file, and the next tick frees the file’s claim only once it is ten minutes old, so the file sits unimported until then.',
-  },
-  bugShowsAs: [
-    { check: 'the file is added', got: 'active' },
-    { check: 'phone has no import left in progress', got: { active: 1 } },
-  ],
   timeoutMs: 8 * 60_000,
   async run({
     devices,
