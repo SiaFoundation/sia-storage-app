@@ -42,6 +42,14 @@ describe('diffFileMetadata', () => {
     expect(diffFileMetadata({ ...base, tags: [] }, base).tags).toBeUndefined()
   })
 
+  it('treats a root file and remote metadata naming the root as equal', () => {
+    expect(diffFileMetadata(base, { ...base, directory: '' }).directory).toBeUndefined()
+  })
+
+  it('detects a move to the root', () => {
+    expect(diffFileMetadata(base, { ...base, directory: 'docs' }).directory).toBeDefined()
+  })
+
   it('detects a directory-only change when updatedAt is identical', () => {
     const diffs = diffFileMetadata({ ...base, directory: '/photos' }, base)
     expect(diffs.directory).toBeDefined()

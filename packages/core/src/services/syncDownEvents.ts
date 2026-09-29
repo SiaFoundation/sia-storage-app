@@ -254,6 +254,24 @@ export async function syncDownEventsBatch(
 }
 
 /**
+ * One event per file, the one with the newest metadata. Two objects can carry
+ * one file's metadata from different moments, when sync-up has pushed a change
+ * to one and not yet the other. Upserting both lets whichever comes last in the
+ * batch win, and the tag sync deletes once and then inserts every entry's tags,
+ * so an older copy would restore a tag the newer one removed.
+ */
+function newestPerFile<T extends { fileRecord: { id: string; updatedAt: number } }>(
+  events: T[],
+): T[] {
+  const byFile = new Map<string, T>()
+  for (const e of events) {
+    const seen = byFile.get(e.fileRecord.id)
+    if (!seen || e.fileRecord.updatedAt >= seen.fileRecord.updatedAt) byFile.set(e.fileRecord.id, e)
+  }
+  return [...byFile.values()]
+}
+
+/**
  * Apply a batch of indexer events to the local state. Runs in three zones:
  *
  *   1. Classify (no writes) — decode + categorize each event as create / update / delete.
@@ -454,11 +472,12 @@ async function processBatch(
       e.isFile &&
       (e.kind === 'create' || (e.kind === 'update' && e.isRemoteNewer)),
   )
-  const dirEntries = syncableEvents
+  const newest = newestPerFile(syncableEvents)
+  const dirEntries = newest
     .filter((e) => e.directory !== undefined)
     .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
-  const tagEntries = syncableEvents
-    .filter((e) => e.tags !== undefined && e.tags.length > 0)
+  const tagEntries = newest
+    .filter((e) => e.tags !== undefined)
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
 
   await internal.withTransaction(async (tx) => {
@@ -467,10 +486,7 @@ async function processBatch(
     // and a locally-tombstoned row is skipped so a delete-in-progress isn't
     // reverted by a stale remote edit (delete wins).
     const remoteWins = updates.filter((e) => e.isRemoteNewer && !e.fileRecord.deletedAt)
-    const fileUpserts = [
-      ...creates.map((e) => e.fileRecord),
-      ...remoteWins.map((e) => e.fileRecord),
-    ]
+    const fileUpserts = newestPerFile([...creates, ...remoteWins]).map((e) => e.fileRecord)
     // A remote rename arrives as a file upsert that rewrites `name`, moving the row into a
     // different (name, directoryId) group. Read the groups these rows sit in before that
     // rewrite, so the recalc below can also recompute the group a rename empties. Creates have

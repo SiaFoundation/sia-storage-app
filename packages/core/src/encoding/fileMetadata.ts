@@ -80,8 +80,11 @@ export function encodeFileMetadata(meta: FileMetadata): ArrayBuffer {
     updatedAt: meta.updatedAt,
   }
   if (meta.kind === 'file') {
-    if (meta.tags) payload.tags = meta.tags
-    if (meta.directory) payload.directory = meta.directory
+    // Written even when empty, so moving a file to the root or removing its
+    // last tag reaches other devices: '' is the root and [] is no tags. A
+    // field missing from a peer's metadata leaves the local value alone.
+    payload.tags = meta.tags ?? []
+    payload.directory = meta.directory ?? ''
     payload.trashedAt = meta.trashedAt
   } else if (meta.kind === 'thumb') {
     payload.thumbForId = meta.thumbForId

@@ -5,13 +5,6 @@ export default defineScenario({
   description:
     'The phone adds two files in docs and tags one. After both converge, the phone moves the first to the root and removes the only tag from the second. The laptop ends with the first file at the root and the second with no tags.',
   devices: { phone: 'cli', laptop: 'cli' },
-  knownBug:
-    'Sync-up leaves the folder out of a root file’s metadata and the tags out of an untagged file’s, and sync-down reads a missing field as no change, so other devices keep the old folder and tag.',
-  bugShowsAs: [
-    'every device holds the same library at the end',
-    { check: 'laptop shows the first file at the root', got: false },
-    { check: 'laptop shows no tags on the second file', got: [{ name: 'keep' }] },
-  ],
   async run({
     devices: { phone, laptop },
     seed,

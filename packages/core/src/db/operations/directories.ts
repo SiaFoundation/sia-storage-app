@@ -401,19 +401,21 @@ export async function syncDirectoryFromMetadata(
 ): Promise<void> {
   if (directoryPath === undefined) return
   await db.withTransactionAsync(async (tx) => {
-    const dir = await getOrCreateDirectoryAtPath(tx, directoryPath)
+    // '' is the root, as in syncManyDirectoriesFromMetadata.
+    const dirId =
+      directoryPath === '' ? null : (await getOrCreateDirectoryAtPath(tx, directoryPath)).id
     if (options?.skipCurrentRecalc) {
-      await sql.update(tx, 'files', { directoryId: dir.id }, { id: fileId })
+      await sql.update(tx, 'files', { directoryId: dirId }, { id: fileId })
       return
     }
     const row = await tx.getFirstAsync<{
       name: string
       directoryId: string | null
     }>('SELECT name, directoryId FROM files WHERE id = ?', fileId)
-    await sql.update(tx, 'files', { directoryId: dir.id }, { id: fileId })
+    await sql.update(tx, 'files', { directoryId: dirId }, { id: fileId })
     if (row) {
       await recalculateCurrentForGroup(tx, row.name, row.directoryId)
-      await recalculateCurrentForGroup(tx, row.name, dir.id)
+      await recalculateCurrentForGroup(tx, row.name, dirId)
     }
   })
 }
@@ -519,24 +521,39 @@ export async function syncManyDirectoriesFromMetadata(
 
     const fileIds = entries.map((e) => e.fileId)
     const ph = fileIds.map(() => '?').join(',')
-    const oldGroups = await tx.getAllAsync<{ name: string; directoryId: string | null }>(
-      `SELECT DISTINCT f.name, f.directoryId FROM files f WHERE f.id IN (${ph}) AND f.kind = 'file'`,
-      ...fileIds,
-    )
+    const rows = await tx.getAllAsync<{
+      id: string
+      name: string
+      kind: string
+      directoryId: string | null
+    }>(`SELECT id, name, kind, directoryId FROM files WHERE id IN (${ph})`, ...fileIds)
+    const rowById = new Map(rows.map((r) => [r.id, r]))
 
-    const byDirId = new Map<string, string[]>()
+    // Only rows whose folder changes are written and returned. Every group returned costs the
+    // caller a stack recalculation, and a created row already sits in its folder.
+    const movesByTarget = new Map<string | null, string[]>()
+    const oldGroups = new Map<string, { name: string; directoryId: string | null }>()
     for (const entry of entries) {
-      const dirId = pathToId.get(entry.directoryPath)
-      if (!dirId) continue
-      const list = byDirId.get(dirId) ?? []
-      list.push(entry.fileId)
-      byDirId.set(dirId, list)
+      const row = rowById.get(entry.fileId)
+      if (!row) continue
+      // '' is the root. Every other path that normalizes to nothing is left alone.
+      const target = entry.directoryPath === '' ? null : pathToId.get(entry.directoryPath)
+      if (target === undefined || target === row.directoryId) continue
+      const ids = movesByTarget.get(target) ?? []
+      ids.push(row.id)
+      movesByTarget.set(target, ids)
+      if (row.kind === 'file') {
+        oldGroups.set(`${row.name}\0${row.directoryId ?? ''}`, {
+          name: row.name,
+          directoryId: row.directoryId,
+        })
+      }
     }
-    for (const [dirId, ids] of byDirId) {
+    for (const [target, ids] of movesByTarget) {
       const idsPh = ids.map(() => '?').join(',')
-      await tx.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${idsPh})`, dirId, ...ids)
+      await tx.runAsync(`UPDATE files SET directoryId = ? WHERE id IN (${idsPh})`, target, ...ids)
     }
-    return oldGroups
+    return [...oldGroups.values()]
   })
 }
 
@@ -642,7 +659,10 @@ export async function deleteDirectoryAndTrashFiles(
 }
 
 /**
- * Deletes directories that have no active files and no subdirectories.
+ * Deletes directories that have no active or trashed files and no
+ * subdirectories. A trashed file keeps its folder because deleting the folder
+ * sets the file's directoryId to null, and restoring it then publishes the
+ * root to other devices, which move their copy out of the folder.
  * Walks up the tree one level per iteration: if removing a directory makes
  * its parent empty, the parent is evaluated on the next pass.
  *
@@ -666,7 +686,7 @@ export async function deleteEmptyDirectories(
        WHERE d.id IN (${ph})
          AND NOT EXISTS (
            SELECT 1 FROM files f
-           WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}
+           WHERE f.directoryId = d.id AND ${buildRecordFilter('f', { includeTrashed: true })}
          )
          AND NOT EXISTS (
            SELECT 1 FROM directories c
