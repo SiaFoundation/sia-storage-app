@@ -134,6 +134,7 @@ export {
   readFile,
   readFileByContentHash,
   readFileByName,
+  readRawPhotosStoredAsTiff,
   readFileByNameInUnfiled,
   readFileByObjectId,
   readFileWithObjects,

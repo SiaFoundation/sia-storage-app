@@ -411,6 +411,7 @@ export function buildDbNamespaces(
       getByObjectId: (objectId, indexerURL) => ops.readFileByObjectId(db, objectId, indexerURL),
       getCurrentByNamesInDirectory: (names, directoryId) =>
         ops.readCurrentFilesByNamesInDirectory(db, names, directoryId),
+      getRawPhotosStoredAsTiff: () => ops.readRawPhotosStoredAsTiff(db),
       getByName: (name) => ops.readFileByName(db, name),
       getByNameInUnfiled: (name) => ops.readFileByNameInUnfiled(db, name),
       getByNameInDirectoryPath: (name, directoryPath) =>
