@@ -19,9 +19,11 @@ export async function retypeFile(
   fileId: string,
   oldType: string,
   newType: string,
+  opts?: { skipInvalidation?: boolean },
 ): Promise<string> {
   logger.info('retypeFile', 'retyping', { fileId, from: oldType, to: newType })
-  await app.files.update({ id: fileId, type: newType }, { updatedAt: 'preserve' })
+  const write = { updatedAt: 'preserve', skipInvalidation: opts?.skipInvalidation } as const
+  await app.files.update({ id: fileId, type: newType }, write)
   if (extFromMime(oldType) === extFromMime(newType)) {
     return app.fs.uri({ id: fileId, type: newType })
   }
@@ -29,7 +31,7 @@ export async function retypeFile(
     const renamed = await app.fs.renameToType({ id: fileId, type: oldType }, newType)
     return renamed.uri
   } catch (e) {
-    await app.files.update({ id: fileId, type: oldType }, { updatedAt: 'preserve' }).catch(() => {})
+    await app.files.update({ id: fileId, type: oldType }, write).catch(() => {})
     throw e
   }
 }

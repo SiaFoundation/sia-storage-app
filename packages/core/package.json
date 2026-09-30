@@ -42,6 +42,7 @@
     "./services/syncDownEvents": "./src/services/syncDownEvents.ts",
     "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts",
     "./services/thumbnailScanner": "./src/services/thumbnailScanner.ts",
+    "./services/repairRawPhotoTypes": "./src/services/repairRawPhotoTypes.ts",
     "./services/cacheEviction": "./src/services/cacheEviction.ts",
     "./services/importScanner": "./src/services/importScanner.ts",
     "./services/suspension": "./src/services/suspension.ts",
