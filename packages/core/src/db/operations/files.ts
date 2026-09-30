@@ -3,6 +3,8 @@ import type { DatabaseAdapter } from '../../adapters/db'
 import type { LocalObject, LocalObjectRef, LocalObjectRefRow } from '../../encoding/localObject'
 import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import type { ContentHash } from '../../lib/contentHash'
+import { refinesContainer } from '../../lib/detectMimeType'
+import { getMimeTypeFromExtension } from '../../lib/fileTypes'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow, FileUpdate, UpdatedAtWrite } from '../../types/files'
@@ -1229,6 +1231,27 @@ export async function queryFileByName(
      ORDER BY f.updatedAt DESC, f.id DESC`,
     name,
   )
+}
+
+/** Extensions of the raw photo formats built on TIFF, whose bytes read as TIFF. */
+/**
+ * Live files stored as TIFF whose name gives a raw format built on TIFF, each
+ * with that raw type.
+ */
+export async function readRawPhotosStoredAsTiff(
+  db: DatabaseAdapter,
+): Promise<{ id: string; type: string }[]> {
+  // INDEXED BY: without table statistics, which a device may not have, the
+  // planner walks every file through idx_files_kind. The type index keeps the
+  // read to TIFF rows, and forcing it errors loudly if the index is dropped.
+  const rows = await db.getAllAsync<{ id: string; name: string }>(
+    `SELECT id, name FROM files INDEXED BY idx_files_fileType
+     WHERE type = 'image/tiff' AND kind = 'file' AND deletedAt IS NULL`,
+  )
+  return rows.flatMap((row) => {
+    const type = getMimeTypeFromExtension(row.name)
+    return type && refinesContainer('image/tiff', type) ? [{ id: row.id, type }] : []
+  })
 }
 
 export async function readFileByName(
