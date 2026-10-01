@@ -43,7 +43,19 @@ export function getTargetPaths(target: BuildTarget) {
 export function computeBuildHash(): string {
   // Core config files that affect native builds. variants.js feeds app.config.js
   // (app identity per build variant), so a change there must bust the cache too.
-  const coreFiles = ['package.json', 'bun.lock', 'app.config.js', 'variants.js', 'eas.json']
+  const coreFiles = ['package.json', 'app.config.js', 'variants.js', 'eas.json']
+
+  // The workspace's lockfile and the patches it applies live at the repo root.
+  // A dependency's native code changes with either, and a patched native
+  // module, such as react-native-screens, would otherwise reuse a build made
+  // without its patch.
+  const rootFiles = [
+    '../../package.json',
+    '../../bun.lock',
+    ...Array.from(new Glob('patches/*.patch').scanSync({ cwd: join(PROJECT_ROOT, '../..') }))
+      .sort()
+      .map((f) => `../../${f}`),
+  ]
 
   // Find all plugin files (custom native code)
   const pluginGlob = new Glob('plugins/*.js')
@@ -64,7 +76,7 @@ export function computeBuildHash(): string {
     .flatMap((pattern) => Array.from(new Glob(pattern).scanSync({ cwd: PROJECT_ROOT })))
     .sort()
 
-  const allFiles = [...coreFiles, ...pluginFiles, ...moduleFiles]
+  const allFiles = [...coreFiles, ...rootFiles, ...pluginFiles, ...moduleFiles]
   const content = allFiles
     .map((f) => {
       const path = join(PROJECT_ROOT, f)
