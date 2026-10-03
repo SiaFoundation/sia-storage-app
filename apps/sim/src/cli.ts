@@ -10,6 +10,7 @@
  * line per action.
  */
 import { Command } from 'commander'
+import { registerAttestCommand, registerCiProgressCommand } from './commands/attest'
 import { registerDeviceCommands } from './commands/device'
 import { registerNetCommands } from './commands/net'
 import { registerObserveCommands } from './commands/observe'
@@ -47,6 +48,8 @@ registerObserveCommands(ctx)
 registerPhoneCommands(ctx)
 registerNetCommands(ctx)
 registerScenarioCommands(ctx)
+registerAttestCommand(ctx)
+registerCiProgressCommand(ctx)
 
 // Exits when the command finishes rather than when the event loop drains, so
 // a handle left open by a server or device it started cannot keep a finished

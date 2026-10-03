@@ -93,7 +93,8 @@ export type Progress = {
   fixed: number
   skipped: number
   running: string[]
-  latest: string
+  /** The last scenario to finish, with its failure line when it did not pass. */
+  latest: { verdict: Verdict; name: string; reason?: string } | null
 }
 
 export function progressOf(
@@ -113,7 +114,13 @@ export function progressOf(
     fixed: count('FIXED'),
     skipped: count('SKIP'),
     running,
-    latest: latest ? `${latest.verdict} ${latest.name}: ${failureLine(latest) ?? ''}` : '',
+    latest: latest
+      ? {
+          verdict: latest.verdict,
+          name: latest.name,
+          ...(failureLine(latest) ? { reason: failureLine(latest) } : {}),
+        }
+      : null,
   }
 }
 

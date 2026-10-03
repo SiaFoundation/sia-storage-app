@@ -127,7 +127,8 @@ jobs:
 
   sim:
     # Real CLI daemons as separate devices over the shared mock network. Each
-    # scenario gets its own network and devices, so four run at once.
+    # scenario gets its own network and devices, so four run at once. The
+    # phone scenarios need simulators and run in sim-mobile.yml.
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'
     timeout-minutes: 30
@@ -144,6 +145,50 @@ jobs:
             /tmp/sia-sim/runs
             /tmp/sia-sim/run-*
           retention-days: 7
+
+  # Main's branch rule requires the sim/ios, sim/android and sim/desktop
+  # statuses on a PR's head commit. Only the release PR needs a phone run,
+  # and a desktop run only when it changes the desktop version, so this job
+  # posts every other status as passed. A pending one waits for sim-mobile.yml
+  # on a PR labelled sim-mobile, or `bun sim attest`, to test that commit.
+  sim-status:
+    runs-on: ubuntu-latest
+    # A fork's token cannot post statuses, so a fork PR gets none from here.
+    if: >-
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          post() {
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+              -f state="$2" -f context="sim/$1" -f description="$3" > /dev/null
+          }
+          desktop_version() {
+            gh api "repos/$GITHUB_REPOSITORY/contents/apps/desktop/package.json?ref=$1" \
+              -H 'Accept: application/vnd.github.raw+json' | jq -r .version
+          }
+          if [ "$RELEASE" != true ]; then
+            for platform in ios android desktop; do post "$platform" success 'Not required for this PR'; done
+            exit 0
+          fi
+          post ios pending 'Waiting for a sim run: add the sim-mobile label or run bun sim attest ios'
+          post android pending 'Waiting for a sim run: add the sim-mobile label or run bun sim attest android'
+          base=$(desktop_version "$BASE_SHA")
+          head=$(desktop_version "$HEAD_SHA")
+          if [ "$base" != "$head" ]; then
+            post desktop pending "Waiting for bun sim attest desktop, for desktop $head"
+          else
+            post desktop success 'Not required: no desktop release in this PR'
+          fi
 
   build-cli:
     # Smoke-test the CLI compile on the cheapest runner. Per-platform builds
