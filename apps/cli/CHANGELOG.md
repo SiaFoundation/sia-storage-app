@@ -1,3 +1,13 @@
+## 0.0.7-rc.1 (2026-10-03)
+
+### Fixes
+
+- The background service frees the disk space held by older versions of a file and by trashed files once they are backed up.
+- A release candidate keeps its library in `~/.sia-beta`, apart from the one a release uses, so the first candidate you run starts signed out.
+- Commands that change the library, such as trashing or renaming a file, no longer fail while the library is syncing.
+- `sia --version` reports the released version rather than the release candidate it was built from.
+- `sia add` and `sia import` store file hashes in the same `sha256:` form as every other app, so saving identical bytes over a file added with the CLI no longer creates a duplicate version and `sia import --skip-existing` finds files added elsewhere. `FileMetadata.hash` is typed `ContentHash` from `@siastorage/core/lib/contentHash`, built with `toContentHash`, and decoded metadata and stored files with a bare hex hash gain the prefix.
+
 ## 0.0.7-rc.0 (2026-09-29)
 
 ### Fixes

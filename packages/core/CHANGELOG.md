@@ -1,3 +1,27 @@
+## 0.0.21-rc.2 (2026-10-03)
+
+### Features
+
+- `sia add` and `sia import` store file hashes in the same `sha256:` form as every other app, so saving identical bytes over a file added with the CLI no longer creates a duplicate version and `sia import --skip-existing` finds files added elsewhere. `FileMetadata.hash` is typed `ContentHash` from `@siastorage/core/lib/contentHash`, built with `toContentHash`, and decoded metadata and stored files with a bare hex hash gain the prefix.
+- Adds `@siastorage/core/lib/forcedReset`, the forced-reset nonces and decision that every app shares.
+- Adds `directories.count`, the number of directories in the library.
+- The library keeps a local apply-order record of every file and folder change, including which folder each moved or deleted item left. `directories.ensureAtPaths` and upsertMany's `directoryIdByFileId` option let bulk writers create files directly in their folders.
+- `app.provider.fetchRange` places one byte range of a file at a path, for a shell that serves a read of part of a file rather than the whole thing.
+- The provider surface lists the whole library on one cursor, folders before files, and answers "what changed since this anchor" for one folder or everything. A moved item arrives as an update carrying its new parent, deletions and folder renames as ordinary deltas, and an anchor stays answerable for as long as a client keeps polling.
+- `app.provider.write` adds the new bytes as the file's newest version, and a provider item keeps the same id across all of a file's versions. Adds `files.addVersion`, and `files.update` and `files.updateMany` no longer accept `hash`, so a file's bytes change only through a new version.
+- `createRemoteAppService` takes per-channel timeouts, and its `invoke` callback now receives `(channel, args, timeoutMs)` in place of variadic arguments.
+
+### Fixes
+
+- Trashing, restoring, deleting, renaming and moving files, and creating, renaming and moving folders, each commit as one transaction, so a failure partway through leaves nothing half-applied.
+- Importing the package no longer throws where `process` is undefined, such as a browser renderer.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- `resolveVariant` treats the desktop `test` build as `dev`, so a test build answers dev forced-reset nonces.
+- `withTransactionAsync` passes its body a handle bound to the transaction, and `internal.withTransaction` passes a database facade bound to it. A body must reach the database only through that handle, and using the outer adapter inside one throws `TransactionMisuseError` on node.
+- `UploadManager` stops or parks right away when `shutdown()` or `suspend()` is called during a database poll, instead of sleeping a full poll interval first and, when suspended with a batch open, flushing that batch.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+
 ## 0.0.21-rc.1 (2026-09-29)
 
 ### Features
