@@ -75,7 +75,9 @@ bun sim device expect phone --label Menu
 - Code: `app.directories`; screens `Directory`; CLI `mkdir`, `mv`
 - Check: tables `directories`, `files`
 - Tests: scenarios `sync/folder-rename-vs-offline-edit`,
-  `sync/move-to-root-and-untag`; integration `directory-cascade`
+  `sync/move-to-root-and-untag`, `sync/folder-with-versions-trashed`,
+  `sync/deleted-versions-empty-a-folder`; integration `directory-cascade`,
+  `folder-delete-versions`
 - CLI: `bun sim sia laptop -- mkdir {folder}`,
   `bun sim sia laptop -- mv {file} {folder}/`
 - Phone, create a folder and open it:
