@@ -97,7 +97,8 @@ function object(fileId: string, id: string) {
 it('upgrading a library that ran the feed migration gives every live version its stack’s current row id', async () => {
   const fresh = createBetterSqlite3Database()
   const stackIds = '20260925_120000_file_stack_id'
-  await runMigrations(fresh, sortMigrations(coreMigrations.filter((m) => m.id !== stackIds)))
+  // Only the migrations before it, as a library that ran the feed migration had.
+  await runMigrations(fresh, sortMigrations(coreMigrations.filter((m) => m.id < stackIds)))
   const insert = (id: string, current: number, extra: string, value: string | number | null) =>
     fresh.runAsync(
       `INSERT INTO files (id, name, size, type, kind, createdAt, updatedAt, hash, addedAt,
