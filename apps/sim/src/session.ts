@@ -41,6 +41,12 @@ export type DeviceRecord = {
   uiPorts?: { wda: number; mjpeg: number }
   /** For a desktop device, the port its app serves the Chrome DevTools Protocol on. */
   debugPort?: number
+  /**
+   * For a desktop device, set when it starts with no account. Sim then leaves
+   * sign-in to the app's own window, which is the only way those screens and
+   * the setup after them are ever shown.
+   */
+  signedOut?: boolean
 }
 
 export type SessionState = {

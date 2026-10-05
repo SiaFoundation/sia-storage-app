@@ -8,6 +8,8 @@ import { SECTOR_SIZE, UPLOAD_DATA_SHARDS, UPLOAD_PARITY_SHARDS } from '@siastora
 import { encodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
 import type { FileMetadata } from '@siastorage/core/types'
 import {
+  type ApprovalMode,
+  type AuthSummary,
   type Conditions,
   DEVICE_HEADER,
   type FaultInput,
@@ -20,11 +22,13 @@ import {
   type Summary,
   toHex,
   type WireAccount,
+  type WireApproval,
+  type WireConnectionRequest,
   type WireEvent,
   type WireObject,
 } from '../protocol'
 import type { Relay } from './relay'
-import { BadRequest, NotFound, type NetworkStore, type ObjectRow } from './store'
+import { BadRequest, Forbidden, NotFound, type NetworkStore, type ObjectRow } from './store'
 
 export type NetworkHandler = {
   fetch(req: Request): Promise<Response>
@@ -56,6 +60,9 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
   }
 
   let holds: Array<HoldRule & { released: Promise<void>; release: () => void }> = []
+  // Approving on arrival is what every device that signs in on its own needs.
+  // A test of the sign-in screens switches to manual and settles each request.
+  let approvalMode: ApprovalMode = 'auto'
 
   function takeFault(op: SdkOp, device: string): FaultRule | undefined {
     const rule = faults.find((f) => f.op === op && (!f.device || f.device === device))
@@ -241,6 +248,53 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
       })
     }
 
+    if (resource === 'auth') {
+      if (id === 'requests' && !action && method === 'POST') {
+        return sdk(req, device, 'auth', () => {
+          const requestId = store.createConnectionRequest(device)
+          if (approvalMode === 'auto') store.settleConnectionRequests('approved', requestId)
+          const body: WireConnectionRequest = {
+            requestId,
+            approvalUrl: `${url.origin}/approve/${requestId}`,
+          }
+          return Response.json(body)
+        })
+      }
+      if (id === 'requests' && action) {
+        const verb = parts[3]
+        if (!verb && method === 'GET') {
+          return sdk(req, device, 'auth', () => {
+            const { state, reconnecting } = mustGetRequest(action)
+            const body: WireApproval = { state, reconnecting }
+            return Response.json(body)
+          })
+        }
+        if (verb === 'matches' && method === 'POST') {
+          return sdk(req, device, 'auth', async () => {
+            mustBeApproved(action)
+            const { appKey } = (await req.json()) as { appKey: string }
+            return Response.json({ matches: store.hasAppKey(appKey) })
+          })
+        }
+        if (verb === 'register' && method === 'POST') {
+          return sdk(req, device, 'auth', async () => {
+            mustBeApproved(action)
+            const { appKey } = (await req.json()) as { appKey: string }
+            if (!/^[0-9a-f]{64}$/.test(appKey))
+              throw new BadRequest('appKey must be 32 bytes of hex')
+            store.registerAppKey(appKey, device)
+            return new Response(null, { status: 204 })
+          })
+        }
+      }
+      if (id === 'connected' && method === 'POST') {
+        return sdk(req, device, 'auth', async () => {
+          const { appKey } = (await req.json()) as { appKey: string }
+          return Response.json({ connected: store.hasAppKey(appKey) })
+        })
+      }
+    }
+
     if (resource === 'prune' && method === 'POST') {
       return sdk(req, device, 'prune', () => new Response(null, { status: 204 }))
     }
@@ -252,6 +306,18 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
     const row = store.object(id)
     if (!row) throw new NotFound(`Object not found: ${id}`)
     return row
+  }
+
+  function mustGetRequest(id: string) {
+    const request = store.connectionRequest(id)
+    if (!request) throw new NotFound(`Connection request not found: ${id}`)
+    return request
+  }
+
+  /** The SDK allows registering and key checks only once the request is approved. */
+  function mustBeApproved(id: string): void {
+    const { state } = mustGetRequest(id)
+    if (state !== 'approved') throw new Forbidden(`Connection request ${id} is ${state}`)
   }
 
   async function routeControl(req: Request, parts: string[], url: URL): Promise<Response> {
@@ -327,6 +393,33 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
       if (method === 'PATCH') {
         Object.assign(conditions, (await req.json()) as Partial<Conditions>)
         return Response.json(conditions)
+      }
+    }
+
+    if (resource === 'auth') {
+      if (!id && method === 'GET') {
+        const summary: AuthSummary = {
+          mode: approvalMode,
+          requests: store.connectionRequests(),
+          appKeys: store.appKeys(),
+        }
+        return Response.json(summary)
+      }
+      if (!id && method === 'PATCH') {
+        const { mode } = (await req.json()) as { mode: ApprovalMode }
+        if (mode !== 'auto' && mode !== 'manual') {
+          throw new BadRequest(`Unknown approval mode ${String(mode)}. One of: auto, manual`)
+        }
+        approvalMode = mode
+        return Response.json({ mode })
+      }
+      if ((id === 'approve' || id === 'deny') && method === 'POST') {
+        const { requestId } = (await req.json().catch(() => ({}))) as { requestId?: string }
+        const settled = store.settleConnectionRequests(
+          id === 'approve' ? 'approved' : 'denied',
+          requestId,
+        )
+        return Response.json({ settled })
       }
     }
 
@@ -418,7 +511,9 @@ function errorResponse(e: unknown): Response {
         ? 404
         : e instanceof BadRequest
           ? 400
-          : 500
+          : e instanceof Forbidden
+            ? 403
+            : 500
   return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status })
 }
 

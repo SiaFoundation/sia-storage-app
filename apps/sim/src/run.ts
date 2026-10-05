@@ -26,6 +26,7 @@ import {
   type CheckRecord,
   createContext,
   type DeviceMap,
+  isDesktopKind,
   PreconditionFailed,
   type Scenario,
   type ScenarioDevices,
@@ -345,7 +346,7 @@ async function runOne(
 
   try {
     scenario = (await import(file)).default as Scenario
-    if (Object.values(scenario.devices).includes('desktop')) {
+    if (Object.values(scenario.devices).some(isDesktopKind)) {
       const unavailable = desktopUnavailable()
       if (unavailable) throw new Skipped(unavailable)
     }
@@ -357,7 +358,8 @@ async function runOne(
       devices[name] = await addDevice(
         session,
         name,
-        kind === 'phone' ? (opts.phone ?? 'ios') : kind,
+        kind === 'phone' ? (opts.phone ?? 'ios') : kind === 'desktop-signed-out' ? 'desktop' : kind,
+        { signedOut: kind === 'desktop-signed-out' },
       )
     }
     // A phone's first start can build WebDriverAgent or boot a simulator, so

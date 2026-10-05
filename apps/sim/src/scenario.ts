@@ -49,16 +49,22 @@ export type StepRecord = { name: string; ms: number; ok: boolean; error?: string
  * A device a scenario asks for. `phone` runs on whichever platform the run
  * chooses (`sim run --phone ios|android`), so one scenario covers both.
  * `desktop` is the installed desktop app on this Mac, and a scenario asking
- * for one is skipped on a machine that has none.
+ * for one is skipped on a machine that has none. `desktop-signed-out` is the
+ * same app started with no account, for a scenario that signs in through its
+ * window.
  */
-type ScenarioDeviceKind = 'cli' | 'phone' | 'desktop'
+type ScenarioDeviceKind = 'cli' | 'phone' | 'desktop' | 'desktop-signed-out'
+
+/** Whether a scenario's device is the desktop app, signed in or not. */
+export const isDesktopKind = (kind: ScenarioDeviceKind): boolean =>
+  kind === 'desktop' || kind === 'desktop-signed-out'
 
 export type DeviceMap = Record<string, ScenarioDeviceKind>
 
 export type ScenarioDevices<M extends DeviceMap> = {
   [N in keyof M]: M[N] extends 'cli'
     ? CliDevice
-    : M[N] extends 'desktop'
+    : M[N] extends 'desktop' | 'desktop-signed-out'
       ? DesktopDevice
       : PhoneDevice
 }

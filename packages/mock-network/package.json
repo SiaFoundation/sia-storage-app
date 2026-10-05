@@ -6,7 +6,8 @@
     "./protocol": "./src/protocol.ts",
     "./client": "./src/client/index.ts",
     "./control": "./src/control/index.ts",
-    "./client/node": "./src/client/node.ts"
+    "./client/node": "./src/client/node.ts",
+    "./client/auth": "./src/client/auth.ts"
   },
   "scripts": {
     "lint": "oxlint . && oxfmt --check .",

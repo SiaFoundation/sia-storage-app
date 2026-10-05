@@ -48,6 +48,25 @@ export function registerNetCommands({ program, current }: CommandContext): void 
     .action(async (op, opts: { device?: string; count: number; status: number; message: string }) =>
       print(await control().addFault({ op, ...opts })),
     )
+  net
+    .command('auth')
+    .description('Sign-in on the network: the approval mode, every request and the app keys')
+    .action(async () => print(await control().auth()))
+  net
+    .command('approval')
+    .description(
+      'Approve connection requests as they arrive, or leave each pending for `net approve` or `net deny`',
+    )
+    .addArgument(new Argument('<mode>').choices(['auto', 'manual']))
+    .action(async (mode: 'auto' | 'manual') => print(await control().setApprovalMode(mode)))
+  net
+    .command('approve [request]')
+    .description('Approve one pending connection request, or every pending one')
+    .action(async (request?: string) => console.log(`approved ${await control().approve(request)}`))
+  net
+    .command('deny [request]')
+    .description('Deny one pending connection request, or every pending one')
+    .action(async (request?: string) => console.log(`denied ${await control().deny(request)}`))
   net.command('clear-faults').action(async () => {
     await control().clearFaults()
     console.log('faults cleared')

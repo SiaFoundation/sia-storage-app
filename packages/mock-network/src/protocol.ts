@@ -44,6 +44,7 @@ export const SDK_OPS = [
   'account',
   'prune',
   'shared',
+  'auth',
 ] as const
 export type SdkOp = (typeof SDK_OPS)[number]
 
@@ -75,6 +76,38 @@ export type WireAccount = {
   pinnedData: string
   pinnedSize: string
   maxPinnedData: string
+}
+
+/**
+ * Whether a connection request is approved as it arrives, or waits for a test
+ * to approve or deny it the way a person does in a browser.
+ */
+export type ApprovalMode = 'auto' | 'manual'
+
+export type ApprovalState = 'pending' | 'approved' | 'denied'
+
+export type WireConnectionRequest = { requestId: string; approvalUrl: string }
+
+/**
+ * `reconnecting` is whether the account already had an app key when the
+ * request was approved, and is false until then.
+ */
+export type WireApproval = { state: ApprovalState; reconnecting: boolean }
+
+/** One connection request as a test sees it. */
+export type InspectedConnectionRequest = {
+  id: string
+  device: string
+  state: ApprovalState
+  reconnecting: boolean
+}
+
+/** Sign-in as a test sees it: the approval mode, every request, and the app keys registered. */
+export type AuthSummary = {
+  mode: ApprovalMode
+  requests: InspectedConnectionRequest[]
+  /** Each registered key with the device that registered it first. */
+  appKeys: Array<{ key: string; device: string }>
 }
 
 /** A device whose app holds its control socket open. */

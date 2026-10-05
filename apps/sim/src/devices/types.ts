@@ -30,6 +30,10 @@ export interface UiSurface {
   clear(sel: Selector): Promise<void>
   waitFor(sel: Selector, timeoutMs?: number): Promise<unknown>
   waitForGone(sel: Selector, timeoutMs?: number): Promise<void>
+  /** The text of the first element matching `sel`, or null when none does. */
+  read?(sel: Selector): Promise<string | null>
+  /** The same surface limited to one of the device's windows, where it has several. */
+  window?(name: string): UiSurface
   longPress?(sel: Selector, holdMs?: number): Promise<void>
   swipe?(direction: 'up' | 'down' | 'left' | 'right', sel?: Selector): Promise<void>
   scrollTo?(sel: Selector, direction?: 'up' | 'down' | 'left' | 'right'): Promise<void>

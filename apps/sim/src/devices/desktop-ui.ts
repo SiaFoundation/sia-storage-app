@@ -14,6 +14,11 @@
  * shows, `label` its aria-label, `id` its data-testid or id, and `contains`
  * part of the text or label.
  *
+ * Both windows show the same status, so the same text and test ids appear in
+ * each. `window('main')` and `window('popover')` limit every call to one of
+ * them. Unscoped, a call acts on the first window with a match. A window that
+ * is hidden keeps its page, so `isShowing` is what says one is on screen.
+ *
  * System Events needs the terminal running sim switched on under Privacy &
  * Security, Accessibility, and every native action here says so when it is off.
  */
@@ -70,6 +75,7 @@ const PAGE_SCRIPT = String.raw`
   const el = matched.find((e) => e.matches(interactive)) || matched[0]
   if (!el) return null
   const target = el.closest(interactive) || el
+  if (action === 'read') return textOf(el)
   if (action === 'tap') target.click()
   if (action === 'type' || action === 'clear') {
     target.focus()
@@ -92,9 +98,19 @@ export class DesktopUi {
     private readonly debugPort: number,
     /** The app's name as System Events knows its process. */
     private readonly processName: string,
+    /** When set, the one window every call is limited to. */
+    private readonly only?: string,
   ) {}
 
-  /** The app's windows, named by their URL hash: `main` and, once opened, `popover`. */
+  /** The same driver limited to one window, `main` or `popover`. */
+  window(name: string): DesktopUi {
+    return new DesktopUi(this.debugPort, this.processName, name)
+  }
+
+  /**
+   * The app's windows, named by their URL hash: `main` and `popover`, each
+   * present once it has been opened for the first time.
+   */
   private async windows(): Promise<Array<{ name: string; target: Target }>> {
     const res = await fetch(`http://127.0.0.1:${this.debugPort}/json/list`, {
       signal: AbortSignal.timeout(15_000),
@@ -103,6 +119,34 @@ export class DesktopUi {
     return targets
       .filter((t) => t.type === 'page')
       .map((t) => ({ name: new URL(t.url).hash.slice(1) || 'main', target: t }))
+      .filter((w) => !this.only || w.name === this.only)
+  }
+
+  /**
+   * Whether a window is on screen. Closing the main window and the popover
+   * losing focus both hide the window and keep its page, so a page being
+   * there says nothing. The app is asked, because the page's own visibility
+   * also reads hidden while another window covers it, as the windows of
+   * whoever is at the Mac during a run do.
+   */
+  async isShowing(window: string): Promise<boolean> {
+    const found = (await this.window(window).windows())[0]
+    if (!found) return false
+    const result = await this.send<{ result: { value: boolean } }>(
+      found.target,
+      'Runtime.evaluate',
+      { expression: 'window.sia.windowVisible()', returnByValue: true, awaitPromise: true },
+    )
+    return result.result.value
+  }
+
+  /** The text of the first element matching `sel`, or null when no window has one. */
+  async read(sel: Selector): Promise<string | null> {
+    for (const { target } of await this.windows()) {
+      const text = await this.run<string | null>(target, sel, 'read')
+      if (text !== null) return text
+    }
+    return null
   }
 
   /** Sends one DevTools command to a window and returns its result. */
