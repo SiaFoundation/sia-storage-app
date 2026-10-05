@@ -28,6 +28,11 @@ export function registerStatusHandlers(
   handlers.set('connect', async () => {
     if (app.service.connection.getState().isConnected) return { connected: true }
     const connected = await connectSdk(app)
+    // A sign-in after boot starts this library's first sync. An empty account
+    // never sets `isSyncingDown`, so from that flag a client cannot tell the
+    // first sync having finished from it not having run. The gate says which:
+    // `syncDownEventsBatch` moves it to 'dismissed' when the catch-up ends.
+    if (connected) app.service.sync.setState({ syncGateStatus: 'pending' })
     // The state file is what `sia status` prints, and boot is its only other
     // writer, so without this a post-sign-in daemon reads as disconnected
     // until it restarts.
@@ -44,13 +49,13 @@ export function registerStatusHandlers(
    * what it has already done.
    */
   handlers.set('materializing', async () => {
-    const { active, done } = materializing.state()
+    const { active, done, passes } = materializing.state()
     // A bare COUNT: getAll() scans every active file to build per-folder
     // counts, real work to repeat on a 2-second poll while listings run.
     const total = await app.service.directories.count()
     // `done` counts folders the system read during the pass and `total` is
     // live, so a folder deleted mid-pass could otherwise read as "3 of 2".
-    return { active, done: Math.min(done, total), total }
+    return { active, done: Math.min(done, total), total, passes }
   })
 
   handlers.set('shutdown', async () => {
