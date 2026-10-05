@@ -1383,6 +1383,39 @@ export async function queryFileVersions(
   )
 }
 
+/** The newest live version of a stack, the row `queryFileVersions` lists first. */
+export async function queryCurrentFileVersion(
+  db: DatabaseAdapter,
+  name: string,
+  directoryId: string | null,
+): Promise<FileRecordRow | null> {
+  if (directoryId === null) {
+    return db.getFirstAsync<FileRecordRow>(
+      `SELECT ${FILE_ROW_COLUMNS}
+       FROM files
+       WHERE name = ?
+         AND directoryId IS NULL
+         AND kind = 'file'
+         AND trashedAt IS NULL AND deletedAt IS NULL
+       ORDER BY updatedAt DESC, id DESC
+       LIMIT 1`,
+      name,
+    )
+  }
+  return db.getFirstAsync<FileRecordRow>(
+    `SELECT ${FILE_ROW_COLUMNS}
+     FROM files
+     WHERE name = ?
+       AND directoryId = ?
+       AND kind = 'file'
+       AND trashedAt IS NULL AND deletedAt IS NULL
+     ORDER BY updatedAt DESC, id DESC
+     LIMIT 1`,
+    name,
+    directoryId,
+  )
+}
+
 /**
  * Renames all versions of a file (all records sharing the same name and
  * directory). Stamps staggered, strictly descending updatedAt values from a

@@ -110,6 +110,15 @@ export const FS_EVICTABLE_MIN_AGE = daysInMs(1) // 1 day
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.
 export const SYNC_UP_METADATA_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
+// How often share links are moved to their files' current versions.
+export const SHARE_LINKS_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
+// How often the account's sharing keys are listed again, which is how a link
+// made, changed or revoked on another device reaches this one. The indexer has
+// no events for sharing keys, so this is a poll.
+export const SHARE_LINKS_REFRESH_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(2) : minutesInMs(5)
+// The page that opens a share link. It reads the key's seed from the fragment,
+// which a browser never sends to a server, and only opens keys on sia.storage.
+export const SHARE_LINK_URL_PREFIX = 'https://share.sia.storage/#share='
 // Sync up metadata batch size.
 export const SYNC_UP_METADATA_BATCH_SIZE = 500 // 500 files
 // Sync up metadata concurrency.

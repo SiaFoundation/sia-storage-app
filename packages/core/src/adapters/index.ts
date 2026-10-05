@@ -17,6 +17,8 @@ export type {
   SdkAdapter,
   SealedObjectRef,
   ShardProgress,
+  SharingKeyRecord,
+  SharingKeyRef,
   UploadOptions,
 } from './sdk'
 export { AddressProtocol } from './sdk'

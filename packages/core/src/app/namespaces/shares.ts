@@ -3,12 +3,14 @@ import type { SdkAdapter } from '../../adapters/sdk'
 import * as ops from '../../db/operations'
 import { sealPinnedObject } from '../../lib/localObjects'
 import type { AppService } from '../service'
+import { buildShareLinks } from './shareLinks'
 
 export function buildSharesNamespace(
   db: DatabaseAdapter,
   getSdk: () => SdkAdapter | null,
   getIndexerURL: () => Promise<string>,
   getAppKeyBytes: (indexerURL: string) => Promise<Uint8Array | null>,
+  invalidateLinks: () => void,
 ): AppService['shares'] {
   function requireSdk(): SdkAdapter {
     const sdk = getSdk()
@@ -22,16 +24,25 @@ export function buildSharesNamespace(
     return sdk.openAppKey(bytes)
   }
 
+  const links = buildShareLinks({
+    db,
+    requireSdk,
+    getIndexerURL,
+    invalidate: invalidateLinks,
+  })
+
   return {
+    ...links,
+
     getMetadata: async (url) => {
       const sdk = requireSdk()
-      const obj = await sdk.sharedObject(url)
+      const obj = await sdk.objectFromShareUrl(url)
       return { size: Number(obj.size()) }
     },
 
     downloadFirstBytes: async (url, byteCount) => {
       const sdk = requireSdk()
-      const obj = await sdk.sharedObject(url)
+      const obj = await sdk.objectFromShareUrl(url)
       const dl = await sdk.download(obj, {
         offset: BigInt(0),
         length: BigInt(byteCount),
@@ -64,7 +75,7 @@ export function buildSharesNamespace(
       const sdk = requireSdk()
       const indexerURL = await getIndexerURL()
       const appKey = await loadAppKey(sdk, indexerURL)
-      const obj = await sdk.sharedObject(url)
+      const obj = await sdk.objectFromShareUrl(url)
       await sdk.pinObject(obj)
       return sealPinnedObject(fileId, indexerURL, obj, appKey)
     },
@@ -76,7 +87,7 @@ export function buildSharesNamespace(
       const object = objects[0]
       const appKey = await loadAppKey(sdk, object.indexerURL)
       const pinned = sdk.openPinnedObject(appKey, object)
-      return sdk.shareObject(pinned, validUntil)
+      return sdk.objectShareUrl(pinned, validUntil)
     },
   }
 }

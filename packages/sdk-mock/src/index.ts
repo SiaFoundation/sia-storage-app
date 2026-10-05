@@ -10,6 +10,8 @@ import type {
   PinnedObjectRef,
   SdkAdapter,
   SealedObjectRef,
+  SharingKeyRecord,
+  SharingKeyRef,
   UploadOptions,
 } from '@siastorage/core/adapters'
 import { SECTOR_SIZE } from '@siastorage/core/config'
@@ -39,11 +41,26 @@ export type StoredObject = {
   updatedAt: Date
 }
 
+/**
+ * A sharing key as the indexer keeps it. The real indexer stores a nonce the
+ * SDK derives the seed from, and this keeps the seed itself, which gives every
+ * device of the account the same key back the same way.
+ */
+export type StoredSharingKey = {
+  seed: Uint8Array
+  description: string
+  expiresAt?: Date
+  createdAt: Date
+  /** Each attached object's metadata as it was when attached, in attach order. */
+  objects: Map<string, ArrayBuffer>
+}
+
 export interface MockIndexerStorage {
   objects: Map<string, StoredObject>
   events: ObjectEvent[]
   fileData: Map<string, Uint8Array>
   uploadFailures: Map<string, Error>
+  sharingKeys: Map<string, StoredSharingKey>
 }
 
 export function createEmptyIndexerStorage(): MockIndexerStorage {
@@ -52,7 +69,13 @@ export function createEmptyIndexerStorage(): MockIndexerStorage {
     events: [],
     fileData: new Map(),
     uploadFailures: new Map(),
+    sharingKeys: new Map(),
   }
+}
+
+/** The public key the mock pairs with a seed. Not a real key derivation. */
+export function mockSharingPublicKey(seed: Uint8Array): string {
+  return `share-${Array.from(seed, (b) => b.toString(16).padStart(2, '0')).join('')}`
 }
 
 let objectIdCounter = 0
@@ -66,8 +89,15 @@ export function resetObjectIdCounter(): void {
   objectIdCounter = 0
 }
 
-function createMockPinnedObject(stored: StoredObject): PinnedObjectRef {
-  let currentMetadata = stored.metadata
+/**
+ * A handle on a stored object. Editing its metadata changes the handle only,
+ * as in the real SDK, and the store sees it on the next pin or metadata update.
+ */
+function createMockPinnedObject(
+  stored: StoredObject,
+  metadata: ArrayBuffer = stored.metadata,
+): PinnedObjectRef {
+  let currentMetadata = metadata
 
   return {
     id: () => stored.id,
@@ -79,8 +109,6 @@ function createMockPinnedObject(stored: StoredObject): PinnedObjectRef {
     updatedAt: () => stored.updatedAt,
     updateMetadata: (newMetadata: ArrayBuffer) => {
       currentMetadata = newMetadata
-      stored.metadata = newMetadata
-      stored.updatedAt = new Date()
     },
     seal: (_appKey: AppKeyRef): SealedObjectRef => ({
       id: stored.id,
@@ -254,6 +282,8 @@ export class MockSdk implements SdkAdapter {
 
     this.storage.objects.delete(key)
     this.storage.fileData.delete(key)
+    // indexd detaches a deleted object from every sharing key.
+    for (const sharingKey of this.storage.sharingKeys.values()) sharingKey.objects.delete(key)
 
     this.upsertEvent({
       id: key,
@@ -314,6 +344,8 @@ export class MockSdk implements SdkAdapter {
     const objectId = object.id()
     const stored = this.storage.objects.get(objectId)
     if (!stored) return
+    stored.metadata = object.metadata()
+    stored.updatedAt = new Date()
 
     this.upsertEvent({
       id: objectId,
@@ -348,13 +380,91 @@ export class MockSdk implements SdkAdapter {
     return new MockPacker(this.storage, options, this.readFile)
   }
 
-  async sharedObject(_url: string): Promise<PinnedObjectRef> {
+  async objectFromShareUrl(_url: string): Promise<PinnedObjectRef> {
     if (!this.connected) throw new Error('Network unavailable')
     throw new Error('Not implemented in mock')
   }
 
-  shareObject(_object: PinnedObjectRef, _validUntil: Date): string {
+  objectShareUrl(_object: PinnedObjectRef, _validUntil: Date): string {
     return 'https://mock-share-url.com'
+  }
+
+  /** A live key, as indexd looks one up: missing, revoked and expired keys are all not found. */
+  private liveSharingKey(key: SharingKeyRef): StoredSharingKey {
+    const stored = this.storage.sharingKeys.get(key.publicKey)
+    if (!stored || (stored.expiresAt && stored.expiresAt.getTime() <= Date.now())) {
+      throw new Error('sharing key not found')
+    }
+    return stored
+  }
+
+  async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
+    if (!this.connected) throw new Error('Network unavailable')
+    if (expiresAt && expiresAt.getTime() <= Date.now()) {
+      throw new Error('expiration must be in the future')
+    }
+    const seed = crypto.getRandomValues(new Uint8Array(32))
+    const publicKey = mockSharingPublicKey(seed)
+    this.storage.sharingKeys.set(publicKey, {
+      seed,
+      description,
+      expiresAt,
+      createdAt: new Date(),
+      objects: new Map(),
+    })
+    return { publicKey, seed }
+  }
+
+  async sharingKeys(offset: number, limit: number): Promise<SharingKeyRecord[]> {
+    if (!this.connected) throw new Error('Network unavailable')
+    const now = Date.now()
+    return [...this.storage.sharingKeys.entries()]
+      .filter(([, k]) => !k.expiresAt || k.expiresAt.getTime() > now)
+      .reverse()
+      .slice(offset, offset + limit)
+      .map(([publicKey, k]) => ({
+        key: { publicKey, seed: k.seed },
+        description: k.description,
+        expiresAt: k.expiresAt,
+        createdAt: k.createdAt,
+        objectCount: k.objects.size,
+      }))
+  }
+
+  async shareObject(key: SharingKeyRef, object: PinnedObjectRef): Promise<void> {
+    if (!this.connected) throw new Error('Network unavailable')
+    const sharingKey = this.liveSharingKey(key)
+    if (!this.storage.objects.has(object.id())) throw new Error('object not found')
+    // Attaching again replaces the attachment and moves it to the newest.
+    sharingKey.objects.delete(object.id())
+    sharingKey.objects.set(object.id(), object.metadata())
+  }
+
+  async sharedObjects(
+    key: SharingKeyRef,
+    offset: number,
+    limit: number,
+  ): Promise<PinnedObjectRef[]> {
+    if (!this.connected) throw new Error('Network unavailable')
+    const sharingKey = this.liveSharingKey(key)
+    return [...sharingKey.objects.entries()]
+      .reverse()
+      .slice(offset, offset + limit)
+      .flatMap(([id, metadata]) => {
+        const stored = this.storage.objects.get(id)
+        return stored ? [createMockPinnedObject(stored, metadata)] : []
+      })
+  }
+
+  async unshareObject(key: SharingKeyRef, objectId: string): Promise<void> {
+    if (!this.connected) throw new Error('Network unavailable')
+    this.liveSharingKey(key).objects.delete(objectId)
+  }
+
+  async revokeSharingKey(key: SharingKeyRef): Promise<void> {
+    if (!this.connected) throw new Error('Network unavailable')
+    this.liveSharingKey(key)
+    this.storage.sharingKeys.delete(key.publicKey)
   }
 
   openAppKey(_bytes: Uint8Array): AppKeyRef {
@@ -447,6 +557,9 @@ export class MockSdk implements SdkAdapter {
     if (stored) {
       this.storage.objects.delete(objectId)
       this.storage.fileData.delete(objectId)
+      for (const sharingKey of this.storage.sharingKeys.values()) {
+        sharingKey.objects.delete(objectId)
+      }
     }
 
     this.upsertEvent({
@@ -469,6 +582,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.events = []
     this.storage.fileData.clear()
     this.storage.uploadFailures.clear()
+    this.storage.sharingKeys.clear()
     objectIdCounter = 0
   }
 

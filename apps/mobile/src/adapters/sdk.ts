@@ -9,11 +9,15 @@ import type {
   PackedUploadRef,
   PinnedObjectRef,
   SdkAdapter,
+  SharingKeyRecord,
+  SharingKeyRef,
   UploadOptions,
 } from '@siastorage/core/adapters'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { AppKey, type AppKeyInterface, PinnedObject } from 'react-native-sia'
 import type { SdkInterface } from 'react-native-sia'
+
+const SHARING_KEYS_UNSUPPORTED = 'Share links are not available in this version of the app'
 
 export class MobileSdkAdapter implements SdkAdapter {
   private sdk: SdkInterface
@@ -79,12 +83,37 @@ export class MobileSdkAdapter implements SdkAdapter {
     return this.sdk.object(objectId) as Promise<PinnedObjectRef>
   }
 
-  async sharedObject(url: string): Promise<PinnedObjectRef> {
+  async objectFromShareUrl(url: string): Promise<PinnedObjectRef> {
     return this.sdk.sharedObject(url) as Promise<PinnedObjectRef>
   }
 
-  shareObject(object: PinnedObjectRef, validUntil: Date): string {
+  objectShareUrl(object: PinnedObjectRef, validUntil: Date): string {
     return this.sdk.shareObject(object, validUntil)
+  }
+
+  // react-native-sia 0.15.2 has no sharing-key bindings.
+  async createSharingKey(): Promise<SharingKeyRef> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
+  }
+
+  async sharingKeys(): Promise<SharingKeyRecord[]> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
+  }
+
+  async shareObject(): Promise<void> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
+  }
+
+  async sharedObjects(): Promise<PinnedObjectRef[]> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
+  }
+
+  async unshareObject(): Promise<void> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
+  }
+
+  async revokeSharingKey(): Promise<void> {
+    throw new Error(SHARING_KEYS_UNSUPPORTED)
   }
 
   openAppKey(bytes: Uint8Array): AppKeyRef {

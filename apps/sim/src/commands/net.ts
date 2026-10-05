@@ -53,6 +53,10 @@ export function registerNetCommands({ program, current }: CommandContext): void 
     .description('Sign-in on the network: the approval mode, every request and the app keys')
     .action(async () => print(await control().auth()))
   net
+    .command('shares')
+    .description('Every live sharing key, with each file as a recipient of its link sees it')
+    .action(async () => print(await control().shares()))
+  net
     .command('approval')
     .description(
       'Approve connection requests as they arrive, or leave each pending for `net approve` or `net deny`',

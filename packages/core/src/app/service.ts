@@ -30,6 +30,7 @@ import type {
   ProviderPage,
   ProviderProgress,
 } from '../types/provider'
+import type { ShareLink, ShareLinkMode } from '../types/shareLinks'
 import type { AdoptFileHashed, AdoptFilePlain, ImportCopyResult } from '../services/fsFileUri'
 import type {
   FileKind,
@@ -107,6 +108,7 @@ export interface AppCaches {
   init: SwrCacheBy
   sdk: SwrCacheBy
   hosts: SwrCacheBy
+  shareLinks: SwrCacheBy
 }
 
 /** Primary API contract for all platform apps. All state and mutations flow through this facade. */
@@ -1076,6 +1078,35 @@ export interface AppService {
     pin(url: string, fileId: string): Promise<LocalObject>
     /** Creates a share URL for a file, valid until the given date. */
     create(fileId: string, validUntil: Date): Promise<string>
+    /**
+     * Makes a link that opens these files on the share page. Any version id of
+     * a file names the file, and a file named twice is shared once.
+     * `expiresAt` is milliseconds since the epoch and has to be in the
+     * future, or is null for a link that never expires. `mode` is what the
+     * link shows from then on, as ShareLinkMode describes, and is fixed once
+     * the link is made.
+     */
+    createLink(
+      fileIds: string[],
+      opts: { expiresAt: number | null; mode: ShareLinkMode },
+    ): Promise<ShareLink>
+    /** The links on the current indexer that have not expired, newest first. */
+    links(): Promise<ShareLink[]>
+    addLinkFiles(publicKey: string, fileIds: string[]): Promise<void>
+    /** Takes every version of these files off the link. */
+    removeLinkFiles(publicKey: string, fileIds: string[]): Promise<void>
+    /** Deletes the link on the indexer. Anyone holding it can no longer open it. */
+    revokeLink(publicKey: string): Promise<void>
+    /**
+     * One pass that moves every `latest` link to its files' current versions,
+     * and attaches files a `snapshot` link was waiting on. A call made while a
+     * pass waits to start shares that pass, unless it asks for `refresh` and
+     * the waiting pass does not, which queues one more. With `refresh`, or
+     * when the last listing is older than SHARE_LINKS_REFRESH_INTERVAL, it
+     * first lists the account's keys, which is how links made, changed or
+     * revoked on other devices arrive.
+     */
+    syncLinks(opts?: { refresh?: boolean }): Promise<void>
   }
   /** Connection state: tracks whether the app is connected to an indexer. */
   connection: {

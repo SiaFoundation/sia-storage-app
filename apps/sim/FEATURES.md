@@ -417,9 +417,18 @@ bun sim device expect phone --label Menu
 
 ### Sharing
 
-- When: share links to a file.
-- Code: `app.shares`
-- Tests: none.
+- When: share links, each a sharing key on the indexer that opens a set of
+  files on share.sia.storage until it expires or is revoked. A link shows
+  either each file's current version or the versions it was made with, and a
+  link made on one device shows on every device of the account. The phone's
+  Share URL makes a signed link to one file instead.
+- Code: `app.shares`; files
+  `packages/core/src/app/namespaces/shareLinks.ts`,
+  `packages/core/src/services/shareLinks.ts`; tables `share_links`,
+  `share_link_files`, `share_link_objects`
+- State: `bun sim net shares` lists each live key with the files a recipient
+  sees and their names as attached.
+- Tests: integration `share-links`
 
 ### Settings and logs
 

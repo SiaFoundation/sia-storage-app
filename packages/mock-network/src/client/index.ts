@@ -20,6 +20,8 @@ import type {
   PackedUploadRef,
   PinnedObjectRef,
   SdkAdapter,
+  SharingKeyRecord,
+  SharingKeyRef,
   UploadOptions,
 } from '@siastorage/core/adapters'
 import { SECTOR_SIZE } from '@siastorage/core/config'
@@ -32,7 +34,9 @@ import {
   type WireBlob,
   type WireEvent,
   type WireObject,
+  type WireSharingKey,
   type WireUpload,
+  fromHex,
 } from '../protocol'
 import { openLocalPinnedObject, pinnedObjectFromWire } from './pinnedObject'
 
@@ -72,6 +76,10 @@ function mockAppKey(): AppKeyRef {
     sign: () => new ArrayBuffer(64),
     verifySignature: () => true,
   }
+}
+
+function sharedObjectPath(key: SharingKeyRef, objectId: string): string {
+  return `/sharing/${encodeURIComponent(key.publicKey)}/objects/${encodeURIComponent(objectId)}`
 }
 
 export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
@@ -177,13 +185,60 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
       return new RemotePacker(call, sendFile, `${base}/sdk/blobs`, headers, opts)
     },
 
-    async sharedObject(url: string): Promise<PinnedObjectRef> {
+    async objectFromShareUrl(url: string): Promise<PinnedObjectRef> {
       const res = await fetch(url, { headers })
       return pinnedObjectFromWire((await parse(res)) as WireObject)
     },
 
-    shareObject(object: PinnedObjectRef): string {
+    objectShareUrl(object: PinnedObjectRef): string {
       return `${base}/sdk/shared/${encodeURIComponent(object.id())}`
+    },
+
+    async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
+      const key = (await call('/sharing', {
+        method: 'POST',
+        body: JSON.stringify({ description, expiresAt: expiresAt?.getTime() ?? null }),
+      })) as WireSharingKey
+      return { publicKey: key.publicKey, seed: fromHex(key.seed) }
+    },
+
+    async sharingKeys(offset: number, limit: number): Promise<SharingKeyRecord[]> {
+      const { keys } = (await call(`/sharing?offset=${offset}&limit=${limit}`)) as {
+        keys: WireSharingKey[]
+      }
+      return keys.map((k) => ({
+        key: { publicKey: k.publicKey, seed: fromHex(k.seed) },
+        description: k.description,
+        ...(k.expiresAt === null ? {} : { expiresAt: new Date(k.expiresAt) }),
+        createdAt: new Date(k.createdAt),
+        objectCount: k.objectCount,
+      }))
+    },
+
+    async shareObject(key: SharingKeyRef, object: PinnedObjectRef): Promise<void> {
+      await call(sharedObjectPath(key, object.id()), {
+        method: 'PUT',
+        body: JSON.stringify({ metadata: toHex(object.metadata()) }),
+      })
+    },
+
+    async sharedObjects(
+      key: SharingKeyRef,
+      offset: number,
+      limit: number,
+    ): Promise<PinnedObjectRef[]> {
+      const { objects } = (await call(
+        `/sharing/${encodeURIComponent(key.publicKey)}/objects?offset=${offset}&limit=${limit}`,
+      )) as { objects: WireObject[] }
+      return objects.map(pinnedObjectFromWire)
+    },
+
+    async unshareObject(key: SharingKeyRef, objectId: string): Promise<void> {
+      await call(sharedObjectPath(key, objectId), { method: 'DELETE' })
+    },
+
+    async revokeSharingKey(key: SharingKeyRef): Promise<void> {
+      await call(`/sharing/${encodeURIComponent(key.publicKey)}`, { method: 'DELETE' })
     },
 
     openAppKey(): AppKeyRef {

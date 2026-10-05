@@ -102,6 +102,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     init: swrCacheBy(),
     sdk: swrCacheBy(),
     hosts: swrCacheBy(),
+    shareLinks: swrCacheBy(),
   }
 
   const raw = createAppEvents()
@@ -172,6 +173,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     () => sdkRef,
     () => settingsNamespace.getIndexerURL(),
     (indexerURL) => authNamespace.getAppKey(indexerURL),
+    () => caches.shareLinks.invalidateAll(),
   )
 
   const databaseNamespaces = (db: DatabaseAdapter, namespaceCaches: AppCaches = caches) =>

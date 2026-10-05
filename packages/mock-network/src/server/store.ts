@@ -33,8 +33,10 @@ import type {
   InspectedConnectionRequest,
   InspectedEvent,
   InspectedObject,
+  InspectedShare,
   RequestRecord,
   SdkOp,
+  WireSharingKey,
 } from '../protocol'
 
 export type ObjectRow = {
@@ -108,6 +110,25 @@ CREATE TABLE IF NOT EXISTS connection_requests (
   state TEXT NOT NULL,
   -- Whether the account had an app key when this was approved.
   reconnecting INTEGER NOT NULL DEFAULT 0
+);
+-- indexd keeps a nonce the SDK derives each key's seed from, using the app
+-- key. The mock keeps the seed, which every device of the account gets back
+-- from a listing, the same as the real derivation gives them.
+CREATE TABLE IF NOT EXISTS sharing_keys (
+  public_key TEXT PRIMARY KEY,
+  seed TEXT NOT NULL,
+  description TEXT NOT NULL,
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+-- Each attachment keeps the metadata it was attached with. A later rename of
+-- the object does not reach it until the object is attached again.
+CREATE TABLE IF NOT EXISTS shared_objects (
+  public_key TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  metadata BLOB NOT NULL,
+  attached_at INTEGER NOT NULL,
+  PRIMARY KEY (public_key, object_id)
 );
 CREATE TABLE IF NOT EXISTS requests (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,6 +284,8 @@ export class NetworkStore {
     if (!row) throw new NotFound('object not found')
     this.db.transaction(() => {
       this.db.query('DELETE FROM objects WHERE id = ?1').run(id)
+      // indexd detaches a deleted object from every sharing key.
+      this.db.query('DELETE FROM shared_objects WHERE object_id = ?1').run(id)
       this.unpublish(id, true)
       if (this.uploadLive(row.upload_id)) {
         this.db
@@ -497,6 +520,127 @@ export class NetworkStore {
     this.db
       .query('INSERT INTO app_keys (key, device) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING')
       .run(key, device)
+  }
+
+  createSharingKey(description: string, expiresAt: number | null): WireSharingKey {
+    if (expiresAt !== null && expiresAt <= Date.now()) {
+      throw new BadRequest('expiration must be in the future')
+    }
+    const seed = Buffer.from(crypto.getRandomValues(new Uint8Array(32)))
+    const publicKey = `share-${createHash('sha256').update(seed).digest('hex').slice(0, 32)}`
+    const createdAt = this.now()
+    this.db
+      .query(
+        `INSERT INTO sharing_keys (public_key, seed, description, expires_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)`,
+      )
+      .run(publicKey, seed.toString('hex'), description, expiresAt, createdAt)
+    return {
+      publicKey,
+      seed: seed.toString('hex'),
+      description,
+      expiresAt,
+      createdAt,
+      objectCount: 0,
+    }
+  }
+
+  /** Live keys, newest first. indexd stops listing a key once it expires. */
+  sharingKeys(offset: number, limit: number): WireSharingKey[] {
+    return this.db
+      .query<
+        {
+          public_key: string
+          seed: string
+          description: string
+          expires_at: number | null
+          created_at: number
+          object_count: number
+        },
+        [number, number, number]
+      >(
+        `SELECT k.*, (SELECT count(*) FROM shared_objects s WHERE s.public_key = k.public_key) AS object_count
+         FROM sharing_keys k
+         WHERE k.expires_at IS NULL OR k.expires_at > ?1
+         ORDER BY k.created_at DESC
+         LIMIT ?2 OFFSET ?3`,
+      )
+      .all(Date.now(), limit, offset)
+      .map((k) => ({
+        publicKey: k.public_key,
+        seed: k.seed,
+        description: k.description,
+        expiresAt: k.expires_at,
+        createdAt: k.created_at,
+        objectCount: k.object_count,
+      }))
+  }
+
+  /** Throws the error indexd returns for a key that is missing, revoked or expired. */
+  private mustGetSharingKey(publicKey: string): void {
+    const live = this.db
+      .query<{ n: number }, [string, number]>(
+        `SELECT count(*) AS n FROM sharing_keys
+         WHERE public_key = ?1 AND (expires_at IS NULL OR expires_at > ?2)`,
+      )
+      .get(publicKey, Date.now())
+    if (!live?.n) throw new NotFound('sharing key not found')
+  }
+
+  shareObject(publicKey: string, objectId: string, metadata: Uint8Array): void {
+    this.mustGetSharingKey(publicKey)
+    if (!this.object(objectId)) throw new NotFound('object not found')
+    this.db
+      .query(
+        `INSERT INTO shared_objects (public_key, object_id, metadata, attached_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (public_key, object_id) DO UPDATE SET metadata = ?3, attached_at = ?4`,
+      )
+      .run(publicKey, objectId, metadata, this.now())
+  }
+
+  unshareObject(publicKey: string, objectId: string): void {
+    this.mustGetSharingKey(publicKey)
+    this.db
+      .query('DELETE FROM shared_objects WHERE public_key = ?1 AND object_id = ?2')
+      .run(publicKey, objectId)
+  }
+
+  /** Attached objects with their attachment's metadata, newest attachment first. */
+  sharedObjects(publicKey: string, offset: number, limit: number): ObjectRow[] {
+    this.mustGetSharingKey(publicKey)
+    return this.db
+      .query<ObjectRow, [string, number, number]>(
+        `SELECT o.id, s.metadata, o.size, o.created_at, o.updated_at, o.pinned,
+                o.uploaded_by, o.content_hash, o.upload_id
+         FROM shared_objects s JOIN objects o ON o.id = s.object_id
+         WHERE s.public_key = ?1
+         ORDER BY s.attached_at DESC
+         LIMIT ?2 OFFSET ?3`,
+      )
+      .all(publicKey, limit, offset)
+  }
+
+  revokeSharingKey(publicKey: string): void {
+    this.mustGetSharingKey(publicKey)
+    this.db.transaction(() => {
+      this.db.query('DELETE FROM shared_objects WHERE public_key = ?1').run(publicKey)
+      this.db.query('DELETE FROM sharing_keys WHERE public_key = ?1').run(publicKey)
+    })()
+  }
+
+  /** Every live key with what a recipient would see. */
+  inspectShares(): InspectedShare[] {
+    return this.sharingKeys(0, Number.MAX_SAFE_INTEGER).map((k) => ({
+      publicKey: k.publicKey,
+      seed: k.seed,
+      description: k.description,
+      expiresAt: k.expiresAt,
+      objects: this.sharedObjects(k.publicKey, 0, Number.MAX_SAFE_INTEGER).map((row) => ({
+        id: row.id,
+        metadata: inspect(row).metadata,
+      })),
+    }))
   }
 
   close(): void {

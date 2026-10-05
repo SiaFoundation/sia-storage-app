@@ -14,6 +14,7 @@ import {
   type HoldRule,
   type InspectedEvent,
   type InspectedObject,
+  type InspectedShare,
   type RequestRecord,
   type SdkOp,
   type Summary,
@@ -48,6 +49,8 @@ export function createNetworkControl(url: string) {
     objects: (opts: { unpinned?: boolean } = {}) =>
       call<InspectedObject[]>(`/objects${opts.unpinned ? '?unpinned=1' : ''}`),
     events: () => call<InspectedEvent[]>('/events'),
+    /** Every live sharing key, with each attached object as a recipient sees it. */
+    shares: () => call<InspectedShare[]>('/shares'),
     /** Publishes an object as if another device had uploaded and pinned it. */
     inject: (input: { metadata: FileMetadata; data?: Uint8Array }) =>
       call<WireObject>(
