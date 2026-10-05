@@ -1044,6 +1044,11 @@ export interface AppService {
     rename(id: string, newParentId: string | null, newName: string): Promise<ProviderItem>
     /** Reversible delete. A folder cascades to the files inside it. */
     trash(id: string): Promise<void>
+    /**
+     * The current version's file id for each file item, in order. Folders and
+     * ids with no visible file are left out.
+     */
+    fileIds(itemIds: string[]): Promise<string[]>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {

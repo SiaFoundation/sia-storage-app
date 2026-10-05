@@ -43,6 +43,14 @@ const api = {
   },
   /** Shows the main window, from the popover that summarizes it. */
   openWindow: () => ipcRenderer.invoke('window:open'),
+  /** The files Finder asked to share, once, or null when no request is waiting. */
+  takeShareRequest: (): Promise<string[] | null> => ipcRenderer.invoke('share:take'),
+  /** Fires when Finder asks to share files. Take them with `takeShareRequest`. */
+  onShareRequest: (listener: () => void) => {
+    const handler = () => listener()
+    ipcRenderer.on('share:requested', handler)
+    return () => ipcRenderer.removeListener('share:requested', handler)
+  },
   copyText: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   /** What this build is called in Finder, and its version. */
   appInfo: () => ipcRenderer.invoke('app:info'),

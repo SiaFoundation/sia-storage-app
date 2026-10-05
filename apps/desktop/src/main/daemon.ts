@@ -9,9 +9,10 @@
  */
 
 import { createRemoteAppService } from '@siastorage/core/app'
+import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { log } from './log'
 import { buildVariant, daemonLogPath, daemonSocketPath, dataDir } from './paths'
 import { call } from './rpc'
@@ -152,6 +153,9 @@ export class Daemon {
         // Picks the forced-reset nonce the daemon answers to.
         SIA_BUILD_VARIANT: buildVariant(),
         SIA_PROVIDER_SOCKET: config.shellSocket,
+        // What the daemon opens when Finder asks to share while this app is
+        // not running. A run from source has no bundle to open.
+        ...(app.isPackaged ? { SIA_DESKTOP_APP: resolve(process.execPath, '../../..') } : {}),
         ...(config.handoffDir ? { SIA_HANDOFF_DIR: config.handoffDir } : {}),
       },
       detached: true,

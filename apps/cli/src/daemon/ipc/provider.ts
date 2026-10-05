@@ -11,6 +11,7 @@ import { startIpcServer } from '@siastorage/node-adapters'
 import { createHash } from 'node:crypto'
 import type { CliApp } from '../../app'
 import type { Materializing } from '../materializing'
+import type { ShareRequests } from '../shareRequests'
 import { pushChanges, type IpcHandlerMap } from './index'
 
 /** `sun_path` is 104 bytes on macOS including the terminator. */
@@ -55,7 +56,8 @@ export function isProviderChannel(channel: string): boolean {
     channel.startsWith(PROVIDER_CHANNEL_PREFIX) ||
     channel === 'hello' ||
     channel === 'subscribe' ||
-    channel === 'warm'
+    channel === 'warm' ||
+    channel === 'share'
   )
 }
 
@@ -95,11 +97,26 @@ export function startProviderListener(
   reflected: IpcHandlerMap,
   opts: ProviderListenerOptions,
   materializing?: Materializing,
+  shareRequests?: ShareRequests,
 ): ReturnType<typeof startIpcServer> {
   assertSocketPathFits(opts.socketPath)
 
   const library = libraryId(opts.libraryPath)
   registerProviderHandlers(reflected, opts.version, library, materializing)
+  // Finder's Share Link action, with the selected items. The daemon only
+  // passes the files on: the app asks how long the link lasts and makes it.
+  reflected.set('share', async (params) => {
+    const itemIds = (params as { args?: unknown[] }).args?.[0]
+    if (!Array.isArray(itemIds) || !itemIds.every((id) => typeof id === 'string')) {
+      throw new Error('share takes a list of item ids')
+    }
+    const fileIds = await app.service.provider.fileIds(itemIds)
+    // Worded so the extension shows its "no longer in Sia Storage" alert.
+    if (fileIds.length === 0) throw new Error('No file with id among the selected items')
+    if (!shareRequests) throw new Error('Sharing is not available from this daemon')
+    await shareRequests.request(fileIds)
+    return { ok: true }
+  })
   // The hashed id, never the path: the path sits under the user's home and
   // these logs are attached to bug reports, which is why the handshake hashes it.
   logger.info('ipc', 'provider_listener_ready', { path: opts.socketPath, library })

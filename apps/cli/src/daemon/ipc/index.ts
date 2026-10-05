@@ -3,6 +3,7 @@ import { startIpcServer, type IpcConnection } from '@siastorage/node-adapters'
 import type { ChangeEvent } from '@siastorage/core/types'
 import type { CliApp } from '../../app'
 import { createMaterializing, type Materializing } from '../materializing'
+import { createShareRequests, type ShareRequests } from '../shareRequests'
 import { registerDownloadHandlers } from './download'
 import { registerStatusHandlers } from './status'
 import { registerUploadHandlers } from './upload'
@@ -71,6 +72,7 @@ export function pushChanges(app: CliApp, connection: IpcConnection): Promise<nev
 export type Subscribers = {
   add(connection: IpcConnection): void
   broadcast(message: unknown): void
+  count(): number
 }
 
 export function createSubscribers(): Subscribers {
@@ -82,6 +84,9 @@ export function createSubscribers(): Subscribers {
     },
     broadcast(message) {
       for (const connection of connections) connection.push(message)
+    },
+    count() {
+      return connections.size
     },
   }
 }
@@ -97,6 +102,8 @@ export type IpcSurface = {
   subscribers: Subscribers
   /** Shared with the provider socket, which is where the evidence arrives. */
   materializing: Materializing
+  /** Finder asks on the provider socket, and the app is told on this one. */
+  shareRequests: ShareRequests
 }
 
 export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface {
@@ -106,6 +113,11 @@ export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface
     handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast, materializing),
     subscribers,
     materializing,
+    shareRequests: createShareRequests({
+      subscriberCount: subscribers.count,
+      broadcast: subscribers.broadcast,
+      appPath: process.env.SIA_DESKTOP_APP || undefined,
+    }),
   }
 }
 
@@ -115,10 +127,11 @@ export function startIpcDispatcher(
   sockPath: string,
   surface: IpcSurface,
 ): ReturnType<typeof startIpcServer> {
-  const { handlers: map, subscribers } = surface
+  const { handlers: map, subscribers, shareRequests } = surface
   return startIpcServer(sockPath, async (method, params, connection) => {
     if (method === 'subscribe') {
       subscribers.add(connection)
+      shareRequests.attached((frame) => connection.push(frame))
       return pushChanges(app, connection)
     }
     const handler = map.get(method)

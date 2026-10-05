@@ -90,6 +90,7 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
           libraryPath: app.paths.dataDir,
         },
         surface.materializing,
+        surface.shareRequests,
       )
     : undefined
   ctx = { app, scheduler, ipcServer, providerServer, lock }

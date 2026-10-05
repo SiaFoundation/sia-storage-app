@@ -277,6 +277,20 @@ function extensionInfoPlist(env: BuildEnv, stamp: Stamp): string {
       // Without a document group fileproviderd logs "Extension doesn't have a
       // group container... Ignoring the extension" and never loads it.
       NSExtensionFileProviderDocumentGroup: env.fileProviderGroup,
+      // Finder lists these in the context menu of items in the folder. The
+      // identifier is the one `shareLinkAction` in Extension.swift handles.
+      // Finder evaluates the rule against the selection, and this one hides
+      // the action whenever a folder is selected, since a link holds files.
+      NSExtensionFileProviderActions: [
+        {
+          NSExtensionFileProviderActionIdentifier: 'storage.sia.share-link',
+          NSExtensionFileProviderActionName: 'Share Link…',
+          NSExtensionFileProviderActionActivationRule:
+            'fileproviderItems.@count > 0 AND SUBQUERY(fileproviderItems, $fileproviderItem, ' +
+            'NOT ($fileproviderItem.contentType.identifier UTI-CONFORMS-TO "public.folder"))' +
+            '.@count == fileproviderItems.@count',
+        },
+      ],
     },
   })
 }

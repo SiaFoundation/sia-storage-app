@@ -417,19 +417,35 @@ bun sim device expect phone --label Menu
 
 ### Sharing
 
-- When: share links, each a sharing key on the indexer that opens a set of
-  files on share.sia.storage until it expires or is revoked. A link shows
-  either each file's current version or the versions it was made with, and a
-  link made on one device shows on every device of the account. The phone's
-  Share URL makes a signed link to one file instead.
+- When: share links on the Mac. Finder's Share Link action opens the
+  window's share view on the selected files, where the link is made. Share
+  links in the window's status view lists every link with Copy and Revoke.
+  A latest link opens its files on share.sia.storage at each file's current
+  version, and a snapshot link at the versions they had when it was made,
+  until it expires or is revoked. A link made on one device shows on every
+  device of the account. The phone's Share URL makes a signed link to one
+  file instead.
 - Code: `app.shares`; files
   `packages/core/src/app/namespaces/shareLinks.ts`,
   `packages/core/src/services/shareLinks.ts`,
+  `apps/cli/src/daemon/shareRequests.ts`,
   `apps/desktop/src/renderer/src/ShareView.tsx`; tables `share_links`,
   `share_link_files`, `share_link_objects`
 - State: `bun sim net shares` lists each live key with the files a recipient
   sees and their names as attached.
-- Tests: integration `share-links`
+- Tests: scenarios `desktop/share-links`; integration `share-links`
+- Desktop, Finder's Share Link for two files, then the link in the window:
+
+```sh
+bun sim device finder mac
+bun sim device tap mac --text "1 day" --window main
+bun sim device tap mac --text "Create Link" --window main
+bun sim device read mac --id share-url --window main
+bun sim net shares
+```
+
+`finderShare` in a scenario sends what Finder's Share Link action sends. The
+menu item itself belongs to Finder, which sim cannot click.
 
 ### Settings and logs
 
