@@ -22,8 +22,13 @@ const RENDERER_PREFERENCES = {
 }
 
 const POPOVER_WIDTH = 300
-/** Wide enough for the sign-in field the window will carry. */
 const WINDOW_WIDTH = 400
+/**
+ * How long a new window waits for the renderer to report its size before it
+ * is shown anyway. A renderer that failed to load never reports, and a window
+ * that never appears would hide that.
+ */
+const SIZE_GRACE_MS = 1_500
 /** Bounds on the content-driven height, so a broken measurement cannot fill the screen. */
 const MIN_HEIGHT = 180
 const MAX_HEIGHT = 720
@@ -33,6 +38,10 @@ const POPOVER_HEIGHT = 320
 const POPOVER_GAP = 6
 
 let mainWindow: BrowserWindow | null = null
+/** Set once the renderer has reported the main window's size. Until then it is not shown. */
+let mainSized = false
+/** Someone has asked to see the main window before it had its size. */
+let showWhenSized = false
 let popover: BrowserWindow | null = null
 let quitting = false
 /** Set while a menu the popover opened holds the focus. See `holdPopover`. */
@@ -118,6 +127,12 @@ export function createMainWindow(): BrowserWindow {
     height: POPOVER_HEIGHT,
     show: false,
     autoHideMenuBar: true,
+    // The width is fixed and the height follows the content, so a size the
+    // user dragged out would be undone by the next row that appears, and a
+    // full screen would be mostly empty around it.
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     // Same material as the popover, so the two read as one surface.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     transparent: process.platform === 'darwin',
@@ -127,7 +142,19 @@ export function createMainWindow(): BrowserWindow {
   })
 
   watchForFailure(window, 'window')
-  window.on('ready-to-show', () => window.show())
+  // Not shown as soon as it can paint. It opens at a guessed height, and the
+  // renderer reports the real one once it knows what it is showing, so
+  // showing it now would draw the window and then jump it.
+  // `resizeToContent` shows it at its first report.
+  mainSized = false
+  showWhenSized = true
+  window.once('ready-to-show', () => {
+    setTimeout(() => {
+      if (window !== mainWindow || mainSized) return
+      mainSized = true
+      revealMainWindow()
+    }, SIZE_GRACE_MS)
+  })
 
   // Hide rather than close, so the app stays alive in the tray. On macOS the
   // dock tile is dropped too, otherwise the app looks running with no window.
@@ -157,8 +184,16 @@ export function showMainWindow(): void {
   const window = createMainWindow()
   if (process.platform === 'darwin') void app.dock?.show()
   if (window.isMinimized()) window.restore()
-  window.show()
-  window.focus()
+  showWhenSized = true
+  revealMainWindow()
+}
+
+/** Shows the main window if it has been asked for and has its size. */
+function revealMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainSized || !showWhenSized) return
+  showWhenSized = false
+  mainWindow.show()
+  mainWindow.focus()
 }
 
 export function createPopover(): BrowserWindow {
@@ -270,17 +305,23 @@ function placePopover(window: BrowserWindow, trayBounds: Rectangle): void {
  * Sizes a window to the height its content reported.
  *
  * The popover behaves like a menu: it is exactly as tall as what it shows, so a
- * section that only appears mid-transfer leaves no gap once it is gone. The
- * window follows the same rule while it shows the same content.
+ * line that only appears while something is wrong leaves no gap once it is
+ * gone. The window follows the same rule, so sign-in and the status view each
+ * get the height they need without one being set for them.
  */
 export function resizeToContent(sender: WebContents, height: number): void {
   const window = BrowserWindow.fromWebContents(sender)
   if (!window || window.isDestroyed()) return
   const [width] = window.getSize()
   const clamped = Math.max(MIN_HEIGHT, Math.min(Math.ceil(height), MAX_HEIGHT))
-  if (window.getSize()[1] === clamped) return
-  window.setSize(width, clamped, false)
-  if (window === popover && lastTrayBounds) placePopover(window, lastTrayBounds)
+  if (window.getSize()[1] !== clamped) {
+    window.setSize(width, clamped, false)
+    if (window === popover && lastTrayBounds) placePopover(window, lastTrayBounds)
+  }
+  if (window === mainWindow && !mainSized) {
+    mainSized = true
+    revealMainWindow()
+  }
 }
 
 export function hidePopover(): void {

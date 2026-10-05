@@ -11,6 +11,12 @@ import type { DomainState, Materializing } from './model'
 
 export type { ChangeEvent }
 
+export type AppInfo = {
+  /** The name the Finder sidebar lists the library under. It differs per build. */
+  finderName: string
+  version: string
+}
+
 export type SiaApi = {
   rpc(method: string, args?: unknown[], timeoutMs?: number): Promise<unknown>
   openUrl(url: string): Promise<void>
@@ -24,6 +30,8 @@ export type SiaApi = {
   closeWindow(): Promise<void>
   /** Whether this window is on screen. Covered by another window still counts. */
   windowVisible(): Promise<boolean>
+  openWindow(): Promise<void>
+  appInfo(): Promise<AppInfo>
   openMount(): Promise<void>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>

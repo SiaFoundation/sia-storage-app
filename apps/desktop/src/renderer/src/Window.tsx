@@ -1,13 +1,13 @@
 /*
  * What the window shows.
  *
- * Sign-in until there is an account, a placeholder after. The library belongs
- * here and is not built yet.
+ * Sign-in until there is an account, then the status view.
  */
 
 import { useApp } from '@siastorage/core/app'
 import { useCallback, useEffect, useState } from 'react'
 import { sia } from './api'
+import { Details } from './Details'
 import { useReportedHeight } from './height'
 import { SignIn } from './SignIn'
 
@@ -30,22 +30,20 @@ export function Window() {
   useEffect(() => {
     void read()
     // The daemon reports a connection change, which is what signing in causes.
-    return sia.onChange(() => void read())
+    // Other scopes arrive several times a second during a sync, and each read
+    // is two daemon round trips.
+    return sia.onChange((event) => {
+      if (event.scope === 'connection') void read()
+    })
   }, [read])
 
   return (
     <div ref={root}>
+      <div aria-hidden className="drag-strip" />
       {needsAccount === null ? null : needsAccount ? (
-        // Sign-in is all this window does, so it hides once done. Hiding keeps
-        // it mounted, so the re-read is what stops it reopening on the form.
-        <SignIn
-          onDone={() => {
-            void read()
-            void sia.closeWindow()
-          }}
-        />
+        <SignIn onDone={() => void read()} />
       ) : (
-        <p className="m-0 p-6 text-center text-secondary">Sia Storage</p>
+        <Details />
       )}
     </div>
   )

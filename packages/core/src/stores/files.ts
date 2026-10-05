@@ -7,7 +7,11 @@ export function useFileDetails(id: string) {
   return useSWR(app.caches.fileById.key(id), () => app.files.getById(id))
 }
 
-/** Returns the total count of all active (non-trashed) files in the library. */
+/**
+ * Returns the count of active (non-trashed) files in the library. Thumbnails
+ * are rows in the same table and are left out, so the number matches what a
+ * file browser shows.
+ */
 export function useFileCountAll() {
   const app = useApp()
   return useSWR(app.caches.library.key('count'), () =>
@@ -15,12 +19,12 @@ export function useFileCountAll() {
       limit: undefined,
       after: undefined,
       order: 'ASC',
-      includeThumbnails: true,
+      includeThumbnails: false,
     }),
   )
 }
 
-/** Returns aggregate stats (e.g. total size) for all active files in the library. */
+/** Returns aggregate stats (e.g. total size) for the files `useFileCountAll` counts. */
 export function useFileStatsAll() {
   const app = useApp()
   return useSWR(app.caches.library.key('stats'), () =>
@@ -28,7 +32,7 @@ export function useFileStatsAll() {
       limit: undefined,
       after: undefined,
       order: 'ASC',
-      includeThumbnails: true,
+      includeThumbnails: false,
     }),
   )
 }

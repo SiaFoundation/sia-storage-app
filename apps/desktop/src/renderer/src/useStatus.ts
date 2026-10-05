@@ -1,5 +1,5 @@
 /*
- * The status the tray shows.
+ * The status the tray and the window show.
  *
  * The library half comes from the hooks in `@siastorage/core/stores`, refreshed
  * by the daemon's cache messages. The mount half cannot: a hook keeps serving
@@ -7,23 +7,33 @@
  * process over the bridge, on the change signal and on a poll while settling.
  */
 
+import { useApp } from '@siastorage/core/app'
 import {
   useConnectionState,
   useFileCountAll,
   useFileStatsAll,
   useIndexerURL,
   useSyncState,
-  useUploadCounts,
 } from '@siastorage/core/stores'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import useSWR from 'swr'
 import { sia } from './api'
-import type { DomainState, Materializing, Status } from './model'
+import {
+  type DomainState,
+  type Materializing,
+  NO_UPLOADS,
+  type Status,
+  summarizeUploads,
+  type Uploads,
+} from './model'
 
 type Shell = {
   domain: DomainState
   mountPath: string | null
   daemonReachable: boolean
   materializing: Materializing
+  /** Whether a read has returned. Before one has, the fields above are placeholders. */
+  known: boolean
 }
 
 /** While the shell is writing folders out there is no change signal to wait on. */
@@ -39,7 +49,8 @@ function useShell(): Shell {
     domain: 'absent',
     mountPath: null,
     daemonReachable: false,
-    materializing: { active: false, done: 0, total: 0 },
+    materializing: { active: false, done: 0, total: 0, passes: 0 },
+    known: false,
   })
 
   const latest = useRef(0)
@@ -66,6 +77,7 @@ function useShell(): Shell {
       daemonReachable: daemonReachable.status === 'fulfilled' ? daemonReachable.value : false,
       materializing:
         materializing.status === 'fulfilled' ? materializing.value : prev.materializing,
+      known: true,
     }))
     // A transient rejection keeps the last known answer: reading it as idle
     // would stop the poll while the popover still shows the pass running. A
@@ -104,14 +116,18 @@ function useShell(): Shell {
       if (stopped || mine !== generation) return
       clearTimeout(timer)
       if (!active && graceLeft > 0) graceLeft -= 1
-      if (active || graceLeft > 0) timer = setTimeout(() => void tick(), PREPARING_POLL_MS)
+      if (active || graceLeft > 0) {
+        timer = setTimeout(() => void tick(), PREPARING_POLL_MS)
+      }
     }
     void tick()
     const stop = sia.onChange((event) => {
-      // Only a connection transition can precede a warm pass. A library event
-      // during a long sync would otherwise keep the folder-count poll running
-      // every two seconds for the sync's whole duration.
-      if (event.scope === 'connection') graceLeft = GRACE_POLLS
+      // Only a connection transition can change what this reads or precede a
+      // warm pass, and a running pass is already polled. Library and sync
+      // events arrive up to five times a second per scope during a long sync,
+      // and each tick opens two daemon sockets.
+      if (event.scope !== 'connection') return
+      graceLeft = GRACE_POLLS
       void tick()
     })
     return () => {
@@ -124,28 +140,70 @@ function useShell(): Shell {
   return shell
 }
 
+/**
+ * The uploads the daemon is holding. `getState` is synchronous on the facade
+ * and a promise across the bridge, so it is handed to SWR to await rather than
+ * destructured here.
+ */
+function useUploads(): Uploads {
+  const app = useApp()
+  const { data } = useSWR(app.caches.uploads.key('active'), () => app.uploads.getState())
+  return data ? summarizeUploads(Object.values(data.uploads)) : NO_UPLOADS
+}
+
+/**
+ * Files on this Mac with no copy on the indexer yet. The uploader's own list
+ * drops a file the moment it finishes, so "4 of 5" has to come from the
+ * library, which keeps counting the one still to go.
+ */
+function useFilesNotUploaded(): number {
+  const app = useApp()
+  const { data } = useSWR(app.caches.library.key('notUploaded'), async () => {
+    const indexerURL = await app.settings.getIndexerURL()
+    return app.files.queryCount({
+      order: 'ASC',
+      pinned: { indexerURL, isPinned: false },
+      fileExistsLocally: true,
+    })
+  })
+  return data ?? 0
+}
+
+function useFolderCount(): number {
+  const app = useApp()
+  const { data } = useSWR(app.caches.directories.key('count'), () => app.directories.count())
+  return data ?? 0
+}
+
 export function useStatus(): Status {
   const files = useFileCountAll()
+  const folderCount = useFolderCount()
   const stats = useFileStatsAll()
   const indexer = useIndexerURL()
   const connection = useConnectionState()
   const sync = useSyncState()
-  const uploads = useUploadCounts()
+  const uploads = useUploads()
+  const filesNotUploaded = useFilesNotUploaded()
   const shell = useShell()
 
   return {
     fileCount: files.data ?? 0,
+    filesNotUploaded,
+    folderCount,
     libraryBytes: stats.data?.totalBytes ?? 0,
-    uploadsDone: sync.data?.syncUpProcessed ?? 0,
-    uploadsTotal: sync.data?.syncUpTotal ?? 0,
-    uploadsPending: uploads.data?.total ?? 0,
+    uploads,
     syncingDown: sync.data?.isSyncingDown ?? false,
-    downloadProgress: sync.data?.syncDownProgress ?? 0,
+    syncDownProgress: sync.data?.syncDownProgress ?? 0,
+    syncingUp: sync.data?.isSyncingUp ?? false,
+    syncUpDone: sync.data?.syncUpProcessed ?? 0,
+    syncUpTotal: sync.data?.syncUpTotal ?? 0,
+    syncGate: sync.data?.syncGateStatus ?? 'unknown',
     connected: connection.data?.isConnected ?? false,
     connectionError: connection.data?.connectionError ?? null,
     indexerUrl: indexer.data ?? '',
     domain: shell.domain,
     daemonReachable: shell.daemonReachable,
+    shellKnown: shell.known,
     mountPath: shell.mountPath,
     materializing: shell.materializing,
   }

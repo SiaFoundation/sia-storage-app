@@ -7,13 +7,21 @@
  */
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { desktopConfig } from './config'
 import { Daemon } from './daemon'
 import { log } from './log'
 import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
 import { isMockNetworkPage } from './testMode'
-import { beginQuit, hideMainWindow, openWebUrl, resizeToContent } from './windows'
+import {
+  beginQuit,
+  hideMainWindow,
+  hidePopover,
+  openWebUrl,
+  resizeToContent,
+  showMainWindow,
+} from './windows'
 
 async function openPath(path: string): Promise<void> {
   const reason = await shell.openPath(path)
@@ -82,6 +90,16 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
     'window:visible',
     (event) => BrowserWindow.fromWebContents(event.sender)?.isVisible() ?? false,
   )
+
+  ipcMain.handle('window:open', () => {
+    hidePopover()
+    showMainWindow()
+  })
+
+  ipcMain.handle('app:info', () => ({
+    finderName: desktopConfig().displayName,
+    version: app.getVersion(),
+  }))
 
   ipcMain.handle('app:quit', () => {
     beginQuit()
