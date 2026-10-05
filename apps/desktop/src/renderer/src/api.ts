@@ -27,6 +27,8 @@ export type SiaApi = {
   materializing(): Promise<Materializing>
   mountPath(): Promise<string | null>
   reportHeight(height: number): void
+  /** Says which of its two widths the window should be: the status view's or onboarding's. */
+  setLayout(layout: 'status' | 'onboarding'): void
   closeWindow(): Promise<void>
   /** Whether this window is on screen. Covered by another window still counts. */
   windowVisible(): Promise<boolean>

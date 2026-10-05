@@ -18,6 +18,7 @@ import {
   beginQuit,
   hideMainWindow,
   hidePopover,
+  layoutMainWindow,
   openWebUrl,
   resizeToContent,
   showMainWindow,
@@ -55,6 +56,7 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
   ipcMain.on('window:height', (event, height: number) => {
     if (typeof height === 'number' && height > 0) resizeToContent(event.sender, height)
   })
+  ipcMain.on('window:layout', (event, layout: unknown) => layoutMainWindow(event.sender, layout))
 
   // Asked, not inferred from a library read that keeps its last answer. Not a
   // facade method either: `connect` is the daemon's own, like ping and shutdown.
