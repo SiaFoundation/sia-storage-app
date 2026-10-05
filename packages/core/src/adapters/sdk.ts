@@ -137,6 +137,27 @@ export interface DownloadLikeRef {
   cancel(): Promise<void>
 }
 
+/**
+ * A sharing key as plain data. Anyone holding the seed can read the objects
+ * attached to the key, at the account's expense, so it is a credential.
+ * Adapters rebuild their native key from the seed on each call.
+ */
+export interface SharingKeyRef {
+  publicKey: string
+  /** 32 bytes. A share link carries it hex encoded. */
+  seed: Uint8Array
+}
+
+/** A sharing key as the indexer lists it for the account that made it. */
+export interface SharingKeyRecord {
+  key: SharingKeyRef
+  description: string
+  /** Absent for a key that never expires. The indexer stops listing a key once it expires. */
+  expiresAt?: Date
+  createdAt: Date
+  objectCount: number
+}
+
 export interface SdkAdapter {
   objectEvents(cursor: ObjectsCursor | undefined, limit: number): Promise<ObjectEvent[]>
   updateObjectMetadata(pinnedObject: PinnedObjectRef): Promise<void>
@@ -145,8 +166,29 @@ export interface SdkAdapter {
   pinObject(pinnedObject: PinnedObjectRef): Promise<void>
   deleteObject(objectId: string): Promise<void>
   getPinnedObject(objectId: string): Promise<PinnedObjectRef>
-  sharedObject(url: string): Promise<PinnedObjectRef>
-  shareObject(object: PinnedObjectRef, validUntil: Date): string
+  /** Opens an object from a signed per-object URL that `objectShareUrl` made. */
+  objectFromShareUrl(url: string): Promise<PinnedObjectRef>
+  /** A signed URL for one object, valid until `validUntil`, which the recipient opens with their own account. */
+  objectShareUrl(object: PinnedObjectRef, validUntil: Date): string
+  /**
+   * Creates a sharing key on the indexer. The SDK derives it from the app key
+   * and a random nonce the indexer keeps, so `sharingKeys` returns the same
+   * key, seed included, on any device signed in to the account.
+   */
+  createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef>
+  /** The account's live sharing keys, newest first. Expired and revoked keys are not listed. */
+  sharingKeys(offset: number, limit: number): Promise<SharingKeyRecord[]>
+  /**
+   * Attaches an object to a key with the metadata the handle holds at the
+   * time. Recipients keep seeing that metadata until it is attached again,
+   * which replaces the earlier attachment.
+   */
+  shareObject(key: SharingKeyRef, object: PinnedObjectRef): Promise<void>
+  /** The objects attached to a key, newest attachment first. */
+  sharedObjects(key: SharingKeyRef, offset: number, limit: number): Promise<PinnedObjectRef[]>
+  unshareObject(key: SharingKeyRef, objectId: string): Promise<void>
+  /** Deletes the key and detaches everything attached to it. */
+  revokeSharingKey(key: SharingKeyRef): Promise<void>
   /** Reconstructs a live AppKeyRef from stored key bytes. */
   openAppKey(bytes: Uint8Array): AppKeyRef
   /** Reconstructs a live PinnedObjectRef from a stored LocalObject. */

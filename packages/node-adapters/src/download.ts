@@ -110,7 +110,7 @@ export function createNodeDownloadAdapter(deps: {
     },
 
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
-      const sharedObject = await sdk.sharedObject(url)
+      const sharedObject = await sdk.objectFromShareUrl(url)
       const totalSize = Number(sharedObject.size())
       await ensureSpace(totalSize)
       const dl = await sdk.download(sharedObject, {

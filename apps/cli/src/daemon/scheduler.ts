@@ -2,6 +2,7 @@ import {
   DB_OPTIMIZE_INTERVAL,
   FS_EVICTION_FREQUENCY,
   PRUNE_SLABS_INTERVAL,
+  SHARE_LINKS_INTERVAL,
   SYNC_EVENTS_INTERVAL,
   SYNC_UP_METADATA_BATCH_SIZE,
   SYNC_UP_METADATA_CONCURRENCY,
@@ -10,7 +11,12 @@ import {
   TRASH_AUTO_PURGE_INTERVAL,
 } from '@siastorage/core/config'
 import { ServiceScheduler } from '@siastorage/core/lib/serviceInterval'
-import { LOG_ROTATION_INTERVAL, runCacheEviction, runLogRotation } from '@siastorage/core/services'
+import {
+  LOG_ROTATION_INTERVAL,
+  runCacheEviction,
+  runLogRotation,
+  runShareLinkSync,
+} from '@siastorage/core/services'
 import { runPruneSlabs } from '@siastorage/core/services/pruneSlabs'
 import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
@@ -65,6 +71,11 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       name: 'trashAutoPurge',
       interval: TRASH_AUTO_PURGE_INTERVAL,
       worker: () => app.service.files.autoPurgeWithCleanup(),
+    },
+    {
+      name: 'shareLinks',
+      interval: SHARE_LINKS_INTERVAL,
+      worker: whenConnected(() => runShareLinkSync(app.service)),
     },
     {
       name: 'pruneSlabs',

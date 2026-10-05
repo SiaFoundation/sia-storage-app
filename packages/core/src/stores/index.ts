@@ -49,5 +49,6 @@ export {
 } from './swr'
 export { useSyncGateGuard, useSyncGateStatus, useSyncState } from './sync'
 export { useAllTags, useIsFavorite, useTagSearch, useTagsForFile } from './tags'
+export { useShareLinks } from './shareLinks'
 export { invalidateThumbnailsForFileId } from './thumbnails'
 export { useUploadEntry, useUploadSpeed } from './uploads'

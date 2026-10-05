@@ -343,6 +343,17 @@ export function createTestApp(
     interval: SYNC_INTERVAL,
   })
 
+  // Lists the account's keys on every pass rather than every few minutes, so a
+  // link changed on one test device reaches the other within a tick.
+  const shareLinks = scheduler.createInterval({
+    name: 'shareLinks',
+    worker: async () => {
+      if (!connected) return
+      await appService.shares.syncLinks({ refresh: true })
+    },
+    interval: SYNC_INTERVAL,
+  })
+
   const thumbScan = scheduler.createInterval({
     name: 'thumbnailScanner',
     worker: runThumbScan,
@@ -426,6 +437,7 @@ export function createTestApp(
       dbOptimize.init()
       syncDown.init()
       syncUp.init()
+      shareLinks.init()
       thumbnailScanner.initialize(appService)
       thumbScan.init()
     },

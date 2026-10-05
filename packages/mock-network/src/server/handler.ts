@@ -26,6 +26,7 @@ import {
   type WireConnectionRequest,
   type WireEvent,
   type WireObject,
+  type WireSharingKey,
 } from '../protocol'
 import type { Relay } from './relay'
 import { BadRequest, Forbidden, NotFound, type NetworkStore, type ObjectRow } from './store'
@@ -295,6 +296,58 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
       }
     }
 
+    if (resource === 'sharing') {
+      const page = () => {
+        const offset = Number(url.searchParams.get('offset') ?? '0')
+        const limit = Number(url.searchParams.get('limit') ?? '100')
+        if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+          throw new BadRequest('limit must be between 1 and 500')
+        }
+        return { offset, limit }
+      }
+      if (!id && method === 'POST') {
+        return sdk(req, device, 'sharing', async () => {
+          const body = (await req.json()) as { description: string; expiresAt: number | null }
+          const key: WireSharingKey = store.createSharingKey(body.description, body.expiresAt)
+          return Response.json(key)
+        })
+      }
+      if (!id && method === 'GET') {
+        return sdk(req, device, 'sharing', () => {
+          const { offset, limit } = page()
+          return Response.json({ keys: store.sharingKeys(offset, limit) })
+        })
+      }
+      if (id && !action && method === 'DELETE') {
+        return sdk(req, device, 'sharing', () => {
+          store.revokeSharingKey(id)
+          return new Response(null, { status: 204 })
+        })
+      }
+      if (id && action === 'objects') {
+        const objectId = parts[3]
+        if (!objectId && method === 'GET') {
+          return sdk(req, device, 'sharing', () => {
+            const { offset, limit } = page()
+            return Response.json({ objects: store.sharedObjects(id, offset, limit).map(wire) })
+          })
+        }
+        if (objectId && method === 'PUT') {
+          return sdk(req, device, 'sharing', async () => {
+            const body = (await req.json()) as { metadata: string }
+            store.shareObject(id, objectId, fromHex(body.metadata))
+            return new Response(null, { status: 204 })
+          })
+        }
+        if (objectId && method === 'DELETE') {
+          return sdk(req, device, 'sharing', () => {
+            store.unshareObject(id, objectId)
+            return new Response(null, { status: 204 })
+          })
+        }
+      }
+    }
+
     if (resource === 'prune' && method === 'POST') {
       return sdk(req, device, 'prune', () => new Response(null, { status: 204 }))
     }
@@ -370,6 +423,8 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
     }
 
     if (resource === 'events' && method === 'GET') return Response.json(store.inspectEvents())
+
+    if (resource === 'shares' && method === 'GET') return Response.json(store.inspectShares())
 
     if (resource === 'requests' && method === 'GET') {
       return Response.json(

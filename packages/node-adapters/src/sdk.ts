@@ -13,6 +13,8 @@ import {
   type SdkAdapter,
   type SealedObjectRef,
   type ShardProgress,
+  type SharingKeyRecord,
+  type SharingKeyRef,
   type UploadOptions,
 } from '@siastorage/core/adapters'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
@@ -23,6 +25,7 @@ import {
   type Sdk,
   type SealedObject,
   type ShardProgress as NativeShardProgress,
+  SharingKey,
 } from '@siafoundation/sia-storage'
 
 // WeakMaps recover the native handle backing a wrapped ref. WeakMap means
@@ -32,6 +35,14 @@ const nativeAppKeys = new WeakMap<AppKeyRef, AppKey>()
 
 function toArrayBuffer(buf: Uint8Array): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+}
+
+function sharingKeyRef(key: SharingKey): SharingKeyRef {
+  return { publicKey: key.publicKey, seed: new Uint8Array(key.seed()) }
+}
+
+function nativeSharingKey(key: SharingKeyRef): SharingKey {
+  return SharingKey.fromSeed(Buffer.from(key.seed))
 }
 
 function castShardProgress(p: NativeShardProgress): ShardProgress {
@@ -288,13 +299,49 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
       return wrapPinnedObject(obj)
     },
 
-    async sharedObject(url: string): Promise<PinnedObjectRef> {
+    async objectFromShareUrl(url: string): Promise<PinnedObjectRef> {
       const obj = await sdk.objectFromShareUrl(url)
       return wrapPinnedObject(obj)
     },
 
-    shareObject(object: PinnedObjectRef, validUntil: Date): string {
+    objectShareUrl(object: PinnedObjectRef, validUntil: Date): string {
       return sdk.objectShareUrl(requireNativePinnedObject(object), validUntil)
+    },
+
+    async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
+      return sharingKeyRef(await sdk.createSharingKey(description, expiresAt))
+    },
+
+    async sharingKeys(offset: number, limit: number): Promise<SharingKeyRecord[]> {
+      const records = await sdk.sharingKeys(offset, limit)
+      return records.map((r) => ({
+        key: sharingKeyRef(r.key),
+        description: r.description,
+        expiresAt: r.stats.expiresAt,
+        createdAt: r.stats.createdAt,
+        objectCount: Number(r.stats.objectCount),
+      }))
+    },
+
+    async shareObject(key: SharingKeyRef, object: PinnedObjectRef): Promise<void> {
+      await sdk.shareObject(nativeSharingKey(key), requireNativePinnedObject(object))
+    },
+
+    async sharedObjects(
+      key: SharingKeyRef,
+      offset: number,
+      limit: number,
+    ): Promise<PinnedObjectRef[]> {
+      const objects = await sdk.sharedObjects(nativeSharingKey(key), offset, limit)
+      return objects.map(wrapPinnedObject)
+    },
+
+    async unshareObject(key: SharingKeyRef, objectId: string): Promise<void> {
+      await sdk.unshareObject(nativeSharingKey(key), objectId)
+    },
+
+    async revokeSharingKey(key: SharingKeyRef): Promise<void> {
+      await sdk.revokeSharingKey(nativeSharingKey(key))
     },
 
     openAppKey(bytes: Uint8Array): AppKeyRef {

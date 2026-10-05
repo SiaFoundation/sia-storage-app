@@ -149,6 +149,7 @@ export function createRemoteAppService(
     init: swrCacheBy(),
     sdk: swrCacheBy(),
     hosts: swrCacheBy(),
+    shareLinks: swrCacheBy(),
   }
 
   if (onMessage) {

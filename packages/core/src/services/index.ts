@@ -17,6 +17,7 @@ export {
 export { LOG_ROTATION_INTERVAL, runLogRotation } from './logRotation'
 export { type OrphanScannerResult, runOrphanScanner } from './orphanScanner'
 export { runPruneSlabs } from './pruneSlabs'
+export { runShareLinkSync } from './shareLinks'
 export { type SuspensionAdapters, createSuspensionManager } from './suspension'
 export { syncDownEventsBatch } from './syncDownEvents'
 export { diffFileMetadata, syncUpMetadataBatch } from './syncUpMetadata'

@@ -45,6 +45,7 @@ export const SDK_OPS = [
   'prune',
   'shared',
   'auth',
+  'sharing',
 ] as const
 export type SdkOp = (typeof SDK_OPS)[number]
 
@@ -168,6 +169,29 @@ export type InspectedObject = {
   uploadedBy: string | null
   contentHash: string | null
   metadata: Record<string, unknown> | null
+}
+
+/** A sharing key as the SDK lists it. Times are milliseconds. */
+export type WireSharingKey = {
+  publicKey: string
+  /** Hex. */
+  seed: string
+  description: string
+  expiresAt: number | null
+  createdAt: number
+  objectCount: number
+}
+
+/**
+ * A sharing key as a recipient sees it: each attached object with the
+ * metadata it was attached with, decoded, newest attachment first.
+ */
+export type InspectedShare = {
+  publicKey: string
+  seed: string
+  description: string
+  expiresAt: number | null
+  objects: Array<{ id: string; metadata: Record<string, unknown> | null }>
 }
 
 export type InspectedEvent = { id: string; deleted: boolean; position: number | null }
