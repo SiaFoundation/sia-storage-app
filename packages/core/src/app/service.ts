@@ -927,6 +927,16 @@ export interface AppService {
       setConnectionResponse(appKey: string, response: string): Promise<void>
       /** Blocks until the connection is approved or rejected. */
       waitForApproval(): Promise<void>
+      /**
+       * After approval, whether the approving account already has this app.
+       * Null when the platform's SDK does not report it.
+       */
+      reconnecting(): Promise<boolean | null>
+      /**
+       * After approval, whether the mnemonic derives an app key the approving
+       * account already has. Null when the platform's SDK does not report it.
+       */
+      matchesExistingAppKey(mnemonic: string): Promise<boolean | null>
       /** Attempts to connect using a hex-encoded app key directly. */
       connectWithKey(keyHex: string): Promise<boolean>
       /** Registers a new account with the given mnemonic; returns the app key hex. */

@@ -289,12 +289,12 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
     },
 
     async sharedObject(url: string): Promise<PinnedObjectRef> {
-      const obj = await sdk.sharedObject(url)
+      const obj = await sdk.objectFromShareUrl(url)
       return wrapPinnedObject(obj)
     },
 
     shareObject(object: PinnedObjectRef, validUntil: Date): string {
-      return sdk.shareObject(requireNativePinnedObject(object), validUntil)
+      return sdk.objectShareUrl(requireNativePinnedObject(object), validUntil)
     },
 
     openAppKey(bytes: Uint8Array): AppKeyRef {

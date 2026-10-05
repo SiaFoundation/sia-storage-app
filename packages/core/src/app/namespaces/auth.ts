@@ -93,6 +93,12 @@ export function buildAuthNamespace(
       async waitForApproval() {
         await sdkAuth.waitForApproval()
       },
+      async reconnecting() {
+        return sdkAuth.reconnecting ? sdkAuth.reconnecting() : null
+      },
+      async matchesExistingAppKey(mnemonic: string) {
+        return sdkAuth.matchesExistingAppKey ? sdkAuth.matchesExistingAppKey(mnemonic) : null
+      },
       async connectWithKey(keyHex: string) {
         return sdkAuth.connectWithKey(keyHex)
       },
