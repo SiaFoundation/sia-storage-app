@@ -59,6 +59,46 @@
     }
   }
 
+  /* A piece leaving the Mac for its provider, fading as it lands.
+     `--from-x` and `--from-y` are the offset back to where it starts, set
+     per piece. */
+  --animate-send: send 0.7s var(--ease-settle) both;
+
+  @keyframes send {
+    0% {
+      opacity: 0;
+      scale: 0.5;
+      translate: var(--from-x) var(--from-y);
+    }
+
+    15% {
+      opacity: 1;
+    }
+
+    80% {
+      opacity: 1;
+      scale: 1;
+      translate: 0 0;
+    }
+
+    100% {
+      opacity: 0;
+      scale: 0.5;
+      translate: 0 0;
+    }
+  }
+
+  /* A provider lighting up as its piece lands. `backwards` holds the unlit
+     start through the delay and lets go at the end. */
+  --animate-arrive: arrive 0.35s var(--ease-settle) backwards;
+
+  @keyframes arrive {
+    from {
+      opacity: 0.2;
+      scale: 0.5;
+    }
+  }
+
   /* One of the three dots trailing a status that is still working. Each dot
      keeps its width while faded, so the text beside it never shifts. */
   --animate-dot: dot 1.2s ease-in-out infinite both;

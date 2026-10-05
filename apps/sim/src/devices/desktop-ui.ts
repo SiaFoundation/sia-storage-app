@@ -140,6 +140,19 @@ export class DesktopUi {
     return result.result.value
   }
 
+  /**
+   * Closes a window the way its close button does. Both end in the window's
+   * close event, which hides the window and tells its page it was closed.
+   */
+  async closeWindow(window: string): Promise<void> {
+    const found = (await this.window(window).windows())[0]
+    if (!found) throw new Error(`No ${window} window to close`)
+    await this.send(found.target, 'Runtime.evaluate', {
+      expression: 'window.sia.closeWindow()',
+      awaitPromise: true,
+    })
+  }
+
   /** The text of the first element matching `sel`, or null when no window has one. */
   async read(sel: Selector): Promise<string | null> {
     for (const { target } of await this.windows()) {

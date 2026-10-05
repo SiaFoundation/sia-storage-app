@@ -391,6 +391,145 @@ export function connectionLabel(s: Status): string {
   return s.connectionError ? 'Not connected' : 'Connecting'
 }
 
+export type StepState = 'waiting' | 'active' | 'done' | 'failed' | 'skipped'
+
+export type SetupStep = {
+  id: 'account' | 'finder' | 'metadata' | 'folders'
+  label: string
+  state: StepState
+  /** A count or a percentage, shown beside the label. */
+  hint: string
+  /** Why a step failed, shown under the label. */
+  detail: string | null
+  /** 0..1 while the step can say how far it is, otherwise null. */
+  progress: number | null
+}
+
+function accountStep(s: Status): SetupStep {
+  const host = indexerHost(s) ?? 'the indexer'
+  const step = { id: 'account' as const, hint: '', detail: null, progress: null }
+  if (!s.shellKnown) return { ...step, label: `Connecting to ${host}`, state: 'active' }
+  if (!s.daemonReachable) {
+    return {
+      ...step,
+      label: `Connecting to ${host}`,
+      state: 'failed',
+      detail: 'Sia Storage is not running. Quit and reopen the app.',
+    }
+  }
+  if (s.connected) return { ...step, label: `Connected to ${host}`, state: 'done' }
+  if (s.connectionError) {
+    return { ...step, label: `Connecting to ${host}`, state: 'failed', detail: s.connectionError }
+  }
+  return { ...step, label: `Connecting to ${host}`, state: 'active' }
+}
+
+function finderStep(s: Status, finderName: string): SetupStep {
+  const step = { id: 'finder' as const, hint: '', detail: null, progress: null }
+  switch (s.domain) {
+    // Nothing failed: a run from source has no signed helper to register with.
+    case 'unsupported':
+      return { ...step, label: 'Finder folder', state: 'skipped', hint: mountLabel(s) }
+    case 'mounted':
+      return { ...step, label: `Added ${finderName} to Finder`, state: 'done' }
+    case 'error':
+      return {
+        ...step,
+        label: `Adding ${finderName} to Finder`,
+        state: 'failed',
+        detail: 'The folder could not be registered with macOS',
+      }
+    default:
+      return { ...step, label: `Adding ${finderName} to Finder`, state: 'active' }
+  }
+}
+
+/**
+ * The first sync is over once the daemon has dismissed the gate it raised at
+ * sign-in. `idle` is a daemon that never raised one, which is one restarted
+ * since, and there `isSyncingDown` is all there is to go on.
+ */
+const firstSyncOver = (s: Status): boolean =>
+  s.syncGate === 'dismissed' || (s.syncGate === 'idle' && !s.syncingDown)
+
+function metadataStep(s: Status): SetupStep {
+  const step = { id: 'metadata' as const, hint: '', detail: null, progress: null }
+  if (!s.daemonReachable || !s.connected) {
+    return { ...step, label: 'Syncing encrypted metadata', state: 'waiting' }
+  }
+  if (firstSyncOver(s)) {
+    return {
+      ...step,
+      label: 'Synced encrypted metadata',
+      state: 'done',
+      hint: s.fileCount > 0 ? files(s.fileCount) : 'No files yet',
+    }
+  }
+  return {
+    ...step,
+    label: 'Syncing encrypted metadata',
+    state: 'active',
+    hint: s.syncingDown && s.syncDownProgress > 0 ? percent(s.syncDownProgress) : '',
+    progress: s.syncingDown ? s.syncDownProgress : null,
+  }
+}
+
+/**
+ * The extension starts its pass over the folders some time after the sync that
+ * brought them, and says nothing until it does, so a library with folders and
+ * no finished pass is still waiting on one. The folder count cannot stand in
+ * for that: a pass can finish before the system has listed a single folder.
+ */
+function foldersStep(s: Status, earlier: SetupStep[], overdue: boolean): SetupStep {
+  const step = { id: 'folders' as const, hint: '', detail: null, progress: null }
+  if (earlier.some((before) => before.state !== 'done')) {
+    return { ...step, label: 'Preparing folders', state: 'waiting' }
+  }
+  const { active, done, total, passes } = s.materializing
+  if (!active && (total === 0 || passes > 0)) {
+    return { ...step, label: 'Folders ready in Finder', state: 'done' }
+  }
+  // The pass is a head start and nothing depends on it: a folder the system
+  // has not written out is written when it is first opened. So a pass that
+  // never starts ends the wait rather than leaving setup spinning on it.
+  if (!active && overdue) {
+    return { ...step, label: 'Folders load as you open them', state: 'skipped' }
+  }
+  return {
+    ...step,
+    label: 'Preparing folders',
+    state: 'active',
+    hint: active ? foldersWritten(s) : '',
+    progress: active && total > 0 ? done / total : null,
+  }
+}
+
+/**
+ * What sign-in still has to do before the library is usable, in the order it
+ * is shown. `foldersOverdue` is the caller's clock saying the folder pass has
+ * had long enough to start.
+ */
+export function setupSteps(
+  s: Status,
+  finderName: string,
+  opts: { foldersOverdue?: boolean } = {},
+): SetupStep[] {
+  const steps = [accountStep(s), finderStep(s, finderName), metadataStep(s)]
+  // With no Finder folder in the build there are no folders to write out.
+  if (s.domain === 'unsupported') return steps
+  return [...steps, foldersStep(s, steps, opts.foldersOverdue === true)]
+}
+
+/** Whether setup is waiting on a folder pass that has not begun. */
+export const awaitingFolderPass = (s: Status, steps: SetupStep[]): boolean =>
+  steps.some((step) => step.id === 'folders' && step.state === 'active') && !s.materializing.active
+
+export const setupFinished = (steps: SetupStep[]): boolean =>
+  steps.every((step) => step.state === 'done' || step.state === 'skipped')
+
+export const setupFailed = (steps: SetupStep[]): boolean =>
+  steps.some((step) => step.state === 'failed')
+
 /** Powers of 1000, which is what Finder counts in. */
 function formatBytes(bytes: number): string {
   const units = ['kB', 'MB', 'GB', 'TB']

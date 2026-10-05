@@ -167,6 +167,10 @@ export function createMainWindow(): BrowserWindow {
     event.preventDefault()
     window.hide()
     if (process.platform === 'darwin') app.dock?.hide()
+    // The page keeps running while hidden and cannot tell this from being
+    // covered by another window, which also reads as hidden to it. It is told,
+    // so it can leave a screen that should not be there at the next open.
+    window.webContents.send('window:closed')
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => openExternally(url))
@@ -328,8 +332,8 @@ function placePopover(window: BrowserWindow, trayBounds: Rectangle): void {
  *
  * The popover behaves like a menu: it is exactly as tall as what it shows, so a
  * line that only appears while something is wrong leaves no gap once it is
- * gone. The window follows the same rule, so sign-in and the status view each
- * get the height they need without one being set for them.
+ * gone. The window follows the same rule, so sign-in, setup and the status
+ * view each get the height they need without one being set for them.
  */
 export function resizeToContent(sender: WebContents, height: number): void {
   const window = BrowserWindow.fromWebContents(sender)

@@ -347,14 +347,18 @@ dialog.
 ### Signing in on the Mac
 
 - When: the desktop app with no account: asking the indexer for a connection,
-  then the recovery phrase.
+  the recovery phrase, the tour, and setup after it.
 - Code: `app.auth`; files `apps/desktop/src/renderer/src/SignIn.tsx`,
   `apps/desktop/src/renderer/src/pairing.ts`,
+  `apps/desktop/src/renderer/src/onboarding/Tour.tsx`,
+  `apps/desktop/src/renderer/src/Setup.tsx`,
   `apps/desktop/src/renderer/src/Window.tsx`,
   `packages/mock-network/src/client/auth.ts`
 - Check: `bun sim net auth` lists the connection requests, whether each was
   told it was reconnecting, and the app keys registered.
-- Tests: scenarios `desktop/sign-in-not-approved`
+- Tests: scenarios `desktop/sign-in-new-account`,
+  `desktop/sign-in-existing-account`, `desktop/sign-in-not-approved`,
+  `desktop/tour-closed-part-way`
 - Desktop, a device added signed out:
 
 ```sh
@@ -366,8 +370,17 @@ bun sim net approve
 bun sim device expect mac --text "Your recovery phrase"
 bun sim device tap mac --label "I have written this down somewhere safe"
 bun sim device tap mac --text Continue
+bun sim device read mac --id tour-title
+bun sim device read mac --id setup-chip-label
+bun sim device tap mac --text Skip
+bun sim device expect mac --text "Sia Storage is ready"
+bun sim device tap mac --text Done
 bun sim device read mac --id status-message
 ```
+
+The tour's corner, `setup-chip-label`, names the setup step running behind it,
+and reads `Ready` once setup has finished. Skip, or Finish on the last slide,
+goes to the list of steps.
 
 A device added without `--signed-out` is signed in before the app starts, so
 its sign-in window shows only after Sign Out.
