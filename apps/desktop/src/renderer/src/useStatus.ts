@@ -43,8 +43,13 @@ const PREPARING_POLL_MS = 2_000
  * The mount and the daemon behind it. Neither is library state, and neither can
  * be inferred from a library read: a hook keeps answering from its cache after
  * the daemon stops answering, so this asks.
+ *
+ * `watch` keeps the poll running for as long as it is set. Setup needs that:
+ * the extension starts writing folders out some seconds after the sync that
+ * brought them, with no signal, and the bounded poll below has run out by the
+ * time a long first sync ends.
  */
-function useShell(): Shell {
+function useShell(watch: boolean): Shell {
   const [shell, setShell] = useState<Shell>({
     domain: 'absent',
     mountPath: null,
@@ -116,7 +121,7 @@ function useShell(): Shell {
       if (stopped || mine !== generation) return
       clearTimeout(timer)
       if (!active && graceLeft > 0) graceLeft -= 1
-      if (active || graceLeft > 0) {
+      if (watch || active || graceLeft > 0) {
         timer = setTimeout(() => void tick(), PREPARING_POLL_MS)
       }
     }
@@ -135,7 +140,7 @@ function useShell(): Shell {
       clearTimeout(timer)
       stop()
     }
-  }, [read])
+  }, [read, watch])
 
   return shell
 }
@@ -175,7 +180,7 @@ function useFolderCount(): number {
   return data ?? 0
 }
 
-export function useStatus(): Status {
+export function useStatus({ watch = false }: { watch?: boolean } = {}): Status {
   const files = useFileCountAll()
   const folderCount = useFolderCount()
   const stats = useFileStatsAll()
@@ -184,7 +189,7 @@ export function useStatus(): Status {
   const sync = useSyncState()
   const uploads = useUploads()
   const filesNotUploaded = useFilesNotUploaded()
-  const shell = useShell()
+  const shell = useShell(watch)
 
   return {
     fileCount: files.data ?? 0,

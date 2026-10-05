@@ -2,8 +2,8 @@
  * The frame every onboarding screen is drawn in: words and controls on the
  * left, and on the right a stage for the thing the words are about.
  *
- * One fixed size for all of them, so moving from one sign-in screen to the next
- * changes what is in the window and never the window.
+ * One fixed size for all of them, so moving from sign-in through the tour to
+ * setup changes what is in the window and never the window.
  */
 
 export const ONBOARDING_HEIGHT = 540
@@ -11,10 +11,13 @@ export const ONBOARDING_HEIGHT = 540
 export function Shell({
   children,
   stage,
+  corner,
   caption,
 }: {
   children: React.ReactNode
   stage: React.ReactNode
+  /** Shown in the stage's top right corner, over whatever is on it. */
+  corner?: React.ReactNode
   /** A line under the stage's picture, for what the picture cannot say. */
   caption?: React.ReactNode
 }) {
@@ -32,6 +35,7 @@ export function Shell({
             {caption}
           </p>
         ) : null}
+        {corner ? <div className="absolute top-2.5 right-2.5">{corner}</div> : null}
       </div>
     </div>
   )

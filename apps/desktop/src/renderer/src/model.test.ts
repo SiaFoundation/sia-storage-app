@@ -6,6 +6,7 @@ import {
   activityHelp,
   activityHint,
   activityProgress,
+  awaitingFolderPass,
   connectionLabel,
   formatBitrate,
   indexerLabel,
@@ -13,6 +14,9 @@ import {
   metadataLabel,
   mountLabel,
   NO_UPLOADS,
+  setupFailed,
+  setupFinished,
+  setupSteps,
   type Status,
   summarizeUploads,
   type Uploads,
@@ -365,6 +369,201 @@ describe('the rows the window adds', () => {
 
   it('calls the mount out as absent from this build when it cannot mount', () => {
     expect(mountLabel(status({ domain: 'unsupported' }))).toBe('Not in this build')
+  })
+})
+
+describe('setup after signing in', () => {
+  /** Just signed in: connected, the gate raised, nothing synced. */
+  const fresh = (over: Partial<Status> = {}) =>
+    status({ fileCount: 0, folderCount: 0, syncGate: 'pending', ...over })
+
+  const states = (s: Status) =>
+    Object.fromEntries(setupSteps(s, 'Sia Storage Dev').map((step) => [step.id, step.state]))
+
+  it('lists the first sync as running until the daemon dismisses its gate', () => {
+    expect(states(fresh())).toEqual({
+      account: 'done',
+      finder: 'done',
+      metadata: 'active',
+      folders: 'waiting',
+    })
+    expect(setupFinished(setupSteps(fresh(), 'Sia Storage Dev'))).toBe(false)
+  })
+
+  it('shows setup connecting, not stopped, before the daemon has first been read', () => {
+    const steps = setupSteps(
+      fresh({ shellKnown: false, daemonReachable: false }),
+      'Sia Storage Dev',
+    )
+    expect(steps[0].state).toBe('active')
+    expect(setupFailed(steps)).toBe(false)
+  })
+
+  it('does not call the first sync finished before the sync state has been read', () => {
+    expect(states(fresh({ syncGate: 'unknown' })).metadata).toBe('active')
+  })
+
+  it('shows how far the first sync has got', () => {
+    const [, , metadata] = setupSteps(
+      fresh({ syncGate: 'active', syncingDown: true, syncDownProgress: 0.42 }),
+      'Sia Storage Dev',
+    )
+
+    expect(metadata.label).toBe('Syncing encrypted metadata')
+    expect(metadata.hint).toBe('42%')
+    expect(metadata.progress).toBe(0.42)
+  })
+
+  it('finishes an account with nothing in it as soon as the gate is dismissed', () => {
+    const s = fresh({ syncGate: 'dismissed' })
+    const steps = setupSteps(s, 'Sia Storage Dev')
+
+    expect(steps.map((step) => step.label)).toEqual([
+      'Connected to sia.storage',
+      'Added Sia Storage Dev to Finder',
+      'Synced encrypted metadata',
+      'Folders ready in Finder',
+    ])
+    expect(steps[2].hint).toBe('No files yet')
+    expect(setupFinished(steps)).toBe(true)
+  })
+
+  it('says how many files the first sync brought', () => {
+    const [, , metadata] = setupSteps(
+      fresh({ syncGate: 'dismissed', fileCount: 1204 }),
+      'Sia Storage Dev',
+    )
+
+    expect(metadata.hint).toBe((1204).toLocaleString() + ' files')
+  })
+
+  it('treats a daemon with no gate as synced once it stops syncing', () => {
+    expect(states(fresh({ syncGate: 'idle', syncingDown: true })).metadata).toBe('active')
+    expect(states(fresh({ syncGate: 'idle' })).metadata).toBe('done')
+  })
+
+  // The extension starts its pass some time after the sync and says
+  // nothing until then, so folders with none written out are not yet done.
+  it('waits for macOS to start on the folders the sync brought', () => {
+    const s = fresh({
+      syncGate: 'dismissed',
+      folderCount: 20,
+      materializing: { active: false, done: 0, total: 20, passes: 0 },
+    })
+
+    expect(states(s).folders).toBe('active')
+  })
+
+  it('counts folders as macOS writes them out, then finishes', () => {
+    const during = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: true, done: 3, total: 20, passes: 0 },
+    })
+    const after = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: false, done: 20, total: 20, passes: 1 },
+    })
+
+    const folders = setupSteps(during, 'Sia Storage Dev')[3]
+    expect(folders.state).toBe('active')
+    expect(folders.hint).toBe('3 of 20')
+    expect(folders.progress).toBe(0.15)
+    expect(setupFinished(setupSteps(after, 'Sia Storage Dev'))).toBe(true)
+  })
+
+  // The extension can report a pass started and settled before the system
+  // has listed a folder, so the count read is no evidence either way.
+  it('finishes on a pass that settled before any folder was read', () => {
+    const s = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: false, done: 0, total: 20, passes: 1 },
+    })
+
+    expect(states(s).folders).toBe('done')
+  })
+
+  // A folder macOS has not written out is written when it is opened, so a
+  // pass that never starts is not something to wait on for good.
+  it('stops waiting on a folder pass that has had its time and never began', () => {
+    const s = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: false, done: 0, total: 20, passes: 0 },
+    })
+    const steps = setupSteps(s, 'Sia Storage Dev', { foldersOverdue: true })
+
+    expect(awaitingFolderPass(s, setupSteps(s, 'Sia Storage Dev'))).toBe(true)
+    expect(steps[3].state).toBe('skipped')
+    expect(steps[3].label).toBe('Folders load as you open them')
+    expect(setupFinished(steps)).toBe(true)
+  })
+
+  it('keeps counting a pass that is running, however long it has been', () => {
+    const s = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: true, done: 3, total: 20, passes: 0 },
+    })
+    const steps = setupSteps(s, 'Sia Storage Dev', { foldersOverdue: true })
+
+    expect(awaitingFolderPass(s, steps)).toBe(false)
+    expect(steps[3].state).toBe('active')
+  })
+
+  it('still says the folders are ready when a pass finishes after the wait ran out', () => {
+    const s = fresh({
+      syncGate: 'dismissed',
+      materializing: { active: false, done: 20, total: 20, passes: 1 },
+    })
+
+    expect(setupSteps(s, 'Sia Storage Dev', { foldersOverdue: true })[3].label).toBe(
+      'Folders ready in Finder',
+    )
+  })
+
+  it('holds the folders step until the Finder folder is mounted', () => {
+    const s = fresh({ syncGate: 'dismissed', domain: 'starting' })
+
+    expect(states(s)).toEqual({
+      account: 'done',
+      finder: 'active',
+      metadata: 'done',
+      folders: 'waiting',
+    })
+  })
+
+  it('skips the Finder steps in a build that cannot mount, and still finishes', () => {
+    const steps = setupSteps(fresh({ syncGate: 'dismissed', domain: 'unsupported' }), 'Sia Storage')
+
+    expect(steps.map((step) => [step.id, step.state])).toEqual([
+      ['account', 'done'],
+      ['finder', 'skipped'],
+      ['metadata', 'done'],
+    ])
+    expect(setupFinished(steps)).toBe(true)
+  })
+
+  it('puts the reason under a step that failed', () => {
+    const steps = setupSteps(
+      fresh({ connected: false, connectionError: 'Could not reach sia.storage' }),
+      'Sia Storage Dev',
+    )
+
+    expect(steps[0].state).toBe('failed')
+    expect(steps[0].detail).toBe('Could not reach sia.storage')
+    expect(steps[2].state).toBe('waiting')
+    expect(setupFailed(steps)).toBe(true)
+  })
+
+  it('fails the Finder step when macOS refuses the folder', () => {
+    const steps = setupSteps(fresh({ domain: 'error' }), 'Sia Storage Dev')
+
+    expect(steps[1].state).toBe('failed')
+    expect(steps[1].detail).toBe('The folder could not be registered with macOS')
+  })
+
+  it('names the indexer generically when its URL will not parse', () => {
+    const [account] = setupSteps(fresh({ indexerUrl: '' }), 'Sia Storage Dev')
+
+    expect(account.label).toBe('Connected to the indexer')
   })
 })
 

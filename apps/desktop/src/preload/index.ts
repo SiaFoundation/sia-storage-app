@@ -35,6 +35,12 @@ const api = {
   closeWindow: () => ipcRenderer.invoke('window:close'),
   /** Whether this window is on screen. Covered by another window still counts. */
   windowVisible: () => ipcRenderer.invoke('window:visible'),
+  /** Fires when the window has been closed, which hides it and keeps the page. */
+  onWindowClosed: (listener: () => void) => {
+    const handler = () => listener()
+    ipcRenderer.on('window:closed', handler)
+    return () => ipcRenderer.removeListener('window:closed', handler)
+  },
   /** Shows the main window, from the popover that summarizes it. */
   openWindow: () => ipcRenderer.invoke('window:open'),
   /** What this build is called in Finder, and its version. */

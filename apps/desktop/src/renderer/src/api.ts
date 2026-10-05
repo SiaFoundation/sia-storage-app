@@ -32,6 +32,8 @@ export type SiaApi = {
   closeWindow(): Promise<void>
   /** Whether this window is on screen. Covered by another window still counts. */
   windowVisible(): Promise<boolean>
+  /** Fires when the window has been closed, which hides it and keeps the page. */
+  onWindowClosed(listener: () => void): () => void
   openWindow(): Promise<void>
   appInfo(): Promise<AppInfo>
   openMount(): Promise<void>
