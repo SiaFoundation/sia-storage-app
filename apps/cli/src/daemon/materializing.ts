@@ -17,6 +17,12 @@ export type MaterializingState = {
   active: boolean
   /** Folders the system has read since the pass started. */
   done: number
+  /**
+   * Passes the extension has reported settled since this daemon started. A
+   * pass can settle before the system has listed a folder, and can start and
+   * settle between two polls, so neither `done` nor `active` says one ran.
+   */
+  passes: number
 }
 
 export type Materializing = {
@@ -32,6 +38,7 @@ export type Materializing = {
 export function createMaterializing(): Materializing {
   let folders = new Set<string>()
   let active = false
+  let passes = 0
 
   return {
     observe(method, args) {
@@ -49,6 +56,7 @@ export function createMaterializing(): Materializing {
         active = true
         return
       }
+      passes += 1
       active = false
     },
 
@@ -57,7 +65,7 @@ export function createMaterializing(): Materializing {
     },
 
     state() {
-      return { active, done: folders.size }
+      return { active, done: folders.size, passes }
     },
   }
 }

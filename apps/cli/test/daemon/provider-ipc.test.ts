@@ -101,6 +101,6 @@ describe('a warm pass over the provider socket', () => {
     await call('warm', ['start'])
     await call('ds:provider:list', ['dir:a'])
 
-    expect(tracker.state()).toEqual({ active: true, done: 1 })
+    expect(tracker.state()).toEqual({ active: true, done: 1, passes: 0 })
   })
 })

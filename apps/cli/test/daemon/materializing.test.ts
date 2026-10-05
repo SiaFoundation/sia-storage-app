@@ -2,7 +2,7 @@ import { createMaterializing } from '../../src/daemon/materializing'
 
 describe('materializing', () => {
   it('reports nothing in progress before a pass starts', () => {
-    expect(createMaterializing().state()).toEqual({ active: false, done: 0 })
+    expect(createMaterializing().state()).toEqual({ active: false, done: 0, passes: 0 })
   })
 
   it('counts each folder the system reads during a pass', () => {
@@ -12,7 +12,7 @@ describe('materializing', () => {
     m.observe('ds:provider:list', ['dir:a'])
     m.observe('ds:provider:list', ['dir:b'])
 
-    expect(m.state()).toEqual({ active: true, done: 2 })
+    expect(m.state()).toEqual({ active: true, done: 2, passes: 0 })
   })
 
   it('counts a folder read twice only once', () => {
@@ -33,7 +33,7 @@ describe('materializing', () => {
     m.observe('ds:provider:list', ['workingset'])
     m.observe('ds:provider:list', ['NSFileProviderTrashContainerItemIdentifier'])
 
-    expect(m.state()).toEqual({ active: true, done: 0 })
+    expect(m.state()).toEqual({ active: true, done: 0, passes: 0 })
   })
 
   it('reports finished once the shell says the system settled', () => {
@@ -43,7 +43,18 @@ describe('materializing', () => {
 
     m.report('settled')
 
-    expect(m.state()).toEqual({ active: false, done: 1 })
+    expect(m.state()).toEqual({ active: false, done: 1, passes: 1 })
+  })
+
+  // The extension can report start and settled back to back, before the
+  // system has listed a folder, and a client polling in between sees neither.
+  it('counts a pass that settled before any folder was read', () => {
+    const m = createMaterializing()
+
+    m.report('start')
+    m.report('settled')
+
+    expect(m.state()).toEqual({ active: false, done: 0, passes: 1 })
   })
 
   it('leaves the tray idle for a folder the user opens after the pass', () => {
@@ -54,7 +65,7 @@ describe('materializing', () => {
 
     m.observe('ds:provider:list', ['dir:b'])
 
-    expect(m.state()).toEqual({ active: false, done: 1 })
+    expect(m.state()).toEqual({ active: false, done: 1, passes: 1 })
   })
 
   it('starts the count over on the next pass', () => {
@@ -65,7 +76,7 @@ describe('materializing', () => {
 
     m.report('start')
 
-    expect(m.state()).toEqual({ active: true, done: 0 })
+    expect(m.state()).toEqual({ active: true, done: 0, passes: 1 })
   })
 
   it('ends a pass the shell can no longer finish when the socket drops', () => {
@@ -75,6 +86,6 @@ describe('materializing', () => {
 
     m.disconnected()
 
-    expect(m.state()).toEqual({ active: false, done: 1 })
+    expect(m.state()).toEqual({ active: false, done: 1, passes: 0 })
   })
 })
