@@ -97,3 +97,58 @@ export const Power = ({ className }: Props) => (
     <path d="M11.6 4.4a5 5 0 1 1-7.2 0" />
   </svg>
 )
+
+/** A window, with its title bar. */
+export const AppWindow = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2" />
+    <path d="M1.8 6h12.4" />
+  </svg>
+)
+
+/** The top of the screen, with one item marked in the menu bar. */
+export const MenuBar = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <rect x="1.6" y="3" width="12.8" height="10" rx="2" />
+    <path d="M1.6 6.2h12.8" />
+    <circle cx="11.4" cy="4.6" r="0.75" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+/** A padlock, for what is stored encrypted. */
+export const Lock = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <rect x="3" y="7" width="10" height="7" rx="1.6" />
+    <path d="M5.4 7V5.2a2.6 2.6 0 0 1 5.2 0V7" />
+  </svg>
+)
+
+/** A dial with its needle, for a rate. */
+export const Gauge = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <path d="M2.4 11.6a6.2 6.2 0 1 1 11.2 0" />
+    <path d="M8 9.4l2.6-3.2" />
+  </svg>
+)
+
+/** A step that has not started. */
+export const Circle = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <circle cx="8" cy="8" r="6.2" />
+  </svg>
+)
+
+/** A step this build leaves out. */
+export const DashCircle = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <circle cx="8" cy="8" r="6.2" />
+    <path d="M5.4 8h5.2" />
+  </svg>
+)
+
+/** Three quarters of a ring. The caller spins it. */
+export const Spinner = ({ className }: Props) => (
+  <svg {...box} strokeWidth={1.6} className={className} aria-hidden="true">
+    <path d="M8 1.8a6.2 6.2 0 1 0 6.2 6.2" />
+  </svg>
+)

@@ -42,6 +42,49 @@
       box-shadow: 0 0 0 4px rgb(10 132 255 / 0%);
     }
   }
+
+  /* The curve every enter and state change shares: quick off the mark, long
+     settle. */
+  --ease-settle: cubic-bezier(0.2, 0, 0, 1);
+
+  /* A block arriving. `both` holds the start frame through an
+     animation-delay, which is what lets blocks be staggered. */
+  --animate-rise: rise 0.45s var(--ease-settle) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      filter: blur(4px);
+      transform: translateY(6px);
+    }
+  }
+
+  /* One of the three dots trailing a status that is still working. Each dot
+     keeps its width while faded, so the text beside it never shifts. */
+  --animate-dot: dot 1.2s ease-in-out infinite both;
+
+  @keyframes dot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.2;
+    }
+
+    30% {
+      opacity: 1;
+    }
+  }
+}
+
+/* Movement is decoration here: every state it accompanies is also written
+   out, so it is dropped whole for anyone who has asked for less of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 :root {
@@ -86,4 +129,19 @@ body {
   -webkit-font-smoothing: antialiased;
   user-select: none;
   cursor: default;
+}
+
+/* The window has no title bar, so this strip across its top, where the
+   traffic lights sit, is what it is dragged by. Chromium leaves every no-drag
+   element out of the drag area whatever is drawn over it, which keeps a
+   control under the strip clickable. */
+.drag-strip {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 40px;
+  -webkit-app-region: drag;
+}
+
+body.window :is(button, a, input, textarea, select, [role='button']) {
+  -webkit-app-region: no-drag;
 }

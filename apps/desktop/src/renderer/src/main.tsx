@@ -2,8 +2,8 @@
  * One bundle serves both windows. Which one this is comes from the URL hash the
  * main process loads it with: `#popover` or `#main`.
  *
- * The popover carries the status view. The window is a placeholder until the
- * library lands in it.
+ * The popover carries the status view. The window carries sign-in and a longer
+ * form of the same status.
  */
 
 import { AppProvider } from '@siastorage/core/app'

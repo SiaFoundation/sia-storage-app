@@ -10,11 +10,12 @@
 import { createRemoteAppService } from '@siastorage/core/app'
 import type { AppService } from '@siastorage/core/app'
 import { sia } from './api'
+import { paceLibraryClears } from './cacheMessages'
 
 export function createWindowService(): AppService {
   return createRemoteAppService(
     (channel, args, timeoutMs) => sia.rpc(channel, args, timeoutMs),
-    (handler) => sia.onCache(handler),
+    (handler) => sia.onCache(paceLibraryClears(handler, 1_000)),
     {
       // Both outlive the transport's default: approval waits on a person in a
       // browser tab, and register round-trips the indexer with the new key.

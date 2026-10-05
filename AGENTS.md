@@ -136,8 +136,8 @@ different bundle ids. `test` is the build automated device tests install. It nee
 `test.env`, with development profiles for the two test App IDs in `test.example.env`.
 
 `bun run desktop:dev:no-mount` skips all of that and runs from source. Use it for UI
-work with no account or signing setup. The app reports it: the popover's Finder row
-reads "Not in this build".
+work with no account or signing setup. The app reports it: the Finder row in its
+window reads "Not in this build".
 
 Beta and release builds come from `.github/workflows/release-desktop.yml`, which runs
 `bun run desktop:release` on a `desktop/v*` GitHub release: a candidate tag
@@ -174,7 +174,7 @@ anything on a screen.
 | Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | no                  |
 | Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together               | yes                 |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
-| Sim, desktop          | `bun sim run desktop/`                          | the installed test app, its Finder extension and Finder folder  | no                  |
+| Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder  | no                  |
 
 The native device and desktop tiers are local-only and rot unless deliberately run. Run
 the native device tier and the phone scenarios before landing anything that touches

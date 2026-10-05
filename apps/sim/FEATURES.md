@@ -320,18 +320,25 @@ bun sim device expect phone --label Menu
 
 ### The desktop app's windows
 
-- When: the tray icon's status popover, the sign-in window, the More menu and
-  the sign-out dialogs.
+- When: the tray icon's status popover, the window's status view, the status
+  line both share, the sign-in window, the More menu and the sign-out dialogs.
 - Code: files `apps/desktop/src/main/tray.ts`,
   `apps/desktop/src/renderer/src/Status.tsx`,
+  `apps/desktop/src/renderer/src/Details.tsx`,
+  `apps/desktop/src/renderer/src/StatusLine.tsx`,
+  `apps/desktop/src/renderer/src/model.ts`,
   `apps/desktop/src/renderer/src/SignIn.tsx`, `apps/desktop/src/main/menu.ts`
-- Desktop, the status popover and its More menu:
+- Tests: scenarios `desktop/status-popover-and-window`
+- Desktop, the status popover, its More menu and the window:
 
 ```sh
 bun sim device tray mac
-bun sim device expect mac --text "Open Folder"
+bun sim device expect mac --text "Open Folder" --window popover
+bun sim device read mac --id status-message --window popover
 bun sim device tap mac --label More
 bun sim device expect mac --text "Open Logs"
+bun sim device open mac
+bun sim device read mac --id files --window main
 bun sim device ui mac
 ```
 

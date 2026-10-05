@@ -33,6 +33,10 @@ const api = {
   closeWindow: () => ipcRenderer.invoke('window:close'),
   /** Whether this window is on screen. Covered by another window still counts. */
   windowVisible: () => ipcRenderer.invoke('window:visible'),
+  /** Shows the main window, from the popover that summarizes it. */
+  openWindow: () => ipcRenderer.invoke('window:open'),
+  /** What this build is called in Finder, and its version. */
+  appInfo: () => ipcRenderer.invoke('app:info'),
 
   openMount: () => ipcRenderer.invoke('open:mount'),
   /** Opens the menu holding the actions the footer has no room for. */
