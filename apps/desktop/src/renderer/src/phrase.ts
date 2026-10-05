@@ -83,3 +83,16 @@ export function emptySlots(): string[] {
 export function toPhrase(slots: readonly string[]): string {
   return slots.join(' ')
 }
+
+/** A check's answer, kept with the phrase it was asked about. */
+export type Checked<T> = { phrase: string; result: T }
+
+/**
+ * The answer for the phrase in the grid now, or `idle` while the last answer
+ * was for another phrase. The check runs a moment after the grid changes and
+ * then waits on the indexer, so without this an edit to an accepted phrase
+ * would keep its predecessor's `ok` until the new answer came back.
+ */
+export function checkFor<T>(checked: Checked<T>, slots: readonly string[], idle: T): T {
+  return checked.phrase === toPhrase(slots) ? checked.result : idle
+}

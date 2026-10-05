@@ -22,7 +22,11 @@ const RENDERER_PREFERENCES = {
 }
 
 const POPOVER_WIDTH = 300
-const WINDOW_WIDTH = 400
+/**
+ * The window's two widths. The status view is one column of rows. Onboarding
+ * is a column of words beside a stage for what the words are about.
+ */
+const LAYOUT_WIDTH = { status: 400, onboarding: 880 } as const
 /**
  * How long a new window waits for the renderer to report its size before it
  * is shown anyway. A renderer that failed to load never reports, and a window
@@ -123,7 +127,7 @@ export function createMainWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
 
   const window = new BrowserWindow({
-    width: WINDOW_WIDTH,
+    width: LAYOUT_WIDTH.status,
     height: POPOVER_HEIGHT,
     show: false,
     autoHideMenuBar: true,
@@ -142,9 +146,9 @@ export function createMainWindow(): BrowserWindow {
   })
 
   watchForFailure(window, 'window')
-  // Not shown as soon as it can paint. It opens at a guessed height, and the
-  // renderer reports the real one once it knows what it is showing, so
-  // showing it now would draw the window and then jump it.
+  // Not shown as soon as it can paint. It opens at a guessed size, and the
+  // renderer picks between two widths and a height once it knows what it is
+  // showing, so showing it now would draw the window and then jump it.
   // `resizeToContent` shows it at its first report.
   mainSized = false
   showWhenSized = true
@@ -194,6 +198,24 @@ function revealMainWindow(): void {
   showWhenSized = false
   mainWindow.show()
   mainWindow.focus()
+}
+
+/**
+ * Sets the main window to the width of what it is about to show. It widens
+ * and narrows around its own centre, so going from onboarding to the status
+ * view shrinks it in place rather than toward its left edge.
+ */
+export function layoutMainWindow(sender: WebContents, layout: unknown): void {
+  const window = BrowserWindow.fromWebContents(sender)
+  if (!window || window !== mainWindow || window.isDestroyed()) return
+  if (layout !== 'status' && layout !== 'onboarding') return
+  const width = LAYOUT_WIDTH[layout]
+  const bounds = window.getBounds()
+  if (bounds.width === width) return
+  const area = screen.getDisplayMatching(bounds).workArea
+  const centred = Math.round(bounds.x + (bounds.width - width) / 2)
+  const x = Math.max(area.x, Math.min(centred, area.x + area.width - width))
+  window.setBounds({ ...bounds, x, width }, false)
 }
 
 export function createPopover(): BrowserWindow {

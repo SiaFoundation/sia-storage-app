@@ -2,10 +2,13 @@
  * What the window shows.
  *
  * Sign-in until there is an account, then the status view.
+ *
+ * The two are different widths, and the window is told which it is showing
+ * before the view is measured.
  */
 
 import { useApp } from '@siastorage/core/app'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { sia } from './api'
 import { Details } from './Details'
 import { useReportedHeight } from './height'
@@ -37,14 +40,22 @@ export function Window() {
     })
   }, [read])
 
+  const view = needsAccount === null ? null : needsAccount ? 'sign-in' : 'status'
+
+  // A layout effect, so the width is on its way before the resize observer
+  // reports the new view's height and the window is sized once, not twice.
+  useLayoutEffect(() => {
+    if (view) sia.setLayout(view === 'status' ? 'status' : 'onboarding')
+  }, [view])
+
   return (
     <div ref={root}>
       <div aria-hidden className="drag-strip" />
-      {needsAccount === null ? null : needsAccount ? (
+      {view === 'sign-in' ? (
         <SignIn onDone={() => void read()} />
-      ) : (
+      ) : view === 'status' ? (
         <Details />
-      )}
+      ) : null}
     </div>
   )
 }

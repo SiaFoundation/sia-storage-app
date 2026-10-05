@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  checkFor,
   emptySlots,
   fillFrom,
   isComplete,
@@ -82,5 +83,14 @@ describe('isComplete', () => {
 describe('normalizeWord', () => {
   it('drops the case and punctuation a paste can carry in', () => {
     expect(normalizeWord('Guard,')).toBe('guard')
+  })
+})
+
+describe('checkFor', () => {
+  it('keeps an answer only for the phrase it was given for', () => {
+    const accepted = { phrase: PHRASE.join(' '), result: 'ok' }
+    expect(checkFor(accepted, PHRASE, 'idle')).toBe('ok')
+    const edited = [...PHRASE.slice(0, 11), 'abandon']
+    expect(checkFor(accepted, edited, 'idle')).toBe('idle')
   })
 })

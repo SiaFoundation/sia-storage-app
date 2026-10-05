@@ -29,6 +29,8 @@ const api = {
 
   /** Reports the height the content needs, so the popover can size to it. */
   reportHeight: (height: number) => ipcRenderer.send('window:height', height),
+  /** Says which of its two widths the window should be: the status view's or onboarding's. */
+  setLayout: (layout: 'status' | 'onboarding') => ipcRenderer.send('window:layout', layout),
 
   closeWindow: () => ipcRenderer.invoke('window:close'),
   /** Whether this window is on screen. Covered by another window still counts. */

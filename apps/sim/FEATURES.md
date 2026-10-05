@@ -321,13 +321,12 @@ bun sim device expect phone --label Menu
 ### The desktop app's windows
 
 - When: the tray icon's status popover, the window's status view, the status
-  line both share, the sign-in window, the More menu and the sign-out dialogs.
+  line both share, the More menu and the sign-out dialogs.
 - Code: files `apps/desktop/src/main/tray.ts`,
   `apps/desktop/src/renderer/src/Status.tsx`,
   `apps/desktop/src/renderer/src/Details.tsx`,
   `apps/desktop/src/renderer/src/StatusLine.tsx`,
-  `apps/desktop/src/renderer/src/model.ts`,
-  `apps/desktop/src/renderer/src/SignIn.tsx`, `apps/desktop/src/main/menu.ts`
+  `apps/desktop/src/renderer/src/model.ts`, `apps/desktop/src/main/menu.ts`
 - Tests: scenarios `desktop/status-popover-and-window`
 - Desktop, the status popover, its More menu and the window:
 
@@ -343,8 +342,35 @@ bun sim device ui mac
 ```
 
 `device ui mac` lists both windows' elements and any open native menu or
-dialog. A desktop device is signed in before the app starts, so the sign-in
-window shows only after Sign Out.
+dialog.
+
+### Signing in on the Mac
+
+- When: the desktop app with no account: asking the indexer for a connection,
+  then the recovery phrase.
+- Code: `app.auth`; files `apps/desktop/src/renderer/src/SignIn.tsx`,
+  `apps/desktop/src/renderer/src/pairing.ts`,
+  `apps/desktop/src/renderer/src/Window.tsx`,
+  `packages/mock-network/src/client/auth.ts`
+- Check: `bun sim net auth` lists the connection requests, whether each was
+  told it was reconnecting, and the app keys registered.
+- Tests: scenarios `desktop/sign-in-not-approved`
+- Desktop, a device added signed out:
+
+```sh
+bun sim up --cli= --desktop mac --signed-out mac
+bun sim net approval manual
+bun sim device tap mac --text Connect
+bun sim device expect mac --text "Waiting for you to approve in your browser"
+bun sim net approve
+bun sim device expect mac --text "Your recovery phrase"
+bun sim device tap mac --label "I have written this down somewhere safe"
+bun sim device tap mac --text Continue
+bun sim device read mac --id status-message
+```
+
+A device added without `--signed-out` is signed in before the app starts, so
+its sign-in window shows only after Sign Out.
 
 ### Phone lifecycle
 
@@ -362,7 +388,8 @@ window shows only after Sign Out.
 - Code: `app.auth`; screens `OnboardingWelcome`, `OnboardingRecoveryPhrase`,
   `OnboardingAdvancedIndexer`, `SwitchIndexer`, `SwitchRecoveryPhrase`,
   `SwitchFinished`; CLI `connect`, `reset`
-- Tests: none drive the sign-in screens. Sim phones sign in through test mode.
+- Tests: none drive the phone's sign-in screens. Sim phones sign in through
+  test mode. The desktop app's are under Signing in on the Mac.
 - Phone, the Switch indexer screens:
 
 ```sim
