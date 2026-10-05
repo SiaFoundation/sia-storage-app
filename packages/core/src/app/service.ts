@@ -371,6 +371,8 @@ export interface AppService {
     getByPath(path: string): Promise<Directory | null>
     /** Returns the directory path for a file, or undefined if unfiled. */
     getPathForFile(fileId: string): Promise<string | undefined>
+    /** Returns the directory path of each of these files that is in one, keyed by file id. */
+    getPathsForFiles(fileIds: string[]): Promise<Record<string, string>>
     /** Returns direct children of a directory (null for root). */
     getChildren(parentPath: string | null): Promise<DirectoryWithCount[]>
     /** Creates a new directory, optionally under a parent path. */

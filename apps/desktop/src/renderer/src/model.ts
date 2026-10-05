@@ -531,7 +531,7 @@ export const setupFailed = (steps: SetupStep[]): boolean =>
   steps.some((step) => step.state === 'failed')
 
 /** Powers of 1000, which is what Finder counts in. */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   const units = ['kB', 'MB', 'GB', 'TB']
   if (bytes < 1000) return `${bytes} ${bytes === 1 ? 'byte' : 'bytes'}`
   let value = bytes / 1000

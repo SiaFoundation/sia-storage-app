@@ -5,7 +5,8 @@
  * arrives for the first time, then the status view. The tour and setup are
  * reached only from a sign-in made in this window: an app launched with an
  * account already on it goes straight to the status view, whatever the
- * library is doing.
+ * library is doing. The status view opens the share links, which take over
+ * the window until they are closed.
  *
  * Onboarding and the status view are different widths, and the window is told
  * which it is showing before the view is measured.
@@ -17,6 +18,7 @@ import { sia } from './api'
 import { Details } from './Details'
 import { useReportedHeight } from './height'
 import { Setup } from './Setup'
+import { ShareView } from './ShareView'
 import { SignIn } from './SignIn'
 
 export function Window() {
@@ -24,6 +26,7 @@ export function Window() {
   const root = useReportedHeight<HTMLDivElement>()
   const [needsAccount, setNeedsAccount] = useState<boolean | null>(null)
   const [settingUp, setSettingUp] = useState(false)
+  const [showingLinks, setShowingLinks] = useState(false)
 
   const read = useCallback(async () => {
     try {
@@ -56,18 +59,25 @@ export function Window() {
     return sia.onWindowClosed(() => setSettingUp(false))
   }, [settingUp])
 
+  useEffect(() => {
+    if (!showingLinks) return
+    return sia.onWindowClosed(() => setShowingLinks(false))
+  }, [showingLinks])
+
   const view = settingUp
     ? 'setup'
     : needsAccount === null
       ? null
       : needsAccount
         ? 'sign-in'
-        : 'status'
+        : showingLinks
+          ? 'share'
+          : 'status'
 
   // A layout effect, so the width is on its way before the resize observer
   // reports the new view's height and the window is sized once, not twice.
   useLayoutEffect(() => {
-    if (view) sia.setLayout(view === 'status' ? 'status' : 'onboarding')
+    if (view) sia.setLayout(view === 'status' || view === 'share' ? 'status' : 'onboarding')
   }, [view])
 
   return (
@@ -82,8 +92,10 @@ export function Window() {
             void read()
           }}
         />
+      ) : view === 'share' ? (
+        <ShareView fileIds={null} onDone={() => setShowingLinks(false)} />
       ) : view === 'status' ? (
-        <Details />
+        <Details onShowLinks={() => setShowingLinks(true)} />
       ) : null}
     </div>
   )

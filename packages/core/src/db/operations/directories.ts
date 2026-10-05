@@ -378,6 +378,21 @@ export async function queryDirectoryPathForFile(
   return row?.path
 }
 
+/** The folder path of each of these files that is in a folder, keyed by file id. */
+export async function queryDirectoryPathsForFiles(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<Record<string, string>> {
+  if (fileIds.length === 0) return {}
+  const rows = await db.getAllAsync<{ id: string; path: string }>(
+    `SELECT f.id, d.path FROM files f
+     INNER JOIN directories d ON d.id = f.directoryId
+     WHERE f.id IN (${fileIds.map(() => '?').join(',')})`,
+    ...fileIds,
+  )
+  return Object.fromEntries(rows.map((r) => [r.id, r.path]))
+}
+
 export async function syncDirectoryFromMetadata(
   db: DatabaseAdapter,
   fileId: string,

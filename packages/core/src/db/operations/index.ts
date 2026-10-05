@@ -24,6 +24,7 @@ export {
   queryDirectoriesByIds,
   queryDirectoriesByParent,
   queryDirectoryPathForFile,
+  queryDirectoryPathsForFiles,
   queryFileByNameInDirectory,
   queryFilesByDirectoryPath,
   readFileByNameInDirectoryPath,

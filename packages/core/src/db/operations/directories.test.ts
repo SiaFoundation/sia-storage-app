@@ -17,6 +17,7 @@ import {
   queryDirectoryById,
   queryDirectoryChildren,
   queryDirectoryPathForFile,
+  queryDirectoryPathsForFiles,
   renameDirectory,
   sanitizeDirectoryPath,
   sanitizeDirectorySegment,
@@ -945,6 +946,28 @@ describe('queryDirectoryPathForFile', () => {
     await createTestFile('f1')
     const path = await queryDirectoryPathForFile(db(), 'f1')
     expect(path).toBeUndefined()
+  })
+})
+
+describe('queryDirectoryPathsForFiles', () => {
+  it('returns the folder of each file in one and leaves out the rest', async () => {
+    await insertDirectory(db(), 'Photos')
+    const vacation = await insertDirectory(db(), 'Vacation', 'Photos')
+    const work = await insertDirectory(db(), 'Work')
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await createTestFile('f3')
+    await moveFileToDirectory(db(), 'f1', vacation.id)
+    await moveFileToDirectory(db(), 'f2', work.id)
+
+    expect(await queryDirectoryPathsForFiles(db(), ['f1', 'f2', 'f3', 'missing'])).toEqual({
+      f1: 'Photos/Vacation',
+      f2: 'Work',
+    })
+  })
+
+  it('returns nothing for no files', async () => {
+    expect(await queryDirectoryPathsForFiles(db(), [])).toEqual({})
   })
 })
 

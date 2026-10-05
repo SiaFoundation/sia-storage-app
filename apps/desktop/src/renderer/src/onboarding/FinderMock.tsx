@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react'
 import { FILES, FOLDERS } from './library'
+import { FinderItemIcon, FOLDER_PATH } from '../finderIcons'
 
 /** The mock screen in its own points, and how far it is scaled to fit the stage. */
 const SCREEN = { width: 800, height: 520 }
@@ -102,8 +103,6 @@ function Glyph({
   )
 }
 
-const FOLDER_PATH =
-  'M2 5.2A1.6 1.6 0 0 1 3.6 3.6h3l1.5 1.6h6.3A1.6 1.6 0 0 1 16 6.8v6.6a1.6 1.6 0 0 1-1.6 1.6H3.6A1.6 1.6 0 0 1 2 13.4z'
 const CLOUD_PATH = 'M5.2 13.6a3.2 3.2 0 0 1-.4-6.4 4.3 4.3 0 0 1 8.3 1.1 2.7 2.7 0 0 1-.2 5.3z'
 
 const SIDEBAR = {
@@ -334,25 +333,7 @@ function ListRow({
           </Glyph>
         ) : null}
       </span>
-      <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true" style={{ flexShrink: 0 }}>
-        {folder ? (
-          <>
-            <path d={FOLDER_PATH} fill="#3d9bf3" />
-            <path
-              d="M2 7.2h14v6.2a1.6 1.6 0 0 1-1.6 1.6H3.6A1.6 1.6 0 0 1 2 13.4z"
-              fill="#62b3ff"
-            />
-          </>
-        ) : (
-          <path
-            d="M4.6 2.2h5.6l3.2 3.2v10.4H4.6zM10.2 2.2v3.2h3.2"
-            fill="#f2f2f4"
-            stroke="rgba(0,0,0,0.28)"
-            strokeWidth="0.7"
-            strokeLinejoin="round"
-          />
-        )}
-      </svg>
+      <FinderItemIcon folder={folder} />
       <span style={{ ...cell, flex: '1 1 auto', minWidth: 0, marginLeft: 6, color: palette.label }}>
         {name}
       </span>

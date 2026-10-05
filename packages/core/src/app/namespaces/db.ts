@@ -611,6 +611,7 @@ export function buildDbNamespaces(
       getById: (id) => ops.queryDirectoryById(db, id),
       getByPath: (path) => ops.queryDirectoryByPath(db, path),
       getPathForFile: (fileId) => ops.queryDirectoryPathForFile(db, fileId),
+      getPathsForFiles: (fileIds) => ops.queryDirectoryPathsForFiles(db, fileIds),
       getChildren: (parentPath) => ops.queryDirectoryChildren(db, parentPath),
       create: async (name, parentPath) => {
         const dir = await ops.insertDirectory(db, name, parentPath)
