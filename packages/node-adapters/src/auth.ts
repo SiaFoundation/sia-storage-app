@@ -81,6 +81,16 @@ export function createNodeSdkAuthAdapter(): NodeSdkAuthResult {
       }
     },
 
+    reconnecting(): boolean {
+      if (!builder) throw new Error('No builder instance')
+      return builder.reconnecting()
+    },
+
+    async matchesExistingAppKey(mnemonic: string): Promise<boolean> {
+      if (!builder) throw new Error('No builder instance')
+      return builder.matchesExistingAppKey(mnemonic)
+    },
+
     async connectWithKey(keyHex: string): Promise<boolean> {
       if (!builder) throw new Error('No builder instance')
       await ensureInit()

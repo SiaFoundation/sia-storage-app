@@ -142,10 +142,10 @@ export class Sdk {
       lastUsed: new Date(),
     }
   }
-  shareObject() {
+  objectShareUrl() {
     return ''
   }
-  async sharedObject() {
+  async objectFromShareUrl() {
     return new PinnedObject()
   }
   async pinObject() {}
@@ -161,6 +161,12 @@ export class Builder {
     return `${this.#indexerUrl}/approve?token=mock`
   }
   async waitForApproval() {}
+  reconnecting() {
+    return false
+  }
+  async matchesExistingAppKey() {
+    return false
+  }
   async connected(): Promise<Sdk | null> {
     return null
   }

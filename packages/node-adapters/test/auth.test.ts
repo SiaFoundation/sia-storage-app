@@ -24,6 +24,8 @@ jest.mock('@siafoundation/sia-storage', () => {
           approvalResolve = resolve
         }),
     ),
+    reconnecting: jest.fn().mockReturnValue(true),
+    matchesExistingAppKey: jest.fn().mockImplementation(async (m: string) => m === 'known phrase'),
     connected: jest.fn().mockImplementation(async () => connectResult),
     register: jest.fn().mockResolvedValue(mockSdk),
   }))
@@ -186,8 +188,27 @@ describe('createNodeSdkAuthAdapter', () => {
     await expect(waitPromise).rejects.toThrow('Auth cancelled')
   })
 
+  it('reports what the SDK says about the approving account', async () => {
+    const { adapters } = createNodeSdkAuthAdapter()
+    await adapters.createBuilder(
+      'https://sia.storage',
+      JSON.stringify({
+        appID: '00'.repeat(32),
+        name: 'Test',
+        description: 'Test',
+        serviceURL: 'https://test.com',
+      }),
+    )
+
+    expect(await adapters.reconnecting?.()).toBe(true)
+    expect(await adapters.matchesExistingAppKey?.('known phrase')).toBe(true)
+    expect(await adapters.matchesExistingAppKey?.('another phrase')).toBe(false)
+  })
+
   it('throws if no builder instance', async () => {
     const { adapters } = createNodeSdkAuthAdapter()
+    expect(() => adapters.reconnecting?.()).toThrow('No builder instance')
+    await expect(adapters.matchesExistingAppKey?.('test')).rejects.toThrow('No builder instance')
     await expect(adapters.requestConnection()).rejects.toThrow('No builder instance')
     await expect(adapters.waitForApproval()).rejects.toThrow('No builder instance')
     await expect(adapters.connectWithKey('ab'.repeat(32))).rejects.toThrow('No builder instance')
