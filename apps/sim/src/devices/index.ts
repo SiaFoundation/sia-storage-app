@@ -61,9 +61,17 @@ export const PHONE_KINDS = DEVICE_KINDS.filter(
 )
 
 /** Records a new device in the session and returns it, not yet started. */
-export async function addDevice(session: Session, name: string, kind: DeviceKind): Promise<Device> {
+export async function addDevice(
+  session: Session,
+  name: string,
+  kind: DeviceKind,
+  opts: { signedOut?: boolean } = {},
+): Promise<Device> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Device names are lowercase letters, digits and dashes: ${name}`)
+  }
+  if (opts.signedOut && kind !== 'desktop') {
+    throw new Error(`Only a desktop device can start signed out, and ${name} is a ${kind} device`)
   }
   await session.update((s) => {
     if (s.devices[name]) throw new Error(`Device ${name} already exists`)
@@ -74,7 +82,11 @@ export async function addDevice(session: Session, name: string, kind: DeviceKind
     if (kind === 'desktop' && desktop) {
       throw new Error(`Session ${session.name} already has a desktop device, ${desktop[0]}`)
     }
-    s.devices[name] = { kind, dir: session.deviceDir(name) }
+    s.devices[name] = {
+      kind,
+      dir: session.deviceDir(name),
+      ...(opts.signedOut ? { signedOut: true } : {}),
+    }
   })
   return openDevice(session, name)
 }

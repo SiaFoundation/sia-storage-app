@@ -21,8 +21,9 @@ export function registerDeviceCommands({ program, current }: CommandContext): vo
   device
     .command('add <name>')
     .addOption(new Option('--kind <kind>', 'Device kind').choices(DEVICE_KINDS).default('cli'))
-    .action(async (name: string, opts: { kind: DeviceKind }) => {
-      const d = await addDevice(current(), name, opts.kind)
+    .option('--signed-out', 'Start a desktop device with no account, to sign in through its window')
+    .action(async (name: string, opts: { kind: DeviceKind; signedOut?: boolean }) => {
+      const d = await addDevice(current(), name, opts.kind, { signedOut: opts.signedOut })
       await d.start()
       console.log(`device ${name} (${opts.kind}) running`)
     })
@@ -60,6 +61,14 @@ export function registerDeviceCommands({ program, current }: CommandContext): vo
     .action((name: string) => {
       desktop(name).ui().clickTray()
       console.log(`clicked ${name}'s menu bar icon`)
+    })
+
+  device
+    .command('open <name>')
+    .description("Open the desktop app's window, as launching the app again does")
+    .action(async (name: string) => {
+      await desktop(name).openWindow()
+      console.log(`opened ${name}'s window`)
     })
 
   device

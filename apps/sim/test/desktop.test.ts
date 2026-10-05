@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { addDevice, type DesktopDevice } from '../src/devices'
 import {
   desktopIdentity,
   desktopUnavailable,
@@ -9,7 +10,6 @@ import {
   isPreservedCopy,
   parseEnvFile,
 } from '../src/devices/desktop'
-import { addDevice } from '../src/devices'
 import { Session } from '../src/session'
 
 const dirs: string[] = []
@@ -88,5 +88,31 @@ describe('desktop devices', () => {
   test('the prod and beta builds are refused, since a device quits its build', () => {
     expect(() => desktopIdentity('prod')).toThrow('SIM_DESKTOP_CONTEXT=prod')
     expect(() => desktopIdentity('beta')).toThrow('SIM_DESKTOP_CONTEXT=beta')
+  })
+})
+
+describe('a desktop device added signed out', () => {
+  const session = Session.create(`unit-signed-out-${process.pid}`, { fastTimers: true })
+  // A session takes one desktop device, so the one added plainly has its own.
+  const plain = Session.create(`unit-signed-in-${process.pid}`, { fastTimers: true })
+  afterAll(() => {
+    session.remove()
+    plain.remove()
+  })
+
+  test('is recorded as starting with no account, and one added plainly is not', async () => {
+    const signedOut = await addDevice(session, 'mac', 'desktop', { signedOut: true })
+    const signedIn = await addDevice(plain, 'mac', 'desktop')
+
+    expect((signedOut as DesktopDevice).signedOut).toBe(true)
+    expect((signedIn as DesktopDevice).signedOut).toBe(false)
+    expect(Session.load(session.name)?.state.devices.mac.signedOut).toBe(true)
+  })
+
+  test('no other kind of device can be', async () => {
+    await expect(addDevice(session, 'laptop', 'cli', { signedOut: true })).rejects.toThrow(
+      'Only a desktop device can start signed out',
+    )
+    expect(session.state.devices.laptop).toBeUndefined()
   })
 })

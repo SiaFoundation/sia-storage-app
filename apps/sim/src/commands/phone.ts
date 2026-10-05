@@ -26,15 +26,26 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
     return d
   }
 
-  /** Runs `fn` against a device's screen and closes the session after, whatever happens. */
-  const withUi = async <T>(name: string, fn: (ui: UiSurface) => Promise<T>): Promise<T> => {
+  /**
+   * Runs `fn` against a device's screen and closes the session after, whatever
+   * happens. `window` limits it to one of the desktop app's windows.
+   */
+  const withUi = async <T>(
+    name: string,
+    fn: (ui: UiSurface) => Promise<T>,
+    window?: string,
+  ): Promise<T> => {
     const d = openDevice(current(), name)
     if (!d.ui) throw new Error(`${name} is a ${d.kind} device, which has no screen to drive`)
-    const ui = d.ui()
+    const whole = d.ui()
+    if (window && !whole.window) {
+      throw new Error(`${name} is a ${d.kind} device, which has one screen and no --window`)
+    }
+    const ui = window && whole.window ? whole.window(window) : whole
     try {
       return await fn(ui)
     } finally {
-      await ui.close()
+      await whole.close()
     }
   }
 
@@ -73,7 +84,10 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
     .description(
       "List a device's visible elements by text, label and test id, for writing selectors",
     )
-    .action(async (name: string) => print(await withUi(name, (ui) => ui.describe())))
+    .option('--window <window>', "One of the desktop app's windows: main or popover")
+    .action(async (name: string, opts: { window?: string }) =>
+      print(await withUi(name, (ui) => ui.describe(), opts.window)),
+    )
 
   /** The --text, --label, --id and --contains options every element command takes. */
   const selecting = (command: Command): Command =>
@@ -82,6 +96,7 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       .option('--label <label>', 'accessibilityLabel, exactly')
       .option('--id <id>', 'testID, exactly')
       .option('--contains <text>', 'Part of the text or label, any case')
+      .option('--window <window>', "One of the desktop app's windows: main or popover")
 
   const selector = (opts: Selector): Selector => {
     const sel: Selector = {}
@@ -97,10 +112,28 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
     device
       .command('tap <name>')
       .description('Tap the element on a phone, or click it in the desktop app'),
-  ).action(async (name: string, opts: Selector) => {
+  ).action(async (name: string, opts: Selector & { window?: string }) => {
     const sel = selector(opts)
-    await withUi(name, (ui) => ui.tap(sel))
+    await withUi(name, (ui) => ui.tap(sel), opts.window)
     console.log(`tapped ${JSON.stringify(sel)} on ${name}`)
+  })
+
+  selecting(
+    device
+      .command('read <name>')
+      .description("Print the element's text, such as a status line or a row's value"),
+  ).action(async (name: string, opts: Selector & { window?: string }) => {
+    const sel = selector(opts)
+    const text = await withUi(
+      name,
+      (ui) => {
+        if (!ui.read) throw new Error(`${name} has no element text to read`)
+        return ui.read(sel)
+      },
+      opts.window,
+    )
+    if (text === null) throw new Error(`No element matching ${JSON.stringify(sel)} on ${name}`)
+    console.log(text)
   })
 
   selecting(
@@ -108,12 +141,16 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       .command('long-press <name>')
       .description('Press and hold the element on a phone')
       .option('--ms <ms>', 'How long to hold', integer, 1000),
-  ).action(async (name: string, opts: Selector & { ms: number }) => {
+  ).action(async (name: string, opts: Selector & { ms: number; window?: string }) => {
     const sel = selector(opts)
-    await withUi(name, (ui) => {
-      if (!ui.longPress) throw new Error(`${name} has no long press`)
-      return ui.longPress(sel, opts.ms)
-    })
+    await withUi(
+      name,
+      (ui) => {
+        if (!ui.longPress) throw new Error(`${name} has no long press`)
+        return ui.longPress(sel, opts.ms)
+      },
+      opts.window,
+    )
     console.log(`long-pressed ${JSON.stringify(sel)} on ${name}`)
   })
 
@@ -124,18 +161,26 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       .option('--clear', 'Empty the field first')
       .option('--submit', 'Press return after typing'),
   ).action(
-    async (name: string, text: string, opts: Selector & { clear?: boolean; submit?: boolean }) => {
+    async (
+      name: string,
+      text: string,
+      opts: Selector & { clear?: boolean; submit?: boolean; window?: string },
+    ) => {
       const sel = selector(opts)
-      await withUi(name, (ui) => ui.type(sel, text, { clear: opts.clear, submit: opts.submit }))
+      await withUi(
+        name,
+        (ui) => ui.type(sel, text, { clear: opts.clear, submit: opts.submit }),
+        opts.window,
+      )
       console.log(`typed into ${JSON.stringify(sel)} on ${name}`)
     },
   )
 
   selecting(
     device.command('clear <name>').description('Empty the field on a phone or in the desktop app'),
-  ).action(async (name: string, opts: Selector) => {
+  ).action(async (name: string, opts: Selector & { window?: string }) => {
     const sel = selector(opts)
-    await withUi(name, (ui) => ui.clear(sel))
+    await withUi(name, (ui) => ui.clear(sel), opts.window)
     console.log(`cleared ${JSON.stringify(sel)} on ${name}`)
   })
 
@@ -162,13 +207,17 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       .command('scroll-to <name>')
       .description('Swipe until the element is on screen')
       .option('--direction <direction>', 'The swipe that scrolls toward it', 'up'),
-  ).action(async (name: string, opts: Selector & { direction: string }) => {
+  ).action(async (name: string, opts: Selector & { direction: string; window?: string }) => {
     const sel = selector(opts)
     const swipe = swipeDirection(opts.direction)
-    await withUi(name, (ui) => {
-      if (!ui.scrollTo) throw new Error(`${name} has no scrolling`)
-      return ui.scrollTo(sel, swipe)
-    })
+    await withUi(
+      name,
+      (ui) => {
+        if (!ui.scrollTo) throw new Error(`${name} has no scrolling`)
+        return ui.scrollTo(sel, swipe)
+      },
+      opts.window,
+    )
     console.log(`scrolled to ${JSON.stringify(sel)} on ${name}`)
   })
 
@@ -200,13 +249,20 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       .description('Wait until the element is on screen, or with --gone until it is not')
       .option('--gone', 'Wait for it to disappear')
       .option('--timeout <ms>', 'How long to wait', integer, 15_000),
-  ).action(async (name: string, opts: Selector & { gone?: boolean; timeout: number }) => {
-    const sel = selector(opts)
-    const start = performance.now()
-    await withUi(name, (ui) =>
-      opts.gone ? ui.waitForGone(sel, opts.timeout) : ui.waitFor(sel, opts.timeout).then(() => {}),
-    )
-    const ms = Math.round(performance.now() - start)
-    console.log(`${opts.gone ? 'gone' : 'found'} ${JSON.stringify(sel)} on ${name} after ${ms}ms`)
-  })
+  ).action(
+    async (name: string, opts: Selector & { gone?: boolean; timeout: number; window?: string }) => {
+      const sel = selector(opts)
+      const start = performance.now()
+      await withUi(
+        name,
+        (ui) =>
+          opts.gone
+            ? ui.waitForGone(sel, opts.timeout)
+            : ui.waitFor(sel, opts.timeout).then(() => {}),
+        opts.window,
+      )
+      const ms = Math.round(performance.now() - start)
+      console.log(`${opts.gone ? 'gone' : 'found'} ${JSON.stringify(sel)} on ${name} after ${ms}ms`)
+    },
+  )
 }

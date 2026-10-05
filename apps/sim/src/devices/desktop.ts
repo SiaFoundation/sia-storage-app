@@ -309,7 +309,7 @@ export class DesktopDevice extends CliDevice {
     if (unavailable) throw new Error(unavailable)
     await takeLease(this.identity, this.session.name)
     mkdirSync(this.paths.dataDir, { recursive: true })
-    if (!existsSync(this.paths.secretsPath)) await this.mustCli('connect')
+    if (!this.signedOut && !existsSync(this.paths.secretsPath)) await this.mustCli('connect')
     await quitApp(this.identity)
     // The system keeps what it listed and downloaded for a Finder folder until
     // the folder is removed, so a device's first start begins from none of it.
@@ -402,6 +402,48 @@ export class DesktopDevice extends CliDevice {
     }
     await this.session.update((s) => {
       delete s.devices[this.name].prepared
+    })
+  }
+
+  /**
+   * Whether the device was added to start with no account. Its daemon then
+   * comes up disconnected and the app opens its window on sign-in, which a
+   * scenario drives through `ui()`. Once it has signed in that way a restart
+   * finds the account like any other device's.
+   */
+  get signedOut(): boolean {
+    return this.session.state.devices[this.name]?.signedOut === true
+  }
+
+  /**
+   * Opens the app's main window the way launching the app again does, and
+   * waits until it is on screen. An app started with an account shows no
+   * window until asked, only its menu bar icon.
+   */
+  async openWindow(): Promise<void> {
+    const opened = Bun.spawnSync(['open', this.identity.appPath])
+    if (opened.exitCode !== 0) {
+      throw new Error(`open ${this.identity.appName} failed: ${opened.stderr.toString().trim()}`)
+    }
+    const ui = this.ui()
+    await waitFor(`${this.name}'s window to open`, () => ui.isShowing('main'), {
+      timeoutMs: 15_000,
+      intervalMs: 250,
+    })
+  }
+
+  /**
+   * Opens the status popover by clicking the menu bar icon, and waits until it
+   * is on screen. The popover hides when it loses focus, so it is opened right
+   * before the step that reads it.
+   */
+  async openPopover(): Promise<void> {
+    const ui = this.ui()
+    if (await ui.isShowing('popover')) return
+    ui.clickTray()
+    await waitFor(`${this.name}'s popover to open`, () => ui.isShowing('popover'), {
+      timeoutMs: 15_000,
+      intervalMs: 250,
     })
   }
 

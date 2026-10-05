@@ -20,6 +20,14 @@ Every device talks to it over HTTP, so it keeps one set of objects and one event
 stream for all of them, persisted under the session directory. Nothing touches a
 real account.
 
+The network is one account, and it holds sign-in too. A CLI or desktop device
+asks it for a connection, and registers the app key its recovery phrase derives,
+so the same phrase gives every device the same key. A request is approved as it
+arrives unless a test switches to `manual` and settles each one with `approve`
+or `deny`. A device that signs in once the account has a key is told it is
+reconnecting, and can ask whether a phrase is one the account holds. Phones
+still sign in inside the app with a fixed key and register nothing here.
+
 ## Working on a feature
 
 Read the feature's entry in `FEATURES.md` first. It names the code the feature
@@ -80,14 +88,21 @@ while macOS reports memory pressure.
 
 A desktop device is the installed test build of the desktop app, launched with
 the session's network and a library in its device directory, and with its daemon
-running from source. A change to the Electron main process or the File Provider
-extension needs `bun run desktop:package test` again. Its first start removes
+running from source. A change to the Electron main process, the windows or the
+File Provider extension needs `bun run desktop:package test` again. Its first start removes
 the build's Finder folder, and so everything macOS listed or downloaded for it,
 and handing the device back removes it again. The test build has one Finder
 folder per Mac, so one desktop device runs at a time across every checkout, and
 a second waits for the first. `SIM_DESKTOP_CONTEXT` launches another build
 context, such as `dev`, which resets that build's Finder folder the same way.
 It refuses `prod` and `beta`, the builds people use.
+
+A desktop device is signed in from the command line before the app starts, so
+the app comes up with an account and no window. Added signed out, with
+`--signed-out` or as `desktop-signed-out` in a scenario, it starts with no
+account: its daemon is disconnected, the app opens its window on sign-in, and
+the test signs in through that window. A test build never opens the approval
+page in a browser. The test approves the request on the network instead.
 
 macOS syncs the test build's Finder folder only once it has been switched on
 under File Providers in System Settings, General, Login Items & Extensions.
@@ -112,6 +127,12 @@ bun sim device locks phone              # iOS: SQLite locks it holds, read from 
 bun sim device ui phone                 # visible elements, for writing selectors
 bun sim device tap phone --label "Add files"
 bun sim up --cli laptop --desktop mac     # the desktop test build on this Mac
+bun sim up --cli= --desktop mac --signed-out mac  # the same, with no account yet
+bun sim net approval manual             # connection requests wait for approve or deny
+bun sim net approve                     # also: deny, and `net auth` to list requests and keys
+bun sim device open mac                 # the app's window, as launching it again does
+bun sim device read mac --id files --window main   # an element's text
+bun sim device ui mac --window popover  # one window's elements
 bun sim device finder mac               # its Finder folder, for cp, mv, ls and rm
 bun sim net offline laptop              # also: online, latency, rate, fail
 bun sim net objects                     # what the indexer holds
@@ -149,11 +170,18 @@ The kill itself needs a real phone.
 ## Scenarios
 
 A scenario is a file in `scenarios/` ending `.scenario.ts`. It declares its
-devices as `cli`, `phone` or `desktop`, runs steps, and records checks. Each
-device arrives typed by its kind, so a `cli` device has `cli()` and `stage()`, a
-`phone` has `ui()` and `importFiles()`, and a `desktop` device has `finderList()`,
-`finderRead()`, `finderWrite()`, `finderRename()`, `finderRemove()`,
-`isCloudOnly()` and `extensionLog()`.
+devices as `cli`, `phone`, `desktop` or `desktop-signed-out`, runs steps, and
+records checks. Each device arrives typed by its kind, so a `cli` device has
+`cli()` and `stage()`, a `phone` has `ui()` and `importFiles()`, and a `desktop`
+device has `finderList()`, `finderRead()`, `finderWrite()`, `finderRename()`,
+`finderRemove()`, `isCloudOnly()` and `extensionLog()`.
+
+A desktop device's `ui()` drives the app's two windows. Both show the same
+status, so a step names the one it means: `ui().window('main')` or
+`ui().window('popover')`. `openWindow()` and `openPopover()` put one on screen,
+`isShowing(window)` says whether it is, and `read(selector)` returns an
+element's text. Values a check reads carry a test id, such as `status-message`,
+`files` and `step-metadata`, so a check does not depend on where a row sits.
 
 `bun sim run [filter]` gives each scenario a fresh network and devices and writes
 a report to `/tmp/sia-sim/runs/<run id>/`. `--jobs N` runs N at once, and

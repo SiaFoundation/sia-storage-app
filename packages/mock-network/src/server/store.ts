@@ -28,7 +28,14 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { decodeFileMetadata } from '@siastorage/core/encoding/fileMetadata'
-import type { InspectedEvent, InspectedObject, RequestRecord, SdkOp } from '../protocol'
+import type {
+  ApprovalState,
+  InspectedConnectionRequest,
+  InspectedEvent,
+  InspectedObject,
+  RequestRecord,
+  SdkOp,
+} from '../protocol'
 
 export type ObjectRow = {
   id: string
@@ -89,6 +96,19 @@ CREATE TABLE IF NOT EXISTS uploads (
   blob_ids TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+-- The network is one account, so every key here belongs to it. A key is what a
+-- recovery phrase derives, and two devices signed in with one phrase share a row.
+CREATE TABLE IF NOT EXISTS app_keys (
+  key TEXT PRIMARY KEY,
+  device TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS connection_requests (
+  id TEXT PRIMARY KEY,
+  device TEXT NOT NULL,
+  state TEXT NOT NULL,
+  -- Whether the account had an app key when this was approved.
+  reconnecting INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS requests (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   at INTEGER NOT NULL,
@@ -424,13 +444,80 @@ export class NetworkStore {
     )
   }
 
+  createConnectionRequest(device: string): string {
+    const id = this.nextId('request')
+    this.db
+      .query("INSERT INTO connection_requests (id, device, state) VALUES (?1, ?2, 'pending')")
+      .run(id, device)
+    return id
+  }
+
+  connectionRequest(id: string): InspectedConnectionRequest | null {
+    const row = this.db
+      .query<ConnectionRequestRow, [string]>('SELECT * FROM connection_requests WHERE id = ?1')
+      .get(id)
+    return row ? inspectRequest(row) : null
+  }
+
+  connectionRequests(): InspectedConnectionRequest[] {
+    return this.db
+      .query<ConnectionRequestRow, []>('SELECT * FROM connection_requests ORDER BY rowid')
+      .all()
+      .map(inspectRequest)
+  }
+
+  /**
+   * Approves or denies one pending request, or every pending one when no id is
+   * given, and returns how many it settled. `reconnecting` is fixed here, at
+   * approval, so the device's own registration a moment later does not turn
+   * its answer to true.
+   */
+  settleConnectionRequests(state: 'approved' | 'denied', id?: string): number {
+    const reconnecting = state === 'approved' && this.appKeys().length > 0 ? 1 : 0
+    return this.db
+      .query(
+        `UPDATE connection_requests SET state = ?1, reconnecting = ?2
+         WHERE state = 'pending' AND (?3 IS NULL OR id = ?3)`,
+      )
+      .run(state, reconnecting, id ?? null).changes
+  }
+
+  appKeys(): Array<{ key: string; device: string }> {
+    return this.db
+      .query<{ key: string; device: string }, []>('SELECT key, device FROM app_keys ORDER BY rowid')
+      .all()
+  }
+
+  hasAppKey(key: string): boolean {
+    return this.db.query('SELECT 1 FROM app_keys WHERE key = ?1').get(key) !== null
+  }
+
+  /** A second device registering the same phrase keeps the first device's row. */
+  registerAppKey(key: string, device: string): void {
+    this.db
+      .query('INSERT INTO app_keys (key, device) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING')
+      .run(key, device)
+  }
+
   close(): void {
     this.db.close()
   }
 }
 
+type ConnectionRequestRow = { id: string; device: string; state: string; reconnecting: number }
+
+function inspectRequest(row: ConnectionRequestRow): InspectedConnectionRequest {
+  return {
+    id: row.id,
+    device: row.device,
+    state: row.state as ApprovalState,
+    reconnecting: row.reconnecting === 1,
+  }
+}
+
 export class NotFound extends Error {}
 export class BadRequest extends Error {}
+export class Forbidden extends Error {}
 
 function inspect(row: ObjectRow): InspectedObject {
   let metadata: Record<string, unknown> | null = null

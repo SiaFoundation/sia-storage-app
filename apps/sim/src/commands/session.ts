@@ -10,6 +10,11 @@ export function registerSessionCommands({ program, sessionName, current }: Comma
     .command('up')
     .description('Start the mock network and devices (default: CLI devices phone and laptop)')
     .option('--real-timers', 'Use production sync and upload timers')
+    .option(
+      '--signed-out <names>',
+      'Comma-separated desktop device names that start with no account, to sign in through the window',
+      '',
+    )
   for (const kind of DEVICE_KINDS) {
     up.option(
       `--${kind} <names>`,
@@ -18,6 +23,7 @@ export function registerSessionCommands({ program, sessionName, current }: Comma
     )
   }
   up.action(async (opts: Record<string, string> & { realTimers?: boolean }) => {
+    const signedOut = new Set(opts.signedOut.split(',').filter(Boolean))
     const name = sessionName()
     const existing = Session.load(name)
     const wanted = DEVICE_KINDS.flatMap((kind) =>
@@ -62,7 +68,7 @@ export function registerSessionCommands({ program, sessionName, current }: Comma
       wanted.map(async ([device, kind]) => {
         const d = session.state.devices[device]
           ? openDevice(session, device)
-          : await addDevice(session, device, kind)
+          : await addDevice(session, device, kind, { signedOut: signedOut.has(device) })
         if (!(await d.isRunning())) await d.start()
         console.log(`device ${device} (${kind}) running`)
       }),

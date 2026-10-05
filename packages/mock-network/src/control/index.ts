@@ -5,6 +5,8 @@
  */
 import type { FileMetadata } from '@siastorage/core/types'
 import {
+  type ApprovalMode,
+  type AuthSummary,
   type Conditions,
   type ConnectedDevice,
   type FaultInput,
@@ -81,6 +83,19 @@ export function createNetworkControl(url: string) {
           json('POST', { method, args, timeoutMs }),
         )
       ).result,
+    /** Sign-in as the network holds it: the approval mode, every request, the registered app keys. */
+    auth: () => call<AuthSummary>('/auth'),
+    /**
+     * `manual` leaves each connection request pending until `approve` or
+     * `deny`, which is how a test stays on the screen that waits for a person.
+     */
+    setApprovalMode: (mode: ApprovalMode) =>
+      call<{ mode: ApprovalMode }>('/auth', json('PATCH', { mode })),
+    /** Approves one pending request, or every pending one, and returns how many. */
+    approve: async (requestId?: string) =>
+      (await call<{ settled: number }>('/auth/approve', json('POST', { requestId }))).settled,
+    deny: async (requestId?: string) =>
+      (await call<{ settled: number }>('/auth/deny', json('POST', { requestId }))).settled,
     addFault: (input: FaultInput) => call<FaultRule>('/faults', json('POST', input)),
     faults: () => call<FaultRule[]>('/faults'),
     clearFaults: () => call<void>('/faults', { method: 'DELETE' }),

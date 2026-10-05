@@ -31,6 +31,8 @@ const api = {
   reportHeight: (height: number) => ipcRenderer.send('window:height', height),
 
   closeWindow: () => ipcRenderer.invoke('window:close'),
+  /** Whether this window is on screen. Covered by another window still counts. */
+  windowVisible: () => ipcRenderer.invoke('window:visible'),
 
   openMount: () => ipcRenderer.invoke('open:mount'),
   /** Opens the menu holding the actions the footer has no room for. */

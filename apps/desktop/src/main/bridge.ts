@@ -6,12 +6,13 @@
  * other handlers are explicit verbs for calls that need Electron APIs.
  */
 
-import { app, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { Daemon } from './daemon'
 import { log } from './log'
 import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
+import { isMockNetworkPage } from './testMode'
 import { beginQuit, hideMainWindow, openWebUrl, resizeToContent } from './windows'
 
 async function openPath(path: string): Promise<void> {
@@ -28,6 +29,12 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
   })
 
   ipcMain.handle('open:url', async (_event, url: string) => {
+    // A test build's sign-in is approved by the test driving it, so its
+    // approval page on the mock network is never opened.
+    if (isMockNetworkPage(url, process.env.SIA_MOCK_NETWORK_URL)) {
+      log.info('shell', 'open_skipped', { reason: 'mock_network' })
+      return
+    }
     // Awaited, and a refused URL rejects too: resolving here tells sign-in
     // the approval page is open, and it would wait on one that never appeared.
     const opened = openWebUrl(url)
@@ -68,6 +75,13 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
   ipcMain.handle('window:close', () => {
     hideMainWindow()
   })
+
+  // What the page cannot tell for itself: its own visibility also reads hidden
+  // while another window covers it.
+  ipcMain.handle(
+    'window:visible',
+    (event) => BrowserWindow.fromWebContents(event.sender)?.isVisible() ?? false,
+  )
 
   ipcMain.handle('app:quit', () => {
     beginQuit()

@@ -22,6 +22,8 @@ export type SiaApi = {
   mountPath(): Promise<string | null>
   reportHeight(height: number): void
   closeWindow(): Promise<void>
+  /** Whether this window is on screen. Covered by another window still counts. */
+  windowVisible(): Promise<boolean>
   openMount(): Promise<void>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>
