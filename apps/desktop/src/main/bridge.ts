@@ -6,7 +6,7 @@
  * other handlers are explicit verbs for calls that need Electron APIs.
  */
 
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
 import { desktopConfig } from './config'
 import { Daemon } from './daemon'
 import { log } from './log'
@@ -96,6 +96,10 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
   ipcMain.handle('window:open', () => {
     hidePopover()
     showMainWindow()
+  })
+
+  ipcMain.handle('clipboard:write', (_event, text: unknown) => {
+    if (typeof text === 'string') clipboard.writeText(text)
   })
 
   ipcMain.handle('app:info', () => ({

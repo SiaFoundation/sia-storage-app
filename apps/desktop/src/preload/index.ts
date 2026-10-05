@@ -43,6 +43,7 @@ const api = {
   },
   /** Shows the main window, from the popover that summarizes it. */
   openWindow: () => ipcRenderer.invoke('window:open'),
+  copyText: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   /** What this build is called in Finder, and its version. */
   appInfo: () => ipcRenderer.invoke('app:info'),
 

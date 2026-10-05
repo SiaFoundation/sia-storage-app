@@ -424,7 +424,8 @@ bun sim device expect phone --label Menu
   Share URL makes a signed link to one file instead.
 - Code: `app.shares`; files
   `packages/core/src/app/namespaces/shareLinks.ts`,
-  `packages/core/src/services/shareLinks.ts`; tables `share_links`,
+  `packages/core/src/services/shareLinks.ts`,
+  `apps/desktop/src/renderer/src/ShareView.tsx`; tables `share_links`,
   `share_link_files`, `share_link_objects`
 - State: `bun sim net shares` lists each live key with the files a recipient
   sees and their names as attached.

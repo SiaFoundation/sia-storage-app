@@ -3,13 +3,13 @@
  *
  * The same status line, rows and sources as the popover, plus the rows the
  * popover has no room for: the average upload speed, the folder count, the
- * Finder folder and the name it goes by in the sidebar, and the connection to
- * the indexer.
+ * share links, the Finder folder and the name it goes by in the sidebar, and
+ * the connection to the indexer.
  */
 
-import { useUploadSpeed } from '@siastorage/core/stores'
+import { useShareLinks, useUploadSpeed } from '@siastorage/core/stores'
 import { Footer } from './Footer'
-import { DoneMark, Row, Section } from './Group'
+import { DoneMark, ROW, Row, Section } from './Group'
 import {
   ArrowCircle,
   CheckCircle,
@@ -36,8 +36,9 @@ import { StatusLine } from './StatusLine'
 import { useAppInfo } from './useAppInfo'
 import { useStatus } from './useStatus'
 
-export function Details() {
+export function Details({ onShowLinks }: { onShowLinks: () => void }) {
   const status = useStatus()
+  const links = useShareLinks({ revalidateOnFocus: false })
   const info = useAppInfo()
   // An average moves slowly, so a slow re-read keeps up with it.
   const speed = useUploadSpeed({ refreshInterval: 10_000 }).data ?? null
@@ -85,6 +86,22 @@ export function Details() {
           <Row icon={<DocOnDoc />} label="Files" id="files" value={fileCountLabel(status)} />
           <Row icon={<Folder />} label="Folders" id="folders" value={folderCountLabel(status)} />
           <Row icon={<InternalDrive />} label="Size" id="size" value={librarySizeLabel(status)} />
+        </Section>
+
+        <Section header="Sharing">
+          <button
+            type="button"
+            className={`${ROW} w-full cursor-default border-none bg-transparent text-left text-label [font-family:inherit] enabled:hover:bg-divider`}
+            onClick={onShowLinks}
+          >
+            <span className="flex w-[15px] shrink-0 text-secondary">
+              <Link />
+            </span>
+            <span className="flex-auto">Share links</span>
+            <span data-testid="share-links" className="pr-row-x text-secondary tabular-nums">
+              {links.data ? links.data.length.toLocaleString() : '-'}
+            </span>
+          </button>
         </Section>
 
         <Section header="Finder">

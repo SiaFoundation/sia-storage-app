@@ -35,6 +35,7 @@ export type SiaApi = {
   /** Fires when the window has been closed, which hides it and keeps the page. */
   onWindowClosed(listener: () => void): () => void
   openWindow(): Promise<void>
+  copyText(text: string): Promise<void>
   appInfo(): Promise<AppInfo>
   openMount(): Promise<void>
   showMoreMenu(): Promise<void>

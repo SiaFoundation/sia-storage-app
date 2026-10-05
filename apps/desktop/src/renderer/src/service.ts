@@ -22,6 +22,13 @@ export function createWindowService(): AppService {
       timeouts: {
         'ds:auth:builder:waitForApproval': 5 * 60 * 1000,
         'ds:auth:builder:register': 60 * 1000,
+        // Each makes a round trip to the indexer per file or per link, and
+        // runs after any link change already under way.
+        'ds:shares:createLink': 2 * 60 * 1000,
+        'ds:shares:addLinkFiles': 2 * 60 * 1000,
+        'ds:shares:removeLinkFiles': 2 * 60 * 1000,
+        'ds:shares:revokeLink': 2 * 60 * 1000,
+        'ds:shares:syncLinks': 2 * 60 * 1000,
       },
     },
   )
