@@ -21,6 +21,11 @@ describe('isProviderChannel', () => {
     expect(isProviderChannel('subscribe')).toBe(true)
   })
 
+  it("allows Finder's share request, which the daemon serves itself", () => {
+    expect(isProviderChannel('share')).toBe(true)
+    expect(isProviderChannel('ds:shares:revokeLink')).toBe(false)
+  })
+
   it('refuses every other namespace', () => {
     expect(isProviderChannel('ping')).toBe(false)
     expect(isProviderChannel('ds:secrets:getItem')).toBe(false)

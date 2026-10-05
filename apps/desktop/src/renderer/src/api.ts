@@ -35,6 +35,10 @@ export type SiaApi = {
   /** Fires when the window has been closed, which hides it and keeps the page. */
   onWindowClosed(listener: () => void): () => void
   openWindow(): Promise<void>
+  /** The files Finder asked to share, once, or null when no request is waiting. */
+  takeShareRequest(): Promise<string[] | null>
+  /** Fires when Finder asks to share files. Take them with `takeShareRequest`. */
+  onShareRequest(listener: () => void): () => void
   copyText(text: string): Promise<void>
   appInfo(): Promise<AppInfo>
   openMount(): Promise<void>

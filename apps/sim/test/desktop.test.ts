@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addDevice, type DesktopDevice } from '../src/devices'
 import {
@@ -30,6 +30,10 @@ describe('desktop devices', () => {
       domainId: 'sia-test',
       domainDisplay: 'Sia Storage Test',
       appPath: '/Applications/Sia Storage Test.app',
+      providerSocket: join(
+        homedir(),
+        'Library/Containers/sia.storage.desktop.test.file-provider/Data/provider.sock',
+      ),
     })
   })
 

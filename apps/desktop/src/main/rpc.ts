@@ -49,6 +49,19 @@ function isCacheFrame(frame: unknown): frame is IpcMessage {
   )
 }
 
+/** Finder's Share Link action, passed on by the daemon with the files it names. */
+export type ShareFrame = { event: 'share'; fileIds: string[] }
+
+function isShareFrame(frame: unknown): frame is ShareFrame {
+  if (!frame || typeof frame !== 'object') return false
+  const { event, fileIds } = frame as Partial<ShareFrame>
+  return (
+    event === 'share' &&
+    Array.isArray(fileIds) &&
+    fileIds.every((id: unknown) => typeof id === 'string')
+  )
+}
+
 export class RpcError extends Error {}
 
 let nextId = 0
@@ -96,8 +109,9 @@ export function call(method: string, args: unknown[] = [], timeoutMs = 15_000): 
  * it drops. The daemon outlives this process and restarts under it, so a dropped
  * stream is expected rather than exceptional.
  *
- * Two kinds of frame arrive: a change signal saying a scope moved, and a cache
- * message naming a key the daemon changed, with the new value when it has one.
+ * Three kinds of frame arrive: a change signal saying a scope moved, a cache
+ * message naming a key the daemon changed, with the new value when it has one,
+ * and a share request from Finder.
  */
 export class DaemonStream {
   private socket: Socket | null = null
@@ -116,6 +130,7 @@ export class DaemonStream {
     private readonly onCache: (message: IpcMessage) => void = () => {},
     private readonly onDown: () => void = () => {},
     private readonly onUp: () => void = () => {},
+    private readonly onShare: (fileIds: string[]) => void = () => {},
   ) {}
 
   start(): void {
@@ -147,6 +162,7 @@ export class DaemonStream {
             // matches neither branch and is dropped.
             if (isChangeEvent(parsed)) this.onEvent(parsed)
             else if (isCacheFrame(parsed)) this.onCache(parsed)
+            else if (isShareFrame(parsed)) this.onShare(parsed.fileIds)
           } catch {
             // Reported rather than reconnected: the daemon sent something this
             // build cannot read, and retrying the same stream would loop on it.

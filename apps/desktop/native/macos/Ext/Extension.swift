@@ -642,3 +642,38 @@ extension FileProviderExtension: NSFileProviderPartialContentFetching {
         return progress
     }
 }
+
+/// The identifier Finder's Share Link action is declared under in this
+/// extension's Info.plist, which `extensionInfoPlist` in the desktop build
+/// writes. The two must match or Finder calls an action nothing handles.
+let shareLinkAction = NSFileProviderExtensionActionIdentifier("storage.sia.share-link")
+
+/// Finder's Share Link action. The extension cannot show a window, and a
+/// link's expiry has to be chosen before the link is made, so the selected
+/// items go to the daemon, which opens the app on its Share view for them.
+/// The action finishes once the daemon has passed them on.
+extension FileProviderExtension: NSFileProviderCustomAction {
+    public func performAction(
+        identifier actionIdentifier: NSFileProviderExtensionActionIdentifier,
+        onItemsWithIdentifiers itemIdentifiers: [NSFileProviderItemIdentifier],
+        completionHandler: @escaping ((any Error)?) -> Void
+    ) -> Progress {
+        guard actionIdentifier == shareLinkAction else {
+            completionHandler(
+                NSError(domain: NSCocoaErrorDomain, code: NSFeatureUnsupportedError))
+            return Progress()
+        }
+        Task {
+            do {
+                try await ready()
+                _ = try await rpc.call(Channel.share, [itemIdentifiers.map(\.rawValue)])
+                fpLog.notice("share requested for \(itemIdentifiers.count, privacy: .public) items")
+                completionHandler(nil)
+            } catch {
+                fpLog.failure("share failed", error)
+                completionHandler(mapError(error))
+            }
+        }
+        return Progress()
+    }
+}

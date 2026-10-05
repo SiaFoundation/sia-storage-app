@@ -13,6 +13,7 @@ import { log } from './log'
 import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
+import { takeShareRequest } from './share'
 import { isMockNetworkPage } from './testMode'
 import {
   beginQuit,
@@ -97,6 +98,8 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
     hidePopover()
     showMainWindow()
   })
+
+  ipcMain.handle('share:take', () => takeShareRequest())
 
   ipcMain.handle('clipboard:write', (_event, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)

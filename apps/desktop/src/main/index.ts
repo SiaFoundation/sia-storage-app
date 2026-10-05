@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
-import { dataDir } from './paths'
+import { buildVariant, dataDir } from './paths'
 import { Daemon, type DaemonSpawn } from './daemon'
 import { forcedResetPending } from './forcedReset'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
@@ -22,6 +22,7 @@ import { log } from './log'
 import { createPlatformIntegration } from './platform'
 import type { StopOptions } from './platform/types'
 import { DaemonStream } from './rpc'
+import { receiveShareRequest } from './share'
 import { createTray, destroyTray } from './tray'
 import { beginQuit, broadcast, createMainWindow, showMainWindow } from './windows'
 
@@ -32,6 +33,16 @@ import { beginQuit, broadcast, createMainWindow, showMainWindow } from './window
  * installed build.
  */
 const BUNDLED = dirname(app.getAppPath())
+
+// Sim drives the windows over Chromium's debugging port. It is read from the
+// environment, not a launch argument, because the daemon reopens a closed app
+// for a Finder share with `open`, which passes on the environment and no
+// arguments. Only the dev and test builds open the port, so a variant added
+// later stays closed until it is listed here.
+const simDebugPort = process.env.SIA_SIM_DEBUG_PORT
+if (simDebugPort && ['dev', 'test'].includes(buildVariant())) {
+  app.commandLine.appendSwitch('remote-debugging-port', simDebugPort)
+}
 
 // A second copy would fight the first for the daemon and the tray.
 if (!app.requestSingleInstanceLock()) {
@@ -288,6 +299,7 @@ if (!app.requestSingleInstanceLock()) {
           // and this scope is what re-arms the popover's bounded polling.
           broadcast('change', { event: 'change', scope: 'connection' })
         },
+        (fileIds) => void app.whenReady().then(() => receiveShareRequest(fileIds)),
       )
       changes.start()
       log.info('app', 'subscribed')

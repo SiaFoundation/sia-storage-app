@@ -5,8 +5,8 @@
  * arrives for the first time, then the status view. The tour and setup are
  * reached only from a sign-in made in this window: an app launched with an
  * account already on it goes straight to the status view, whatever the
- * library is doing. The status view opens the share links, which take over
- * the window until they are closed.
+ * library is doing. Share links take over the window when Finder asks to
+ * share files and when the status view opens them, until they are closed.
  *
  * Onboarding and the status view are different widths, and the window is told
  * which it is showing before the view is measured.
@@ -26,7 +26,12 @@ export function Window() {
   const root = useReportedHeight<HTMLDivElement>()
   const [needsAccount, setNeedsAccount] = useState<boolean | null>(null)
   const [settingUp, setSettingUp] = useState(false)
-  const [showingLinks, setShowingLinks] = useState(false)
+  // The files Finder asked to share, null to manage links with none picked,
+  // and undefined when share links are not showing. `request` counts requests,
+  // so a new one starts the view over even while it shows the last link made.
+  const [sharing, setSharing] = useState<{ request: number; fileIds: string[] | null } | undefined>(
+    undefined,
+  )
 
   const read = useCallback(async () => {
     try {
@@ -59,10 +64,21 @@ export function Window() {
     return sia.onWindowClosed(() => setSettingUp(false))
   }, [settingUp])
 
+  // Taken on mount as well as on the signal, because a request that opened
+  // this window arrived before the page was listening.
   useEffect(() => {
-    if (!showingLinks) return
-    return sia.onWindowClosed(() => setShowingLinks(false))
-  }, [showingLinks])
+    const take = () =>
+      void sia.takeShareRequest().then((fileIds) => {
+        if (fileIds) setSharing((last) => ({ request: (last?.request ?? 0) + 1, fileIds }))
+      })
+    take()
+    return sia.onShareRequest(take)
+  }, [])
+
+  useEffect(() => {
+    if (sharing === undefined) return
+    return sia.onWindowClosed(() => setSharing(undefined))
+  }, [sharing])
 
   const view = settingUp
     ? 'setup'
@@ -70,7 +86,7 @@ export function Window() {
       ? null
       : needsAccount
         ? 'sign-in'
-        : showingLinks
+        : sharing !== undefined
           ? 'share'
           : 'status'
 
@@ -93,9 +109,13 @@ export function Window() {
           }}
         />
       ) : view === 'share' ? (
-        <ShareView fileIds={null} onDone={() => setShowingLinks(false)} />
+        <ShareView
+          key={sharing?.request}
+          fileIds={sharing?.fileIds ?? null}
+          onDone={() => setSharing(undefined)}
+        />
       ) : view === 'status' ? (
-        <Details onShowLinks={() => setShowingLinks(true)} />
+        <Details onShowLinks={() => setSharing({ request: 0, fileIds: null })} />
       ) : null}
     </div>
   )

@@ -305,6 +305,23 @@ describe('Provider reads', () => {
     })
   })
 
+  describe('fileIds', () => {
+    it('gives the current version of each file item, in order, and leaves out folders and unknown ids', async () => {
+      const [first, second] = await app.addFiles(generateTestFiles(2, { startId: 540 }))
+      const dir = await app.app.directories.create('Shared')
+      await createNewerVersion(app, first)
+
+      const ids = await app.app.provider.fileIds([
+        second.id,
+        directoryProviderId(dir.id),
+        'no-such-item',
+        first.id,
+      ])
+
+      expect(ids).toEqual([second.id, 'newer-version'])
+    })
+  })
+
   describe('badges', () => {
     it('reports a locally stored file as downloaded', async () => {
       const [file] = await app.addFiles(generateTestFiles(1, { startId: 60 }))

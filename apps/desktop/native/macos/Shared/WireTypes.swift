@@ -103,4 +103,6 @@ public enum Channel {
     public static let write = "ds:provider:write"
     public static let rename = "ds:provider:rename"
     public static let trash = "ds:provider:trash"
+    /// Finder's Share Link action, served by the daemon rather than the facade.
+    public static let share = "share"
 }

@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { sendIpcCommand } from '@siastorage/node-adapters/ipc'
 import { withFileLock } from '../lock'
 import { freePort, isAlive } from '../process'
 import { REPO_ROOT, SIM_HOME, Session } from '../session'
@@ -34,6 +35,11 @@ export type DesktopIdentity = {
   domainId: string
   domainDisplay: string
   appPath: string
+  /**
+   * Where the File Provider extension reaches the daemon, inside the
+   * extension's container. Null for a context whose env names no extension.
+   */
+  providerSocket: string | null
 }
 
 /** `KEY=value` lines, skipping comments and blanks, as the build's env files are written. */
@@ -79,6 +85,9 @@ export function desktopIdentity(
     domainId: values.SIA_DOMAIN_ID,
     domainDisplay: values.SIA_DOMAIN_DISPLAY,
     appPath: join('/Applications', `${values.SIA_APP_NAME}.app`),
+    providerSocket: values.SIA_EXT_BUNDLE_ID
+      ? join(homedir(), 'Library', 'Containers', values.SIA_EXT_BUNDLE_ID, 'Data', 'provider.sock')
+      : null,
   }
 }
 
@@ -320,21 +329,18 @@ export class DesktopDevice extends CliDevice {
         s.devices[this.name].prepared = true
       })
     }
-    const flags = Object.entries(this.launchEnv()).flatMap(([k, v]) => ['--env', `${k}=${v}`])
     // Chromium's debugging port, which drives the windows. The app allows one
-    // running copy, and a second launch hands its arguments to nothing, so the
-    // port goes on this launch, the first since the quit above.
+    // running copy, and a second launch hands its environment to nothing, so
+    // the port goes on this launch, the first since the quit above. A copy the
+    // daemon reopens for a Finder share inherits the same environment, and so
+    // the same port.
     const debugPort = freePort()
     await this.session.update((s) => {
       s.devices[this.name].debugPort = debugPort
     })
-    const opened = Bun.spawnSync([
-      'open',
-      ...flags,
-      this.identity.appPath,
-      '--args',
-      `--remote-debugging-port=${debugPort}`,
-    ])
+    const env = { ...this.launchEnv(), SIA_SIM_DEBUG_PORT: String(debugPort) }
+    const flags = Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`])
+    const opened = Bun.spawnSync(['open', ...flags, this.identity.appPath])
     if (opened.exitCode !== 0) {
       throw new Error(`open ${this.identity.appName} failed: ${opened.stderr.toString().trim()}`)
     }
@@ -413,6 +419,19 @@ export class DesktopDevice extends CliDevice {
    */
   get signedOut(): boolean {
     return this.session.state.devices[this.name]?.signedOut === true
+  }
+
+  /**
+   * Kills the app's own processes and leaves its daemon running, as a crash
+   * of the app would. Quitting the app the way a person does stops the daemon
+   * too.
+   */
+  async killApp(): Promise<void> {
+    for (const pid of appPids(this.identity)) process.kill(pid, 'SIGKILL')
+    await waitFor(`${this.identity.appName} to exit`, () => appPids(this.identity).length === 0, {
+      timeoutMs: 15_000,
+      intervalMs: 250,
+    })
   }
 
   /**
@@ -515,6 +534,27 @@ export class DesktopDevice extends CliDevice {
     const mount = findMount(this.identity.domainDisplay)
     if (!mount) throw new Error(`${this.name} has no Finder folder`)
     return join(mount, path)
+  }
+
+  /**
+   * Sends what Finder's Share Link action sends for these files, on the socket
+   * the extension uses: their item ids, which are the files' stack ids. The
+   * menu item itself belongs to Finder, which nothing here can click.
+   */
+  async finderShare(names: string[]): Promise<void> {
+    const itemIds: string[] = []
+    for (const name of names) {
+      const [row] = await this.sql<{ stackId: string }>(
+        `SELECT stackId FROM files WHERE name = ? AND kind = 'file' AND current = 1
+           AND trashedAt IS NULL AND deletedAt IS NULL`,
+        name,
+      )
+      if (!row) throw new Error(`No file named ${name} on ${this.name}`)
+      itemIds.push(row.stackId)
+    }
+    const socket = this.identity.providerSocket
+    if (!socket) throw new Error(`The ${this.identity.context} build context names no extension`)
+    await sendIpcCommand(socket, 'share', { args: [itemIds] })
   }
 
   /**

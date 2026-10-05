@@ -1,10 +1,11 @@
 /*
  * Share links, in the window.
  *
- * Opened two ways. Given files, the view asks what the link should show and
- * how long it should last before making it, because the indexer fixes both
- * when the link is made. The status view opens it with no files, to see and
- * revoke the links already made.
+ * Opened two ways. Finder's Share Link action hands over the files selected
+ * there, and the view asks what the link should show and how long it should
+ * last before making it, because the indexer fixes both when the link is made.
+ * The status view opens it with no files, to see and revoke the links already
+ * made.
  */
 
 import { useApp } from '@siastorage/core/app'
@@ -159,7 +160,7 @@ function LinkRow({
   )
 }
 
-/** The files to share, and the choices fixed when the link is made. */
+/** The files Finder asked to share, and the choices of what the link shows and how long it lasts. */
 function NewLink({
   fileIds,
   onCreated,

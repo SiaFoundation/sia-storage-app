@@ -660,6 +660,16 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
   return {
     item,
 
+    async fileIds(itemIds) {
+      const ids: string[] = []
+      for (const itemId of itemIds) {
+        if (parseDirectoryProviderId(itemId) !== null) continue
+        const row = await ops.queryProviderItem(db, itemId)
+        if (row) ids.push(row.id)
+      }
+      return ids
+    },
+
     async list(folderId, cursor) {
       /*
        * The whole library: what the system is told about without anyone having
