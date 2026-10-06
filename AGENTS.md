@@ -159,8 +159,9 @@ and check each change against the device's tables, logs and accessibility tree. 
 bug on a device before reading code for its cause. `apps/sim/FEATURES.md` maps each feature
 to its code, the state that shows it worked and the tests that cover it, with recipes that
 reach it on a phone, and `apps/sim/AGENTS.md` covers the commands and how to write a
-scenario. The PR description of a fix found or reproduced in sim gives the
-`bun sim transcript` lines that reproduced it and the captures of what they showed.
+scenario. The PR description of a fix found or reproduced in sim gives the sim commands
+that reproduce it, what its checks showed before and after the fix, and captures of
+anything on a screen.
 
 ## Tests
 
@@ -189,6 +190,11 @@ but only a real photo library proves the framework returns what that policy chos
 that gap is where cross-device hash divergence comes from. Behavior only real processes
 show, such as a kill mid-upload, a phone suspended with its database open, or a Finder
 save racing another device, gets a sim scenario.
+
+A fix shows its before and after at the lowest of these tiers that both runs the code
+where the bug lives and can force its timing: a test that fails on the commit before the
+fix and passes on it. A fix usually extends a test that already covers the behavior
+rather than adding one that checks only the bug.
 
 ### Integration tests (`apps/integration/test/`)
 
