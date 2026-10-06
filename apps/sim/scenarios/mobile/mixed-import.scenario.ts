@@ -5,23 +5,6 @@ export default defineScenario({
   description:
     'The phone imports an empty file, a file whose name has spaces, and three ordinary files in one pick, and the first copy ends as cancelled, as a native copy can without a suspension. No row is left in progress, the named and ordinary files are added and reach the laptop, and the empty file ends in a terminal state rather than blocking the rest.',
   devices: { phone: 'phone', laptop: 'cli' },
-  knownBug:
-    'The import scanner takes any copy that ends as cancelled for a suspension, so it stops starting the tick’s other files too, counts none of them, and leaves every row it claimed claimed until a stale claim is freed ten minutes later.',
-  bugShowsAs: [
-    {
-      check: 'the named and ordinary files are added',
-      // Files are left claimed, and every other is added.
-      matches: (rows: string[][]) =>
-        rows.some(([, state]) => state === 'active') &&
-        rows.every(([, state]) => state === 'active' || state === 'added'),
-    },
-    {
-      check: 'phone has no import left in progress',
-      matches: (rows: Record<string, number>) => (rows.active ?? 0) > 0 && !rows.pending,
-    },
-    // Which copy runs first differs between platforms, and the empty file can be among those left claimed.
-    { check: 'the empty file has exactly one finished row', got: 0, sometimes: true },
-  ],
   timeoutMs: 6 * 60_000,
   async run({ devices, converge, step, checkEqual, checkContent, note, waitFor, workDir }) {
     const phone = devices.phone
@@ -48,7 +31,7 @@ export default defineScenario({
           importId,
         )
       )[0]?.n ?? 0
-    // A cancelled copy is retried after a backoff, so this waits longer than one copy takes.
+    // The cancelled file is retried on a later tick, so this waits longer than one copy takes.
     await waitFor('every row to finish', async () => (await unfinished()) === 0 || undefined, {
       timeoutMs: 120_000,
       intervalMs: 1000,

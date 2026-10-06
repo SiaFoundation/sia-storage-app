@@ -135,6 +135,28 @@ describe('imports ops', () => {
     expect(row?.attempts).toBe(IMPORT_MAX_ATTEMPTS)
   })
 
+  it('a failure given a retry time is due then rather than after the backoff', async () => {
+    await insertImport(db(), imp({ id: 'i1', source: 'picker' }))
+    await insertManyImportFiles(db(), [file({ id: 'a', importId: 'i1' })])
+    await claimImportFile(db(), 'a', 1000, 'tok')
+    await markImportFileFailure(
+      db(),
+      'a',
+      'tok',
+      'io-error',
+      2000,
+      'failed',
+      IMPORT_MAX_ATTEMPTS,
+      2000,
+    )
+    const row = await db().getFirstAsync<{
+      state: string
+      attempts: number
+      nextAttemptAt: number
+    }>(`SELECT state, attempts, nextAttemptAt FROM import_files WHERE id='a'`)
+    expect(row).toEqual({ state: 'pending', attempts: 1, nextAttemptAt: 2000 })
+  })
+
   it('one transient failure releases to pending with a future backoff', async () => {
     await insertImport(db(), imp({ id: 'i1', source: 'picker' }))
     await insertManyImportFiles(db(), [file({ id: 'a', importId: 'i1' })])
