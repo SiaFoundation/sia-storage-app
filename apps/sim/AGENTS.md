@@ -228,8 +228,9 @@ fails as usual, and the report and the run's summary line list it.
 - A scenario that verifies a change you made is worth keeping. Add it here in
   the same diff.
 
-When you report that something works across devices, cite the run id and the
-commit in the report.
+When you tell the person you are working for that something works across
+devices, cite the run id and the commit, so they can open the report on this
+machine. A PR description is different, as described below.
 
 ## Reporting a fix
 
@@ -240,19 +241,43 @@ fix reports KNOWN_BUG and the run on it reports PASS. A change meant to make
 something faster shows `bench` or `perf` numbers from before and after instead,
 taken on the same device kind with the same load.
 
-The PR description has one shape:
+The PR description has one shape, with a small heading per section:
+
+````markdown
+#### What was wrong
+
+What a user saw, in a sentence or two.
+
+#### Cause
+
+The code responsible, in one sentence.
+
+#### Fix
+
+What the change does.
+
+#### Reproduction
 
 ```
-What was wrong: what a user saw, in a sentence or two.
-Cause: the code responsible, in one sentence.
-Fix: what the change does.
-
-Reproduce with sim:
-  the `bun sim transcript` lines from the session that showed it
-Before: the run id and KNOWN_BUG, or the numbers
-After: the run id and PASS, or the numbers
-Screenshots: captures from `device capture`, when the problem shows on a screen
+bun sim run mobile/tapped-download-arrives --phone android
 ```
+
+- Before: the verdict and what the failing checks saw, or the numbers.
+- After: the verdict, or the numbers.
+
+#### Screenshots
+
+Captures from `device capture`, when the problem shows on a screen.
+````
+
+The Reproduction block holds the `bun sim run` command for the scenario, or the
+`bun sim transcript` lines from the session that showed it. Before and After
+give the result itself, such as `KNOWN_BUG`, the laptop keeps
+`["Favorites", "keep"]`, and `PASS`, so a reviewer knows what the bug looks like
+and can run the command on either commit to see it. Scenario names, commands,
+file names and the values a check saw go in inline code. A run id names a
+report that exists only on the machine that ran it, so it stays out of the
+description.
 
 Screenshots come from phones and the desktop app's windows, never from Finder,
 whose window shows every other folder on the Mac.
