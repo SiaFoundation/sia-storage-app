@@ -755,7 +755,8 @@ export interface AppService {
     /**
      * Records a transient failure: backoff to pending, or terminal at the attempt cap.
      * `exhaustedState` is the terminal at exhaustion: `unavailable` for a source that
-     * stays unretrievable, `failed` (default) for a processing error.
+     * stays unretrievable, `failed` (default) for a processing error. `retryAt`
+     * schedules the next try in place of the backoff.
      */
     markFailure(
       id: string,
@@ -764,6 +765,7 @@ export interface AppService {
       now: number,
       exhaustedState?: 'failed' | 'unavailable',
       maxAttempts?: number,
+      retryAt?: number,
     ): Promise<void>
     /** Cancels in-flight import files (the caller deletes their staged bytes). */
     cancel(ids: string[]): Promise<void>

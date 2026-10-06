@@ -737,7 +737,7 @@ describe('ImportScanner stall watchdog', () => {
         await new Promise((r) => setTimeout(r, 60_000))
         opts.onProgress(i * 200)
       }
-      return { uri: '/local/a', size: 1000 }
+      return { kind: 'plain', uri: '/local/a', size: 1000 }
     })
 
     const run = scanner(m).runScan()
@@ -792,7 +792,7 @@ describe('ImportScanner copy progress writes', () => {
       opts.onProgress(30) // still under both gates
       wall += 200
       opts.onProgress(100) // 7% since the last write: the delta gate trips
-      return { uri: '/local/a', size: 1000 }
+      return { kind: 'plain', uri: '/local/a', size: 1000 }
     })
 
     const result = await scanner(m).runScan()
@@ -815,7 +815,7 @@ describe('ImportScanner copy progress writes', () => {
     })
     m.fs.importCopy.mockImplementation(async (_file: any, _uri: string, opts: any) => {
       opts.onProgress(10)
-      return { uri: '/local/a', size: 1000 }
+      return { kind: 'plain', uri: '/local/a', size: 1000 }
     })
 
     const result = await scanner(m).runScan()
@@ -823,22 +823,54 @@ describe('ImportScanner copy progress writes', () => {
     expect(m.imports.markFailure).not.toHaveBeenCalled()
   })
 
-  it('a native cancelled rejection suspends the row with no terminal write', async () => {
+  it('a cancelled copy with no suspension behind it retries at once on a row with no earlier attempt, backs off on one with, and the tick goes on', async () => {
+    const m = createMocks({
+      candidates: [
+        fileRow({ id: 'a', importId: 'imp1' }),
+        fileRow({ id: 'b', importId: 'imp1' }),
+        fileRow({ id: 'c', importId: 'imp1', attempts: 1 }),
+      ],
+      imports: [impRow({ id: 'imp1', source: 'picker' })],
+      finalize: { outcome: 'added' },
+    })
+    m.fs.importCopy.mockImplementation(async (file: { id: string }) => {
+      if (file.id !== 'b') {
+        const e = new Error('copy cancelled') as Error & { code: string }
+        e.code = 'cancelled'
+        throw e
+      }
+      return { kind: 'plain', uri: '/local/b', size: 1000 }
+    })
+
+    const before = Date.now()
+    const result = await scanner(m).runScan()
+    expect(result.failed).toBe(2)
+    expect(result.finalized).toBe(1)
+    const calls = new Map(m.imports.markFailure.mock.calls.map((c: unknown[]) => [c[0], c]))
+    const [, , reason, , , , retryAt] = calls.get('a')!
+    expect(reason).toBe('io-error')
+    expect(retryAt).toBeGreaterThanOrEqual(before)
+    expect(retryAt).toBeLessThanOrEqual(Date.now())
+    expect(calls.get('c')![2]).toBe('io-error')
+    expect(calls.get('c')![6]).toBeUndefined()
+  })
+
+  it('a copy cancelled because the tick was aborted for a suspension leaves the row claimed', async () => {
     const m = createMocks({
       candidates: [fileRow({ id: 'a', importId: 'imp1' })],
       imports: [impRow({ id: 'imp1', source: 'picker' })],
     })
+    const tick = new AbortController()
     m.fs.importCopy.mockImplementation(async () => {
+      tick.abort()
       const e = new Error('copy cancelled') as Error & { code: string }
       e.code = 'cancelled'
       throw e
     })
 
-    const result = await scanner(m).runScan()
-    expect(result.finalized).toBe(0)
+    const result = await scanner(m).runScan(tick.signal)
     expect(result.failed).toBe(0)
     expect(m.imports.markFailure).not.toHaveBeenCalled()
-    expect(m.imports.markUnavailable).not.toHaveBeenCalled()
     expect(m.imports.finalize).not.toHaveBeenCalled()
   })
 })

@@ -864,6 +864,9 @@ export async function markImportFileFailure(
   // Per-code cap (registry-driven): deterministic failures exhaust early
   // instead of burning the full schedule.
   maxAttempts: number = IMPORT_MAX_ATTEMPTS,
+  // When the next try is due, in place of the backoff, for a failure whose
+  // cause has already passed.
+  retryAt?: number,
 ): Promise<void> {
   const cur = await db.getFirstAsync<{ attempts: number }>(
     `SELECT attempts FROM import_files WHERE id = ? AND claimToken = ?`,
@@ -892,7 +895,7 @@ export async function markImportFileFailure(
      WHERE id = ? AND claimToken = ?`,
     reason,
     attempts,
-    now + delay,
+    retryAt ?? now + delay,
     id,
     token,
   )

@@ -439,6 +439,37 @@ describe('Imports lifecycle (integration)', () => {
     expect(await app.getFileById(fileId)).toBeNull()
   }, 30_000)
 
+  it('retries a copy cancelled with nothing suspending the app on the next tick, and the other files finish', async () => {
+    const dir = await app.createDirectory('Picks')
+    const importId = nextId('imp')
+    const ids = [nextId('if'), nextId('if'), nextId('if')]
+    for (const id of ids) {
+      sources.set(id, { status: 'resolved', uri: writeSource(`bytes of ${id}`) })
+    }
+    // A native copy can end as cancelled on its own, as the iOS photo copy does
+    // when PhotoKit reports the request cancelled.
+    jest
+      .spyOn(app.app.fs, 'importCopy')
+      .mockRejectedValueOnce(Object.assign(new Error('copy cancelled'), { code: 'cancelled' }))
+
+    await app.app.imports.create(
+      importRow({ id: importId, source: 'picker', directoryId: dir.id }),
+      ids.map((id, i) =>
+        importFileRow({ id, importId, name: `pick-${i}.txt`, directoryId: dir.id }),
+      ),
+    )
+    await scanner.runScan()
+
+    const rows = await Promise.all(ids.map((id) => importFileById(importId, id)))
+    expect(rows.filter((r) => r.state === 'added')).toHaveLength(2)
+    const cancelled = rows.find((r) => r.state !== 'added')
+    expect(cancelled).toMatchObject({ state: 'pending', attempts: 1 })
+    expect(cancelled!.nextAttemptAt).toBeLessThanOrEqual(Date.now())
+
+    await scanner.runScan()
+    expect((await importFileById(importId, cancelled!.id)).state).toBe('added')
+  }, 30_000)
+
   it('never writes an empty-hash files row across mixed outcomes', async () => {
     const dir = await app.createDirectory('Mixed')
     const addedId = nextId('if')

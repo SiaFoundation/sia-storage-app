@@ -289,8 +289,17 @@ export function buildDbNamespaces(
         await ops.markImportFileUnavailable(db, id, token, reason)
         invalidateImports()
       },
-      markFailure: async (id, token, reason, now, exhaustedState, maxAttempts) => {
-        await ops.markImportFileFailure(db, id, token, reason, now, exhaustedState, maxAttempts)
+      markFailure: async (id, token, reason, now, exhaustedState, maxAttempts, retryAt) => {
+        await ops.markImportFileFailure(
+          db,
+          id,
+          token,
+          reason,
+          now,
+          exhaustedState,
+          maxAttempts,
+          retryAt,
+        )
         invalidateImports()
       },
       cancel: async (ids) => {

@@ -429,6 +429,20 @@ export class ImportScanner {
                 result.failed++
                 return
               }
+              if (!signal?.aborted && !suspending) {
+                // Neither the tick's abort nor the stall watchdog cancelled this
+                // copy, so no resume will pick it up. Taking it for a suspension
+                // would stop this tick's other files and leave every row it
+                // claimed claimed for ten minutes. Only a row with no earlier
+                // attempt retries at once, so a source that keeps cancelling backs
+                // off like any I/O failure instead of using up its attempts in
+                // seconds.
+                logger.warn('importScanner', 'copy_cancelled', { fileId: row.id })
+                const retryAt = row.attempts === 0 ? Date.now() : undefined
+                await this.recordFailure(app, row, token, 'io-error', now, retryAt)
+                result.failed++
+                return
+              }
               // A native `cancelled` rejection is the suspend path, not a failure:
               // the row stays active with its claim and resetStale recovers it, the
               // same as a raced abort that exits the loop before the cancellation lands.
@@ -563,9 +577,18 @@ export class ImportScanner {
     token: string,
     code: ImportReasonCode,
     now: number,
+    retryAt?: number,
   ): Promise<void> {
     const rule = importReasonRule(code)
-    await app.imports.markFailure(row.id, token, code, now, rule.exhausted, rule.cap)
+    await app.imports.markFailure(
+      row.id,
+      token,
+      code,
+      now,
+      rule.exhausted,
+      rule.cap,
+      ...(retryAt === undefined ? [] : [retryAt]),
+    )
   }
 
   /**
