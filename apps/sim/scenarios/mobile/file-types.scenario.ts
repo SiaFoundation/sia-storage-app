@@ -97,15 +97,22 @@ export default defineScenario({
       // search that reaches the end turns and looks back the other way.
       // A row's label is the name followed by its status, size and type.
       const row = { contains: `${f.name}, ` }
-      // Only a scroll that reaches the end counts as the name missing. Any
-      // other error, such as Appium losing the emulator, ends the scenario.
+      // `ui.scrollTo` throws "to the end without finding" once a swipe leaves
+      // the screen unchanged. Only that error is retried, scrolling down, and
+      // the name counts as missing only if the second scroll ends the same
+      // way. Any other error, such as Appium losing the emulator, is rethrown,
+      // because the list's position is then unknown.
+      const reachedEnd = (e: unknown) => String(e).includes('to the end without finding')
       const shown = await ui
         .scrollTo(row)
-        .catch(() => ui.scrollTo(row, 'down'))
+        .catch((e: unknown) => {
+          if (!reachedEnd(e)) throw e
+          return ui.scrollTo(row, 'down')
+        })
         .then(
           () => true,
           (e: unknown) => {
-            if (String(e).includes('to the end without finding')) return false
+            if (reachedEnd(e)) return false
             throw e
           },
         )
