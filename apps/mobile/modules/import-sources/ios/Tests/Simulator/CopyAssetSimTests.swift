@@ -1,10 +1,11 @@
 import Photos
+import UIKit
 import XCTest
 
 @testable import ImportSources
 
 // Simulator tier: `bun run mobile:test:native:ios:sim`. Reads a real photo
-// library, so it needs a booted simulator and cannot run on CI.
+// library, so it runs on an iOS simulator rather than under `swift test`.
 //
 // Not reachable here, and checked on a device instead: iCloud download progress
 // and its cloud-download-failed classification, the not-enough-space path, and
@@ -38,9 +39,19 @@ final class CopyAssetSimTests: XCTestCase {
     try? FileManager.default.removeItem(at: destDir)
   }
 
+  /// A JPEG that decodes. `requestContentEditingInput` decodes the original,
+  /// and the CI runner's Photos rejects arbitrary bytes behind a JPEG header
+  /// with PHPhotosErrorDomain 7001, though a local simulator accepts them.
+  private func jpeg(_ color: UIColor) throws -> Data {
+    let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { ctx in
+      color.setFill()
+      ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+    }
+    return try XCTUnwrap(image.jpegData(compressionQuality: 0.9))
+  }
+
   private func seedJpeg() throws -> (assetId: String, bytes: Data) {
-    var payload = Data([0xFF, 0xD8, 0xFF, 0xE0])
-    payload.append(Data((0..<50_000).map { UInt8($0 % 255) }))
+    let payload = try jpeg(.systemTeal)
     let file = destDir.appendingPathComponent("seed.jpg")
     try payload.write(to: file)
 
@@ -98,14 +109,12 @@ final class CopyAssetSimTests: XCTestCase {
     XCTAssertGreaterThan(progressEvents, 0)
   }
 
-  func testDeletedAssetIdClassifiesDeleted() throws {
-    let (assetId, _) = try seedJpeg()
-    let removed = expectation(description: "removed")
-    PHPhotoLibrary.shared().performChanges {
-      let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
-      PHAssetChangeRequest.deleteAssets(fetch)
-    } completionHandler: { _, _ in removed.fulfill() }
-    wait(for: [removed], timeout: 30)
+  // Deleting a photo from a test raises a confirmation that only a person can
+  // answer, so the test waits on it until it times out. A deleted photo's id
+  // and an id that never named a photo both fetch as nothing, which is the
+  // case the copier classifies, so the test uses the second.
+  func testIdWithNoPhotoClassifiesDeleted() throws {
+    let assetId = "00000000-0000-0000-0000-000000000000/L0/001"
 
     let done = expectation(description: "failed")
     var code: String?
@@ -156,8 +165,7 @@ final class CopyAssetSimTests: XCTestCase {
     let asset = try XCTUnwrap(
       PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject)
 
-    var rendered = Data([0xFF, 0xD8, 0xFF, 0xE1])
-    rendered.append(Data((0..<30_000).map { UInt8(($0 &* 7) % 251) }))
+    let rendered = try jpeg(.systemOrange)
 
     let gotInput = expectation(description: "editing input")
     var input: PHContentEditingInput?

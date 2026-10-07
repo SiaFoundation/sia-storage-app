@@ -9,7 +9,7 @@ name: Sim (mobile)
 # A labelled run tests the PR's head commit and posts its result on that
 # commit as the sim/ios and sim/android statuses, which the release PR needs
 # before it can merge. `bun sim attest` posts the same statuses from a local
-# run. The label comes off once both jobs have ended, so testing a later
+# run. The label comes off once every job has ended, so testing a later
 # commit means adding the label again. A push while a run is going cancels it and
 # removes the label. A cancelled or timed-out run puts its commit's status back
 # to what pr.yml posts and says why, and the new head commit gets its statuses
@@ -185,6 +185,40 @@ jobs:
       - if: always() && steps.setup.outcome == 'success'
         run: bun sim prune --all --force
 
+  # The import module's Swift code against the real Photos framework on a
+  # simulator: edited photos with a separate render, cancelled copies and ids
+  # with no photo, which sim cannot put in a photo library. A job of its own
+  # rather than a step in `ios`, because it builds its own Xcode scheme and
+  # patches the Podfile, and the app build that job caches must not see either.
+  ios-native:
+    if: >-
+      (github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim-mobile')) &&
+      (github.event_name != 'workflow_dispatch' || inputs.platform != 'android')
+    concurrency:
+      group: ${{ github.workflow }}-ios-native-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    runs-on: tenki-macos-26-large
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      - run: bunx expo prebuild --platform ios --no-install
+        working-directory: apps/mobile
+      - run: bun run mobile:test:native:ios:sim
+        # CocoaPods needs a UTF-8 locale and this runner sets none.
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+
   # Runs on a push to a PR that has the label. Sharing the platform job's
   # concurrency group cancels a run still testing the previous commit.
   ios-stop:
@@ -202,6 +236,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim-mobile" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err
+
+  # The same for ios-native, which has a group of its own. ios-stop removes the
+  # label, so this job only has to enter the group.
+  ios-native-stop:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'sim-mobile')
+    concurrency:
+      group: ${{ github.workflow }}-ios-native-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
 
   android:
     if: >-
@@ -378,7 +426,7 @@ jobs:
   # removed it on finishing would leave the other's stop job with no label to
   # see, and a push would then let that platform finish on the old commit.
   unlabel:
-    needs: [ios, android]
+    needs: [ios, ios-native, android]
     if: >-
       always() && github.event_name == 'pull_request' && github.event.action == 'labeled' &&
       github.event.label.name == 'sim-mobile'

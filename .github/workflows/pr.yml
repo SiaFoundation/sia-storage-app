@@ -75,7 +75,7 @@ jobs:
 
   # The import-sources Swift logic. A standalone SwiftPM package, so this needs
   # no prebuild and no simulator. The simulator tier (Photos-framework behavior)
-  # stays local: see `mobile:test:native:ios:sim`.
+  # runs in sim-mobile.yml, with the phone suites.
   test-native-ios:
     runs-on: macos-latest
     if: github.event.action != 'closed'

@@ -171,15 +171,16 @@ anything on a screen.
 | Rust                  | `cargo test --workspace`                        | the Rust core                                                   | yes                 |
 | Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                         | yes                 |
 | Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`           | yes                 |
-| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | no                  |
+| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | on label and weekly |
 | Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together               | yes                 |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
 | Sim, desktop          | `bun sim run desktop/`                          | the installed test app, its Finder extension and Finder folder  | no                  |
 
-The native device and desktop tiers are local-only and rot unless deliberately run. Run
-the native device tier and the phone scenarios before landing anything that touches
-native code or the import flow, and the desktop scenarios before landing a change to the
-desktop app or its extension.
+The desktop tier is local-only and rots unless deliberately run. The native device tier
+and the phone scenarios run in CI only on the `sim-mobile` label and weekly, so run them,
+or add the label, before landing anything that touches native code or the import flow,
+and run the desktop scenarios before landing a change to the desktop app or its
+extension.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot

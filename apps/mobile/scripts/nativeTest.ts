@@ -2,11 +2,13 @@
  * Native test runner for the import-sources module.
  *
  * bun scripts/nativeTest.ts ios Swift host suite (headless macOS)
- * bun scripts/nativeTest.ts ios --simulator Photos/picker XCTest on the booted sim
+ * bun scripts/nativeTest.ts ios --simulator Photos/picker XCTest on a simulator of its own
  * bun scripts/nativeTest.ts android Robolectric suite (headless JVM;
  * needs android/ from a prior prebuild)
  */
+import { Database } from 'bun:sqlite'
 import { existsSync, readdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
 
 const appRoot = path.resolve(import.meta.dir, '..')
@@ -23,20 +25,81 @@ function output(cmd: string[]): string {
   return new TextDecoder().decode(Bun.spawnSync(cmd).stdout).trim()
 }
 
+/**
+ * Rewrites the app host's Photos grant into the form tapping Allow on the
+ * prompt leaves in the simulator's TCC database: auth_reason 2 (the user's
+ * consent) and auth_version 2. `simctl privacy grant photos` writes reason 4
+ * and version 1, which Photos on Xcode 26.2's simulators reads as not
+ * determined, so every test waited for access until it timed out. Returns
+ * whether the entry was found.
+ */
+function grantPhotosAsUser(udid: string, bundleId: string): boolean {
+  const tcc = path.join(
+    homedir(),
+    'Library/Developer/CoreSimulator/Devices',
+    udid,
+    'data/Library/TCC/TCC.db',
+  )
+  const db = new Database(tcc)
+  try {
+    const result = db
+      .query(
+        `UPDATE access SET auth_value = 2, auth_reason = 2, auth_version = 2
+         WHERE service = 'kTCCServicePhotos' AND client = ?`,
+      )
+      .run(bundleId)
+    return result.changes > 0
+  } finally {
+    db.close()
+  }
+}
+
 /** The generated workspace, whose name follows the build variant. */
 function findWorkspace(iosDir: string): string | null {
   return readdirSync(iosDir).find((f) => f.endsWith('.xcworkspace')) ?? null
 }
 
-/** UDID of the single booted simulator; the tests read its photo library. */
-function bootedUdid(): string | null {
-  const json = JSON.parse(output(['xcrun', 'simctl', 'list', 'devices', '--json'])) as {
-    devices: Record<string, Array<{ udid: string; state: string }>>
-  }
-  const booted = Object.values(json.devices)
+const SIMULATOR_NAME = 'sia-native-tests'
+
+/**
+ * The simulator these tests run on, created on the newest iOS runtime the
+ * first time and booted when it is not. The tests seed and read its photo
+ * library, so it is one of their own: sim's phones and anyone's own simulator
+ * can be booted beside it. Returns its UDID and whether this run booted it.
+ */
+function testSimulator(): { udid: string; booted: boolean } | null {
+  const devices = JSON.parse(output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json']))
+    .devices as Record<string, Array<{ name: string; udid: string; state: string }>>
+  let device = Object.values(devices)
     .flat()
-    .filter((d) => d.state === 'Booted')
-  return booted.length === 1 ? booted[0].udid : null
+    .find((d) => d.name === SIMULATOR_NAME)
+  if (!device) {
+    const runtimes = (
+      JSON.parse(output(['xcrun', 'simctl', 'list', 'runtimes', 'available', '--json']))
+        .runtimes as Array<{
+        identifier: string
+        platform?: string
+        supportedDeviceTypes: Array<{ identifier: string; productFamily?: string }>
+      }>
+    ).filter((r) => r.platform === 'iOS')
+    const runtime = runtimes.at(-1)
+    const deviceType = runtime?.supportedDeviceTypes.find((t) => t.productFamily === 'iPhone')
+    if (!runtime || !deviceType) return null
+    const udid = output([
+      'xcrun',
+      'simctl',
+      'create',
+      SIMULATOR_NAME,
+      deviceType.identifier,
+      runtime.identifier,
+    ])
+    if (!udid) return null
+    device = { name: SIMULATOR_NAME, udid, state: 'Shutdown' }
+  }
+  if (device.state === 'Booted') return { udid: device.udid, booted: false }
+  if (run(['xcrun', 'simctl', 'boot', device.udid], appRoot) !== 0) return null
+  if (run(['xcrun', 'simctl', 'bootstatus', device.udid, '-b'], appRoot) !== 0) return null
+  return { udid: device.udid, booted: true }
 }
 
 if (platform === 'ios') {
@@ -53,10 +116,19 @@ if (platform === 'ios') {
     process.exit(1)
   }
   const scheme = 'ImportSources-Unit-Tests'
-  const udid = bootedUdid()
-  if (!udid) {
-    console.error('boot exactly one simulator (these tests read its photo library).')
+  const sim = testSimulator()
+  if (!sim) {
+    console.error(`could not create or boot the ${SIMULATOR_NAME} simulator.`)
     process.exit(1)
+  }
+  const udid = sim.udid
+  // Shut down only a simulator this run booted, so one left running on
+  // purpose stays up. An exit handler covers every failure path below,
+  // including a throw.
+  if (sim.booted) {
+    process.on('exit', () => {
+      Bun.spawnSync(['xcrun', 'simctl', 'shutdown', udid])
+    })
   }
   const testspec =
     "pod 'ImportSources', :path => '../modules/import-sources/ios', :testspecs => ['Tests']"
@@ -138,7 +210,17 @@ if (platform === 'ios') {
       process.exit(1)
     }
   }
-  process.exit(run(['xcodebuild', 'test-without-building', ...xcargs], iosDir))
+  if (!grantPhotosAsUser(udid, appHostBundleId)) {
+    console.error('simctl granted Photos access but left no TCC entry to rewrite.')
+    process.exit(1)
+  }
+  // On a failure xcodebuild collects a sysdiagnose from the simulator by
+  // default, and on a CI runner that waits out a 600 second timeout.
+  const result = run(
+    ['xcodebuild', 'test-without-building', ...xcargs, '-collect-test-diagnostics', 'never'],
+    iosDir,
+  )
+  process.exit(result)
 }
 
 if (platform === 'android') {
