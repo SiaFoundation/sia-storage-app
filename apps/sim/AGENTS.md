@@ -72,7 +72,11 @@ comes from Metro, so a JS change needs no rebuild, and `device stop` and
 Phones load JavaScript from one Metro server per checkout, so a JS change needs
 no rebuild. A native change needs the build command again. Simulators and
 emulators are pooled per checkout and reused with the app wiped, so only the
-first phone after a reboot pays for a cold boot.
+first phone after a reboot pays for a cold boot. A phone handed back has the
+photos it added taken out of its device's library first. `simctl` cannot take
+out one photo, so on iOS the simulator is shut down and its whole library
+emptied, and the next phone on it boots it again. A device whose photos could
+not be removed is deleted, or on Android stopped, and leaves the pool.
 
 Emulators run an AVD named `sia-sim`, which sim creates from the newest
 installed system image with an 8 GB data partition. The app holds photo imports
@@ -208,8 +212,9 @@ the app, such as a relaunch after a kill, fails as usual.
 With `SIM_PROGRESS_FILE` set, `bun sim run` rewrites that file as JSON with
 the count per verdict, the scenarios running and the latest result, for a CI
 step that cannot read the job's log until the job ends. `bun sim prune` stops
-what an interrupted run in this checkout left running and removes the sessions
-of every run that has finished, including those kept for inspection. `--all`
+what an interrupted run in this checkout left running, hands back the phones
+it still held, and removes the sessions of every run that has finished,
+including those kept for inspection. `--all`
 also stops and removes the checkout's named sessions, including the one
 `bun sim up` started, stops its Metro and Appium servers, deletes its
 simulators, stops its emulators, and quits the desktop test build and removes

@@ -39,6 +39,13 @@ export type DeviceRecord = {
    * session on the default port attaches to the first simulator's agent.
    */
   uiPorts?: { wda: number; mjpeg: number }
+  /**
+   * For a phone, the file names of the photos it added to its simulator's or
+   * emulator's library. The library outlives the session, since the pool
+   * hands the same device to the next one, so they are taken out again when
+   * the phone is handed back.
+   */
+  photos?: string[]
   /** For a desktop device, the port its app serves the Chrome DevTools Protocol on. */
   debugPort?: number
   /**
