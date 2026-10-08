@@ -54,6 +54,9 @@ function makeMockPinnedObject(
     updateMetadata: (_newMetadata: ArrayBuffer) => {
       // Not used in tests
     },
+    truncate: () => {
+      throw new Error('truncate is not used in these tests')
+    },
     seal: () => ({
       id: objectId,
       slabs: [],
