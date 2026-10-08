@@ -1,7 +1,6 @@
-import Clipboard from '@react-native-clipboard/clipboard'
 import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
-import { useFileDetails, useSdk } from '@siastorage/core/stores'
+import { useFileDetails } from '@siastorage/core/stores'
 import { logger } from '@siastorage/logger'
 // oxlint-disable-next-line no-restricted-imports -- pickDirectoryAsync is async and createFile only creates an empty SAF document; the bytes are streamed natively by blob-util below
 import { Directory, type File } from 'expo-file-system'
@@ -11,30 +10,11 @@ import ReactNativeBlobUtil from 'react-native-blob-util'
 import Share from 'react-native-share'
 import { useFileStatus } from '../lib/file'
 import { useToast } from '../lib/toastContext'
-import { app } from '../stores/appService'
 
 export function useShareAction({ fileId }: { fileId: string }) {
   const toast = useToast()
   const { data: file } = useFileDetails(fileId)
   const status = useFileStatus(file ?? undefined)
-  const { data: isConnected } = useSdk()
-
-  const getShareUrl = useCallback(async () => {
-    if (!file) return
-    if (!isConnected) return
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 1)
-    return app().shares.create(file.id, expiresAt)
-  }, [file, isConnected])
-
-  const handleShareURL = useCallback(async () => {
-    if (!file) return
-    if (!isConnected) return
-    const shareUrl = await getShareUrl()
-    if (!shareUrl) return
-    Clipboard.setString(shareUrl)
-    toast.show('Share URL copied')
-  }, [file, isConnected, getShareUrl, toast])
 
   const handleShareFile = useCallback(async () => {
     if (!file) return
@@ -94,9 +74,8 @@ export function useShareAction({ fileId }: { fileId: string }) {
   }, [file, status.data?.fileUri, toast])
 
   return {
-    canShare: status.data?.canShare,
+    canExport: !!file?.type && !!status.data?.fileUri,
     canSaveToDevice: Platform.OS === 'android' && !!status.data?.fileUri,
-    handleShareURL,
     handleShareFile,
     handleSaveToDevice,
   }

@@ -1,6 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { SdkAdapter } from '../../adapters/sdk'
-import * as ops from '../../db/operations'
 import { sealPinnedObject } from '../../lib/localObjects'
 import type { AppService } from '../service'
 import { buildShareLinks } from './shareLinks'
@@ -78,16 +77,6 @@ export function buildSharesNamespace(
       const obj = await sdk.objectFromShareUrl(url)
       await sdk.pinObject(obj)
       return sealPinnedObject(fileId, indexerURL, obj, appKey)
-    },
-
-    create: async (fileId, validUntil) => {
-      const sdk = requireSdk()
-      const objects = await ops.queryObjectsForFile(db, fileId)
-      if (objects.length === 0) throw new Error('No local object for file')
-      const object = objects[0]
-      const appKey = await loadAppKey(sdk, object.indexerURL)
-      const pinned = sdk.openPinnedObject(appKey, object)
-      return sdk.objectShareUrl(pinned, validUntil)
     },
   }
 }

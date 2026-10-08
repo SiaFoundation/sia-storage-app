@@ -41,6 +41,7 @@ mobile app's source.
 ```sim
 bun sim device tap phone --label Files
 bun sim device tap phone --contains "No folder"
+bun sim device scroll-to phone --contains {file}
 bun sim device tap phone --contains {file}
 bun sim device tap phone --label "More actions"
 bun sim device expect phone --text "Move to trash"
@@ -56,6 +57,7 @@ bun sim device expect phone --label Menu
 ```sim
 bun sim device tap phone --label Files
 bun sim device tap phone --contains "No folder"
+bun sim device scroll-to phone --contains {file}
 bun sim device tap phone --contains {file}
 bun sim device tap phone --label "Toggle file details"
 bun sim device tap phone --contains "Name, "
@@ -98,6 +100,7 @@ bun sim device expect phone --label Menu
 ```sim
 bun sim device tap phone --label Files
 bun sim device tap phone --contains "No folder"
+bun sim device scroll-to phone --contains {file}
 bun sim device tap phone --contains {file}
 bun sim device tap phone --label "Move to folder"
 bun sim device type phone --label "Search or create folder" "{folder}"
@@ -133,6 +136,7 @@ bun sim device expect phone --label Menu
 ```sim
 bun sim device tap phone --label Files
 bun sim device tap phone --contains "No folder"
+bun sim device scroll-to phone --contains {file}
 bun sim device tap phone --contains {file}
 bun sim device tap phone --label Favorite
 bun sim device expect phone --label Unfavorite
@@ -417,23 +421,27 @@ bun sim device expect phone --label Menu
 
 ### Sharing
 
-- When: share links on the Mac. Finder's Share Link action opens the
-  window's share view on the selected files, where the link is made. Share
-  links in the window's status view lists every link with Copy and Revoke.
-  A latest link opens its files on share.sia.storage at each file's current
-  version, and a snapshot link at the versions they had when it was made,
-  until it expires or is revoked. A link made on one device shows on every
-  device of the account. The phone's Share URL makes a signed link to one
-  file instead.
+- When: share links. On the Mac, Finder's Share Link action opens the
+  window's share view on the selected files, where the link is made, and
+  Share links in the window's status view lists every link with Copy and
+  Revoke. On the phone, Share link in a file's menu, in the selection bar
+  and on the viewer's share button opens the share link sheet, and Share
+  Links in the menu lists every link. A latest link opens its files on
+  share.sia.storage at each file's current version, and a snapshot link at
+  the versions they had when it was made, until it expires or is revoked. A
+  link made on one device shows on every device of the account.
 - Code: `app.shares`; files
   `packages/core/src/app/namespaces/shareLinks.ts`,
   `packages/core/src/services/shareLinks.ts`,
   `apps/cli/src/daemon/shareRequests.ts`,
-  `apps/desktop/src/renderer/src/ShareView.tsx`; tables `share_links`,
-  `share_link_files`, `share_link_objects`
+  `apps/desktop/src/renderer/src/ShareView.tsx`,
+  `apps/mobile/src/components/ShareLinkSheet.tsx`,
+  `apps/mobile/src/managers/shareLinks.ts`; screens `ShareLinks`; tables
+  `share_links`, `share_link_files`, `share_link_objects`
 - State: `bun sim net shares` lists each live key with the files a recipient
   sees and their names as attached.
-- Tests: scenarios `desktop/share-links`; integration `share-links`
+- Tests: scenarios `desktop/share-links`, `mobile/share-links`; integration
+  `share-links`
 - Desktop, Finder's Share Link for two files, then the link in the window:
 
 ```sh
@@ -446,6 +454,34 @@ bun sim net shares
 
 `finderShare` in a scenario sends what Finder's Share Link action sends. The
 menu item itself belongs to Finder, which sim cannot click.
+
+- Phone, the share link sheet from the viewer's share button:
+
+```sim
+bun sim device tap phone --label Files
+bun sim device tap phone --contains "No folder"
+bun sim device scroll-to phone --contains {file}
+bun sim device tap phone --contains {file}
+bun sim device tap phone --label Share
+bun sim device expect phone --text "Create Link"
+bun sim device tap phone --label Done
+bun sim device expect phone --text "Create Link" --gone
+bun sim device tap phone --label Close
+bun sim device tap phone --label Back
+bun sim device expect phone --label Menu
+```
+
+- Phone, the list of links:
+
+```sim
+bun sim device tap phone --label Menu
+bun sim device scroll-to phone --label "Share Links" --direction down
+bun sim device tap phone --label "Share Links"
+bun sim device expect phone --id share-links-empty
+bun sim device back phone
+bun sim device tap phone --label Back
+bun sim device expect phone --label Menu
+```
 
 ### Settings and logs
 

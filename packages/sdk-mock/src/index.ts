@@ -385,10 +385,6 @@ export class MockSdk implements SdkAdapter {
     throw new Error('Not implemented in mock')
   }
 
-  objectShareUrl(_object: PinnedObjectRef, _validUntil: Date): string {
-    return 'https://mock-share-url.com'
-  }
-
   /** A live key, as indexd looks one up: missing, revoked and expired keys are all not found. */
   private liveSharingKey(key: SharingKeyRef): StoredSharingKey {
     const stored = this.storage.sharingKeys.get(key.publicKey)
