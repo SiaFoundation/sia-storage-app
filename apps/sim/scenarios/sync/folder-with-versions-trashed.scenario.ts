@@ -5,9 +5,6 @@ export default defineScenario({
   description:
     "The laptop adds report.txt to docs twice, so docs holds two versions of it, and the desk syncs both. Trashing docs on the laptop succeeds and trashes both versions, the desk takes the trash, and a file the laptop adds afterwards still reaches the desk, so the desk's sync-down did not stop.",
   devices: { laptop: 'cli', desk: 'cli' },
-  knownBug:
-    'Deleting a folder is not sent to other devices. The laptop trashes the files, which syncs, then deletes docs, which leaves its trashed versions in no folder while the desk still has them in docs.',
-  bugShowsAs: ['every device holds the same library at the end'],
   async run({ devices: { laptop, desk }, converge, step, check, checkEqual, waitFor, workDir }) {
     await step('the laptop adds report.txt to docs, then a second version of it', async () => {
       for (const n of [1, 2]) {
