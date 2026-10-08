@@ -306,7 +306,7 @@ function runningSeconds(pid: number): number {
 }
 
 /** Kills an emulator this pool started and drops it from the pool. */
-function discard(serial: string): void {
+export function discard(serial: string): void {
   if (isOurs(serial)) {
     try {
       process.kill(Number(readFileSync(pidFile(serial), 'utf8')), 'SIGKILL')

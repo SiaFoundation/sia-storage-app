@@ -51,6 +51,19 @@ export function release(udid: string): void {
   pool.release(udid)
 }
 
+/** Shuts down and deletes a simulator a session holds, and takes it out of the pool. */
+export async function discard(udid: string): Promise<void> {
+  await simctl.shutdown(udid)
+  await simctl.remove(udid)
+  pool.forget(udid)
+}
+
+/** Hands back a simulator that was shut down while held, so the pool does not count it as running. */
+export function releaseOff(udid: string): void {
+  pool.release(udid)
+  pool.markOff(udid)
+}
+
 /**
  * Shuts down the pooled simulators no session has held for `idleMs` and keeps
  * them in the pool. The next lease boots one rather than creating a new

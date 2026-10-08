@@ -21,8 +21,9 @@ export default defineScenario({
     const phone = devices.phone
     await photoAccess(phone, ctx)
     await step('turn on Import new photos', () => phone.call('sim.enableNewPhotoSync'))
-    // Android pushes each photo into one shared folder under its file name, and a
-    // pooled emulator keeps earlier runs' photos, which a fixed name would overwrite.
+    // Android pushes each photo into one shared folder under its file name,
+    // where a fixed name would overwrite a photo that a failed removal left
+    // from an earlier run.
     const photos = seedPhotos(`${workDir}/new`, {
       count: 3,
       prefix: `new-photo-${crypto.randomUUID().slice(0, 8)}`,

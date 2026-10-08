@@ -69,9 +69,10 @@ export abstract class PhoneDevice implements Device {
    * A running device with the app installed. On the device's first start in a
    * session it is a pooled device whose app has none of its own data left,
    * installed again or, on Android when the build is unchanged, cleared with
-   * `pm clear`. The photo library stays as the session
-   * that held the device before left it. A later start, after a stop or a
-   * kill, keeps the app and its data, as relaunching a phone does.
+   * `pm clear`. The photo library is the pooled device's own, and holds
+   * nothing an earlier session added, since `dispose` takes that out. A later
+   * start, after a stop or a kill, keeps the app and its data, as relaunching
+   * a phone does.
    */
   protected abstract prepare(): Promise<void>
   /** Writes `contents` to `name` in the app's documents folder. */
@@ -114,8 +115,12 @@ export abstract class PhoneDevice implements Device {
   abstract screenshot(path: string): Promise<void>
   /** Gives the app full access to the photo library, without leaving a prompt on screen. */
   abstract grantPhotoAccess(): Promise<void>
-  /** Adds image files to the device's photo library, as a camera or a saved download would. */
-  abstract addPhotos(paths: string[]): Promise<void>
+  /** Puts image files into the device's photo library. */
+  protected abstract putPhotos(paths: string[]): Promise<void>
+  /** Takes the photos named `names`, which this phone added, out of `target`'s library. */
+  protected abstract removePhotos(target: string, names: string[]): Promise<void>
+  /** Stops `target` and takes it out of its pool for good. */
+  protected abstract discard(target: string): Promise<void>
   /** Copies the app's database, with its WAL files, into `dir`. */
   protected abstract copyDatabase(dir: string): Promise<void>
   protected abstract release(target: string): void
@@ -127,7 +132,28 @@ export abstract class PhoneDevice implements Device {
     writeFileSync(join(dir, 'app.log'), await this.logs(500).catch(() => ''))
   }
 
-  /** Stops the app and hands the simulator or emulator back to its pool. */
+  /**
+   * Adds image files to the device's photo library, as a camera or a saved
+   * download would. The names are recorded first, so a run killed part way
+   * through the adding still leaves them for `dispose` or `sim prune` to take
+   * out.
+   */
+  async addPhotos(paths: string[]): Promise<void> {
+    const names = paths.map((p) => basename(p))
+    await this.session.update((s) => {
+      const record = s.devices[this.name]
+      record.photos = [...new Set([...(record.photos ?? []), ...names])]
+    })
+    await this.putPhotos(paths)
+  }
+
+  /**
+   * Stops the app, takes the photos this phone added out of the device's
+   * library, and hands the simulator or emulator back to its pool. A device
+   * whose photos could not be removed leaves the pool instead: handed back,
+   * it would give the next session those photos, and with this phone's record
+   * of them gone nothing would try the removal again.
+   */
   async dispose(): Promise<void> {
     this.disposed = true
     const target = this.target
@@ -135,11 +161,30 @@ export abstract class PhoneDevice implements Device {
     await this.driver?.close()
     this.driver = null
     await this.stop().catch(() => {})
-    this.release(target)
+    const photos = this.session.state.devices[this.name]?.photos ?? []
+    const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
+    const clean =
+      photos.length === 0 ||
+      (await this.removePhotos(target, photos).then(
+        () => true,
+        (e: unknown) => {
+          console.error(
+            `Could not remove ${photos.length} photos ${this.name} added to ${target}, so it leaves the pool: ${why(e)}`,
+          )
+          return false
+        },
+      ))
+    if (clean) this.release(target)
+    else {
+      await this.discard(target).catch((e: unknown) => {
+        console.error(`Could not take ${target} out of the pool: ${why(e)}`)
+      })
+    }
     await this.session.update((s) => {
       delete s.devices[this.name].target
       delete s.devices[this.name].prepared
       delete s.devices[this.name].uiPorts
+      delete s.devices[this.name].photos
     })
   }
 

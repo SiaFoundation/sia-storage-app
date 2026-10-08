@@ -3,6 +3,9 @@
  * `sia-sim-...`, which tells it apart from every other simulator on the
  * machine.
  */
+import { rmSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { $ } from 'bun'
 import { runTool } from '../process'
 
@@ -77,6 +80,16 @@ export async function boot(udid: string): Promise<void> {
 
 export async function shutdown(udid: string): Promise<void> {
   await simctl(['shutdown', udid], { check: false })
+}
+
+/**
+ * Stops the `xcodebuild` Appium leaves running on a simulator between UI
+ * sessions, which is WebDriverAgent's test run. One still running when its
+ * simulator shuts down starts a `simctl diagnose` of it, which outlives the
+ * sim command that shut it down.
+ */
+export async function stopTestRunner(udid: string): Promise<void> {
+  await runTool(['pkill', '-f', `xcodebuild .*id=${udid}`], { timeoutMs: 10_000, check: false })
 }
 
 export async function remove(udid: string): Promise<void> {
@@ -192,4 +205,17 @@ export async function setDefault(
 /** Adds image or video files to the simulator's photo library. */
 export async function addMedia(udid: string, paths: string[]): Promise<void> {
   await simctl(['addmedia', udid, ...paths], { timeoutMs: 5 * 60_000 })
+}
+
+/**
+ * Empties a shut-down simulator's photo library. `addmedia` has no inverse,
+ * so one photo cannot be taken out. The library is two directories in the
+ * simulator's data on this Mac, the image files in DCIM and their database in
+ * PhotoData, and the next boot creates both again, empty.
+ */
+export function clearPhotoLibrary(udid: string): void {
+  const media = join(homedir(), 'Library/Developer/CoreSimulator/Devices', udid, 'data/Media')
+  for (const dir of ['DCIM', 'PhotoData']) {
+    rmSync(join(media, dir), { recursive: true, force: true })
+  }
 }

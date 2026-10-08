@@ -38,6 +38,8 @@ const CRASH_REPORTS = join(homedir(), 'Library/Logs/DiagnosticReports')
 
 export class IosDevice extends PhoneDevice {
   readonly kind = 'ios' as const
+  /** Set once `removePhotos` has shut the simulator down. */
+  private shutDown = false
 
   private get udid(): string {
     const udid = this.target
@@ -267,8 +269,24 @@ export class IosDevice extends PhoneDevice {
     await asked
   }
 
-  async addPhotos(paths: string[]): Promise<void> {
+  protected async putPhotos(paths: string[]): Promise<void> {
     await simctl.addMedia(this.udid, paths)
+  }
+
+  /**
+   * Empties the whole library, since `simctl addmedia` has no inverse that
+   * takes out one photo, and its files can be deleted only while the simulator
+   * is shut down.
+   */
+  protected async removePhotos(target: string): Promise<void> {
+    await simctl.stopTestRunner(target)
+    await simctl.shutdown(target)
+    this.shutDown = true
+    simctl.clearPhotoLibrary(target)
+  }
+
+  protected async discard(target: string): Promise<void> {
+    await pool.discard(target)
   }
 
   async screenshot(path: string): Promise<void> {
@@ -307,9 +325,10 @@ export class IosDevice extends PhoneDevice {
     }
   }
 
-  /** Back to the pool, still booted, so the next phone skips the boot. */
+  /** Back to the pool, still booted unless emptying its photo library shut it down, so the next phone skips the boot. */
   protected release(target: string): void {
-    pool.release(target)
+    if (this.shutDown) pool.releaseOff(target)
+    else pool.release(target)
   }
 }
 
