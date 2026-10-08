@@ -244,11 +244,6 @@ describe('computeFileStatus', () => {
   })
 
   describe('capabilities', () => {
-    it('canShare requires literal pin (not isShared)', () => {
-      expect(deriveCapabilities(makeFacts({ isShared: true })).canShare).toBe(false)
-      expect(deriveCapabilities(makeFacts({ isPinned: true })).canShare).toBe(true)
-    })
-
     it('isOnNetwork is pin OR shared', () => {
       expect(deriveCapabilities(makeFacts()).isOnNetwork).toBe(false)
       expect(deriveCapabilities(makeFacts({ isShared: true })).isOnNetwork).toBe(true)
@@ -318,7 +313,6 @@ describe('computeFileStatus', () => {
       })
       const caps = getFileCapabilities(file, null)
       expect(caps.isOnNetwork).toBe(true)
-      expect(caps.canShare).toBe(true)
       expect(caps.canDownload).toBe(true)
       expect(caps.canUpload).toBe(false)
     })

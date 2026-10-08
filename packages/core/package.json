@@ -21,6 +21,7 @@
     "./lib/retry": "./src/lib/retry.ts",
     "./lib/coalescingQueue": "./src/lib/coalescingQueue.ts",
     "./lib/serviceInterval": "./src/lib/serviceInterval.ts",
+    "./lib/shareLinkText": "./src/lib/shareLinkText.ts",
     "./lib/singleflight": "./src/lib/singleflight.ts",
     "./lib/slotPool": "./src/lib/slotPool.ts",
     "./lib/timeout": "./src/lib/timeout.ts",

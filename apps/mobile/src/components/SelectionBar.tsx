@@ -3,6 +3,7 @@ import {
   ArrowDownToLineIcon,
   CloudUploadIcon,
   FolderIcon,
+  LinkIcon,
   TagIcon,
   Trash2Icon,
 } from 'lucide-react-native'
@@ -17,6 +18,7 @@ import { downloadFile } from '../managers/downloader'
 import { queueUploadForFileId } from '../managers/uploader'
 import { app } from '../stores/appService'
 import { useSelectedCount, useSelectedFileIds } from '../stores/fileSelection'
+import { openShareLinkSheet } from '../stores/shareLinkSheet'
 import { openSheet } from '../stores/sheets'
 import { palette } from '../styles/colors'
 import { BottomControlBar, iconColors } from './BottomControlBar'
@@ -47,6 +49,10 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
   const handleMoveToFolder = useCallback(() => {
     openSheet(moveToDirectorySheet)
   }, [moveToDirectorySheet])
+
+  const handleShareLink = useCallback(() => {
+    openShareLinkSheet({ fileIds: ids })
+  }, [ids])
 
   const handleDownload = useCallback(async () => {
     if (!counts) return
@@ -132,6 +138,13 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
         onPress: handleMoveToFolder,
         disabled,
       },
+      {
+        key: 'share',
+        icon: <LinkIcon color={iconColors.white} size={20} />,
+        label: 'Share link',
+        onPress: handleShareLink,
+        disabled,
+      },
     ]
     if (counts && counts.downloadable > 0) {
       list.push({
@@ -160,7 +173,16 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
       disabled,
     })
     return list
-  }, [disabled, counts, handleTag, handleMoveToFolder, handleDownload, handleUpload, handleTrash])
+  }, [
+    disabled,
+    counts,
+    handleTag,
+    handleMoveToFolder,
+    handleShareLink,
+    handleDownload,
+    handleUpload,
+    handleTrash,
+  ])
 
   return (
     <>

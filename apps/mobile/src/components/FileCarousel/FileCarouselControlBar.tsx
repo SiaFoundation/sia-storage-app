@@ -21,7 +21,6 @@ type Props = {
   onPressMore: () => void
   onToggleFavorite: () => void
   isFavorite: boolean
-  canShare: boolean
 }
 
 export function FileCarouselControlBar({
@@ -33,7 +32,6 @@ export function FileCarouselControlBar({
   onPressMore,
   onToggleFavorite,
   isFavorite,
-  canShare,
 }: Props) {
   const { width, height } = useWindowDimensions()
   const isLandscape = width > height
@@ -61,7 +59,7 @@ export function FileCarouselControlBar({
               fill={isFavorite ? palette.red[500] : 'none'}
             />
           </IconButton>
-          <IconButton onPress={onShareFile} disabled={!canShare} accessibilityLabel="Share">
+          <IconButton onPress={onShareFile} accessibilityLabel="Share">
             <ShareIcon color={iconColors.white} />
           </IconButton>
           <IconButton onPress={onAddTag} accessibilityLabel="Add tag">

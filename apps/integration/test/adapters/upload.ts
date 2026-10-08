@@ -13,7 +13,6 @@ export function buildTestSdkAdapter(sdk: MockSdk, appKey: AppKeyRef): SdkAdapter
     deleteObject: (id) => sdk.deleteObject(id),
     getPinnedObject: (id) => sdk.getPinnedObject(id),
     objectFromShareUrl: (url) => sdk.objectFromShareUrl(url),
-    objectShareUrl: () => '',
     createSharingKey: (description, expiresAt) => sdk.createSharingKey(description, expiresAt),
     sharingKeys: (offset, limit) => sdk.sharingKeys(offset, limit),
     shareObject: (key, po) => sdk.shareObject(key, po),

@@ -24,6 +24,7 @@ import { downloadFile, useDownload } from '../managers/downloader'
 import { queueUploadForFileId, useReuploadFile } from '../managers/uploader'
 import type { MainStackParamList } from '../stacks/types'
 import { app } from '../stores/appService'
+import { openShareLinkSheet } from '../stores/shareLinkSheet'
 import { closeSheet, openSheet, useSheetOpen } from '../stores/sheets'
 import { palette } from '../styles/colors'
 import { ActionSheet } from './ActionSheet'
@@ -90,10 +91,9 @@ function SingleFileActionsSheet({
   const status = useFileStatus(file ?? undefined)
   const isOpen = useSheetOpen(sheetName)
 
-  const { handleShareFile, handleShareURL, handleSaveToDevice, canShare, canSaveToDevice } =
-    useShareAction({
-      fileId,
-    })
+  const { handleShareFile, handleSaveToDevice, canExport, canSaveToDevice } = useShareAction({
+    fileId,
+  })
   const favorite = useIsFavorite(isOpen ? fileId : null)
 
   const handleToggleFavorite = useCallback(async () => {
@@ -145,15 +145,17 @@ function SingleFileActionsSheet({
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
       <ActionSheetButton
-        disabled={!canShare}
         variant="primary"
         icon={<LinkIcon size={18} />}
-        onPress={handlePressAndClose(handleShareURL)}
+        onPress={() => {
+          closeSheet(sheetName)
+          setTimeout(() => openShareLinkSheet({ fileIds: [fileId] }), 300)
+        }}
       >
         Share link
       </ActionSheetButton>
       <ActionSheetButton
-        disabled={!canShare}
+        disabled={!canExport}
         variant="primary"
         icon={<ShareIcon size={18} />}
         onPress={handlePressAndClose(handleShareFile)}
@@ -339,6 +341,16 @@ function BulkFileActionsSheet({
   return (
     <ActionSheet visible={isOpen} onRequestClose={() => closeSheet(sheetName)}>
       <Text style={styles.bulkHeader}>{total.toLocaleString()} files selected</Text>
+      <ActionSheetButton
+        variant="primary"
+        icon={<LinkIcon size={18} />}
+        onPress={() => {
+          closeSheet(sheetName)
+          setTimeout(() => openShareLinkSheet({ fileIds }), 300)
+        }}
+      >
+        Share link
+      </ActionSheetButton>
       <ActionSheetButton
         variant="primary"
         icon={<ArrowDownToLineIcon size={18} />}

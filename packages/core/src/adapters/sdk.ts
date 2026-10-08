@@ -166,10 +166,8 @@ export interface SdkAdapter {
   pinObject(pinnedObject: PinnedObjectRef): Promise<void>
   deleteObject(objectId: string): Promise<void>
   getPinnedObject(objectId: string): Promise<PinnedObjectRef>
-  /** Opens an object from a signed per-object URL that `objectShareUrl` made. */
+  /** Opens an object from a signed URL to that one object, which the recipient opens with their own account. */
   objectFromShareUrl(url: string): Promise<PinnedObjectRef>
-  /** A signed URL for one object, valid until `validUntil`, which the recipient opens with their own account. */
-  objectShareUrl(object: PinnedObjectRef, validUntil: Date): string
   /**
    * Creates a sharing key on the indexer. The SDK derives it from the app key
    * and a random nonce the indexer keeps, so `sharingKeys` returns the same

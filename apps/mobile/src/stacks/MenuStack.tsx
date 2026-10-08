@@ -7,6 +7,7 @@ import { LearnSiaNetworkScreen } from '../screens/learn/LearnSiaNetworkScreen'
 import { MenuScreen } from '../screens/MenuScreen'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
+import { ShareLinksScreen } from '../screens/ShareLinksScreen'
 import { palette } from '../styles/colors'
 import { SwitchIndexerStack } from './SwitchIndexerStack'
 import type { MenuStackParamList } from './types'
@@ -23,6 +24,11 @@ export function MenuStack() {
       }}
     >
       <Stack.Screen name="MenuHome" component={MenuScreen} options={{ title: '' }} />
+      <Stack.Screen
+        name="ShareLinks"
+        component={ShareLinksScreen}
+        options={{ title: 'Share Links' }}
+      />
       <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
       <Stack.Screen
         name="Advanced"
