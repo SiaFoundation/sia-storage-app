@@ -24,3 +24,16 @@ export function generateRecoveryPhrase() {
 }
 export function validateRecoveryPhrase() {}
 export function setLogger() {}
+
+export class SharingKey {
+  private constructor(private readonly bytes: ArrayBuffer) {}
+  static fromSeed(seed: ArrayBuffer) {
+    return new SharingKey(seed)
+  }
+  publicKey() {
+    return `ed25519:${Buffer.from(this.bytes).toString('hex').slice(0, 8)}`
+  }
+  seed() {
+    return this.bytes
+  }
+}
