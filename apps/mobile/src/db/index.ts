@@ -197,6 +197,17 @@ function migrationAdapter(conn: SQLite.SQLiteDatabase): DatabaseAdapter {
   return { ...statements, withTransactionAsync: (fn) => conn.withTransactionAsync(() => fn(tx)) }
 }
 
+// Orders initializeDB calls. A second call that began while the first was
+// still migrating would close the connection the migrations are running on.
+const initMutex = new Mutex()
+
+/**
+ * Opens the database and runs its migrations. Launch and sign-in each start
+ * the app's initialization, and both reach here. With the same database
+ * already open and migrated a call does nothing, since closing the connection
+ * would cut off the statements running on it, which is a use-after-free in
+ * sqlite3_mutex_enter. `reopen` asks for a new connection and always gets one.
+ */
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
@@ -205,6 +216,22 @@ export async function initializeDB(options?: {
   reopen?: boolean
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
+  const ready = () => !options?.reopen && !!database && dbInitialized && name === dbName
+  if (ready()) return
+  const release = await initMutex.acquire()
+  try {
+    // A call that held the mutex first may have opened this database.
+    if (ready()) return
+    await openAndMigrate(name, options)
+  } finally {
+    release()
+  }
+}
+
+async function openAndMigrate(
+  name: string,
+  options?: { onProgress?: MigrationProgressHandler; reopen?: boolean },
+): Promise<void> {
   dbName = name
   // Close any existing connection before opening a new one. Without this,
   // a suspend → resume (reopen=true) → full reinit (reopen=false) sequence
