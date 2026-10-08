@@ -304,10 +304,6 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
       return wrapPinnedObject(obj)
     },
 
-    objectShareUrl(object: PinnedObjectRef, validUntil: Date): string {
-      return sdk.objectShareUrl(requireNativePinnedObject(object), validUntil)
-    },
-
     async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
       return sharingKeyRef(await sdk.createSharingKey(description, expiresAt))
     },

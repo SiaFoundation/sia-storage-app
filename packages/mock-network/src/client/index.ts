@@ -190,10 +190,6 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
       return pinnedObjectFromWire((await parse(res)) as WireObject)
     },
 
-    objectShareUrl(object: PinnedObjectRef): string {
-      return `${base}/sdk/shared/${encodeURIComponent(object.id())}`
-    },
-
     async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
       const key = (await call('/sharing', {
         method: 'POST',

@@ -1,8 +1,6 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
-import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { useIsFavorite } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
-import { logger } from '@siastorage/logger'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { EyeIcon, EyeOffIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,11 +14,10 @@ import {
 } from 'react-native'
 import Carousel, { type ICarouselInstance } from 'react-native-reanimated-carousel'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import Share from 'react-native-share'
-import { useFileStatus } from '../../lib/file'
 import { useToast } from '../../lib/toastContext'
 import { app } from '../../stores/appService'
 import { useFileCarousel } from '../../stores/fileCarousel'
+import { openShareLinkSheet } from '../../stores/shareLinkSheet'
 import { palette } from '../../styles/colors'
 import BlocksLoader from '../BlocksLoader'
 import { useDragToDismissGesture } from '../DragToDismiss'
@@ -119,8 +116,6 @@ export function FileCarousel({
     setViewerSize({ width, height })
   }, [])
 
-  const status = useFileStatus(currentFile ?? undefined)
-
   const carouselData = useMemo(() => {
     return Array.from({ length: totalCount }, (_, i) => i)
   }, [totalCount])
@@ -163,22 +158,9 @@ export function FileCarousel({
     }
   }, [])
 
-  const handleShareFile = useCallback(async () => {
-    if (!currentFile?.type || !status.data?.fileUri) return
-    try {
-      await Share.open({
-        url: status.data.fileUri,
-        type: currentFile.type,
-        filename: currentFile.name ?? undefined,
-        subject: `Sia Storage - ${currentFile.type}`,
-      })
-    } catch (e) {
-      const msg = getErrorMessage(e, '')
-      if (!msg.includes('User did not share')) {
-        logger.error('FileCarousel', 'share_failed', { error: e as Error })
-      }
-    }
-  }, [currentFile, status.data?.fileUri])
+  const handleShareFile = useCallback(() => {
+    if (currentFile) openShareLinkSheet({ fileIds: [currentFile.id] })
+  }, [currentFile])
 
   const handleMore = useCallback(() => {
     if (onShowActionSheet) {
@@ -366,7 +348,6 @@ export function FileCarousel({
             onPressMore={handleMore}
             onToggleFavorite={handleToggleFavorite}
             isFavorite={favorite.data ?? false}
-            canShare={status.data?.canShare ?? false}
           />
         </View>
       ) : null}

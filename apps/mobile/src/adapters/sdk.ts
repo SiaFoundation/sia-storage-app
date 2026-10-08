@@ -111,10 +111,6 @@ export class MobileSdkAdapter implements SdkAdapter {
     return this.sdk.objectFromShareUrl(url) as Promise<PinnedObjectRef>
   }
 
-  objectShareUrl(object: PinnedObjectRef, validUntil: Date): string {
-    return this.sdk.objectShareUrl(native(object), validUntil)
-  }
-
   async createSharingKey(description: string, expiresAt?: Date): Promise<SharingKeyRef> {
     return sharingKeyRef(await this.sdk.createSharingKey(description, expiresAt))
   }

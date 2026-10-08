@@ -1,4 +1,5 @@
 import Clipboard from '@react-native-clipboard/clipboard'
+import { CheckIcon } from 'lucide-react-native'
 import type React from 'react'
 import { Children, Fragment, useCallback } from 'react'
 import {
@@ -100,6 +101,35 @@ export function InsetGroupLink({
         </Text>
       ) : null}
       {trailing ?? (showChevron ? <Text style={styles.chevron}>›</Text> : null)}
+    </Pressable>
+  )
+}
+
+type ChoiceRowProps = {
+  label: string
+  description?: string
+  selected: boolean
+  onPress: () => void
+}
+
+/** One option of a pick-one list. The chosen row carries a checkmark, as iOS Settings does. */
+export function InsetGroupChoiceRow({ label, description, selected, onPress }: ChoiceRowProps) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={description ? `${label}, ${description}` : label}
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+      android_ripple={{ color: palette.gray[700] }}
+      style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
+    >
+      <View style={styles.labelCol}>
+        <Text numberOfLines={1} style={styles.label}>
+          {label}
+        </Text>
+        {description ? <Text style={styles.description}>{description}</Text> : null}
+      </View>
+      {selected ? <CheckIcon size={20} color={palette.blue[400]} /> : null}
     </Pressable>
   )
 }
