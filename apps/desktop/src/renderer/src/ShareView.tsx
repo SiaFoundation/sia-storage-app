@@ -130,12 +130,7 @@ function LinkRow({
         {error ? <span className="text-[11px] leading-[1.4] text-red">{error}</span> : null}
       </span>
       <span className="flex shrink-0 gap-0.5 pr-1">
-        <button
-          type="button"
-          className={`${SMALL_BUTTON} text-accent`}
-          disabled={!link.url}
-          onClick={() => link.url && onCopy()}
-        >
+        <button type="button" className={`${SMALL_BUTTON} text-accent`} onClick={onCopy}>
           {copied ? 'Copied' : 'Copy'}
         </button>
         <button
@@ -267,19 +262,9 @@ function NewLink({
 }
 
 export function ShareView({ fileIds, onDone }: { fileIds: string[] | null; onDone: () => void }) {
-  const app = useApp()
   const links = useShareLinks()
   const [created, setCreated] = useState<ShareLink | null>(null)
   const [copied, copy] = useCopied()
-
-  // A link has no address until the daemon has listed the account's keys,
-  // which it otherwise does every few minutes, so a link made on another
-  // device or before the daemon restarted is listed now. Only then: a listing
-  // waits on the indexer for every link, and a link being made waits on it.
-  const missingAddress = links.data?.some((l) => l.url === null) ?? false
-  useEffect(() => {
-    if (missingAddress) void app.shares.syncLinks({ refresh: true }).catch(() => {})
-  }, [app, missingAddress])
 
   const others = (links.data ?? []).filter((l) => l.publicKey !== created?.publicKey)
 
@@ -299,7 +284,7 @@ export function ShareView({ fileIds, onDone }: { fileIds: string[] | null; onDon
               <span
                 data-testid="share-url"
                 className="truncate text-[12px] text-label select-text"
-                title={created.url ?? undefined}
+                title={created.url}
               >
                 {created.url}
               </span>
@@ -307,14 +292,14 @@ export function ShareView({ fileIds, onDone }: { fileIds: string[] | null; onDon
                 <button
                   type="button"
                   className={PRIMARY_BUTTON}
-                  onClick={() => created.url && copy(created.publicKey, created.url)}
+                  onClick={() => copy(created.publicKey, created.url)}
                 >
                   {copied === created.publicKey ? 'Copied' : 'Copy Link'}
                 </button>
                 <button
                   type="button"
                   className={PLAIN_BUTTON}
-                  onClick={() => created.url && void sia.openUrl(created.url)}
+                  onClick={() => void sia.openUrl(created.url)}
                 >
                   Open in Browser
                 </button>
@@ -334,7 +319,7 @@ export function ShareView({ fileIds, onDone }: { fileIds: string[] | null; onDon
                 key={link.publicKey}
                 link={link}
                 copied={copied === link.publicKey}
-                onCopy={() => link.url && copy(link.publicKey, link.url)}
+                onCopy={() => copy(link.publicKey, link.url)}
               />
             ))
           )}

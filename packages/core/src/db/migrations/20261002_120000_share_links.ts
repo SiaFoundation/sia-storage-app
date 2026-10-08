@@ -7,6 +7,12 @@ import type { Migration } from '../types'
  * what the indexer cannot hold: files not uploaded yet, and files taken off a
  * link while trashed so a restore can put them back.
  *
+ * share_links.seed is the key's seed in hex. A link's address ends in it and
+ * every change to the key is signed with it. The SDK derives it from the app
+ * key and a nonce the indexer keeps, so a device learns it only by listing the
+ * account's keys, and a link read with no network would have no address
+ * without this column.
+ *
  * share_links.mode is 'latest' or 'snapshot', as ShareLinkMode describes. A
  * device that did not make a link reads it from the key's description, which
  * the indexer keeps.
@@ -25,6 +31,7 @@ async function up(db: DatabaseAdapter): Promise<void> {
   await db.execAsync(`
     CREATE TABLE share_links (
       publicKey TEXT PRIMARY KEY,
+      seed TEXT NOT NULL,
       indexerURL TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       expiresAt INTEGER,

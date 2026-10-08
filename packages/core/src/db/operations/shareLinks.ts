@@ -3,6 +3,8 @@ import type { ShareLinkFileState, ShareLinkMode } from '../../types/shareLinks'
 
 export type ShareLinkRow = {
   publicKey: string
+  /** The key's seed in hex. */
+  seed: string
   indexerURL: string
   createdAt: number
   expiresAt: number | null
@@ -23,10 +25,11 @@ export type ShareLinkObjectRow = {
 
 export async function insertShareLink(db: DatabaseAdapter, link: ShareLinkRow): Promise<void> {
   await db.runAsync(
-    `INSERT INTO share_links (publicKey, indexerURL, createdAt, expiresAt, mode)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO share_links (publicKey, seed, indexerURL, createdAt, expiresAt, mode)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (publicKey) DO NOTHING`,
     link.publicKey,
+    link.seed,
     link.indexerURL,
     link.createdAt,
     link.expiresAt,
@@ -45,7 +48,7 @@ export async function queryShareLinks(
   indexerURL: string,
 ): Promise<ShareLinkRow[]> {
   return db.getAllAsync<ShareLinkRow>(
-    `SELECT publicKey, indexerURL, createdAt, expiresAt, mode FROM share_links
+    `SELECT publicKey, seed, indexerURL, createdAt, expiresAt, mode FROM share_links
      WHERE indexerURL = ?
      ORDER BY createdAt DESC, publicKey`,
     indexerURL,
@@ -57,7 +60,7 @@ export async function queryShareLink(
   publicKey: string,
 ): Promise<ShareLinkRow | null> {
   return db.getFirstAsync<ShareLinkRow>(
-    'SELECT publicKey, indexerURL, createdAt, expiresAt, mode FROM share_links WHERE publicKey = ?',
+    'SELECT publicKey, seed, indexerURL, createdAt, expiresAt, mode FROM share_links WHERE publicKey = ?',
     publicKey,
   )
 }

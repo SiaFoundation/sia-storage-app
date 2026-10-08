@@ -33,11 +33,7 @@ export type ShareLinkFile = {
 /** A link that opens a set of files on the share page, as its `mode` describes. */
 export type ShareLink = {
   publicKey: string
-  /**
-   * Null until this process has listed the account's sharing keys, which is
-   * where a key made on another device, or before a restart, gets its seed.
-   */
-  url: string | null
+  url: string
   createdAt: number
   /** Null for a link that never expires. */
   expiresAt: number | null
