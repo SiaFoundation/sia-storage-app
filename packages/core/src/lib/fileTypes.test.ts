@@ -26,6 +26,11 @@ describe('getMimeTypeFromExtension', () => {
     expect(getMimeTypeFromExtension('file.foo')).toBeNull()
   })
 
+  it('returns null for an extension that names an Object member', () => {
+    expect(getMimeTypeFromExtension('file.constructor')).toBeNull()
+    expect(getMimeTypeFromExtension('file.__proto__')).toBeNull()
+  })
+
   it('returns null for undefined/empty input', () => {
     expect(getMimeTypeFromExtension(undefined)).toBeNull()
     expect(getMimeTypeFromExtension('')).toBeNull()
@@ -257,6 +262,12 @@ describe('extFromMime', () => {
 
   it('returns .bin for unknown types', () => {
     expect(extFromMime('foo/bar')).toBe('.bin')
+  })
+
+  it('returns .bin for a type that names an Object member', () => {
+    expect(extFromMime('constructor')).toBe('.bin')
+    expect(extFromMime('__proto__')).toBe('.bin')
+    expect(extFromMime('toString')).toBe('.bin')
   })
 
   it('returns .bin for null/undefined', () => {
