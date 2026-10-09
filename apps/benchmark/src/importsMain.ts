@@ -57,10 +57,6 @@ async function main() {
     `Seeded ${info.importCount} imports / ${info.importFileCount.toLocaleString()} import_files in ${(generationTimeMs / 1000).toFixed(1)}s`,
   )
 
-  // The node adapter opens WAL; the app's device default is DELETE, and the
-  // journal mode shapes exactly the write-interleaved costs measured here.
-  await db.execAsync('PRAGMA journal_mode = DELETE')
-
   const { service: app } = createStubAppService(db)
 
   // The real scanner, resolved against nothing: every source reports a fixed

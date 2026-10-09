@@ -248,10 +248,10 @@ After a scenario's own steps, the runner records standard checks on every
 device: it is still running, has no download or import left in progress, holds
 the same library as the other devices, points every file at an object holding
 its own bytes, pins no file's bytes twice and no object for no file, and has the
-bytes of every file it records as local. They catch damage a scenario was not
-looking for. A scenario that breaks one on purpose names it in
-`skipStandardChecks` with the reason, and a known bug that breaks one lists its
-label in `bugShowsAs` like any other check.
+bytes of every file it records as local, and on a phone runs its database in WAL
+mode. They catch damage a scenario was not looking for. A scenario that breaks
+one on purpose names it in `skipStandardChecks` with the reason, and a known bug
+that breaks one lists its label in `bugShowsAs` like any other check.
 
 A scenario that asserts what the apps do now, where nobody has decided that is
 what they should do, sets `needsReview` to the decision needed. It passes or

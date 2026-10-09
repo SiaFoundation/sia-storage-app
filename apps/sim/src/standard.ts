@@ -3,8 +3,9 @@
  * behavior it is about, and these look for damage any behavior can do along
  * the way: a file pointing at another file's bytes, bytes pinned twice or for
  * no file, devices that never agree, downloads and imports left hanging, a
- * local record with no bytes behind it, and an app that died. They run after
- * the scenario's own steps, and only when those ended without an error.
+ * local record with no bytes behind it, an app that died, and a phone database
+ * not in WAL mode. They run after the scenario's own steps, and only when
+ * those ended without an error.
  *
  * A check whose label the scenario already recorded is not recorded again. A
  * scenario that breaks one of these on purpose names it in
@@ -28,6 +29,7 @@ export type StandardCheck =
   | 'pinnedOnce'
   | 'noStrayObjects'
   | 'localBytes'
+  | 'walJournal'
 
 export async function recordStandardChecks(opts: {
   devices: Record<string, Device>
@@ -122,6 +124,16 @@ export async function recordStandardChecks(opts: {
       .filter((o) => o.metadata?.kind === 'file' && !known.has(o.id))
       .map((o) => o.id)
     checkEqual('every pinned object belongs to a file on a device', stray, [])
+  }
+  if (!skip.walJournal) {
+    for (const [name, device] of devices) {
+      if (device.kind !== 'ios' && device.kind !== 'android') continue
+      checkEqual(
+        `${name} runs its database in WAL mode`,
+        await device.call<string | null>('sim.journalMode'),
+        'wal',
+      )
+    }
   }
   if (!skip.localBytes) {
     for (const [name, device] of devices) {

@@ -14,7 +14,7 @@
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import { Keyboard } from 'react-native'
-import { database, db, getDbState } from '../db'
+import { copyDatabaseTo, db, getDbState } from '../db'
 import { importFiles } from '../lib/importFiles'
 import {
   ensureMediaLibraryPermission,
@@ -62,12 +62,21 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
   },
 
   /**
-   * Writes a copy of the database to `path` with VACUUM INTO, which reads
-   * every committed write, the WAL's included, for a test to read while the
-   * app keeps writing.
+   * The journal mode of the app's own connection. A copy of the file cannot
+   * answer this, since `VACUUM INTO` writes every copy in rollback mode.
+   */
+  async 'sim.journalMode'() {
+    const row = await db().getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode')
+    return row?.journal_mode ?? null
+  },
+
+  /**
+   * Writes a copy of the database to `path` the way the settings export does,
+   * from one read of every committed write, for a test to read while the app
+   * keeps writing.
    */
   async 'sim.copyDatabase'(path: string) {
-    await database.execAsync(`VACUUM INTO '${path.replace(/'/g, "''")}'`)
+    await copyDatabaseTo(path)
     return null
   },
 
