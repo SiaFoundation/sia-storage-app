@@ -1,3 +1,4 @@
+import { logger } from '@siastorage/logger'
 import { createSuspensionManager, type SuspensionAdapters } from './suspension'
 
 type Mocks = {
@@ -15,6 +16,8 @@ function createAdapters(
     onBeforeSuspend?: () => void
     onAfterSuspend?: () => void | Promise<void>
     waitForIdle?: () => Promise<void>
+    endOpenTransaction?: () => Promise<boolean>
+    suspendBlocker?: () => string | null
     /** Returns iOS remaining ms; defaults to Infinity (no cap). */
     getBackgroundTimeRemainingMs?: () => number
   } = {},
@@ -46,6 +49,7 @@ function createAdapters(
       ),
       interrupt: jest.fn(recordEvent('interrupt')),
       getInflightCount: jest.fn(() => 0),
+      endOpenTransaction: jest.fn(opts.endOpenTransaction ?? (async () => false)),
     },
     platform: {
       getBackgroundTimeRemainingMs: jest.fn(
@@ -53,6 +57,7 @@ function createAdapters(
       ),
     },
     hooks: {
+      suspendBlocker: jest.fn(opts.suspendBlocker ?? (() => null)),
       onBeforeSuspend: jest.fn(opts.onBeforeSuspend ?? recordEvent('onBeforeSuspend')),
       onAfterSuspend: jest.fn(opts.onAfterSuspend ?? recordEvent('onAfterSuspend')),
       onAfterResume: jest.fn(),
@@ -161,43 +166,6 @@ describe('doSuspend', () => {
   })
 
   describe('interrupt loop', () => {
-    it('calls interrupt while waitForIdle stays pending, breaks once it resolves', async () => {
-      jest.useFakeTimers()
-      try {
-        let pendingResolver: () => void = () => {}
-        const idle = jest
-          .fn<Promise<void>, []>()
-          // Stay pending for the first iteration so the loop calls interrupt.
-          .mockImplementationOnce(
-            () =>
-              new Promise<void>((r) => {
-                pendingResolver = r
-              }),
-          )
-          // Resolve immediately on the second iteration so the loop breaks.
-          .mockImplementation(() => Promise.resolve())
-
-        const { adapters, mocks } = createAdapters({ waitForIdle: idle })
-        const manager = createSuspensionManager(adapters)
-
-        const suspendPromise = manager.suspend()
-
-        // Drive the loop's INTERRUPT_TICK_MS (50ms) timer; the first
-        // raceWithTimeout times out, an interrupt fires, and the loop
-        // re-checks idle on the next iteration.
-        await jest.advanceTimersByTimeAsync(50)
-        pendingResolver()
-
-        await suspendPromise
-        await flushMicrotasks()
-
-        expect(mocks.db.interrupt).toHaveBeenCalled()
-        expect(manager.isSuspended()).toBe(true)
-      } finally {
-        jest.useRealTimers()
-      }
-    })
-
     it('bails when iOS background-time budget drops below FINISH_RESERVE_MS', async () => {
       jest.useFakeTimers()
       try {
@@ -292,8 +260,8 @@ describe('doSuspend', () => {
 
         const suspendPromise = manager.suspend()
 
-        // Let a couple of interrupt iterations run.
-        await jest.advanceTimersByTimeAsync(150)
+        // Past the 1s grace period, let a couple of interrupt iterations run.
+        await jest.advanceTimersByTimeAsync(1_150)
         const interruptsBeforeForeground = mocks.db.interrupt.mock.calls.length
         expect(interruptsBeforeForeground).toBeGreaterThan(0)
 
@@ -323,22 +291,18 @@ describe('doSuspend', () => {
       }
     })
 
-    it('keeps interrupting while iOS budget is generous, until idle', async () => {
+    it('waits out the grace period before interrupting, then interrupts until idle', async () => {
       jest.useFakeTimers()
       try {
-        // Three pending iterations, then a resolved one. With 30s reported
-        // remaining we should see three interrupts before the drain ends.
         const pending: Array<() => void> = []
-        let calls = 0
-        const idle = jest.fn<Promise<void>, []>(() => {
-          calls += 1
-          if (calls <= 3) {
-            return new Promise<void>((r) => {
-              pending.push(r)
-            })
-          }
-          return Promise.resolve()
-        })
+        let idleNow = false
+        const idle = jest.fn<Promise<void>, []>(() =>
+          idleNow
+            ? Promise.resolve()
+            : new Promise<void>((r) => {
+                pending.push(r)
+              }),
+        )
         const { adapters, mocks } = createAdapters({
           waitForIdle: idle,
           getBackgroundTimeRemainingMs: () => 30_000,
@@ -347,15 +311,74 @@ describe('doSuspend', () => {
 
         const suspendPromise = manager.suspend()
 
-        // 3 ticks @ 50ms = 150ms; the 4th idle resolves immediately.
+        await jest.advanceTimersByTimeAsync(950)
+        expect(mocks.db.interrupt).not.toHaveBeenCalled()
         await jest.advanceTimersByTimeAsync(150)
+        expect(mocks.db.interrupt).toHaveBeenCalled()
+
+        idleNow = true
         for (const r of pending) r()
-
         await suspendPromise
-        await flushMicrotasks()
-
-        expect(mocks.db.interrupt).toHaveBeenCalledTimes(3)
         expect(manager.isSuspended()).toBe(true)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('never interrupts work that finishes inside the grace period', async () => {
+      jest.useFakeTimers()
+      try {
+        let finish: () => void = () => {}
+        const idle = jest
+          .fn<Promise<void>, []>()
+          .mockImplementationOnce(
+            () =>
+              new Promise<void>((r) => {
+                finish = r
+              }),
+          )
+          .mockImplementation(() => Promise.resolve())
+        const { adapters, mocks } = createAdapters({ waitForIdle: idle })
+        const manager = createSuspensionManager(adapters)
+
+        const suspendPromise = manager.suspend()
+        await jest.advanceTimersByTimeAsync(500)
+        finish()
+        await suspendPromise
+
+        expect(mocks.db.interrupt).not.toHaveBeenCalled()
+        expect(manager.isSuspended()).toBe(true)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('shortens the grace period to half of a short iOS budget', async () => {
+      jest.useFakeTimers()
+      try {
+        const pending: Array<() => void> = []
+        const idle = jest.fn<Promise<void>, []>(
+          () =>
+            new Promise<void>((r) => {
+              pending.push(r)
+            }),
+        )
+        // (1200 - 200 reserve) / 2 = 500ms of grace.
+        const { adapters, mocks } = createAdapters({
+          waitForIdle: idle,
+          getBackgroundTimeRemainingMs: () => 1_200,
+        })
+        const manager = createSuspensionManager(adapters)
+
+        const suspendPromise = manager.suspend()
+        await jest.advanceTimersByTimeAsync(450)
+        expect(mocks.db.interrupt).not.toHaveBeenCalled()
+        await jest.advanceTimersByTimeAsync(150)
+        expect(mocks.db.interrupt).toHaveBeenCalled()
+
+        await jest.advanceTimersByTimeAsync(5_000)
+        for (const r of pending) r()
+        await suspendPromise
       } finally {
         jest.useRealTimers()
       }
@@ -418,6 +441,39 @@ describe('initialAppState option', () => {
     await manager.releaseBackgroundTask('bg')
 
     expect(manager.isSuspended()).toBe(true)
+  })
+})
+
+describe('suspendBlocker hook', () => {
+  it('declines a background transition while blocked, then suspends on the next task release', async () => {
+    let blocker: string | null = 'init_in_progress'
+    const { adapters, mocks } = createAdapters({ suspendBlocker: () => blocker })
+    const manager = createSuspensionManager(adapters)
+
+    await manager.setAppState('background')
+    expect(manager.isSuspended()).toBe(false)
+    expect(mocks.db.gate).not.toHaveBeenCalled()
+
+    blocker = null
+    await manager.registerBackgroundTask('bg')
+    await manager.releaseBackgroundTask('bg')
+
+    expect(manager.isSuspended()).toBe(true)
+  })
+})
+
+describe('open transaction after the drain', () => {
+  it('ends it, logs an error and still suspends', async () => {
+    const error = jest.spyOn(logger, 'error')
+    const { adapters } = createAdapters({ endOpenTransaction: async () => true })
+    const manager = createSuspensionManager(adapters)
+
+    await manager.suspend()
+
+    expect(adapters.db.endOpenTransaction).toHaveBeenCalledTimes(1)
+    expect(manager.isSuspended()).toBe(true)
+    expect(error).toHaveBeenCalledWith('suspension', 'open_transaction_after_drain')
+    error.mockRestore()
   })
 })
 

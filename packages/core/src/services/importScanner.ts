@@ -15,6 +15,7 @@ import {
   importReasonRule,
   isImportReasonCode,
 } from '../db/operations/importReasons'
+import { isSuspendedDbError } from '../lib/errors'
 import { uniqueId } from '../lib/uniqueId'
 import { raceWithAbort } from '../lib/timeout'
 import type { ContentHash } from '../lib/contentHash'
@@ -495,6 +496,13 @@ export class ImportScanner {
 
           await this.finalizeHashed(app, row, token, outcome, result)
         } catch (e) {
+          // The suspend gate cut off this row's transaction, which is not a
+          // failed import. Recording one would spend an attempt once the app
+          // resumes, so the row stays `active` for resetStale instead.
+          if (isSuspendedDbError(e)) {
+            suspending = true
+            return
+          }
           logger.error('importScanner', 'process_error', {
             fileId: row.id,
             error: e as Error,
@@ -550,9 +558,8 @@ export class ImportScanner {
         if (!(await app.imports.claim(row.id, now, token))) continue
         jobs.push(copyPool.run(row.size, () => processRow(row, imp, token)))
       }
-      // allSettled: a job whose terminal write itself throws (DB fast-reject on
-      // suspend) must not detach its siblings mid-copy; the row stays `active`
-      // and resetStale recovers it.
+      // allSettled: a job whose terminal write itself throws must not detach its
+      // siblings mid-copy. The row stays `active` and resetStale recovers it.
       await Promise.allSettled(jobs)
 
       if (result.deferred > 0) {

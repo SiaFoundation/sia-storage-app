@@ -44,17 +44,15 @@ export function buildDbNamespaces(
     detectMimeType?: (path: string) => Promise<string | null>
   },
 ): DatabaseNamespaces {
-  // Runs after any copy's bytes land: gate so the read+upsert can't leave the
-  // file invisible to cache eviction, then correct files.size to the real
-  // on-disk length (Android often reports the wrong size at import).
-  // updatedAt is preserved, because the size fix is not an edit another
-  // device should see as newer.
+  // Runs after any copy's bytes land: records the cache row, then corrects
+  // files.size to the real on-disk length (Android often reports the wrong
+  // size at import). updatedAt is preserved, because the size fix is not an
+  // edit another device should see as newer.
   async function recordCopiedMeta(
     file: { id: string; type: string },
     size: number,
     usedAt?: number,
   ) {
-    await db.waitUntilActive?.()
     await db.withTransactionAsync(async (tx) => {
       const previous = await ops.readFsMeta(tx, file.id)
       await ops.upsertFsMeta(tx, {
@@ -70,9 +68,6 @@ export function buildDbNamespaces(
 
   async function removeFile(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
-    // Disk delete is done; gate so the fsMeta delete doesn't fast-reject
-    // and leave a row pointing at a missing file.
-    await db.waitUntilActive?.()
     await ops.deleteFsMeta(db, file.id)
     // Callers read on-device state from here, not from the fsMeta row, so a
     // stale entry hands out the path of a file that no longer exists.
@@ -96,6 +91,10 @@ export function buildDbNamespaces(
     })
     return ids
   }
+
+  // The log appender puts a rejected batch back on its queue and writes it
+  // with the next one, so a log write has no reason to wait at the gate.
+  const logsDb = db.failFast?.() ?? db
 
   function invalidateLibrary() {
     caches.library.invalidateAll()
@@ -122,9 +121,6 @@ export function buildDbNamespaces(
     const result = opts
       ? await fsIO.adoptFile(file, sourceUri, opts)
       : await fsIO.adoptFile(file, sourceUri)
-    // Bytes are on disk; gate so the fsMeta upsert can't fast-reject and leave
-    // a file with no meta row, invisible to cache eviction.
-    await db.waitUntilActive?.()
     const now = Date.now()
     await ops.upsertFsMeta(db, { fileId: file.id, size: result.size, addedAt: now, usedAt: now })
     return result
@@ -179,8 +175,6 @@ export function buildDbNamespaces(
       if (!fsIO.writeFile) throw new Error('writeFile not implemented')
       const result = await fsIO.writeFile(file, data)
       const hash = adapters?.crypto ? toContentHash(await adapters.crypto.sha256(data)) : ''
-      // See copyFile above — disk write is done; gate the fsMeta upsert.
-      await db.waitUntilActive?.()
       await ops.upsertFsMeta(db, {
         fileId: file.id,
         size: result.size,
@@ -827,10 +821,10 @@ export function buildDbNamespaces(
       sortedFileIds: (params, limit, offset) => ops.querySortedFileIds(db, params, limit, offset),
     },
     logs: {
-      append: (entry) => ops.insertLog(db, { ...entry, createdAt: Date.now() }),
+      append: (entry) => ops.insertLog(logsDb, { ...entry, createdAt: Date.now() }),
       appendMany: (entries) =>
         ops.insertManyLogs(
-          db,
+          logsDb,
           entries.map((e) => ({ ...e, createdAt: Date.now() })),
         ),
       read: async (opts?: { logLevel?: string; logScopes?: string[]; limit?: number }) => {

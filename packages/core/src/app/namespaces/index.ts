@@ -200,9 +200,6 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     optimize: async () => {
       await adapters.db.execAsync('PRAGMA optimize')
     },
-    db: {
-      waitUntilActive: () => adapters.db.waitUntilActive?.() ?? Promise.resolve(),
-    },
     ...databaseNamespaces(adapters.db),
     settings: settingsNamespace,
     storage: {

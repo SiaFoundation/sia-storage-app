@@ -1,15 +1,19 @@
 import { DatabaseSuspendedError } from '@siastorage/core/lib/errors'
+import { createSuspensionManager } from '@siastorage/core/services/suspension'
 import {
-  closeDb,
   database,
   db,
   dbInitialized,
+  endOpenTransaction,
   getDbState,
+  getInflightCount,
   initializeDB,
+  interruptDatabase,
+  isInTransaction,
   resetDb,
   resumeDb,
+  suspendBlocker,
   suspendDb,
-  waitUntilDbActive,
   waitForQueriesIdle,
   withRecovery,
 } from '.'
@@ -18,489 +22,305 @@ const NPE_MESSAGE = 'Call to function has been rejected. java.lang.NullPointerEx
 
 beforeEach(async () => {
   await initializeDB({ databaseName: ':memory:' })
+  await db().execAsync('CREATE TABLE t (x INTEGER)')
 })
 
 afterEach(async () => {
+  resumeDb()
   await resetDb()
 })
 
-describe('state transitions', () => {
-  it('starts in active state', () => {
-    expect(getDbState()).toBe('active')
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((r) => {
+    resolve = r
   })
+  return { promise, resolve }
+}
 
-  it('suspendDb transitions to suspending', () => {
+async function settled(p: Promise<unknown>): Promise<boolean> {
+  let done = false
+  p.then(
+    () => {
+      done = true
+    },
+    () => {
+      done = true
+    },
+  )
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+  return done
+}
+
+const rows = async () => (await db().getAllAsync<{ x: number }>('SELECT x FROM t')).map((r) => r.x)
+
+describe('gate states', () => {
+  it('starts active, suspends and resumes', () => {
+    expect(getDbState()).toBe('active')
     suspendDb()
     expect(getDbState()).toBe('suspending')
-  })
-
-  it('resumeDb transitions back to active', () => {
-    suspendDb()
-    resumeDb()
-    expect(getDbState()).toBe('active')
-  })
-
-  it('closeDb transitions to closed', async () => {
-    await closeDb()
-    expect(getDbState()).toBe('closed')
-  })
-
-  it('full cycle: active → suspending → closed → active', async () => {
-    expect(getDbState()).toBe('active')
-    suspendDb()
-    expect(getDbState()).toBe('suspending')
-    await closeDb()
-    expect(getDbState()).toBe('closed')
-    await initializeDB({ databaseName: ':memory:', reopen: true })
     resumeDb()
     expect(getDbState()).toBe('active')
   })
 })
 
-describe('query gating', () => {
-  it('getAllAsync rejects during suspending', async () => {
+describe('while suspending', () => {
+  it('parks an outer statement and runs it after resume', async () => {
     suspendDb()
-    await expect(db().getAllAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-  })
+    const write = db().runAsync('INSERT INTO t VALUES (1)')
 
-  it('getFirstAsync rejects during suspending', async () => {
-    suspendDb()
-    await expect(db().getFirstAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-  })
-
-  it('runAsync rejects fast during suspending', async () => {
-    // Parking writes here would deadlock the drain via the txMutex —
-    // callers that need wait-for-resume call waitUntilDbActive() first.
-    suspendDb()
-    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS test (id TEXT)')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
+    expect(await settled(write)).toBe(false)
     resumeDb()
+    await write
+
+    expect(await rows()).toEqual([1])
   })
 
-  it('execAsync rejects fast during suspending', async () => {
+  it('parks a transaction before BEGIN and runs it after resume', async () => {
     suspendDb()
-    await expect(db().execAsync('SELECT 1')).rejects.toThrow(DatabaseSuspendedError)
-    resumeDb()
-  })
-
-  it('withTransactionAsync rejects fast during suspending', async () => {
-    suspendDb()
-    let txRan = false
-    await expect(
-      db().withTransactionAsync(async () => {
-        txRan = true
-      }),
-    ).rejects.toThrow(DatabaseSuspendedError)
-    expect(txRan).toBe(false)
-    resumeDb()
-  })
-
-  it('reads also park in closed state and drain after reopen+resume', async () => {
-    await closeDb()
-    const queryPromise = db().getAllAsync<{ v: number }>('SELECT 1 as v')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
+    let began = false
+    const txn = db().withTransactionAsync(async (tx) => {
+      began = true
+      await tx.runAsync('INSERT INTO t VALUES (1)')
     })
-    await Promise.resolve()
-    expect(settled).toBe(false)
-    await initializeDB({ databaseName: ':memory:', reopen: true })
+
+    expect(await settled(txn)).toBe(false)
+    expect(began).toBe(false)
     resumeDb()
-    const rows = await queryPromise
-    expect(rows).toEqual([{ v: 1 }])
+    await txn
+
+    expect(await rows()).toEqual([1])
   })
 
-  it('writes park in closed state and drain after reopen+resume', async () => {
-    await closeDb()
-    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')
-    let settled = false
-    queryPromise.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
-    await initializeDB({ databaseName: ':memory:', reopen: true })
-    resumeDb()
-    await queryPromise
-  })
-
-  it('waitUntilDbActive resolves immediately when active', async () => {
-    await waitUntilDbActive()
-  })
-
-  it('waitUntilDbActive parks during suspending and resolves on resume', async () => {
-    suspendDb()
-    let settled = false
-    const wait = waitUntilDbActive().then(() => {
-      settled = true
-    })
-    await Promise.resolve()
-    expect(settled).toBe(false)
-    resumeDb()
-    await wait
-    expect(settled).toBe(true)
-  })
-
-  it('waitUntilDbActive rejects after the safety-valve timeout', async () => {
+  it('rejects a parked call once the gate has stayed closed for 30s', async () => {
     jest.useFakeTimers()
     try {
       suspendDb()
-      const wait = waitUntilDbActive()
-      wait.catch(() => {})
+      const read = db().getAllAsync('SELECT 1')
+      read.catch(() => {})
       jest.advanceTimersByTime(30_000)
-      await expect(wait).rejects.toThrow(DatabaseSuspendedError)
+      await expect(read).rejects.toThrow(DatabaseSuspendedError)
     } finally {
       jest.useRealTimers()
-      resumeDb()
     }
   })
-})
 
-describe('withRecovery during suspension', () => {
-  it('does not reopen when state is suspending', async () => {
+  it('starts the 30s over when the timer fires late after a freeze', async () => {
+    jest.useFakeTimers()
+    try {
+      suspendDb()
+      const read = db().getAllAsync<{ v: number }>('SELECT 1 AS v')
+      read.catch(() => {})
+
+      jest.setSystemTime(Date.now() + 60 * 60_000)
+      jest.advanceTimersByTime(30_000)
+      expect(await settled(read)).toBe(false)
+
+      resumeDb()
+      await expect(read).resolves.toEqual([{ v: 1 }])
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('lets an open transaction commit while suspending until the drain interrupts', async () => {
+    const paused = deferred()
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (1)')
+      await paused.promise
+      await tx.runAsync('INSERT INTO t VALUES (2)')
+    })
+    await new Promise((r) => setTimeout(r, 10))
+
     suspendDb()
-    const fn = jest.fn().mockRejectedValue(new Error(NPE_MESSAGE))
-    await expect(withRecovery(fn)).rejects.toThrow(NPE_MESSAGE)
-    expect(fn).toHaveBeenCalledTimes(1)
+    paused.resolve()
+    await txn
+
+    resumeDb()
+    expect(await rows()).toEqual([1, 2])
   })
 
-  it('does not reopen when state is closed', async () => {
-    await closeDb()
-    const fn = jest.fn().mockRejectedValue(new Error(NPE_MESSAGE))
-    await expect(withRecovery(fn)).rejects.toThrow(NPE_MESSAGE)
-    expect(fn).toHaveBeenCalledTimes(1)
+  it('rejects the next statement of an open transaction once the drain interrupts, and rolls it back', async () => {
+    const paused = deferred()
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (1)')
+      await paused.promise
+      await tx.runAsync('INSERT INTO t VALUES (2)')
+    })
+    await new Promise((r) => setTimeout(r, 10))
+
+    suspendDb()
+    interruptDatabase()
+    paused.resolve()
+
+    await expect(txn).rejects.toThrow(DatabaseSuspendedError)
+    await waitForQueriesIdle()
+    expect(isInTransaction()).toBe(false)
+    resumeDb()
+    expect(await rows()).toEqual([])
   })
 
-  it('still recovers from NPE in active state', async () => {
-    const fn = jest
-      .fn()
-      .mockRejectedValueOnce(new Error(NPE_MESSAGE))
-      .mockResolvedValueOnce('recovered')
-    const result = await withRecovery(fn)
-    expect(result).toBe('recovered')
-    expect(fn).toHaveBeenCalledTimes(2)
+  it('reports a suspension when the drain interrupts a statement mid-transaction', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'runAsync').mockImplementationOnce(async () => {
+      await running.promise
+      throw new Error('interrupted')
+    })
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (1)')
+    })
+    await new Promise((r) => setTimeout(r, 10))
+
+    suspendDb()
+    interruptDatabase()
+    running.resolve()
+
+    await expect(txn).rejects.toThrow(DatabaseSuspendedError)
+  })
+
+  it('reports a suspension when the drain interrupts a statement outside a transaction', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'runAsync').mockImplementationOnce(async () => {
+      await running.promise
+      throw new Error('interrupted')
+    })
+    const write = db().runAsync('INSERT INTO t VALUES (1)')
+    await new Promise((r) => setTimeout(r, 10))
+
+    suspendDb()
+    interruptDatabase()
+    running.resolve()
+
+    await expect(write).rejects.toThrow(DatabaseSuspendedError)
+  })
+
+  it('rolls back a transaction left open after the drain', async () => {
+    await database.execAsync('BEGIN')
+    expect(await endOpenTransaction()).toBe(true)
+    expect(isInTransaction()).toBe(false)
+    expect(await endOpenTransaction()).toBe(false)
+  })
+
+  it('rejects calls through failFast instead of parking', async () => {
+    suspendDb()
+    const fast = db().failFast!()
+
+    await expect(fast.runAsync('INSERT INTO t VALUES (1)')).rejects.toThrow(DatabaseSuspendedError)
+    await expect(fast.withTransactionAsync(async () => {})).rejects.toThrow(DatabaseSuspendedError)
   })
 })
 
 describe('in-flight tracking', () => {
-  it('waitForQueriesIdle resolves immediately with no in-flight queries', async () => {
+  it('counts a statement made while active before the caller yields', async () => {
+    const write = db().runAsync('INSERT INTO t VALUES (1)')
+
+    expect(getInflightCount()).toBe(1)
+    suspendDb()
     await waitForQueriesIdle()
+    expect(await settled(write)).toBe(true)
   })
 
-  it('waitForQueriesIdle waits for an in-flight query to complete', async () => {
-    let resolveQuery!: () => void
-    const blockingPromise = new Promise<void>((r) => {
-      resolveQuery = r
-    })
-    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(() => blockingPromise as any)
+  it('counts a transaction made while active before the caller yields', async () => {
+    const txn = db().withTransactionAsync(async () => {})
 
-    const queryPromise = db().getAllAsync('SELECT 1')
-
-    let idleDone = false
-    const idlePromise = waitForQueriesIdle().then(() => {
-      idleDone = true
-    })
-
-    await Promise.resolve()
-    expect(idleDone).toBe(false)
-
-    resolveQuery()
-    await queryPromise
-    await idlePromise
-    expect(idleDone).toBe(true)
+    expect(getInflightCount()).toBe(1)
+    await txn
   })
 
-  it('waitForQueriesIdle waits for multiple in-flight queries', async () => {
-    let resolveFirst!: () => void
-    let resolveSecond!: () => void
-    jest
-      .spyOn(database, 'getAllAsync')
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((r) => {
-            resolveFirst = r
-          }) as any,
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((r) => {
-            resolveSecond = r
-          }) as any,
-      )
+  it('does not count transactions waiting for the lock', async () => {
+    const held = deferred()
+    const first = db().withTransactionAsync(() => held.promise)
+    const queued = Array.from({ length: 50 }, () => db().withTransactionAsync(async () => {}))
+    await new Promise((r) => setTimeout(r, 10))
 
-    const q1 = db().getAllAsync('SELECT 1')
-    const q2 = db().getAllAsync('SELECT 2')
-
-    let idleDone = false
-    const idlePromise = waitForQueriesIdle().then(() => {
-      idleDone = true
-    })
-
-    resolveFirst()
-    await q1
-    await Promise.resolve()
-    expect(idleDone).toBe(false)
-
-    resolveSecond()
-    await q2
-    await idlePromise
-    expect(idleDone).toBe(true)
+    expect(getInflightCount()).toBe(1)
+    held.resolve()
+    await Promise.all([first, ...queued])
+    expect(getInflightCount()).toBe(0)
   })
 
-  it('preserves inflight across resumeDb so late trackEnd does not drive count negative', async () => {
-    // The earlier impl reset inflightCount to 0 in resumeDb. Any query
-    // that started before the gate (trackStart fired) and finished after
-    // resume would then trigger trackEnd against count=0, going to -1.
-    // Once negative, waitForQueriesIdle (which checks `=== 0`) could
-    // never resolve again, pinning the next suspend's drain loop until
-    // MAX_DRAIN_MS. resumeDb must leave inflight alone and let the
-    // pending .finally(trackEnd) callbacks reach 0 naturally.
-    let resolveQuery!: () => void
-    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(
-      () =>
-        new Promise<void>((r) => {
-          resolveQuery = r
-        }) as any,
-    )
+  it('parks a transaction that gets the lock after the gate closed, and drains without it', async () => {
+    const held = deferred()
+    const first = db().withTransactionAsync(() => held.promise)
+    let secondBegan = false
+    const second = db().withTransactionAsync(async (tx) => {
+      secondBegan = true
+      await tx.runAsync('INSERT INTO t VALUES (2)')
+    })
+    await new Promise((r) => setTimeout(r, 10))
 
-    const queryPromise = db().getAllAsync('SELECT 1')
-    // Resume while the query is still in flight.
+    suspendDb()
+    held.resolve()
+    await first
+    await waitForQueriesIdle()
+
+    expect(secondBegan).toBe(false)
+    resumeDb()
+    await second
+    expect(await rows()).toEqual([2])
+  })
+
+  it('waits for the drain on a statement still running when the gate closes', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'runAsync').mockImplementationOnce(() => running.promise as any)
+    const write = db().runAsync('INSERT INTO t VALUES (1)')
+
+    suspendDb()
+    const drained = waitForQueriesIdle()
+    expect(await settled(drained)).toBe(false)
+
+    running.resolve()
+    await write
+    await drained
+  })
+
+  it('keeps the count across resume so a late end cannot drive it negative', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(() => running.promise as any)
+    const read = db().getAllAsync('SELECT 1')
     resumeDb()
 
-    // waitForQueriesIdle must NOT have resolved yet — query is in flight.
-    let idleDone = false
-    const idlePromise = waitForQueriesIdle().then(() => {
-      idleDone = true
-    })
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(idleDone).toBe(false)
-
-    // Resolve the query → trackEnd fires → inflight reaches 0 → waiters drain.
-    resolveQuery()
-    await queryPromise
-    await idlePromise
-    expect(idleDone).toBe(true)
+    const idle = waitForQueriesIdle()
+    expect(await settled(idle)).toBe(false)
+    running.resolve()
+    await read
+    await idle
+    expect(getInflightCount()).toBe(0)
   })
 })
 
-describe('closeDb', () => {
-  it('sets dbInitialized to false before closing', async () => {
-    expect(dbInitialized).toBe(true)
-    const closeSpy = jest.spyOn(database, 'closeAsync')
-    let initDuringClose: boolean | undefined
-    closeSpy.mockImplementationOnce(async () => {
-      initDuringClose = dbInitialized
-    })
-    await closeDb()
-    expect(initDuringClose).toBe(false)
-  })
-
-  it('runs WAL checkpoint before close', async () => {
-    const execSpy = jest.spyOn(database, 'execAsync')
-    await closeDb()
-    const calls = execSpy.mock.calls.map((c) => c[0])
-    expect(calls).toContain('PRAGMA busy_timeout = 0')
-    expect(calls).toContain('PRAGMA wal_checkpoint(TRUNCATE)')
-  })
-
-  it('succeeds even if checkpoint fails', async () => {
-    const execSpy = jest.spyOn(database, 'execAsync')
-    execSpy.mockRejectedValue(new Error('checkpoint failed'))
-    await closeDb()
-    expect(getDbState()).toBe('closed')
-  })
-
-  it('succeeds even if closeAsync throws', async () => {
-    jest.spyOn(database, 'closeAsync').mockRejectedValueOnce(new Error('SQLITE_BUSY'))
-    await closeDb()
-    expect(dbInitialized).toBe(false)
-    expect(getDbState()).toBe('closed')
-  })
-
-  // Closing while a query iterates the native handle produces a UAF in
-  // sqlite3_mutex_enter (TestFlight crash #29). closeDb must wait for the
-  // serial dispatch queue to be empty before destroying the handle.
-  it('waits for in-flight queries to finish before closeAsync', async () => {
-    let resolveQuery!: () => void
-    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(
-      () =>
-        new Promise<void>((r) => {
-          resolveQuery = r
-        }) as any,
-    )
-    const closeAsyncSpy = jest.spyOn(database, 'closeAsync')
-
-    const queryPromise = db().getAllAsync('SELECT 1')
-
-    let closeDone = false
-    const closePromise = closeDb().then(() => {
-      closeDone = true
+describe('outer statements and transactions', () => {
+  it('begins a transaction only after an outer statement already running has settled', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'runAsync').mockImplementationOnce(() => running.promise as any)
+    const begin = jest.spyOn(database, 'withTransactionAsync')
+    const write = db().runAsync('INSERT INTO t VALUES (1)')
+    const txn = db().withTransactionAsync(async (tx) => {
+      await tx.runAsync('INSERT INTO t VALUES (2)')
     })
 
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(closeDone).toBe(false)
-    expect(closeAsyncSpy).not.toHaveBeenCalled()
-
-    resolveQuery()
-    await queryPromise
-    await closePromise
-    expect(closeDone).toBe(true)
-    expect(closeAsyncSpy).toHaveBeenCalled()
-  })
-})
-
-describe('full suspend/resume cycle', () => {
-  it('reads during suspending reject; reads during closed park and drain after reopen', async () => {
-    const rows1 = await db().getAllAsync<{ v: number }>('SELECT 1 as v')
-    expect(rows1).toEqual([{ v: 1 }])
-
-    suspendDb()
-    await expect(db().getAllAsync<{ v: number }>('SELECT 1 as v')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-
-    await closeDb()
-    expect(dbInitialized).toBe(false)
-    const duringClosed = db().getAllAsync<{ v: number }>('SELECT 2 as v')
-
-    await initializeDB({ databaseName: ':memory:', reopen: true })
-    resumeDb()
-
-    expect(await duringClosed).toEqual([{ v: 2 }])
-  })
-
-  it('writes during suspending reject fast; callers wait via waitUntilDbActive before issuing', async () => {
-    suspendDb()
-    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS t (id TEXT)')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-
-    // Caller-side gate: wait, then issue. The write succeeds after resume.
-    let writeSettled = false
-    const guarded = (async () => {
-      await waitUntilDbActive()
-      await db().runAsync('CREATE TABLE IF NOT EXISTS t2 (id TEXT)')
-      writeSettled = true
-    })()
-    await Promise.resolve()
-    expect(writeSettled).toBe(false)
-    resumeDb()
-    await guarded
-    expect(writeSettled).toBe(true)
-  })
-
-  it('in-flight query at suspend time completes, then drain resolves', async () => {
-    let resolveQuery!: () => void
-    jest.spyOn(database, 'runAsync').mockImplementationOnce(
-      () =>
-        new Promise<void>((r) => {
-          resolveQuery = r
-        }) as any,
-    )
-
-    const queryPromise = db().runAsync('CREATE TABLE IF NOT EXISTS x (id TEXT)')
-
-    suspendDb()
-    // A new write issued during suspend now rejects fast (no longer parks).
-    // Inflight only counts the in-flight pre-gate query.
-    await expect(db().runAsync('CREATE TABLE IF NOT EXISTS y (id TEXT)')).rejects.toThrow(
-      DatabaseSuspendedError,
-    )
-
-    let drained = false
-    waitForQueriesIdle().then(() => {
-      drained = true
-    })
-    await Promise.resolve()
-    expect(drained).toBe(false)
-
-    resolveQuery()
-    await queryPromise
-    await Promise.resolve()
-    expect(drained).toBe(true)
-
-    resumeDb()
-  })
-
-  it('resetDb works after suspend → resume → reinit sequence', async () => {
-    // Simulate: boot → suspend → resume (reopen) → full reinit → reset.
-    // This is the exact sequence that happens when the app suspends during
-    // initial auth, resumes, then the full init completes. Without closing
-    // the previous connection in initializeDB, the intermediate reopen
-    // connection leaks and deleteDatabaseAsync fails.
-    suspendDb()
-    await closeDb()
-
-    await initializeDB({ databaseName: ':memory:', reopen: true })
-    resumeDb()
-
-    // Full reinit (as if the app's init flow completed after resume).
-    await initializeDB({ databaseName: ':memory:' })
-
-    // Reset should not throw.
-    await resetDb()
-    expect(dbInitialized).toBe(true)
-    expect(getDbState()).toBe('active')
-  })
-
-  it('rapid suspend/resume does not corrupt state', async () => {
-    suspendDb()
-    resumeDb()
-    suspendDb()
-    resumeDb()
-    expect(getDbState()).toBe('active')
-
-    const rows = await db().getAllAsync<{ v: number }>('SELECT 1 as v')
-    expect(rows).toEqual([{ v: 1 }])
-  })
-})
-
-describe('journal mode', () => {
-  it('opens with a 500-page autocheckpoint and a 4MB WAL size limit', async () => {
-    await initializeDB({ databaseName: ':memory:' })
-    const auto = await db().getFirstAsync<{ wal_autocheckpoint: number }>(
-      'PRAGMA wal_autocheckpoint',
-    )
-    expect(auto?.wal_autocheckpoint).toBe(500)
-    const limit = await db().getFirstAsync<{ journal_size_limit: number }>(
-      'PRAGMA journal_size_limit',
-    )
-    expect(limit?.journal_size_limit).toBe(4194304)
-  })
-})
-
-describe('transactions', () => {
-  const rows = async () =>
-    (await db().getAllAsync<{ x: number }>('SELECT x FROM t')).map((r) => r.x)
-
-  beforeEach(async () => {
-    await db().execAsync('CREATE TABLE t (x INTEGER)')
+    expect(await settled(txn)).toBe(false)
+    expect(begin).not.toHaveBeenCalled()
+    running.resolve()
+    await write
+    await txn
+    expect(begin).toHaveBeenCalledTimes(1)
   })
 
   it('keeps an outer write out of a transaction that rolls back', async () => {
-    let fail!: () => void
-    const failing = new Promise<void>((resolve) => {
-      fail = resolve
-    })
-    const txn = db()
+    const paused = deferred()
+    const failing = db()
       .withTransactionAsync(async (tx) => {
         await tx.runAsync('INSERT INTO t VALUES (1)')
-        await failing
+        await paused.promise
         throw new Error('batch failed')
       })
       .catch(() => {})
     await new Promise((r) => setTimeout(r, 10))
 
     const outer = db().runAsync('INSERT INTO t VALUES (2)')
-    fail()
-    await Promise.all([outer, txn])
+    paused.resolve()
+    await Promise.all([outer, failing])
 
     expect(await rows()).toEqual([2])
   })
@@ -515,5 +335,162 @@ describe('transactions', () => {
 
     await expect(kept?.runAsync('INSERT INTO t VALUES (1)')).rejects.toThrow('has ended')
     await expect(kept?.withTransactionAsync(async () => {})).rejects.toThrow('has ended')
+  })
+
+  it('joins a nested transaction opened through the handle', async () => {
+    await db()
+      .withTransactionAsync(async (tx) => {
+        await tx.runAsync('INSERT INTO t VALUES (1)')
+        await tx.withTransactionAsync(async (inner) => {
+          await inner.runAsync('INSERT INTO t VALUES (2)')
+          throw new Error('nested op failed')
+        })
+      })
+      .catch(() => {})
+
+    expect(await rows()).toEqual([])
+  })
+})
+
+describe('resetDb', () => {
+  it('parks calls made during the reset and runs them on the new database', async () => {
+    const reset = resetDb()
+    expect(getDbState()).toBe('closed')
+    const read = db().getAllAsync<{ n: number }>(
+      `SELECT count(*) AS n FROM sqlite_master WHERE name = 't'`,
+    )
+
+    await reset
+    expect(getDbState()).toBe('active')
+    expect(dbInitialized).toBe(true)
+    expect(await read).toEqual([{ n: 0 }])
+  })
+
+  it('holds the drain open through a reset and leaves the gate closed for a suspend that lands mid-reset', async () => {
+    const closing = deferred()
+    jest.spyOn(database, 'closeAsync').mockImplementationOnce(() => closing.promise)
+    const reset = resetDb()
+    await new Promise((r) => setTimeout(r, 10))
+
+    suspendDb()
+    const drained = waitForQueriesIdle()
+    expect(await settled(drained)).toBe(false)
+
+    closing.resolve()
+    await reset
+    await drained
+    expect(getDbState()).toBe('suspending')
+  })
+
+  it('holds the drain open for a reset still waiting for the writer lock', async () => {
+    const held = deferred()
+    const txn = db().withTransactionAsync(() => held.promise)
+    await new Promise((r) => setTimeout(r, 10))
+    const reset = resetDb()
+
+    suspendDb()
+    const drained = waitForQueriesIdle()
+    held.resolve()
+    await txn
+    expect(await settled(drained)).toBe(false)
+
+    await reset
+    await drained
+  })
+
+  it('waits for a running statement before closing the connection', async () => {
+    const running = deferred()
+    jest.spyOn(database, 'getAllAsync').mockImplementationOnce(() => running.promise as any)
+    const close = jest.spyOn(database, 'closeAsync')
+    const read = db().getAllAsync('SELECT 1')
+
+    const reset = resetDb()
+    expect(await settled(reset)).toBe(false)
+    expect(close).not.toHaveBeenCalled()
+
+    running.resolve()
+    await read
+    await reset
+    expect(close).toHaveBeenCalled()
+  })
+})
+
+describe('withRecovery', () => {
+  it('does not reopen while suspending', async () => {
+    suspendDb()
+    const fn = jest.fn().mockRejectedValue(new Error(NPE_MESSAGE))
+    await expect(withRecovery(fn)).rejects.toThrow(NPE_MESSAGE)
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers from a native handle error while active', async () => {
+    const fn = jest
+      .fn()
+      .mockRejectedValueOnce(new Error(NPE_MESSAGE))
+      .mockResolvedValueOnce('recovered')
+    expect(await withRecovery(fn)).toBe('recovered')
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('journal mode', () => {
+  it('opens with a 500-page autocheckpoint and a 4MB WAL size limit', async () => {
+    const auto = await db().getFirstAsync<{ wal_autocheckpoint: number }>(
+      'PRAGMA wal_autocheckpoint',
+    )
+    expect(auto?.wal_autocheckpoint).toBe(500)
+    const limit = await db().getFirstAsync<{ journal_size_limit: number }>(
+      'PRAGMA journal_size_limit',
+    )
+    expect(limit?.journal_size_limit).toBe(4194304)
+  })
+})
+
+describe('suspension manager', () => {
+  function manager() {
+    return createSuspensionManager({
+      scheduler: { pause() {}, abort() {}, resume() {} },
+      uploader: { suspend() {}, resume() {}, adjustBatchForSuspension() {} },
+      db: {
+        gate: suspendDb,
+        ungate: resumeDb,
+        waitForIdle: waitForQueriesIdle,
+        interrupt: interruptDatabase,
+        getInflightCount,
+        endOpenTransaction,
+      },
+      platform: { getBackgroundTimeRemainingMs: () => Number.POSITIVE_INFINITY },
+      hooks: { suspendBlocker },
+    })
+  }
+
+  it('suspends during a reset and finishes suspending only after the reset', async () => {
+    const held = deferred()
+    const txn = db().withTransactionAsync(() => held.promise)
+    await new Promise((r) => setTimeout(r, 10))
+    const order: string[] = []
+    const reset = resetDb().then(() => order.push('reset'))
+
+    const suspended = manager()
+      .suspend()
+      .then(() => order.push('suspended'))
+    held.resolve()
+    await Promise.all([txn, reset, suspended])
+
+    expect(order).toEqual(['reset', 'suspended'])
+    expect(getDbState()).toBe('suspending')
+  })
+
+  it('suspends rather than declining when backgrounded while a reset replaces the connection', async () => {
+    const closing = deferred()
+    jest.spyOn(database, 'closeAsync').mockImplementationOnce(() => closing.promise)
+    const reset = resetDb()
+    await new Promise((r) => setTimeout(r, 10))
+
+    const suspended = manager().suspend()
+    closing.resolve()
+    await Promise.all([reset, suspended])
+
+    expect(getDbState()).toBe('suspending')
   })
 })

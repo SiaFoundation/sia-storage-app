@@ -1,5 +1,6 @@
 import type { LogLevel } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
+import * as sql from '../sql'
 
 type LogInsert = {
   timestamp: string
@@ -22,21 +23,12 @@ export async function insertLog(db: DatabaseAdapter, entry: LogInsert): Promise<
   )
 }
 
+// One transaction, because the log appender re-queues a failed batch whole.
+// A batch larger than one insert statement holds that the suspension gate
+// cut off partway would otherwise write its first chunk twice.
 export async function insertManyLogs(db: DatabaseAdapter, entries: LogInsert[]): Promise<void> {
   if (entries.length === 0) return
-  await db.withTransactionAsync(async (tx) => {
-    for (const entry of entries) {
-      await tx.runAsync(
-        'INSERT INTO logs (timestamp, level, scope, message, data, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        entry.timestamp,
-        entry.level,
-        entry.scope,
-        entry.message,
-        entry.data,
-        entry.createdAt,
-      )
-    }
-  })
+  await db.withTransactionAsync((tx) => sql.insertMany(tx, 'logs', entries))
 }
 
 export async function queryAvailableLogScopes(db: DatabaseAdapter): Promise<string[]> {

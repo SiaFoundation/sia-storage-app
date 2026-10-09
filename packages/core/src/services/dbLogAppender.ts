@@ -30,10 +30,18 @@ class DbLogAppender implements Appender {
     await this.drain()
   }
 
-  /** Fire one in-flight write before the iOS suspend gate closes. Sync. */
+  /**
+   * Starts writing the queued lines just before the iOS suspend gate closes.
+   * The write is dispatched in this tick, so the drain waits for it. If it
+   * cannot start before the gate closes it rejects, and the lines go back on
+   * the queue.
+   */
   flushBeforeSuspend(): void {
     if (this.stopped || this.queue.length === 0) return
-    void this.append(this.queue.splice(0)).catch(() => {})
+    const batch = this.queue.splice(0)
+    void this.append(batch).catch(() => {
+      this.queue.unshift(...batch)
+    })
   }
 
   start(): void {

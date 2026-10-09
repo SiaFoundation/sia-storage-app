@@ -150,10 +150,6 @@ export async function importAssets(
     return { importId: null, newVersionCount: 0 }
   }
 
-  // An iOS background landing mid-flight would fast-reject the first DB
-  // read. Gate so the import resumes after the gate reopens.
-  await app().db.waitUntilActive()
-
   const importId = uniqueId()
   const parsed = picks.map((a) => parseAssetMetadata(a, defaultFileName))
   const rows: ImportFileRow[] = picks.map((a, i) => {
@@ -223,8 +219,6 @@ export async function importMediaAssets(
 ): Promise<ImportAssetsResult> {
   const { destinationDirectoryId = null, assignTagName } = options
   const now = Date.now()
-
-  await app().db.waitUntilActive()
 
   const importId = uniqueId()
   const candidates = await buildPhotoCandidateRows(assets, importId, destinationDirectoryId, now)
