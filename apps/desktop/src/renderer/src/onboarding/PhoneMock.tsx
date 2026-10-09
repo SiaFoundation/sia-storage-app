@@ -49,6 +49,45 @@ const FOLDER = (
   <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
 )
 
+/** Where the Wi-Fi fan's point sits, which its three arcs are drawn around. */
+const WIFI = { x: 35.17, y: 12.67 }
+
+/**
+ * The right of an iPhone's status bar: four signal bars, Wi-Fi and a full
+ * battery. Every size and gap is the one iOS draws, in points, read off a
+ * simulator's status bar, so the picture is a phone's and not a sketch of one.
+ */
+function StatusIcons() {
+  return (
+    <svg viewBox="0 0 78.33 13" width={78.33} height={13} fill={WHITE} aria-hidden="true">
+      {[4.67, 7, 9.67, 12.33].map((height, bar) => (
+        <rect key={height} x={bar * 5.33} y={WIFI.y - height} width={3.33} height={height} rx={1} />
+      ))}
+      {/* Three rings around the point, cut to the fan the glyph opens to. */}
+      <clipPath id="status-wifi-fan">
+        <polygon points="35.17,12.67 37.34,9.71 47.98,-0.33 22.36,-0.33 33,9.71" />
+      </clipPath>
+      <g clipPath="url(#status-wifi-fan)" fill="none" stroke={WHITE}>
+        <circle cx={WIFI.x} cy={WIFI.y} r={11} strokeWidth={2.67} />
+        <circle cx={WIFI.x} cy={WIFI.y} r={6.83} strokeWidth={2.33} />
+        <circle cx={WIFI.x} cy={WIFI.y} r={3.67} fill={WHITE} stroke="none" />
+      </g>
+      <rect
+        x={51.5}
+        y={0.5}
+        width={24}
+        height={12}
+        rx={3.5}
+        fill="none"
+        stroke={WHITE}
+        strokeOpacity={0.4}
+      />
+      <rect x={53} y={2} width={21} height={9} rx={2} />
+      <path d="M77 4.5v4c.8-.34 1.33-1.1 1.33-2s-.53-1.66-1.33-2z" fillOpacity={0.5} />
+    </svg>
+  )
+}
+
 const row: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -144,16 +183,16 @@ export function PhoneMock() {
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              padding: '19px 34px 0',
+              alignItems: 'center',
+              // The clock sits further in than the icons, each centred in its
+              // side of the island.
+              padding: '19px 34px 0 53px',
               fontSize: 17,
               fontWeight: 600,
             }}
           >
             <span>9:41</span>
-            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ width: 18, height: 11, borderRadius: 2, background: WHITE }} />
-              <span style={{ width: 26, height: 12, borderRadius: 4, background: WHITE }} />
-            </span>
+            <StatusIcons />
           </div>
 
           <div
