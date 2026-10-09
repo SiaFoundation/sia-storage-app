@@ -54,6 +54,11 @@ export default defineScenario({
     })
     checkEqual('the tour shows its five slides in order', seen, TOUR)
     checkEqual(
+      'the phone slide offers the phone app with a code to scan',
+      await ui.read({ id: 'tour-install-label' }),
+      'Scan to install the companion app',
+    )
+    checkEqual(
       'the Finder slide names the folder this build uses',
       await (async () => {
         await ui.tap({ text: 'Back' })
