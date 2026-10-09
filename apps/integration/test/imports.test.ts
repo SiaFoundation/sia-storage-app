@@ -35,6 +35,8 @@ describe('Imports lifecycle (integration)', () => {
   let sourceDir: string
   /** Maps an import_file id to its resolved temp source URI (or a non-resolved status). */
   let sources: Map<string, ResolveSourceResult>
+  /** What the classifier sees for every copy; null falls through to the name. */
+  let headerBytes: Uint8Array | null
 
   beforeEach(async () => {
     idCounter = 0
@@ -60,9 +62,9 @@ describe('Imports lifecycle (integration)', () => {
       const bytes = nodeFs.readFileSync(filePath)
       return toContentHash(createHash('sha256').update(bytes).digest('hex'))
     }
-    // Classification falls to name/staged type; these tests assert states,
-    // not types.
-    const readHeaderBytes: ReadHeaderBytes = async () => null
+    // Most tests assert states, not types, and leave this null.
+    headerBytes = null
+    const readHeaderBytes: ReadHeaderBytes = async () => headerBytes
 
     scanner = new ImportScanner()
     scanner.initialize(app.app, calculateContentHash, readHeaderBytes, resolveSource)
@@ -597,5 +599,64 @@ describe('Imports lifecycle (integration)', () => {
     await drainScanner()
     const retryRow = await importFileById(retryImportId, retryId)
     expect(retryRow.state).toBe('added')
+  }, 30_000)
+
+  /**
+   * Finalizing a reclassified import without moving its bytes leaves the
+   * library row naming a path with nothing at it: the first upload poll finds
+   * no file, drops the fs row, and the photo lands in the unavailable bucket
+   * having reported a successful import. An edited raw photo on iOS is this
+   * shape, staged from the CR3 capture and copied as the rendered JPEG.
+   */
+  it('a photo classified as a different format than it was staged as keeps a local copy at its new type', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    const JPEG_HEAD = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+    headerBytes = JPEG_HEAD
+    const bytes = Buffer.concat([Buffer.from(JPEG_HEAD), Buffer.from('rendered jpeg bytes')])
+    sources.set(fileId, { status: 'resolved', uri: writeSource(bytes) })
+
+    await app.app.imports.create(importRow({ id: importId, source: 'picker' }), [
+      importFileRow({
+        id: fileId,
+        importId,
+        name: 'IMG_0001.CR3',
+        type: 'image/x-canon-cr3',
+        mediaAssetId: 'asset-raw',
+      }),
+    ])
+    await drainScanner()
+
+    expect((await importFileById(importId, fileId)).state).toBe('added')
+    const file = await app.getFileById(fileId)
+    expect(file?.type).toBe('image/jpeg')
+    // The name stops claiming a format the stored bytes are not.
+    expect(file?.name).toBe('IMG_0001.jpg')
+
+    // The upload poll's resolve step: a null uri here skips the upload and
+    // drops the fs row, which is what strands the file.
+    const indexerURL = await app.app.settings.getIndexerURL()
+    expect(await app.app.fs.getFileUri({ id: fileId, type: file!.type })).not.toBeNull()
+    expect(await app.app.fs.readMeta(fileId)).not.toBeNull()
+    expect(await app.app.files.getLost(indexerURL)).toEqual([])
+  }, 30_000)
+
+  it('leaves nothing at the old extension for the orphan sweep to reclaim', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    const JPEG_HEAD = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+    headerBytes = JPEG_HEAD
+    sources.set(fileId, {
+      status: 'resolved',
+      uri: writeSource(Buffer.concat([Buffer.from(JPEG_HEAD), Buffer.from('bytes')])),
+    })
+
+    await app.app.imports.create(importRow({ id: importId, source: 'picker' }), [
+      importFileRow({ id: fileId, importId, name: 'IMG_0002.CR3', type: 'image/x-canon-cr3' }),
+    ])
+    await drainScanner()
+
+    const stored = nodeFs.readdirSync(app.tempDir).filter((f) => f.startsWith(fileId))
+    expect(stored).toEqual([`${fileId}.jpg`])
   }, 30_000)
 })

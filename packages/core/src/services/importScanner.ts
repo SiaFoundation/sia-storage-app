@@ -1,6 +1,7 @@
 import { logger } from '@siastorage/logger'
 import { createWeightedPool } from '../lib/weightedPool'
 import { classifyImportType } from '../lib/detectMimeType'
+import { extFromMime, nameForType, typeOfStoredPath } from '../lib/fileTypes'
 import {
   IMPORT_CRITICAL_FREE_BYTES,
   IMPORT_MAX_PER_TICK,
@@ -310,10 +311,17 @@ export class ImportScanner {
           // id slot from a prior interrupted-after-copy tick hash as-is. A
           // moved `staged` origin no longer exists, so resolving it would
           // misclassify a recoverable row as deleted.
+          // The meta row records that a copy happened, not the extension it
+          // landed under. A retype interrupted mid-finalize leaves the bytes
+          // one extension over, and moveBytesBack returns them to the row's
+          // type. With no bytes on disk the row re-copies from the source,
+          // where hashing an empty path would only burn attempts.
           const preMeta = await app.fs.readMeta(row.id)
-          if (preMeta) {
+          let preSize = preMeta ? await app.fs.sizeOnDisk({ id: row.id, type: row.type }) : null
+          if (preMeta && preSize === null) preSize = await this.moveBytesBack(app, row)
+          if (preMeta && preSize !== null) {
             const fileUri = app.fs.uri({ id: row.id, type: row.type })
-            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri, preMeta.size), signal)
+            const hashRaced = await raceWithAbort(this.hashFile(row, fileUri, preSize), signal)
             if (!hashRaced.ok) {
               suspending = true
               return
@@ -592,7 +600,8 @@ export class ImportScanner {
   }
 
   /**
-   * Persist the hashed outcome and finalize the claimed row: record the hash,
+   * Persist the hashed outcome and finalize the claimed row: move the bytes if
+   * classification changed their extension, record hash/size/type/name,
    * finalize, tally, then release the grant at success terminals.
    */
   private async finalizeHashed(
@@ -617,12 +626,42 @@ export class ImportScanner {
       result.failed++
       return
     }
-    // Persist hash/size/type onto the row BEFORE finalize; finalizeImportFile
+    // The copy landed at the staged type's extension, so a classification
+    // landing elsewhere has to take the bytes with it: a row naming a path
+    // with nothing at it reads as a file with no local copy, and the upload
+    // poll skips it and drops its fs row. Bytes first, so a failed move
+    // leaves the row describing where they still are.
+    if (extFromMime(outcome.type) !== extFromMime(row.type)) {
+      try {
+        await app.fs.renameToType({ id: row.id, type: row.type }, outcome.type)
+      } catch (e) {
+        logger.warn('importScanner', 'retype_failed', {
+          fileId: row.id,
+          from: row.type,
+          to: outcome.type,
+          error: e as Error,
+        })
+        // Bytes untouched, so the next tick's fast path retries the move.
+        await this.recordFailure(app, row, token, 'io-error', Date.now())
+        result.failed++
+        return
+      }
+    }
+    // Every fs call past the move addresses the bytes by their new type.
+    const storedFile = { id: row.id, type: outcome.type }
+
+    // Persist hash/size/type/name onto the row BEFORE finalize; finalizeImportFile
     // reads them from its own ownership SELECT (it takes only (id, token)).
     await app.imports.recordHash(row.id, token, {
       hash: outcome.hash,
       size: outcome.size,
       type: outcome.type,
+      // An iOS photo edited from raw stages as `IMG_1.CR3` and imports as
+      // the rendered JPEG its bytes are, so a `media` row's name, from a
+      // photo library pick or a background photo import, follows the
+      // content. A file the user picked keeps the name they gave it, since a
+      // .pages or .ods reads as zip and renaming it would lose that name.
+      name: row.sourceKind === 'media' ? nameForType(row.name, outcome.type) : row.name,
     })
     const fin = await app.imports.finalize(row.id, token)
     if (fin.outcome === 'added') {
@@ -631,7 +670,7 @@ export class ImportScanner {
     } else if (fin.outcome === 'duplicate') {
       // Content dup of an existing finalized file in the same directory: clean
       // the now-redundant bytes by this id (the original lives at a different id).
-      await app.fs.removeFile({ id: row.id, type: row.type })
+      await app.fs.removeFile(storedFile)
       result.duplicate++
     } else {
       // noop: lost the claim mid-flight; do nothing.
@@ -650,6 +689,27 @@ export class ImportScanner {
         })
       }
     }
+  }
+
+  /**
+   * Finalize moves the bytes to the classified type's extension before it
+   * writes that type to the row, so a kill, or a rejected write, between the
+   * two leaves the recorded copy one extension over. Resolving the source again
+   * cannot recover a `staged` row, whose copy consumed its source, and the row
+   * would go terminal and the orphan sweep delete its bytes. So the bytes are
+   * found by id and moved back under the row's type. Returns their size, or
+   * null when no copy is on disk.
+   */
+  private async moveBytesBack(app: AppService, row: ImportFileRow): Promise<number | null> {
+    const prefix = `${row.id}.`
+    const path = (await app.fs.listFiles()).find((p) => {
+      const name = p.slice(p.lastIndexOf('/') + 1)
+      return name.startsWith(prefix) && !name.endsWith('.tmp')
+    })
+    const at = path ? typeOfStoredPath(path) : null
+    if (!at) return null
+    await app.fs.renameToType({ id: row.id, type: at }, row.type)
+    return app.fs.sizeOnDisk({ id: row.id, type: row.type })
   }
 
   /**
