@@ -49,7 +49,7 @@ function ensureApp(): AppServiceResult {
     uploader: createUploaderAdapters(),
     sdkAuth: mobileSdkAuth,
     thumbnail: createMobileThumbnailAdapter(),
-    detectMimeType: (path) => detectMimeType(path),
+    detectMimeType,
   })
   _app = result.service
   _internal = result.internal

@@ -19,7 +19,6 @@ import type { SdkAdapter } from '../../adapters/sdk'
 import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
 import type { Directory, ProviderChangeRow } from '../../db/operations'
-import { getMimeTypeFromExtension } from '../../lib/fileTypes'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import {
@@ -864,13 +863,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
 
       const id = uniqueId()
-      // The name the user chose is the better signal: the staged file is a
-      // UUID with no extension, so sniffing it alone types every text file as
-      // a byte stream.
-      const type =
-        getMimeTypeFromExtension(name) ??
-        (await service.fs.detectMimeType(source)) ??
-        'application/octet-stream'
+      // The staged file is named by a UUID, so the name the user chose
+      // supplies the extension for types with no byte signature, such as
+      // text. Bytes win otherwise, as they do for `sia add` and a phone's
+      // import, so a file gets one type whichever app adds it.
+      const type = (await service.fs.detectMimeType(source, name)) ?? 'application/octet-stream'
       const adopted = await fsIO.adoptFile({ id, type }, source)
       const now = Date.now()
       // One transaction: the uploader scans only files with a local copy

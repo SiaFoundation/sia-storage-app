@@ -16,6 +16,34 @@ afterEach(() => {
 })
 
 describe('createNodeDetectMimeType', () => {
+  it('reads the extension from the name it is given over the path', async () => {
+    const staged = path.join(tempDir, '6f1c2b0e')
+    fs.writeFileSync(staged, 'plain notes')
+    expect(await detect(staged)).toBeNull()
+    expect(await detect(staged, 'notes.md')).toBe('text/markdown')
+  })
+
+  it('lets the bytes win over the name it is given', async () => {
+    const staged = path.join(tempDir, '6f1c2b0e')
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    fs.writeFileSync(staged, Buffer.concat([png, Buffer.alloc(100)]))
+    expect(await detect(staged, 'picture.txt')).toBe('image/png')
+  })
+
+  it('does not read through a symlink, and answers from the name', async () => {
+    const png = path.join(tempDir, 'real.png')
+    fs.writeFileSync(
+      png,
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(100),
+      ]),
+    )
+    const staged = path.join(tempDir, '6f1c2b0e')
+    fs.symlinkSync(png, staged)
+    expect(await detect(staged, 'notes.md')).toBe('text/markdown')
+  })
+
   it('detects PNG file correctly', async () => {
     const filePath = path.join(tempDir, 'test.png')
     // PNG magic bytes
