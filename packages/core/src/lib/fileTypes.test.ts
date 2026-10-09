@@ -1,4 +1,10 @@
-import { extFromMime, getMimeTypeFromExtension, isMimeType, MimeTypes } from './fileTypes'
+import {
+  extFromMime,
+  getMimeTypeFromExtension,
+  isIdentifiedMimeType,
+  isMimeType,
+  MimeTypes,
+} from './fileTypes'
 import type { Ext, MimeType } from './fileTypes'
 
 describe('getMimeTypeFromExtension', () => {
@@ -323,5 +329,51 @@ describe('isMimeType', () => {
 
   it('returns false for undefined', () => {
     expect(isMimeType(undefined)).toBe(false)
+  })
+})
+
+describe('isIdentifiedMimeType', () => {
+  it('rejects application/octet-stream, which names no format', () => {
+    // Valid, but the "no idea" answer: letting it win would overwrite a
+    // good extension match with nothing.
+    expect(isMimeType('application/octet-stream')).toBe(true)
+    expect(isIdentifiedMimeType('application/octet-stream')).toBe(false)
+  })
+
+  it('accepts a type that names a format', () => {
+    expect(isIdentifiedMimeType('image/x-canon-cr3')).toBe(true)
+  })
+
+  it('rejects unknown, empty, and absent types', () => {
+    expect(isIdentifiedMimeType('foo/bar')).toBe(false)
+    expect(isIdentifiedMimeType('')).toBe(false)
+    expect(isIdentifiedMimeType(null)).toBe(false)
+    expect(isIdentifiedMimeType(undefined)).toBe(false)
+  })
+})
+
+describe('storage path mapping', () => {
+  // A managed file's bytes live at its id plus extFromMime(type), and the
+  // orphan sweep recovers a file found at the wrong extension by mapping that
+  // extension back to a type. A type with no extension of its own would share
+  // the `.bin` slot with every other unmapped type, and an extension that does
+  // not map back to a type storing at it makes the recovery unable to act.
+
+  it('every type has an extension of its own', () => {
+    const unmapped = MimeTypes.filter(
+      (m) => m !== 'application/octet-stream' && extFromMime(m) === '.bin',
+    )
+    expect(unmapped).toEqual([])
+  })
+
+  it('every stored extension maps back to a type that stores at it', () => {
+    // Aliases are fine: image/x-adobe-dng maps back to image/dng, and both
+    // store at `.dng`, so the bytes are found either way.
+    const stored = [...new Set(MimeTypes.map((m) => extFromMime(m)))]
+    const broken = stored.filter((ext) => {
+      const back = getMimeTypeFromExtension(`f${ext}`)
+      return !back || extFromMime(back) !== ext
+    })
+    expect(broken).toEqual(['.bin'])
   })
 })

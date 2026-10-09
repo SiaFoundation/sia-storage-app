@@ -10,8 +10,9 @@
  *   `null` for formats with no magic-byte rule (most plain-text files, niche
  *   containers without a unique signature) — the detector falls back to
  *   `application/octet-stream`. Container-based formats resolve to the
- *   container's MIME, not the vendor-specific outer MIME (e.g. `.docx` →
- *   `application/zip`, camera RAW → `image/tiff`).
+ *   container's MIME, not the vendor-specific outer MIME: `.docx` is
+ *   `application/zip`, and TIFF-based camera RAW is `image/tiff`. CR3 is not
+ *   TIFF-based, so it identifies exactly.
  *
  * `source` — where the byte content came from:
  *   - 'small'         — github.com/mathiasbynens/small (smallest valid file).
@@ -83,7 +84,7 @@ export const fixtureExpectations = {
   'sample.avci': { mime: 'image/avci', bytesMime: null, source: 'stub' },
   'sample.avcs': { mime: 'image/avcs', bytesMime: null, source: 'stub' },
   'sample.cr2': { mime: 'image/x-canon-cr2', bytesMime: 'image/tiff', source: 'stub' },
-  'sample.cr3': { mime: 'image/x-canon-cr3', bytesMime: 'image/tiff', source: 'stub' },
+  'sample.cr3': { mime: 'image/x-canon-cr3', bytesMime: 'image/x-canon-cr3', source: 'stub' },
   'sample.nef': { mime: 'image/x-nikon-nef', bytesMime: 'image/tiff', source: 'stub' },
   'sample.nrw': { mime: 'image/x-nikon-nrw', bytesMime: 'image/tiff', source: 'stub' },
   'sample.arw': { mime: 'image/x-sony-arw', bytesMime: 'image/tiff', source: 'stub' },
