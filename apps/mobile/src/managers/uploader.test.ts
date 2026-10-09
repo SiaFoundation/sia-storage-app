@@ -501,6 +501,89 @@ describe('UploadManager', () => {
       expect(localObjects).toHaveLength(1)
     })
 
+    it('a shutdown while a batch is pinning waits until the batch is recorded', async () => {
+      const entry = await createTestFile('pinning-file')
+      manager.initialize(app(), internal(), defaultAdapters())
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
+      let finishPin!: () => void
+      mockSdk.pinObject.mockImplementationOnce(
+        () => new Promise<undefined>((resolve) => (finishPin = () => resolve(undefined))),
+      )
+
+      await manager.__testProcessFiles([entry])
+      const flushing = manager.flush()
+      await jest.advanceTimersByTimeAsync(0)
+      let shutDown = false
+      const shutdown = manager.shutdown().then(() => {
+        shutDown = true
+      })
+      await jest.advanceTimersByTimeAsync(0)
+      expect(shutDown).toBe(false)
+
+      finishPin()
+      await shutdown
+      await flushing
+      expect(await app().localObjects.getForFile('pinning-file')).toHaveLength(1)
+    })
+
+    it('a file enqueued while shutdown waits on a pinning batch is added by the next loop', async () => {
+      const entry = await createTestFile('pinning-file')
+      manager.initialize(app(), internal(), defaultAdapters())
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
+      let finishPin!: () => void
+      mockSdk.pinObject.mockImplementationOnce(
+        () => new Promise<undefined>((resolve) => (finishPin = () => resolve(undefined))),
+      )
+
+      await manager.__testProcessFiles([entry])
+      const flushing = manager.flush()
+      await jest.advanceTimersByTimeAsync(0)
+      const shutdown = manager.shutdown()
+      await jest.advanceTimersByTimeAsync(0)
+      manager.enqueue([createFileEntry('late-file')])
+      finishPin()
+      await shutdown
+      await flushing
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      expect(mockPacker.addPath.mock.calls.map(([p]) => p)).toContain('file://late-file')
+    })
+
+    it('a file whose pin fails while shutdown waits stays registered when it is enqueued again', async () => {
+      const entry = await createTestFile('pinning-file')
+      manager.initialize(app(), internal(), defaultAdapters())
+      mockPacker.finalize.mockResolvedValueOnce([mockPinnedObject])
+      let failPin!: () => void
+      mockSdk.pinObject
+        .mockImplementationOnce(
+          () =>
+            new Promise<undefined>(
+              (_, reject) => (failPin = () => reject(new Error('Pin failed'))),
+            ),
+        )
+        .mockRejectedValueOnce(new Error('Pin failed'))
+        .mockRejectedValueOnce(new Error('Pin failed'))
+      // The retry arrives as the pin gives up, before shutdown's wait ends.
+      const setError = app().uploads.setError.bind(app().uploads)
+      jest.spyOn(app().uploads, 'setError').mockImplementation((id, message) => {
+        setError(id, message)
+        manager.enqueue([entry])
+      })
+
+      await manager.__testProcessFiles([entry])
+      const flushing = manager.flush()
+      await jest.advanceTimersByTimeAsync(0)
+      const shutdown = manager.shutdown()
+      await jest.advanceTimersByTimeAsync(0)
+      failPin()
+      await jest.advanceTimersByTimeAsync(10000)
+      await shutdown
+      await flushing.catch(() => {})
+
+      expect(app().uploads.getEntry('pinning-file')).toBeDefined()
+    })
+
     it('creates new packer for files added after flush', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
@@ -1173,6 +1256,124 @@ describe('UploadManager', () => {
       expect(manager.flushHistory).toHaveLength(1)
       expect(manager.flushHistory[0].fileCount).toBe(20)
       expect(manager.flushHistory[0].reason).toBe('idle_timeout')
+    })
+
+    it('a file queued while a poll is reading the database is added once', async () => {
+      enablePolling()
+      const polled = createDBFiles(3, { prefix: 'race' })
+      let answerPoll!: (rows: unknown) => void
+      queryFilesSpy
+        .mockImplementationOnce(() => new Promise((resolve) => (answerPoll = resolve)))
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      // The poll is waiting on its query when an import queues one of the
+      // files it is about to return.
+      manager.enqueue([createFileEntry('race-0', 400)])
+      answerPoll(polled)
+      await jest.advanceTimersByTimeAsync(0)
+
+      const paths = mockPacker.addPath.mock.calls.map(([p]) => p)
+      expect(paths.filter((p) => p === 'file://race-0')).toHaveLength(1)
+      expect(paths).toHaveLength(3)
+    })
+
+    it('queuing a file the poll already picked up does not add it twice', async () => {
+      enablePolling()
+      queryFilesSpy
+        .mockResolvedValueOnce(createDBFiles(2, { prefix: 'dup' }))
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      manager.enqueue([createFileEntry('dup-1', 400)])
+      await jest.advanceTimersByTimeAsync(0)
+
+      const paths = mockPacker.addPath.mock.calls.map(([p]) => p)
+      expect(paths.filter((p) => p === 'file://dup-1')).toHaveLength(1)
+    })
+
+    it('a shutdown leaves no polled file marked as uploading, so it can be queued again', async () => {
+      enablePolling()
+      queryFilesSpy
+        .mockResolvedValueOnce(createDBFiles(3, { prefix: 'stop' }))
+        .mockResolvedValue([] as any)
+      // The first add never finishes, so the other two are still waiting to be added.
+      mockPacker.addPath.mockImplementationOnce(() => new Promise<bigint>(() => {}))
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      expect(app().uploads.getActiveIds().sort()).toEqual(['stop-0', 'stop-1', 'stop-2'])
+
+      await manager.shutdown()
+      expect(app().uploads.getActiveIds()).toEqual([])
+    })
+
+    it('a restart while an add is in flight adds each file from the new loop only', async () => {
+      enablePolling()
+      const files = createDBFiles(2, { prefix: 'restart' })
+      queryFilesSpy
+        .mockResolvedValueOnce(files)
+        .mockResolvedValueOnce(files)
+        .mockResolvedValue([] as any)
+      let failFirstAdd!: (e: Error) => void
+      mockPacker.addPath.mockImplementationOnce(
+        () => new Promise<bigint>((_, reject) => (failFirstAdd = reject)),
+      )
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      await manager.shutdown()
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      // The cancelled packer's add fails only now, after the new loop started.
+      failFirstAdd(new Error('upload closed'))
+      await jest.advanceTimersByTimeAsync(0)
+
+      const paths = mockPacker.addPath.mock.calls.map(([p]) => p)
+      expect(paths.filter((p) => p === 'file://restart-1')).toHaveLength(1)
+      // The old loop's add of restart-0 fails after the new loop has added it
+      // again, and must not mark the file failed in the new loop's batch.
+      expect(paths.filter((p) => p === 'file://restart-0')).toHaveLength(2)
+      expect(app().uploads.getEntry('restart-0')?.status).not.toBe('error')
+    })
+
+    it('a poll that finishes after shutdown registers none of its files', async () => {
+      enablePolling()
+      let finishPoll!: (files: never[]) => void
+      queryFilesSpy.mockImplementationOnce(() => new Promise((resolve) => (finishPoll = resolve)))
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      await manager.shutdown()
+      finishPoll(createDBFiles(2, { prefix: 'late' }) as never[])
+      await jest.advanceTimersByTimeAsync(0)
+
+      expect(app().uploads.getEntry('late-0')).toBeUndefined()
+      expect(app().uploads.getEntry('late-1')).toBeUndefined()
+    })
+
+    it('a loop replaced while it polls stops, so the next enqueue wakes the new loop', async () => {
+      enablePolling()
+      let finishPoll!: (files: never[]) => void
+      queryFilesSpy
+        .mockImplementationOnce(() => new Promise((resolve) => (finishPoll = resolve)))
+        .mockResolvedValue([] as any)
+
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      await manager.shutdown()
+      manager.initialize(app(), internal(), defaultAdapters())
+      await jest.advanceTimersByTimeAsync(0)
+      // The old loop's poll returns only now, while the new loop idles.
+      finishPoll([])
+      await jest.advanceTimersByTimeAsync(0)
+
+      manager.enqueue([createFileEntry('woken-file')])
+      await jest.advanceTimersByTimeAsync(0)
+      const paths = mockPacker.addPath.mock.calls.map(([p]) => p)
+      expect(paths).toContain('file://woken-file')
     })
 
     it('re-polls DB and processes additional files found', async () => {

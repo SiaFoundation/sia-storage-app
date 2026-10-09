@@ -17,7 +17,6 @@ export function buildUploaderNamespace(
 
   const namespace: AppService['uploader'] = {
     async enqueueByIds(fileIds) {
-      let queued = 0
       let skipped = 0
       const entries: FileEntry[] = []
       for (const fileId of fileIds) {
@@ -32,12 +31,9 @@ export function buildUploaderNamespace(
           continue
         }
         entries.push({ fileId: file.id, fileUri, file, size: file.size })
-        queued++
       }
-      if (entries.length > 0) {
-        manager.enqueue(entries)
-      }
-      return { queued, skipped }
+      const queued = manager.enqueue(entries)
+      return { queued, skipped: skipped + entries.length - queued }
     },
     async enqueueWithUri(entries) {
       const fileEntries: FileEntry[] = []
