@@ -2,6 +2,27 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.14.2-rc.2 (2026-10-09)
+
+### Fixes
+
+- VoiceOver and TalkBack read a name for the app's icon buttons and text fields, such as the Media, Files and Tags tabs, the viewer's Share and More buttons, and the search, folder, tag and indexer fields, and VoiceOver can reach the options in action sheets.
+- Fixes a crash that could close the app right after it opens on Android.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- An import copy that ends as cancelled outside a suspension is retried at once the first time and backs off if it happens again, instead of leaving it and the files after it waiting ten minutes.
+- Files being imported when the app goes to the background finish soon after it comes back, instead of waiting up to ten minutes.
+- Picking an edited photo shows the format it will actually import as, rather than the format of the untouched original stored beside it.
+- Reduces the chance of a change being lost while the library is syncing.
+- Clear local files in Advanced settings moves a file's local copy back under the right extension instead of deleting it, and never deletes a copy that a file in the library still points at.
+- Renaming a file from its details takes one tap on Rename instead of two.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Files from your other devices now appear on a phone that went to the background while it was syncing them.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+- Log video playback failures so they can be diagnosed instead of failing silently.
+
 ## 1.14.2-rc.1 (2026-09-29)
 
 ### Fixes

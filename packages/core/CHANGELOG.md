@@ -1,3 +1,40 @@
+## 0.0.21-rc.2 (2026-10-09)
+
+### Features
+
+- Adds `auth.builder.reconnecting` and `auth.builder.matchesExistingAppKey`, which say after approval whether the approving account already uses the app and whether a recovery phrase is one of its own. Both return null where the platform's SDK cannot say.
+- `sia add` and `sia import` store file hashes in the same `sha256:` form as every other app, so saving identical bytes over a file added with the CLI no longer creates a duplicate version and `sia import --skip-existing` finds files added elsewhere. `FileMetadata.hash` is typed `ContentHash` from `@siastorage/core/lib/contentHash`, built with `toContentHash`, and decoded metadata and stored files with a bare hex hash gain the prefix.
+- Adds `@siastorage/core/lib/forcedReset`, the forced-reset nonces and decision that every app shares.
+- Adds `directories.count`, the number of directories in the library.
+- The library keeps a local apply-order record of every file and folder change, including which folder each moved or deleted item left. `directories.ensureAtPaths` and upsertMany's `directoryIdByFileId` option let bulk writers create files directly in their folders.
+- `app.provider.fetchRange` places one byte range of a file at a path, for a shell that serves a read of part of a file rather than the whole thing.
+- `app.provider.fileIds` returns the current version's file id for each Finder item id, leaving out folders and items with no visible file.
+- The provider surface lists the whole library on one cursor, folders before files, and answers "what changed since this anchor" for one folder or everything. A moved item arrives as an update carrying its new parent, deletions and folder renames as ordinary deltas, and an anchor stays answerable for as long as a client keeps polling.
+- `app.provider.write` adds the new bytes as the file's newest version, and a provider item keeps the same id across all of a file's versions. Adds `files.addVersion`, and `files.update` and `files.updateMany` no longer accept `hash`, so a file's bytes change only through a new version.
+- `createRemoteAppService` takes per-channel timeouts, and its `invoke` callback now receives `(channel, args, timeoutMs)` in place of variadic arguments.
+- Adds share links built on sharing keys: `app.shares.createLink`, `links`, `addLinkFiles`, `removeLinkFiles` and `revokeLink`, with `syncLinks` and the `runShareLinkSync` service keeping a `latest` link on its files' current versions while a `snapshot` link keeps the versions it was made with. `SdkAdapter` gains the sharing-key methods, and its per-object share URL methods are renamed `objectShareUrl` and `objectFromShareUrl`.
+
+### Fixes
+
+- Trashing, restoring, deleting, renaming and moving files, and creating, renaming and moving folders, each commit as one transaction, so a failure partway through leaves nothing half-applied.
+- Importing the package no longer throws where `process` is undefined, such as a browser renderer.
+- `app.directories.getPathsForFiles` returns the folder path of many files in one call, and `useShareLinks` takes a `revalidateOnFocus` option.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- `useFileCountAll` and `useFileStatsAll` count files only and leave their thumbnails out.
+- An import copy that ends as cancelled outside a suspension is retried at once the first time and backs off if it happens again, instead of leaving it and the files after it waiting ten minutes.
+- Files being imported when the app goes to the background finish soon after it comes back, instead of waiting up to ten minutes.
+- Clear local files in Advanced settings moves a file's local copy back under the right extension instead of deleting it, and never deletes a copy that a file in the library still points at.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Files from your other devices now appear on a phone that went to the background while it was syncing them.
+- `resolveVariant` treats the desktop `test` build as `dev`, so a test build answers dev forced-reset nonces.
+- `withTransactionAsync` passes its body a handle bound to the transaction, and `internal.withTransaction` passes a database facade bound to it. A body must reach the database only through that handle, and using the outer adapter inside one throws `TransactionMisuseError` on node.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- `useUploadSpeed` takes an optional `refreshInterval`, and the unused `useUploadCounts` hook is removed from `@siastorage/core/stores`.
+- `UploadManager` stops or parks right away when `shutdown()` or `suspend()` is called during a database poll, instead of sleeping a full poll interval first and, when suspended with a batch open, flushing that batch.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+
 ## 0.0.21-rc.1 (2026-09-29)
 
 ### Features
