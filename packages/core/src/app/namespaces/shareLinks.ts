@@ -24,6 +24,7 @@ import type { SdkAdapter, SharingKeyRef } from '../../adapters/sdk'
 import { SHARE_LINK_URL_PREFIX, SHARE_LINKS_REFRESH_INTERVAL } from '../../config'
 import * as ops from '../../db/operations'
 import { decodeFileMetadata, encodeFileMetadata } from '../../encoding/fileMetadata'
+import { hexToUint8, uint8ToHex } from '../../lib/hex'
 import type { FileRecordRow } from '../../types/files'
 import type { ShareLink, ShareLinkFile, ShareLinkMode } from '../../types/shareLinks'
 import type { AppService } from '../service'
@@ -57,8 +58,8 @@ type Deps = {
   invalidate: () => void
 }
 
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+function keyOf(link: ops.ShareLinkRow): SharingKeyRef {
+  return { publicKey: link.publicKey, seed: hexToUint8(link.seed) }
 }
 
 /** A stack's identity, as queryFileVersions takes it. */
@@ -102,9 +103,6 @@ function isGoneError(e: unknown): boolean {
 
 export function buildShareLinks(deps: Deps): ShareLinkMethods {
   const { db } = deps
-  // A seed lets anyone read the link's files at the account's expense, and
-  // listing the account's keys gives each one back, so seeds stay in memory.
-  const seeds = new Map<string, Uint8Array>()
   let refreshedAt = 0
   // Every operation that reads a link's state and then changes it on the
   // indexer runs one at a time. Without this, the background pass could
@@ -141,23 +139,22 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     const startedAt = Date.now()
     const records = await allPages((offset) => sdk.sharingKeys(offset, PAGE_SIZE))
     const listed = new Map(records.map((r) => [r.key.publicKey, r]))
-    for (const r of records) seeds.set(r.key.publicKey, r.key.seed)
+    let changed = false
 
     const local = await ops.queryShareLinks(db, indexerURL)
     const known = new Set(local.map((l) => l.publicKey))
-    let changed = false
     for (const link of local) {
       // Missing from the listing means revoked or expired. A link made after
       // the listing was requested is not in it yet.
       if (listed.has(link.publicKey) || link.createdAt >= startedAt) continue
       await ops.deleteShareLink(db, link.publicKey)
-      seeds.delete(link.publicKey)
       changed = true
     }
     for (const r of records) {
       if (!known.has(r.key.publicKey)) {
         await ops.insertShareLink(db, {
           publicKey: r.key.publicKey,
+          seed: uint8ToHex(r.key.seed),
           indexerURL,
           createdAt: r.createdAt.getTime(),
           expiresAt: r.expiresAt?.getTime() ?? null,
@@ -413,7 +410,6 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
   }
 
   async function readLink(link: ops.ShareLinkRow): Promise<ShareLink> {
-    const seed = seeds.get(link.publicKey)
     const files: ShareLinkFile[] = []
     for (const file of await ops.queryShareLinkFileStacks(db, link.publicKey)) {
       // No name is a row whose file this device no longer has.
@@ -434,7 +430,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     }
     return {
       publicKey: link.publicKey,
-      url: seed ? SHARE_LINK_URL_PREFIX + toHex(seed) : null,
+      url: SHARE_LINK_URL_PREFIX + link.seed,
       createdAt: link.createdAt,
       expiresAt: link.expiresAt,
       mode: link.mode,
@@ -442,15 +438,30 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     }
   }
 
-  async function requireKey(
+  /**
+   * The link's row, listing the account's keys first when this device has
+   * none for it, as for a link made on another device since the last listing.
+   * Null means the key is revoked or expired.
+   */
+  async function findLink(
     sdk: SdkAdapter,
     indexerURL: string,
     publicKey: string,
-  ): Promise<SharingKeyRef> {
-    if (!seeds.has(publicKey)) await refresh(sdk, indexerURL)
-    const seed = seeds.get(publicKey)
-    if (!seed) throw new Error('This link has expired or was revoked')
-    return { publicKey, seed }
+  ): Promise<ops.ShareLinkRow | null> {
+    const link = await ops.queryShareLink(db, publicKey)
+    if (link) return link
+    await refresh(sdk, indexerURL)
+    return ops.queryShareLink(db, publicKey)
+  }
+
+  async function requireLink(
+    sdk: SdkAdapter,
+    indexerURL: string,
+    publicKey: string,
+  ): Promise<ops.ShareLinkRow> {
+    const link = await findLink(sdk, indexerURL, publicKey)
+    if (!link) throw new Error('This link has expired or was revoked')
+    return link
   }
 
   async function runSyncPass(opts: { refresh?: boolean }): Promise<void> {
@@ -462,12 +473,11 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     let changed = false
     const now = Date.now()
     for (const link of await ops.queryShareLinks(db, indexerURL)) {
-      const seed = seeds.get(link.publicKey)
       // The indexer answers not found for an expired key, so every change to
       // it would fail until the next listing drops it.
-      if (!seed || (link.expiresAt !== null && link.expiresAt <= now)) continue
+      if (link.expiresAt !== null && link.expiresAt <= now) continue
       try {
-        if (await syncLink(sdk, indexerURL, { publicKey: link.publicKey, seed }, link.mode)) {
+        if (await syncLink(sdk, indexerURL, keyOf(link), link.mode)) {
           changed = true
         }
       } catch (e) {
@@ -496,9 +506,9 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
           DESCRIPTIONS[mode],
           expiresAt === null ? undefined : new Date(expiresAt),
         )
-        seeds.set(key.publicKey, key.seed)
         const link = {
           publicKey: key.publicKey,
+          seed: uint8ToHex(key.seed),
           indexerURL,
           createdAt: Date.now(),
           expiresAt,
@@ -540,8 +550,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       exclusive(async () => {
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
-        const key = await requireKey(sdk, indexerURL, publicKey)
-        const link = await ops.queryShareLink(db, publicKey)
+        const link = await requireLink(sdk, indexerURL, publicKey)
         const existing = await ops.queryShareLinkFileStacks(db, publicKey)
         const taken = new Set(existing.filter((f) => f.name !== null).map(stackOf))
         const added = await distinctFiles(fileIds, taken)
@@ -550,7 +559,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
             await ops.insertShareLinkFile(tx, publicKey, fileId, 'pending')
           }
         })
-        await syncLink(sdk, indexerURL, key, link?.mode ?? 'latest')
+        await syncLink(sdk, indexerURL, keyOf(link), link.mode)
         deps.invalidate()
       }),
 
@@ -558,7 +567,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       exclusive(async () => {
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
-        const key = await requireKey(sdk, indexerURL, publicKey)
+        const key = keyOf(await requireLink(sdk, indexerURL, publicKey))
         const stacks = new Set<string>()
         for (const fileId of fileIds) {
           const stack = await ops.queryFileStackKey(db, fileId)
@@ -581,19 +590,17 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       exclusive(async () => {
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
-        if (!seeds.has(publicKey)) await refresh(sdk, indexerURL)
-        // Still unknown after listing the account's keys means it is already
-        // revoked or expired, and only this device's record of it is left.
-        const seed = seeds.get(publicKey)
-        if (seed) {
+        // No row after listing the account's keys means it is already
+        // revoked or expired.
+        const link = await findLink(sdk, indexerURL, publicKey)
+        if (link) {
           try {
-            await sdk.revokeSharingKey({ publicKey, seed })
+            await sdk.revokeSharingKey(keyOf(link))
           } catch (e) {
             if (!isGoneError(e)) throw e
           }
         }
         await ops.deleteShareLink(db, publicKey)
-        seeds.delete(publicKey)
         deps.invalidate()
       }),
 
