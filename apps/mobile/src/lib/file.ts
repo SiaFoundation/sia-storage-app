@@ -90,7 +90,6 @@ export type FilePhase =
 /** Derived action gates. Computed from FileFacts; orthogonal to phase. */
 export type FileCapabilities = {
   isOnNetwork: boolean
-  canShare: boolean
   canDownload: boolean
   canUpload: boolean
   canPlay: boolean
@@ -145,7 +144,6 @@ export function deriveCapabilities(facts: FileFacts): FileCapabilities {
   const uploadFree = facts.upload.state === 'idle' || facts.upload.state === 'errored'
   return {
     isOnNetwork,
-    canShare: facts.isPinned,
     canDownload: isOnNetwork && !facts.hasLocalCopy && downloadFree,
     canUpload: facts.hasLocalCopy && !facts.isPinned && uploadFree,
     canPlay: facts.hasLocalCopy || facts.photosLookup === 'available',
@@ -206,7 +204,6 @@ export type FileStatus = {
   download: DownloadActivity
   errorText: string | null
   phase: FilePhase
-  canShare: boolean
   canDownload: boolean
   canUpload: boolean
   canPlay: boolean
@@ -293,7 +290,6 @@ export function computeFileStatus({
     download,
     errorText: resolvedErrorText,
     phase,
-    canShare: capabilities.canShare,
     canDownload: capabilities.canDownload,
     canUpload: capabilities.canUpload,
     canPlay: capabilities.canPlay,

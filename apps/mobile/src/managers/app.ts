@@ -13,6 +13,7 @@ import { resetFileSelection } from '../stores/fileSelection'
 import { initLogger } from '../stores/logs'
 import { reconnectIndexer, resetSdk } from '../stores/sdk'
 import { getUseWalMode, initKeepAwake } from '../stores/settings'
+import { closeShareLinkSheet } from '../stores/shareLinkSheet'
 import { resetSheets } from '../stores/sheets'
 import { ensureTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
@@ -25,6 +26,7 @@ import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
 import { initPerfMonitor } from './perfMonitor'
 import { maybePruneSlabs, resetPruneThrottle } from './pruneSlabs'
+import { initShareLinks } from './shareLinks'
 import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
@@ -132,6 +134,7 @@ export async function initApp(): Promise<void> {
         initSyncNewPhotos()
         initBackgroundTasks()
         initSyncUpMetadata()
+        initShareLinks()
         initThumbnailScanner()
         void maybePruneSlabs()
       },
@@ -290,6 +293,7 @@ function resetAllStores() {
   app().downloads.cancelAll()
   resetFileSelection()
   resetSheets()
+  closeShareLinkSheet()
   resetViewSettings()
   app().caches.libraryVersion.invalidate()
 }

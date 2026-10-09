@@ -13,6 +13,7 @@ import { SWRConfig } from 'swr'
 import { AppSplash } from './components/AppSplash'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ShareIntentConsumer } from './components/ShareIntentConsumer'
+import { ShareLinkSheet } from './components/ShareLinkSheet'
 import useLinkedURL from './hooks/useLinkedURL'
 import { useReconnectIndexer } from './hooks/useReconnectIndexer'
 import { initForegroundRefresh } from './lib/foregroundRefresh'
@@ -116,6 +117,7 @@ function RootContent() {
             <NavigationContainer ref={navigationRef} theme={darkNavigationTheme}>
               <RootStack />
             </NavigationContainer>
+            <ShareLinkSheet />
           </>
         )}
       </BottomSheetModalProvider>

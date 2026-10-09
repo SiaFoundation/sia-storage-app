@@ -87,6 +87,7 @@ export function MenuScreen({ navigation }: Props) {
 
       <InsetGroupSection header="Library">
         <InsetGroupLink label="Imports" onPress={navigateToImports} />
+        <InsetGroupLink label="Share Links" onPress={() => navigation.navigate('ShareLinks')} />
       </InsetGroupSection>
 
       <InsetGroupSection header="Device">

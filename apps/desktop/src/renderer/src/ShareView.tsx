@@ -9,6 +9,18 @@
  */
 
 import { useApp } from '@siastorage/core/app'
+import {
+  DEFAULT_EXPIRY,
+  EXPIRY_CHOICES,
+  type ExpiryChoice,
+  expiresAt,
+  expiryLabel,
+  linkProgress,
+  linkTitle,
+  MODE_CHOICES,
+  modeLabel,
+  shareErrorText,
+} from '@siastorage/core/lib/shareLinkText'
 import { useShareLinks } from '@siastorage/core/stores'
 import type { ShareLink, ShareLinkMode } from '@siastorage/core/types'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -19,20 +31,7 @@ import { FinderItemIcon } from './finderIcons'
 import { ROW, Section } from './Group'
 import { CheckCircle, Circle, Link } from './icons'
 import { formatBytes } from './model'
-import {
-  DEFAULT_EXPIRY,
-  EXPIRY_CHOICES,
-  type ExpiryChoice,
-  expiresAt,
-  expiryLabel,
-  folderName,
-  groupByFolder,
-  linkProgress,
-  linkTitle,
-  MODE_CHOICES,
-  modeLabel,
-  shareErrorText,
-} from './shareModel'
+import { folderName, groupByFolder } from './shareModel'
 import { useAppInfo } from './useAppInfo'
 
 const SMALL_BUTTON =

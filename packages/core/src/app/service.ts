@@ -1091,8 +1091,6 @@ export interface AppService {
     downloadFirstBytes(url: string, byteCount: number): Promise<Uint8Array>
     /** Pins a shared URL to the current indexer and returns the new local object. */
     pin(url: string, fileId: string): Promise<LocalObject>
-    /** Creates a share URL for a file, valid until the given date. */
-    create(fileId: string, validUntil: Date): Promise<string>
     /**
      * Makes a link that opens these files on the share page. Any version id of
      * a file names the file, and a file named twice is shared once.
