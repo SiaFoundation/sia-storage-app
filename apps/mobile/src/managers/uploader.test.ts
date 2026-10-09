@@ -778,7 +778,7 @@ describe('UploadManager', () => {
       })
 
       let shardProgress: ((p: ShardProgress) => void) | null = null
-      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+      mockSdk.uploadPacked.mockImplementation((opts: any) => {
         shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
@@ -813,7 +813,7 @@ describe('UploadManager', () => {
       })
 
       let shardProgress: ((p: ShardProgress) => void) | null = null
-      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+      mockSdk.uploadPacked.mockImplementation((opts: any) => {
         shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
@@ -858,7 +858,7 @@ describe('UploadManager', () => {
       })
 
       let shardProgress: ((p: ShardProgress) => void) | null = null
-      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+      mockSdk.uploadPacked.mockImplementation((opts: any) => {
         shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
@@ -895,7 +895,7 @@ describe('UploadManager', () => {
       })
 
       let shardProgress: ((p: ShardProgress) => void) | null = null
-      mockSdk.uploadPacked.mockImplementation(async (opts: any) => {
+      mockSdk.uploadPacked.mockImplementation((opts: any) => {
         shardProgress = opts.shardUploaded.progress
         return mockPacker
       })
