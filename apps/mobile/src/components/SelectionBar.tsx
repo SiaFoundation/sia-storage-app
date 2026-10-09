@@ -71,7 +71,7 @@ export function SelectionBar({ moveToDirectorySheet = 'moveToDirectory', onCompl
         return
       }
       for (const file of downloadable) {
-        void downloadFile(file, 0).catch((e) => {
+        void downloadFile(file, 'user').catch((e) => {
           logger.error('SelectionBar', 'download_failed', { id: file.id, error: e as Error })
         })
       }

@@ -11,6 +11,7 @@
  * fails a call to a backgrounded app at once. A closed socket reconnects every
  * second.
  */
+import type { DownloadPriority } from '@siastorage/core/app'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library'
 import { Keyboard } from 'react-native'
@@ -194,11 +195,11 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
    * app on its own request, so two calls sent in a row can arrive in either
    * order, and a scenario that orders downloads waits for each to return.
    */
-  async 'sim.startDownload'(fileId: string, priority?: number) {
+  async 'sim.startDownload'(fileId: string, priority: DownloadPriority) {
     const outcome: { settled: boolean; error?: string } = { settled: false }
     startedDownloads.push(outcome)
     app()
-      .downloads.downloadFile(fileId, priority ?? undefined)
+      .downloads.downloadFile(fileId, priority)
       .then(
         () => {
           outcome.settled = true

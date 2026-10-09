@@ -202,6 +202,54 @@ describe('SlotPool', () => {
       release1()
     })
 
+    it('a promoted waiter is served before the priority it left', async () => {
+      const pool = new SlotPool(1)
+      const release1 = await pool.acquire()
+      const order: string[] = []
+
+      void pool.acquire(undefined, { priority: 0 }).then((r) => {
+        order.push('user')
+        r()
+      })
+      void pool.acquire(undefined, { priority: 1, key: 'thumb' }).then((r) => {
+        order.push('promoted')
+        r()
+      })
+      void pool.acquire(undefined, { priority: 1 }).then((r) => {
+        order.push('background')
+        r()
+      })
+      pool.promote('thumb', 0)
+
+      release1()
+      await new Promise((r) => setTimeout(r, 0))
+      // Newest first within priority 0, then the one still at priority 1.
+      expect(order).toEqual(['promoted', 'user', 'background'])
+    })
+
+    it('a promoted waiter is not evicted by its old priority depth', async () => {
+      const pool = new SlotPool(1)
+      const release1 = await pool.acquire()
+      let evicted = false
+      void pool.acquire(undefined, { priority: 1, maxQueueDepth: 1, key: 'kept' }).catch(() => {
+        evicted = true
+      })
+      pool.promote('kept', 0)
+      for (let i = 0; i < 3; i++) {
+        pool.acquire(undefined, { priority: 1, maxQueueDepth: 1 }).catch(() => {})
+      }
+
+      await new Promise((r) => setTimeout(r, 0))
+      expect(evicted).toBe(false)
+      release1()
+    })
+
+    it('promoting a key nothing waits under does nothing', () => {
+      const pool = new SlotPool(1)
+      expect(() => pool.promote('missing', 0)).not.toThrow()
+      expect(pool.getQueueSize()).toBe(0)
+    })
+
     it('signal abort removes entry from queue', async () => {
       const pool = new SlotPool(1)
       const release1 = await pool.acquire()
