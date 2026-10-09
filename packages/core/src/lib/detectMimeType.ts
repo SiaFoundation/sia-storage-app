@@ -217,9 +217,11 @@ export function detectMimeType(opts: {
 }
 
 /**
- * The one classification call for an import row at finalize. `headerBytes`
- * and `mediaMime` come from the copy's single read; `stagedType` is the
- * metadata-derived type recorded at staging. A `media` row takes the
+ * The one classification call for an import row. The phone's staging runs it
+ * on the source's metadata and finalize runs it again on the copy, so the two
+ * agree whenever the copy adds nothing the metadata lacked. `headerBytes` and
+ * `mediaMime` come from the copy's single read, and `stagedType` is the
+ * metadata-derived type. A `media` row takes the
  * OS-reported type of the copied resource, but only when it identifies
  * something; everything else goes through the content-first chain.
  */
