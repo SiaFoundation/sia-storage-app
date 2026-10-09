@@ -1,7 +1,6 @@
 ---
 cli: patch
 mobile: patch
-desktop: patch
 core: patch
 ---
 
