@@ -31,13 +31,14 @@ export default defineScenario({
     } = ctx
     const phone = devices.phone
     await photoAccess(phone, ctx)
-    // Unique names, since a pooled emulator keeps earlier runs' photos in the
-    // one folder Android pushes them to, and a fixed name would overwrite one.
+    // Unique names, since Android pushes every photo into one folder under its
+    // file name, and a fixed name would overwrite a photo that a failed removal
+    // left there from an earlier run.
     const photos = seedPhotos(`${workDir}/library`, {
       count: 3,
       prefix: `library-photo-${crypto.randomUUID().slice(0, 8)}`,
     })
-    // A pooled phone's library already holds photos, so the app has to see
+    // A new simulator's library ships with a few photos, so the app has to see
     // three more than it did, not merely three.
     const before = await phone.call<number>('sim.photoLibraryCount')
     await step('three photos are in the library', () => phone.addPhotos(photos))
@@ -64,8 +65,8 @@ export default defineScenario({
         { timeoutMs: 300_000, intervalMs: 1000 },
       ),
     )
-    // A pooled simulator keeps photos earlier scenarios added, and a new one
-    // ships with a few, so the count is at least the three added here.
+    // A new simulator ships with a few photos, so the count is at least the
+    // three added here.
     note(`the walk imported ${states.added} photos`)
     // A pooled phone's library can hold the same photo twice, and the second
     // copy is rightly a duplicate.

@@ -1,15 +1,23 @@
 /**
  * Clears what finished, crashed or interrupted runs left behind: network
  * servers and CLI daemons still running, the runs' sessions, including those
- * kept for inspection, and the leases on the simulators they held. A killed
- * `sim run` cannot tear down after itself, and a leftover daemon keeps its
- * port and its CPU until something stops it.
+ * kept for inspection, the leases on the simulators and emulators they held,
+ * and the photos they added to those. A killed `sim run` cannot tear down
+ * after itself, and a leftover daemon keeps its port and its CPU until
+ * something stops it.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { readDaemonPid } from '@siastorage/node-adapters/lock'
 import { getPaths } from '@siastorage/node-adapters/paths'
-import { anyKindBusy, reapAllKinds, releaseAllKinds, stopSharedServers } from './devices'
+import {
+  allDevices,
+  anyKindBusy,
+  PhoneDevice,
+  reapAllKinds,
+  releaseAllKinds,
+  stopSharedServers,
+} from './devices'
 import { stopNetwork } from './network'
 import { isAlive, isCliDaemon } from './process'
 import { defaultSessionName, Session, SIM_HOME, type SessionState } from './session'
@@ -38,9 +46,21 @@ function isLiveRun(session: Session): boolean {
   return session.name.startsWith('run-') && isAlive(session.state.createdBy)
 }
 
+/**
+ * Hands back the phones of a session whose runner is gone, as the runner's own
+ * teardown would have. That is what takes the photos the session added out of
+ * a pooled simulator's library before another session gets it.
+ */
+async function handBackPhones(session: Session): Promise<void> {
+  for (const device of allDevices(session)) {
+    if (device instanceof PhoneDevice) await device.dispose().catch(() => {})
+  }
+}
+
 async function stopSession(session: Session): Promise<number> {
   let killed = 0
   await stopNetwork(session)
+  await handBackPhones(session)
   for (const device of Object.values(session.state.devices)) {
     const paths = getPaths(device.dir)
     const pid = readDaemonPid(paths.pidPath)

@@ -134,8 +134,24 @@ export class AndroidDevice extends PhoneDevice {
     }
   }
 
+  /**
+   * Deletes the files from shared storage. MediaProvider serves that storage,
+   * and drops a file's MediaStore row when the file is deleted through it, so
+   * the photos leave the library the app lists as well.
+   */
+  protected async removePhotos(target: string, names: string[]): Promise<void> {
+    // The pool's emulators run read-only, so one that has stopped took
+    // everything written to its storage with it.
+    if (!emulators.isOurs(target)) return
+    await this.adb.shell(`rm -f ${names.map((name) => q(`${PHOTOS}/${name}`)).join(' ')}`)
+  }
+
+  protected async discard(target: string): Promise<void> {
+    emulators.discard(target)
+  }
+
   /** Adds files to the emulator's photo library: shared storage, then a media scan so MediaStore lists them. */
-  async addPhotos(paths: string[]): Promise<void> {
+  protected async putPhotos(paths: string[]): Promise<void> {
     for (const path of paths) {
       const remote = `${PHOTOS}/${basename(path)}`
       await this.adb.push(path, remote)
