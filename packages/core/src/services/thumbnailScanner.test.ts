@@ -26,4 +26,11 @@ describe('shouldReplaceType', () => {
   it('returns true when declared and detected map to different extensions', () => {
     expect(shouldReplaceType('image/heic', 'image/jpeg')).toBe(true)
   })
+
+  it('keeps a camera raw type whose bytes sniff as the tiff they are built on', () => {
+    expect(shouldReplaceType('image/dng', 'image/tiff')).toBe(false)
+    expect(shouldReplaceType('image/x-apple-proraw', 'image/tiff')).toBe(false)
+    expect(shouldReplaceType('image/x-sony-arw', 'image/tiff')).toBe(false)
+    expect(shouldReplaceType('image/png', 'image/tiff')).toBe(true)
+  })
 })
