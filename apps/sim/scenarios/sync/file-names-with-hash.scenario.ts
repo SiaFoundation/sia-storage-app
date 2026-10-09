@@ -1,4 +1,4 @@
-import { storedAs, typeProblems } from '../../src/filetypes'
+import { typeProblems } from '../../src/filetypes'
 import { defineScenario } from '../../src/scenario'
 
 export default defineScenario({
@@ -6,14 +6,6 @@ export default defineScenario({
   description:
     'The laptop adds text and document files, each named with a # before the extension. The app finds no byte signature in the text files or in .rtf, .doc, .xls, .ppt, .mobi and .azw3, and types .docx, .xlsx, .pptx and .epub zips by extension, so for those files the extension after the # decides the type. Two other devices converge, and every device holds each file under its exact name with the type it would have without the #.',
   devices: { laptop: 'cli', desk: 'cli', spare: 'cli' },
-  knownBug:
-    'The extension lookup cuts every name at its first # or ?, as if it were a URL, so "notes #2.md" is read as "notes " and stored as application/octet-stream.',
-  // Cut at the #, a name has no extension, so only the bytes give a type,
-  // and byte detection names a container format at most.
-  bugShowsAs: ['laptop', 'desk', 'spare'].map((device) => ({
-    check: `${device} stores each file's type as if its name had no #`,
-    matches: storedAs('application/octet-stream', 'application/zip'),
-  })),
   timeoutMs: 8 * 60_000,
   async run({ devices, seedTypes, converge, step, checkEqual }) {
     const files = await step('laptop adds text and documents named with a #', () =>
