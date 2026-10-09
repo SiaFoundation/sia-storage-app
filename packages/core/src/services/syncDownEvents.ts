@@ -11,6 +11,7 @@ import {
 import type { LocalObject } from '../encoding/localObject'
 import { sealPinnedObject } from '../lib/localObjects'
 import type { FileMetadata, FileRecordRow } from '../types/files'
+import { repairRawPhotoTypesOnce } from './repairRawPhotoTypes'
 
 /**
  * Activates the sync gate if auto-sync is enabled and connected.
@@ -114,6 +115,7 @@ export async function syncDownEventsBatch(
   const counts: Counts = { total: 0, fileCreates: 0 }
   let totalEventsFetched = 0
   let firstEventTime: number | undefined
+  let caughtUp = false
   const now = Date.now()
 
   try {
@@ -215,6 +217,7 @@ export async function syncDownEventsBatch(
 
         // If the batch is not full, we're done for now.
         if (events.length < batchSize) {
+          caughtUp = true
           break
         }
 
@@ -260,6 +263,12 @@ export async function syncDownEventsBatch(
       ...(dismissGate && { syncGateStatus: 'dismissed' }),
     })
   }
+
+  // The repair keeps each row's updatedAt, so sync-up pushes a repaired row
+  // only where no other device has edited it since. Run before this device
+  // has pulled those edits, the repair would lose to them, and sync-down
+  // would put the TIFF type back.
+  if (caughtUp && !signal.aborted) await repairRawPhotoTypesOnce(app, signal)
 
   if (totalEventsFetched > 1 && !signal.aborted) {
     return 0 // zero interval: poll again immediately

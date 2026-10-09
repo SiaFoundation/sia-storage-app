@@ -8,12 +8,6 @@ export default defineScenario({
   description:
     'Another device already published a DNG stored as image/tiff, as byte detection once typed every raw photo built on TIFF. The laptop and the desk sync it down. The laptop restarts, and both devices end with the photo stored as image/dng.',
   devices: { laptop: 'cli', desk: 'cli' },
-  knownBug:
-    'Nothing gives a raw photo already stored as TIFF its raw type, so it stays image/tiff on every device.',
-  bugShowsAs: ['laptop', 'desk'].map((device) => ({
-    check: `${device} stores it as image/dng`,
-    got: 'image/tiff',
-  })),
   async run({ devices: { laptop, desk }, network, converge, step, checkEqual, waitFor }) {
     const now = Date.now()
     await step('another device has published a DNG stored as image/tiff', () =>

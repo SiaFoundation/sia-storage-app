@@ -187,6 +187,11 @@ export interface AppService {
      * collisions and surface an "Added N files as new versions" toast.
      */
     getCurrentByNamesInDirectory(names: string[], directoryId: string | null): Promise<FileRecord[]>
+    /**
+     * Live files stored as TIFF whose name gives a raw format built on TIFF,
+     * such as a .dng, each with that raw type.
+     */
+    getRawPhotosStoredAsTiff(): Promise<{ id: string; type: string }[]>
     /** Returns a file by name (current version). */
     getByName(name: string): Promise<FileRecord | null>
     /** Returns a file by name among unfiled files (no directory). */
