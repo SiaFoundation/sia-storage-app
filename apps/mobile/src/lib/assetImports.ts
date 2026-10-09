@@ -4,6 +4,7 @@
 // candidate rows for new-photos and library-scan; those callers stage the
 // rows themselves.
 
+import { normalizeName } from '@siastorage/core/lib/names'
 import { uniqueId } from '@siastorage/core/lib/uniqueId'
 import { logger } from '@siastorage/logger'
 import { getAssetSizes, isNativeAvailable } from 'import-sources'
@@ -187,7 +188,10 @@ export async function importAssets(
     destinationDirectoryId,
   )
   const existingNames = new Set(existingCurrent.map((f) => f.name))
-  const newVersionCount = rows.reduce((n, r) => (existingNames.has(r.name) ? n + 1 : n), 0)
+  const newVersionCount = rows.reduce(
+    (n, r) => (existingNames.has(normalizeName(r.name)) ? n + 1 : n),
+    0,
+  )
 
   const importRow: ImportRow = {
     id: importId,
@@ -263,7 +267,10 @@ export async function importMediaAssets(
       destinationDirectoryId,
     )
     const existingNames = new Set(existingCurrent.map((f) => f.name))
-    newVersionCount = candidates.reduce((n, r) => (existingNames.has(r.name) ? n + 1 : n), 0)
+    newVersionCount = candidates.reduce(
+      (n, r) => (existingNames.has(normalizeName(r.name)) ? n + 1 : n),
+      0,
+    )
   }
 
   const importRow: ImportRow = {

@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { normalizeName } from '../../lib/names'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import { uniqueId } from '../../lib/uniqueId'
 import type { FileRecord, FileRecordRow } from '../../types/files'
@@ -424,14 +425,14 @@ export async function ensureDirectoriesAtPaths(
   db: DatabaseAdapter,
   fullPaths: Iterable<string>,
 ): Promise<Map<string, string>> {
-  // Expand each input path into its sanitized normal form and all of
-  // its prefixes so a/b/c also creates a and a/b. Map the original
-  // input string to the normalized path so callers can look up by what
-  // they passed in.
+  // Expand each input path into its sanitized NFC form and all of its
+  // prefixes, so a/b/c also creates a and a/b. The result is keyed by the
+  // input string as given, so sync-down finds the row for a decomposed path
+  // from another device's metadata.
   const inputToNormalized = new Map<string, string>()
   const prefixes = new Set<string>()
   for (const raw of fullPaths) {
-    const segments = raw.split('/').map(sanitizeDirectorySegment).filter(Boolean)
+    const segments = normalizeName(raw).split('/').map(sanitizeDirectorySegment).filter(Boolean)
     if (segments.length === 0) {
       inputToNormalized.set(raw, '')
       continue

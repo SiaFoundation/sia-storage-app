@@ -1,5 +1,6 @@
 import { createEmptyIndexerStorage, generateMockFileMetadata } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp, waitForCondition } from './app'
+import { drainListing } from './utils'
 
 describe('Sync Down', () => {
   let app: TestApp
@@ -283,6 +284,37 @@ describe('Sync Down', () => {
     expect(dirs).toHaveLength(1)
     expect(dirs[0].path).toBe('Vacation')
     expect(dirs[0].fileCount).toBe(1)
+  })
+
+  it('a synced file whose folder path is decomposed is inserted into the composed folder, never at the root', async () => {
+    // macOS hands a device the decomposed form, e and a combining accent.
+    const composed = 'Café/Été'
+    const rootAnchor = (await drainListing(app, null)).anchor
+    app.sdk.injectObject({
+      metadata: generateMockFileMetadata(1, {
+        name: 'menu.jpg',
+        directory: composed.normalize('NFD'),
+      }),
+    })
+
+    let fileId: string | undefined
+    await waitForCondition(
+      async () => {
+        const files = await app.getFiles()
+        fileId = files.find((f) => f.name === 'menu.jpg')?.id
+        return fileId !== undefined
+      },
+      { timeout: 10_000, message: 'File with a decomposed folder path to sync' },
+    )
+
+    expect(await app.readDirectoryPathForFile(fileId!)).toBe(composed)
+    const paths = (await app.readAllDirectoriesWithCounts()).map((d) => d.path).sort()
+    expect(paths).toEqual(['Café', composed])
+    // A row inserted at the root and then moved into the folder journals a
+    // departure from the root, which the root scope then reports.
+    const rootChanges = await app.app.provider.changes(null, rootAnchor)
+    expect(rootChanges.items.map((i) => i.id)).not.toContain(fileId)
+    expect(rootChanges.deletedIds).not.toContain(fileId)
   })
 
   it('syncs directory updates from server', async () => {

@@ -290,6 +290,12 @@ describe('queryTagsByPrefix', () => {
     expect(results.map((t) => t.name).sort()).toEqual(['Trash', 'Travel'])
   })
 
+  it('matches a decomposed prefix against a tag stored composed', async () => {
+    await insertTag(db(), 'Été'.normalize('NFC'))
+    const results = await queryTagsByPrefix(db(), 'Ét'.normalize('NFD'))
+    expect(results.map((t) => t.name)).toEqual(['Été'.normalize('NFC')])
+  })
+
   it('returns all by usedAt when empty query', async () => {
     await insertTag(db(), 'Alpha')
     await insertTag(db(), 'Beta')

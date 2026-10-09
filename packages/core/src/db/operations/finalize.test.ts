@@ -328,6 +328,25 @@ describe('finalizeImportFile (real DB lifecycle)', () => {
     expect(f?.hash).toBe('')
   })
 
+  it('applies a decomposed pending tag name in its composed form', async () => {
+    await arrange(
+      imp({
+        id: 'imp1',
+        source: 'new-photos',
+        directoryId: 'D',
+        dedupByHash: 1,
+        pendingTags: JSON.stringify(['Été'.normalize('NFD')]),
+      }),
+      file({ id: 'if1', importId: 'imp1', name: 'tagged.jpg', directoryId: 'D' }),
+      'sha256:h-nfd-tag',
+      'tok',
+    )
+
+    await finalizeImportFile(db(), 'if1', 'tok')
+
+    expect(await queryTagNamesForFile(db(), 'if1')).toEqual(['Été'.normalize('NFC')])
+  })
+
   it('applies string tag names and drops non-string entries without throwing', async () => {
     // The non-string 123 entry exercises the malformed-tag filter.
     await arrange(
