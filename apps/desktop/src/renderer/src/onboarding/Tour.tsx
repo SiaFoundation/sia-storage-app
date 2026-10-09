@@ -7,7 +7,9 @@
  * and staying to the end is never what holds the library up.
  */
 
+import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
+import { sia } from '../api'
 import { PLAIN_BUTTON, PRIMARY_BUTTON } from '../buttons'
 import type { SetupStep } from '../model'
 import { FinderMock } from './FinderMock'
@@ -22,6 +24,46 @@ import { moved, type SlideId, slides } from './slides'
 const LINK =
   'cursor-default border-none bg-transparent p-0 text-[11px] text-secondary underline ' +
   '[font-family:inherit] hover:text-label'
+
+/** The mobile app's store pages. */
+const APP_STORE_URL = 'https://apps.apple.com/app/id6753593109'
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=sia.storage'
+
+/**
+ * The way from the phone slide to the phone: a code for the App Store, and a
+ * link for Android. One code, since two side by side leave the reader to work
+ * out which is theirs before they can scan either.
+ */
+function InstallApp() {
+  return (
+    <div className="mt-5 flex items-center gap-3.5">
+      {/* The code keeps its white ground and margin on the dark window, which
+          a phone's camera needs around a code to find it. */}
+      <QRCodeSVG
+        data-testid="tour-install-code"
+        value={APP_STORE_URL}
+        size={88}
+        marginSize={2}
+        title="Code for Sia Storage on the App Store"
+        className="shrink-0 rounded-[6px]"
+      />
+      <div className="flex flex-col items-start gap-1">
+        <span data-testid="tour-install-label" className="text-[12px] font-semibold text-label">
+          Scan to install the companion app
+        </span>
+        <span className="text-[11px] text-secondary">Opens the App Store on an iPhone.</span>
+        <button
+          type="button"
+          className={LINK}
+          // A browser that will not open leaves nothing to say on this slide.
+          onClick={() => void sia.openUrl(PLAY_STORE_URL).catch(() => {})}
+        >
+          On Android, get it on Google Play
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function Stage({ id, finderName }: { id: SlideId; finderName: string }) {
   /** The pointer is over the picture, which each slide answers in its own way. */
@@ -105,6 +147,7 @@ export function Tour({
           {slide.title}
         </h1>
         <p className={LEAD}>{slide.body}</p>
+        {slide.id === 'phone' ? <InstallApp /> : null}
       </div>
 
       <div className="flex items-center gap-2">

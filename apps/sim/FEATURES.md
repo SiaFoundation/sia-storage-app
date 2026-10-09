@@ -380,7 +380,8 @@ bun sim device read mac --id status-message
 
 The tour's corner, `setup-chip-label`, names the setup step running behind it,
 and reads `Ready` once setup has finished. Skip, or Finish on the last slide,
-goes to the list of steps.
+goes to the list of steps. The last slide, on the phone app, shows a code for
+its App Store page as `tour-install-code`, labelled by `tour-install-label`.
 
 A device added without `--signed-out` is signed in before the app starts, so
 its sign-in window shows only after Sign Out.
