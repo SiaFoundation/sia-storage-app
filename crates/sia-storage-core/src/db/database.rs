@@ -75,21 +75,23 @@ impl Db {
     /// thread rather than leaving it open.
     ///
     /// Restricted to `crate::db`: no consumer opens a transaction or holds the connection.
-    pub(in crate::db) async fn transaction<T, F>(&self, f: F) -> Result<T, DbError>
+    pub(in crate::db) async fn transaction<T, E, F>(&self, f: F) -> Result<T, E>
     where
-        F: FnOnce(&mut Transaction) -> Result<T, DbError> + Send + 'static,
+        F: FnOnce(&mut Transaction) -> Result<T, E> + Send + 'static,
         T: Send + 'static,
+        E: From<DbError> + Send + 'static,
     {
         // Acquired before spawn_blocking: waiters park as futures, and only the
         // lock holder occupies a blocking-pool thread.
         let mut guard = self.conn.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            let mut tx = guard.transaction()?;
+            let mut tx = guard.transaction().map_err(DbError::from)?;
             let value = f(&mut tx)?;
-            tx.commit()?;
+            tx.commit().map_err(DbError::from)?;
             Ok(value)
         })
-        .await?
+        .await
+        .map_err(DbError::from)?
     }
 }
 
@@ -101,7 +103,7 @@ mod tests {
         let db = Db::open_in_memory().await.unwrap();
         db.transaction(|tx| {
             tx.execute_batch("CREATE TABLE t (id TEXT)")?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -112,7 +114,7 @@ mod tests {
         db.transaction(|tx| {
             let mut stmt = tx.prepare("SELECT id FROM t ORDER BY id")?;
             let rows = stmt.query_map([], |r| r.get(0))?;
-            Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
+            Ok::<_, DbError>(rows.collect::<rusqlite::Result<Vec<String>>>()?)
         })
         .await
         .unwrap()
@@ -123,7 +125,7 @@ mod tests {
         let db = seeded().await;
         db.transaction(|tx| {
             tx.execute("INSERT INTO t (id) VALUES ('a')", [])?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -147,6 +149,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rolls_back_on_the_closures_own_error_type() {
+        #[derive(Debug)]
+        struct OpError;
+        impl From<DbError> for OpError {
+            fn from(_: DbError) -> Self {
+                OpError
+            }
+        }
+
+        let db = seeded().await;
+        let r = db
+            .transaction(|tx| {
+                tx.execute("INSERT INTO t (id) VALUES ('a')", [])
+                    .map_err(DbError::from)?;
+                Err::<(), OpError>(OpError)
+            })
+            .await;
+        assert!(r.is_err());
+        assert!(
+            ids(&db).await.is_empty(),
+            "the failed unit left nothing behind"
+        );
+    }
+
+    #[tokio::test]
     async fn savepoint_rolls_back_only_its_substep() {
         let db = seeded().await;
         db.transaction(|tx| {
@@ -154,7 +181,7 @@ mod tests {
             let sp = tx.savepoint()?;
             sp.execute("INSERT INTO t (id) VALUES ('b')", [])?;
             drop(sp); // no commit -> ROLLBACK TO, undoing 'b' but not the outer 'a'
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -170,7 +197,7 @@ mod tests {
             tokio::spawn(async move {
                 db.transaction(|tx| {
                     tx.execute("INSERT INTO t (id) VALUES ('a')", [])?;
-                    Ok(())
+                    Ok::<_, DbError>(())
                 })
                 .await
             })
@@ -180,7 +207,7 @@ mod tests {
             tokio::spawn(async move {
                 db.transaction(|tx| {
                     tx.execute("INSERT INTO t (id) VALUES ('b')", [])?;
-                    Ok(())
+                    Ok::<_, DbError>(())
                 })
                 .await
             })

@@ -2008,7 +2008,7 @@ mod tests {
                   VALUES (?, ?, ?, ?, ?, ?, '', 0, 0, ?, ?, 1)",
                 params![id, name, directory_id, kind, hash, size, added_at, lost_reason],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2028,7 +2028,7 @@ mod tests {
                   VALUES (?, ?, ?, '', '', '', '', '', '', 0, 0)",
                 params![file_id, indexer_url, object_id],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2041,7 +2041,7 @@ mod tests {
                 "INSERT INTO fs (fileId, size, addedAt, usedAt) VALUES (?, 1, 0, 0)",
                 params![file_id],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2050,11 +2050,11 @@ mod tests {
     async fn current_flag(db: &Db, id: &str) -> i64 {
         let id = id.to_string();
         db.transaction(move |c| {
-            Ok(
-                c.query_row("SELECT current FROM files WHERE id = ?", params![id], |r| {
-                    r.get(0)
-                })?,
-            )
+            Ok::<_, DbError>(c.query_row(
+                "SELECT current FROM files WHERE id = ?",
+                params![id],
+                |r| r.get(0),
+            )?)
         })
         .await
         .unwrap()
@@ -2131,7 +2131,7 @@ mod tests {
                     params![d, format!("/{d}")],
                 )?;
             }
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2203,7 +2203,7 @@ mod tests {
         put_file(&db, "f2", "b", None, "file", "h2", 9, 2, None).await;
         db.transaction(|c| {
             c.execute("UPDATE files SET trashedAt = 1 WHERE id = 'f2'", [])?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2301,9 +2301,10 @@ mod tests {
         let remaining: Vec<String> = db
             .transaction(|c| {
                 let mut stmt = c.prepare("SELECT id FROM files ORDER BY id")?;
-                Ok(stmt
-                    .query_map([], |r| r.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?)
+                Ok::<_, DbError>(
+                    stmt.query_map([], |r| r.get(0))?
+                        .collect::<rusqlite::Result<Vec<String>>>()?,
+                )
             })
             .await
             .unwrap();
@@ -2351,7 +2352,7 @@ mod tests {
                 "INSERT INTO files (id, name, nameSortKey, kind, hash, size, type, createdAt, updatedAt, addedAt, current) VALUES (?, ?, ?, 'file', 'h', 1, '', 0, 0, 0, 1)",
                 params!["f1", "File 2.txt", natural_sort_key(Some("File 2.txt")).unwrap()],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2369,7 +2370,7 @@ mod tests {
 
         let (name, sort_key, updated_at): (String, Option<String>, i64) = db
             .transaction(|c| {
-                Ok(c.query_row(
+                Ok::<_, DbError>(c.query_row(
                     "SELECT name, nameSortKey, updatedAt FROM files WHERE id = 'f1'",
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -2408,7 +2409,7 @@ mod tests {
 
         let (name, sort_key, updated_at): (String, Option<String>, i64) = db
             .transaction(|c| {
-                Ok(c.query_row(
+                Ok::<_, DbError>(c.query_row(
                     "SELECT name, nameSortKey, updatedAt FROM files WHERE id = 'f1'",
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -2477,7 +2478,7 @@ mod tests {
         put_file(&db, "f2", "b", None, "file", "h2", 1, 2, None).await;
         db.transaction(|c| {
             c.execute("UPDATE files SET trashedAt = 50 WHERE id = 'f2'", [])?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2490,7 +2491,7 @@ mod tests {
         async fn row(db: &Db, id: &str) -> (Option<i64>, Option<i64>, i64) {
             let id = id.to_string();
             db.transaction(move |c| {
-                Ok(c.query_row(
+                Ok::<_, DbError>(c.query_row(
                     "SELECT deletedAt, trashedAt, updatedAt FROM files WHERE id = ?",
                     params![id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -2505,7 +2506,7 @@ mod tests {
 
         let needs_sync_up: bool = db
             .transaction(|c| {
-                Ok(c.query_row(
+                Ok::<_, DbError>(c.query_row(
                     "SELECT needsSyncUp FROM objects WHERE id = 'o1' AND indexerURL = 'https://a.com'",
                     [],
                     |r| r.get(0),
@@ -2527,7 +2528,7 @@ mod tests {
                   VALUES ('f1', 'L1', 'old', 1, '', 'file', 0, 0, 'h_old', 7, 42, 1)",
                 [],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2551,7 +2552,7 @@ mod tests {
             Option<i64>,
         ) = db
             .transaction(|c| {
-                Ok(c.query_row(
+                Ok::<_, DbError>(c.query_row(
                     "SELECT name, hash, localId, addedAt, deletedAt FROM files WHERE id = 'f1'",
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
@@ -2619,7 +2620,7 @@ mod tests {
                     params![d, format!("/{d}")],
                 )?;
             }
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -2637,7 +2638,7 @@ mod tests {
                     params![updated, id],
                 )?;
             }
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
