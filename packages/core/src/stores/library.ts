@@ -16,13 +16,22 @@ type LibraryRow = FileRecordRow & { isFavorite: number; fsExists: number }
  * `queryLibrary`. Each list row component then renders its
  * `useIsFavorite` and `useFsFileUri` from cache instead of firing its
  * own query. `fsExists` priming trusts the DB row; `useFsFileUri`'s
- * fetcher self-heals on disk drift, and the staleness window is at
- * most one library invalidation cycle.
+ * fetcher self-heals on disk drift.
+ *
+ * `since` is the caches' mark from before the query ran. `fill` skips any
+ * entry written after it, such as a download finishing or a favorite
+ * toggled while the query ran, since the row read before that write is
+ * older than it.
  */
-export function primeListRowCaches(app: AppService, rows: LibraryRow[]): void {
+export function primeListRowCaches(
+  app: AppService,
+  rows: LibraryRow[],
+  since: { tags: number; fsFileUri: number },
+): void {
   for (const row of rows) {
-    app.caches.tags.set(!!row.isFavorite, `favorite/${row.id}`)
-    app.caches.fsFileUri.set(
+    app.caches.tags.fill(since.tags, !!row.isFavorite, `favorite/${row.id}`)
+    app.caches.fsFileUri.fill(
+      since.fsFileUri,
       row.fsExists ? app.fs.uri({ id: row.id, type: row.type }) : null,
       row.id,
     )
@@ -79,6 +88,7 @@ export function useFileList(params: FileListParams) {
 
   const fetcher = async (key: string) => {
     const pageIndex = Number(key.split('|page=').pop() ?? '0')
+    const since = { tags: app.caches.tags.mark(), fsFileUri: app.caches.fsFileUri.mark() }
     const rows = await app.files.queryLibrary({
       sortBy,
       sortDir: sortingDir,
@@ -90,7 +100,7 @@ export function useFileList(params: FileListParams) {
       offset: pageIndex * PAGE_SIZE,
     })
 
-    primeListRowCaches(app, rows)
+    primeListRowCaches(app, rows, since)
 
     const fileIds = rows.map((r) => r.id)
     const objectsByFile = await app.localObjects.getRefsForFiles(fileIds)

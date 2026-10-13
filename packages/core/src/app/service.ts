@@ -75,6 +75,14 @@ export type SwrCacheBy<T = unknown> = {
   }
 }
 
+/** A SwrCacheBy that a list query fills without undoing a newer write. See `swrFillableCacheBy`. */
+export type SwrFillableCacheBy<T = unknown> = Omit<SwrCacheBy<T>, 'coalesced'> & {
+  /** Taken before a query whose answer is passed to `fill`. */
+  mark: () => number
+  /** Sets the entry unless it, or the whole cache, was written or invalidated after `mark` returned `since`. */
+  fill: (since: number, data: T, ...parts: string[]) => void
+}
+
 /** Cache that tracks library data version changes via a monotonic counter. */
 export interface LibraryVersionCache {
   /** Bumps the version number, signaling that library data has changed. */
@@ -87,7 +95,8 @@ export interface LibraryVersionCache {
 
 /** All SWR caches used by the app, keyed by domain. */
 export interface AppCaches {
-  tags: SwrCacheBy
+  /** Filled by useFileList with each row's favorite flag, read by useIsFavorite. */
+  tags: SwrFillableCacheBy
   directories: SwrCacheBy
   library: SwrCacheBy
   /** Imports list + per-import summary. Every import_files write invalidates it
@@ -99,9 +108,9 @@ export interface AppCaches {
     byFileId: SwrCacheBy
   }
   /** Per-fileId local URI (`file://…` when on disk, null when not).
-   *  Primed by useFileList from the LEFT JOIN flag so list-row
+   *  Filled by useFileList from the LEFT JOIN flag so list-row
    *  useFsFileUri hooks short-circuit. */
-  fsFileUri: SwrCacheBy<string | null>
+  fsFileUri: SwrFillableCacheBy<string | null>
   libraryVersion: LibraryVersionCache
   settings: SwrCacheBy
   sync: SwrCacheBy
