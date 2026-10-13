@@ -2,6 +2,45 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.0-rc.0 (2026-10-13)
+
+### Features
+
+- Share link in a file's menu, in the selection bar and on the viewer's share button makes a link to one file or many that anyone can open on share.sia.storage, showing either the files' latest versions or the versions they have now, for a day, a week, 30 days or until revoked. Share Links in the menu lists every link on the account, where each can be copied, shared or revoked. This replaces Share link's one-day URL to a single file.
+
+### Fixes
+
+- VoiceOver and TalkBack read a name for the app's icon buttons and text fields, such as the Media, Files and Tags tabs, the viewer's Share and More buttons, and the search, folder, tag and indexer fields, and VoiceOver can reach the options in action sheets.
+- Fixes a crash that could close the app right after it opens on Android.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- Files no longer upload with another file's contents when other files in the same upload could not be read.
+- A file whose name contains `#` or `?` gets the type its extension names instead of a generic one.
+- Canon raw (CR3) photos are recognized from their contents, and a file Android reports with no type (`application/octet-stream`) takes its type from its name or contents instead.
+- An import copy that ends as cancelled outside a suspension is retried at once the first time and backs off if it happens again, instead of leaving it and the files after it waiting ten minutes.
+- Files being imported when the app goes to the background finish soon after it comes back, instead of waiting up to ten minutes.
+- A file whose content is not the format its filename claims now imports and uploads normally instead of landing under Unavailable files. An edited raw photo is stored as the rendered JPEG it actually is, and named to match. `nameForType` in `@siastorage/core/lib/fileTypes` gives a name the extension its type implies.
+- Picking an edited photo shows the format it will actually import as, rather than the format of the untouched original stored beside it.
+- Files with an extension such as `.constructor` or `.__proto__` are stored with an unknown file type instead of a bogus one.
+- Upgraded react-native-sia to 0.15.3, which adds the sharing keys that share links are made with.
+- Reduces the chance of a change being lost while the library is syncing.
+- The database always uses write-ahead logging, and the journal mode setting under Advanced is removed.
+- A name with accents or other combined characters is stored the same way whichever app it came from, so a file saved in Finder and the same file added on a phone share one name and one version history. Names already stored are converted on the first launch after the update.
+- Clear local files in Advanced settings moves a file's local copy back under the right extension instead of deleting it, and never deletes a copy that a file in the library still points at.
+- Camera raw photos such as DNG, CR2, NEF and ARW keep their raw type on every device instead of being stored or renamed as TIFF.
+- Renaming a file from its details takes one tap on Rename instead of two.
+- Raw photos stored as TIFF, such as DNGs an iPhone relabelled, get their raw type back the next time the app starts and catches up with the network.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- The app no longer crashes while signing in.
+- An imported photo carries the right format and filename from the moment it is picked, instead of correcting itself once the import finishes.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Files from your other devices now appear on a phone that went to the background while it was syncing them.
+- Tapping a file that was already queued to download in the background now always downloads it. Thumbnails dropped from a long download queue no longer stay listed as queued on the Transfers screen, and load again after scrolling away from them and back.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- A file added while the app is checking for new uploads no longer uploads twice.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+- Log video playback failures so they can be diagnosed instead of failing silently.
+
 ## 1.14.2-rc.1 (2026-09-29)
 
 ### Fixes
