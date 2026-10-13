@@ -10,10 +10,15 @@ import androidx.exifinterface.media.ExifInterface
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.UUID
+import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -22,8 +27,19 @@ import kotlin.math.roundToInt
 // materialized, and we apply the EXIF orientation ourselves with a Matrix — so
 // the result is deterministic regardless of what any platform decoder would do.
 class ThumbnailerModule : Module() {
+  // Off Expo's shared AsyncFunction thread, where a long call from another module
+  // (a photo-library change query, a file copy) would stall every thumbnail
+  // queued behind it.
+  private val executor = Executors.newSingleThreadExecutor()
+  private val queue = CoroutineScope(executor.asCoroutineDispatcher() + SupervisorJob())
+
   override fun definition() = ModuleDefinition {
     Name("Thumbnailer")
+
+    OnDestroy {
+      queue.cancel()
+      executor.shutdown()
+    }
 
     // Encodes one thumbnail per entry in `maxSizes`, each capping the long edge
     // at that size. The source is decoded and oriented once at the largest size;
@@ -47,7 +63,7 @@ class ThumbnailerModule : Module() {
       val upright = applyOrientation(decoded, orientation)
 
       maxSizes.map { size -> encodeWebp(scale(upright, size)) }
-    }
+    }.runOnQueue(queue)
 
     // One frame at `timeMs`, scaled to fit within `maxSize`. The retriever returns
     // frames with the track rotation already applied.
@@ -67,7 +83,7 @@ class ThumbnailerModule : Module() {
       } ?: throw CodedException("Could not extract video frame: $uri")
 
       encodeWebp(scale(frame, maxSize))
-    }
+    }.runOnQueue(queue)
   }
 
   // Largest power-of-two subsample that still leaves the long edge >= maxSize, so

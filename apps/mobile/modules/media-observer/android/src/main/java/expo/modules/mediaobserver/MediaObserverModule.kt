@@ -7,6 +7,11 @@ import android.provider.MediaStore
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 
 // The photo library's insertion cursor, via MediaStore.
 //
@@ -17,12 +22,23 @@ import expo.modules.kotlin.modules.ModuleDefinition
 // back to DATE_ADDED. Only the primary shared volume is observed (a removable SD
 // card has its own generation counter), which covers the camera roll.
 class MediaObserverModule : Module() {
+  // Expo runs every AsyncFunction without runOnQueue on one thread shared by all
+  // modules. A slow MediaStore query there makes every other module's call wait
+  // behind it, thumbnails included.
+  private val executor = Executors.newSingleThreadExecutor()
+  private val queue = CoroutineScope(executor.asCoroutineDispatcher() + SupervisorJob())
+
   override fun definition() = ModuleDefinition {
     Name("MediaObserver")
 
-    AsyncFunction("currentCursor") { currentCursor() }
+    OnDestroy {
+      queue.cancel()
+      executor.shutdown()
+    }
 
-    AsyncFunction("changesSince") { cursor: String? -> changesSince(cursor) }
+    AsyncFunction("currentCursor") { currentCursor() }.runOnQueue(queue)
+
+    AsyncFunction("changesSince") { cursor: String? -> changesSince(cursor) }.runOnQueue(queue)
   }
 
   private fun currentCursor(): String =

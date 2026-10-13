@@ -11,16 +11,22 @@ public class MediaObserverModule: Module {
   private static let version = "v1"
   private static let maxInserts = 10_000
 
+  // Expo runs every AsyncFunction without runOnQueue on one serial queue shared
+  // by all modules. A change-history walk runs as long as the history since its
+  // cursor, and on that queue every other module's call waits behind it,
+  // thumbnails included.
+  private let queue = DispatchQueue(label: "expo.modules.mediaobserver", qos: .utility)
+
   public func definition() -> ModuleDefinition {
     Name("MediaObserver")
 
     AsyncFunction("currentCursor") { () -> String in
       Self.encode(PHPhotoLibrary.shared().currentChangeToken)
-    }
+    }.runOnQueue(queue)
 
     AsyncFunction("changesSince") { (cursor: String?) -> [String: Any] in
       self.changesSince(cursor)
-    }
+    }.runOnQueue(queue)
   }
 
   private func changesSince(_ cursor: String?) -> [String: Any] {
