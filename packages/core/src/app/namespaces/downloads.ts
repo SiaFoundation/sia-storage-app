@@ -125,6 +125,9 @@ export function buildDownloadsNamespace(
     state = {
       downloads: { ...state.downloads, [id]: { ...existing, ...patch } },
     }
+    if (patch.status !== undefined && patch.status !== existing.status) {
+      caches.downloads.invalidate('counts')
+    }
     caches.downloads.invalidate(id)
   }
 
@@ -183,7 +186,16 @@ export function buildDownloadsNamespace(
       // download's entry.
       if (controller.signal.aborted) return
       if (size === file.size) {
-        remove(fileId)
+        // A screen asks for bytes already here when its cached "not on this
+        // device" is stale. Left uncorrected, the file shows as cloud only and
+        // an open viewer asks again for as long as it is open. Without an `fs`
+        // row the next list query would mark it cloud only once more.
+        if (!(await ops.readFsMeta(db, fileId))) {
+          const now = Date.now()
+          await ops.upsertFsMeta(db, { fileId, size, addedAt: now, usedAt: now })
+        }
+        await caches.fsFileUri.set(fsIO.uri(fileId, file.type), fileId)
+        if (current()) remove(fileId)
         return
       }
 
