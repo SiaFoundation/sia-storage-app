@@ -4,10 +4,12 @@ name: Release Desktop
 # release. A prerelease (desktop/vX.Y.Z-rc.N) is the beta app; the stable tag
 # the Finalize Release workflow promotes it to is the shipping app. Both tags
 # name the same commit, so the two builds differ only in identity and version.
+#
+# Releases here are immutable, so publish-releases.ts creates a desktop release
+# as a draft and starts this workflow from its tag. The image is attached to
+# the draft, and the draft is published after it.
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       context:
@@ -35,7 +37,6 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'desktop/')) }}
     runs-on: macos-26
     outputs:
       dmg: ${{ steps.release.outputs.dmg }}
@@ -43,7 +44,7 @@ jobs:
       # The tag decides, as it does in release.ts, not the release's prerelease
       # flag, so the profiles always match the app the script builds. The
       # context input applies only to a dispatch without a tag.
-      BETA: ${{ contains(github.event.release.tag_name || inputs.tag || '', '-rc.') || (github.event_name == 'workflow_dispatch' && inputs.tag == '' && inputs.context == 'beta') }}
+      BETA: ${{ contains(inputs.tag, '-rc.') || (inputs.tag == '' && inputs.context == 'beta') }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -102,7 +103,7 @@ jobs:
           # Empty whenever there is a tag, so the input's default cannot
           # contradict it.
           SIA_CONTEXT: ${{ inputs.tag == '' && inputs.context || '' }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_TAG: ${{ inputs.tag }}
           SIA_BUILD_NUMBER: ${{ github.run_number }}
           SIA_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           SIA_FILEPROVIDER_GROUP: ${{ env.BETA == 'true' && secrets.MACOS_FILEPROVIDER_GROUP_BETA || secrets.MACOS_FILEPROVIDER_GROUP }}
@@ -120,10 +121,9 @@ jobs:
           retention-days: 7
 
   upload:
-    # Attach on real release events, or on manual dispatch when the operator
-    # opts in, which is how an asset is re-attached after a failed build
-    # without cutting a new tag.
-    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.upload) }}
+    # Attach when the dispatch opts in, as publish-releases.ts does, or as an
+    # operator does to finish a draft whose build failed.
+    if: ${{ inputs.upload }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -142,7 +142,7 @@ jobs:
       - name: Check the release points at what we built
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
           BUILT_SHA: ${{ github.sha }}
         run: |
           if [ -z "$TAG" ]; then
@@ -157,10 +157,25 @@ jobs:
             exit 1
           fi
 
+      # A published release takes no new file, so attaching is refused unless
+      # the release is still the draft publish-releases.ts made.
       - name: Upload disk image to release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
         # --clobber lets a re-run replace the asset. --repo because this job
         # has no checkout, so gh cannot infer the repo from git.
-        run: gh release upload "$TAG" dist/*.dmg --clobber --repo "$GITHUB_REPOSITORY"
+        run: |
+          if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "$TAG is already published, and a published release takes no new file."
+            exit 1
+          fi
+          gh release upload "$TAG" dist/*.dmg --clobber --repo "$GITHUB_REPOSITORY"
+
+      # --latest=false keeps the latest release a cli one, the release
+      # releases/latest/download serves, though this build finishes after it.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"

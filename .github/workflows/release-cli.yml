@@ -1,8 +1,11 @@
 name: Release CLI
 
+# Builds the CLI binaries and attaches them to a cli release. Releases here are
+# immutable, so publish-releases.ts creates a cli release as a draft and starts
+# this workflow from its tag. The binaries are attached to the draft, and the
+# draft is published after them.
+
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -24,11 +27,7 @@ jobs:
   # bakes this version into the binary and the upload attaches to this release,
   # so resolving it once keeps the two from naming different releases.
   #
-  # Also the single gate for the workflow. Runs on every cli/v* release and every
-  # manual dispatch, candidates included so a cut can be tried before it
-  # graduates, and skips mobile/* releases, which build elsewhere.
   resolve:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'cli/')) }}
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
@@ -43,7 +42,6 @@ jobs:
         run: bun scripts/resolve-cli-release.ts
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
           INPUT_TAG: ${{ inputs.tag }}
           REF: ${{ github.ref }}
           WANTS_UPLOAD: ${{ inputs.upload_to_latest_release }}
@@ -110,11 +108,9 @@ jobs:
           retention-days: 7
 
   upload:
-    # Attach binaries on real release events, or on manual dispatch when the
-    # operator opts in. Lets us re-attach assets to a release after a
-    # failed/edited build without cutting a new tag (the original workflow run
-    # can't be re-run once its artifacts expire).
-    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_latest_release) }}
+    # Attach when the dispatch opts in, as publish-releases.ts does, or as an
+    # operator does to finish a draft whose build failed.
+    if: ${{ inputs.upload_to_latest_release }}
     needs: [resolve, build]
     runs-on: ubuntu-latest
     permissions:
@@ -149,6 +145,8 @@ jobs:
             exit 1
           fi
 
+      # A published release takes no new file, so attaching is refused unless
+      # the release is still the draft publish-releases.ts made.
       - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,4 +154,15 @@ jobs:
         # --clobber lets re-runs replace assets cleanly if the workflow
         # is restarted after a partial upload. --repo is required because
         # this job has no checkout, so gh can't infer the repo from git.
-        run: gh release upload "$TAG" dist/sia-storage-* --clobber --repo "$GITHUB_REPOSITORY"
+        run: |
+          if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "$TAG is already published, and a published release takes no new file."
+            exit 1
+          fi
+          gh release upload "$TAG" dist/sia-storage-* --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
