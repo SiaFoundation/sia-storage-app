@@ -141,6 +141,10 @@ export function createMainWindow(): BrowserWindow {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     transparent: process.platform === 'darwin',
     vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
+    // macOS draws the material in its lighter inactive tint while a window
+    // is unfocused, so without this the window shown without focus, as from
+    // Finder's Share Link, draws light gray until clicked.
+    visualEffectState: 'active',
     backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
     webPreferences: RENDERER_PREFERENCES,
   })
@@ -238,6 +242,9 @@ export function createPopover(): BrowserWindow {
     fullscreenable: false,
     transparent: process.platform === 'darwin',
     vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
+    // The popover loses focus only while a menu it opened holds it, see
+    // `holdPopover`, and keeps its focused look then too.
+    visualEffectState: 'active',
     backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
     webPreferences: RENDERER_PREFERENCES,
   })
