@@ -141,6 +141,10 @@ export function createMainWindow(): BrowserWindow {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     transparent: process.platform === 'darwin',
     vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
+    // By default macOS draws the material in its lighter inactive tint while
+    // the window is not focused, so a window opened from Finder or the
+    // popover came up light grey until clicked.
+    visualEffectState: 'active',
     backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
     webPreferences: RENDERER_PREFERENCES,
   })
@@ -238,6 +242,7 @@ export function createPopover(): BrowserWindow {
     fullscreenable: false,
     transparent: process.platform === 'darwin',
     vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
+    visualEffectState: 'active',
     backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
     webPreferences: RENDERER_PREFERENCES,
   })
