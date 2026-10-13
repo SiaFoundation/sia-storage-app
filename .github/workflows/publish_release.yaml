@@ -46,6 +46,11 @@ jobs:
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.head_ref == 'release' && github.event.pull_request.merged == true) }}
     runs-on: ubuntu-latest
+    # actions: write lets the workflow's own token start the desktop and CLI
+    # builds, which attach their files to a draft and then publish it.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -68,6 +73,7 @@ jobs:
         run: bun scripts/publish-releases.ts
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          DISPATCH_TOKEN: ${{ github.token }}
           PUBLISH_REF: ${{ inputs.ref }}
           PUBLISH_MODE: ${{ inputs.mode }}
           DRY_RUN: ${{ inputs.dry_run }}

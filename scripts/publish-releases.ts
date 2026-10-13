@@ -20,6 +20,12 @@
 // months later. Preparing a cut twice yields an identical tree under a fresh
 // sha, so tags are compared by tree: an unchanged release is refreshed in place
 // rather than deleted and recreated.
+//
+// The repository's releases are immutable: once published, a release can gain
+// no file, and its tag can never be moved or reused. A package whose release
+// carries files is created as a draft, on a tag made first, and its build
+// workflow is started from that tag. The workflow attaches the files and then
+// publishes the draft. Any other package is published at once.
 
 import { execFileSync } from 'child_process'
 import { readFileSync, unlinkSync, writeFileSync } from 'fs'
@@ -27,6 +33,18 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 
 const RC_SUFFIX = /-rc\.\d+$/
+
+/**
+ * The workflow that builds and attaches each package's release files, and the
+ * inputs that make it attach them to the release it is started for.
+ */
+const ASSET_WORKFLOWS: Record<string, { file: string; inputs: (tag: string) => string[] }> = {
+  desktop: { file: 'release-desktop.yml', inputs: (tag) => ['tag=' + tag, 'upload=true'] },
+  cli: {
+    file: 'release-cli.yml',
+    inputs: (tag) => ['tag=' + tag, 'upload_to_latest_release=true'],
+  },
+}
 
 // Written by a graduating cut (see prepare-release.ts) and read back here.
 const CANDIDATE_FILE = '.release-candidate'
@@ -84,8 +102,21 @@ function fileAt(ref: string, path: string): string | null {
   }
 }
 
-function ghCapture(args: string[]): string {
-  return execFileSync('gh', args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+/**
+ * Runs a gh lookup, returning null only when gh reports that the thing does
+ * not exist. Any other failure throws: `publish` deletes and recreates tags
+ * when a lookup comes back empty, so an auth error or outage read as "no
+ * release" would delete a tag that has one.
+ */
+function ghLookup(args: string[]): string | null {
+  try {
+    return execFileSync('gh', args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  } catch (error) {
+    // `gh release view` prints "release not found", `gh api` prints "Not Found (HTTP 404)".
+    const stderr = String((error as { stderr?: unknown }).stderr ?? '')
+    if (/release not found|\(HTTP 404\)/.test(stderr)) return null
+    throw error
+  }
 }
 
 function ghRun(args: string[]): void {
@@ -97,20 +128,77 @@ function ghRun(args: string[]): void {
 }
 
 function tagSha(tag: string): string | null {
-  try {
-    return ghCapture(['api', `repos/{owner}/{repo}/git/ref/tags/${tag}`, '--jq', '.object.sha'])
-  } catch {
-    return null
+  return ghLookup(['api', `repos/{owner}/{repo}/git/ref/tags/${tag}`, '--jq', '.object.sha'])
+}
+
+/** Whether `tag` has a release, and whether that release is still a draft. */
+function releaseState(tag: string): 'published' | 'draft' | null {
+  const isDraft = ghLookup(['release', 'view', tag, '--json', 'isDraft', '--jq', '.isDraft'])
+  if (isDraft === null) return null
+  return isDraft === 'true' ? 'draft' : 'published'
+}
+
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/**
+ * Runs `attempt` until it succeeds, up to five times 5 seconds apart. A tag
+ * made a moment ago can be missing from the next call that names it.
+ */
+function retried(what: string, attempt: () => void): void {
+  for (let tries = 1; ; tries++) {
+    try {
+      attempt()
+      return
+    } catch (e) {
+      if (tries === 5) throw e
+      console.log(`  ${what} failed, trying again`)
+      sleep(5_000)
+    }
   }
 }
 
-function releaseExists(tag: string): boolean {
-  try {
-    execFileSync('gh', ['release', 'view', tag], { stdio: 'ignore' })
-    return true
-  } catch {
-    return false
+/**
+ * Starts the workflow that builds `name`'s files for `tag` and publishes its
+ * draft, unless a run of it for that tag is already queued or running, as on
+ * a re-run of this script while the first build is still going. A dispatch by
+ * the workflow's own token starts a run, where a release event from that
+ * token would not.
+ */
+function startBuild(name: string, tag: string): void {
+  const workflow = ASSET_WORKFLOWS[name]
+  if (!workflow) return
+  const args = ['workflow', 'run', workflow.file, '--ref', tag]
+  for (const input of workflow.inputs(tag)) args.push('-f', input)
+  if (process.env.DRY_RUN === 'true') {
+    console.log(`  would run: gh ${args.join(' ')}`)
+    return
   }
+  const token = process.env.DISPATCH_TOKEN
+  if (!token) throw new Error(`set DISPATCH_TOKEN to start ${workflow.file} for ${tag}`)
+  const env = { ...process.env, GH_TOKEN: token }
+  const running = execFileSync(
+    'gh',
+    [
+      'run',
+      'list',
+      '--workflow',
+      workflow.file,
+      '--branch',
+      tag,
+      '--json',
+      'status',
+      '--jq',
+      '[.[] | select(.status != "completed")] | length',
+    ],
+    { encoding: 'utf-8', env },
+  ).trim()
+  if (running !== '0') {
+    console.log(`  ${workflow.file} is already running for ${tag}`)
+    return
+  }
+  retried(`starting ${workflow.file}`, () => execFileSync('gh', args, { stdio: 'inherit', env }))
 }
 
 // The heading carries the date the notes are titled with ("## 1.14.0 (2026-08-13)").
@@ -191,7 +279,7 @@ try {
 const targetTree = treeOf(target)
 console.log(`${mode} from ${ref} (${target.slice(0, 9)})`)
 
-type Release = { tag: string; title: string; body: string; prerelease: boolean }
+type Release = { name: string; tag: string; title: string; body: string; prerelease: boolean }
 
 // What this cut owes a package, or null when the package is not part of it.
 function releaseFor({ name, versionedFile, changelog }: Package): Release | null {
@@ -211,6 +299,7 @@ function releaseFor({ name, versionedFile, changelog }: Package): Release | null
     throw new Error(`${versionedFile} is ${version} but ${changelog} documents ${entry.version}`)
   }
   return {
+    name,
     tag: `${name}/v${tagVersion}`,
     title: `${name} ${tagVersion}${entry.date ? ` (${entry.date})` : ''}`,
     body: entry.body,
@@ -218,8 +307,10 @@ function releaseFor({ name, versionedFile, changelog }: Package): Release | null
   }
 }
 
-function publish({ tag, title, body, prerelease }: Release): void {
+function publish({ name, tag, title, body, prerelease }: Release): void {
+  const withFiles = name in ASSET_WORKFLOWS
   let existing = tagSha(tag)
+  let state = releaseState(tag)
 
   if (existing !== null && treeOf(existing) !== targetTree) {
     if (mode !== 'promote') {
@@ -227,44 +318,71 @@ function publish({ tag, title, body, prerelease }: Release): void {
         `${tag} points at ${existing.slice(0, 9)}, whose tree is not ${target.slice(0, 9)}'s`,
       )
     }
+    // A published release locks its tag, and a deleted one's name can never be
+    // used again, so only a draft or a bare tag can be moved.
+    if (state === 'published') {
+      throw new Error(
+        `${tag} is published at ${existing.slice(0, 9)}, whose tree is not this cut's, and a published release's tag cannot be moved or reused`,
+      )
+    }
     console.log(`${tag}: retargeting, the tagged tree is not this cut`)
-    if (releaseExists(tag)) {
+    if (state === 'draft') {
       ghRun(['release', 'delete', tag, '--yes', '--cleanup-tag'])
     } else {
       ghRun(['api', '-X', 'DELETE', `repos/{owner}/{repo}/git/refs/tags/${tag}`])
     }
     existing = null
+    state = null
   }
 
-  if (existing !== null && releaseExists(tag)) {
-    console.log(`${tag}: already published at this tree, refreshing notes`)
+  if (state !== null) {
+    console.log(`${tag}: already ${state} at this tree, refreshing notes`)
     withNotes(body, (notes) =>
       ghRun(['release', 'edit', tag, '--title', title, '--notes-file', notes]),
     )
+    // A draft whose build failed is waiting on another run.
+    if (state === 'draft') startBuild(name, tag)
     return
+  }
+
+  // The tag comes first for a release with files, since its draft has none
+  // until published and its build workflow is started from it.
+  if (existing === null && withFiles) {
+    console.log(`${tag}: tagging ${target.slice(0, 9)}`)
+    ghRun([
+      'api',
+      'repos/{owner}/{repo}/git/refs',
+      '-f',
+      `ref=refs/tags/${tag}`,
+      '-f',
+      `sha=${target}`,
+    ])
+    existing = target
   }
 
   // An existing tag outlived a run that died before its release was created, so
   // the release attaches to it rather than moving it.
-  const targetArg = existing === null ? ['--target', target] : []
+  const targetArg = existing === null ? ['--target', target] : ['--verify-tag']
   console.log(
-    existing === null
-      ? `${tag}: creating at ${target.slice(0, 9)}`
-      : `${tag}: tag exists without a release, creating from it`,
+    `${tag}: creating ${withFiles ? 'a draft' : 'the release'} at ${(existing ?? target).slice(0, 9)}`,
   )
   withNotes(body, (notes) =>
-    ghRun([
-      'release',
-      'create',
-      tag,
-      ...targetArg,
-      '--title',
-      title,
-      '--notes-file',
-      notes,
-      ...(prerelease ? ['--prerelease'] : []),
-    ]),
+    retried(`creating ${tag}`, () =>
+      ghRun([
+        'release',
+        'create',
+        tag,
+        ...targetArg,
+        '--title',
+        title,
+        '--notes-file',
+        notes,
+        ...(prerelease ? ['--prerelease'] : []),
+        ...(withFiles ? ['--draft'] : []),
+      ]),
+    ),
   )
+  if (withFiles) startBuild(name, tag)
 }
 
 const releases = knopePackages()

@@ -52,9 +52,6 @@ function newestStable(): string {
 }
 
 function resolve(): string {
-  const eventTag = process.env.EVENT_TAG
-  if (eventTag) return eventTag
-
   const inputTag = process.env.INPUT_TAG
   if (inputTag) return inputTag
 

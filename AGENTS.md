@@ -140,9 +140,12 @@ work with no account or signing setup. The app reports it: the Finder row in its
 window reads "Not in this build".
 
 Beta and release builds come from `.github/workflows/release-desktop.yml`, which runs
-`bun run desktop:release` on a `desktop/v*` GitHub release: a candidate tag
-(`-rc.N`) builds the beta app, the stable tag builds the shipping one, and each
-attaches a notarized disk image to its release. The same script runs locally with a
+`bun run desktop:release` for a `desktop/v*` tag: a candidate tag (`-rc.N`) builds
+the beta app, the stable tag builds the shipping one, and each attaches a notarized
+disk image to its release. Releases in this repository are immutable once
+published, so `scripts/publish-releases.ts` creates a desktop or CLI release as a
+draft, starts its build workflow from the tag, and the workflow publishes the
+draft once the files are attached. The same script runs locally with a
 Developer ID identity in the keychain and `APPLE_API_KEY`, `APPLE_API_ISSUER` and
 `APPLE_KEY_B64` set; `DRY_RUN=true` skips notarization.
 
