@@ -9,6 +9,11 @@ import UniformTypeIdentifiers
 // orientation, so the full-resolution bitmap is never materialized and the JS
 // side never has to reason about which decoder applied orientation.
 public class ThumbnailerModule: Module {
+  // Off Expo's shared AsyncFunction queue, where a long call from another module
+  // (a photo-library change walk, a file copy) would stall every thumbnail
+  // queued behind it.
+  private let queue = DispatchQueue(label: "expo.modules.thumbnailer", qos: .userInitiated)
+
   public func definition() -> ModuleDefinition {
     Name("Thumbnailer")
 
@@ -29,7 +34,7 @@ public class ThumbnailerModule: Module {
         let image = size >= max(base.width, base.height) ? base : self.scale(base, maxPixelSize: size)
         return try self.encodeJpeg(image)
       }
-    }
+    }.runOnQueue(queue)
 
     // One frame at `timeMs`, oriented via the preferred track transform and
     // scaled to fit within `maxSize` on the long edge.
@@ -43,7 +48,7 @@ public class ThumbnailerModule: Module {
       let time = CMTime(value: CMTimeValue(timeMs), timescale: 1000)
       let frame = try generator.copyCGImage(at: time, actualTime: nil)
       return try self.encodeJpeg(frame)
-    }
+    }.runOnQueue(queue)
   }
 
   // kCGImageSourceThumbnailMaxPixelSize decodes directly near the target size
