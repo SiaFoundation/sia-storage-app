@@ -5,7 +5,7 @@
  * builds a call-forwarding proxy on the other side and replays those
  * cache messages into its local caches so hooks re-render.
  */
-import { swrCacheBy } from '../stores/swr'
+import { swrCacheBy, swrFillableCacheBy } from '../stores/swr'
 import { createLibraryVersionCache } from './libraryVersionCache'
 import type { AppCaches, AppService } from './service'
 
@@ -130,7 +130,7 @@ export function createRemoteAppService(
   },
 ): AppService {
   const caches: AppCaches = {
-    tags: swrCacheBy(),
+    tags: swrFillableCacheBy(),
     directories: swrCacheBy(),
     library: swrCacheBy(),
     imports: swrCacheBy(),
@@ -139,7 +139,7 @@ export function createRemoteAppService(
       best: swrCacheBy(),
       byFileId: swrCacheBy(),
     },
-    fsFileUri: swrCacheBy<string | null>(),
+    fsFileUri: swrFillableCacheBy<string | null>(),
     libraryVersion: createLibraryVersionCache(),
     settings: swrCacheBy(),
     sync: swrCacheBy(),

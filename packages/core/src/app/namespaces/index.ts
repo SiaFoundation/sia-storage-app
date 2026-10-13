@@ -6,7 +6,7 @@ import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
-import { swrCacheBy } from '../../stores/swr'
+import { swrCacheBy, swrFillableCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
 import { createLibraryVersionCache } from '../libraryVersionCache'
 import { buildProviderNamespace } from './provider'
@@ -83,7 +83,7 @@ function afterCommit(caches: AppCaches, invalidations: Array<() => void>): AppCa
 
 export function createAppService(adapters: AppServiceAdapters): AppServiceResult {
   const caches: AppCaches = {
-    tags: swrCacheBy(),
+    tags: swrFillableCacheBy(),
     directories: swrCacheBy(),
     library: swrCacheBy(),
     imports: swrCacheBy(),
@@ -92,7 +92,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       best: swrCacheBy(),
       byFileId: swrCacheBy(),
     },
-    fsFileUri: swrCacheBy<string | null>(),
+    fsFileUri: swrFillableCacheBy<string | null>(),
     libraryVersion: createLibraryVersionCache(),
     settings: swrCacheBy(),
     sync: swrCacheBy(),
