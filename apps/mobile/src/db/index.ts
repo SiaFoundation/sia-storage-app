@@ -19,12 +19,13 @@
  * | active              | runs     | runs                                    |
  * | suspending          | parks    | runs, so the transaction can commit     |
  * | suspending, cut off | parks    | rejects, and the transaction rolls back |
- * | closed              | parks    | runs, and resetDb waits for it          |
+ * | closed              | parks    | runs, and the replacement waits for it  |
  *
- * The drain's first interrupt cuts off open transactions. 'closed' is resetDb
- * replacing the connection. A parked call runs once the gate reopens, or
- * rejects with DatabaseSuspendedError after 30s of the app running, so a
- * caller never has to wait for resume itself. Parking a statement inside a
+ * The drain's first interrupt cuts off open transactions. 'closed' is resetDb,
+ * or an initializeDB that finds a connection open, replacing the connection.
+ * A parked call runs once the gate reopens, or rejects with
+ * DatabaseSuspendedError after 30s of the app running, so a caller never has
+ * to wait for resume itself. Parking a statement inside a
  * transaction instead would keep that transaction, and so the drain, open
  * across the freeze. A call through failFast() rejects where one would park.
  *
@@ -168,18 +169,24 @@ export function resumeDb(): void {
   logger.debug('db', 'resumed', { drained })
 }
 
-// Settles when the reset in progress ends. The drain waits for a reset from
-// its first line, the wait for the writer lock included, because a freeze
-// partway through leaves the app with no database or a half-migrated one.
-let resetting: Promise<void> = Promise.resolve()
+// Settles when every connection replacement in progress ends: a reset from its
+// first line, the wait for the writer lock included, and an initializeDB that
+// replaces a connection from when it closes the gate. A freeze partway through
+// either leaves the app with no database or a half-migrated one.
+let replacing: Promise<void> = Promise.resolve()
+
+function trackReplacement(work: Promise<void>): void {
+  replacing = Promise.all([replacing, work.catch(() => {})]).then(() => {})
+}
 
 export async function waitForQueriesIdle(): Promise<void> {
-  await Promise.all([inflight.settled(), resetting])
+  await Promise.all([inflight.settled(), replacing])
 }
 
 // Set when the first initializeDB finishes. Its migrations run on the raw
 // connection, outside the drain's count, so a suspend before then is declined.
-// resetDb and reopenDb clear dbInitialized later, and the drain waits for both.
+// resetDb, an initializeDB that replaces the connection, and reopenDb clear
+// dbInitialized later, and the drain waits for each.
 let opened = false
 
 export function suspendBlocker(): string | null {
@@ -373,23 +380,79 @@ function closeIfRetired(reader: Reader): void {
   void closed.finally(() => closing.delete(closed))
 }
 
+/**
+ * Opens the database and runs its migrations. Launch and sign-in each start
+ * the app's initialization, and both reach here. With the same database
+ * already open and migrated a call does nothing, since closing the connection
+ * would cut off the statements running on it. Otherwise a call that finds a
+ * connection open, such as a retry after a failed migration, replaces it the
+ * way resetDb does: it closes the gate and waits for the work in flight,
+ * because closing under a running statement is a use-after-free in
+ * sqlite3_mutex_enter. The writer lock orders it against other calls and
+ * against resetDb.
+ */
 export async function initializeDB(options?: {
   onProgress?: MigrationProgressHandler
   /** Custom database name (for test isolation) */
   databaseName?: string
 }): Promise<void> {
   const name = options?.databaseName ?? dbName
-  dbName = name
-  // expo-sqlite refuses to delete the database file while any connection is
-  // open, so a second initializeDB must not leak the first connections.
-  await closeReaders()
-  if (database) {
+  const ready = () => database && dbInitialized && name === dbName
+  // Checked before the lock too, so a sign-in does not wait for a transaction
+  // that holds it.
+  if (ready()) {
+    opened = true
+    return
+  }
+  const release = await lockOutsideSuspension()
+  try {
+    // A call that held the lock first may have opened this database.
+    if (ready()) return
+    dbName = name
+    if (!database) return await openAndMigrate(options)
+    const reopen = reopenAndMigrate(options)
+    trackReplacement(reopen)
+    await reopen
+  } finally {
+    release()
+  }
+}
+
+// A suspension owns the gate until it resumes. Closing it for a replacement
+// would open it under the suspension, so the call waits, untracked, since the
+// drain must not wait for work that cannot start until resume.
+async function lockOutsideSuspension(): Promise<() => void> {
+  for (;;) {
+    while (state === 'suspending') await parkUntilActive().catch(() => {})
+    const release = await writerLock.acquire()
+    // Read through the getter: the loop above narrowed `state`, and a
+    // suspension can have started during the wait for the lock.
+    if (getDbState() !== 'suspending') return release
+    release()
+  }
+}
+
+async function reopenAndMigrate(options?: { onProgress?: MigrationProgressHandler }) {
+  state = 'closed'
+  try {
+    await inflight.settled()
+    dbInitialized = false
+    // expo-sqlite refuses to delete the database file while any connection is
+    // open, so a second initializeDB must not leak the first connections.
+    await closeReaders()
     try {
       await database.closeAsync()
     } catch {}
+    await openAndMigrate(options)
+  } finally {
+    // A suspend that landed meanwhile owns the gate now, and its resume reopens it.
+    if (state === 'closed') openGate()
   }
-  logger.info('db', 'initializing', { name, directory: dbDirectory })
-  database = await SQLite.openDatabaseAsync(name, undefined, dbDirectory)
+}
+
+async function openAndMigrate(options?: { onProgress?: MigrationProgressHandler }) {
+  logger.info('db', 'initializing', { name: dbName, directory: dbDirectory })
+  database = await SQLite.openDatabaseAsync(dbName, undefined, dbDirectory)
   // Use database directly (not the db() adapter) to avoid triggering
   // withRecovery during init, which would open a competing connection.
   await database.execAsync(INIT_PRAGMAS)
@@ -486,15 +549,18 @@ export async function copyDatabaseTo(path: string): Promise<void> {
 // Delete the database and start fresh. Runs only in the foreground (the
 // settings reset and the forced reset at boot), so the gate ends active.
 export function resetDb(): Promise<void> {
+  state = 'closed'
   const reset = replaceDatabase()
-  resetting = reset.catch(() => {})
+  trackReplacement(reset)
   return reset
 }
 
 async function replaceDatabase(): Promise<void> {
-  state = 'closed'
   const release = await writerLock.acquire()
+  // An initializeDB that held the lock first reopens the gate as it ends.
+  if (state === 'active') state = 'closed'
   try {
+    logger.info('db', 'resetting')
     // Closing while a statement iterates the native handle is a
     // use-after-free in sqlite3_mutex_enter (TestFlight crash #29).
     await inflight.settled()
