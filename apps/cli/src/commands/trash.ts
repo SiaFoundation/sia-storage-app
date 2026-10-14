@@ -6,30 +6,13 @@
  * entries the phone and desktop app show.
  */
 import type { TrashEntry } from '@siastorage/core/types'
-import { getPaths } from '@siastorage/node-adapters'
-import { ensureDaemonRunning } from '../daemon/supervisor'
 import { createDaemonClient } from '../lib/appServiceClient'
+import { ensureDaemon, fail } from '../lib/daemonCommand'
 import { c, formatBytes, formatRelativeDate, table } from '../lib/format'
 import { normalizePath } from '../lib/normalizePath'
 
 /** The fewest characters of an entry's id `sia trash` shows. */
 const ID_SHOWN = 8
-
-/**
- * Starts the daemon if needed and returns its socket path. The caller makes
- * the client: it forwards every property to the daemon, `then` included, so
- * a promise resolving to the client would send the daemon a `then` call.
- */
-async function ensureDaemon(dataDir: string): Promise<string> {
-  const p = getPaths(dataDir)
-  await ensureDaemonRunning(p)
-  return p.sockPath
-}
-
-function fail(message: string): never {
-  console.error(message)
-  process.exit(1)
-}
 
 function pathOf(entry: TrashEntry): string {
   return entry.folder ? `${entry.folder}/${entry.name}` : entry.name

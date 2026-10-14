@@ -35,6 +35,7 @@ export async function completeCommand(args: string[]) {
       case 'rm':
       case 'tag':
       case 'untag':
+      case 'share':
       case 'download': {
         const files = await app.files.query({
           limit: 100,
@@ -76,6 +77,10 @@ const zshScript = [
   "    'untag:Remove a tag from a file'",
   "    'trash:List or empty the trash'",
   "    'restore:Put entries in the trash back'",
+  "    'share:Make a share link to files'",
+  "    'unshare:Take files off a share link'",
+  "    'revoke:Delete a share link'",
+  "    'links:List share links'",
   "    'search:Search files'",
   "    'config:View or set configuration'",
   "    'import:Recursively import files from a local directory'",
@@ -90,7 +95,7 @@ const zshScript = [
   '  local partial="${words[3,-1]}"',
   '',
   '  case "${words[2]}" in',
-  '    ls|info|rm|download|tag|untag|mv)',
+  '    ls|info|rm|download|tag|untag|mv|share)',
   '      local -a completions',
   '      completions=("${(@f)$(sia __complete ${words[2]} $partial)}")',
   '      if [[ -n "${completions[1]}" ]]; then',
@@ -118,7 +123,7 @@ const bashScript = [
   '  COMPREPLY=()',
   '  cur="${COMP_WORDS[COMP_CWORD]}"',
   '  prev="${COMP_WORDS[COMP_CWORD-1]}"',
-  '  commands="connect daemon logs ls mkdir rm add download mv info status sync tags tag untag trash restore search config import completions"',
+  '  commands="connect daemon logs ls mkdir rm add download mv info status sync tags tag untag trash restore share unshare revoke links search config import completions"',
   '',
   '  if [[ ${COMP_CWORD} -eq 1 ]]; then',
   '    COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )',
@@ -126,7 +131,7 @@ const bashScript = [
   '  fi',
   '',
   '  case "${COMP_WORDS[1]}" in',
-  '    ls|info|rm|download|tag|untag|mv)',
+  '    ls|info|rm|download|tag|untag|mv|share)',
   '      local completions',
   '      completions=$(sia __complete "${COMP_WORDS[1]}" "${COMP_WORDS[@]:2}" 2>/dev/null)',
   '      COMPREPLY=( $(compgen -W "${completions}" -- "${cur}") )',
