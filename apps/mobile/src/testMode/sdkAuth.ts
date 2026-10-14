@@ -3,9 +3,12 @@
  * key and recovery phrase, and connects to the mock network.
  */
 import type { SdkAdapter } from '@siastorage/core/adapters'
-import { createRemoteSdk, type FileSender } from '@siastorage/mock-network/client'
+import { createRemoteSdk, type FileOpener, type FileSender } from '@siastorage/mock-network/client'
 import { MOCK_APP_KEY_HEX, MOCK_PHRASE } from '@siastorage/mock-network/protocol'
+// oxlint-disable-next-line no-restricted-imports -- File constructor + .writableStream() (async)
+import { File } from 'expo-file-system'
 import { FileSystemUploadType, uploadAsync } from 'expo-file-system/legacy'
+import RNFS from 'react-native-fs'
 import type { MobileSdkAuth } from '../adapters/auth'
 
 /**
@@ -25,6 +28,16 @@ const sendFileNatively: FileSender = async (path, blobsUrl, headers) => {
   return { blobId: body.blobId, size: body.size }
 }
 
+const openFileForWrite: FileOpener = async (path) => {
+  const uri = path.startsWith('file://') ? path : `file://${path}`
+  await RNFS.writeFile(uri, '')
+  const writer = new File(uri).writableStream().getWriter()
+  return {
+    write: (bytes) => writer.write(bytes),
+    close: () => writer.close(),
+  }
+}
+
 export class SimSdkAuth implements MobileSdkAuth {
   private readonly sdk: SdkAdapter
   private connected = false
@@ -32,7 +45,11 @@ export class SimSdkAuth implements MobileSdkAuth {
     null
 
   constructor(network: { url: string; device: string }) {
-    this.sdk = createRemoteSdk({ ...network, sendFile: sendFileNatively })
+    this.sdk = createRemoteSdk({
+      ...network,
+      sendFile: sendFileNatively,
+      openFile: openFileForWrite,
+    })
   }
 
   setOnConnected(handler: (appKeyHex: string, indexerUrl: string) => Promise<void>): void {

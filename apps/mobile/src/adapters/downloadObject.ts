@@ -1,5 +1,5 @@
 import type { DownloadObjectAdapter } from '@siastorage/core/app'
-import { streamToCache } from '../lib/streamToCache'
+import { downloadToCache } from '../lib/downloadToCache'
 import { app } from '../stores/appService'
 import { adoptFileToFs } from '../stores/fs'
 
@@ -15,15 +15,15 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
         length: undefined,
       })
 
-      await streamToCache({
+      await downloadToCache({
         file,
         totalSize: file.size,
         dl,
         signal,
-        onAfterClose: async (targetFile) => {
-          await adoptFileToFs(file, targetFile.uri)
-        },
         onProgress,
+        onComplete: async (targetUri) => {
+          await adoptFileToFs(file, targetUri)
+        },
       })
     },
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
@@ -35,15 +35,15 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
         length: undefined,
       })
 
-      await streamToCache({
+      await downloadToCache({
         file,
         totalSize,
         dl,
         signal,
-        onAfterClose: async (targetFile) => {
-          await adoptFileToFs(file, targetFile.uri)
-        },
         onProgress,
+        onComplete: async (targetUri) => {
+          await adoptFileToFs(file, targetUri)
+        },
       })
     },
   }

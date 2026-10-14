@@ -52,12 +52,24 @@ export type FileSender = (
   headers: Record<string, string>,
 ) => Promise<WireBlob>
 
+/**
+ * Opens the file at `path` for writing from the start. The phone supplies
+ * one so downloads can have `writeToPath`, standing in for the real SDK's,
+ * which writes a download to a file itself.
+ */
+export type FileOpener = (path: string) => Promise<{
+  write(bytes: Uint8Array): Promise<void>
+  close(): Promise<void>
+}>
+
 export type RemoteSdkOptions = {
   /** Base URL of the mock network, e.g. http://127.0.0.1:4100. */
   url: string
   /** This device's name in the server's request log and fault rules. */
   device: string
   sendFile: FileSender
+  /** Gives downloads `writeToPath`. Platforms that read downloads chunk by chunk leave it out. */
+  openFile?: FileOpener
 }
 
 export async function parse(res: Response): Promise<unknown> {
@@ -86,6 +98,7 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
   const base = options.url.replace(/\/$/, '')
   const headers = { [DEVICE_HEADER]: options.device }
   const sendFile = options.sendFile
+  const openFile = options.openFile
 
   async function call(path: string, init: RequestInit = {}): Promise<unknown> {
     const res = await fetch(`${base}/sdk${path}`, {
@@ -143,7 +156,7 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
       let position = start
       let cancelled = false
       let chunkIndex = 0
-      return {
+      const dl: DownloadLikeRef = {
         async read(control?: { signal: AbortSignal }): Promise<ArrayBuffer> {
           if (cancelled || control?.signal.aborted || position >= end) return new ArrayBuffer(0)
           const length = Math.min(SECTOR_SIZE, end - position)
@@ -171,6 +184,28 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
           cancelled = true
         },
       }
+      if (openFile) {
+        // Writes each sector-sized read as it arrives, so the file grows
+        // during the download the way the real SDK's buffered writes make it
+        // grow.
+        dl.writeToPath = async (path, control) => {
+          const file = await openFile(path)
+          let written = 0
+          try {
+            for (;;) {
+              const chunk = await dl.read(control)
+              if (chunk.byteLength === 0) break
+              await file.write(new Uint8Array(chunk))
+              written += chunk.byteLength
+            }
+          } finally {
+            await file.close()
+          }
+          if (control?.signal.aborted || cancelled) throw new Error('Download cancelled')
+          return BigInt(written)
+        }
+      }
+      return dl
     },
 
     async downloadByObjectId(objectId: string): Promise<ArrayBuffer> {
