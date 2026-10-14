@@ -104,7 +104,9 @@ export function LibraryStatusSheet() {
             ? `${formatCount(importingCount)} waiting on uploads.`
             : `${formatCount(importingCount)} importing.`
 
-  const totalCount = stats.data?.files.total ?? 0
+  // Upload stats leave unavailable files out of their totals, but they are
+  // still in the library.
+  const totalCount = (stats.data?.files.total ?? 0) + (stats.data?.files.unavailable ?? 0)
   const totalBytes = account.data ? Number(account.data.pinnedData) : undefined
   const availableBytes = account.data ? Number(account.data.remainingStorage) : undefined
 
@@ -172,7 +174,7 @@ export function LibraryStatusSheet() {
         footer={
           mode === 'size' && importingCount > 0
             ? `Sizes do not include the ${importingCount === 1 ? 'file' : `${importingCount.toLocaleString()} files`} still pending import.`
-            : 'Upload progress across all files in the library.'
+            : 'Upload progress across all files in the library, except unavailable ones.'
         }
       >
         {categories.map(([label, cat]) => {

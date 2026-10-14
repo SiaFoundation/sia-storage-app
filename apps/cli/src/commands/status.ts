@@ -59,7 +59,7 @@ export async function statusCommand(dataDir: string, _opts?: { size?: boolean })
         // Daemon not responding to IPC
       }
 
-      if (o.total > 0) {
+      if (o.total > 0 || o.unavailable > 0) {
         let activeBytes = 0
         if (uploadState?.active) {
           for (const entry of uploadState.active) {
@@ -78,6 +78,9 @@ export async function statusCommand(dataDir: string, _opts?: { size?: boolean })
         )
         if (o.remaining > 0) {
           console.log(`  Pending:  ${o.remaining} files`)
+        }
+        if (o.unavailable > 0) {
+          console.log(`  Unavailable: ${o.unavailable} files (no local copy to upload)`)
         }
       }
 
@@ -114,12 +117,17 @@ export async function statusCommand(dataDir: string, _opts?: { size?: boolean })
       }
 
       if (o.remaining > 0) {
+        // Only files that can still upload, as `remaining` counts them: a
+        // local copy, and not marked lost.
         const pendingFiles = await app.files.query({
           limit: 10 + batchFileIds.size,
           order: 'ASC',
           pinned: { indexerURL, isPinned: false },
+          fileExistsLocally: true,
         })
-        const filtered = pendingFiles.filter((f: any) => !batchFileIds.has(f.id)).slice(0, 10)
+        const filtered = pendingFiles
+          .filter((f: any) => !batchFileIds.has(f.id) && !f.lostReason)
+          .slice(0, 10)
         if (filtered.length > 0) {
           const pendingCount = o.remaining - batchFileIds.size
           console.log()
