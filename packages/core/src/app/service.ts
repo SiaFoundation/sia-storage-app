@@ -1106,6 +1106,12 @@ export interface AppService {
     cancelAll(): void
     /** Sets the maximum concurrent download slots and persists the value. */
     setMaxSlots(n: number): Promise<void>
+    /**
+     * Applies a download count the user saved, at startup. Writes nothing,
+     * so an install that never chose one follows `DEFAULT_MAX_DOWNLOADS` as
+     * it changes.
+     */
+    restoreMaxSlots(): Promise<void>
   }
   /** Share URL operations: resolve, preview, pin, and create share links. */
   shares: {
