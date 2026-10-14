@@ -6,7 +6,12 @@ import * as mediaObserver from 'media-observer'
 import { buildPhotoCandidateRows, resolveImportDirectoryId } from '../lib/assetImports'
 import { app } from '../stores/appService'
 import { triggerImportScanner } from './importScanner'
-import { initSyncNewPhotos, run, setAutoSyncNewPhotos } from './syncNewPhotos'
+import {
+  __resetSyncNewPhotosForTesting,
+  initSyncNewPhotos,
+  run,
+  setAutoSyncNewPhotos,
+} from './syncNewPhotos'
 
 jest.useFakeTimers()
 
@@ -94,6 +99,7 @@ const storedCursor = () => app().storage.getItem(CURSOR_KEY)
 describe('syncNewPhotos', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
+    __resetSyncNewPhotosForTesting()
     currentCursorMock.mockResolvedValue('v1:now')
     changesSinceMock.mockResolvedValue({ inserted: [], cursor: 'v1:now' })
     getAssetInfoAsyncMock.mockImplementation(async (id) => asset(String(id)))
@@ -201,7 +207,6 @@ describe('syncNewPhotos', () => {
   })
 
   it('a hung changesSince call times out instead of wedging the tick, holding the cursor', async () => {
-    jest.useFakeTimers()
     // A native promise that never settles: without the timeout the worker never
     // returns and the scheduler never runs another tick.
     changesSinceMock.mockImplementation(() => new Promise(() => {}))
@@ -211,7 +216,49 @@ describe('syncNewPhotos', () => {
     await tick // settles because the timeout rejected; tick_failed swallows it
 
     expect(await storedCursor()).toBe('v1:saved')
-    jest.useRealTimers()
+  })
+
+  it('a tick after a timeout uses the still-running call instead of starting another', async () => {
+    let resolveChanges: ((v: { inserted: string[]; cursor: string }) => void) | null = null
+    changesSinceMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveChanges = resolve
+        }),
+    )
+
+    const first = run()
+    await jest.advanceTimersByTimeAsync(21_000)
+    await first
+    expect(await storedCursor()).toBe('v1:saved')
+
+    resolveChanges!({ inserted: [], cursor: 'v1:next' })
+    await run()
+
+    expect(changesSinceMock).toHaveBeenCalledTimes(1)
+    expect(await storedCursor()).toBe('v1:next')
+  })
+
+  it('queries again once a tick has used the previous result', async () => {
+    changesSinceMock.mockResolvedValue({ inserted: ['a1'], cursor: 'v1:next' })
+    buildRowsMock.mockResolvedValue([row('r1', 'a1')])
+    appendSpy.mockRejectedValueOnce(new Error('boom'))
+
+    await run()
+    await run()
+
+    expect(changesSinceMock).toHaveBeenCalledTimes(2)
+    expect(await storedCursor()).toBe('v1:next')
+  })
+
+  it('retries a changesSince call that failed', async () => {
+    changesSinceMock.mockRejectedValueOnce(new Error('photos error'))
+
+    await run()
+    await run()
+
+    expect(changesSinceMock).toHaveBeenCalledTimes(2)
+    expect(await storedCursor()).toBe('v1:now')
   })
 
   it('does NOT advance the cursor when the append fails, so the ids replay', async () => {

@@ -36,7 +36,9 @@ export function currentCursor(): Promise<string> {
 /**
  * Asset ids added since `cursor`, plus the next cursor. A cursor that can't be
  * honored (first run, expired, too large) reports no additions and returns a
- * fresh cursor anchored at now — the gap is the archive sync's job.
+ * fresh cursor anchored at now — the gap is the archive sync's job. On iOS a
+ * long history comes back over several calls: each stops at a time budget and
+ * returns a cursor at the last change it read.
  */
 export function changesSince(cursor: string | null): Promise<MediaChanges> {
   return nativeModule().changesSince(cursor)
