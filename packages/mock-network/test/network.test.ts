@@ -310,6 +310,49 @@ describe('mock network', () => {
     expect(new Uint8Array(got)).toEqual(bytes.slice(50, 50 + SECTOR_SIZE))
   })
 
+  test('two downloads at once share the download rate', async () => {
+    const size = 1024 * 1024
+    const a = await upload(phone, 'a.bin', new Uint8Array(size).fill(1))
+    const b = await upload(phone, 'b.bin', new Uint8Array(size).fill(2))
+    await control.setConditions({ downloadBytesPerSec: 4 * 1024 * 1024 })
+    const drain = async (object: typeof a) => {
+      const dl = await laptop.download(object, { offset: 0n, length: undefined })
+      let bytes = 0
+      for (;;) {
+        const chunk = await dl.read()
+        if (chunk.byteLength === 0) return bytes
+        bytes += chunk.byteLength
+      }
+    }
+    const started = Date.now()
+    const [gotA, gotB] = await Promise.all([drain(a), drain(b)])
+    // 2 MiB at 4 MiB/s takes 500ms whichever way it is split between them.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(450)
+    expect([gotA, gotB]).toEqual([size, size])
+  })
+
+  test('a download abandoned mid-piece does not hold up the next one', async () => {
+    const piece = 64 * 1024
+    const a = await upload(phone, 'a.bin', new Uint8Array(4 * piece).fill(1))
+    const b = await upload(phone, 'b.bin', new Uint8Array(piece).fill(2))
+    // One 64 KiB piece takes the link for a second.
+    await control.setConditions({ downloadBytesPerSec: piece })
+
+    const abandoned = new AbortController()
+    const dl = await laptop.download(a, { offset: 0n, length: undefined })
+    const reading = dl.read({ signal: abandoned.signal }).catch(() => null)
+    await Bun.sleep(100)
+    abandoned.abort()
+    await reading
+
+    const started = Date.now()
+    const next = await laptop.download(b, { offset: 0n, length: undefined })
+    expect((await next.read()).byteLength).toBe(piece)
+    // Its own piece takes a second. Waiting out the abandoned piece as well
+    // would take close to two.
+    expect(Date.now() - started).toBeLessThan(1500)
+  })
+
   test('a sealed object reopens with its id, size and metadata and no request', async () => {
     const object = await upload(phone, 'sealed.txt', new Uint8Array([1, 2, 3]))
     const sealed = object.seal(phone.appKey())
