@@ -152,3 +152,11 @@ export const Spinner = ({ className }: Props) => (
     <path d="M8 1.8a6.2 6.2 0 1 0 6.2 6.2" />
   </svg>
 )
+
+/** A trash can with its lid. */
+export const Trash = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <path d="M2.6 4.2h10.8M6.2 4.2V2.8h3.6v1.4" />
+    <path d="M4 4.2l.7 8.6a1.4 1.4 0 0 0 1.4 1.3h3.8a1.4 1.4 0 0 0 1.4-1.3l.7-8.6" />
+  </svg>
+)

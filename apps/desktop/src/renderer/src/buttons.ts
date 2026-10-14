@@ -7,3 +7,9 @@ const BUTTON =
 
 export const PLAIN_BUTTON = `${BUTTON} border-divider bg-card text-label enabled:hover:bg-divider`
 export const PRIMARY_BUTTON = `${BUTTON} border-transparent bg-accent text-white enabled:hover:brightness-110`
+
+/** The text buttons on a row, such as Copy and Revoke on a share link. */
+export const SMALL_BUTTON =
+  'cursor-default rounded-[5px] border-none bg-transparent px-1.5 py-[2px] text-[12px] [font-family:inherit] ' +
+  'transition-[scale,background-color] duration-150 ease-settle enabled:active:scale-[0.96] enabled:hover:bg-divider ' +
+  'focus-visible:shadow-[0_0_0_2px_var(--color-accent)] focus-visible:outline-none'
