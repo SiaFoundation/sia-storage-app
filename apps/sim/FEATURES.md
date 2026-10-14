@@ -23,15 +23,17 @@ mobile app's source.
 
 - When: adding, opening, renaming, moving, trashing, restoring and deleting
   files, and the versions kept under one name.
-- Code: `app.files`; screens `Library`, `Directory`, `UnavailableFiles`; CLI
-  `add`, `mv`, `rm`, `ls`
+- Code: `app.files`; screens `Library`, `Directory`, `UnavailableFiles`,
+  `Trash`; desktop `TrashView`; CLI `add`, `mv`, `rm`, `ls`, `trash`
 - Check: tables `files`, `objects`; `bun sim library`
 - Tests: scenarios `mobile/rename-in-viewer`, `sync/edits-propagate`,
   `sync/delete-stays-deleted`, `sync/offline-conflict`,
   `sync/offline-edits-survive-kill`, `sync/same-name-on-three-devices`,
-  `sync/edits-during-own-upload`, `mobile/phone-and-laptop`; integration
-  `trash-restore`, `version-sync`, `full-lifecycle`, `bulk-operations`
-- CLI: `bun sim sia laptop -- ls`,
+  `sync/edits-during-own-upload`, `mobile/phone-and-laptop`, `desktop/trash`;
+  integration `trash-restore`, `trash-versions`, `version-sync`,
+  `full-lifecycle`, `bulk-operations`
+- CLI: `bun sim sia laptop -- ls`, `bun sim sia laptop -- trash`,
+  `bun sim sia laptop -- restore {file}`,
   `bun sim sia laptop -- mv {file} renamed.bin`,
   `bun sim call laptop files.renameFile <id> renamed.bin`
 - Desktop: the Finder folder, `bun sim device finder mac`, then `ls`, `mv`, `rm`

@@ -26,18 +26,13 @@ import type { ShareLink, ShareLinkMode } from '@siastorage/core/types'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { sia } from './api'
-import { PLAIN_BUTTON, PRIMARY_BUTTON } from './buttons'
+import { PLAIN_BUTTON, PRIMARY_BUTTON, SMALL_BUTTON } from './buttons'
 import { FinderItemIcon } from './finderIcons'
 import { ROW, Section } from './Group'
 import { CheckCircle, Circle, Link } from './icons'
 import { formatBytes } from './model'
 import { folderName, groupByFolder } from './shareModel'
 import { useAppInfo } from './useAppInfo'
-
-const SMALL_BUTTON =
-  'cursor-default rounded-[5px] border-none bg-transparent px-1.5 py-[2px] text-[12px] [font-family:inherit] ' +
-  'transition-[scale,background-color] duration-150 ease-settle enabled:active:scale-[0.96] enabled:hover:bg-divider ' +
-  'focus-visible:shadow-[0_0_0_2px_var(--color-accent)] focus-visible:outline-none'
 
 type SharedFile = { fileId: string; name: string; size: number; folder: string | null }
 

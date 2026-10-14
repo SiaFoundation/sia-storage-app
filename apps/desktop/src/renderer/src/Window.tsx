@@ -6,7 +6,8 @@
  * reached only from a sign-in made in this window: an app launched with an
  * account already on it goes straight to the status view, whatever the
  * library is doing. Share links take over the window when Finder asks to
- * share files and when the status view opens them, until they are closed.
+ * share files and when the status view opens them, until they are closed,
+ * and the trash takes it over when the status view opens it.
  *
  * Onboarding and the status view are different widths, and the window is told
  * which it is showing before the view is measured.
@@ -19,6 +20,7 @@ import { Details } from './Details'
 import { useReportedHeight } from './height'
 import { Setup } from './Setup'
 import { ShareView } from './ShareView'
+import { TrashView } from './TrashView'
 import { SignIn } from './SignIn'
 
 export function Window() {
@@ -32,6 +34,7 @@ export function Window() {
   const [sharing, setSharing] = useState<{ request: number; fileIds: string[] | null } | undefined>(
     undefined,
   )
+  const [showingTrash, setShowingTrash] = useState(false)
 
   const read = useCallback(async () => {
     try {
@@ -80,6 +83,11 @@ export function Window() {
     return sia.onWindowClosed(() => setSharing(undefined))
   }, [sharing])
 
+  useEffect(() => {
+    if (!showingTrash) return
+    return sia.onWindowClosed(() => setShowingTrash(false))
+  }, [showingTrash])
+
   const view = settingUp
     ? 'setup'
     : needsAccount === null
@@ -88,12 +96,14 @@ export function Window() {
         ? 'sign-in'
         : sharing !== undefined
           ? 'share'
-          : 'status'
+          : showingTrash
+            ? 'trash'
+            : 'status'
 
   // A layout effect, so the width is on its way before the resize observer
   // reports the new view's height and the window is sized once, not twice.
   useLayoutEffect(() => {
-    if (view) sia.setLayout(view === 'status' || view === 'share' ? 'status' : 'onboarding')
+    if (view) sia.setLayout(view === 'setup' || view === 'sign-in' ? 'onboarding' : 'status')
   }, [view])
 
   return (
@@ -114,8 +124,13 @@ export function Window() {
           fileIds={sharing?.fileIds ?? null}
           onDone={() => setSharing(undefined)}
         />
+      ) : view === 'trash' ? (
+        <TrashView onDone={() => setShowingTrash(false)} />
       ) : view === 'status' ? (
-        <Details onShowLinks={() => setSharing({ request: 0, fileIds: null })} />
+        <Details
+          onShowLinks={() => setSharing({ request: 0, fileIds: null })}
+          onShowTrash={() => setShowingTrash(true)}
+        />
       ) : null}
     </div>
   )
