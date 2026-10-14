@@ -302,6 +302,24 @@ export function createSuspensionManager(
 
   return {
     suspend: () => queue.enqueue(doSuspend),
+    /**
+     * Suspends unless a background task is running when the queue reaches
+     * it, whatever the recorded app state. For a platform that decides for
+     * itself when the app is about to be frozen, as Android does when its
+     * upload service stops in the background.
+     */
+    suspendUnlessBusy: (trigger: string) =>
+      queue.enqueue(async () => {
+        if (runningTasks.size > 0) {
+          logger.debug('suspension', 'skipped', {
+            reason: 'background_task_running',
+            activeCount: runningTasks.size,
+            trigger,
+          })
+          return
+        }
+        await doSuspend()
+      }),
     resume: () => queue.enqueue(doResume),
     isSuspended: () => state === 'suspended',
 

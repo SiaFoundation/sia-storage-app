@@ -190,6 +190,7 @@ export class UploadManager {
   private _uploadedCount = 0
   /** Cumulative bytes successfully pinned and saved. */
   private _uploadedBytes = 0
+  private _shardBytes = 0
   /** Upload throughput, fed per shard (raw encoded bytes) across all active batches. */
   private speed = new TransferSpeedTracker()
   /** When resume() last ran; shards already in flight then carry suspension time. */
@@ -539,6 +540,15 @@ export class UploadManager {
   }
 
   /**
+   * Encoded bytes sent to hosts this session. It rises while a large file is
+   * still uploading, before `packedBytes` or `uploadedBytes` move, which
+   * happens only once a whole file is added or pinned.
+   */
+  get shardBytes(): number {
+    return this._shardBytes
+  }
+
+  /**
    * Running-average upload throughput over in-flight upload time (queue
    * and packing gaps excluded), persisted across sessions, or null until
    * enough transfer has been measured. rawBps counts encoded bytes on the
@@ -581,6 +591,7 @@ export class UploadManager {
     this._packedBytes = 0
     this._uploadedCount = 0
     this._uploadedBytes = 0
+    this._shardBytes = 0
     this.speed.reset()
     this.resumedAt = 0
   }
@@ -1186,6 +1197,7 @@ export class UploadManager {
    */
   private onShardUploaded(batch: BatchState, p: ShardProgress): void {
     batch.uploadedShardBytes += Number(p.shardSize)
+    this._shardBytes += Number(p.shardSize)
     const elapsedMs = Number(p.elapsedMs)
     // elapsedMs brackets the host RPC with a clock that keeps ticking while
     // the OS freezes the process, so a shard in flight across a suspension

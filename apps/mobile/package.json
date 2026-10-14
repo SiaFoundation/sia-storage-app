@@ -102,6 +102,7 @@
     "react-native-worklets": "0.13.0",
     "swr": "2.5.1",
     "thumbnailer": "file:./modules/thumbnailer",
+    "upload-service": "file:./modules/upload-service",
     "zod": "4.6.7"
   },
   "devDependencies": {
