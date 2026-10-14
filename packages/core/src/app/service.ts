@@ -39,6 +39,8 @@ import type {
   FileRecordRow,
   FileUpdate,
   ThumbSize,
+  RestoredFile,
+  TrashEntry,
   UpdatedAtWrite,
 } from '../types/files'
 import type {
@@ -334,6 +336,24 @@ export interface AppService {
     tombstoneWithThumbnailsAndCleanup(files: { id: string; type: string }[]): Promise<void>
     /** Tombstones files past trash retention, then cleans up local files and uploads. */
     autoPurgeWithCleanup(): Promise<void>
+    /** Files in the trash, one entry per file with the versions trashed with it, most recently trashed first. */
+    trashEntries(opts?: { limit?: number; offset?: number }): Promise<TrashEntry[]>
+    /** How many entries the trash holds. */
+    trashCount(): Promise<number>
+    /**
+     * Takes these entries out of the trash with every version they hold.
+     * One whose name a live file has taken since comes back renamed, as
+     * `photo (restored).jpg`. Entries no longer in the trash are skipped.
+     */
+    restoreTrashEntries(entryIds: string[]): Promise<RestoredFile[]>
+    /**
+     * Deletes these entries for good, every version they hold, and returns
+     * the ids of those deleted. One restored or deleted elsewhere since the
+     * caller read it is skipped.
+     */
+    deleteTrashEntries(entryIds: string[]): Promise<string[]>
+    /** Deletes everything in the trash for good and returns how many entries it held. */
+    emptyTrash(): Promise<number>
     /** Returns the count of lost files for an indexer. */
     getLostCount(indexerURL: string): Promise<number>
     /** Returns count and total size of lost files for an indexer. */

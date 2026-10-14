@@ -7,7 +7,7 @@ import { normalizeName, withNormalizedName } from '../../lib/names'
 import type { AdoptFileHashed, AdoptFilePlain, FsIOAdapter } from '../../services/fsFileUri'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
-import { IMPORTS_CACHE_COALESCE_MS } from '../../config'
+import { IMPORTS_CACHE_COALESCE_MS, TRASH_AUTO_PURGE_AGE } from '../../config'
 import { createCoalescer } from '../../lib/coalescer'
 import type { AppCaches, AppService, DatabaseNamespaces } from '../service'
 
@@ -101,6 +101,32 @@ export function buildDbNamespaces(
   function invalidateLibrary() {
     caches.library.invalidateAll()
     caches.libraryVersion.invalidate()
+  }
+
+  async function tombstoneAndCleanup(files: { id: string; type: string }[]) {
+    if (files.length === 0) return
+    const ids = files.map((f) => f.id)
+    uploads.removeMany(ids)
+    await ops.tombstoneFilesAndThumbnails(db, ids)
+    await removeTombstoned(files)
+  }
+
+  /**
+   * Removes the bytes of files already tombstoned, and their thumbnails'.
+   * Trashing took them off the upload queue, so files from the trash need
+   * nothing more.
+   */
+  async function removeTombstoned(files: { id: string; type: string }[]) {
+    if (files.length === 0) return
+    const ids = files.map((f) => f.id)
+    // In batches, since each id is a bound parameter and the whole trash can
+    // hold more than one statement allows.
+    const thumbs = []
+    for (let i = 0; i < ids.length; i += 500) {
+      thumbs.push(...(await ops.queryThumbnailFileInfoByFileIds(db, ids.slice(i, i + 500))))
+    }
+    await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
+    invalidateLibrary()
   }
 
   // adoptFile through the fs adapter, then record fsMeta. Overloaded to mirror
@@ -563,14 +589,42 @@ export function buildDbNamespaces(
         await ops.tombstoneFilesAndThumbnails(db, ids)
         invalidateLibrary()
       },
-      tombstoneWithThumbnailsAndCleanup: async (files) => {
-        if (files.length === 0) return
-        const ids = files.map((f) => f.id)
-        uploads.removeMany(ids)
-        await ops.tombstoneFilesAndThumbnails(db, ids)
-        const thumbs = await ops.queryThumbnailFileInfoByFileIds(db, ids)
-        await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
-        invalidateLibrary()
+      tombstoneWithThumbnailsAndCleanup: tombstoneAndCleanup,
+      trashEntries: async (opts) => {
+        const rows = await ops.queryTrashEntries(db, opts?.limit ?? 500, opts?.offset ?? 0)
+        const folders = await ops.queryDirectoryPathsForFiles(
+          db,
+          rows.map((r) => r.id),
+        )
+        return rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          size: r.size,
+          folder: folders[r.id] ?? null,
+          versions: r.versions,
+          trashedAt: r.trashedAt,
+          purgeAt: r.trashedAt + TRASH_AUTO_PURGE_AGE,
+        }))
+      },
+      trashCount: () => ops.queryTrashEntryCount(db),
+      restoreTrashEntries: async (entryIds) => {
+        const restored = await ops.restoreTrashEntries(db, entryIds)
+        if (restored.length > 0) invalidateLibrary()
+        return restored
+      },
+      deleteTrashEntries: async (entryIds) => {
+        const files = await ops.tombstoneTrashEntries(db, entryIds)
+        await removeTombstoned(files)
+        // An entry's id is one of its files, so it is in the list when the
+        // entry was still in the trash.
+        const deleted = new Set(files.map((f) => f.id))
+        return entryIds.filter((id) => deleted.has(id))
+      },
+      emptyTrash: async () => {
+        const entries = await ops.queryTrashEntryCount(db)
+        await removeTombstoned(await ops.tombstoneTrash(db))
+        return entries
       },
       autoPurgeWithCleanup: async () => {
         const total = await ops.autoPurgeOldTrashedFiles(db, async (batchIds) => {
