@@ -6,6 +6,7 @@ import {
   createAppService,
 } from '@siastorage/core/app'
 import type { UploadManager } from '@siastorage/core/services/uploader'
+import { readMemory } from 'memory-info'
 import { type MobileSdkAuth, MobileSdkAuthAdapter } from '../adapters/auth'
 import { createCryptoAdapter } from '../adapters/crypto'
 import { createDownloadAdapter } from '../adapters/downloadObject'
@@ -50,6 +51,7 @@ function ensureApp(): AppServiceResult {
     sdkAuth: mobileSdkAuth,
     thumbnail: createMobileThumbnailAdapter(),
     detectMimeType,
+    readMemory,
   })
   _app = result.service
   _internal = result.internal

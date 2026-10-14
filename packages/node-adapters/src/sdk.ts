@@ -272,6 +272,7 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
       const stream = sdk.download(native, {
         offset: options.offset,
         length: options.length,
+        maxBufferedChunks: options.maxBufferedChunks,
         onShardDownloaded: bridgeShardCallback(options.shardDownloaded),
       })
       return readableStreamToDownloadLikeRef(stream)
@@ -281,6 +282,7 @@ export function createNodeSdkAdapter(sdk: Sdk): SdkAdapter {
       const packed = sdk.uploadPacked({
         dataShards: options.dataShards,
         parityShards: options.parityShards,
+        maxBufferedSlabs: options.maxBufferedSlabs,
         onShardUploaded: bridgeShardCallback(options.shardUploaded),
       })
       return wrapPackedUpload(packed)

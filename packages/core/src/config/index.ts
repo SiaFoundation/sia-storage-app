@@ -31,6 +31,42 @@ export const UPLOAD_PARITY_SHARDS = 20
 export const SECTOR_SIZE = 4 * 1024 * 1024
 // Slab data capacity = SECTOR_SIZE × data shards.
 export const SLAB_SIZE = SECTOR_SIZE * UPLOAD_DATA_SHARDS
+/**
+ * Memory one encoded slab occupies while an upload holds it: every data and
+ * parity shard at once, 30 x 4 MiB, three times `SLAB_SIZE`.
+ */
+export const UPLOAD_SLAB_MEMORY_BYTES = SECTOR_SIZE * (UPLOAD_DATA_SHARDS + UPLOAD_PARITY_SHARDS)
+/** The SDK's largest download chunk, and the unit `maxBufferedChunks` counts. */
+export const DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+/**
+ * Memory one full download chunk holds while the SDK fetches and decodes it:
+ * the shard reads it races, the decoded shards, and the output copy. The SDK
+ * source puts this between one and three times the chunk, so this is the
+ * middle of that range rather than a measurement.
+ */
+export const DOWNLOAD_CHUNK_MEMORY_BYTES = 2 * DOWNLOAD_CHUNK_BYTES
+/**
+ * Read-ahead a download always gets, however short memory is: the window the
+ * SDK's controller starts every download at. Below it a download would start
+ * smaller than the SDK intends.
+ */
+export const DOWNLOAD_MIN_BUFFERED_CHUNKS = 8
+/**
+ * Share of the memory the device can spare that transfers may use together.
+ * The rest is left to the app's own work and to other apps, and the app
+ * holding the most memory is the one a phone stops first in the background.
+ */
+export const TRANSFER_BUDGET_HEADROOM_SHARE = 0.25
+/** Most transfers may use together on any device. */
+export const TRANSFER_BUDGET_CEILING_BYTES = 512 * 1024 * 1024
+/** Least transfers are given, including when the device reports it is short. */
+export const TRANSFER_BUDGET_FLOOR_BYTES = 64 * 1024 * 1024
+/**
+ * Budget on a platform with no memory reading, which is the desktop and the
+ * CLI. Their SDK otherwise takes a tenth of the machine's RAM for each
+ * transfer, with nothing limiting several together.
+ */
+export const TRANSFER_BUDGET_UNREAD_BYTES = 512 * 1024 * 1024
 // Packer idle timeout - flush partial slab after this delay.
 export const PACKER_IDLE_TIMEOUT = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Max batch duration before forcing flush (limits time data is unpinned).

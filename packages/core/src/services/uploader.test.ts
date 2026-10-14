@@ -1,5 +1,6 @@
 import type { AppService, AppServiceInternal } from '../app/service'
 import { PACKER_IDLE_TIMEOUT } from '../config'
+import { TransferMemoryBudget } from './transferMemoryBudget'
 import { UploadManager } from './uploader'
 
 /**
@@ -33,7 +34,10 @@ function createHeldPollApp() {
 async function startHeldInPoll() {
   const held = createHeldPollApp()
   const manager = new UploadManager()
-  manager.initialize(held.app, {} as AppServiceInternal, { toFilePath: (uri) => uri })
+  const internal = {
+    transferBudget: new TransferMemoryBudget(() => null),
+  } as unknown as AppServiceInternal
+  manager.initialize(held.app, internal, { toFilePath: (uri) => uri })
   await jest.advanceTimersByTimeAsync(0)
   expect(held.getAutoScanUploads).toHaveBeenCalledTimes(1)
   return { manager, ...held }

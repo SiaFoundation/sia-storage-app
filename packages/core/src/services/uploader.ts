@@ -23,6 +23,7 @@ import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
 import { TransferSpeedTracker } from '../lib/transferSpeed'
+import { uploadPeakBytes } from './transferMemoryBudget'
 import { uniqueId } from '../lib/uniqueId'
 import type { FileRecordRow } from '../types/files'
 
@@ -153,6 +154,9 @@ export class UploadManager {
   private uploadingBatch: BatchState | null = null
   /** Native packed upload handle for the batch being finalized; used by shutdown() to cancel. */
   private uploadingPacker: PackedUploadRef | null = null
+  /** The `maxBufferedSlabs` each open packer was made with, for the memory budget. */
+  private packerSlabs = 0
+  private uploadingPackerSlabs = 0
   /** The flush now finalizing, pinning and recording `uploadingBatch`. */
   private flushing: Promise<void> | null = null
   /** Files added via enqueue() — processed before polled files. */
@@ -201,6 +205,7 @@ export class UploadManager {
   initialize(app: AppService, internal: AppServiceInternal, adapters: UploaderAdapters): void {
     this.app = app
     this.internal = internal
+    internal.transferBudget.trackUploads(() => this.heldBytes())
     this.adapters = adapters
     this.speedPersistedAt = Date.now()
     // Seed the speed average from the previous session's totals. seed()
@@ -285,6 +290,7 @@ export class UploadManager {
     // Move batch/packer to uploading* so shutdown() can cancel them separately
     this.uploadingBatch = batch
     this.uploadingPacker = packer
+    this.uploadingPackerSlabs = this.packerSlabs
     this.packer = null
     this.batch = null
 
@@ -459,6 +465,14 @@ export class UploadManager {
 
   get isSuspended(): boolean {
     return this._suspended
+  }
+
+  /** What the open packers may peak at, which downloads leave room for. */
+  private heldBytes(): number {
+    return (
+      (this.packer ? uploadPeakBytes(this.packerSlabs) : 0) +
+      (this.uploadingPacker ? uploadPeakBytes(this.uploadingPackerSlabs) : 0)
+    )
   }
 
   /**
@@ -758,9 +772,11 @@ export class UploadManager {
           slabUploadAdds: 0,
           uploadedShardBytes: 0,
         }
+        const slabs = this.internal.transferBudget.uploadSlabs()
         const packer = await sdk.uploadPacked({
           dataShards: UPLOAD_DATA_SHARDS,
           parityShards: UPLOAD_PARITY_SHARDS,
+          maxBufferedSlabs: slabs,
           shardUploaded: {
             progress: (p) => this.onShardUploaded(batch, p),
           },
@@ -771,6 +787,7 @@ export class UploadManager {
         }
         this.batch = batch
         this.packer = packer
+        this.packerSlabs = slabs
       }
 
       this.app.uploads.setStatus(entry.fileId, 'packing')

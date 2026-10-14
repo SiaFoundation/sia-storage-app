@@ -23,6 +23,7 @@ import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { syncDownEventsBatch } from '@siastorage/core/services/syncDownEvents'
 import { syncUpMetadataBatch } from '@siastorage/core/services/syncUpMetadata'
 import { ThumbnailScanner } from '@siastorage/core/services/thumbnailScanner'
+import type { MemoryReader } from '@siastorage/core/services/transferMemoryBudget'
 import type { UploadManager } from '@siastorage/core/services/uploader'
 import type { FileRecord, FileUpdate, UpdatedAtWrite } from '@siastorage/core/types'
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
@@ -121,9 +122,12 @@ export interface TestAppOptions {
   thumbnail?: Partial<ThumbnailAdapter>
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
   detectMimeType?: (path: string, name?: string) => Promise<string | null>
+  readMemory?: MemoryReader
 }
 
 export interface TestApp {
+  /** The read-ahead each download asked the SDK for, in the order they ran. */
+  downloadChunks: number[]
   start(): Promise<void>
   shutdown(): Promise<void>
   pause(): void
@@ -270,6 +274,7 @@ export function createTestApp(
       return result === 'application/octet-stream' ? null : result
     })
 
+  const downloadChunks: number[] = []
   const {
     service: appService,
     internal,
@@ -278,12 +283,14 @@ export function createTestApp(
     db,
     handoffDir: options?.handoffDir,
     maxPageSize: options?.maxPageSize,
+    readMemory: options?.readMemory,
     storage,
     secrets,
     crypto,
     fsIO,
     downloadObject: {
-      async download({ file, object, sdk, onProgress }) {
+      async download({ file, object, sdk, onProgress, maxBufferedChunks }) {
+        downloadChunks.push(maxBufferedChunks)
         const data = await sdk.downloadByObjectId(object.id)
         onProgress(1)
         if (!fsIO.writeFile) throw new Error('writeFile not implemented')
@@ -413,6 +420,7 @@ export function createTestApp(
   })
 
   return {
+    downloadChunks,
     app: appService,
     internal,
     async failInserts(table, message) {
