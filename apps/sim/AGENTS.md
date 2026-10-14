@@ -145,7 +145,7 @@ bun sim device open mac                 # the app's window, as launching it agai
 bun sim device read mac --id files --window main   # an element's text
 bun sim device ui mac --window popover  # one window's elements
 bun sim device finder mac               # its Finder folder, for cp, mv, ls and rm
-bun sim net offline laptop              # also: online, latency, rate, fail
+bun sim net offline laptop              # also: online, latency, rate, download-rate, fail
 bun sim net objects                     # what the indexer holds
 bun sim seed laptop --type image -n 2   # real files of a type, named the risky ways
 bun sim device type phone --label "Search files" report --submit

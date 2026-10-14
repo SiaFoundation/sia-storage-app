@@ -38,6 +38,12 @@ export function registerNetCommands({ program, current }: CommandContext): void 
       print(await control().setConditions({ uploadBytesPerSec: parseSize(size) })),
     )
   net
+    .command('download-rate <size>')
+    .description('Download rate per second shared by all devices, e.g. 10m. 0 is unlimited')
+    .action(async (size: string) =>
+      print(await control().setConditions({ downloadBytesPerSec: parseSize(size) })),
+    )
+  net
     .command('fail')
     .description('Fail the next matching SDK calls')
     .addArgument(new Argument('<op>', 'The SDK call to fail').choices(SDK_OPS))

@@ -44,8 +44,66 @@ class Fault extends Error {
   }
 }
 
+/** Resolves true after `ms`, or false as soon as `signal` aborts. */
+function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false)
+    const onAbort = () => {
+      clearTimeout(timer)
+      resolve(false)
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve(true)
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 export function createNetworkHandler(store: NetworkStore, relay: Relay): NetworkHandler {
-  const conditions: Conditions = { offline: [], latencyMs: 0, uploadBytesPerSec: 0 }
+  const conditions: Conditions = {
+    offline: [],
+    latencyMs: 0,
+    uploadBytesPerSec: 0,
+    downloadBytesPerSec: 0,
+  }
+  // When the download link is next free. Each piece of every download takes
+  // the link for its share of a second at the download rate, so downloads
+  // running together divide the rate between them.
+  let downloadLinkFreeAt = 0
+
+  /** Serves `file` at the download rate, a piece at a time. */
+  function paced(file: Blob, signal: AbortSignal): ReadableStream<Uint8Array> {
+    const piece = 64 * 1024
+    let offset = 0
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (offset >= file.size || signal.aborted) {
+          controller.close()
+          return
+        }
+        const bytes = new Uint8Array(await file.slice(offset, offset + piece).arrayBuffer())
+        offset += bytes.length
+        const rate = conditions.downloadBytesPerSec
+        if (rate > 0) {
+          const now = Date.now()
+          const start = Math.max(now, downloadLinkFreeAt)
+          const end = start + (bytes.length / rate) * 1000
+          downloadLinkFreeAt = end
+          if (!(await sleepUnlessAborted(end - now, signal))) {
+            // A download abandoned mid-piece gives back the part of the link
+            // it had not used yet, or the next one would wait behind bytes
+            // nobody is reading.
+            const at = Date.now()
+            downloadLinkFreeAt = Math.max(at, downloadLinkFreeAt - (end - Math.max(at, start)))
+            controller.close()
+            return
+          }
+        }
+        controller.enqueue(bytes)
+      },
+    })
+  }
   let faults: FaultRule[] = []
   let faultSeq = 0
   // When each upload may commit. Uploads queue one after another on a single
@@ -166,7 +224,11 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
           const offset = Number(url.searchParams.get('offset') ?? '0')
           const lengthParam = url.searchParams.get('length')
           const end = lengthParam ? Math.min(row.size, offset + Number(lengthParam)) : row.size
-          return new Response(Bun.file(store.dataPath(id)).slice(offset, end))
+          const data = Bun.file(store.dataPath(id)).slice(offset, end)
+          if (conditions.downloadBytesPerSec === 0) return new Response(data)
+          return new Response(paced(data, req.signal), {
+            headers: { 'content-length': String(end - offset) },
+          })
         })
       }
     }

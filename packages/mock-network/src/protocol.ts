@@ -130,6 +130,12 @@ export type Conditions = {
    * several times this rate.
    */
   uploadBytesPerSec: number
+  /**
+   * Download rate in bytes per second, shared by every download on the
+   * network in the order their pieces are ready, so two at once each take
+   * half. 0 is unlimited.
+   */
+  downloadBytesPerSec: number
 }
 
 /** A fault that fails the next `count` matching calls with `status`. */
