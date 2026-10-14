@@ -15,6 +15,7 @@ import {
   STORAGE_FULL_POLL_INTERVAL,
   UPLOAD_DATA_SHARDS,
   UPLOAD_PARITY_SHARDS,
+  UPLOAD_YIELD_POLL_MS,
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
 import type { LocalObject } from '../encoding/localObject'
@@ -23,6 +24,7 @@ import { sealPinnedObject } from '../lib/localObjects'
 import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
 import { TransferSpeedTracker } from '../lib/transferSpeed'
+import { uploadPeakBytes } from './transferMemoryBudget'
 import { uniqueId } from '../lib/uniqueId'
 import type { FileRecordRow } from '../types/files'
 
@@ -153,6 +155,15 @@ export class UploadManager {
   private uploadingBatch: BatchState | null = null
   /** Native packed upload handle for the batch being finalized; used by shutdown() to cancel. */
   private uploadingPacker: PackedUploadRef | null = null
+  /** The `maxBufferedSlabs` each open packer was made with, for the memory budget. */
+  private packerSlabs = 0
+  private uploadingPackerSlabs = 0
+  /**
+   * Slabs chosen for a packer the SDK is still creating. Counted from the
+   * moment they are chosen, so a download that reserves during
+   * `uploadPacked` leaves room for them.
+   */
+  private openingSlabs = 0
   /** The flush now finalizing, pinning and recording `uploadingBatch`. */
   private flushing: Promise<void> | null = null
   /** Files added via enqueue() — processed before polled files. */
@@ -202,6 +213,7 @@ export class UploadManager {
   initialize(app: AppService, internal: AppServiceInternal, adapters: UploaderAdapters): void {
     this.app = app
     this.internal = internal
+    internal.transferBudget.trackUploads(() => this.heldBytes())
     this.adapters = adapters
     this.speedPersistedAt = Date.now()
     // Seed the speed average from the previous session's totals. seed()
@@ -286,6 +298,7 @@ export class UploadManager {
     // Move batch/packer to uploading* so shutdown() can cancel them separately
     this.uploadingBatch = batch
     this.uploadingPacker = packer
+    this.uploadingPackerSlabs = this.packerSlabs
     this.packer = null
     this.batch = null
 
@@ -458,6 +471,15 @@ export class UploadManager {
 
   get isSuspended(): boolean {
     return this._suspended
+  }
+
+  /** What the open packers may peak at, which downloads leave room for. */
+  private heldBytes(): number {
+    return (
+      (this.packer ? uploadPeakBytes(this.packerSlabs) : 0) +
+      (this.openingSlabs > 0 ? uploadPeakBytes(this.openingSlabs) : 0) +
+      (this.uploadingPacker ? uploadPeakBytes(this.uploadingPackerSlabs) : 0)
+    )
   }
 
   /**
@@ -767,19 +789,30 @@ export class UploadManager {
           slabUploadAdds: 0,
           uploadedShardBytes: 0,
         }
-        const packer = await sdk.uploadPacked({
-          dataShards: UPLOAD_DATA_SHARDS,
-          parityShards: UPLOAD_PARITY_SHARDS,
-          shardUploaded: {
-            progress: (p) => this.onShardUploaded(batch, p),
-          },
-        })
+        const slabs = this.internal.transferBudget.uploadSlabs()
+        this.openingSlabs = slabs
+        let packer: PackedUploadRef
+        try {
+          packer = await sdk.uploadPacked({
+            dataShards: UPLOAD_DATA_SHARDS,
+            parityShards: UPLOAD_PARITY_SHARDS,
+            maxBufferedSlabs: slabs,
+            shardUploaded: {
+              progress: (p) => this.onShardUploaded(batch, p),
+            },
+          })
+        } finally {
+          // Nothing awaits between here and `packerSlabs` below, so the slabs
+          // stay counted without a gap.
+          this.openingSlabs = 0
+        }
         if (stale()) {
           packer.cancel()
           return
         }
         this.batch = batch
         this.packer = packer
+        this.packerSlabs = slabs
       }
 
       this.app.uploads.setStatus(entry.fileId, 'packing')
@@ -854,6 +887,8 @@ export class UploadManager {
     let i = 0
 
     while (i < entries.length && this.isCurrent(generation) && !this._suspended) {
+      await this.yieldToUserDownloads(generation)
+      if (!this.isCurrent(generation) || this._suspended) break
       // computeWindowEnd needs a packer+batch — when neither exists or
       // when the next file would trigger a pre-flush, fall back to
       // processEntry which handles packer creation and pre-flush checks.
@@ -880,6 +915,23 @@ export class UploadManager {
       this.explicitQueue.unshift(...entries.slice(i))
     }
     if (this.draining === draining) this.draining = null
+  }
+
+  /**
+   * Waits while the memory budget asks uploads to give way to a download the
+   * user is waiting on. Only between adds: a file the SDK is already encoding
+   * keeps going, however many slabs it spans.
+   */
+  private async yieldToUserDownloads(generation: number): Promise<void> {
+    if (!this.internal.transferBudget.uploadShouldWait()) return
+    logger.info('uploadManager', 'yield_to_downloads')
+    while (
+      this.internal.transferBudget.uploadShouldWait() &&
+      this.isCurrent(generation) &&
+      !this._suspended
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, UPLOAD_YIELD_POLL_MS))
+    }
   }
 
   /**

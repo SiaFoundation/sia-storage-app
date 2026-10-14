@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["MemoryInfoModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.memoryinfo.MemoryInfoModule"]
+  }
+}

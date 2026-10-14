@@ -1,3 +1,4 @@
+import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
@@ -1241,6 +1242,8 @@ export type DatabaseNamespaces = Omit<
 
 /** Non-serializable APIs that cannot cross an IPC/RPC boundary. Only used by bootstrap code. */
 export interface AppServiceInternal {
+  /** How much memory uploads and downloads may hold. */
+  transferBudget: TransferMemoryBudget
   /** Injects the live SDK instance after auth completes. */
   setSdk(sdk: SdkAdapter | null): void
   /** Returns the current SDK instance, or null if not connected. */

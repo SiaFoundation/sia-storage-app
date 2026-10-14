@@ -18,6 +18,7 @@ import {
 } from '../../lib/errors'
 import { SlotPool } from '../../lib/slotPool'
 import type { FsIOAdapter } from '../../services/fsFileUri'
+import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { AppCaches, AppService } from '../service'
 import type { DownloadPriority, DownloadsState } from '../stores'
 
@@ -32,6 +33,8 @@ export type DownloadObjectAdapter = {
     sdk: SdkAdapter
     onProgress: (progress: number) => void
     signal: AbortSignal
+    /** Read-ahead the SDK may hold for this download, in chunks. */
+    maxBufferedChunks: number
   }): Promise<void>
   /**
    * Streams one byte range of an object straight to an absolute path.
@@ -47,16 +50,20 @@ export type DownloadObjectAdapter = {
     offset: number
     length: number
     signal: AbortSignal
+    /** Read-ahead the SDK may hold for this download, in chunks. */
+    maxBufferedChunks: number
   }): Promise<number>
   /** Resolves a share URL via the SDK and streams its contents to local storage.
    * The share object's size is only known after the SDK resolves it, so the
    * free-space guard is passed in as `ensureSpace`: the adapter awaits it with
-   * the resolved size before streaming, and it throws when there is no room. */
+   * the resolved size before streaming, and it throws when there is no room.
+   * It resolves to the read-ahead the SDK may hold for this download, in
+   * chunks, which is only known once the download has its slot. */
   downloadFromShareUrl(params: {
     file: { id: string; type: string }
     url: string
     sdk: SdkAdapter
-    ensureSpace: (size: number) => Promise<void>
+    ensureSpace: (size: number) => Promise<number>
     onProgress: (progress: number) => void
     signal: AbortSignal
   }): Promise<void>
@@ -70,6 +77,7 @@ export function buildDownloadsNamespace(
   storage: StorageAdapter,
   caches: AppCaches,
   getSdk: () => SdkAdapter | null,
+  budget: TransferMemoryBudget,
 ): AppService['downloads'] {
   let state: DownloadsState = { downloads: {} }
   const controllers = new Map<string, AbortController>()
@@ -173,6 +181,7 @@ export function buildDownloadsNamespace(
     // controller, and this download must not clear the new one's entries.
     const current = () => controllers.get(fileId) === controller
     let release: (() => void) | undefined
+    let reservation: { chunks: number; release: () => void } | undefined
     try {
       const file = await ops.readFile(db, fileId)
       if (!file) throw new Error('File record not found')
@@ -229,12 +238,16 @@ export function buildDownloadsNamespace(
       })
       update(fileId, { status: 'downloading' })
 
+      // Taken once the slot is held, right before the stream opens, so it
+      // counts every transfer that started while this one waited.
+      reservation = budget.reserveDownload({ user: priority === 'user' })
       await downloadObject.download({
         file: { id: fileId, type: file.type, size: file.size },
         object: objects[0],
         sdk,
         onProgress: (progress) => update(fileId, { progress: Math.min(1, progress) }),
         signal: controller.signal,
+        maxBufferedChunks: reservation.chunks,
       })
 
       if (controller.signal.aborted) return
@@ -278,6 +291,7 @@ export function buildDownloadsNamespace(
       }
       throw e
     } finally {
+      reservation?.release()
       release?.()
       if (current()) {
         controllers.delete(fileId)
@@ -292,6 +306,7 @@ export function buildDownloadsNamespace(
     // Caller (downloadFromShareUrl) registers synchronously before awaiting.
     const controller = controllers.get(id)!
     let release: (() => void) | undefined
+    let reservation: { chunks: number; release: () => void } | undefined
     try {
       const sdk = getSdk()
       if (!sdk) throw new Error('SDK not initialized')
@@ -312,6 +327,8 @@ export function buildDownloadsNamespace(
           // other downloads are waiting on. Matches execute()'s ordering.
           release = await slotPool.acquire(controller.signal, { priority: SLOT_PRIORITY.user })
           update(id, { status: 'downloading' })
+          reservation = budget.reserveDownload({ user: true })
+          return reservation.chunks
         },
         onProgress: (progress) => update(id, { progress: Math.min(1, progress) }),
         signal: controller.signal,
@@ -335,6 +352,7 @@ export function buildDownloadsNamespace(
       }
       throw e
     } finally {
+      reservation?.release()
       release?.()
       inFlight.delete(id)
       inFlightSizes.delete(id)

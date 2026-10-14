@@ -240,8 +240,34 @@ describe('UploadManager', () => {
       expect(mockSdk.uploadPacked).toHaveBeenCalledWith({
         dataShards: UPLOAD_DATA_SHARDS,
         parityShards: UPLOAD_PARITY_SHARDS,
+        // No memory reading under jest, so the fixed budget, which holds the most slabs.
+        maxBufferedSlabs: 5,
         shardUploaded: expect.any(Object),
       })
+    })
+
+    it('counts the slabs of a packer the SDK is still opening, so a download reserving then leaves room', async () => {
+      let open!: () => void
+      mockSdk.uploadPacked.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            open = () => resolve(mockPacker)
+          }) as any,
+      )
+      manager.initialize(app(), internal(), defaultAdapters())
+
+      const run = manager.__testProcessFiles([createFileEntry('file1')])
+      for (let i = 0; i < 20 && mockSdk.uploadPacked.mock.calls.length === 0; i++) {
+        await jest.advanceTimersByTimeAsync(0)
+      }
+      expect(mockSdk.uploadPacked).toHaveBeenCalledTimes(1)
+      // With no memory reading the budget is the fixed 904 MiB, and a
+      // five-slab upload's 840 MiB peak leaves downloads their 64 MiB floor.
+      expect(internal().transferBudget.downloadRoom()).toBe(64 * 1024 * 1024)
+
+      open()
+      await run
+      expect(internal().transferBudget.downloadRoom()).toBe(64 * 1024 * 1024)
     })
 
     it('reuses packer for subsequent files in same batch', async () => {

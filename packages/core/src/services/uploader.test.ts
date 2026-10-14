@@ -1,5 +1,6 @@
 import type { AppService, AppServiceInternal } from '../app/service'
-import { PACKER_IDLE_TIMEOUT } from '../config'
+import { PACKER_IDLE_TIMEOUT, UPLOAD_YIELD_POLL_MS } from '../config'
+import { TransferMemoryBudget } from './transferMemoryBudget'
 import { UploadManager } from './uploader'
 
 /**
@@ -33,7 +34,10 @@ function createHeldPollApp() {
 async function startHeldInPoll() {
   const held = createHeldPollApp()
   const manager = new UploadManager()
-  manager.initialize(held.app, {} as AppServiceInternal, { toFilePath: (uri) => uri })
+  const internal = {
+    transferBudget: new TransferMemoryBudget(() => null),
+  } as unknown as AppServiceInternal
+  manager.initialize(held.app, internal, { toFilePath: (uri) => uri })
   await jest.advanceTimersByTimeAsync(0)
   expect(held.getAutoScanUploads).toHaveBeenCalledTimes(1)
   return { manager, ...held }
@@ -99,5 +103,60 @@ describe('UploadManager idle wait', () => {
     expect(flush).not.toHaveBeenCalled()
     internals.batch = null
     await manager.shutdown()
+  })
+})
+
+describe('UploadManager and the memory budget', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('adds no file while a download the user opened needs the room, and carries on once it ends', async () => {
+    const MB = 1024 * 1024
+    // 200 MiB cannot hold a one-slab upload beside the 64 MiB download floor.
+    const budget = new TransferMemoryBudget(() => ({
+      availableBytes: 1200 * MB,
+      thresholdBytes: 400 * MB,
+      lowMemory: false,
+    }))
+    const held = createHeldPollApp()
+    const manager = new UploadManager()
+    manager.initialize(held.app, { transferBudget: budget } as unknown as AppServiceInternal, {
+      toFilePath: (uri) => uri,
+    })
+    await jest.advanceTimersByTimeAsync(0)
+    const internals = manager as unknown as {
+      loopGeneration: number
+      processEntry: (entry: { fileId: string }) => Promise<void>
+      processEntries: (entries: unknown[], generation: number) => Promise<void>
+    }
+    const added: string[] = []
+    jest.spyOn(internals, 'processEntry').mockImplementation(async (entry) => {
+      added.push(entry.fileId)
+    })
+
+    const opened = budget.reserveDownload({ user: true })
+    const run = internals.processEntries(
+      [
+        { fileId: 'a', size: 1 },
+        { fileId: 'b', size: 1 },
+      ],
+      internals.loopGeneration,
+    )
+    await jest.advanceTimersByTimeAsync(10 * UPLOAD_YIELD_POLL_MS)
+    expect(added).toEqual([])
+
+    opened.release()
+    await jest.advanceTimersByTimeAsync(UPLOAD_YIELD_POLL_MS)
+    await run
+    expect(added).toEqual(['a', 'b'])
+
+    await manager.shutdown()
+    held.releasePoll(false)
+    await jest.advanceTimersByTimeAsync(0)
   })
 })

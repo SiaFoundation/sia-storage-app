@@ -71,7 +71,7 @@ export function createNodeDownloadAdapter(deps: {
   getAppKey: (indexerURL: string) => Promise<Uint8Array | null>
 }): DownloadObjectAdapter {
   return {
-    async download({ file, object, sdk, onProgress, signal }) {
+    async download({ file, object, sdk, onProgress, signal, maxBufferedChunks }) {
       const keyBytes = await deps.getAppKey(object.indexerURL)
       if (!keyBytes) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
@@ -81,13 +81,22 @@ export function createNodeDownloadAdapter(deps: {
       const dl = await sdk.download(pinnedObject, {
         offset: BigInt(0),
         length: undefined,
+        maxBufferedChunks,
       })
 
       await deps.fsIO.ensureDirectory()
       await streamToPath(dl, deps.fsIO.uri(file.id, file.type), file.size, signal, onProgress)
     },
 
-    async downloadRangeToPath({ object, sdk, destPath, offset, length, signal }) {
+    async downloadRangeToPath({
+      object,
+      sdk,
+      destPath,
+      offset,
+      length,
+      signal,
+      maxBufferedChunks,
+    }) {
       const keyBytes = await deps.getAppKey(object.indexerURL)
       if (!keyBytes) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
@@ -97,6 +106,7 @@ export function createNodeDownloadAdapter(deps: {
       const dl = await sdk.download(pinnedObject, {
         offset: BigInt(offset),
         length: BigInt(length),
+        maxBufferedChunks,
       })
 
       // createWriteStream follows a symlink at the destination and writes
@@ -112,10 +122,11 @@ export function createNodeDownloadAdapter(deps: {
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
       const sharedObject = await sdk.objectFromShareUrl(url)
       const totalSize = Number(sharedObject.size())
-      await ensureSpace(totalSize)
+      const maxBufferedChunks = await ensureSpace(totalSize)
       const dl = await sdk.download(sharedObject, {
         offset: BigInt(0),
         length: undefined,
+        maxBufferedChunks,
       })
 
       await deps.fsIO.ensureDirectory()

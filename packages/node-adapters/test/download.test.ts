@@ -56,6 +56,7 @@ function adapter(chunks: Uint8Array[]) {
       sdk: sdkYielding(chunks),
       onProgress: () => {},
       signal: new AbortController().signal,
+      maxBufferedChunks: 8,
     })
 }
 
@@ -98,6 +99,7 @@ describe('a download the caller aborted', () => {
       sdk: sdkYielding([new Uint8Array(256)]),
       onProgress: () => {},
       signal: controller.signal,
+      maxBufferedChunks: 8,
     })
   })
 })
@@ -123,12 +125,41 @@ describe('a ranged download', () => {
       offset: 1024,
       length: 256,
       signal: new AbortController().signal,
+      maxBufferedChunks: 8,
     })
 
     expect(bytes).toBe(256)
     const written = fs.readFileSync(dest)
     expect(written.length).toBe(1280)
     expect(written.subarray(1024, 1280)).toEqual(Buffer.from(payload))
+  })
+
+  it('asks the SDK for the read-ahead the caller gave it', async () => {
+    let asked: unknown
+    const sdk = {
+      openAppKey: () => ({}),
+      openPinnedObject: () => ({}),
+      download: async (_object: unknown, opts: { maxBufferedChunks?: number }) => {
+        asked = opts.maxBufferedChunks
+        return stream([new Uint8Array(64)])
+      },
+    } as never
+    const download = createNodeDownloadAdapter({
+      fsIO,
+      getAppKey: async () => new Uint8Array([1, 2, 3]),
+    })
+
+    await download.downloadRangeToPath!({
+      object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
+      sdk,
+      destPath: path.join(filesDir, 'range.bin'),
+      offset: 0,
+      length: 64,
+      signal: new AbortController().signal,
+      maxBufferedChunks: 24,
+    })
+
+    expect(asked).toBe(24)
   })
 
   it('replaces a symlink at the destination instead of writing through it', async () => {
@@ -148,6 +179,7 @@ describe('a ranged download', () => {
       offset: 0,
       length: 64,
       signal: new AbortController().signal,
+      maxBufferedChunks: 8,
     })
 
     expect(fs.readFileSync(outside, 'utf8')).toBe('untouched')

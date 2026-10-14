@@ -31,6 +31,7 @@ import {
   type ProviderPage,
 } from '../../types/provider'
 import type { AppService, AppServiceInternal } from '../service'
+import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
@@ -55,6 +56,7 @@ export type ProviderNamespaceDeps = {
   maxPageSize?: number
   getSdk: () => SdkAdapter | null
   downloadObject: DownloadObjectAdapter
+  transferBudget: TransferMemoryBudget
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -814,14 +816,24 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       const want = Math.max(0, Math.min(length, file.size - start))
       if (want === 0) return { offset: start, bytes: 0 }
 
-      const bytes = await downloadObject.downloadRangeToPath({
-        object: objects[0],
-        sdk,
-        destPath: dest,
-        offset: start,
-        length: want,
-        signal: new AbortController().signal,
-      })
+      // Finder fetches several ranges at once, outside the download slots,
+      // so each holds its read-ahead against the others while it runs.
+      // A Finder read is a file someone just opened on the Mac.
+      const reservation = deps.transferBudget.reserveDownload({ user: true })
+      let bytes: number
+      try {
+        bytes = await downloadObject.downloadRangeToPath({
+          object: objects[0],
+          sdk,
+          destPath: dest,
+          offset: start,
+          length: want,
+          signal: new AbortController().signal,
+          maxBufferedChunks: reservation.chunks,
+        })
+      } finally {
+        reservation.release()
+      }
       // The shell reports this back as the range the system can now read. A
       // wrong one is invisible until a file reads short, so it is logged.
       logger.info('provider', 'range_served', {
