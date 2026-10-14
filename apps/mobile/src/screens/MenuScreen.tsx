@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
-import { useAccount, useIndexerURL } from '@siastorage/core/stores'
+import { useAccount, useIndexerURL, useTrashCount } from '@siastorage/core/stores'
 import Constants from 'expo-constants'
 import { useCallback, useState } from 'react'
 import { Alert } from 'react-native'
@@ -54,6 +54,7 @@ export function MenuScreen({ navigation }: Props) {
   const indexerURL = useIndexerURL()
   const isConnected = useIsConnected()
   const account = useAccount()
+  const trashCount = useTrashCount()
   const keepAwake = useKeepAwake()
   const [isReconnecting, setIsReconnecting] = useState(false)
 
@@ -88,6 +89,11 @@ export function MenuScreen({ navigation }: Props) {
       <InsetGroupSection header="Library">
         <InsetGroupLink label="Imports" onPress={navigateToImports} />
         <InsetGroupLink label="Share Links" onPress={() => navigation.navigate('ShareLinks')} />
+        <InsetGroupLink
+          label="Trash"
+          value={trashCount.data ? String(trashCount.data) : undefined}
+          onPress={() => navigation.navigate('Trash')}
+        />
       </InsetGroupSection>
 
       <InsetGroupSection header="Device">
