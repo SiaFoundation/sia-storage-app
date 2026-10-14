@@ -2,10 +2,12 @@ import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TouchableHighlight, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { assertNever, useFileStatus } from '../../lib/file'
-import { humanSize } from '../../lib/humanSize'
 import { useDownload } from '../../managers/downloader'
+import { app } from '../../stores/appService'
+import { useIsOnline } from '../../hooks/useIsOnline'
+import { useIsConnected } from '../../stores/sdk'
 import { colors } from '../../styles/colors'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
 import { ImageViewer } from '../MediaConsumers/ImageViewer'
@@ -14,6 +16,7 @@ import { MarkdownViewer } from '../MediaConsumers/MarkdownViewer'
 import { PDFViewer } from '../MediaConsumers/PDFViewer'
 import { TextViewer } from '../MediaConsumers/TextViewer'
 import { VideoPlayer } from '../MediaConsumers/VideoPlayer'
+import { DownloadPanel } from './DownloadPanel'
 import { pickViewerForFile } from './pickViewer'
 
 type FileViewerProps = {
@@ -43,9 +46,13 @@ export function FileViewer({
   const photosLookup = status.data?.photosLookup
   const photosDisplayUri = status.data?.photosDisplayUri ?? null
   const displayUri = status.data?.displayUri ?? null
-  const isDownloading = status.data?.download.state === 'downloading'
   const fileDownload = useDownload(file, 'user', { notifyOnInsufficientSpace: true })
   const { data: fileDownloadState } = useDownloadEntry(file.id)
+  // The indexer flag stays set when the phone loses its network, so the
+  // panel also needs the network itself to say it is offline.
+  const indexerConnected = useIsConnected()
+  const { data: isOnline } = useIsOnline()
+  const isConnected = indexerConnected && isOnline !== false
 
   const baseMediaStyle = styles.media
   const textMediaStyle = textTopInset
@@ -53,14 +60,16 @@ export function FileViewer({
     : baseMediaStyle
   const textInsetValue = textTopInset && textTopInset > 0 ? textTopInset : undefined
 
-  const onDownloadPress = useCallback(() => {
+  const onDownloadPress = useCallback(async () => {
     if (onViewerControlPress) onViewerControlPress()
-    if (isDownloading) return
     if (customDownloader) customDownloader()
-    else fileDownload()
-  }, [isDownloading, customDownloader, fileDownload, onViewerControlPress])
-
-  const isQueued = fileDownloadState?.status === 'queued'
+    else await fileDownload()
+    // The panel leaves "Starting" when this settles, so the entry it reads is
+    // refreshed first. Otherwise a retry that registered and failed again
+    // before the next render would show the old failed entry, unchanged,
+    // and nothing would move the panel on.
+    await app().caches.downloads.invalidate(file.id)
+  }, [customDownloader, fileDownload, onViewerControlPress, file.id])
 
   const UnavailablePanel = useMemo(() => {
     return (
@@ -77,35 +86,17 @@ export function FileViewer({
     // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
   }, [])
 
-  const DownloadPanel = useMemo(() => {
-    return (
-      <View style={[baseMediaStyle, { justifyContent: 'center', alignItems: 'center', gap: 20 }]}>
-        <TouchableHighlight
-          accessibilityRole="button"
-          accessibilityLabel="Download"
-          onPress={onDownloadPress}
-          disabled={isQueued}
-        >
-          <CloudDownloadIcon color={colors.textPrimary} size={40} />
-        </TouchableHighlight>
-
-        {!isDownloading && !isQueued ? (
-          <Text style={{ color: colors.textPrimary }}>
-            Press to download ({humanSize(file.size)})
-          </Text>
-        ) : null}
-
-        {isQueued ? <Text style={{ color: colors.textPrimary }}>Download queued</Text> : null}
-
-        {isDownloading && !isQueued ? (
-          <Text style={{ color: colors.textPrimary }}>
-            Downloading: {((fileDownloadState?.progress || 0) * 100).toFixed(0)}%
-          </Text>
-        ) : null}
-      </View>
-    )
-    // oxlint-disable-next-line react/exhaustive-deps -- baseMediaStyle is a static StyleSheet reference, stable across renders
-  }, [isDownloading, isQueued, onDownloadPress, fileDownloadState?.progress, file.size])
+  const downloadPanel = useMemo(
+    () => (
+      <DownloadPanel
+        size={file.size}
+        entry={fileDownloadState}
+        isConnected={isConnected}
+        onPress={onDownloadPress}
+      />
+    ),
+    [file.size, fileDownloadState, isConnected, onDownloadPress],
+  )
 
   const LoadingPanel = useMemo(() => {
     return (
@@ -217,11 +208,11 @@ export function FileViewer({
         return displayUri ? renderViewer(displayUri) : UnavailablePanel
       case 'pinned-remote-only':
       case 'downloading':
-        return DownloadPanel
+        return downloadPanel
       case 'pinned-and-local':
       case 'local-only':
       case 'uploading':
-        return displayUri ? renderViewer(displayUri) : DownloadPanel
+        return displayUri ? renderViewer(displayUri) : downloadPanel
       default:
         return assertNever(phase)
     }
@@ -233,7 +224,7 @@ export function FileViewer({
     displayUri,
     LoadingPanel,
     UnavailablePanel,
-    DownloadPanel,
+    downloadPanel,
     renderViewer,
   ])
 
