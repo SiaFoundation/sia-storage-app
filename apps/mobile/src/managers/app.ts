@@ -31,6 +31,10 @@ import { initShareLinks } from './shareLinks'
 import { initSuspensionManager, teardownSuspensionManager } from './suspension'
 import { initSyncDownEvents, triggerSyncDownEvents } from './syncDownEvents'
 import { initSyncNewPhotos } from './syncNewPhotos'
+import {
+  initUploadForegroundService,
+  shutdownUploadForegroundService,
+} from './uploadForegroundService'
 import { resetPhotosArchiveCursor } from './syncPhotosArchive'
 import { initSyncUpMetadata } from './syncUpMetadata'
 import { initThumbnailScanner } from './thumbnailScanner'
@@ -135,6 +139,7 @@ export async function initApp(): Promise<void> {
         initBackgroundTasks()
         initSyncUpMetadata()
         initShareLinks()
+        initUploadForegroundService()
         initThumbnailScanner()
         void maybePruneSlabs()
       },
@@ -165,6 +170,7 @@ async function cancelAllTransfers() {
 }
 
 export async function shutdownApp() {
+  await shutdownUploadForegroundService()
   teardownSuspensionManager()
   shutdownScreenDim()
   await cancelAllTransfers()

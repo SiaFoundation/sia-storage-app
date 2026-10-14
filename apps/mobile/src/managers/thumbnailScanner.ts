@@ -13,7 +13,7 @@ const scanner = new ThumbnailScanner()
 // slows its polling cadence. Reset on triggerNow / new imports.
 const IDLE_BACKOFF_THRESHOLD = 3
 const IDLE_BACKOFF_INTERVAL_MS = 30_000
-const IDLE_STEADY_INTERVAL_MS = 60_000
+export const IDLE_STEADY_INTERVAL_MS = 60_000
 const IDLE_STEADY_THRESHOLD = 6
 
 let consecutiveZeroTicks = 0
