@@ -10,6 +10,11 @@ import Photos
 public class MediaObserverModule: Module {
   private static let version = "v1"
   private static let maxInserts = 10_000
+  // The walk visits every change since the token, so its length grows with the
+  // token's age. Stopping at the budget returns the cursor at the last change
+  // read, and the next call resumes there. The budget sits well under the JS
+  // caller's 20s timeout, so a call returns its progress instead of timing out.
+  private static let walkBudget: TimeInterval = 5
 
   // Expo runs every AsyncFunction without runOnQueue on one serial queue shared
   // by all modules. A change-history walk runs as long as the history since its
@@ -42,7 +47,9 @@ public class MediaObserverModule: Module {
 
     var inserted: [String] = []
     var last = token
+    let deadline = Date().addingTimeInterval(Self.walkBudget)
     for change in changes {
+      if Date() >= deadline { break }
       let details: PHPersistentObjectChangeDetails?
       do {
         details = try change.changeDetails(for: .asset)

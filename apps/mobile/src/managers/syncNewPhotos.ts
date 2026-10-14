@@ -62,9 +62,10 @@ export async function run(signal?: AbortSignal): Promise<void> {
     await app().imports.sealIdle('new-photos', IMPORT_IDLE_SEAL_MS, now)
 
     const { inserted, cursor } = await withTimeout(
-      mediaObserver.changesSince(await getCursor()),
+      changesSince(await getCursor()),
       NATIVE_CALL_TIMEOUT_MS,
     )
+    pendingChanges = null
     if (signal?.aborted) return
 
     const assets = await resolveAssets(inserted)
@@ -162,6 +163,31 @@ async function resolveAssets(ids: string[]): Promise<MediaLibrary.AssetInfo[]> {
     ),
   )
   return resolved.filter((a): a is MediaLibrary.AssetInfo => a !== null && a !== undefined)
+}
+
+// A changesSince call keeps running natively after its timeout. A later tick
+// with the same cursor awaits that call rather than starting another behind it,
+// so a walk longer than the timeout still delivers on a later tick. Restarting
+// it from the same cursor every tick would time out every time, and new photos
+// would stop importing for good. The tick that receives the result clears it,
+// so a cursor that tick holds back is queried afresh.
+let pendingChanges: {
+  cursor: string | null
+  promise: Promise<mediaObserver.MediaChanges>
+} | null = null
+
+function changesSince(cursor: string | null): Promise<mediaObserver.MediaChanges> {
+  if (pendingChanges && pendingChanges.cursor === cursor) return pendingChanges.promise
+  const entry = { cursor, promise: mediaObserver.changesSince(cursor) }
+  pendingChanges = entry
+  entry.promise.catch(() => {
+    if (pendingChanges === entry) pendingChanges = null
+  })
+  return entry.promise
+}
+
+export function __resetSyncNewPhotosForTesting(): void {
+  pendingChanges = null
 }
 
 // The scheduler reschedules only after the worker settles, so one native call
