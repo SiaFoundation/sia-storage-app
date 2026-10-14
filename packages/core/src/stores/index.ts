@@ -50,5 +50,6 @@ export {
 export { useSyncGateGuard, useSyncGateStatus, useSyncState } from './sync'
 export { useAllTags, useIsFavorite, useTagSearch, useTagsForFile } from './tags'
 export { useShareLinks } from './shareLinks'
+export { TRASH_PAGE, useTrashCount, useTrashEntries } from './trash'
 export { invalidateThumbnailsForFileId } from './thumbnails'
 export { useUploadEntry, useUploadSpeed } from './uploads'

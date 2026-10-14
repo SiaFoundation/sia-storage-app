@@ -20,6 +20,7 @@ export type SwitchIndexerStackParamList = {
 export type MenuStackParamList = {
   MenuHome: undefined
   ShareLinks: undefined
+  Trash: undefined
   SwitchIndexer: NavigatorScreenParams<SwitchIndexerStackParamList> | undefined
   Logs: undefined
   Advanced: undefined
