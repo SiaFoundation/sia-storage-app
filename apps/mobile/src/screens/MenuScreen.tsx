@@ -3,7 +3,8 @@ import { DEFAULT_INDEXER_URL } from '@siastorage/core/config'
 import { useAccount, useIndexerURL } from '@siastorage/core/stores'
 import Constants from 'expo-constants'
 import { useCallback, useState } from 'react'
-import { Alert } from 'react-native'
+import { Alert, Platform } from 'react-native'
+import useSWR from 'swr'
 import {
   InsetGroupCopyRow,
   InsetGroupLink,
@@ -19,6 +20,12 @@ import { useMenuHeader } from '../hooks/useMenuHeader'
 import { openExternalURL } from '../lib/inAppBrowser'
 import { promptClearAndResync, promptClearAndSignOut } from '../lib/resetPrompts'
 import { useToast } from '../lib/toastContext'
+import {
+  BACKGROUND_UPLOADS_SETTING,
+  isBackgroundUploadsEnabled,
+  setBackgroundUploadsEnabled,
+} from '../managers/uploadForegroundService'
+import { app } from '../stores/appService'
 import type { MenuStackParamList } from '../stacks/types'
 import { reconnectIndexer, useIsConnected } from '../stores/sdk'
 import { toggleKeepAwake, useKeepAwake } from '../stores/settings'
@@ -55,11 +62,22 @@ export function MenuScreen({ navigation }: Props) {
   const isConnected = useIsConnected()
   const account = useAccount()
   const keepAwake = useKeepAwake()
+  const backgroundUploads = useSWR(app().caches.settings.key(BACKGROUND_UPLOADS_SETTING), () =>
+    isBackgroundUploadsEnabled(),
+  )
   const [isReconnecting, setIsReconnecting] = useState(false)
 
   const handleDeleteAccount = useCallback(() => {
     promptDeleteAccount(indexerURL.data ?? DEFAULT_INDEXER_URL)
   }, [indexerURL.data])
+
+  const handleBackgroundUploads = useCallback(
+    async (enabled: boolean) => {
+      const notifying = await setBackgroundUploadsEnabled(enabled)
+      if (!notifying) toast.show('Notifications are off, so uploads run without one')
+    },
+    [toast],
+  )
 
   const handleReconnect = useCallback(async () => {
     setIsReconnecting(true)
@@ -90,12 +108,26 @@ export function MenuScreen({ navigation }: Props) {
         <InsetGroupLink label="Share Links" onPress={() => navigation.navigate('ShareLinks')} />
       </InsetGroupSection>
 
-      <InsetGroupSection header="Device">
+      <InsetGroupSection
+        header="Device"
+        footer={
+          Platform.OS === 'android'
+            ? 'Background uploads keep going on Wi-Fi with the app in the background or the phone locked, and show a notification while they run.'
+            : undefined
+        }
+      >
         <InsetGroupToggleRow
           label="Stay awake during uploads"
           value={keepAwake.data ?? false}
           onValueChange={toggleKeepAwake}
         />
+        {Platform.OS === 'android' ? (
+          <InsetGroupToggleRow
+            label="Upload in the background"
+            value={backgroundUploads.data ?? false}
+            onValueChange={(enabled) => void handleBackgroundUploads(enabled)}
+          />
+        ) : null}
       </InsetGroupSection>
 
       <InsetGroupSection header="Learn">

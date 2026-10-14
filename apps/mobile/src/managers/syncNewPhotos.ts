@@ -31,6 +31,7 @@ import {
 } from '../lib/mediaLibraryPermissions'
 import { app } from '../stores/appService'
 import { triggerImportScanner } from './importScanner'
+import { noteUploadWork } from './uploadWorkSignal'
 
 const CURSOR_KEY = 'syncNewPhotosCursor'
 
@@ -120,6 +121,7 @@ export async function run(signal?: AbortSignal): Promise<void> {
         // idempotent).
         if (result.action === 'waited') return
         triggerImportScanner()
+        noteUploadWork()
       } else {
         logger.debug('syncNewPhotos', 'no_new_candidates')
       }
