@@ -85,8 +85,7 @@ export async function initApp(): Promise<void> {
         await initKeepAwake()
         initAutoKeepAwake()
         initScreenDim()
-        const maxDownloads = await app().settings.getMaxDownloads()
-        await app().downloads.setMaxSlots(maxDownloads)
+        await app().downloads.restoreMaxSlots()
       },
     },
     {

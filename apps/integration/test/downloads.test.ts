@@ -1,4 +1,9 @@
-import { DOWNLOAD_PRESERVED_DISK_BYTES, INSUFFICIENT_SPACE_MESSAGE } from '@siastorage/core/config'
+import {
+  DEFAULT_MAX_DOWNLOADS,
+  DOWNLOAD_PRESERVED_DISK_BYTES,
+  INSUFFICIENT_SPACE_MESSAGE,
+  MAX_DOWNLOADS_SETTING,
+} from '@siastorage/core/config'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 import { cache, serialize } from 'swr/_internal'
@@ -251,6 +256,60 @@ describe('Downloads', () => {
 
     await app.app.downloads.setMaxSlots(0)
     expect(await app.app.settings.getMaxDownloads()).toBe(1)
+  })
+
+  it('an upgraded install with the old default saved runs at the new default, and startup saves nothing', async () => {
+    await app.app.storage.setItem('maxDownloads', '2')
+
+    await app.app.downloads.restoreMaxSlots()
+
+    expect(await app.app.settings.getMaxDownloads()).toBe(DEFAULT_MAX_DOWNLOADS)
+    expect(await app.app.storage.getItem('maxDownloads')).toBeNull()
+    expect(await app.app.storage.getItem(MAX_DOWNLOADS_SETTING)).toBeNull()
+  })
+
+  it('with the saved count cleared, startup runs downloads at the default again, not the old count', async () => {
+    await app.app.downloads.setMaxSlots(1)
+    await app.app.storage.removeItem(MAX_DOWNLOADS_SETTING)
+    await app.app.downloads.restoreMaxSlots()
+
+    const first = await setupDownloadableFile(app, { startId: 1 })
+    const second = await setupDownloadableFile(app, { startId: 2 })
+    let unblock!: () => void
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve
+    })
+    const download = app.sdk.downloadByObjectId.bind(app.sdk)
+    jest.spyOn(app.sdk, 'downloadByObjectId').mockImplementation(async (objectId) => {
+      if (objectId === first.stored.id) await blocked
+      return download(objectId)
+    })
+    const holding = app.app.downloads.downloadFile(first.file.id, 'user')
+    await waitForCondition(
+      () => app.app.downloads.getEntry(first.file.id)?.status === 'downloading',
+    )
+
+    // With one slot this would wait behind the first.
+    await app.app.downloads.downloadFile(second.file.id, 'user')
+    unblock()
+    await holding
+  })
+
+  it('an upgraded install keeps a download count it chose, other than the old default', async () => {
+    await app.app.storage.setItem('maxDownloads', '4')
+
+    await app.app.downloads.restoreMaxSlots()
+
+    expect(await app.app.settings.getMaxDownloads()).toBe(4)
+    expect(await app.app.storage.getItem('maxDownloads')).toBeNull()
+  })
+
+  it('a download count the user chose survives startup', async () => {
+    await app.app.downloads.setMaxSlots(3)
+
+    await app.app.downloads.restoreMaxSlots()
+
+    expect(await app.app.settings.getMaxDownloads()).toBe(3)
   })
 
   it('progress reports file.size-based progress', async () => {

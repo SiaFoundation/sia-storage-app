@@ -18,8 +18,15 @@ export const APP_META = {
 export const DEFAULT_INDEXER_URL = 'https://sia.storage'
 // Max concurrent uploads.
 export const DEFAULT_MAX_UPLOADS = 1
-// Max concurrent downloads.
-export const DEFAULT_MAX_DOWNLOADS = 2
+/**
+ * Most downloads that run at once. The transfer memory budget decides how
+ * many large ones fit together. This limits how many small ones do, since a
+ * small download spends most of its time waiting on hosts to answer rather
+ * than moving data, and running more of them is what makes many of them fast.
+ */
+export const DEFAULT_MAX_DOWNLOADS = 8
+/** Where a download count the user chose is saved. Absent means the default. */
+export const MAX_DOWNLOADS_SETTING = 'maxConcurrentDownloads'
 // Background downloads that may wait for a slot at once. Queuing another drops
 // the oldest waiting.
 export const MAX_BACKGROUND_DOWNLOADS_QUEUED = 20

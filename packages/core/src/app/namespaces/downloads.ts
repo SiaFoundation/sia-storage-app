@@ -3,6 +3,7 @@ import type { SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import {
   DEFAULT_MAX_DOWNLOADS,
+  MAX_DOWNLOADS_SETTING,
   DOWNLOAD_PRESERVED_DISK_BYTES,
   INSUFFICIENT_SPACE_MESSAGE,
   MAX_BACKGROUND_DOWNLOADS_QUEUED,
@@ -81,7 +82,9 @@ export function buildDownloadsNamespace(
 ): AppService['downloads'] {
   let state: DownloadsState = { downloads: {} }
   const controllers = new Map<string, AbortController>()
-  const slotPool = new SlotPool(DEFAULT_MAX_DOWNLOADS)
+  // Limits downloads by count and by the memory their read-ahead may hold,
+  // so small files run together while large ones take turns.
+  const slotPool = new SlotPool(DEFAULT_MAX_DOWNLOADS, { capacity: budget.downloadRoom() })
   const inFlight = new Map<string, Promise<void>>()
   // The priority each download in flight waits at. A `user` call for a file
   // already waiting as `background` raises it here and in the slot pool.
@@ -89,7 +92,7 @@ export function buildDownloadsNamespace(
   // Byte size of each download currently competing for disk, so a second
   // concurrent download counts the first's bytes as already spoken for. Two
   // downloads checking the same free space independently could each pass and
-  // together overrun it; DEFAULT_MAX_DOWNLOADS lets two run at once. Keyed by
+  // together overrun it, and DEFAULT_MAX_DOWNLOADS lets several run at once. Keyed by
   // download id, populated once the size is known, cleared when the download
   // finalizes.
   const inFlightSizes = new Map<string, number>()
@@ -231,10 +234,13 @@ export function buildDownloadsNamespace(
       // Read now rather than when the download started: a user call may have
       // raised it during the awaits above, before it had a place in the pool.
       const priority = priorities.get(fileId) ?? requested
+      const chunks = budget.downloadChunks()
+      slotPool.setCapacity(budget.downloadRoom())
       release = await slotPool.acquire(controller.signal, {
         priority: SLOT_PRIORITY[priority],
         maxQueueDepth: priority === 'background' ? MAX_BACKGROUND_DOWNLOADS_QUEUED : undefined,
         key: fileId,
+        weight: budget.downloadBytes(file.size, chunks),
       })
       update(fileId, { status: 'downloading' })
 
@@ -325,7 +331,11 @@ export function buildDownloadsNamespace(
           // Acquire only once the size is known and there is room, so a slow
           // SDK resolve or an immediate no-space refusal doesn't hold a slot
           // other downloads are waiting on. Matches execute()'s ordering.
-          release = await slotPool.acquire(controller.signal, { priority: SLOT_PRIORITY.user })
+          slotPool.setCapacity(budget.downloadRoom())
+          release = await slotPool.acquire(controller.signal, {
+            priority: SLOT_PRIORITY.user,
+            weight: budget.downloadBytes(size, budget.downloadChunks()),
+          })
           update(id, { status: 'downloading' })
           reservation = budget.reserveDownload({ user: true })
           return reservation.chunks
@@ -419,9 +429,24 @@ export function buildDownloadsNamespace(
     },
     setMaxSlots: async (n) => {
       const clamped = Math.max(1, Math.floor(Number(n) || 1))
-      await storage.setItem('maxDownloads', String(clamped))
-      caches.settings.invalidate('maxDownloads')
+      await storage.setItem(MAX_DOWNLOADS_SETTING, String(clamped))
+      caches.settings.invalidate(MAX_DOWNLOADS_SETTING)
       slotPool.setMaxSlots(clamped)
+    },
+    restoreMaxSlots: async () => {
+      // Installs from before this key hold `maxDownloads`, which every launch
+      // rewrote, so a 2 there is the default of the time rather than anyone's
+      // choice and is dropped. Any other count was chosen in settings, and
+      // moves to the current key unless one is already saved there.
+      const legacy = Math.floor(Number(await storage.getItem('maxDownloads')))
+      if (legacy > 0 && legacy !== 2 && (await storage.getItem(MAX_DOWNLOADS_SETTING)) === null) {
+        await storage.setItem(MAX_DOWNLOADS_SETTING, String(legacy))
+      }
+      await storage.deleteItem('maxDownloads')
+      // Applied either way: after local data is cleared, this runs again on
+      // the same pool, which may hold a count the user chose before.
+      const saved = Number(await storage.getItem(MAX_DOWNLOADS_SETTING))
+      slotPool.setMaxSlots(saved > 0 ? Math.floor(saved) : DEFAULT_MAX_DOWNLOADS)
     },
   }
 }
