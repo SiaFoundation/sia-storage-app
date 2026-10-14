@@ -12,6 +12,12 @@ type TempFsFileInfo = {
   id: string
   type: string
   localId: string | null
+  /**
+   * Names one download attempt. A cancelled attempt is still cleaning up
+   * when a retry of the same file starts, and with one path per file its
+   * cleanup would delete the retry's file.
+   */
+  attempt?: string
 }
 
 export async function ensureTempFsStorageDirectory(): Promise<void> {
@@ -22,7 +28,8 @@ export async function ensureTempFsStorageDirectory(): Promise<void> {
 }
 
 function getTempDownloadFileForId(file: TempFsFileInfo): File {
-  return new File(tempFsStorageDirectory, `${file.id}.download.tmp`)
+  const name = file.attempt ? `${file.id}.${file.attempt}` : file.id
+  return new File(tempFsStorageDirectory, `${name}.download.tmp`)
 }
 
 export async function getOrCreateTempDownloadFile(file: TempFsFileInfo): Promise<File> {
