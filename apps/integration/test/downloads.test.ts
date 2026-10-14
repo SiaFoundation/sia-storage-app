@@ -475,3 +475,74 @@ describe('Download cancelled mid-start', () => {
     }
   })
 })
+
+describe('Transfer memory', () => {
+  const MB = 1024 * 1024
+  // 800 MB above Android's kill level, so a 200 MB transfer budget.
+  const readMemory = () => ({
+    availableBytes: 1200 * MB,
+    thresholdBytes: 400 * MB,
+    lowMemory: false,
+  })
+  let app: TestApp
+
+  afterEach(async () => {
+    await app.shutdown()
+  })
+
+  it('a download asks the SDK for read-ahead sized from what the device can spare', async () => {
+    app = createTestApp(createEmptyIndexerStorage(), { readMemory })
+    await app.start()
+    app.pause()
+    const { file } = await setupDownloadableFile(app)
+
+    await app.app.downloads.downloadFile(file.id, 'user')
+
+    // Half of 200 MB, at 2 MiB of memory per chunk.
+    expect(app.downloadChunks).toEqual([50])
+  })
+
+  it('an upload asks the SDK to buffer one slab when the budget cannot hold two', async () => {
+    app = createTestApp(createEmptyIndexerStorage(), { readMemory })
+    const uploadPacked = jest.spyOn(app.sdk, 'uploadPacked')
+    await app.start()
+    const [file] = await app.addFiles(generateTestFiles(1, { sizeBytes: 4096 }))
+
+    await waitForCondition(
+      async () => (await app.app.localObjects.getRefsForFiles([file.id]))[file.id]?.length > 0,
+    )
+
+    expect(uploadPacked).toHaveBeenCalledWith(expect.objectContaining({ maxBufferedSlabs: 1 }))
+  })
+
+  it('a finished download gives its read-ahead back, so the next one gets the same', async () => {
+    app = createTestApp(createEmptyIndexerStorage(), { readMemory })
+    await app.start()
+    app.pause()
+    const first = await setupDownloadableFile(app, { startId: 1 })
+    const second = await setupDownloadableFile(app, { startId: 2 })
+
+    await app.app.downloads.downloadFile(first.file.id, 'user')
+    await app.app.downloads.downloadFile(second.file.id, 'user')
+
+    expect(app.downloadChunks).toEqual([50, 50])
+  })
+
+  it('a download started while an upload is open gets the download floor beside it', async () => {
+    // No reading, so the fixed 904 MiB budget, of which an upload buffering
+    // five slabs may take 840 MiB.
+    app = createTestApp(createEmptyIndexerStorage())
+    const uploadPacked = jest.spyOn(app.sdk, 'uploadPacked')
+    await app.start()
+    const { file } = await setupDownloadableFile(app)
+    await app.addFiles(generateTestFiles(1, { startId: 2, sizeBytes: 4096 }))
+    // The batch stays open until its idle timeout, well past the download.
+    await waitForCondition(() => uploadPacked.mock.calls.length > 0)
+
+    await app.app.downloads.downloadFile(file.id, 'user')
+
+    // The upload leaves the 64 MiB download floor, and the download takes
+    // half of it, 16 chunks at 2 MiB each.
+    expect(app.downloadChunks).toEqual([16])
+  })
+})

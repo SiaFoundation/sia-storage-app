@@ -104,7 +104,11 @@ function testSimulator(): { udid: string; booted: boolean } | null {
 
 if (platform === 'ios') {
   if (!simulator) {
-    process.exit(run(['swift', 'test', '--package-path', 'modules/import-sources/ios'], appRoot))
+    for (const module of ['import-sources', 'memory-info']) {
+      const code = run(['swift', 'test', '--package-path', `modules/${module}/ios`], appRoot)
+      if (code !== 0) process.exit(code)
+    }
+    process.exit(0)
   }
   // Simulator tier. The podspec's testspec is inert for a plain `pod install`,
   // so opt the generated Podfile into it before installing. Editing that Podfile
@@ -229,7 +233,7 @@ if (platform === 'android') {
     console.error('android/ not generated; run `bunx expo prebuild -p android` first.')
     process.exit(1)
   }
-  const gradleTasks = ['import-sources', 'upload-service'].map(
+  const gradleTasks = ['import-sources', 'upload-service', 'memory-info'].map(
     (module) => `:${module}:testDebugUnitTest`,
   )
   process.exit(run(['./gradlew', ...gradleTasks], androidDir))

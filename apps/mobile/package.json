@@ -73,6 +73,7 @@
     "lucide-react-native": "1.55.0",
     "markdown-it": "15.0.2",
     "media-observer": "file:./modules/media-observer",
+    "memory-info": "file:./modules/memory-info",
     "react": "19.3.0",
     "react-native": "0.88.0-rc.5",
     "react-native-background-fetch": "4.4.2",

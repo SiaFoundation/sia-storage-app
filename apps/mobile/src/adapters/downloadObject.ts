@@ -5,7 +5,7 @@ import { adoptFileToFs } from '../stores/fs'
 
 export function createDownloadAdapter(): DownloadObjectAdapter {
   return {
-    async download({ file, object, sdk, onProgress, signal }) {
+    async download({ file, object, sdk, onProgress, signal, maxBufferedChunks }) {
       const keyBytes = await app().auth.getAppKey(object.indexerURL)
       if (!keyBytes) throw new Error(`No AppKey found for indexer: ${object.indexerURL}`)
 
@@ -13,6 +13,7 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
       const dl = await sdk.download(pinnedObject, {
         offset: BigInt(0),
         length: undefined,
+        maxBufferedChunks,
       })
 
       await downloadToCache({
@@ -29,10 +30,11 @@ export function createDownloadAdapter(): DownloadObjectAdapter {
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {
       const sharedObject = await sdk.objectFromShareUrl(url)
       const totalSize = Number(sharedObject.size())
-      await ensureSpace(totalSize)
+      const maxBufferedChunks = await ensureSpace(totalSize)
       const dl = await sdk.download(sharedObject, {
         offset: BigInt(0),
         length: undefined,
+        maxBufferedChunks,
       })
 
       await downloadToCache({
