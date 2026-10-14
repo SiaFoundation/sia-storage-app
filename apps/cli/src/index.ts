@@ -229,6 +229,26 @@ if (process.env.SIA_DAEMON_MODE === '1') {
     })
 
   program
+    .command('trash')
+    .description('List the trash, delete entries in it for good, or empty it')
+    .argument('[entries...]', 'With --delete, the entries to delete, by id or path')
+    .option('--delete', 'Delete the named entries for good')
+    .option('--empty', 'Delete everything in the trash for good')
+    .action(async (entries: string[], opts: { delete?: boolean; empty?: boolean }) => {
+      const { trashCommand } = await import('./commands/trash')
+      await trashCommand(resolveDataDir(), entries, opts)
+    })
+
+  program
+    .command('restore')
+    .description('Put entries in the trash back, with their versions')
+    .argument('<entries...>', 'Entries by id, the start of an id, or path')
+    .action(async (entries: string[]) => {
+      const { restoreCommand } = await import('./commands/trash')
+      await restoreCommand(resolveDataDir(), entries)
+    })
+
+  program
     .command('search')
     .description('Search files')
     .argument('<query...>', 'Search query')
