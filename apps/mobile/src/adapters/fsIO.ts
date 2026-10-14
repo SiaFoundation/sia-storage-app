@@ -8,6 +8,7 @@ import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHas
 import { copyImportFile } from '../lib/importCopy'
 import { simHooks } from '../lib/simHooks'
 import { getStorageDirectoryUri } from '../lib/sharedContainer'
+import { fileUriToPath } from '@siastorage/core/lib/fileUri'
 
 const fsStorageDirectoryUri = `${getStorageDirectoryUri()}/files`
 
@@ -28,20 +29,6 @@ async function publish(tempUri: string, targetUri: string): Promise<void> {
     await RNFS.unlink(targetUri)
   }
   await RNFS.moveFile(tempUri, targetUri)
-}
-
-// iOS pickers (Document Picker, share inbox) hand us percent-encoded
-// `file://` URLs — `Screenshot%202025-09-03.png` — but RNFS expects a
-// real filesystem path with literal spaces. Fall back to the raw path
-// if decoding throws on a malformed URI (literal `%` + non-hex).
-function fileUriToPath(uri: string): string {
-  if (!uri.startsWith('file://')) return uri
-  const path = uri.slice('file://'.length)
-  try {
-    return decodeURIComponent(path)
-  } catch {
-    return path
-  }
 }
 
 // Overloaded to match the adapter contract: hashed by default, size-only with

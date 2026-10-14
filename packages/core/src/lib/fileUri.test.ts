@@ -12,6 +12,10 @@ describe('fileUriToPath', () => {
     expect(fileUriToPath('file:///tmp/a%23b%2Bc.png')).toBe('/tmp/a#b+c.png')
   })
 
+  it('keeps a name with a literal percent sign that is not an escape', () => {
+    expect(fileUriToPath('file:///tmp/100%done.txt')).toBe('/tmp/100%done.txt')
+  })
+
   it('returns a path that is already bare unchanged', () => {
     expect(fileUriToPath('/tmp/plain.txt')).toBe('/tmp/plain.txt')
   })

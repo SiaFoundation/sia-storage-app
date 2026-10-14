@@ -134,6 +134,15 @@ export interface DownloadLikeRef {
    * Callers loop until `byteLength === 0` or an exception propagates.
    */
   read(control?: { signal: AbortSignal }): Promise<ArrayBuffer>
+  /**
+   * Writes the rest of the download to the file at `path`, truncating it
+   * first, and resolves to the bytes written. The SDK writes the file itself,
+   * so no data crosses into JavaScript. A cancelled or failed call leaves a
+   * partial file behind. The React Native binding has it, and so does the
+   * sim's mock SDK when the phone app gives it a way to open files. The Node
+   * binding does not.
+   */
+  writeToPath?(path: string, control?: { signal: AbortSignal }): Promise<bigint>
   cancel(): Promise<void>
 }
 
