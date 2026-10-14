@@ -285,4 +285,95 @@ describe('SlotPool', () => {
       expect(pool.getInUseCount()).toBe(0)
     })
   })
+
+  describe('capacity', () => {
+    it('a heavy waiter that is cancelled lets the lighter one behind it start at once', async () => {
+      const pool = new SlotPool(4, { capacity: 100 })
+      await pool.acquire(undefined, { weight: 50 })
+      const heavy = new AbortController()
+      const heavyWait = pool.acquire(heavy.signal, { weight: 80, priority: 0 }).catch(() => null)
+      let lightStarted = false
+      void pool.acquire(undefined, { weight: 30, priority: 1 }).then(() => {
+        lightStarted = true
+      })
+      await Promise.resolve()
+      expect(lightStarted).toBe(false)
+
+      heavy.abort()
+      await heavyWait
+      await Promise.resolve()
+      expect(lightStarted).toBe(true)
+    })
+
+    it('runs light operations together up to the slot count', async () => {
+      const pool = new SlotPool(4, { capacity: 100 })
+      const releases = await Promise.all(
+        [1, 2, 3].map(() => pool.acquire(undefined, { weight: 10 })),
+      )
+      expect(pool.getInUseCount()).toBe(3)
+      expect(pool.getInUseWeight()).toBe(30)
+      for (const release of releases) release()
+    })
+
+    it('makes heavy operations take turns', async () => {
+      const pool = new SlotPool(4, { capacity: 100 })
+      const first = await pool.acquire(undefined, { weight: 80 })
+      let second = false
+      const waiting = pool.acquire(undefined, { weight: 80 }).then((release) => {
+        second = true
+        return release
+      })
+      await Promise.resolve()
+      expect(second).toBe(false)
+      first()
+      const release = await waiting
+      expect(second).toBe(true)
+      release()
+    })
+
+    it('lets one operation heavier than the capacity run alone', async () => {
+      const pool = new SlotPool(4, { capacity: 100 })
+      const release = await pool.acquire(undefined, { weight: 500 })
+      expect(pool.getInUseWeight()).toBe(500)
+      release()
+    })
+
+    it('a heavy waiter is not kept waiting by lighter ones queued behind it', async () => {
+      const pool = new SlotPool(8, { capacity: 100 })
+      const running = await pool.acquire(undefined, { weight: 50, priority: 1 })
+      const order: string[] = []
+      const heavy = pool.acquire(undefined, { weight: 80, priority: 0 }).then((r) => {
+        order.push('heavy')
+        return r
+      })
+      // Fits beside the running one, but not beside the heavy waiter too.
+      const light = pool.acquire(undefined, { weight: 30, priority: 1 }).then((r) => {
+        order.push('light')
+        return r
+      })
+      await Promise.resolve()
+      expect(order).toEqual([])
+      running()
+      ;(await heavy)()
+      ;(await light)()
+      expect(order).toEqual(['heavy', 'light'])
+    })
+
+    it('a lower capacity applies to what starts next, not to what is running', async () => {
+      const pool = new SlotPool(4, { capacity: 100 })
+      const a = await pool.acquire(undefined, { weight: 60 })
+      pool.setCapacity(50)
+      expect(pool.getInUseWeight()).toBe(60)
+      let started = false
+      const b = pool.acquire(undefined, { weight: 10 }).then((r) => {
+        started = true
+        return r
+      })
+      await Promise.resolve()
+      expect(started).toBe(false)
+      a()
+      ;(await b)()
+      expect(started).toBe(true)
+    })
+  })
 })

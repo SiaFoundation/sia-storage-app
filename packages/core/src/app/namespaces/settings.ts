@@ -1,5 +1,5 @@
 import type { StorageAdapter } from '../../adapters/storage'
-import { DEFAULT_INDEXER_URL, DEFAULT_MAX_DOWNLOADS } from '../../config'
+import { DEFAULT_INDEXER_URL, DEFAULT_MAX_DOWNLOADS, MAX_DOWNLOADS_SETTING } from '../../config'
 import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
@@ -54,11 +54,11 @@ export function buildSettingsNamespace(
       caches.settings.set(v, 'activeLibraryTab')
       await storage.setItem('activeLibraryTab', v)
     },
-    getMaxDownloads: () => getNum('maxDownloads', DEFAULT_MAX_DOWNLOADS),
+    getMaxDownloads: () => getNum(MAX_DOWNLOADS_SETTING, DEFAULT_MAX_DOWNLOADS),
     setMaxDownloads: async (v) => {
       const clamped = Math.max(1, Math.floor(Number(v) || 1))
-      await storage.setItem('maxDownloads', String(clamped))
-      caches.settings.invalidate('maxDownloads')
+      await storage.setItem(MAX_DOWNLOADS_SETTING, String(clamped))
+      caches.settings.invalidate(MAX_DOWNLOADS_SETTING)
     },
     getLogLevel: () => getStr('logLevel', 'debug'),
     setLogLevel: (v) => setStr('logLevel', v),

@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import { useApp } from '../app/context'
+import { MAX_DOWNLOADS_SETTING } from '../config'
 
 /** Returns the configured indexer URL used for metadata sync. */
 export function useIndexerURL() {
@@ -60,7 +61,9 @@ export function useActiveLibraryTab() {
 /** Returns the maximum number of concurrent downloads allowed. */
 export function useMaxDownloads() {
   const app = useApp()
-  return useSWR(app.caches.settings.key('maxDownloads'), () => app.settings.getMaxDownloads())
+  return useSWR(app.caches.settings.key(MAX_DOWNLOADS_SETTING), () =>
+    app.settings.getMaxDownloads(),
+  )
 }
 
 /** Returns the current log level setting. */
