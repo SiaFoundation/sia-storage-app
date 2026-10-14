@@ -93,3 +93,29 @@ export type FileUpdate = Omit<Partial<FileRecordRow>, 'updatedAt' | 'hash'> & { 
 export type FileRecord = FileRecordRow & {
   objects: Record<string, LocalObjectRef>
 }
+
+/**
+ * A file in the trash with the versions trashed along with it. `id` is the
+ * newest of them, and names the entry to restore or delete it.
+ */
+export type TrashEntry = {
+  id: string
+  name: string
+  type: string
+  size: number
+  /** The folder it was in, or null for the top of the library or a folder since deleted. */
+  folder: string | null
+  versions: number
+  trashedAt: number
+  /** The earliest the trash deletes it for good. The hourly purge may run later. */
+  purgeAt: number
+}
+
+/** A file brought back from the trash, under the name it came back with. */
+export type RestoredFile = {
+  /** The newest restored version. */
+  id: string
+  name: string
+  /** The name it was trashed under, when a live file had taken it since. */
+  renamedFrom: string | null
+}

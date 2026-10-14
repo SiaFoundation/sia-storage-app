@@ -7,6 +7,8 @@ export type {
   FileUpdate,
   ThumbSize,
   UpdatedAtWrite,
+  RestoredFile,
+  TrashEntry,
 } from './files'
 export { fileLocalMetadataKeys, fileMetadataKeys, fileRecordRowKeys, ThumbSizes } from './files'
 export type { ChangeEvent, ChangeScope } from './changes'
