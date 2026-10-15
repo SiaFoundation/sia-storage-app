@@ -13,7 +13,8 @@
  */
 
 import { useApp } from '@siastorage/core/app'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { sia } from './api'
 import { PLAIN_BUTTON, PRIMARY_BUTTON } from './buttons'
 import { PhotoPile } from './onboarding/PhotoPile'
 import { HEADING, LEAD, Shell } from './onboarding/Shell'
@@ -88,6 +89,16 @@ export function SignIn({ onDone }: { onDone: () => void }) {
     const timer = setTimeout(() => setCopied(false), COPIED_MS)
     return () => clearTimeout(timer)
   }, [copied])
+
+  // Closing the window only hides it and keeps this page mounted, and Start
+  // over returns to Connect on the same page. Without clearing at both, the
+  // next phrase screen would open with the old phrase filled in.
+  const forgetTyped = useCallback(() => {
+    setEntered(emptySlots())
+    setChecked({ phrase: '', result: 'idle' })
+  }, [])
+
+  useEffect(() => sia.onWindowClosed(forgetTyped), [forgetTyped])
 
   // The checksum is what a full grid of real words can still get wrong, so it
   // is asked about the moment the last slot fills rather than at Continue.
@@ -312,6 +323,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
             className={LINK}
             disabled={busy}
             onClick={() => {
+              forgetTyped()
               setStage('connect')
               setError(null)
             }}

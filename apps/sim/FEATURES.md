@@ -364,7 +364,7 @@ dialog.
   told it was reconnecting, and the app keys registered.
 - Tests: scenarios `desktop/sign-in-new-account`,
   `desktop/sign-in-existing-account`, `desktop/sign-in-not-approved`,
-  `desktop/tour-closed-part-way`
+  `desktop/sign-in-forgets-typed-phrase`, `desktop/tour-closed-part-way`
 - Desktop, a device added signed out:
 
 ```sh
