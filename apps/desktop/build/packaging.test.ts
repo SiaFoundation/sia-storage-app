@@ -26,6 +26,7 @@ const env = {
   appName: 'Sia Storage Dev',
   appIcon: 'icon-dev.icns',
   linkCli: true,
+  updateChannel: null,
 }
 
 describe('entitlements', () => {
@@ -254,6 +255,21 @@ describe('build settings', () => {
 
     it("lets the environment set test's linkCli back to true", () => {
       expect(loadEnv('test', { ...environment, SIA_LINK_CLI: 'true' }).linkCli).toBe(true)
+    })
+
+    it.each([
+      ['dev', null],
+      ['test', null],
+      ['beta', 'beta'],
+      ['prod', 'stable'],
+    ] as const)('%s env updates from the %p channel', (context, channel) => {
+      expect(loadEnv(context, environment).updateChannel).toBe(channel)
+    })
+
+    it('rejects an update channel other than beta or stable', () => {
+      expect(() => loadEnv('beta', { ...environment, SIA_UPDATE_CHANNEL: 'nightly' })).toThrow(
+        /SIA_UPDATE_CHANNEL is nightly/,
+      )
     })
 
     it.each(['dev', 'test', 'beta', 'prod'])(

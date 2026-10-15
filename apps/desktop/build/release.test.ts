@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'bun:test'
-import { dmgName } from './dmg'
+import { releaseFileName } from './darwin'
 import { developerIdIdentityFrom } from './identity'
 import { notaryKeyFrom, parseSubmission } from './notarize'
-import { assertTagMatchesPackage, contextForTag, versionForTag } from './release'
+import { assertTagMatchesPackage, contextsForTag, versionForTag } from './release'
 
-describe('the disk image name', () => {
+describe('the release file names', () => {
   it.each([
-    ['Sia Storage Beta', '1.2.0-rc.0', 'Sia-Storage-Beta-1.2.0-rc.0-arm64.dmg'],
-    ['Sia Storage', '1.2.0', 'Sia-Storage-1.2.0-arm64.dmg'],
-  ])('%s at %s is %s', (appName, version, expected) => {
-    expect(dmgName(appName, version)).toBe(expected)
+    ['Sia Storage Beta', '1.2.0-rc.0', 'dmg', 'Sia-Storage-Beta-1.2.0-rc.0-arm64.dmg'],
+    ['Sia Storage', '1.2.0', 'dmg', 'Sia-Storage-1.2.0-arm64.dmg'],
+    ['Sia Storage', '1.2.0', 'zip', 'Sia-Storage-1.2.0-arm64.zip'],
+  ] as const)('%s at %s as a %s is %s', (appName, version, extension, expected) => {
+    expect(releaseFileName(appName, version, extension)).toBe(expected)
   })
 })
 
@@ -84,10 +85,13 @@ describe('the notarytool verdict', () => {
 })
 
 describe('the release tag', () => {
-  it('is the version and the context', () => {
+  it('is the version, and the apps it builds', () => {
     expect(versionForTag('desktop/v1.2.0-rc.0')).toBe('1.2.0-rc.0')
-    expect(contextForTag('desktop/v1.2.0-rc.0')).toBe('beta')
-    expect(contextForTag('desktop/v1.2.0')).toBe('prod')
+    expect(contextsForTag('desktop/v1.2.0-rc.0')).toEqual(['beta'])
+  })
+
+  it('builds the beta app beside the shipping one for a stable release', () => {
+    expect(contextsForTag('desktop/v1.2.0')).toEqual(['prod', 'beta'])
   })
 
   it.each(['cli/v1.2.0', 'desktop/v1.2', 'desktop/1.2.0', 'desktop/v1.2.0-beta.1'])(

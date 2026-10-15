@@ -15,6 +15,7 @@ import type { PlatformIntegration } from './platform'
 import { call } from './rpc'
 import { takeShareRequest } from './share'
 import { isMockNetworkPage } from './testMode'
+import { installUpdate, updateState } from './updates'
 import {
   beginQuit,
   hideMainWindow,
@@ -109,6 +110,9 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
     finderName: desktopConfig().displayName,
     version: app.getVersion(),
   }))
+
+  ipcMain.handle('update:state', () => updateState())
+  ipcMain.handle('update:install', () => installUpdate())
 
   ipcMain.handle('app:quit', () => {
     beginQuit()

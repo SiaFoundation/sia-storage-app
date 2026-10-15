@@ -1,11 +1,12 @@
 /*
- * Builds a distributable disk image: bundle, sign, notarize and staple the
- * app, wrap it, then notarize and staple the image.
+ * Builds what a release attaches for one app: bundle, sign, notarize and
+ * staple the app, zip it for the updater, wrap it in a disk image, then
+ * notarize and staple the image.
  *
  * The headless half of packaging, with nothing installed or launched, so it
  * runs on a CI runner. `bun run desktop:release <beta|prod>` is the local
- * form. The workflow in .github/workflows/release-desktop.yml runs it from a
- * `desktop/v*` GitHub release and sets RELEASE_TAG.
+ * form. The workflow in .github/workflows/release-desktop.yml runs it once
+ * for each app a `desktop/v*` tag builds, with RELEASE_TAG and SIA_CONTEXT set.
  *
  * The tag is the version, not package.json. A stable tag is created on the
  * release candidate's own commit, where package.json still reads X.Y.Z-rc.N,
@@ -18,8 +19,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { $ } from 'bun'
 import { fileURLToPath } from 'node:url'
-import { APP_VERSION, build, type BuildOptions, type BuildResult } from './darwin'
-import { createDmg, dmgName } from './dmg'
+import { APP_VERSION, build, releaseFileName, type BuildOptions, type BuildResult } from './darwin'
+import { createDmg } from './dmg'
 import { type BuildEnv, readEnvValues, resolveEnv } from './env'
 import { developerIdIdentity } from './identity'
 import {
@@ -42,9 +43,16 @@ export function versionForTag(tag: string): string {
   return match[1]!
 }
 
-/** A candidate is the beta app; a stable release is the shipping one. */
-export function contextForTag(tag: string): 'beta' | 'prod' {
-  return RC_SUFFIX.test(versionForTag(tag)) ? 'beta' : 'prod'
+/**
+ * The apps a tag builds. `release` builds the first when it is given no
+ * context. A candidate is the beta app. A stable release is the shipping app
+ * and the beta app too, because beta installs update from every desktop
+ * release and an install only accepts an update signed under its own bundle
+ * id. Without a beta build of the stable version, a beta install would wait
+ * for the next candidate.
+ */
+export function contextsForTag(tag: string): Array<'beta' | 'prod'> {
+  return RC_SUFFIX.test(versionForTag(tag)) ? ['beta'] : ['prod', 'beta']
 }
 
 /**
@@ -79,12 +87,12 @@ export async function release(input: {
   buildNumber?: string
   notarize: boolean
   environment: Record<string, string | undefined>
-}): Promise<string> {
+}): Promise<{ dmgPath: string; zipPath: string }> {
   const { tag, environment } = input
-  const context = tag ? contextForTag(tag) : input.context
+  const context = input.context ?? (tag ? contextsForTag(tag)[0] : undefined)
   if (!context) throw new Error('No build context: pass one, or set RELEASE_TAG')
-  if (tag && input.context && input.context !== context) {
-    throw new Error(`${tag} is a ${context} release, not ${input.context}`)
+  if (tag && !(contextsForTag(tag) as string[]).includes(context)) {
+    throw new Error(`${tag} builds ${contextsForTag(tag).join(' and ')}, not ${context}`)
   }
   const version = tag ? versionForTag(tag) : APP_VERSION
   if (tag) assertTagMatchesPackage(tag, APP_VERSION)
@@ -100,7 +108,8 @@ export async function release(input: {
   const key = input.notarize ? notaryKeyFrom(environment) : undefined
 
   const result = await buildSigned(env, { version, buildNumber: input.buildNumber })
-  const dmgPath = join(dirname(result.appPath), dmgName(env.appName, version))
+  const dmgPath = join(dirname(result.appPath), releaseFileName(env.appName, version, 'dmg'))
+  const zipPath = join(dirname(result.appPath), releaseFileName(env.appName, version, 'zip'))
   const keyDir = key ? mkdtempSync(join(environment.RUNNER_TEMP ?? tmpdir(), 'notary-')) : ''
   try {
     const keyPath = key ? writeNotaryKey(key, keyDir) : ''
@@ -115,6 +124,12 @@ export async function release(input: {
       rmSync(zip)
       await staple(result.appPath)
     }
+
+    // After stapling, so an install updated from the zip carries its ticket
+    // the same as one copied from the image and launches offline.
+    console.log('Zipping for updates…')
+    rmSync(zipPath, { force: true })
+    await $`ditto -c -k --sequesterRsrc --keepParent ${result.appPath} ${zipPath}`
 
     console.log('Wrapping…')
     await createDmg({
@@ -133,18 +148,18 @@ export async function release(input: {
   } finally {
     if (keyDir) rmSync(keyDir, { recursive: true, force: true })
   }
-  return dmgPath
+  return { dmgPath, zipPath }
 }
 
 if (import.meta.main) {
-  const dmgPath = await release({
-    context: process.argv[2] ?? process.env.SIA_CONTEXT,
+  const { dmgPath, zipPath } = await release({
+    context: process.argv[2] ?? (process.env.SIA_CONTEXT?.trim() || undefined),
     tag: process.env.RELEASE_TAG?.trim() || undefined,
     buildNumber: process.env.SIA_BUILD_NUMBER?.trim() || undefined,
     notarize: process.env.DRY_RUN !== 'true',
     environment: process.env,
   })
-  console.log(`\nImage: ${dmgPath}`)
+  console.log(`\nImage: ${dmgPath}\nUpdate: ${zipPath}`)
   const output = process.env.GITHUB_OUTPUT
-  if (output) appendFileSync(output, `dmg=${dmgPath}\n`)
+  if (output) appendFileSync(output, `dmg=${dmgPath}\nzip=${zipPath}\n`)
 }

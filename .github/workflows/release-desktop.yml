@@ -1,13 +1,16 @@
 name: Release Desktop
 
-# Builds the macOS app as a notarized disk image and attaches it to a desktop
-# release. A prerelease (desktop/vX.Y.Z-rc.N) is the beta app; the stable tag
-# the Finalize Release workflow promotes it to is the shipping app. Both tags
-# name the same commit, so the two builds differ only in identity and version.
+# Builds the macOS app as a notarized disk image, plus the zip installed apps
+# update from, and attaches both to a desktop release. A prerelease
+# (desktop/vX.Y.Z-rc.N) builds the beta app. The stable tag the Finalize
+# Release workflow promotes it to builds the shipping app and the beta app
+# again, because beta installs update from stable releases too and only take a
+# zip signed as the beta. Both tags name the same commit, so the builds differ
+# only in identity and version.
 #
 # Releases here are immutable, so publish-releases.ts creates a desktop release
-# as a draft and starts this workflow from its tag. The image is attached to
-# the draft, and the draft is published after it.
+# as a draft and starts this workflow from its tag. The files are attached to
+# the draft, and the draft is published after them.
 
 on:
   workflow_dispatch:
@@ -19,11 +22,11 @@ on:
         options: [beta, prod]
         default: beta
       tag:
-        description: 'Release to build and attach to (e.g. desktop/v0.1.0-rc.0). A candidate builds beta, a stable tag builds prod. Dispatch from that tag.'
+        description: 'Release to build and attach to (e.g. desktop/v0.1.0-rc.0). A candidate builds beta, a stable tag builds prod and beta. Dispatch from that tag.'
         required: false
         type: string
       upload:
-        description: 'Attach the disk image to the release named by tag. Off = build only, the artifact stays on the run.'
+        description: 'Attach the disk images and update zips to the release named by tag. Off = build only, the artifacts stay on the run.'
         required: false
         type: boolean
         default: false
@@ -38,13 +41,17 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
-    outputs:
-      dmg: ${{ steps.release.outputs.dmg }}
+    strategy:
+      # A release is published only once every app it owes is attached, so
+      # one failed build is the whole release failed.
+      fail-fast: true
+      matrix:
+        # The tag decides, as contextsForTag does in release.ts, not the
+        # release's prerelease flag. The context input applies only to a
+        # dispatch without a tag.
+        context: ${{ fromJSON(inputs.tag == '' && format('["{0}"]', inputs.context) || (contains(inputs.tag, '-rc.') && '["beta"]' || '["prod","beta"]')) }}
     env:
-      # The tag decides, as it does in release.ts, not the release's prerelease
-      # flag, so the profiles always match the app the script builds. The
-      # context input applies only to a dispatch without a tag.
-      BETA: ${{ contains(inputs.tag, '-rc.') || (inputs.tag == '' && inputs.context == 'beta') }}
+      BETA: ${{ matrix.context == 'beta' }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,9 +107,7 @@ jobs:
         id: release
         working-directory: apps/desktop
         env:
-          # Empty whenever there is a tag, so the input's default cannot
-          # contradict it.
-          SIA_CONTEXT: ${{ inputs.tag == '' && inputs.context || '' }}
+          SIA_CONTEXT: ${{ matrix.context }}
           RELEASE_TAG: ${{ inputs.tag }}
           SIA_BUILD_NUMBER: ${{ github.run_number }}
           SIA_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -115,8 +120,10 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: desktop-dmg
-          path: ${{ steps.release.outputs.dmg }}
+          name: desktop-${{ matrix.context }}
+          path: |
+            ${{ steps.release.outputs.dmg }}
+            ${{ steps.release.outputs.zip }}
           if-no-files-found: error
           retention-days: 7
 
@@ -129,14 +136,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download artifact
+      - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: desktop-dmg
+          pattern: desktop-*
+          merge-multiple: true
           path: dist
 
-      # The image is only ever attached to the release whose commit produced
-      # it: a retarget deletes and recreates a release while a build is still
+      # Files are only ever attached to the release whose commit produced
+      # them: a retarget deletes and recreates a release while a build is still
       # in flight, and a dispatch off a branch would attach a branch build to
       # a tagged release. Dispatch from the tag you are attaching to.
       - name: Check the release points at what we built
@@ -153,13 +161,13 @@ jobs:
             || { echo "Release $TAG not found."; exit 1; }
           TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
           if [ "$TAG_SHA" != "$BUILT_SHA" ]; then
-            echo "$TAG points at $TAG_SHA but this image was built from $BUILT_SHA."
+            echo "$TAG points at $TAG_SHA but these files were built from $BUILT_SHA."
             exit 1
           fi
 
       # A published release takes no new file, so attaching is refused unless
       # the release is still the draft publish-releases.ts made.
-      - name: Upload disk image to release
+      - name: Upload disk images and update zips to release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
@@ -170,7 +178,7 @@ jobs:
             echo "$TAG is already published, and a published release takes no new file."
             exit 1
           fi
-          gh release upload "$TAG" dist/*.dmg --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" dist/*.dmg dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
 
       # --latest=false keeps the latest release a cli one, the release
       # releases/latest/download serves, though this build finishes after it.

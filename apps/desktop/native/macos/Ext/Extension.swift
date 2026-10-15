@@ -64,8 +64,17 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             (Bundle.main.infoDictionary?["SiaDaemonVersion"] as? String) ?? "unknown"
         self.rpc = rpc
         self.handoff = Handoff()
+        let bundleURL = Bundle.main.bundleURL
         self.handshake = Handshake {
-            try await rpc.callDecoding(ProviderHello.self, Channel.hello, [version])
+            do {
+                return try await rpc.callDecoding(ProviderHello.self, Channel.hello, [version])
+            } catch {
+                if BundleOnDisk.replaced(loaded: version, bundleURL: bundleURL) {
+                    fpLog.notice("bundle replaced by an update, exiting for the new build")
+                    exit(0)
+                }
+                throw error
+            }
         }
         super.init()
 

@@ -17,6 +17,13 @@ export type AppInfo = {
   version: string
 }
 
+/** The main process's update state. Only `ready` asks anything of the user. */
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'downloading'; version: string }
+  | { status: 'ready'; version: string }
+
 export type SiaApi = {
   rpc(method: string, args?: unknown[], timeoutMs?: number): Promise<unknown>
   openUrl(url: string): Promise<void>
@@ -44,6 +51,9 @@ export type SiaApi = {
   openMount(): Promise<void>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>
+  updateState(): Promise<UpdateState>
+  installUpdate(): Promise<void>
+  onUpdate(listener: (state: UpdateState) => void): () => void
   onChange(listener: (event: ChangeEvent) => void): () => void
   onCache(listener: (message: IpcMessage) => void): () => void
   platform: string

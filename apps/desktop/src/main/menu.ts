@@ -9,10 +9,12 @@
 
 import { Menu } from 'electron'
 import { openLogs } from './logs'
+import { updateMenuItems } from './updates'
 import { holdPopover } from './windows'
 
 export function showMoreMenu(signOut: () => void): void {
   const menu = Menu.buildFromTemplate([
+    ...updateMenuItems(),
     { label: 'Open Logs', click: openLogs },
     { type: 'separator' },
     { label: 'Sign Out…', click: signOut },
