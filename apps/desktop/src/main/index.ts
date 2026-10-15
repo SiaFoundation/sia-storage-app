@@ -24,6 +24,7 @@ import type { StopOptions } from './platform/types'
 import { DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
 import { createTray, destroyTray } from './tray'
+import { startUpdates } from './updates'
 import { beginQuit, broadcast, createMainWindow, showMainWindow } from './windows'
 
 /**
@@ -233,6 +234,9 @@ if (!app.requestSingleInstanceLock()) {
       // The sandboxed extension can only reach a socket inside its own
       // container, so that path is what the daemon has to be told to serve.
       const config = desktopConfig()
+      // Ahead of the daemon and Finder steps, so a release whose startup fails
+      // in one of them can still update itself to one that does not.
+      startUpdates(config, (state) => broadcast('update', state))
       const { shellSocket, handoffDir } = platform.shellPaths(config)
       spawn = {
         runtime: process.env.SIA_DAEMON_RUNTIME ?? join(BUNDLED, 'bun'),

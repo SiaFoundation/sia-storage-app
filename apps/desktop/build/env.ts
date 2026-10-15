@@ -7,9 +7,9 @@
  * fills those in on a developer Mac; and `SIA_*` variables in the environment
  * fill them in on a CI runner, which has no env file to write.
  *
- * Every value but SIA_LINK_CLI is required. A missing one is reported by name
- * rather than left to surface later as a codesign or fileproviderd failure that
- * names nothing.
+ * Every value but SIA_LINK_CLI and SIA_UPDATE_CHANNEL is required. A missing
+ * one is reported by name rather than left to surface later as a codesign or
+ * fileproviderd failure that names nothing.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -33,9 +33,11 @@ export type BuildEnv = {
   appIcon: string
   /** Whether packaging points `~/.local/bin/sia` at this build. `SIA_LINK_CLI=false` turns it off. */
   linkCli: boolean
+  /** Which releases the built app updates itself from. Null builds an app that never checks. */
+  updateChannel: 'beta' | 'stable' | null
 }
 
-const FIELDS: Array<[Exclude<keyof BuildEnv, 'linkCli'>, string]> = [
+const FIELDS: Array<[Exclude<keyof BuildEnv, 'linkCli' | 'updateChannel'>, string]> = [
   ['teamId', 'SIA_TEAM_ID'],
   ['signIdentity', 'SIA_SIGN_IDENTITY'],
   ['appBundleId', 'SIA_APP_BUNDLE_ID'],
@@ -66,7 +68,14 @@ export function resolveEnv(values: Record<string, string>, source: string): Buil
   if (missing.length > 0) {
     throw new Error(`${source} is missing: ${missing.join(', ')}`)
   }
-  const out = { linkCli: values.SIA_LINK_CLI?.trim() !== 'false' } as BuildEnv
+  const channel = values.SIA_UPDATE_CHANNEL?.trim() || null
+  if (channel !== null && channel !== 'beta' && channel !== 'stable') {
+    throw new Error(`SIA_UPDATE_CHANNEL is ${channel}, not beta or stable`)
+  }
+  const out = {
+    linkCli: values.SIA_LINK_CLI?.trim() !== 'false',
+    updateChannel: channel,
+  } as BuildEnv
   for (const [field, key] of FIELDS) out[field] = values[key]!.trim()
   for (const [field, key] of [
     ['appProfile', 'SIA_APP_PROFILE'],
@@ -82,7 +91,7 @@ export function envOverrides(
   environment: Record<string, string | undefined>,
 ): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const key of [...FIELDS.map(([, key]) => key), 'SIA_LINK_CLI']) {
+  for (const key of [...FIELDS.map(([, key]) => key), 'SIA_LINK_CLI', 'SIA_UPDATE_CHANNEL']) {
     const value = environment[key]
     if (value?.trim()) out[key] = value
   }
@@ -99,8 +108,8 @@ export function readEnvValues(
   const file = join(envDir, `${context}.env`)
   const local = existsSync(file)
   const overrides = envOverrides(environment)
-  // SIA_LINK_CLI is a build switch, not a signing setting, so on its own it
-  // does not stand in for the env file.
+  // SIA_LINK_CLI and SIA_UPDATE_CHANNEL are build switches, not signing
+  // settings, so on their own they do not stand in for the env file.
   if (!local && !FIELDS.some(([, key]) => key in overrides)) {
     throw new Error(
       `No ${context}.env in apps/desktop/env. Copy ${context}.example.env and fill in the five blanks.`,

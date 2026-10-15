@@ -10,12 +10,6 @@
 import { $ } from 'bun'
 import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { ARCH } from './darwin'
-
-/** `Sia Storage Beta` at `1.2.0-rc.0` becomes `Sia-Storage-Beta-1.2.0-rc.0-arm64.dmg`. */
-export function dmgName(appName: string, version: string, arch = ARCH): string {
-  return `${appName.replace(/\s+/g, '-')}-${version}-${arch}.dmg`
-}
 
 export async function createDmg(options: {
   appPath: string

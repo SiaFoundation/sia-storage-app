@@ -10,6 +10,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
 import { Daemon } from './daemon'
+import { updateMenuItems } from './updates'
 import { beginQuit, hidePopover, showMainWindow, togglePopover } from './windows'
 
 let tray: Tray | null = null
@@ -35,6 +36,7 @@ export function createTray(): Tray {
     item.popUpContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open Sia Storage', click: () => showMainWindow() },
+        ...updateMenuItems(),
         { type: 'separator' },
         {
           label: 'Quit',

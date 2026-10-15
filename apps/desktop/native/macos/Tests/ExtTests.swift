@@ -957,3 +957,35 @@ final class FetchWindowTests: XCTestCase {
         }
     }
 }
+
+final class BundleOnDiskTests: XCTestCase {
+    private func bundle(daemonVersion: String?) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("SiaFileProvider.appex")
+        let contents = root.appendingPathComponent("Contents")
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        var info: [String: Any] = ["CFBundleIdentifier": "sia.storage.test"]
+        if let daemonVersion { info["SiaDaemonVersion"] = daemonVersion }
+        try (info as NSDictionary).write(to: contents.appendingPathComponent("Info.plist"))
+        addTeardownBlock { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        return root
+    }
+
+    func testTheSameBuildOnDiskIsNotReplaced() throws {
+        let url = try bundle(daemonVersion: "0.0.7")
+        XCTAssertFalse(BundleOnDisk.replaced(loaded: "0.0.7", bundleURL: url))
+    }
+
+    func testANewerDaemonVersionOnDiskIsAReplacedBundle() throws {
+        let url = try bundle(daemonVersion: "0.0.8")
+        XCTAssertTrue(BundleOnDisk.replaced(loaded: "0.0.7", bundleURL: url))
+    }
+
+    func testAnUnreadableBundleIsNotTakenForAReplacedOne() throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        XCTAssertFalse(BundleOnDisk.replaced(loaded: "0.0.7", bundleURL: missing))
+        let noKey = try bundle(daemonVersion: nil)
+        XCTAssertFalse(BundleOnDisk.replaced(loaded: "0.0.7", bundleURL: noKey))
+    }
+}

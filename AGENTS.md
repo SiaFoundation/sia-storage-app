@@ -136,8 +136,11 @@ window reads "Not in this build".
 
 Beta and release builds come from `.github/workflows/release-desktop.yml`, which runs
 `bun run desktop:release` for a `desktop/v*` tag: a candidate tag (`-rc.N`) builds
-the beta app, the stable tag builds the shipping one, and each attaches a notarized
-disk image to its release. Releases in this repository are immutable once
+the beta app, the stable tag builds the shipping one and the beta app again, and
+each build attaches a notarized disk image and an update zip to its release.
+Installed beta and shipping apps update themselves from those zips, the beta from
+every desktop release and the shipping app from stable ones (`src/main/updates.ts`
+in `apps/desktop`). Releases in this repository are immutable once
 published, so `scripts/publish-releases.ts` creates a desktop or CLI release as a
 draft, starts its build workflow from the tag, and the workflow publishes the
 draft once the files are attached. The same script runs locally with a

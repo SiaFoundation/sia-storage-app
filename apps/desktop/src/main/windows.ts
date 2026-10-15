@@ -58,6 +58,11 @@ export function beginQuit(): void {
   quitting = true
 }
 
+/** For a quit that did not happen, so closing the window hides it again. */
+export function cancelQuit(): void {
+  quitting = false
+}
+
 function rendererEntry(hash: string): { url?: string; file?: string; hash: string } {
   const dev = process.env.ELECTRON_RENDERER_URL
   return dev

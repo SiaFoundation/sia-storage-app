@@ -12,6 +12,7 @@ import { app } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { log } from './log'
+import type { UpdateChannel } from './updateFeed'
 
 export type DesktopConfig = {
   /** Stable identifier for the mount, so a restart reattaches rather than duplicating. */
@@ -25,6 +26,16 @@ export type DesktopConfig = {
    * which runs whatever daemon it is pointed at and so has nothing to compare.
    */
   daemonBuild?: string
+  /**
+   * Where this build looks for its own updates. Absent unless packaging set
+   * `SIA_UPDATE_CHANNEL`, which beta and prod do and dev and test do not by
+   * default, and from a source run.
+   */
+  updates?: {
+    channel: UpdateChannel
+    /** The update zip's file name with `{version}` standing in for the version. */
+    asset: string
+  }
 }
 
 const DEVELOPMENT: DesktopConfig = {

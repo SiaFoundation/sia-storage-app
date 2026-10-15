@@ -14,6 +14,7 @@ import { useReportedHeight } from './height'
 import { ArrowCircle, DocOnDoc, InternalDrive, Lock } from './icons'
 import { fileCountLabel, librarySizeLabel, metadataLabel, uploadsRow } from './model'
 import { StatusLine } from './StatusLine'
+import { UpdateNotice } from './UpdateNotice'
 import { useStatus } from './useStatus'
 
 export function Status() {
@@ -28,6 +29,7 @@ export function Status() {
     <div className="flex flex-col" ref={root}>
       <div className="flex flex-col gap-3 px-inset pt-inset pb-[18px]">
         <StatusLine status={status} />
+        <UpdateNotice />
 
         <Section header="Activity">
           <Row

@@ -33,6 +33,20 @@ export const APP_VERSION = (
 const DAEMON_VERSION = (await Bun.file(join(repoRoot, 'apps', 'cli', 'package.json')).json())
   .version as string
 
+/**
+ * The name of a file a release attaches for this app: `Sia Storage Beta` at
+ * `1.2.0-rc.0` becomes `Sia-Storage-Beta-1.2.0-rc.0-arm64.dmg`. The installed
+ * app finds its update zip by this name, so the two must not drift.
+ */
+export function releaseFileName(
+  appName: string,
+  version: string,
+  extension: 'dmg' | 'zip',
+  arch = ARCH,
+): string {
+  return `${appName.replace(/\s+/g, '-')}-${version}-${arch}.${extension}`
+}
+
 export type BuildResult = {
   appPath: string
   appexPath: string
@@ -147,6 +161,14 @@ async function installApp(
         displayName: env.domainDisplay,
         extensionBundleId: env.extBundleId,
         daemonBuild,
+        ...(env.updateChannel
+          ? {
+              updates: {
+                channel: env.updateChannel,
+                asset: releaseFileName(env.appName, '{version}', 'zip'),
+              },
+            }
+          : {}),
       },
       null,
       2,
@@ -277,6 +299,9 @@ function appInfoPlist(env: BuildEnv, executable: string, stamp: Stamp): string {
     // plist replaces that one, so the class has to come along.
     NSPrincipalClass: 'AtomApplication',
     LSMinimumSystemVersion: '13.0',
+    // The updater hands Squirrel a feed served on 127.0.0.1. Electron's stock
+    // plist allows that and this one replaces it, so it has to say so too.
+    NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
   })
 }
 

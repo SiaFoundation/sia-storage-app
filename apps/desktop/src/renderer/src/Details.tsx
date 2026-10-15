@@ -34,6 +34,7 @@ import {
   uploadsRow,
 } from './model'
 import { StatusLine } from './StatusLine'
+import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
 import { useStatus } from './useStatus'
 
@@ -63,6 +64,7 @@ export function Details({
           content, and the inset keeps the first thing drawn from landing under them. */}
       <div className="flex flex-col gap-3 px-inset pt-12 pb-[18px]">
         <StatusLine status={status} />
+        <UpdateNotice />
 
         <Section header="Activity">
           <Row

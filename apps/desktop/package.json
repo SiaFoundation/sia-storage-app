@@ -12,7 +12,7 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.build.json",
     "lint": "oxlint . && oxfmt --check .",
-    "test": "bun test"
+    "test": "bun test --path-ignore-patterns='**/updates.test.ts' && bun test ./src/main/updates.test.ts"
   },
   "dependencies": {
     "@scure/bip39": "2.4.0",

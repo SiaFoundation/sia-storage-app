@@ -60,6 +60,17 @@ const api = {
   showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),
 
+  /** Where the app is with its own updates: idle, checking, downloading or ready. */
+  updateState: () => ipcRenderer.invoke('update:state'),
+  /** Quits, installs the staged update and relaunches. Does nothing until one is ready. */
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  /** Fires with the new state each time it changes. */
+  onUpdate: (listener: (state: unknown) => void) => {
+    const handler = (_event: unknown, payload: unknown) => listener(payload)
+    ipcRenderer.on('update', handler)
+    return () => ipcRenderer.removeListener('update', handler)
+  },
+
   /** Fires when the library, the connection or sync state changes. */
   onChange: (listener: (event: ChangeEvent) => void) => {
     const handler = (_event: unknown, payload: ChangeEvent) => listener(payload)

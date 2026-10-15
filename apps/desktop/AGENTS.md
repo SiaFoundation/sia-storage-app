@@ -61,7 +61,28 @@ Finder domain. New surface goes in TypeScript.
 ## Releases
 
 `build/release.ts` is the build CI runs: bundle, sign, notarize and staple the
-app, then wrap it in a disk image and notarize and staple that. It installs
-nothing. When `RELEASE_TAG` is set the tag is
+app, zip it for the updater, then wrap it in a disk image and notarize and
+staple that. It installs nothing. When `RELEASE_TAG` is set the tag is
 the version, not `package.json`: a stable `desktop/vX.Y.Z` tag is created on
 the release candidate's commit, where `package.json` still reads `X.Y.Z-rc.N`.
+
+## Updates
+
+The beta and shipping builds update themselves from the repository's GitHub
+releases through Electron's autoUpdater. On macOS that is Squirrel, which
+accepts only a bundle meeting the running one's code signing requirement, and
+that requirement names the bundle id and the team. That is why a stable tag
+builds the beta app as well as the shipping one: a beta install takes every
+desktop release, and could not take a shipping zip. dev and test builds name
+no `SIA_UPDATE_CHANNEL` by default, so they never check.
+
+An update swaps the bundle under a daemon and an extension that may both
+outlive it, and the daemon refuses a handshake from an extension built for
+another daemon version. The relaunched app replaces a daemon the previous
+build started (`Daemon.reconcile`), and the extension exits when a handshake
+fails and the plist on disk names a different daemon version than it loaded,
+so fileproviderd starts the new binary.
+
+To try an update against a local server, package a dev or test build with
+`SIA_UPDATE_CHANNEL` set and launch it with `SIA_UPDATE_FEED` naming the
+server's releases list.
