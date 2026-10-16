@@ -50,6 +50,7 @@
     "./services/suspension": "./src/services/suspension.ts",
     "./services/uploader": "./src/services/uploader.ts",
     "./services/fsFileUri": "./src/services/fsFileUri.ts",
+    "./services/transferMemoryBudget": "./src/services/transferMemoryBudget.ts",
     "./app": "./src/app/index.ts",
     "./stores": "./src/stores/index.ts",
     "./stores/swr": "./src/stores/swr.ts",

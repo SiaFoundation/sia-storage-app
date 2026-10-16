@@ -25,6 +25,7 @@ module.exports = {
     '^react-native-sia$': '<rootDir>/test/mocks/react-native-sia.ts',
     '^thumbnailer$': '<rootDir>/test/mocks/thumbnailer.ts',
     '^media-observer$': '<rootDir>/test/mocks/media-observer.ts',
+    '^memory-info$': '<rootDir>/test/mocks/memory-info.ts',
     '^import-sources$': '<rootDir>/test/mocks/import-sources.ts',
     '^\\.\\./lib/sharedContainer$': '<rootDir>/test/mocks/sharedContainer.ts',
     '^\\.\\./\\.\\./lib/sharedContainer$': '<rootDir>/test/mocks/sharedContainer.ts',

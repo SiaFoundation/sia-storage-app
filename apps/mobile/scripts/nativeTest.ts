@@ -1,5 +1,6 @@
 /**
- * Native test runner for the import-sources module.
+ * Native test runner for the import-sources and memory-info modules. The
+ * simulator tier covers import-sources only.
  *
  * bun scripts/nativeTest.ts ios Swift host suite (headless macOS)
  * bun scripts/nativeTest.ts ios --simulator Photos/picker XCTest on a simulator of its own
@@ -104,7 +105,11 @@ function testSimulator(): { udid: string; booted: boolean } | null {
 
 if (platform === 'ios') {
   if (!simulator) {
-    process.exit(run(['swift', 'test', '--package-path', 'modules/import-sources/ios'], appRoot))
+    for (const module of ['import-sources', 'memory-info']) {
+      const code = run(['swift', 'test', '--package-path', `modules/${module}/ios`], appRoot)
+      if (code !== 0) process.exit(code)
+    }
+    process.exit(0)
   }
   // Simulator tier. The podspec's testspec is inert for a plain `pod install`,
   // so opt the generated Podfile into it before installing. Editing that Podfile
@@ -229,7 +234,10 @@ if (platform === 'android') {
     console.error('android/ not generated; run `bunx expo prebuild -p android` first.')
     process.exit(1)
   }
-  process.exit(run(['./gradlew', ':import-sources:testDebugUnitTest'], androidDir))
+  const gradleTasks = ['import-sources', 'memory-info'].map(
+    (module) => `:${module}:testDebugUnitTest`,
+  )
+  process.exit(run(['./gradlew', ...gradleTasks], androidDir))
 }
 
 console.error('usage: bun scripts/nativeTest.ts <ios|android> [--simulator]')

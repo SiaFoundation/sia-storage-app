@@ -240,6 +240,8 @@ describe('UploadManager', () => {
       expect(mockSdk.uploadPacked).toHaveBeenCalledWith({
         dataShards: UPLOAD_DATA_SHARDS,
         parityShards: UPLOAD_PARITY_SHARDS,
+        // No memory reading under jest, so the budget is the fixed one.
+        maxBufferedSlabs: 2,
         shardUploaded: expect.any(Object),
       })
     })

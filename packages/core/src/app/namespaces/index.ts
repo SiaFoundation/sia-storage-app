@@ -5,6 +5,7 @@ import type { ObjectsCursor, SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
+import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { swrCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
@@ -42,6 +43,8 @@ export interface AppServiceAdapters {
   handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
+  /** Reads how much memory the device can spare. Left out, transfers get a fixed budget. */
+  readMemory?: MemoryReader
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -156,6 +159,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     adapters.fsIO,
   )
 
+  const transferBudget = new TransferMemoryBudget(adapters.readMemory ?? (() => null))
   const downloadsNamespace = buildDownloadsNamespace(
     adapters.db,
     adapters.fsIO,
@@ -163,6 +167,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     adapters.storage,
     caches,
     () => sdkRef,
+    transferBudget,
   )
 
   const settingsNamespace = buildSettingsNamespace(adapters.storage, caches)
@@ -252,6 +257,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       maxPageSize: adapters.maxPageSize,
       getSdk: () => sdkRef,
       downloadObject: adapters.downloadObject,
+      transferBudget,
     }),
     downloads: downloadsNamespace,
     shares: sharesNamespace,
@@ -294,6 +300,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
   }
 
   const internal: AppServiceInternal = {
+    transferBudget,
     setSdk: (sdk) => {
       sdkRef = sdk
       caches.sdk.invalidate()

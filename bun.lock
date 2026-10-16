@@ -132,6 +132,7 @@
         "lucide-react-native": "0.543.0",
         "markdown-it": "14.1.1",
         "media-observer": "file:./modules/media-observer",
+        "memory-info": "file:./modules/memory-info",
         "react": "19.2.0",
         "react-native": "0.83.2",
         "react-native-background-fetch": "4.3.0",
@@ -2794,6 +2795,8 @@
     "@siastorage/mobile/import-sources": ["import-sources@file:apps/mobile/modules/import-sources", {}],
 
     "@siastorage/mobile/media-observer": ["media-observer@file:apps/mobile/modules/media-observer", {}],
+
+    "@siastorage/mobile/memory-info": ["memory-info@file:apps/mobile/modules/memory-info", {}],
 
     "@siastorage/mobile/thumbnailer": ["thumbnailer@file:apps/mobile/modules/thumbnailer", {}],
 

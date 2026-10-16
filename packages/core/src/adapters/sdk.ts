@@ -63,6 +63,8 @@ export interface ShardProgress {
 export interface UploadOptions {
   dataShards: number
   parityShards: number
+  /** Slabs the SDK may hold at once. Left out, it sizes this from the device's total RAM. */
+  maxBufferedSlabs?: number
   shardUploaded?: {
     progress: (p: ShardProgress) => void
   }
@@ -71,6 +73,8 @@ export interface UploadOptions {
 export interface DownloadOptions {
   offset: bigint
   length: bigint | undefined
+  /** Read-ahead the SDK may hold, in chunks. Left out, it sizes this from the device's total RAM. */
+  maxBufferedChunks?: number
   shardDownloaded?: {
     progress: (p: ShardProgress) => void
   }
