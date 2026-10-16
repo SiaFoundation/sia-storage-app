@@ -12,7 +12,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native'
-import Carousel, { type ICarouselInstance } from 'react-native-reanimated-carousel'
+import { Carousel, type CarouselRef } from 'react-native-reanimated-carousel'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useToast } from '../../lib/toastContext'
 import { app } from '../../stores/appService'
@@ -108,7 +108,7 @@ export function FileCarousel({
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 })
 
   const insets = useSafeAreaInsets()
-  const carouselRef = useRef<ICarouselInstance>(null)
+  const carouselRef = useRef<CarouselRef>(null)
   const dragToDismissGesture = useDragToDismissGesture()
 
   const handleViewerLayout = useCallback((event: LayoutChangeEvent) => {
@@ -291,13 +291,15 @@ export function FileCarousel({
                   ref={carouselRef}
                   data={carouselData}
                   renderItem={renderItem}
-                  width={viewerSize.width}
-                  height={viewerSize.height}
-                  defaultIndex={currentIndex}
+                  style={{ width: viewerSize.width, height: viewerSize.height }}
+                  // The position and the id window come from two queries, so a file
+                  // removed between them leaves currentIndex past the end, and the
+                  // carousel throws on an out-of-range defaultIndex.
+                  defaultIndex={Math.min(currentIndex, carouselData.length - 1)}
                   onSnapToItem={handleSnapToItem}
                   loop={false}
-                  enabled={!isZoomed && !isDismissing}
-                  windowSize={5}
+                  scrollEnabled={!isZoomed && !isDismissing}
+                  renderWindowSize={5}
                   onConfigurePanGesture={(gesture) => {
                     gesture.activeOffsetX([-10, 10])
                     // Android: carousel waits for DragToDismiss to fail

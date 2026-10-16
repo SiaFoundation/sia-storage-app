@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "composite": true
+    "composite": true,
+    "types": ["bun"]
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
 }

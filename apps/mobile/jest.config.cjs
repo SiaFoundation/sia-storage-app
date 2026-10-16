@@ -3,7 +3,6 @@ const reactDir = path.dirname(require.resolve('react/package.json'))
 
 module.exports = {
   maxWorkers: 8,
-  globalSetup: '<rootDir>/jest.globalSetup.cjs',
   preset: 'jest-expo',
   testEnvironment: 'node',
   testTimeout: 60000,
@@ -20,7 +19,7 @@ module.exports = {
     '^@siastorage/logger$': '<rootDir>/../../packages/logger/src/index.ts',
     '^expo-secure-store$': '<rootDir>/test/mocks/expo-secure-store.ts',
     '^@react-native-async-storage/async-storage$': '<rootDir>/test/mocks/async-storage.ts',
-    '^expo-media-library$': '<rootDir>/test/mocks/expo-media-library.ts',
+    '^expo-media-library(/legacy)?$': '<rootDir>/test/mocks/expo-media-library.ts',
     '^expo-keep-awake$': '<rootDir>/test/mocks/expo-keep-awake.ts',
     '^react-native-sia$': '<rootDir>/test/mocks/react-native-sia.ts',
     '^thumbnailer$': '<rootDir>/test/mocks/thumbnailer.ts',

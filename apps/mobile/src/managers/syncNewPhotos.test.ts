@@ -1,7 +1,7 @@
 import { IMPORT_IDLE_SEAL_MS, SYNC_NEW_PHOTOS_INTERVAL } from '@siastorage/core/config'
 import type { AppendToOpenImportResult, ImportFileRow } from '@siastorage/core/db/operations'
 import { shutdownAllServiceIntervals } from '@siastorage/core/lib/serviceInterval'
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import * as mediaObserver from 'media-observer'
 import { buildPhotoCandidateRows, resolveImportDirectoryId } from '../lib/assetImports'
 import { app } from '../stores/appService'
@@ -10,7 +10,7 @@ import { initSyncNewPhotos, run, setAutoSyncNewPhotos } from './syncNewPhotos'
 
 jest.useFakeTimers()
 
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   getAssetInfoAsync: jest.fn(),
   MediaType: { photo: 'photo', video: 'video' },
 }))

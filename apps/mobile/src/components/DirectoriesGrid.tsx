@@ -69,7 +69,7 @@ export function DirectoriesGrid({
     <FlatList
       data={listData}
       keyExtractor={(dir) => dir.id}
-      ListHeaderComponent={ListHeaderComponent}
+      ListHeaderComponent={ListHeaderComponent ?? undefined}
       contentContainerStyle={styles.grid}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) => (

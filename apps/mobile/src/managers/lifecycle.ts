@@ -18,7 +18,7 @@ export type Lifecycle = 'foreground' | 'background'
  * after a BG task releases its lifecycle (`maybeSuspend` requires
  * `appState === 'background'`).
  */
-export function deriveLifecycle(s: AppStateStatus): Lifecycle {
+export function deriveLifecycle(s: string | null | undefined): Lifecycle {
   return s === 'active' || s === 'inactive' ? 'foreground' : 'background'
 }
 

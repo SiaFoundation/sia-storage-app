@@ -60,7 +60,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
       // bytes into its content URI off the JS thread (expo-file-system's
       // own copy() is sync JSI and would block on large files).
       target = directory.createFile(file.name ?? `${file.id}${extFromMime(file.type)}`, file.type)
-      await ReactNativeBlobUtil.MediaCollection.writeToMediafile(target.uri, status.data.fileUri)
+      await ReactNativeBlobUtil.media.write(target.uri, status.data.fileUri)
       toast.show('File saved')
     } catch (e) {
       try {

@@ -437,7 +437,7 @@ describe('Saving a file through the provider', () => {
 
         const deleted: string[] = []
         const seen = new Set<string>()
-        for (let hasMore = true; hasMore; ) {
+        for (let hasMore = true; hasMore;) {
           const page = await paged.app.provider.changes(WORKING_SET_ID, anchor)
           deleted.push(...page.deletedIds)
           for (const item of page.items) seen.add(item.id)

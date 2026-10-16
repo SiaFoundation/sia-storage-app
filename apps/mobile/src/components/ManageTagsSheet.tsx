@@ -1,7 +1,16 @@
 import { useAllTags, useTagsForFile } from '@siastorage/core/stores'
 import { CheckIcon, PlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
@@ -22,7 +31,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
   const fileTags = useTagsForFile(fileId)
   const allTags = useAllTags()
   const [query, setQuery] = useState('')
-  const inputRef = useRef<TextInput | null>(null)
+  const inputRef = useRef<TextInputInstance | null>(null)
   const [loadingTagIds, setLoadingTagIds] = useState<Set<string>>(new Set())
   const [loadingTagNames, setLoadingTagNames] = useState<Set<string>>(new Set())
 
@@ -153,7 +162,7 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
                   </Pressable>
                 )
               })()
-            : null
+            : undefined
         }
         renderItem={({ item }) => {
           const isOnFile = existingTagIds.has(item.id)
@@ -182,9 +191,9 @@ export function ManageTagsSheet({ fileId, sheetName }: Props) {
           )
         }}
         ListEmptyComponent={
-          query.trim().length > 0 && exactMatch ? null : query.trim().length === 0 ? (
+          query.trim().length > 0 && exactMatch ? undefined : query.trim().length === 0 ? (
             <Text style={styles.emptyText}>No tags yet. Type to create one.</Text>
-          ) : null
+          ) : undefined
         }
       />
     </ModalSheet>

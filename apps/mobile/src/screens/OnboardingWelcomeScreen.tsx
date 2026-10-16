@@ -80,7 +80,7 @@ export default function OnboardingWelcomeScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <Animated.View
-        style={[StyleSheet.absoluteFillObject, { opacity: gridOpacity }]}
+        style={[StyleSheet.absoluteFill, { opacity: gridOpacity }]}
         pointerEvents="none"
       >
         <BlocksGrid

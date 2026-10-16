@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient'
-import { type ColorValue, StyleSheet, View, type ViewProps } from 'react-native'
+import { StyleSheet, View, type ViewProps } from 'react-native'
 
 type Props = ViewProps & {
   fadeTo?: 'top' | 'bottom'
@@ -20,11 +20,11 @@ export function Gradient({
         colors={
           (fadeTo === 'bottom'
             ? [overlayTopColor, overlayBottomColor]
-            : [overlayBottomColor, overlayTopColor]) as [ColorValue, ColorValue]
+            : [overlayBottomColor, overlayTopColor]) as [string, string]
         }
         start={{ x: 0.5, y: fadeTo === 'bottom' ? 0 : 1 }}
         end={{ x: 0.5, y: fadeTo === 'bottom' ? 1 : 0 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
     </View>
   )

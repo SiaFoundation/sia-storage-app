@@ -24,6 +24,24 @@ function fakeDevice(
 
 const network = { objects: async () => [] } as unknown as NetworkControl
 
+/** A device that records its first object row only after `noRowsFor` reads, as a save in flight does. */
+function deviceSavingObject(id: string, noRowsFor: number) {
+  let reads = 0
+  const device = fakeDevice()
+  device.sql = (async () => (reads++ < noRowsFor ? [] : [{ id }])) as Device['sql']
+  return device
+}
+
+const networkWith = (id: string) =>
+  ({ objects: async () => [{ id, metadata: { kind: 'file' } }] }) as unknown as NetworkControl
+
+const onlyStray = {
+  downloadsSettle: 'not under test',
+  importsSettle: 'not under test',
+  ownBytes: 'not under test',
+  localBytes: 'not under test',
+} as const
+
 describe('recordStandardChecks', () => {
   test('a device that died stops the checks that would read it', async () => {
     const checks: CheckRecord[] = []
@@ -67,6 +85,36 @@ describe('recordStandardChecks', () => {
     const labels = checks.map((c) => c.label)
     expect(labels).not.toContain('laptop has no import left in progress')
     expect(labels.filter((l) => l === 'no file’s bytes are pinned twice')).toHaveLength(1)
+  })
+
+  test('an object the device records while the checks wait is not a stray', async () => {
+    const checks: CheckRecord[] = []
+    await recordStandardChecks({
+      devices: { laptop: deviceSavingObject('obj-1', 2) },
+      network: networkWith('obj-1'),
+      checks,
+      skip: onlyStray,
+      settleMs: 5000,
+    })
+    expect(checks.find((c) => c.label.includes('pinned object'))).toEqual({
+      label: 'every pinned object belongs to a file on a device',
+      ok: true,
+    })
+  })
+
+  test('an object no device ever records is reported as a stray', async () => {
+    const checks: CheckRecord[] = []
+    await recordStandardChecks({
+      devices: { laptop: fakeDevice() },
+      network: networkWith('obj-1'),
+      checks,
+      skip: onlyStray,
+      settleMs: 1500,
+    })
+    expect(checks.find((c) => c.label.includes('pinned object'))).toMatchObject({
+      ok: false,
+      actual: ['obj-1'],
+    })
   })
 
   test('a download left queued is recorded with its file', async () => {

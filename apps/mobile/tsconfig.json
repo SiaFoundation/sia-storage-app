@@ -1,6 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "types": ["jest", "node"],
     "strict": true,
     "paths": {
       "@siastorage/core": ["../../packages/core/src/index.ts"],
