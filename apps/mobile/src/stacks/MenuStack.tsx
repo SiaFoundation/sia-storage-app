@@ -8,6 +8,7 @@ import { MenuScreen } from '../screens/MenuScreen'
 import { SettingsAdvancedScreen } from '../screens/SettingsAdvancedScreen'
 import { SettingsLogsScreen } from '../screens/SettingsLogsScreen'
 import { ShareLinksScreen } from '../screens/ShareLinksScreen'
+import { TrashScreen } from '../screens/TrashScreen'
 import { palette } from '../styles/colors'
 import { SwitchIndexerStack } from './SwitchIndexerStack'
 import type { MenuStackParamList } from './types'
@@ -29,6 +30,7 @@ export function MenuStack() {
         component={ShareLinksScreen}
         options={{ title: 'Share Links' }}
       />
+      <Stack.Screen name="Trash" component={TrashScreen} options={{ title: 'Trash' }} />
       <Stack.Screen name="Logs" component={SettingsLogsScreen} options={{ title: 'Logs' }} />
       <Stack.Screen
         name="Advanced"
