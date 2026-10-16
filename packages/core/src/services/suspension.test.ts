@@ -421,6 +421,30 @@ describe('initialAppState option', () => {
   })
 })
 
+describe('suspendUnlessBusy', () => {
+  it('suspends with no background task running, whatever the recorded app state', async () => {
+    const { adapters } = createAdapters()
+    const manager = createSuspensionManager(adapters)
+
+    await manager.suspendUnlessBusy('test')
+
+    expect(manager.isSuspended()).toBe(true)
+  })
+
+  it('leaves the database alone while another background task still runs', async () => {
+    const { adapters, mocks } = createAdapters()
+    const manager = createSuspensionManager(adapters, { initialAppState: 'background' })
+    await manager.registerBackgroundTask('fetch')
+    await manager.registerBackgroundTask('service')
+
+    await manager.releaseBackgroundTask('service')
+    await manager.suspendUnlessBusy('test')
+
+    expect(manager.isSuspended()).toBe(false)
+    expect(mocks.scheduler.pause).not.toHaveBeenCalled()
+  })
+})
+
 describe('BG task gating', () => {
   it('blocks suspend while a BG task is running', async () => {
     const { adapters, mocks } = createAdapters()

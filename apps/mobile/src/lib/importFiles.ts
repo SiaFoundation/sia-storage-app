@@ -1,5 +1,6 @@
 import type { ImportSource } from '@siastorage/core/db/operations'
 import { triggerImportScanner } from '../managers/importScanner'
+import { noteUploadWork } from '../managers/uploadWorkSignal'
 import {
   type Asset,
   importAssets,
@@ -48,4 +49,5 @@ export async function importPickedMedia(
 function afterStaged(result: ImportAssetsResult): void {
   if (!result.importId) return
   triggerImportScanner()
+  noteUploadWork()
 }

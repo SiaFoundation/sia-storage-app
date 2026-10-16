@@ -32,6 +32,7 @@ import { getMediaLibraryPermissions } from '../lib/mediaLibraryPermissions'
 import { app } from '../stores/appService'
 import { isBgTaskActive } from './bgTaskContext'
 import { triggerImportScanner } from './importScanner'
+import { noteUploadWork } from './uploadWorkSignal'
 import { acquireAutoKeepAwake, releaseAutoKeepAwake } from './autoKeepAwake'
 
 const PAGE_SIZE = 500
@@ -275,6 +276,7 @@ export async function run(signal?: AbortSignal) {
       // denominator stays reachable.
       await app().imports.addFiles(importId, rows)
       triggerImportScanner()
+      noteUploadWork()
       logger.info('syncPhotosArchive', 'batch_processed', {
         newCount,
         existingCount,

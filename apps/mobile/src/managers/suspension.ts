@@ -149,7 +149,19 @@ export function initSuspensionManager(): void {
     // Android fires 'background' for picker / share-sheet round-trips
     // that aren't real backgrounding; running the pipeline there degrades
     // the experience. iOS pickers don't background the app, so the flow
-    // only fires when the user actually leaves.
+    // only fires when the user actually leaves. Android suspends only when
+    // its upload foreground service stops in the background, through
+    // suspendForAndroidServiceStop, and resumes on every return.
+    if (Platform.OS === 'android') {
+      if (next !== 'foreground') return
+      // Recorded so a background task released in front, the upload
+      // service's included, does not suspend the app on screen when it was
+      // launched in the background. Resumed as well, since the service's
+      // stop suspends without changing the recorded state.
+      void manager.setAppState('foreground')
+      void manager.resume()
+      return
+    }
     if (Platform.OS !== 'ios') return
     if (next === 'background') {
       if (!dbInitialized) {
@@ -173,6 +185,21 @@ export function initSuspensionManager(): void {
 export function teardownSuspensionManager(): void {
   unsubscribeLifecycle?.()
   unsubscribeLifecycle = null
+}
+
+/**
+ * Parks the uploader and drains the database when the Android upload
+ * foreground service stops while the app is in the background. Nothing then
+ * holds the process up, and Android freezes it within 10 seconds. Not tied to
+ * the app going to the background, which Android also reports for a photo
+ * picker or share sheet, where suspending would block the database under
+ * them.
+ */
+export async function suspendForAndroidServiceStop(): Promise<void> {
+  if (Platform.OS !== 'android' || getLifecycle() !== 'background') return
+  // A background fetch task can still be running, and suspending would gate
+  // the database under its next query.
+  await manager.suspendUnlessBusy('android_service_stop')
 }
 
 /** Called at the start of every BG task — resumes the manager if suspended. */
