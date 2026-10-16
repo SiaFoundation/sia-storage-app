@@ -53,6 +53,8 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
     version: options.version ?? APP_VERSION,
     build: options.buildNumber ?? '1',
   }
+  const commit = (await $`git rev-parse --short HEAD`.cwd(repoRoot).nothrow().text()).trim()
+  const daemonBuild = daemonBuildId(stamp, commit || 'nogit')
   const out = join(root, 'dist')
   const appPath = join(out, `${env.appName}.app`)
   rmSync(appPath, { recursive: true, force: true })
@@ -85,8 +87,8 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
   cpSync(icon, join(resources, 'icon.icns'))
 
   const swiftBuild = join(out, 'swift-build')
-  await installApp(resources, env, stamp)
-  await buildDaemon(resources)
+  await installApp(resources, env, stamp, daemonBuild)
+  await buildDaemon(resources, daemonBuild)
   await compileShared(swiftBuild)
   await compileExtension(join(appexContents, 'MacOS', 'SiaFileProvider'), swiftBuild)
   await compileAgent(join(agentContents, 'MacOS', AGENT_NAME))
@@ -115,7 +117,12 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
  * folder. Electron prefers it over Resources/app, so leaving it in place gives a
  * signed bundle that launches into the wrong program.
  */
-async function installApp(resources: string, env: BuildEnv, stamp: Stamp): Promise<void> {
+async function installApp(
+  resources: string,
+  env: BuildEnv,
+  stamp: Stamp,
+  daemonBuild: string,
+): Promise<void> {
   const built = join(root, 'out')
   if (!existsSync(built)) throw new Error(`No build at ${built}. Run bun run desktop:build.`)
 
@@ -139,6 +146,7 @@ async function installApp(resources: string, env: BuildEnv, stamp: Stamp): Promi
         domainId: env.domainId,
         displayName: env.domainDisplay,
         extensionBundleId: env.extBundleId,
+        daemonBuild,
       },
       null,
       2,
@@ -155,11 +163,12 @@ async function installApp(resources: string, env: BuildEnv, stamp: Stamp): Promi
  * payload to lose, the addon is an ordinary file, and signing the runtime is
  * signing a stock executable.
  */
-async function buildDaemon(resources: string): Promise<void> {
+async function buildDaemon(resources: string, daemonBuild: string): Promise<void> {
   const entry = join(repoRoot, 'apps', 'cli', 'src', 'index.ts')
+  const define = `SIA_DAEMON_BUILD=${JSON.stringify(daemonBuild)}`
   // One directory, not --outfile: the CLI pulls in assets Bun emits alongside
   // the script, and --outfile accepts a single output.
-  await $`bun build ${entry} --target=bun --bundle --outdir ${resources} --entry-naming daemon.js`.cwd(
+  await $`bun build ${entry} --target=bun --bundle --outdir ${resources} --entry-naming daemon.js --define ${define}`.cwd(
     repoRoot,
   )
 
@@ -223,6 +232,20 @@ async function compileAgent(destination: string): Promise<void> {
 
 /** The two version keys every bundle in the app carries. */
 type Stamp = { version: string; build: string }
+
+/**
+ * Names one packaging run. The app reads it from its config, the daemon has
+ * it compiled in, and on launch the app checks the daemon it finds against
+ * it. Local builds of one checkout share the version, build number and
+ * commit, so the random suffix is what tells two of them apart.
+ */
+export function daemonBuildId(
+  stamp: Stamp,
+  commit: string,
+  suffix = crypto.randomUUID().slice(0, 8),
+): string {
+  return `${stamp.version}+${stamp.build}.${commit}.${suffix}`
+}
 
 function agentInfoPlist(env: BuildEnv, stamp: Stamp): string {
   return plist({

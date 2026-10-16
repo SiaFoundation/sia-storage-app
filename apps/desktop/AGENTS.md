@@ -43,10 +43,14 @@ must carry no path and no identifier.
 
 ## The daemon
 
-The daemon outlives the app. Started detached, it survives a crash, and
-quitting stops only a daemon this app started. The app attaches to whichever
-daemon already answers the socket, so code assuming it owns the daemon's
-lifetime is wrong on the second launch.
+The daemon outlives the app. Started detached, it survives a crash, so the one
+answering the socket at launch can be from an earlier install or a terminal.
+The app asks it which build it is and who started it (`Daemon.reconcile`):
+it keeps one of its own build, replaces one an earlier desktop install
+started, and asks before stopping one started from a terminal or too old to
+say. Quitting stops only a daemon the app owns, one it started or one a
+desktop app started, so code assuming the app owns every daemon it finds is
+wrong for a terminal's.
 
 ## Swift
 

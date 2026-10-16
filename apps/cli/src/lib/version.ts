@@ -12,3 +12,13 @@ declare const SIA_CLI_VERSION: string | undefined
 export function cliVersion(): string {
   return typeof SIA_CLI_VERSION === 'string' ? SIA_CLI_VERSION : pkg.version
 }
+
+// Stamped by the desktop packaging, which writes the same value into the app's
+// own config. The app compares the two on launch, because a daemon outlives the
+// app and keeps running the previous build's code after an update.
+declare const SIA_DAEMON_BUILD: string | undefined
+
+/** The desktop build this daemon was packaged with, or null outside a packaged app. */
+export function daemonBuild(): string | null {
+  return typeof SIA_DAEMON_BUILD === 'string' ? SIA_DAEMON_BUILD : null
+}

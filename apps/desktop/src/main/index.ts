@@ -9,13 +9,13 @@
  * attaches to the daemon, brings the OS mount up, and relays calls.
  */
 
-import { app, BrowserWindow } from 'electron'
-import { existsSync, readFileSync } from 'node:fs'
+import { app, BrowserWindow, dialog } from 'electron'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
 import { desktopConfig } from './config'
 import { buildVariant, dataDir } from './paths'
-import { Daemon, type DaemonSpawn } from './daemon'
+import { Daemon, type DaemonIdentity, type DaemonSpawn, expectedDaemonBuild } from './daemon'
 import { forcedResetPending } from './forcedReset'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
@@ -42,6 +42,28 @@ const BUNDLED = dirname(app.getAppPath())
 const simDebugPort = process.env.SIA_SIM_DEBUG_PORT
 if (simDebugPort && ['dev', 'test'].includes(buildVariant())) {
   app.commandLine.appendSwitch('remote-debugging-port', simDebugPort)
+}
+
+/**
+ * Asks before stopping a daemon the app cannot vouch for. It may be someone's
+ * terminal session, but leaving it means this app talks to code it was not
+ * built with.
+ */
+async function confirmRestartDaemon(running: DaemonIdentity | null): Promise<boolean> {
+  // Startup waits on the answer, and the app has no window in front, so the
+  // alert is brought forward with it rather than opening behind another app.
+  app.focus({ steal: true })
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['Restart', 'Not Now'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Restart the Sia background service?',
+    detail: running
+      ? `A Sia background service started from the command line is running build ${running.build ?? running.version}, which is not this app's. Restarting it stops that service and starts this app's own. Uploads that were in progress carry on afterwards.`
+      : "A Sia background service is running that this version of Sia Storage cannot identify, most likely one left by an earlier version. Restarting it stops that service and starts this app's own. Uploads that were in progress carry on afterwards.",
+  })
+  return response === 0
 }
 
 // A second copy would fight the first for the daemon and the tray.
@@ -96,35 +118,6 @@ if (!app.requestSingleInstanceLock()) {
   }
 
   /**
-   * Whether a live daemon still holds `daemon.lock`. The daemon closes its
-   * socket before it closes the database and unlinks the lock, so an
-   * unreachable socket is not yet a finished shutdown. The lock file holds
-   * the owner's pid, and a dead owner means a crash leftover, which must not
-   * block the wipe: the wipe removes the stale file with everything else.
-   */
-  function daemonHoldsLock(): boolean {
-    try {
-      const pid = Number.parseInt(readFileSync(join(dataDir(), 'daemon.lock'), 'utf8'), 10)
-      if (!Number.isInteger(pid)) return false
-      // Signal 0 delivers nothing; it only reports whether the pid exists.
-      process.kill(pid, 0)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  /** Polls the lock out, bounded so a hung daemon fails the wipe rather than the app. */
-  async function daemonLockHeld(): Promise<boolean> {
-    const deadline = Date.now() + 5_000
-    while (Date.now() < deadline) {
-      if (!daemonHoldsLock()) return false
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    }
-    return true
-  }
-
-  /**
    * Relaunches rather than re-initialising in place: bringing the daemon, the
    * mount and the window back up against an empty library is what startup
    * already does, and a second path for it would only ever run here. Only
@@ -141,8 +134,9 @@ if (!app.requestSingleInstanceLock()) {
       log.error('app', 'sign_out_failed', { error: e as Error }),
     )
     await quitting
-    // stop() leaves an attached daemon alone and can time out on an owned one,
-    // and a wipe under a live daemon deletes the database it is still writing.
+    // stop() leaves a daemon started from a terminal alone and can time out
+    // on an owned one, and a wipe under a live daemon deletes the database it
+    // is still writing.
     if (platform.status() !== 'absent' && platform.status() !== 'unsupported') {
       // The system's copy outlives the library, so wiping without taking the
       // folder away leaves this account's file names and downloaded contents
@@ -152,7 +146,9 @@ if (!app.requestSingleInstanceLock()) {
     } else if (await Daemon.isReachable()) {
       log.error('app', 'sign_out_daemon_still_up')
       await warnWipeBlocked('A Sia daemon still holds the library. Stop it, then sign out again.')
-    } else if (await daemonLockHeld()) {
+    } else if (!(await Daemon.lockReleased(5_000))) {
+      // Bounded, so a hung daemon fails the wipe rather than the app. A lock
+      // left by a crash does not count, and the wipe removes the stale file.
       log.error('app', 'sign_out_daemon_still_closing')
       await warnWipeBlocked('The daemon is still shutting down. Sign out again in a moment.')
     } else {
@@ -213,7 +209,7 @@ if (!app.requestSingleInstanceLock()) {
       // was probing reachability must not have the daemon respawned under it.
       if (quitting) return
       log.info('daemon', 'restarting')
-      log.info('daemon', 'attached', { state: await daemon.attach(spawn) })
+      log.info('daemon', 'attached', { state: await daemon.attach(spawn), owned: daemon.owned })
     } finally {
       reviving = false
     }
@@ -248,6 +244,12 @@ if (!app.requestSingleInstanceLock()) {
       // a mismatch here is how the extension ends up served by the wrong daemon.
       log.info('app', 'library', { path: dataDir() })
       log.info('app', 'serving_extension', { container: dirname(shellSocket) })
+      // Before the reset check below: a daemon from another build is stopped
+      // here, and the bundled one that replaces it is what may rebuild.
+      await daemon.reconcile(expectedDaemonBuild(config), confirmRestartDaemon)
+      // The replace can wait 30 seconds, and a quit in that time must not be
+      // followed by `attach` starting a daemon that outlives it.
+      if (quitting) return
       // A daemon starting on a new reset nonce rebuilds the library. One that
       // is already up keeps its library, and its folder with it. A daemon the
       // CLI started has already rebuilt by the time the app attaches, so its
@@ -258,7 +260,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       const hadSocket = existsSync(shellSocket)
       const attached = await daemon.attach(spawn)
-      log.info('daemon', 'attached', { state: attached })
+      log.info('daemon', 'attached', { state: attached, owned: daemon.owned })
       // A socket file is normal on relaunch, when the daemon from the last
       // launch still answers it. A socket nothing answers is left over from a
       // crash or belongs to another data directory, and the extension hangs

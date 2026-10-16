@@ -20,6 +20,11 @@ export type DesktopConfig = {
   displayName: string
   /** Names the container the daemon and the extension meet in. */
   extensionBundleId: string
+  /**
+   * The build the bundled daemon was compiled with. Absent in a checkout,
+   * which runs whatever daemon it is pointed at and so has nothing to compare.
+   */
+  daemonBuild?: string
 }
 
 const DEVELOPMENT: DesktopConfig = {
