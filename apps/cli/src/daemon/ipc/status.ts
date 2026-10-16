@@ -1,7 +1,17 @@
 import { readState, writeState } from '@siastorage/node-adapters'
 import { connectSdk, type CliApp } from '../../app'
+import { cliVersion, daemonBuild } from '../../lib/version'
 import type { Materializing } from '../materializing'
 import type { IpcHandlerMap } from './index'
+
+/**
+ * Set by the desktop app in the environment it spawns the daemon with. Local
+ * desktop packaging links this same script as a `sia` command, so the build
+ * alone cannot tell the app's daemon from one a person started in a terminal.
+ */
+export function daemonStarter(): 'desktop' | 'cli' {
+  return process.env.SIA_DAEMON_STARTED_BY === 'desktop' ? 'desktop' : 'cli'
+}
 
 /** Handlers for daemon-process-level queries (not app state). */
 export function registerStatusHandlers(
@@ -11,6 +21,18 @@ export function registerStatusHandlers(
   materializing: Materializing,
 ): void {
   handlers.set('ping', async () => ({ ok: true }))
+
+  /**
+   * Which build is serving and what started it. The desktop app asks on
+   * launch: a daemon started by an earlier install is replaced, and one
+   * started from a terminal is not stopped without asking.
+   */
+  handlers.set('version', async () => ({
+    build: daemonBuild(),
+    version: cliVersion(),
+    pid: process.pid,
+    startedBy: daemonStarter(),
+  }))
 
   handlers.set('status', async () => ({
     running: true,

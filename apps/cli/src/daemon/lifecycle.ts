@@ -45,11 +45,27 @@ export function attachSignalHandlers(shutdown: () => Promise<void>): void {
   process.on('SIGTERM', handler)
 }
 
+/** The shutdown each context is running, which a second request joins. */
+const shuttingDown = new WeakMap<ShutdownContext, Promise<void>>()
+
 /**
  * Runs the graceful shutdown sequence: drain uploader, stop services, close
  * IPC, finalize and close the database, remove state file, release lock.
+ *
+ * A second call joins the first. The desktop app can send two `shutdown`
+ * requests, its own quit and then its next launch replacing this daemon, and
+ * a second run would close the database while the first drains uploads.
  */
-export async function executeShutdown(ctx: ShutdownContext): Promise<void> {
+export function executeShutdown(ctx: ShutdownContext): Promise<void> {
+  let running = shuttingDown.get(ctx)
+  if (!running) {
+    running = runShutdown(ctx)
+    shuttingDown.set(ctx, running)
+  }
+  return running
+}
+
+async function runShutdown(ctx: ShutdownContext): Promise<void> {
   logger.info('daemon', 'shutting_down')
   await ctx.app.service.uploader.shutdown()
   ctx.app.internal.events.dispose()

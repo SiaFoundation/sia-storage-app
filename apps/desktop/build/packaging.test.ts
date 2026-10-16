@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { envOverrides, loadEnv, parseEnv, resolveEnv } from './env'
-import { plist } from './darwin'
+import { daemonBuildId, plist } from './darwin'
 import { replaceableShim, resolveCli } from './install'
 import {
   appEntitlements,
@@ -267,5 +267,14 @@ describe('build settings', () => {
     it('rejects a context with no example file', () => {
       expect(() => loadEnv('staging', environment)).toThrow(/No such build context: staging/)
     })
+  })
+})
+
+describe('the daemon build id', () => {
+  it('names the version, build number and commit, and differs between two runs of one checkout', () => {
+    const stamp = { version: '0.0.2-rc.1', build: '7' }
+
+    expect(daemonBuildId(stamp, 'abc1234', 'k2j4x9q1')).toBe('0.0.2-rc.1+7.abc1234.k2j4x9q1')
+    expect(daemonBuildId(stamp, 'abc1234')).not.toBe(daemonBuildId(stamp, 'abc1234'))
   })
 })

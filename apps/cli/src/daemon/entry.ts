@@ -5,6 +5,7 @@ import { connectSdk, createCliAppService } from '../app'
 import { applyForcedReset } from './forcedReset'
 import { buildIpcSurface, startIpcDispatcher } from './ipc'
 import { startProviderListener } from './ipc/provider'
+import { daemonStarter } from './ipc/status'
 import {
   acquireLockOrExit,
   attachSignalHandlers,
@@ -13,6 +14,7 @@ import {
 } from './lifecycle'
 import { initializeScheduler } from './scheduler'
 import { cliVariant } from '../lib/variant'
+import { daemonBuild } from '../lib/version'
 
 /**
  * Build identifier a storage-provider shell must match to call anything.
@@ -102,6 +104,11 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
 
 export async function startDaemon(dataDir?: string): Promise<void> {
   const ctx = await startServices(dataDir)
-  logger.info('daemon', 'started', { pid: process.pid, connected: ctx.connected })
+  logger.info('daemon', 'started', {
+    pid: process.pid,
+    connected: ctx.connected,
+    build: daemonBuild() ?? 'unstamped',
+    startedBy: daemonStarter(),
+  })
   console.log(`Daemon started (PID: ${process.pid})`)
 }
