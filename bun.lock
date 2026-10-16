@@ -25,7 +25,7 @@
     },
     "apps/cli": {
       "name": "@siastorage/cli",
-      "version": "0.0.7-rc.2",
+      "version": "0.0.7-rc.3",
       "bin": {
         "sia": "src/index.ts",
       },
@@ -55,7 +55,7 @@
     },
     "apps/desktop": {
       "name": "@siastorage/desktop",
-      "version": "0.0.1-rc.3",
+      "version": "0.0.1-rc.4",
       "dependencies": {
         "@scure/bip39": "2.4.0",
         "@siastorage/core": "workspace:*",
@@ -97,7 +97,7 @@
     },
     "apps/mobile": {
       "name": "@siastorage/mobile",
-      "version": "1.15.0-rc.1",
+      "version": "1.15.0-rc.2",
       "dependencies": {
         "@azure/core-asynciterator-polyfill": "1.0.2",
         "@bacons/text-decoder": "0.0.0",
@@ -204,7 +204,7 @@
     },
     "packages/core": {
       "name": "@siastorage/core",
-      "version": "0.0.21-rc.3",
+      "version": "0.0.21-rc.4",
       "dependencies": {
         "@siastorage/logger": "workspace:*",
         "zod": "4.3.6",
