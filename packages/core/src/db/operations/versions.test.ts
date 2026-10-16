@@ -24,7 +24,11 @@ import {
 } from './library'
 import { addTagToFile, queryTagsForFile } from './tags'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
-import { restoreFilesAndThumbnails, trashFilesAndThumbnails } from './trash'
+import {
+  autoPurgeOldTrashedFiles,
+  restoreFilesAndThumbnails,
+  trashFilesAndThumbnails,
+} from './trash'
 
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
@@ -699,6 +703,50 @@ describe('current column maintenance', () => {
     await restoreFilesAndThumbnails(db(), ['v2'])
     expect(await queryLibraryFileCount(db())).toBe(1)
     expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('v2')
+  })
+
+  test('versions sharing a stamp keep the one shown through a trash and restore, whatever their creation dates', async () => {
+    // createdAt is a photo's capture date, so it says nothing about which
+    // version was saved last. With one stamp, the stack shows the higher id.
+    await createFile('a', { name: 'doc.txt', createdAt: base + 50, updatedAt: base })
+    await createFile('b', { name: 'doc.txt', createdAt: base, updatedAt: base })
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('b')
+
+    await trashFilesAndThumbnails(db(), ['a', 'b'])
+    await restoreFilesAndThumbnails(db(), ['a', 'b'])
+
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('b')
+  })
+
+  test('a file restored after the hourly purge selected it is not deleted', async () => {
+    await createFile('old', { name: 'doc.txt', updatedAt: base })
+    await trashFilesAndThumbnails(db(), ['old'])
+    // Old enough to purge.
+    await db().runAsync(`UPDATE files SET trashedAt = 1 WHERE id = 'old'`)
+
+    const real = db()
+    let restored = false
+    const restoringAfterSelect = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== 'getAllAsync') return Reflect.get(target, prop, receiver)
+        return async (query: string, ...params: unknown[]) => {
+          const rows = await target.getAllAsync(query, ...(params as []))
+          if (!restored && query.includes('trashedAt < ?') && query.includes('LIMIT')) {
+            restored = true
+            await restoreFilesAndThumbnails(target, ['old'])
+          }
+          return rows
+        }
+      },
+    })
+    const purged: string[] = []
+    await autoPurgeOldTrashedFiles(restoringAfterSelect, async (ids) => {
+      purged.push(...ids)
+    })
+
+    expect(restored).toBe(true)
+    expect(purged).toEqual([])
+    expect((await queryFileByName(db(), 'doc.txt'))?.id).toBe('old')
   })
 
   test('partial restore: restoring one of three trashed versions makes it current', async () => {

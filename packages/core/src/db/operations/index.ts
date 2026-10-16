@@ -282,7 +282,15 @@ export {
 } from './shareLinks'
 export {
   autoPurgeOldTrashedFiles,
+  queryTrashedFiles,
+  queryTrashEntries,
+  queryTrashEntryCount,
+  queryTrashEntryFiles,
   tombstoneFilesAndThumbnails,
   restoreFilesAndThumbnails,
+  restoreTrashEntries,
+  tombstoneTrash,
+  tombstoneTrashEntries,
+  type TrashEntryRow,
   trashFilesAndThumbnails,
 } from './trash'
