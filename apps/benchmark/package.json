@@ -9,12 +9,12 @@
     "bench:imports:100k": "node --import tsx src/importsMain.ts --profile archive100k"
   },
   "dependencies": {
-    "tsx": "4.21.0"
+    "tsx": "4.23.15"
   },
   "devDependencies": {
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
     "@siastorage/node-adapters": "workspace:*",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
   }
 }

@@ -6,7 +6,6 @@
     "apps/*"
   ],
   "scripts": {
-    "postinstall": "npm rebuild better-sqlite3",
     "lint": "oxlint . && oxfmt --check .",
     "check-changesets": "bun scripts/check-changesets.ts",
     "publish-releases": "bun scripts/publish-releases.ts",
@@ -62,15 +61,24 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "knip": "6.3.0",
-    "oxfmt": "0.43.0",
-    "oxlint": "1.58.0"
+    "knip": "6.41.0",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0"
+  },
+  "overrides": {
+    "@expo/config-plugins": "58.0.7",
+    "expo-constants": "58.0.10",
+    "expo-linking": "58.0.11",
+    "react-native": "0.88.0-rc.5",
+    "vite": "8.3.4"
+  },
+  "engines": {
+    "node": ">=24.3.0"
   },
   "patchedDependencies": {
     "react-native-fs@2.20.0": "patches/react-native-fs@2.20.0.patch",
-    "expo-sqlite@55.0.10": "patches/expo-sqlite@55.0.10.patch",
-    "expo-video@55.0.10": "patches/expo-video@55.0.10.patch",
-    "react-native-screens@4.23.0": "patches/react-native-screens@4.23.0.patch"
+    "expo-sqlite@58.0.11": "patches/expo-sqlite@58.0.11.patch",
+    "react-native-sia@0.15.3": "patches/react-native-sia@0.15.3.patch"
   },
   "trustedDependencies": [
     "electron"

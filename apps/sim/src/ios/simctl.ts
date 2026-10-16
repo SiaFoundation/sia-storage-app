@@ -40,7 +40,12 @@ export async function listDevices(): Promise<SimDevice[]> {
   return Object.values(byRuntime).flat()
 }
 
-/** The newest installed iOS runtime, as a simctl runtime identifier. */
+/**
+ * The newest installed iOS runtime that can run DEVICE_TYPE, as a simctl
+ * runtime identifier. The newest runtime alone is not enough: a runtime can
+ * drop older models, as iOS 27.1's simulator runtime supports only one new
+ * model, and simctl then refuses to create the device.
+ */
 async function latestRuntime(): Promise<string> {
   const out = await simctl(['list', 'runtimes', '--json'])
   const runtimes = (
@@ -50,12 +55,22 @@ async function latestRuntime(): Promise<string> {
         platform: string
         version: string
         isAvailable: boolean
+        supportedDeviceTypes?: Array<{ name: string }>
       }>
     }
-  ).runtimes.filter((r) => r.platform === 'iOS' && r.isAvailable)
+  ).runtimes.filter(
+    (r) =>
+      r.platform === 'iOS' &&
+      r.isAvailable &&
+      (r.supportedDeviceTypes ?? []).some((t) => t.name === DEVICE_TYPE),
+  )
   runtimes.sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }))
   const latest = runtimes.at(-1)
-  if (!latest) throw new Error('No iOS simulator runtime is installed. Install one in Xcode.')
+  if (!latest) {
+    throw new Error(
+      `No installed iOS simulator runtime runs an ${DEVICE_TYPE}. Install one in Xcode.`,
+    )
+  }
   return latest.identifier
 }
 

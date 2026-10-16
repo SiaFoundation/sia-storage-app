@@ -1,8 +1,8 @@
 import type { RefObject } from 'react'
 import { useCallback } from 'react'
-import { Platform, type TextInput } from 'react-native'
+import { Platform, type TextInputInstance } from 'react-native'
 
-export function useFocusOnShow(ref: RefObject<TextInput | null>) {
+export function useFocusOnShow(ref: RefObject<TextInputInstance | null>) {
   return useCallback(() => {
     if (Platform.OS === 'android') {
       // On Android, Modal.onShow fires before content is fully laid out,

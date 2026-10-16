@@ -37,15 +37,13 @@ export function ViewSettingsMenu({ children, scope = 'library', allowedCategorie
     ]
 
     return [
-      ...sortOptions.map(
-        (opt): MenuItem => ({
-          type: 'checkbox',
-          key: opt.key,
-          label: opt.label,
-          checked: vs.sortBy === opt.value,
-          onPress: () => setSortBy(scope, opt.value),
-        }),
-      ),
+      ...sortOptions.map((opt): MenuItem => ({
+        type: 'checkbox',
+        key: opt.key,
+        label: opt.label,
+        checked: vs.sortBy === opt.value,
+        onPress: () => setSortBy(scope, opt.value),
+      })),
       { type: 'separator' },
       {
         type: 'checkbox',
@@ -66,15 +64,13 @@ export function ViewSettingsMenu({ children, scope = 'library', allowedCategorie
         type: 'submenu',
         key: 'filter',
         label: 'Filter',
-        items: visibleCategories.map(
-          (cat): MenuItem => ({
-            type: 'checkbox',
-            key: `filter-${cat}`,
-            label: CATEGORY_LABELS[cat] ?? cat,
-            checked: categorySet.has(cat),
-            onPress: () => toggleCategory(scope, cat),
-          }),
-        ),
+        items: visibleCategories.map((cat): MenuItem => ({
+          type: 'checkbox',
+          key: `filter-${cat}`,
+          label: CATEGORY_LABELS[cat] ?? cat,
+          checked: categorySet.has(cat),
+          onPress: () => toggleCategory(scope, cat),
+        })),
       },
       { type: 'separator' },
       {

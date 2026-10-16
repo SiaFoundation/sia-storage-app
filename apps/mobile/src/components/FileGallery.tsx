@@ -59,7 +59,7 @@ export function FileGallery({
           ? { ...styles.galleryContent, paddingTop: contentPaddingTop }
           : styles.galleryContent
       }
-      ListHeaderComponent={ListHeaderComponent}
+      ListHeaderComponent={ListHeaderComponent ?? undefined}
       renderItem={renderItem}
       onEndReachedThreshold={0.95}
       onEndReached={handleEndReached}
@@ -69,7 +69,7 @@ export function FileGallery({
       updateCellsBatchingPeriod={20}
       showsVerticalScrollIndicator={false}
       keyboardDismissMode={keyboardDismissMode}
-      ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
+      ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : undefined}
       removeClippedSubviews
     />
   )

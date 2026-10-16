@@ -1,7 +1,16 @@
 import { useAllDirectories } from '@siastorage/core/stores'
 import { CheckIcon, FolderIcon, PlusIcon, XIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from 'react-native'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
@@ -24,7 +33,7 @@ export function SelectDirectorySheet({
   const isOpen = useSheetOpen(sheetName)
   const allDirs = useAllDirectories()
   const [query, setQuery] = useState('')
-  const inputRef = useRef<TextInput | null>(null)
+  const inputRef = useRef<TextInputInstance | null>(null)
 
   const dirs = allDirs.data ?? []
   const filtered = query.trim()
@@ -155,7 +164,7 @@ export function SelectDirectorySheet({
         ListEmptyComponent={
           query.trim().length === 0 ? (
             <Text style={styles.emptyText}>No folders yet. Type to create one.</Text>
-          ) : null
+          ) : undefined
         }
       />
     </ModalSheet>

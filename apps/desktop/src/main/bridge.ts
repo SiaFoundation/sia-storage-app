@@ -101,8 +101,8 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
 
   ipcMain.handle('share:take', () => takeShareRequest())
 
-  ipcMain.handle('clipboard:write', (_event, text: unknown) => {
-    if (typeof text === 'string') clipboard.writeText(text)
+  ipcMain.handle('clipboard:write', async (_event, text: unknown) => {
+    if (typeof text === 'string') await clipboard.writeText(text)
   })
 
   ipcMain.handle('app:info', () => ({

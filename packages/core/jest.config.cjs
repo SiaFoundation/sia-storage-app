@@ -9,13 +9,12 @@ module.exports = {
         tsconfig: {
           target: 'ES2022',
           module: 'commonjs',
-          moduleResolution: 'node',
+          moduleResolution: 'bundler',
           esModuleInterop: true,
           strict: true,
-          baseUrl: '.',
           paths: {
             '@siastorage/logger': ['../logger/src/index.ts'],
-            '@siastorage/core/*': ['src/*/index.ts', 'src/*.ts'],
+            '@siastorage/core/*': ['./src/*/index.ts', './src/*.ts'],
             '@siastorage/node-adapters/*': ['../node-adapters/src/*'],
           },
         },

@@ -178,3 +178,11 @@ console.warn = (...args) => {
   }
   originalConsoleWarn(...args)
 }
+
+// expo-sqlite connects every database it opens in __DEV__ to the Expo dev tools.
+// The connection is async, so it requires expo/devtools after the test has
+// finished and logs a failure once Jest has torn the module registry down. A
+// null client makes expo-sqlite skip the dev tools.
+jest.mock('expo/devtools', () => ({
+  getDevToolsPluginClientAsync: async () => null,
+}))

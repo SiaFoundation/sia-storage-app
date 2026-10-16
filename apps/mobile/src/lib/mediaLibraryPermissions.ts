@@ -1,5 +1,5 @@
 import { swrCache } from '@siastorage/core/stores'
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { useCallback, useMemo } from 'react'
 import { Linking, Platform } from 'react-native'
 import useSWR from 'swr'

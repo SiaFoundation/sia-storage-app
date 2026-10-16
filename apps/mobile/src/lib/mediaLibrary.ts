@@ -1,6 +1,6 @@
 import type { ResolveSourceResult } from '@siastorage/core/services/importScanner'
 import { logger } from '@siastorage/logger'
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { Platform } from 'react-native'
 
 const resolved = (uri: string): ResolveSourceResult => ({ status: 'resolved', uri })

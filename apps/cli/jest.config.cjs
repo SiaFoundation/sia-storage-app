@@ -5,10 +5,9 @@ const sharedTransform = {
       tsconfig: {
         target: 'ES2022',
         module: 'commonjs',
-        moduleResolution: 'node',
+        moduleResolution: 'bundler',
         esModuleInterop: true,
         strict: true,
-        baseUrl: '.',
         paths: {
           '@siastorage/logger': ['../../packages/logger/src/index.ts'],
           '@siastorage/core': ['../../packages/core/src/index.ts'],
@@ -52,7 +51,6 @@ module.exports = {
     {
       displayName: 'e2e',
       testEnvironment: 'node',
-      maxWorkers: 4,
       testMatch: ['<rootDir>/test/e2e/**/*.test.ts'],
       setupFiles: ['<rootDir>/test/e2e/setup.ts'],
       transform: sharedTransform,

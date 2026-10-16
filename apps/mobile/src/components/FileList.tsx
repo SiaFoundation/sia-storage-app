@@ -55,7 +55,7 @@ export function FileList({
         paddingTop: contentPaddingTop ?? HEADER_CONTENT_OFFSET,
         paddingBottom: 130,
       }}
-      ListHeaderComponent={ListHeaderComponent}
+      ListHeaderComponent={ListHeaderComponent ?? undefined}
       renderItem={renderItem}
       onEndReachedThreshold={0.9}
       onEndReached={handleEndReached}
@@ -65,7 +65,7 @@ export function FileList({
       updateCellsBatchingPeriod={20}
       showsVerticalScrollIndicator={false}
       keyboardDismissMode={keyboardDismissMode}
-      ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : null}
+      ListFooterComponent={isLoadingMore ? <ActivityIndicator /> : undefined}
       removeClippedSubviews
     />
   )
