@@ -7,7 +7,7 @@
  * the connection to the indexer.
  */
 
-import { useShareLinks, useUploadSpeed } from '@siastorage/core/stores'
+import { useShareLinks, useTrashCount, useUploadSpeed } from '@siastorage/core/stores'
 import { Footer } from './Footer'
 import { DoneMark, ROW, Row, Section } from './Group'
 import {
@@ -19,6 +19,7 @@ import {
   InternalDrive,
   Link,
   Lock,
+  Trash,
   WarnCircle,
 } from './icons'
 import {
@@ -36,9 +37,16 @@ import { StatusLine } from './StatusLine'
 import { useAppInfo } from './useAppInfo'
 import { useStatus } from './useStatus'
 
-export function Details({ onShowLinks }: { onShowLinks: () => void }) {
+export function Details({
+  onShowLinks,
+  onShowTrash,
+}: {
+  onShowLinks: () => void
+  onShowTrash: () => void
+}) {
   const status = useStatus()
   const links = useShareLinks({ revalidateOnFocus: false })
+  const trash = useTrashCount()
   const info = useAppInfo()
   // An average moves slowly, so a slow re-read keeps up with it.
   const speed = useUploadSpeed({ refreshInterval: 10_000 }).data ?? null
@@ -86,6 +94,19 @@ export function Details({ onShowLinks }: { onShowLinks: () => void }) {
           <Row icon={<DocOnDoc />} label="Files" id="files" value={fileCountLabel(status)} />
           <Row icon={<Folder />} label="Folders" id="folders" value={folderCountLabel(status)} />
           <Row icon={<InternalDrive />} label="Size" id="size" value={librarySizeLabel(status)} />
+          <button
+            type="button"
+            className={`${ROW} w-full cursor-default border-none bg-transparent text-left text-label [font-family:inherit] enabled:hover:bg-divider`}
+            onClick={onShowTrash}
+          >
+            <span className="flex w-[15px] shrink-0 text-secondary">
+              <Trash />
+            </span>
+            <span className="flex-auto">Trash</span>
+            <span data-testid="trash" className="pr-row-x text-secondary tabular-nums">
+              {trash.data !== undefined ? trash.data.toLocaleString() : '-'}
+            </span>
+          </button>
         </Section>
 
         <Section header="Sharing">
