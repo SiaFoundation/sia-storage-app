@@ -1,4 +1,5 @@
 import {
+  DOWNLOAD_CHUNK_BYTES,
   DOWNLOAD_CHUNK_MEMORY_BYTES,
   DOWNLOAD_MIN_BUFFERED_CHUNKS,
   TRANSFER_BUDGET_CEILING_BYTES,
@@ -117,5 +118,25 @@ export class TransferMemoryBudget {
         this.downloadsHeld -= bytes
       },
     }
+  }
+
+  /**
+   * What downloads may hold together: the budget less the open uploads'
+   * peak. The download slots weigh each download against this.
+   */
+  downloadCapacity(): number {
+    return Math.max(0, this.totalBytes() - this.uploadHeld())
+  }
+
+  /**
+   * Memory a download of `fileSize` bytes may hold with `chunks` of
+   * read-ahead. A file smaller than its read-ahead never has more of itself
+   * in flight than its own size, so a thumbnail weighs a fraction of a large
+   * file. Each download's write buffer, 4 MiB on the phone, is left out,
+   * and the download count bounds those instead.
+   */
+  downloadBytes(fileSize: number, chunks: number): number {
+    const inFlight = Math.min(fileSize, chunks * DOWNLOAD_CHUNK_BYTES)
+    return inFlight * (DOWNLOAD_CHUNK_MEMORY_BYTES / DOWNLOAD_CHUNK_BYTES)
   }
 }

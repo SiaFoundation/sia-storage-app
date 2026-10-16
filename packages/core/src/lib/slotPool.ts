@@ -2,6 +2,7 @@ import { AbortError } from './errors'
 
 type WaitEntry = {
   priority: number
+  weight: number
   key?: string
   grant: () => void
   evict: () => void
@@ -14,20 +15,39 @@ type AcquireOptions = {
   maxQueueDepth?: number
   /** Names the waiter, so promote() can move it while it waits. */
   key?: string
+  /**
+   * How much of the pool's capacity the holder uses while it runs, in
+   * whatever unit the pool's capacity is given in. Default 0.
+   */
+  weight?: number
 }
 
 /**
  * A counting semaphore-style pool that limits the number of concurrent operations.
- * Use `withSlot` to run an async task while reserving one slot. Defaults to 5 slots.
+ * Use `withSlot` to run an async task while reserving one slot.
+ *
+ * A pool given a `capacity` also limits the total `weight` of what runs at
+ * once, so many light operations can run together where heavy ones take
+ * turns. One operation is always let in when nothing is running, however
+ * heavy, so a weight above the capacity waits its turn rather than forever.
+ *
+ * The first waiter in serving order that does not fit holds back what it
+ * needs, and waiters behind it run beside the current holders only in the
+ * room left after that. Otherwise a stream of light operations queued behind
+ * a heavy one would keep it waiting for as long as they kept arriving.
  */
 export class SlotPool {
   private maxSlots: number
   private inUseCount: number
+  private capacity: number
+  private inUseWeight: number
   private waitQueue: WaitEntry[]
 
-  constructor(maxSlots: number) {
+  constructor(maxSlots: number, opts?: { capacity?: number }) {
     this.maxSlots = Math.max(1, Math.floor(maxSlots))
     this.inUseCount = 0
+    this.capacity = opts?.capacity ?? Number.POSITIVE_INFINITY
+    this.inUseWeight = 0
     this.waitQueue = []
   }
 
@@ -53,6 +73,17 @@ export class SlotPool {
     this.drain()
   }
 
+  /** Returns the total weight of what is running. */
+  getInUseWeight(): number {
+    return this.inUseWeight
+  }
+
+  /** Updates the total weight that may run at once. Holders over it keep running. */
+  setCapacity(capacity: number): void {
+    this.capacity = Math.max(0, capacity)
+    this.drain()
+  }
+
   /**
    * Acquire a slot. Resolves with a release function to free the slot.
    *
@@ -71,9 +102,9 @@ export class SlotPool {
       throw new AbortError()
     }
 
-    if (this.inUseCount < this.maxSlots) {
-      this.inUseCount += 1
-      return this.makeRelease()
+    const weight = Math.max(0, opts?.weight ?? 0)
+    if (this.waitQueue.length === 0 && this.fits(weight, 0, 0)) {
+      return this.take(weight)
     }
 
     const priority = opts?.priority ?? 0
@@ -84,13 +115,13 @@ export class SlotPool {
 
       const entry: WaitEntry = {
         priority,
+        weight,
         key: opts?.key,
         grant: () => {
           if (settled) return
           settled = true
           if (signal) signal.removeEventListener('abort', onAbort)
-          this.inUseCount += 1
-          resolve(this.makeRelease())
+          resolve(this.take(weight))
         },
         evict: () => {
           if (settled) return
@@ -102,10 +133,17 @@ export class SlotPool {
         },
       }
 
-      const onAbort = () => entry.evict()
+      // A waiter that does not fit holds back its weight from those behind
+      // it, so taking it out can let them run now.
+      const onAbort = () => {
+        entry.evict()
+        this.drain()
+      }
 
       this.insert(entry)
       signal?.addEventListener('abort', onAbort, { once: true })
+      // A waiter queued behind one that does not fit may still fit beside it.
+      this.drain()
 
       // Evict oldest same-priority entries beyond the depth cap.
       if (maxQueueDepth !== undefined) {
@@ -134,6 +172,7 @@ export class SlotPool {
     const [entry] = this.waitQueue.splice(at, 1)
     entry.priority = priority
     this.insert(entry)
+    this.drain()
   }
 
   /**
@@ -164,20 +203,40 @@ export class SlotPool {
     }
   }
 
-  private makeRelease(): () => void {
+  /**
+   * Whether `weight` can start now, with `heldSlots` and `heldWeight` set
+   * aside for an earlier waiter that does not fit yet.
+   */
+  private fits(weight: number, heldSlots: number, heldWeight: number): boolean {
+    if (this.inUseCount + heldSlots >= this.maxSlots) return false
+    if (this.inUseCount === 0 && heldSlots === 0) return true
+    return this.inUseWeight + heldWeight + weight <= this.capacity
+  }
+
+  private take(weight: number): () => void {
+    this.inUseCount += 1
+    this.inUseWeight += weight
     let released = false
     return () => {
       if (released) return
       released = true
       this.inUseCount -= 1
+      this.inUseWeight -= weight
       this.drain()
     }
   }
 
   private drain(): void {
-    while (this.inUseCount < this.maxSlots && this.waitQueue.length > 0) {
-      const next = this.waitQueue.shift()
-      if (next) next.grant()
+    let heldSlots = 0
+    let heldWeight = 0
+    for (const entry of [...this.waitQueue]) {
+      if (this.fits(entry.weight, heldSlots, heldWeight)) {
+        this.waitQueue.splice(this.waitQueue.indexOf(entry), 1)
+        entry.grant()
+      } else if (heldSlots === 0) {
+        heldSlots = 1
+        heldWeight = entry.weight
+      }
     }
   }
 }

@@ -215,13 +215,19 @@ bun sim device expect phone --label Menu
 
 ### Downloads and the local cache
 
-- When: a file's bytes coming down to a device, download priority, and freeing
-  local copies.
-- Code: `app.downloads`, `app.fs`; services `cacheEviction`; CLI `download`
+- When: a file's bytes coming down to a device, download priority, how many
+  downloads run at once and how much memory they hold, and freeing local
+  copies.
+- Code: `app.downloads`, `app.fs`; services `cacheEviction`,
+  `transferMemoryBudget`; CLI `download`
 - Check: `call <device> downloads.getState`; tables `fs`
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
-  `sync/converge-and-download`, `mobile/tapped-download-arrives`; integration
-  `downloads`, `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
+  `sync/converge-and-download`, `mobile/tapped-download-arrives`,
+  `sync/small-downloads-beside-large`; integration `downloads`, `fs-eviction`,
+  `fs-adopt`, `fs-orphan`, `size-reconcile`
+- Network: `net latency` adds a delay to every call and `net download-rate`
+  shares one download speed between every download, the two costs that decide
+  how downloads should be scheduled.
 - CLI: `bun sim sia laptop -- download {file}`
 - Desktop: `bun sim device download mac {file}` downloads a cloud-only file by
   reading it through Finder, and `bun sim device finder-state mac {file}` shows
