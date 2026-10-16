@@ -427,22 +427,26 @@ bun sim device expect phone --label Menu
   Share links in the window's status view lists every link with Copy and
   Revoke. On the phone, Share link in a file's menu, in the selection bar
   and on the viewer's share button opens the share link sheet, and Share
-  Links in the menu lists every link. A latest link opens its files on
+  Links in the menu lists every link. On the CLI, `sia share` makes a link,
+  `sia share --to`, `sia unshare` and `sia revoke` change it, and `sia links`
+  lists every link with its files. A latest link opens its files on
   share.sia.storage at each file's current version, and a snapshot link at
   the versions they had when it was made, until it expires or is revoked. A
   link made on one device shows on every device of the account.
 - Code: `app.shares`; files
   `packages/core/src/app/namespaces/shareLinks.ts`,
   `packages/core/src/services/shareLinks.ts`,
-  `apps/cli/src/daemon/shareRequests.ts`,
+  `apps/cli/src/daemon/shareRequests.ts`, `apps/cli/src/commands/share.ts`,
   `apps/desktop/src/renderer/src/ShareView.tsx`,
   `apps/mobile/src/components/ShareLinkSheet.tsx`,
   `apps/mobile/src/managers/shareLinks.ts`; screens `ShareLinks`; tables
   `share_links`, `share_link_files`, `share_link_objects`
 - State: `bun sim net shares` lists each live key with the files a recipient
   sees and their names as attached.
-- Tests: scenarios `desktop/share-links`, `mobile/share-links`; integration
-  `share-links`
+- Tests: scenarios `desktop/share-links`, `mobile/share-links`,
+  `sync/share-links-from-cli`; integration `share-links`
+- CLI: `bun sim sia laptop -- share {file} {file}`, then
+  `bun sim sia desk -- links`
 - Desktop, Finder's Share Link for two files, then the link in the window:
 
 ```sh

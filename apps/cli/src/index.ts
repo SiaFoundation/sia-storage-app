@@ -229,6 +229,48 @@ if (process.env.SIA_DAEMON_MODE === '1') {
     })
 
   program
+    .command('share')
+    .description('Make a link anyone can open to see and download files')
+    .argument('<files...>', 'File names or IDs')
+    .option('--expires <when>', 'day, week (the default), month or never')
+    .option('--snapshot', 'Show the files as they are now, not their latest versions')
+    .option('--to <link>', 'Add the files to this link instead of making one')
+    .action(
+      async (files: string[], opts: { expires?: string; snapshot?: boolean; to?: string }) => {
+        const { shareCommand } = await import('./commands/share')
+        await shareCommand(resolveDataDir(), files, opts)
+      },
+    )
+
+  program
+    .command('unshare')
+    .description('Take files off a share link')
+    .argument('<link>', 'Link address, key, or the start of its key')
+    .argument('<files...>', 'File names or IDs')
+    .action(async (link: string, files: string[]) => {
+      const { unshareCommand } = await import('./commands/share')
+      await unshareCommand(resolveDataDir(), link, files)
+    })
+
+  program
+    .command('revoke')
+    .description('Delete a share link so no one can open it')
+    .argument('<link>', 'Link address, key, or the start of its key')
+    .action(async (link: string) => {
+      const { revokeCommand } = await import('./commands/share')
+      await revokeCommand(resolveDataDir(), link)
+    })
+
+  program
+    .command('links')
+    .description('List share links and the files on each')
+    .option('--json', 'Print the links as JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const { linksCommand } = await import('./commands/share')
+      await linksCommand(resolveDataDir(), opts)
+    })
+
+  program
     .command('search')
     .description('Search files')
     .argument('<query...>', 'Search query')
