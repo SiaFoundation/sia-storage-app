@@ -23,7 +23,7 @@ import BlocksLoader from '../BlocksLoader'
 import { useDragToDismissGesture } from '../DragToDismiss'
 import { FileDetails } from '../FileDetails'
 import { FileCarouselControlBar } from './FileCarouselControlBar'
-import { FileCarouselHeader } from './FileCarouselHeader'
+import { CAROUSEL_HEADER_HEIGHT, FileCarouselHeader } from './FileCarouselHeader'
 import { FileCarouselPage } from './FileCarouselPage'
 
 type Props = {
@@ -232,7 +232,7 @@ export function FileCarousel({
       return (
         <FileCarouselPage
           file={file}
-          textTopInset={insets.top}
+          textTopInset={insets.top + CAROUSEL_HEADER_HEIGHT}
           onTap={toggleControlsVisibility}
           onImageZoomChange={handleImageZoomChange}
           onSwipeLeft={goToNext}

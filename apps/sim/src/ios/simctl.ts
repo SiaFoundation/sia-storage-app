@@ -10,7 +10,9 @@ import { $ } from 'bun'
 import { runTool } from '../process'
 
 export const SIM_PREFIX = 'sia-sim-'
-const DEVICE_TYPE = 'iPhone 16 Pro'
+export const DEFAULT_DEVICE_TYPE = 'iPhone 16 Pro'
+/** The iPhone model sim's simulators are. `SIM_IOS_DEVICE` names another, such as "iPhone Duo". */
+export const DEVICE_TYPE = process.env.SIM_IOS_DEVICE || DEFAULT_DEVICE_TYPE
 
 /**
  * Runs `xcrun simctl`. A simulator that is still booting makes most commands
@@ -129,8 +131,30 @@ export async function openSettings(udid: string): Promise<void> {
   await simctl(['launch', udid, 'com.apple.Preferences'])
 }
 
+/**
+ * Captures the screen showing the interface. simctl captures the primary
+ * screen by default, which on an iPhone Duo is the cover screen, and that
+ * screen is black while the phone is open.
+ */
 export async function screenshot(udid: string, path: string): Promise<void> {
-  await simctl(['io', udid, 'screenshot', path])
+  const display = await activeDisplay(udid)
+  await simctl(['io', udid, 'screenshot', ...(display ? [`--display=${display}`] : []), path])
+}
+
+/** The id of the built-in screen showing the interface, or null when devicectl cannot say. */
+async function activeDisplay(udid: string): Promise<number | null> {
+  try {
+    const out = await runTool(
+      ['xcrun', 'devicectl', 'device', 'info', 'displays', '-d', udid, '--json-output', '-'],
+      { timeoutMs: 30_000, name: 'devicectl device info displays' },
+    )
+    const { result } = JSON.parse(new TextDecoder().decode(out)) as {
+      result: { displays: Array<{ displayId: number; name?: string; active?: boolean }> }
+    }
+    return result.displays.find((d) => d.active && d.name?.startsWith('LCD'))?.displayId ?? null
+  } catch {
+    return null
+  }
 }
 
 /** The host path of the app's App Group container, where its database lives. */

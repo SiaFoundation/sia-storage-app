@@ -1,17 +1,24 @@
 import { type FileListParams, useFileList } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
-import { useCallback } from 'react'
-import { ActivityIndicator, FlatList, type FlatListProps, StyleSheet } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  FlatList,
+  type FlatListProps,
+  type LayoutChangeEvent,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
-import { HEADER_CONTENT_OFFSET } from '../styles/layout'
+import { galleryColumns } from '../lib/galleryColumns'
+import { useHeaderContentOffset } from '../styles/layout'
 import { FileGalleryItem } from './FileGalleryItem'
 
 type Props = {
   filters: FileListParams
   onPressItem: (item: FileRecord) => void
   onLongPressItem?: (item: FileRecord) => void
-  numColumns?: number
   keyboardDismissMode?: FlatListProps<FileRecord>['keyboardDismissMode']
   contentPaddingTop?: number
   ListHeaderComponent?: React.ReactElement | null
@@ -21,7 +28,6 @@ export function FileGallery({
   filters,
   onPressItem,
   onLongPressItem,
-  numColumns = 3,
   keyboardDismissMode,
   contentPaddingTop,
   ListHeaderComponent,
@@ -35,30 +41,104 @@ export function FileGallery({
     hasMore,
   })
 
+  const headerOffset = useHeaderContentOffset()
+  const { width: windowWidth } = useWindowDimensions()
+  const [width, setWidth] = useState(windowWidth)
+  const columns = galleryColumns(width)
+
+  // A FlatList cannot change its column count in place, so a new count remounts
+  // it under a new key, which starts it at the top. Folding or unfolding an
+  // iPhone Duo changes the count, so the first row on screen is kept and
+  // scrolled back to once the new list has laid out.
+  const listRef = useRef<FlatList<FileRecord>>(null)
+  const firstVisibleIndex = useRef(0)
+  const restoreRow = useRef<{ row: number; columns: number } | null>(null)
+  const onViewableItemsChanged = useCallback<
+    NonNullable<FlatListProps<FileRecord>['onViewableItemsChanged']>
+  >(({ viewableItems }) => {
+    const index = viewableItems[0]?.index
+    if (index != null) firstVisibleIndex.current = index
+  }, [])
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const next = event.nativeEvent.layout.width
+      const nextColumns = galleryColumns(next)
+      if (nextColumns !== columns) {
+        restoreRow.current = {
+          row: Math.floor(firstVisibleIndex.current / nextColumns),
+          columns: nextColumns,
+        }
+      }
+      setWidth(next)
+    },
+    [columns],
+  )
+  const restoreAttempts = useRef(0)
+  // The outgoing list reports its own size change before the new one mounts,
+  // so the restore waits for a list with the column count it was taken for.
+  const handleContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      const target = restoreRow.current
+      if (!target || target.columns !== columns || height === 0) return
+      restoreRow.current = null
+      restoreAttempts.current = 0
+      if (target.row > 0) listRef.current?.scrollToIndex({ index: target.row, animated: false })
+    },
+    [columns],
+  )
+  // The new list has measured no rows yet, so the first scroll can land short.
+  // It moves by the average row height so far, and tries again once more rows
+  // have been measured.
+  const handleScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      listRef.current?.scrollToOffset({
+        offset: info.index * info.averageItemLength,
+        animated: false,
+      })
+      if (restoreAttempts.current++ < 3) {
+        setTimeout(
+          () => listRef.current?.scrollToIndex({ index: info.index, animated: false }),
+          100,
+        )
+      }
+    },
+    [],
+  )
+
   const renderItem = useCallback(
     ({ item }: { item: FileRecord }) => {
       return (
-        <FileGalleryItem file={item} onPressItem={onPressItem} onLongPressItem={onLongPressItem} />
+        <FileGalleryItem
+          file={item}
+          onPressItem={onPressItem}
+          onLongPressItem={onLongPressItem}
+          columns={columns}
+        />
       )
     },
-    [onPressItem, onLongPressItem],
+    [onPressItem, onLongPressItem, columns],
   )
 
   return (
     <FlatList
+      ref={listRef}
+      key={`columns-${columns}`}
       data={files ?? []}
       keyExtractor={(item) => item.id}
-      numColumns={numColumns}
+      numColumns={columns}
+      onLayout={handleLayout}
+      onViewableItemsChanged={onViewableItemsChanged}
+      onContentSizeChange={handleContentSizeChange}
+      onScrollToIndexFailed={handleScrollToIndexFailed}
       contentInsetAdjustmentBehavior="never"
       contentInset={{ top: 0, bottom: 0, left: 0, right: 0 }}
       automaticallyAdjustContentInsets={false}
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
-      contentContainerStyle={
-        contentPaddingTop
-          ? { ...styles.galleryContent, paddingTop: contentPaddingTop }
-          : styles.galleryContent
-      }
+      contentContainerStyle={[
+        styles.galleryContent,
+        { paddingTop: contentPaddingTop || headerOffset },
+      ]}
       ListHeaderComponent={ListHeaderComponent ?? undefined}
       renderItem={renderItem}
       onEndReachedThreshold={0.95}
@@ -77,7 +157,6 @@ export function FileGallery({
 
 const styles = StyleSheet.create({
   galleryContent: {
-    paddingTop: HEADER_CONTENT_OFFSET,
     paddingBottom: 130,
   },
 })

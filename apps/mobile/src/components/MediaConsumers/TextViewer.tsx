@@ -126,7 +126,7 @@ function buildPreHtml(s: string, topInset?: number) {
   return `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  html,body{margin:0;padding:0;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
+  html,body{margin:0;padding:0;-webkit-text-size-adjust:100%;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
   .wrap{padding:16px;${paddingTop}}
   pre{white-space:pre-wrap;word-wrap:break-word;margin:0;}
   code,pre,tt{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}

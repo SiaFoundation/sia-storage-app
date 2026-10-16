@@ -7,15 +7,18 @@ import { colors, palette, whiteA } from '../styles/colors'
 import { FileThumbnail } from './FileThumbnail'
 import { UploadStatusIcon } from './UploadStatusIcon'
 
-type Props = FileItemProps
+type Props = FileItemProps & {
+  /** How many tiles share a row, which sets each tile's width. */
+  columns: number
+}
 
-function FileGalleryItemComponent({ file, onPressItem, onLongPressItem }: Props) {
+function FileGalleryItemComponent({ file, onPressItem, onLongPressItem, columns }: Props) {
   const isSelectionMode = useIsSelectionMode()
   const isSelected = useIsFileSelected(file.id)
 
   const status = useFileStatus(file)
   return (
-    <View collapsable={false} style={styles.thumbCell}>
+    <View collapsable={false} style={[styles.thumbCell, { width: `${100 / columns}%` }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={file.name}
@@ -50,11 +53,13 @@ function FileGalleryItemComponent({ file, onPressItem, onLongPressItem }: Props)
   )
 }
 
-export const FileGalleryItem = memo(FileGalleryItemComponent, fileItemPropsAreEqual)
+export const FileGalleryItem = memo(
+  FileGalleryItemComponent,
+  (prev, next) => prev.columns === next.columns && fileItemPropsAreEqual(prev, next),
+)
 
 const styles = StyleSheet.create({
   thumbCell: {
-    width: '33.33%',
     aspectRatio: 1,
     margin: 0,
     backgroundColor: colors.bgSurface,

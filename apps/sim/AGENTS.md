@@ -83,6 +83,12 @@ installed system image with an 8 GB data partition. The app holds photo imports
 while less than 2 GB is free, which an AVD in daily use can fall below.
 `SIM_ANDROID_AVD` names a different AVD.
 
+Simulators are iPhone 16 Pros on the newest installed runtime that runs one.
+`SIM_IOS_DEVICE` names another model, such as "iPhone Duo", whose simulators
+get their own pool. sim drives an iPhone Duo folded, on its cover screen.
+Unfolded, the automation session sees only the cover screen's home screen, and
+simctl has no command that folds one.
+
 Booted phones share one memory budget across every checkout on the machine,
 `SIM_PHONE_MEMORY_GB`, or 40% of installed memory when that is unset. A phone
 that would take them past it waits, as does any phone while macOS reports

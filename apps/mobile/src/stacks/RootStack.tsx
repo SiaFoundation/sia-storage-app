@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text } from 'react-native'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { dismissStatusSheet } from '../lib/navigationRef'
 import { ImportDetailScreen } from '../screens/ImportDetailScreen'
@@ -29,10 +30,25 @@ function DoneButton() {
 // the imports flow pushed inside it. Deep entries (a folder banner, "View
 // import") open mid-stack with Status beneath, so back always walks up to
 // Status and dismissing returns to wherever the user was.
+//
+// The sheet is its own view controller, so the app's provider reports the main
+// window's insets, not the sheet's. A provider inside the modal reads the
+// sheet's own, which on an iPhone Duo's cover screen include the status bar
+// down the right edge.
 function StatusSheetModal() {
+  return (
+    <SafeAreaProvider>
+      <StatusSheetNavigator />
+    </SafeAreaProvider>
+  )
+}
+
+function StatusSheetNavigator() {
+  const { left, right } = useSafeAreaInsets()
   return (
     <Sheet.Navigator
       screenOptions={{
+        contentStyle: { paddingLeft: left, paddingRight: right },
         headerShown: true,
         headerStyle: styles.header,
         headerTintColor: palette.gray[50],

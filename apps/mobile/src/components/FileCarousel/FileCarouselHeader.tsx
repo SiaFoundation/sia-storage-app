@@ -54,6 +54,9 @@ export function FileCarouselHeader({
   )
 }
 
+/** The header's height below the top safe area: 2 above the row, the 44 row and 8 below it. */
+export const CAROUSEL_HEADER_HEIGHT = 2 + 44 + 8
+
 const styles = StyleSheet.create({
   headerContainer: { backgroundColor: palette.gray[950], paddingBottom: 8 },
   headerRow: {
