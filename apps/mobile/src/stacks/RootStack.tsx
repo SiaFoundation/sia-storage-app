@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { DimSurface } from '../components/DimSurface'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LibraryStatusSheet } from '../components/LibraryStatusSheet'
 import { dismissStatusSheet } from '../lib/navigationRef'
 import { ImportDetailScreen } from '../screens/ImportDetailScreen'
@@ -30,32 +31,47 @@ function DoneButton() {
 // the imports flow pushed inside it. Deep entries (a folder banner, "View
 // import") open mid-stack with Status beneath, so back always walks up to
 // Status and dismissing returns to wherever the user was.
+//
+// The sheet is its own view controller, so the app's provider reports the main
+// window's insets, not the sheet's. A provider inside the modal reads the
+// sheet's own, which on an iPhone Duo's cover screen include the status bar
+// down the right edge.
 function StatusSheetModal() {
   return (
     <DimSurface>
-      <Sheet.Navigator
-        screenOptions={{
-          headerShown: true,
-          headerStyle: styles.header,
-          headerTintColor: palette.gray[50],
-          headerRight: DoneButton,
-        }}
-      >
-        <Sheet.Screen name="Status" component={LibraryStatusSheet} options={{ title: 'Status' }} />
-        <Sheet.Screen name="Imports" component={ImportsScreen} options={{ title: 'Imports' }} />
-        <Sheet.Screen
-          name="ImportDetail"
-          component={ImportDetailScreen}
-          options={{ title: 'Import' }}
-        />
-        <Sheet.Screen
-          name="Unavailable"
-          component={UnavailableFilesScreen}
-          options={{ title: 'Unavailable' }}
-        />
-        <Sheet.Screen name="Uploads" component={UploadsScreen} options={{ title: 'Uploads' }} />
-      </Sheet.Navigator>
+      <SafeAreaProvider>
+        <StatusSheetNavigator />
+      </SafeAreaProvider>
     </DimSurface>
+  )
+}
+
+function StatusSheetNavigator() {
+  const { left, right } = useSafeAreaInsets()
+  return (
+    <Sheet.Navigator
+      screenOptions={{
+        contentStyle: { paddingLeft: left, paddingRight: right },
+        headerShown: true,
+        headerStyle: styles.header,
+        headerTintColor: palette.gray[50],
+        headerRight: DoneButton,
+      }}
+    >
+      <Sheet.Screen name="Status" component={LibraryStatusSheet} options={{ title: 'Status' }} />
+      <Sheet.Screen name="Imports" component={ImportsScreen} options={{ title: 'Imports' }} />
+      <Sheet.Screen
+        name="ImportDetail"
+        component={ImportDetailScreen}
+        options={{ title: 'Import' }}
+      />
+      <Sheet.Screen
+        name="Unavailable"
+        component={UnavailableFilesScreen}
+        options={{ title: 'Unavailable' }}
+      />
+      <Sheet.Screen name="Uploads" component={UploadsScreen} options={{ title: 'Uploads' }} />
+    </Sheet.Navigator>
   )
 }
 

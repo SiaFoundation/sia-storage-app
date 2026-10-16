@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import type React from 'react'
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
+import { useGridContentOffset } from '../styles/layout'
 import { EmptyState } from './EmptyState'
 
 type Props = {
@@ -20,6 +21,7 @@ export function DirectoriesGrid({
   onCreateDirectory,
   ListHeaderComponent,
 }: Props) {
+  const gridOffset = useGridContentOffset()
   const rootDirs = useDirectoryChildren(null)
   const unfiledCount = useUnfiledFileCount()
   const dirs = rootDirs.data ?? []
@@ -54,7 +56,7 @@ export function DirectoriesGrid({
     // of its own still needs.
     return (
       <View style={styles.empty}>
-        <View style={styles.emptyHeader}>{ListHeaderComponent}</View>
+        <View style={[styles.emptyHeader, { top: gridOffset }]}>{ListHeaderComponent}</View>
         <EmptyState
           image={require('../../assets/folder-stack.png')}
           title="No folders yet"
@@ -70,7 +72,7 @@ export function DirectoriesGrid({
       data={listData}
       keyExtractor={(dir) => dir.id}
       ListHeaderComponent={ListHeaderComponent ?? undefined}
-      contentContainerStyle={styles.grid}
+      contentContainerStyle={[styles.grid, { paddingTop: gridOffset }]}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) => (
         <DirectoryCard
@@ -121,7 +123,6 @@ function DirectoryCard({
 const styles = StyleSheet.create({
   grid: {
     padding: 16,
-    paddingTop: 140,
     paddingBottom: 120,
   },
   empty: {
@@ -131,7 +132,6 @@ const styles = StyleSheet.create({
   // its center when the banner hides itself at a zero count.
   emptyHeader: {
     position: 'absolute',
-    top: 140,
     left: 0,
     right: 0,
     paddingHorizontal: 16,
