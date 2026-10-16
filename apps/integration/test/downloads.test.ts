@@ -1,6 +1,7 @@
 import { DOWNLOAD_PRESERVED_DISK_BYTES, INSUFFICIENT_SPACE_MESSAGE } from '@siastorage/core/config'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
+import { cache, serialize } from 'swr/_internal'
 import { createTestApp, generateTestFiles, type TestApp, waitForCondition } from './app'
 
 function appWithFreeSpace(freeBytes: number): TestApp {
@@ -176,6 +177,33 @@ describe('Downloads', () => {
     const meta = await app.app.fs.readMeta(file.id)
     expect(meta).not.toBeNull()
     expect(meta!.size).toBe(file.size)
+  })
+
+  it('a download asked for a file already on the device tells the screens it is there', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1 }))
+    // Two separate conditions. A screen holds a stale "not on this device",
+    // as a list query that read the file before its bytes arrived leaves it.
+    // And the bytes are on disk with no fs row describing them.
+    await app.app.caches.fsFileUri.set(null, file.id)
+    await app.app.fs.deleteMeta(file.id)
+
+    await app.app.downloads.downloadFile(file.id, 'user')
+
+    const cached = cache.get(serialize(app.app.caches.fsFileUri.key(file.id))[0])?.data
+    expect(cached).toBe(app.app.fs.uri(file))
+    expect((await app.app.fs.readMeta(file.id))?.size).toBe(file.size)
+    expect(app.app.downloads.getEntry(file.id)).toBeUndefined()
+  })
+
+  it('the transfers count is refreshed when a download starts, runs and finishes', async () => {
+    const { file } = await setupDownloadableFile(app)
+    const invalidate = jest.spyOn(app.app.caches.downloads, 'invalidate')
+
+    await app.app.downloads.downloadFile(file.id, 'user')
+
+    const countRefreshes = invalidate.mock.calls.filter(([key]) => key === 'counts')
+    // Queued, then downloading, then done.
+    expect(countRefreshes).toHaveLength(3)
   })
 
   it('deduplicates concurrent downloads for the same file', async () => {
