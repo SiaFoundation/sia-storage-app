@@ -217,7 +217,7 @@ function ImportDetailContent({
           <Text style={styles.emptyFiles}>
             {search ? 'No files match your search.' : 'No files in this import.'}
           </Text>
-        ) : null
+        ) : undefined
       }
     />
   )

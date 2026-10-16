@@ -13,7 +13,7 @@
  */
 import type { DownloadPriority } from '@siastorage/core/app'
 import { logger } from '@siastorage/logger'
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { Keyboard } from 'react-native'
 import { copyDatabaseTo, db, getDbState } from '../db'
 import { importFiles } from '../lib/importFiles'

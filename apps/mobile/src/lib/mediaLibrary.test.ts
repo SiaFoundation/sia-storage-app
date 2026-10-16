@@ -1,7 +1,7 @@
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { getMediaLibraryDisplayUri, getMediaLibraryUri } from './mediaLibrary'
 
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   getAssetInfoAsync: jest.fn(),
 }))
 

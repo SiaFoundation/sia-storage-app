@@ -1,7 +1,15 @@
 import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { FolderPlusIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from 'react-native'
 import { useToast } from '../lib/toastContext'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { app } from '../stores/appService'
@@ -24,7 +32,7 @@ export function CreateDirectorySheet({
   const isOpen = useSheetOpen(sheetName)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
-  const inputRef = useRef<TextInput | null>(null)
+  const inputRef = useRef<TextInputInstance | null>(null)
 
   const handleShow = useFocusOnShow(inputRef)
 

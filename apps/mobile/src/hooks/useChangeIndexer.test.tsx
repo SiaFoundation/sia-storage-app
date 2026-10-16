@@ -45,26 +45,26 @@ describe('indexer URL helpers', () => {
 })
 
 describe('useChangeIndexer', () => {
-  it('keeps onChangeText stable across renders so typing does not clear the field', () => {
+  it('keeps onChangeText stable across renders so typing does not clear the field', async () => {
     // Regression: OnboardingAdvancedIndexerScreen resets the field in a focus
     // effect keyed on this callback. If the reference changed on every render,
     // the effect re-ran on each keystroke and wiped the input as the user typed.
-    const { result, rerender } = renderHook(() => useChangeIndexer())
+    const { result, rerender } = await renderHook(() => useChangeIndexer())
     const first = result.current.newIndexerInputProps.onChangeText
 
-    act(() => {
+    await act(() => {
       result.current.newIndexerInputProps.onChangeText('h')
     })
-    rerender({})
+    await rerender({})
 
     expect(result.current.newIndexerInputProps.onChangeText).toBe(first)
     expect(result.current.newIndexerInputProps.value).toBe('h')
   })
 
-  it('strips a pasted protocol from the input and resolves a full https URL', () => {
-    const { result } = renderHook(() => useChangeIndexer())
+  it('strips a pasted protocol from the input and resolves a full https URL', async () => {
+    const { result } = await renderHook(() => useChangeIndexer())
 
-    act(() => {
+    await act(() => {
       result.current.newIndexerInputProps.onChangeText('https://my-indexer.com')
     })
 

@@ -37,7 +37,7 @@ export async function recordStandardChecks(opts: {
   checks: CheckRecord[]
   skip?: Partial<Record<StandardCheck, string>>
   signal?: AbortSignal
-  /** How long a download or import gets to finish before it counts as left behind. */
+  /** How long downloads, imports and upload saves get to finish before they count as left behind. */
   settleMs?: number
 }): Promise<void> {
   const { network, checks, skip = {}, settleMs = 30_000 } = opts
@@ -115,14 +115,22 @@ export async function recordStandardChecks(opts: {
   // so an object it has not heard of yet would look like a stray. Skipping
   // `agree`, or failing it, skips this check too.
   if (!skip.noStrayObjects && agree) {
-    const known = new Set<string>()
-    for (const [, device] of devices) {
-      for (const row of await device.sql<{ id: string }>('SELECT id FROM objects'))
-        known.add(row.id)
-    }
-    const stray = (await network.objects())
-      .filter((o) => o.metadata?.kind === 'file' && !known.has(o.id))
-      .map((o) => o.id)
+    // An upload pins its object on the network before the device records it, so
+    // a batch the device is still saving reads as strays until the rows land.
+    const stray = await settled(
+      async () => {
+        const known = new Set<string>()
+        for (const [, device] of devices) {
+          for (const row of await device.sql<{ id: string }>('SELECT id FROM objects'))
+            known.add(row.id)
+        }
+        return (await network.objects())
+          .filter((o) => o.metadata?.kind === 'file' && !known.has(o.id))
+          .map((o) => o.id)
+      },
+      settleMs,
+      opts.signal,
+    )
     checkEqual('every pinned object belongs to a file on a device', stray, [])
   }
   if (!skip.walJournal) {

@@ -48,9 +48,10 @@ export function FileViewer({
   const { data: fileDownloadState } = useDownloadEntry(file.id)
 
   const baseMediaStyle = styles.media
-  const textMediaStyle = textTopInset
-    ? StyleSheet.flatten([baseMediaStyle, { paddingTop: textTopInset }])
-    : baseMediaStyle
+  const textMediaStyle = useMemo(
+    () => (textTopInset ? { ...baseMediaStyle, paddingTop: textTopInset } : baseMediaStyle),
+    [baseMediaStyle, textTopInset],
+  )
   const textInsetValue = textTopInset && textTopInset > 0 ? textTopInset : undefined
 
   const onDownloadPress = useCallback(() => {

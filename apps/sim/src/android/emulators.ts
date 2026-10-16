@@ -40,12 +40,13 @@ const AVD_ENV = { ...process.env, ANDROID_AVD_HOME: AVD_HOME }
  * Written into the AVD's config.ini. The medium phone profile's 2 GB of RAM
  * leaves a Google Play image under enough memory pressure that the system
  * kills background processes, adb's connection to the emulator drops, and
- * Appium's instrumentation dies. With a hardware keyboard Android keeps the
- * on-screen one hidden, and a tap that would close it reaches the app instead.
+ * Appium's instrumentation dies. The size is in megabytes because emulator 36 ignores
+ * "4G" and boots with the profile's 2 GB. With a hardware keyboard Android keeps
+ * the on-screen one hidden, and a tap that would close it reaches the app instead.
  */
 const AVD_CONFIG: Record<string, string> = {
   'disk.dataPartition.size': '8G',
-  'hw.ramSize': '4G',
+  'hw.ramSize': '4096',
   'hw.keyboard': 'no',
 }
 

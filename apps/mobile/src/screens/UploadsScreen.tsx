@@ -101,7 +101,7 @@ export function UploadsScreen() {
             {thumbCount === 1 ? '1 thumbnail' : `${thumbCount.toLocaleString()} thumbnails`} also
             uploading.
           </Text>
-        ) : null
+        ) : undefined
       }
     />
   )

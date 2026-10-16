@@ -15,9 +15,11 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>()
  */
 export function dismissStatusSheet(): void {
   if (!navigationRef.isReady()) return
+  const root = navigationRef.getRootState()
+  if (!root) return
   navigationRef.dispatch({
     ...CommonActions.goBack(),
-    target: navigationRef.getRootState().key,
+    target: root.key,
   })
 }
 
@@ -45,7 +47,7 @@ export function navigateToImports(): void {
 export function navigateToDirectory(dir: { id: string; name: string; path: string }): void {
   if (!navigationRef.isReady()) return
   const root = navigationRef.getRootState()
-  if (root.routes[root.index]?.name === 'StatusSheet') dismissStatusSheet()
+  if (root?.routes[root.index]?.name === 'StatusSheet') dismissStatusSheet()
   navigationRef.navigate('Tabs', {
     screen: 'MainTab',
     params: {

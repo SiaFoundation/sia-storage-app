@@ -43,7 +43,7 @@ describe('useUploadProgress', () => {
       progress: 0,
     })
 
-    const { result } = renderHook(() => useUploadProgress(), { wrapper })
+    const { result } = await renderHook(() => useUploadProgress(), { wrapper })
 
     await waitFor(() => expect(result.current.packerCount).toBe(3))
     // Total stays at 3 (all three still upload); the user-facing count is just
@@ -54,7 +54,7 @@ describe('useUploadProgress', () => {
   test('counts an upload with no kind as a real file', async () => {
     app().uploads.register({ id: 'legacy', size: 1000, status: 'uploading', progress: 0 })
 
-    const { result } = renderHook(() => useUploadProgress(), { wrapper })
+    const { result } = await renderHook(() => useUploadProgress(), { wrapper })
 
     await waitFor(() => expect(result.current.packerCount).toBe(1))
     expect(result.current.packerFileCount).toBe(1)
