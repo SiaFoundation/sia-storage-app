@@ -2,6 +2,7 @@ import { logger } from '@siastorage/logger'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
+import { undimScreen } from '../managers/screenDim'
 import { colors, palette, whiteA } from '../styles/colors'
 
 const MAX_DETAIL_LENGTH = 2000
@@ -24,6 +25,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // A crash while dimmed otherwise leaves the panel at 1% under the fallback.
+    undimScreen()
+
     logger.error('errorBoundary', 'uncaught_render_error', {
       error,
       componentStack: info.componentStack ?? undefined,

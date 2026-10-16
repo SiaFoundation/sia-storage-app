@@ -25,8 +25,19 @@ import { addLifecycleListener, getLifecycle } from './lifecycle'
 const KEEP_AWAKE_TAG = 'auto'
 
 const heldTags = new Set<string>()
+const heldListeners = new Set<(held: boolean) => void>()
 let lockActive = false
 let unsubscribeLifecycle: (() => void) | null = null
+
+function notifyHeld(held: boolean): void {
+  for (const listener of [...heldListeners]) {
+    try {
+      listener(held)
+    } catch (error) {
+      logger.warn('autoKeepAwake', 'held_listener_error', { error: error as Error })
+    }
+  }
+}
 
 function activateLock(): void {
   if (lockActive) return
@@ -65,14 +76,35 @@ function ensureLifecycleSubscription(): void {
 /** Adds an intent and activates the lock if the app is foregrounded. */
 export function acquireAutoKeepAwake(tag: string): void {
   ensureLifecycleSubscription()
+  const wasEmpty = heldTags.size === 0
   heldTags.add(tag)
   if (getLifecycle() === 'foreground') activateLock()
+  if (wasEmpty) notifyHeld(true)
 }
 
 /** Removes an intent and deactivates the lock if no intents remain. */
 export function releaseAutoKeepAwake(tag: string): void {
-  heldTags.delete(tag)
-  if (heldTags.size === 0) deactivateLock()
+  const removed = heldTags.delete(tag)
+  if (heldTags.size > 0) return
+  deactivateLock()
+  if (removed) notifyHeld(false)
+}
+
+/**
+ * Subscribes to the intent set crossing empty, in either direction. Fires on
+ * the crossing only, never per tag, and tracks intents rather than the lock:
+ * a backgrounded app drops the lock while its intents stand.
+ */
+export function subscribeAutoKeepAwake(fn: (held: boolean) => void): () => void {
+  heldListeners.add(fn)
+  return () => {
+    heldListeners.delete(fn)
+  }
+}
+
+/** Returns whether any intent is currently held. */
+export function isAutoKeepAwakeHeld(): boolean {
+  return heldTags.size > 0
 }
 
 /** Wires the lifecycle listener up front; safe to call multiple times. */
@@ -84,5 +116,6 @@ export function __resetAutoKeepAwakeForTesting(): void {
   unsubscribeLifecycle?.()
   unsubscribeLifecycle = null
   heldTags.clear()
+  heldListeners.clear()
   lockActive = false
 }

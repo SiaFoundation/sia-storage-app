@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, palette } from '../styles/colors'
+import { DimSurface } from './DimSurface'
 
 type Props = {
   visible: boolean
@@ -33,31 +34,33 @@ export function ModalSheet({
       onDismiss={onRequestClose}
       onShow={onShow}
     >
-      <View style={styles.container}>
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
-            },
-          ]}
-        >
-          <Text style={styles.title}>{title}</Text>
-          <View style={styles.headerRight}>
-            {headerRight ?? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Done"
-                onPress={onRequestClose}
-                hitSlop={8}
-              >
-                <Text style={styles.doneText}>Done</Text>
-              </Pressable>
-            )}
+      <DimSurface>
+        <View style={styles.container}>
+          <View
+            style={[
+              styles.header,
+              {
+                paddingTop: Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
+              },
+            ]}
+          >
+            <Text style={styles.title}>{title}</Text>
+            <View style={styles.headerRight}>
+              {headerRight ?? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Done"
+                  onPress={onRequestClose}
+                  hitSlop={8}
+                >
+                  <Text style={styles.doneText}>Done</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
+          {children}
         </View>
-        {children}
-      </View>
+      </DimSurface>
     </Modal>
   )
 }
