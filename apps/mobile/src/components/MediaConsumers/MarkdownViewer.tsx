@@ -143,7 +143,7 @@ function buildRawHtml(md: string) {
   return `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  html,body{margin:0;padding:0;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
+  html,body{margin:0;padding:0;-webkit-text-size-adjust:100%;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
   .wrap{padding:16px;word-wrap:break-word}
   pre{white-space:pre-wrap}
   code,pre,tt{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
@@ -156,7 +156,7 @@ function buildPreviewShell(innerHtml: string) {
   return `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  html,body{margin:0;padding:0;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
+  html,body{margin:0;padding:0;-webkit-text-size-adjust:100%;background:#000;color:#fff;font:14px/1.6 -apple-system,system-ui,Segoe UI,Roboto,Ubuntu}
   .wrap{padding:16px;word-wrap:break-word}
   .wrap h1,.wrap h2,.wrap h3{margin:1.2em 0 .6em}
   .wrap pre{background:#0b0b0b;border:1px solid #222;padding:12px;border-radius:8px;overflow:auto}

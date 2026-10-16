@@ -25,7 +25,9 @@ export function FileCarouselHeader({
   const status = useFileStatus(file)
   const insets = useSafeAreaInsets()
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 2, paddingHorizontal: 12 }]}>
+    <View
+      style={[styles.headerContainer, { paddingTop: insets.top + TOP_GAP, paddingHorizontal: 12 }]}
+    >
       <View style={styles.headerRow}>
         <IconButton
           onPress={() => navigation.goBack()}
@@ -54,10 +56,17 @@ export function FileCarouselHeader({
   )
 }
 
+const TOP_GAP = 2
+const ROW_HEIGHT = 44
+const BOTTOM_GAP = 8
+
+/** The header's height below the top safe area. */
+export const CAROUSEL_HEADER_HEIGHT = TOP_GAP + ROW_HEIGHT + BOTTOM_GAP
+
 const styles = StyleSheet.create({
-  headerContainer: { backgroundColor: palette.gray[950], paddingBottom: 8 },
+  headerContainer: { backgroundColor: palette.gray[950], paddingBottom: BOTTOM_GAP },
   headerRow: {
-    height: 44,
+    height: ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

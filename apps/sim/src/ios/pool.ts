@@ -14,7 +14,9 @@ const pool = new DevicePool(join(SIM_HOME, `ios-pool-${defaultSessionName()}`))
  */
 export function lease(session: string): Promise<string> {
   return withPhoneRoom('ios', async (room) => {
-    const devices = await simctl.listDevices()
+    // Every model shares the pool, so release and cleanup work whatever
+    // SIM_IOS_DEVICE says. A lease offers only that model's simulators.
+    const devices = await simctl.listDevices(simctl.DEVICE_TYPE)
     const booted = devices.filter((d) => d.state === 'Booted').map((d) => d.udid)
     const cold = devices.filter((d) => d.state !== 'Booted').map((d) => d.udid)
     const udid = await pool.lease(

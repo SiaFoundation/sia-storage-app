@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, palette } from '../styles/colors'
 import { DimSurface } from './DimSurface'
 
@@ -35,33 +35,49 @@ export function ModalSheet({
       onShow={onShow}
     >
       <DimSurface>
-        <View style={styles.container}>
-          <View
-            style={[
-              styles.header,
-              {
-                paddingTop: Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
-              },
-            ]}
-          >
-            <Text style={styles.title}>{title}</Text>
-            <View style={styles.headerRight}>
-              {headerRight ?? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Done"
-                  onPress={onRequestClose}
-                  hitSlop={8}
-                >
-                  <Text style={styles.doneText}>Done</Text>
-                </Pressable>
-              )}
+        <SafeAreaProvider>
+          <SheetFrame>
+            <View
+              style={[
+                styles.header,
+                {
+                  paddingTop: Platform.OS === 'android' ? Math.max(20, insets.top) : 20,
+                },
+              ]}
+            >
+              <Text style={styles.title}>{title}</Text>
+              <View style={styles.headerRight}>
+                {headerRight ?? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Done"
+                    onPress={onRequestClose}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.doneText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
-          </View>
-          {children}
-        </View>
+            {children}
+          </SheetFrame>
+        </SafeAreaProvider>
       </DimSurface>
     </Modal>
+  )
+}
+
+/**
+ * Keeps the sheet's content clear of its own side insets. A page sheet fills
+ * the width of a compact screen, and an iPhone Duo's cover screen has its
+ * status bar down the right edge, so without this the Done button sits under
+ * the clock. The app's provider reports the main window's insets, not the
+ * sheet's, so these come from the provider inside the modal.
+ */
+function SheetFrame({ children }: { children: ReactNode }) {
+  const { left, right } = useSafeAreaInsets()
+  return (
+    <View style={[styles.container, { paddingLeft: left, paddingRight: right }]}>{children}</View>
   )
 }
 

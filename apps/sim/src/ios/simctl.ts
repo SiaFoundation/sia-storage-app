@@ -10,7 +10,9 @@ import { $ } from 'bun'
 import { runTool } from '../process'
 
 export const SIM_PREFIX = 'sia-sim-'
-const DEVICE_TYPE = 'iPhone 16 Pro'
+const DEFAULT_DEVICE_TYPE = 'iPhone 16 Pro'
+/** The iPhone model sim's simulators are. `SIM_IOS_DEVICE` names another, such as "iPhone Duo". */
+export const DEVICE_TYPE = process.env.SIM_IOS_DEVICE || DEFAULT_DEVICE_TYPE
 
 /**
  * Runs `xcrun simctl`. A simulator that is still booting makes most commands
@@ -32,12 +34,25 @@ async function simctl(
 
 const BOOT_TIMEOUT_MS = 5 * 60_000
 
-type SimDevice = { udid: string; name: string; state: string }
+type SimDevice = { udid: string; name: string; state: string; deviceTypeIdentifier: string }
 
-export async function listDevices(): Promise<SimDevice[]> {
+/** Every simulator, or with `model`, such as "iPhone Duo", only that model's. */
+export async function listDevices(model?: string): Promise<SimDevice[]> {
   const out = await simctl(['list', 'devices', '--json'])
   const byRuntime = (JSON.parse(out) as { devices: Record<string, SimDevice[]> }).devices
-  return Object.values(byRuntime).flat()
+  const devices = Object.values(byRuntime).flat()
+  if (!model) return devices
+  const type = await deviceTypeIdentifier(model)
+  return devices.filter((d) => d.deviceTypeIdentifier === type)
+}
+
+async function deviceTypeIdentifier(name: string): Promise<string> {
+  const out = await simctl(['list', 'devicetypes', '--json'])
+  const types = (JSON.parse(out) as { devicetypes: Array<{ name: string; identifier: string }> })
+    .devicetypes
+  const type = types.find((t) => t.name === name)
+  if (!type) throw new Error(`simctl has no device type named ${name}.`)
+  return type.identifier
 }
 
 /**
@@ -129,8 +144,31 @@ export async function openSettings(udid: string): Promise<void> {
   await simctl(['launch', udid, 'com.apple.Preferences'])
 }
 
+/**
+ * Captures the screen showing the interface. simctl captures the primary
+ * screen by default, which on an iPhone Duo is the cover screen, and that
+ * screen is black while the phone is open.
+ */
 export async function screenshot(udid: string, path: string): Promise<void> {
-  await simctl(['io', udid, 'screenshot', path])
+  const display = await activeDisplay(udid)
+  await simctl(['io', udid, 'screenshot', ...(display ? [`--display=${display}`] : []), path])
+}
+
+/** The id of the built-in screen showing the interface, or null when devicectl cannot say. */
+async function activeDisplay(udid: string): Promise<number | null> {
+  try {
+    const out = await runTool(
+      ['xcrun', 'devicectl', 'device', 'info', 'displays', '-d', udid, '--json-output', '-'],
+      { timeoutMs: 30_000, name: 'devicectl device info displays' },
+    )
+    const { result } = JSON.parse(new TextDecoder().decode(out)) as {
+      result: { displays: Array<{ displayId: number; name?: string; active?: boolean }> }
+    }
+    // devicectl names the simulator's own screens LCD, LCD-1 and so on.
+    return result.displays.find((d) => d.active && d.name?.startsWith('LCD'))?.displayId ?? null
+  } catch {
+    return null
+  }
 }
 
 /** The host path of the app's App Group container, where its database lives. */
