@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   note: { color: 'orange', marginBottom: 8, fontSize: 12 },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',

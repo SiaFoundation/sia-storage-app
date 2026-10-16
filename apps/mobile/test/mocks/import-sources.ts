@@ -33,8 +33,8 @@ export const createFileBookmarks = jest.fn(
 )
 export const createFileBookmark = jest.fn(async (_uri: string): Promise<SourceRef> => notMocked())
 export const createDirBookmark = jest.fn(async (_uri: string): Promise<SourceRef> => notMocked())
-export const startAccess = jest.fn(
-  async (_ref: SourceRef): Promise<StartAccessResult> => notMocked(),
+export const startAccess = jest.fn(async (_ref: SourceRef): Promise<StartAccessResult> =>
+  notMocked(),
 )
 export const startAccessChild = jest.fn(
   async (_dirRef: SourceRef, _key: string): Promise<{ uri: string }> => notMocked(),

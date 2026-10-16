@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   selectedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
 })

@@ -100,12 +100,14 @@ export function UnavailableFilesScreen() {
               <Text style={styles.removeAllText}>Remove all unavailable files</Text>
             </Pressable>
           </View>
-        ) : null
+        ) : undefined
       }
       renderItem={({ item, index }) => (
         <UnavailableRow file={item} now={now} first={index === 0} onRemove={removeOne} />
       )}
-      ListEmptyComponent={files ? <Text style={styles.empty}>No unavailable files.</Text> : null}
+      ListEmptyComponent={
+        files ? <Text style={styles.empty}>No unavailable files.</Text> : undefined
+      }
     />
   )
 }

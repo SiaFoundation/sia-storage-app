@@ -45,7 +45,7 @@ export function AppSplash() {
         animation="swap"
         opacity={0.12}
         inset={{ top, bottom }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       {/* The error card carries its own copy of these actions with an
           explanation of each, so the cog would be a second route to the same

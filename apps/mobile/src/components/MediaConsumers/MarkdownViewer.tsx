@@ -24,16 +24,18 @@ export function MarkdownViewer({
 
   const isLoading = fileLoading || webViewLoading
 
-  const mdParser = useMemo(
-    () =>
-      new MarkdownIt({
-        html: false,
-        linkify: true,
-        typographer: true,
-        breaks: false,
-      }),
-    [],
-  )
+  const mdParser = useMemo(() => {
+    const parser = new MarkdownIt({
+      html: false,
+      linkify: true,
+      typographer: true,
+      breaks: false,
+    })
+    // linkify-it 6 links a bare domain such as example.com only with fuzzyLink,
+    // which it leaves off by default.
+    parser.linkify.set({ fuzzyLink: true })
+    return parser
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -193,7 +195,7 @@ const styles = StyleSheet.create({
   },
   segmentText: { color: 'white', fontSize: 13 },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',

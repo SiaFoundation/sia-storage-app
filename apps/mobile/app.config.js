@@ -79,10 +79,9 @@ export default {
       'expo-secure-store',
       'expo-sqlite',
       'expo-image',
-      ['./plugins/ios-target-16'],
       './plugins/android-gradle-cache',
       'expo-video',
-      './plugins/background-fetch',
+      'react-native-background-fetch',
       [
         'react-native-maps',
         {

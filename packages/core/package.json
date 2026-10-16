@@ -40,7 +40,6 @@
     "./db/sql": "./src/db/sql.ts",
     "./db/operations": "./src/db/operations/index.ts",
     "./services": "./src/services/index.ts",
-    "./services/logForwarder": "./src/services/logForwarder.ts",
     "./services/logRotation": "./src/services/logRotation.ts",
     "./services/syncDownEvents": "./src/services/syncDownEvents.ts",
     "./services/syncUpMetadata": "./src/services/syncUpMetadata.ts",
@@ -68,14 +67,14 @@
   },
   "dependencies": {
     "@siastorage/logger": "workspace:*",
-    "zod": "4.3.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@siastorage/node-adapters": "workspace:*",
-    "@types/jest": "29.5.14",
-    "jest": "29.7.0",
-    "ts-jest": "29.4.6",
-    "typescript": "5.9.3"
+    "@types/jest": "30.0.0",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.14",
+    "typescript": "6.0.3"
   },
   "peerDependencies": {
     "react": "^18 || ^19",

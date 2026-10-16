@@ -22,18 +22,27 @@ function deferred() {
   return { promise, resolve }
 }
 
+// fireEvent.press settles only once the press handler does, and the panel's
+// handler waits on the request. This returns once the handler has started, so
+// a test can look at the button while the request is still out.
+async function pressWithoutWaiting(element: Parameters<typeof fireEvent.press>[0]) {
+  const pressing = fireEvent.press(element)
+  await new Promise((resolve) => setImmediate(resolve))
+  return { settled: () => pressing }
+}
+
 describe('DownloadPanel', () => {
   it('a tap shows Starting until the request settles, then where the download is', async () => {
     const request = deferred()
     const onPress = jest.fn(() => request.promise)
-    const view = render(
+    const view = await render(
       <DownloadPanel size={40 * MB} entry={undefined} isConnected onPress={onPress} />,
     )
 
-    fireEvent.press(screen.getByTestId('download-panel'))
+    const pressing = await pressWithoutWaiting(screen.getByTestId('download-panel'))
     expect(screen.getByText('Starting download')).toBeTruthy()
 
-    view.rerender(
+    await view.rerender(
       <DownloadPanel
         size={40 * MB}
         entry={{ id: 'f', status: 'downloading', progress: 0.25 }}
@@ -42,6 +51,7 @@ describe('DownloadPanel', () => {
       />,
     )
     await act(async () => request.resolve())
+    await pressing.settled()
     expect(screen.getByText('Downloading 25%')).toBeTruthy()
     expect(screen.getByText('10.0 MB of 40.0 MB')).toBeTruthy()
   })
@@ -49,31 +59,30 @@ describe('DownloadPanel', () => {
   it('a retry that registers and fails again before a render shows the failure, not Starting', async () => {
     const failed = { id: 'f', status: 'error' as const, progress: 0, error: 'host timed out' }
     const request = deferred()
-    render(
+    await render(
       <DownloadPanel size={40 * MB} entry={failed} isConnected onPress={() => request.promise} />,
     )
 
-    fireEvent.press(screen.getByTestId('download-panel'))
+    const pressing = await pressWithoutWaiting(screen.getByTestId('download-panel'))
     expect(screen.getByText('Starting download')).toBeTruthy()
     await act(async () => request.resolve())
+    await pressing.settled()
 
     expect(screen.getByText('Download failed')).toBeTruthy()
   })
 
   it('a refused tap goes back to Download', async () => {
     const onPress = jest.fn(async () => {})
-    render(<DownloadPanel size={40 * MB} entry={undefined} isConnected onPress={onPress} />)
+    await render(<DownloadPanel size={40 * MB} entry={undefined} isConnected onPress={onPress} />)
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('download-panel'))
-    })
+    await fireEvent.press(screen.getByTestId('download-panel'))
 
     expect(screen.getByText('Download')).toBeTruthy()
   })
 
-  it('a queued download cannot be tapped again', () => {
+  it('a queued download cannot be tapped again', async () => {
     const onPress = jest.fn(async () => {})
-    render(
+    await render(
       <DownloadPanel
         size={40 * MB}
         entry={{ id: 'f', status: 'queued', progress: 0 }}
@@ -82,14 +91,14 @@ describe('DownloadPanel', () => {
       />,
     )
 
-    fireEvent.press(screen.getByTestId('download-panel'))
+    await fireEvent.press(screen.getByTestId('download-panel'))
 
     expect(screen.getByText('Waiting to download')).toBeTruthy()
     expect(onPress).not.toHaveBeenCalled()
   })
 
-  it('a failed download offers another try', () => {
-    render(
+  it('a failed download offers another try', async () => {
+    await render(
       <DownloadPanel
         size={40 * MB}
         entry={{ id: 'f', status: 'error', progress: 0, error: 'host timed out' }}
@@ -102,11 +111,13 @@ describe('DownloadPanel', () => {
     expect(screen.getByText('Tap to try again')).toBeTruthy()
   })
 
-  it('offline, the button says why it does nothing', () => {
+  it('offline, the button says why it does nothing', async () => {
     const onPress = jest.fn(async () => {})
-    render(<DownloadPanel size={40 * MB} entry={undefined} isConnected={false} onPress={onPress} />)
+    await render(
+      <DownloadPanel size={40 * MB} entry={undefined} isConnected={false} onPress={onPress} />,
+    )
 
-    fireEvent.press(screen.getByTestId('download-panel'))
+    await fireEvent.press(screen.getByTestId('download-panel'))
 
     expect(screen.getByText('Not connected')).toBeTruthy()
     expect(onPress).not.toHaveBeenCalled()

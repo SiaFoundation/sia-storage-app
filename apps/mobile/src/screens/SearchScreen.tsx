@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  type TextInputInstance,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DragToDismiss } from '../components/DragToDismiss'
@@ -51,7 +52,7 @@ export function SearchScreen({ navigation }: Props) {
   const tags = allTags.data ?? []
   const [text, setText] = useState('')
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
-  const inputRef = useRef<TextInput | null>(null)
+  const inputRef = useRef<TextInputInstance | null>(null)
   const debounced = useDebouncedValue(text, 300)
   const isSelectionMode = useIsSelectionMode()
   const isSelectionModeRef = useRef(isSelectionMode)
@@ -343,7 +344,7 @@ export function SearchScreen({ navigation }: Props) {
       {selectedFile ? (
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             styles.carouselOverlay,
             {
               opacity: fadeAnim,

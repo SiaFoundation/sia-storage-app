@@ -148,12 +148,12 @@ export function waitForQueriesIdle(): Promise<void> {
   })
 }
 
-// Cancels any statement currently executing on the active connection.
-// iOS only — the patch that adds interruptSync to NativeDatabase only ships
-// the Swift side. sqlite3_interrupt is documented thread-safe and signals
-// across threads, so this returns immediately and the running statement
-// fails with SQLITE_INTERRUPT, releasing the SQLite mutex and the WAL lock
-// — the actual mechanism behind 0xdead10cc on suspend.
+// Cancels any statement currently executing on the active connection, so
+// the running statement fails with SQLITE_INTERRUPT and releases the SQLite
+// mutex and the WAL lock. A lock held into suspension is what iOS kills an
+// app for (0xdead10cc), so this runs on iOS only. sqlite3_interrupt is
+// thread-safe and returns at once. expo-sqlite throws while the connection is
+// closing, which the catch below absorbs.
 export function interruptDatabase(): void {
   if (Platform.OS !== 'ios') return
   if (!dbInitialized || !database) return

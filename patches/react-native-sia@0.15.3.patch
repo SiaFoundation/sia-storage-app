@@ -1,0 +1,12 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 0b3b99e2a3e039f0f92f4f8f9d8717445268205a..5160abfe4145541b5d067e8ec40bac56bfec102b 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -67,7 +67,6 @@ android {
+     minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+     targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+     buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+-    consumerProguardFiles 'proguard-rules.pro'
+ 
+     buildFeatures {
+       prefab true

@@ -115,15 +115,11 @@ export default function OnboardingRecoveryPhraseScreen() {
         animation="swap"
         opacity={0.12}
         inset={{ top, bottom }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       {previewUri ? (
         <>
-          <Image
-            source={{ uri: previewUri }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           <Pressable
             testID="recovery-preview-back"
             onPress={() => setPreviewUri(null)}
@@ -269,7 +265,7 @@ export default function OnboardingRecoveryPhraseScreen() {
             tileScale={0.12}
             animation="none"
             opacity={0.25}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <View style={styles.exportLogoWrap}>
             <Image

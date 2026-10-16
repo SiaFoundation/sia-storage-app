@@ -96,7 +96,7 @@ describe('seedPhotos', () => {
   /** Each chunk as `{ type, data }`, failing on a wrong length or checksum. */
   function chunks(png: Buffer): Array<{ type: string; data: Buffer }> {
     const out: Array<{ type: string; data: Buffer }> = []
-    for (let at = 8; at < png.length; ) {
+    for (let at = 8; at < png.length;) {
       const length = png.readUInt32BE(at)
       const typeAndData = png.subarray(at + 4, at + 8 + length)
       expect(png.readUInt32BE(at + 8 + length)).toBe(crc32(typeAndData) >>> 0)

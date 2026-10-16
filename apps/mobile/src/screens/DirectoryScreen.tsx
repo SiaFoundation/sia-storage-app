@@ -373,7 +373,7 @@ export function DirectoryScreen({ route, navigation }: Props) {
       {selectedFile ? (
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             styles.carouselOverlay,
             {
               opacity: fadeAnim,

@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewInstance,
 } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
 
@@ -44,7 +45,7 @@ export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
     height: 0,
   })
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null)
-  const triggerRef = useRef<View>(null)
+  const triggerRef = useRef<ViewInstance>(null)
   const progress = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(0)).current
   const [, setClosing] = useState(false)
@@ -262,7 +263,7 @@ function renderItems(
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   menuContainer: {
     position: 'absolute',

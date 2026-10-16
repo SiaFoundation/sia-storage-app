@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "types": ["jest", "node", "bun"],
     "customConditions": ["node"]
   },
   "include": ["src", "test"]

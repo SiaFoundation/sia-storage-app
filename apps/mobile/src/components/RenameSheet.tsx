@@ -1,7 +1,15 @@
 import { getErrorMessage } from '@siastorage/core/lib/errors'
 import { PencilIcon } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from 'react-native'
 import { useFocusOnShow } from '../lib/useFocusOnShow'
 import { closeSheet, useSheetOpen } from '../stores/sheets'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -19,7 +27,7 @@ export function RenameSheet({ sheetName, title, placeholder, initialValue, onRen
   const isOpen = useSheetOpen(sheetName)
   const [name, setName] = useState(initialValue)
   const [error, setError] = useState('')
-  const inputRef = useRef<TextInput | null>(null)
+  const inputRef = useRef<TextInputInstance | null>(null)
 
   const handleShow = useFocusOnShow(inputRef)
 

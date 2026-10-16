@@ -15,7 +15,7 @@ export function LearnScreen({ children }: LearnScreenProps) {
 
   return (
     <View style={styles.container}>
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <BlocksGrid
           cols={5}
           rows={12}

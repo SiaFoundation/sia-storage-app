@@ -300,7 +300,7 @@ export function TagLibraryScreen({ route, navigation }: Props) {
       {selectedFile ? (
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             styles.carouselOverlay,
             {
               opacity: fadeAnim,

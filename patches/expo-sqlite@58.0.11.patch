@@ -1,0 +1,130 @@
+diff --git a/android/src/main/cpp/NativeStatementBinding.cpp b/android/src/main/cpp/NativeStatementBinding.cpp
+index e9f118424a34b0b9e6bad355eb2c0d5bdf764ab1..ca7e1788578d812f31a6565391a12c414cb2f98d 100644
+--- a/android/src/main/cpp/NativeStatementBinding.cpp
++++ b/android/src/main/cpp/NativeStatementBinding.cpp
+@@ -37,6 +37,10 @@ void NativeStatementBinding::registerNatives() {
+                        NativeStatementBinding::bindStatementParam),
+       makeNativeMethod("getLastErrorMessage",
+                        NativeStatementBinding::getLastErrorMessage),
++      makeNativeMethod("getLastChanges",
++                       NativeStatementBinding::getLastChanges),
++      makeNativeMethod("getLastInsertRowId",
++                       NativeStatementBinding::getLastInsertRowId),
+       makeNativeMethod("getColumnNames",
+                        NativeStatementBinding::getColumnNames),
+       makeNativeMethod("getColumnValues",
+@@ -102,9 +106,21 @@ int NativeStatementBinding::sqlite3_step() {
+   lastErrorMessage = ret == SQLITE_ROW || ret == SQLITE_DONE
+                          ? ""
+                          : sqliteErrorMessage(db, ret);
++  // The change count and row id belong to the connection, and statements on
++  // one connection run concurrently on the IO dispatcher. Read after the lock
++  // is released, another statement's step can replace them, so an UPDATE that
++  // changed a row reports 0 changes.
++  lastChanges = ::exsqlite3_changes(db);
++  lastInsertRowId = ::exsqlite3_last_insert_rowid(db);
+   return ret;
+ }
+ 
++int NativeStatementBinding::getLastChanges() { return lastChanges; }
++
++int64_t NativeStatementBinding::getLastInsertRowId() {
++  return lastInsertRowId;
++}
++
+ std::string NativeStatementBinding::getLastErrorMessage() {
+   return lastErrorMessage;
+ }
+diff --git a/android/src/main/cpp/NativeStatementBinding.h b/android/src/main/cpp/NativeStatementBinding.h
+index 77ee56f93fe19438ca315214f2c9d2269ab0eaf4..104639e741524e2f0e96ae014d5451fb5de0d75a 100644
+--- a/android/src/main/cpp/NativeStatementBinding.h
++++ b/android/src/main/cpp/NativeStatementBinding.h
+@@ -31,6 +31,8 @@ public:
+ 
+   // helpers
+   std::string getLastErrorMessage();
++  int getLastChanges();
++  int64_t getLastInsertRowId();
+   int bindStatementParam(int index, jni::alias_ref<jni::JObject> param);
+   jni::local_ref<jni::JArrayList<jni::JString>> getColumnNames();
+   jni::local_ref<jni::JArrayList<jni::JObject>> getColumnValues();
+@@ -51,6 +53,8 @@ private:
+   sqlite3 *db = nullptr;
+   exsqlite3_stmt *stmt = nullptr;
+   std::string lastErrorMessage;
++  int lastChanges = 0;
++  int64_t lastInsertRowId = 0;
+ };
+ 
+ } // namespace expo
+diff --git a/android/src/main/java/expo/modules/sqlite/NativeStatement.kt b/android/src/main/java/expo/modules/sqlite/NativeStatement.kt
+index 1d6e169b128ffd74689e984522440d22b834480e..04c26fc3836831f04cde666b435f8185a390ba41 100644
+--- a/android/src/main/java/expo/modules/sqlite/NativeStatement.kt
++++ b/android/src/main/java/expo/modules/sqlite/NativeStatement.kt
+@@ -122,8 +122,8 @@ internal class NativeStatement @JS constructor() : SharedRef<NativeStatementBind
+           emptyList()
+         }
+       return RunResult(
+-        lastInsertRowId = connection.ref.sqlite3_last_insert_rowid(),
+-        changes = connection.ref.sqlite3_changes(),
++        lastInsertRowId = ref.getLastInsertRowId(),
++        changes = ref.getLastChanges(),
+         firstRowValues = firstRowValues
+       )
+     }
+diff --git a/android/src/main/java/expo/modules/sqlite/NativeStatementBinding.kt b/android/src/main/java/expo/modules/sqlite/NativeStatementBinding.kt
+index 922ed2ca6ae00648bb1592cfac3021e62db7bf77..93870213d83b076e272262c78856c82e7a2bb132 100644
+--- a/android/src/main/java/expo/modules/sqlite/NativeStatementBinding.kt
++++ b/android/src/main/java/expo/modules/sqlite/NativeStatementBinding.kt
+@@ -35,6 +35,8 @@ internal class NativeStatementBinding : Closeable {
+ 
+   external fun bindStatementParam(index: Int, param: Any?): Int
+   external fun getLastErrorMessage(): String
++  external fun getLastChanges(): Int
++  external fun getLastInsertRowId(): Long
+   external fun getColumnNames(): SQLiteColumnNames
+   external fun getColumnValues(): SQLiteColumnValues
+ 
+diff --git a/ios/NativeStatement.swift b/ios/NativeStatement.swift
+index 0d4c18712465b5aab78438a85e0182e4ddca71a1..ab8bb6c0a61535782d8fbdacc8f323c35b2e5ee0 100644
+--- a/ios/NativeStatement.swift
++++ b/ios/NativeStatement.swift
+@@ -135,7 +135,12 @@ final class NativeStatement: SharedObject, @unchecked Sendable {
+       isFinalized = true
+       pointer = nil
+       database.statements.removeAll { $0 === self }
+-      if let message = result.message {
++      // SQLITE_INTERRUPT here re-reports an interrupt of the statement's last
++      // run, which already rejected that call. Thrown again, it replaces the
++      // original rejection in the try/finally cleanup of getAllAsync, runAsync
++      // and the rest, and surfaces as an unhandled rejection while the app
++      // drains its database before iOS suspends it.
++      if let message = result.message, result.code != SQLITE_INTERRUPT {
+         throw SQLiteErrorException(message)
+       }
+     }
+@@ -171,14 +176,21 @@ final class NativeStatement: SharedObject, @unchecked Sendable {
+         }
+       }
+ 
+-      let result = sqliteResult(for: database.pointer) { exsqlite3_step(pointer) }
++      // The change count and row id belong to the connection, and runAsync
++      // runs concurrently. Read outside the connection mutex the step held,
++      // another statement's step can replace them, so an UPDATE that changed a
++      // row reports 0 changes. The mutex is recursive, so sqliteResult nests.
++      let (result, lastInsertRowId, changes) = withSQLiteDatabaseLock(for: database.pointer) {
++        let result = sqliteResult(for: database.pointer) { exsqlite3_step(pointer) }
++        return (result, exsqlite3_last_insert_rowid(database.pointer), exsqlite3_changes(database.pointer))
++      }
+       let ret = result.code
+       if let message = result.message {
+         throw SQLiteErrorException(message)
+       }
+       return SQLiteRunResult(
+-        lastInsertRowId: Double(exsqlite3_last_insert_rowid(database.pointer)),
+-        changes: Int(exsqlite3_changes(database.pointer)),
++        lastInsertRowId: Double(lastInsertRowId),
++        changes: Int(changes),
+         firstRowValues: ret == SQLITE_ROW ? try columnValues() : []
+       )
+     }

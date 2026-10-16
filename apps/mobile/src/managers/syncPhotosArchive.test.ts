@@ -1,5 +1,5 @@
 import type { ImportFileRow, ImportRow } from '@siastorage/core/db/operations'
-import * as MediaLibrary from 'expo-media-library'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { buildPhotoCandidateRows, resolveImportDirectoryId } from '../lib/assetImports'
 import { app } from '../stores/appService'
 import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
@@ -19,7 +19,7 @@ import {
 
 jest.useFakeTimers()
 
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   getAssetsAsync: jest.fn(),
   SortBy: {
     creationTime: 'creationTime',

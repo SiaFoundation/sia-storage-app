@@ -45,25 +45,25 @@ describe('useThumbnailUri', () => {
     mockWasDropped.mockReset()
   })
 
-  it('asks for a thumbnail once while its tile stays mounted after the background queue drops it', () => {
+  it('asks for a thumbnail once while its tile stays mounted after the background queue drops it', async () => {
     mockWasDropped.mockReturnValue(true)
-    const { rerender } = renderHook(() => useThumbnailUri(file))
-    rerender(undefined)
-    rerender(undefined)
+    const { rerender } = await renderHook(() => useThumbnailUri(file))
+    await rerender(undefined)
+    await rerender(undefined)
     expect(mockDownload).toHaveBeenCalledTimes(1)
   })
 
-  it('asks again after a drop when the tile mounts again, as a tile scrolled back into view does', () => {
+  it('asks again after a drop when the tile mounts again, as a tile scrolled back into view does', async () => {
     mockWasDropped.mockReturnValue(true)
-    renderHook(() => useThumbnailUri(file)).unmount()
-    renderHook(() => useThumbnailUri(file))
+    await (await renderHook(() => useThumbnailUri(file))).unmount()
+    await renderHook(() => useThumbnailUri(file))
     expect(mockDownload).toHaveBeenCalledTimes(2)
   })
 
-  it('asks again while its tile stays mounted when its download was cancelled, as a suspension cancels every download', () => {
+  it('asks again while its tile stays mounted when its download was cancelled, as a suspension cancels every download', async () => {
     mockWasDropped.mockReturnValue(false)
-    const { rerender } = renderHook(() => useThumbnailUri(file))
-    rerender(undefined)
+    const { rerender } = await renderHook(() => useThumbnailUri(file))
+    await rerender(undefined)
     expect(mockDownload).toHaveBeenCalledTimes(2)
     expect(mockWasDropped).toHaveBeenCalledWith('thumb-1')
   })

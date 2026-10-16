@@ -77,7 +77,7 @@ export default function OnboardingAdvancedIndexerScreen() {
           animation="swap"
           opacity={0.12}
           inset={{ top, bottom }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
 
         <KeyboardAwareScrollView

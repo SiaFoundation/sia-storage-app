@@ -71,11 +71,6 @@ build logs stay under the gitignored `.build-cache/`.
 A run that exits 0 with almost no output has not passed; it has failed to capture.
 Check the line count against the summary lines before believing it.
 
-`node_modules` is not shared between worktrees. After `bun install`, if core tests
-fail with "Could not locate the bindings file" for `better-sqlite3`, build it:
-`cd node_modules/better-sqlite3 && PYTHON=/usr/bin/python3 npm run build-release`.
-`npm rebuild better-sqlite3` reports success without producing a binding.
-
 ## Architecture
 
 - **The AppService facade is the only API for platform apps.** Everything goes through
