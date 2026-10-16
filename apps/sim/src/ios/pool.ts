@@ -5,7 +5,12 @@ import { DevicePool } from '../pool'
 import { defaultSessionName, SIM_HOME } from '../session'
 import * as simctl from './simctl'
 
-const pool = new DevicePool(join(SIM_HOME, `ios-pool-${defaultSessionName()}`))
+// One pool per iPhone model, so a session asking for one model is never handed another.
+const model =
+  simctl.DEVICE_TYPE === simctl.DEFAULT_DEVICE_TYPE
+    ? ''
+    : `-${simctl.DEVICE_TYPE.replace(/\W+/g, '-')}`
+const pool = new DevicePool(join(SIM_HOME, `ios-pool-${defaultSessionName()}${model}`))
 
 /**
  * Leases a simulator, booted ones first, since reusing one skips the boot. One

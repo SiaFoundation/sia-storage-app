@@ -2,6 +2,7 @@ import { useNavigation } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { X } from 'lucide-react-native'
 import { Pressable, StyleSheet } from 'react-native'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SwitchFinishedScreen } from '../screens/SwitchFinishedScreen'
 import { SwitchIndexerScreen } from '../screens/SwitchIndexerScreen'
 import { SwitchRecoveryPhraseScreen } from '../screens/SwitchRecoveryPhraseScreen'
@@ -25,10 +26,24 @@ function CloseButton() {
   )
 }
 
+// Shown as a full-screen modal, which is its own view controller, so the app's
+// provider reports the main window's insets, not the modal's. A provider inside
+// the modal reads its own, which on an iPhone Duo's cover screen include the
+// status bar down the right edge.
 export function SwitchIndexerStack() {
+  return (
+    <SafeAreaProvider>
+      <SwitchIndexerNavigator />
+    </SafeAreaProvider>
+  )
+}
+
+function SwitchIndexerNavigator() {
+  const { left, right } = useSafeAreaInsets()
   return (
     <Stack.Navigator
       screenOptions={{
+        contentStyle: { paddingLeft: left, paddingRight: right },
         headerShown: true,
         headerStyle: styles.header,
         headerTintColor: palette.gray[50],

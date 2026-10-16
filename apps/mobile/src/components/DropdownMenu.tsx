@@ -1,8 +1,7 @@
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react-native'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Animated,
-  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -10,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type ViewInstance,
 } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
@@ -49,9 +49,12 @@ export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
   const progress = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(0)).current
   const [, setClosing] = useState(false)
+  const screen = useWindowDimensions()
+  const sizeWhenOpened = useRef({ width: 0, height: 0 })
 
   const open = useCallback(() => {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
+      sizeWhenOpened.current = { width: screen.width, height: screen.height }
       setTriggerLayout({ x, y, width, height })
       setIsOpen(true)
       setClosing(false)
@@ -64,7 +67,7 @@ export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
         friction: 22,
       }).start()
     })
-  }, [progress, slideAnim])
+  }, [progress, slideAnim, screen.width, screen.height])
 
   const close = useCallback(() => {
     setClosing(true)
@@ -78,6 +81,14 @@ export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
       setActiveSubmenu(null)
     })
   }, [progress])
+
+  // The menu is placed from where its trigger was when it opened. Folding or
+  // unfolding an iPhone Duo, or rotating, moves the trigger, so the menu closes
+  // as the system's own menus do rather than stay where the trigger used to be.
+  useEffect(() => {
+    const opened = sizeWhenOpened.current
+    if (isOpen && (opened.width !== screen.width || opened.height !== screen.height)) close()
+  }, [isOpen, screen.width, screen.height, close])
 
   const openSubmenu = useCallback(
     (key: string) => {
@@ -114,7 +125,6 @@ export function DropdownMenu({ trigger, items, accessibilityLabel }: Props) {
     : null
   const submenuItems = submenuItem && submenuItem.type === 'submenu' ? submenuItem.items : []
 
-  const screen = Dimensions.get('window')
   const MENU_WIDTH = 240
   const statusBarOffset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0
   const menuRight = triggerLayout.x + triggerLayout.width

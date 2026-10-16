@@ -4,7 +4,7 @@ import type React from 'react'
 import { useCallback } from 'react'
 import { ActivityIndicator, FlatList, type FlatListProps } from 'react-native'
 import { useFlatListControls } from '../hooks/useFlatListControls'
-import { HEADER_CONTENT_OFFSET } from '../styles/layout'
+import { useHeaderContentOffset } from '../styles/layout'
 import { FileListItem } from './FileListItem'
 
 type Props = {
@@ -24,6 +24,7 @@ export function FileList({
   ListHeaderComponent,
   contentPaddingTop,
 }: Props) {
+  const headerOffset = useHeaderContentOffset()
   const { data: files, size, setSize, isValidating, hasMore } = useFileList(filters)
   const { isLoadingMore, handleEndReached } = useFlatListControls({
     data: files,
@@ -52,7 +53,7 @@ export function FileList({
       automaticallyAdjustKeyboardInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={{
-        paddingTop: contentPaddingTop ?? HEADER_CONTENT_OFFSET,
+        paddingTop: contentPaddingTop ?? headerOffset,
         paddingBottom: 130,
       }}
       ListHeaderComponent={ListHeaderComponent ?? undefined}

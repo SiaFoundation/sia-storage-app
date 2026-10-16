@@ -15,6 +15,9 @@ import { ensureAppium } from './server'
 import type { PhoneKind } from '../session'
 import { describeTree, findCenter, findTapPoint, locators, type Selector } from './tree'
 
+/** The name UIKit gives a navigation back button, wherever iOS draws it. */
+const BACK_BUTTON: Selector = { id: 'BackButton' }
+
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right'
 
 /** Appium answered a request with an error status. */
@@ -408,9 +411,19 @@ export class UiDriver {
     return last
   }
 
-  /** The system back: Android's back key, or the navigation bar's back button on iOS. */
+  /**
+   * The system back: Android's back key, or the navigation bar's back button on
+   * iOS. WebDriverAgent's back taps the navigation bar's first button, but on an
+   * iPhone Duo's cover screen iOS moves the back button into a toolbar down the
+   * right edge, which leaves Done first. So the button named BackButton is
+   * tapped wherever it is, and WebDriverAgent's back is the fallback.
+   */
   async back(): Promise<void> {
-    await this.withSession((id) => this.request('POST', `/session/${id}/back`, {}))
+    if (this.platform === 'ios' && findCenter(await this.source(), BACK_BUTTON, 'ios')) {
+      await this.tap(BACK_BUTTON)
+    } else {
+      await this.withSession((id) => this.request('POST', `/session/${id}/back`, {}))
+    }
     // A back press has no element to wait for, and Android drops a second
     // press that lands while the first one's screen transition is running.
     await this.settled()

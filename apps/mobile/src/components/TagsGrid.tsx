@@ -5,6 +5,7 @@ import { HeartIcon, TagIcon } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { overlay, palette, whiteA } from '../styles/colors'
+import { useHeaderContentOffset } from '../styles/layout'
 import { EmptyState } from './EmptyState'
 
 type TagOrSpacer = TagWithCount | { id: '__spacer' }
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export function TagsGrid({ onSelectTag, onCreateTag }: Props) {
+  const headerOffset = useHeaderContentOffset()
   const allTags = useAllTags()
   const tags = allTags.data ?? []
 
@@ -48,7 +50,7 @@ export function TagsGrid({ onSelectTag, onCreateTag }: Props) {
       data={paddedTags}
       keyExtractor={(tag) => tag.id}
       numColumns={2}
-      contentContainerStyle={styles.grid}
+      contentContainerStyle={[styles.grid, { paddingTop: headerOffset + 10 }]}
       columnWrapperStyle={styles.row}
       showsVerticalScrollIndicator={false}
       renderItem={({ item }) =>
@@ -92,7 +94,6 @@ function TagCard({ tag, onPress }: { tag: TagWithCount; onPress: () => void }) {
 const styles = StyleSheet.create({
   grid: {
     padding: 16,
-    paddingTop: 140,
     paddingBottom: 120,
   },
   row: {
