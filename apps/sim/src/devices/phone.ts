@@ -12,6 +12,7 @@
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { createNetworkControl } from '@siastorage/mock-network/control'
+import { liveAccount } from '../live'
 import { ensureMetro } from '../metro'
 import type { DeviceRecord, PhoneKind, Session } from '../session'
 import { logActions, UiDriver } from '../ui/driver'
@@ -124,6 +125,8 @@ export abstract class PhoneDevice implements Device {
   /** Copies the app's database, with its WAL files, into `dir`. */
   protected abstract copyDatabase(dir: string): Promise<void>
   protected abstract release(target: string): void
+  /** Removes the app's data and stored keys from `target`, so a pooled device holds no account. */
+  protected abstract forgetAccount(target: string): Promise<void>
 
   async preserve(dir: string): Promise<void> {
     mkdirSync(dir, { recursive: true })
@@ -163,17 +166,32 @@ export abstract class PhoneDevice implements Device {
     await this.stop().catch(() => {})
     const photos = this.session.state.devices[this.name]?.photos ?? []
     const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
-    const clean =
-      photos.length === 0 ||
-      (await this.removePhotos(target, photos).then(
+    // The next session wipes the app before it starts, but a pooled device
+    // can sit idle until then, and a live session's app holds the real test
+    // account's key. One that could not be cleared leaves the pool.
+    const forgot =
+      !this.session.state.live ||
+      (await this.forgetAccount(target).then(
         () => true,
         (e: unknown) => {
           console.error(
-            `Could not remove ${photos.length} photos ${this.name} added to ${target}, so it leaves the pool: ${why(e)}`,
+            `Could not remove the test account from ${target}, so it leaves the pool: ${why(e)}`,
           )
           return false
         },
       ))
+    const clean =
+      forgot &&
+      (photos.length === 0 ||
+        (await this.removePhotos(target, photos).then(
+          () => true,
+          (e: unknown) => {
+            console.error(
+              `Could not remove ${photos.length} photos ${this.name} added to ${target}, so it leaves the pool: ${why(e)}`,
+            )
+            return false
+          },
+        )))
     if (clean) this.release(target)
     else {
       await this.discard(target).catch((e: unknown) => {
@@ -259,6 +277,7 @@ export abstract class PhoneDevice implements Device {
           url: this.fromDevice(this.session.networkUrl()),
           device: this.name,
           fastTimers: this.session.state.fastTimers,
+          ...(this.session.state.live ? { live: true } : {}),
         }),
       )
     } catch (e) {
@@ -303,7 +322,7 @@ export abstract class PhoneDevice implements Device {
           if (s.isInitializing) return false
           if (Date.now() - signInAt > 30_000) {
             signInAt = Date.now()
-            await this.call('sim.signIn', this.fromDevice(this.session.networkUrl()))
+            await this.signIn()
           }
           return false
         }
@@ -320,6 +339,20 @@ export abstract class PhoneDevice implements Device {
       e.message = `${e.message}. The app crashed: ${crash}`
       throw withCrash(e, crash)
     })
+  }
+
+  /**
+   * Signs in on the session's mock network, or in a live session into the
+   * test account with the app key `sim live login` stored, which connects
+   * without the browser approval a recovery phrase alone would need.
+   */
+  private async signIn(): Promise<void> {
+    if (!this.session.state.live) {
+      await this.call('sim.signIn', this.fromDevice(this.session.networkUrl()))
+      return
+    }
+    const { indexerUrl, appKeyHex } = liveAccount()
+    await this.call('sim.signInLive', indexerUrl, appKeyHex)
   }
 
   /**

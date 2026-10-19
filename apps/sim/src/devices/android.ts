@@ -424,6 +424,11 @@ export class AndroidDevice extends PhoneDevice {
     await this.snapshotDatabase(dir)
   }
 
+  /** `pm clear` deletes the app's files and settings, where its stored keys are kept. */
+  protected async forgetAccount(target: string): Promise<void> {
+    await adb(target).shell(`pm clear ${PACKAGE}`)
+  }
+
   /** Back to the pool, still running, so the next phone skips the boot. */
   protected release(target: string): void {
     emulators.release(target)

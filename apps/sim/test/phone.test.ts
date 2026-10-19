@@ -13,7 +13,7 @@ const Phone = PhoneDevice as unknown as new (
 /** A phone with no simulator behind it, which records what was done to its photo library and its lease. */
 class FakePhone extends Phone {
   readonly calls: string[] = []
-  failing: 'put' | 'remove' | null = null
+  failing: 'put' | 'remove' | 'forget' | null = null
 
   protected async putPhotos(paths: string[]): Promise<void> {
     if (this.failing === 'put') throw new Error('the run was killed here')
@@ -29,6 +29,10 @@ class FakePhone extends Phone {
   protected async discard(target: string): Promise<void> {
     this.calls.push(`discard ${target}`)
   }
+  protected async forgetAccount(target: string): Promise<void> {
+    this.calls.push(`forget ${target}`)
+    if (this.failing === 'forget') throw new Error('simctl could not reach the simulator')
+  }
   async stop(): Promise<void> {}
 }
 
@@ -38,9 +42,13 @@ describe('a phone and the photos it adds to its pooled device', () => {
     for (const session of sessions) session.remove()
   })
 
-  async function phoneOn(target: string): Promise<{ phone: FakePhone; session: Session }> {
+  async function phoneOn(
+    target: string,
+    opts: { live?: boolean } = {},
+  ): Promise<{ phone: FakePhone; session: Session }> {
     const session = Session.create(`unit-photos-${process.pid}-${sessions.length}`, {
       fastTimers: true,
+      live: opts.live,
     })
     sessions.push(session)
     await session.update((s) => {
@@ -62,6 +70,25 @@ describe('a phone and the photos it adds to its pooled device', () => {
     ])
     expect(session.state.devices.phone.photos).toBeUndefined()
     expect(session.state.devices.phone.target).toBeUndefined()
+  })
+
+  test('a phone from a live session clears the test account before it is released', async () => {
+    const { phone } = await phoneOn('sim-live', { live: true })
+    await phone.dispose()
+    expect(phone.calls).toEqual(['forget sim-live', 'release sim-live'])
+  })
+
+  test('a live phone whose account could not be cleared leaves the pool', async () => {
+    const { phone } = await phoneOn('sim-live-2', { live: true })
+    phone.failing = 'forget'
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await phone.dispose()
+      expect(logged).toHaveBeenCalledTimes(1)
+    } finally {
+      logged.mockRestore()
+    }
+    expect(phone.calls).toEqual(['forget sim-live-2', 'discard sim-live-2'])
   })
 
   test('a phone that added no photos is released with its library untouched', async () => {

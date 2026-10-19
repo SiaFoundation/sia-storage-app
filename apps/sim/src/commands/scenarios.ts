@@ -3,6 +3,7 @@ import { Option } from 'commander'
 import { PHONE_KINDS, type PhoneKind } from '../devices'
 import { otherRunInProgress, prune, reapIdle } from '../prune'
 import { FAILING, failureLine } from '../report'
+import { liveAccount, refuseOtherLiveSession } from '../live'
 import { findScenarios, runScenarios } from '../run'
 import { type CommandContext, integer } from './shared'
 
@@ -12,6 +13,10 @@ export function registerScenarioCommands({ program }: CommandContext): void {
     .description('Run scenarios (all, or those whose path contains a filter) and write a report')
     .option('--keep', 'Keep every session directory, not only failed ones')
     .option('--real-timers', 'Use production sync and upload timers')
+    .option(
+      '--live',
+      'Sign phones into the real-network test account in .env.sim-live. Phones only',
+    )
     .option('-j, --jobs <n>', 'Scenarios to run at once', integer, 1)
     .option('--keep-devices', 'Leave phones booted and Metro running for the next run')
     .addOption(
@@ -39,6 +44,7 @@ Environment:
         }: {
           keep?: boolean
           realTimers?: boolean
+          live?: boolean
           jobs: number
           phone?: PhoneKind
           keepDevices?: boolean
@@ -46,6 +52,13 @@ Environment:
       ) => {
         const files = await findScenarios(filters)
         if (files.length === 0) throw new Error(`No scenarios match ${filters.join(' ')}`)
+        if (opts.live) {
+          liveAccount()
+          // Scenarios at once would share the account, each syncing down the
+          // others' files and wiping them at its start.
+          if (opts.jobs > 1) throw new Error('Live runs take one scenario at a time. Drop --jobs.')
+          await refuseOtherLiveSession('')
+        }
         const { report, paths, cancelled } = await runScenarios(files, {
           ...opts,
           progressFile: process.env.SIM_PROGRESS_FILE || undefined,

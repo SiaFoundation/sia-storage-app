@@ -73,6 +73,11 @@ export async function addDevice(
   if (opts.signedOut && kind !== 'desktop') {
     throw new Error(`Only a desktop device can start signed out, and ${name} is a ${kind} device`)
   }
+  // A CLI daemon and the desktop app sign in through the mock network's
+  // account, which a live session's network does not stand in for.
+  if (session.state.live && (kind === 'cli' || kind === 'desktop')) {
+    throw new Error(`A live session runs phones only, and ${name} is a ${kind} device`)
+  }
   await session.update((s) => {
     if (s.devices[name]) throw new Error(`Device ${name} already exists`)
     // The desktop test build has one app and one Finder folder per Mac, and
