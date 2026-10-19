@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import sharp from 'sharp'
 import { createBunThumbnailAdapter } from '../../src/thumbnail'
 
 const dir = mkdtempSync(join(tmpdir(), 'sia-bun-thumb-'))
@@ -27,6 +28,22 @@ function bmp(): Uint8Array {
   return out
 }
 
+/** Size and the colours at the centres of the top-left, top-right, bottom-left and bottom-right quadrants. */
+async function quadrantColors(webp: ArrayBuffer) {
+  const { data, info } = await sharp(Buffer.from(webp)).raw().toBuffer({ resolveWithObject: true })
+  const at = (fx: number, fy: number) => {
+    const x = Math.floor(info.width * fx)
+    const y = Math.floor(info.height * fy)
+    const o = (y * info.width + x) * info.channels
+    const [r, g, b] = [data[o] > 128, data[o + 1] > 128, data[o + 2] > 128]
+    return r && g && b ? 'W' : r ? 'R' : g ? 'G' : b ? 'B' : '?'
+  }
+  return {
+    size: `${info.width}x${info.height}`,
+    quadrants: at(0.25, 0.25) + at(0.75, 0.25) + at(0.25, 0.75) + at(0.75, 0.75),
+  }
+}
+
 describe('the Bun thumbnail adapter', () => {
   const adapter = createBunThumbnailAdapter()
 
@@ -37,6 +54,28 @@ describe('the Bun thumbnail adapter', () => {
     const result = await adapter.generateImageThumbnail(path, 64)
     expect(result.mimeType).toBe('image/webp')
     expect('data' in result && result.data.byteLength).toBeGreaterThan(0)
+  })
+
+  // The fixtures are a 32x16 image with red, green, blue and white quadrants,
+  // stored with each EXIF orientation. Each expectation is what ImageIO draws
+  // for that file with kCGImageSourceCreateThumbnailWithTransform, the call
+  // the iOS app makes its thumbnails with.
+  it.skipIf(process.platform !== 'darwin').each([
+    [1, '32x16', 'RGBW'],
+    [2, '32x16', 'GRWB'],
+    [3, '32x16', 'WBGR'],
+    [4, '32x16', 'BWRG'],
+    [5, '16x32', 'RBGW'],
+    [6, '16x32', 'BRWG'],
+    [7, '16x32', 'WGBR'],
+    [8, '16x32', 'GWRB'],
+  ])('draws a HEIC and a TIFF with orientation %d upright', async (n, size, quadrants) => {
+    for (const ext of ['heic', 'tiff']) {
+      const path = join(import.meta.dir, '../fixtures/orientation', `${n}.${ext}`)
+      const result = await adapter.generateImageThumbnail(path, 64)
+      if (!('data' in result)) throw new Error('expected thumbnail bytes')
+      expect(await quadrantColors(result.data)).toEqual({ size, quadrants })
+    }
   })
 
   it('leaves out SVG, which Bun.Image cannot decode', async () => {

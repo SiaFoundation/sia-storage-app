@@ -1,5 +1,6 @@
 import type { ThumbnailAdapter, ThumbnailResult } from '@siastorage/core/adapters'
 import type { MimeType } from '@siastorage/core/lib/fileTypes'
+import { type Orientation, readOrientation } from './imageOrientation'
 
 const WEBP_QUALITY = 80
 
@@ -28,10 +29,21 @@ const OS_CODEC_TYPES = [
   'image/heif',
 ] as const satisfies readonly MimeType[]
 
-async function resizeToWebp(filePath: string, size: number): Promise<ThumbnailResult> {
-  const path = filePath.replace(/^file:\/\//, '')
-  const buf = await Bun.file(path)
-    .image()
+function localPath(filePath: string): string {
+  return filePath.replace(/^file:\/\//, '')
+}
+
+async function resizeToWebp(
+  path: string,
+  size: number,
+  orientation: Orientation | null,
+): Promise<ThumbnailResult> {
+  // Bun's own autoOrient covers JPEG. It is off where the turn comes from the
+  // file, so a Bun that starts orienting these formats cannot turn them twice.
+  let image = Bun.file(path).image(orientation ? { autoOrient: false } : undefined)
+  if (orientation?.rotate) image = image.rotate(orientation.rotate)
+  if (orientation?.flop) image = image.flop()
+  const buf = await image
     .resize(size, size, { fit: 'inside', withoutEnlargement: true })
     .webp({ quality: WEBP_QUALITY })
     .buffer()
@@ -52,13 +64,16 @@ export function createBunThumbnailAdapter(
   return {
     thumbnailableTypes:
       platform === 'linux' ? EVERY_PLATFORM_TYPES : [...EVERY_PLATFORM_TYPES, ...OS_CODEC_TYPES],
-    generateImageThumbnail(sourcePath: string, targetSize: number) {
-      return resizeToWebp(sourcePath, targetSize)
+    async generateImageThumbnail(sourcePath: string, targetSize: number) {
+      const path = localPath(sourcePath)
+      return resizeToWebp(path, targetSize, await readOrientation(path))
     },
     async generateImageThumbnails(sourcePath: string, sizes: number[]) {
+      const path = localPath(sourcePath)
+      const orientation = await readOrientation(path)
       const results = new Map<number, ThumbnailResult>()
       for (const size of sizes) {
-        results.set(size, await resizeToWebp(sourcePath, size))
+        results.set(size, await resizeToWebp(path, size, orientation))
       }
       return results
     },
