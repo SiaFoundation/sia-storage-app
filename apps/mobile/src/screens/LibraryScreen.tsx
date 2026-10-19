@@ -367,9 +367,9 @@ export function LibraryScreen({ route, navigation }: Props) {
             <FileCarousel
               initialId={selectedFile.id}
               initialFile={selectedFile}
-              sortBy={vs.sortBy}
-              sortDir={vs.sortDir}
-              categories={vs.selectedCategories}
+              sortBy={filters.sortBy}
+              sortDir={filters.sortDir}
+              categories={filters.categories}
               onClose={handleCloseCarousel}
               onShowActionSheet={handleShowCarouselActions}
               onShowTagSheet={() => openSheet('manageFileTags')}
