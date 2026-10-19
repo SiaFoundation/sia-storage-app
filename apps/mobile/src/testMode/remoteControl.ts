@@ -11,6 +11,7 @@
  * fails a call to a backgrounded app at once. A closed socket reconnects every
  * second.
  */
+import { hexToUint8 } from '@siastorage/core'
 import type { DownloadPriority } from '@siastorage/core/app'
 import { logger } from '@siastorage/logger'
 import * as MediaLibrary from 'expo-media-library/legacy'
@@ -27,7 +28,8 @@ import { startArchiveSync } from '../managers/syncPhotosArchive'
 import { addLifecycleListener, getLifecycle } from '../managers/lifecycle'
 import { simHooks } from '../lib/simHooks'
 import { app } from '../stores/appService'
-import { authenticateIndexer, registerWithIndexer } from '../stores/sdk'
+import { authenticateIndexer, connectSdk, registerWithIndexer } from '../stores/sdk'
+import { simNetwork } from '.'
 import { MOCK_PHRASE } from '@siastorage/mock-network/protocol'
 
 type Call = { id: string; method: string; args: unknown[] }
@@ -56,6 +58,27 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
     if (authErr) throw new Error(`authenticate failed: ${JSON.stringify(authErr)}`)
     const [, regErr] = await registerWithIndexer(MOCK_PHRASE, indexerURL)
     if (regErr) throw new Error(`register failed: ${JSON.stringify(regErr)}`)
+    app().init.setState({ isInitializing: true })
+    await app().settings.setHasOnboarded(true)
+    await initApp()
+    return null
+  },
+
+  /**
+   * Signs into the real network with an app key the account has already
+   * approved, the way a launch reconnects, then finishes onboarding like
+   * `sim.signIn`. A refused key throws, since falling back to onboarding
+   * would open the approval page on the phone and wait for a person.
+   */
+  async 'sim.signInLive'(indexerURL: string, appKeyHex: string) {
+    await app().settings.setIndexerURL(indexerURL)
+    await app().auth.setAppKey(indexerURL, hexToUint8(appKeyHex))
+    if (!(await connectSdk())) {
+      throw new Error(
+        'The test account refused the app key. Run `bun sim live login` on the Mac again.',
+      )
+    }
+    app().connection.setState({ isConnected: true, connectionError: null })
     app().init.setState({ isInitializing: true })
     await app().settings.setHasOnboarded(true)
     await initApp()
@@ -245,6 +268,11 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
 async function dispatch(method: string, args: unknown[]): Promise<unknown> {
   const step = simSteps[method]
   if (step) return step(...(args as never[]))
+  // The relay takes calls from any process on the Mac, and in a live session
+  // the auth namespace returns the real test account's app key.
+  if (simNetwork?.live && method.startsWith('auth.')) {
+    throw new Error(`${method} is not callable in a live session`)
+  }
   // A method can sit under nested namespaces, such as `auth.builder.create`.
   const path = method.split('.')
   let target: unknown = app()

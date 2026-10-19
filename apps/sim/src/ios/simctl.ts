@@ -189,8 +189,12 @@ export async function logSince(udid: string, since: Date, predicate: string): Pr
   )
 }
 
-export async function uninstall(udid: string, bundleId: string): Promise<void> {
-  await simctl(['uninstall', udid, bundleId], { check: false })
+export async function uninstall(
+  udid: string,
+  bundleId: string,
+  opts: { check?: boolean } = {},
+): Promise<void> {
+  await simctl(['uninstall', udid, bundleId], { check: opts.check ?? false })
 }
 
 /**
@@ -198,8 +202,8 @@ export async function uninstall(udid: string, bundleId: string): Promise<void> {
  * iOS keeps keychain items across an uninstall, so a reinstalled app would
  * otherwise find the previous session's account.
  */
-export async function resetKeychain(udid: string): Promise<void> {
-  await simctl(['keychain', udid, 'reset'], { check: false })
+export async function resetKeychain(udid: string, opts: { check?: boolean } = {}): Promise<void> {
+  await simctl(['keychain', udid, 'reset'], { check: opts.check ?? false })
 }
 
 /** The host path of the app's data container, whose Documents folder the app reads. */

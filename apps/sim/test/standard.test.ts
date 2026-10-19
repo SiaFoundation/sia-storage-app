@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { NetworkControl } from '@siastorage/mock-network/control'
 import type { Device } from '../src/devices'
 import type { CheckRecord } from '../src/scenario'
-import { recordStandardChecks } from '../src/standard'
+import { MOCK_STORAGE_CHECKS, recordStandardChecks } from '../src/standard'
 
 /** A device with an empty library, whose answers a test can override. */
 function fakeDevice(
@@ -115,6 +115,27 @@ describe('recordStandardChecks', () => {
       ok: false,
       actual: ['obj-1'],
     })
+  })
+
+  test('with the live skips, no check reads what the mock network stores', async () => {
+    const checks: CheckRecord[] = []
+    const untouched = {
+      objects: async () => {
+        throw new Error('read the mock network')
+      },
+    } as unknown as NetworkControl
+    await recordStandardChecks({
+      devices: { laptop: fakeDevice() },
+      network: untouched,
+      checks,
+      skip: MOCK_STORAGE_CHECKS,
+    })
+    expect(checks.map((c) => c.label)).toEqual([
+      'laptop is still running at the end',
+      'laptop has no download left queued or downloading',
+      'laptop has no import left in progress',
+      'laptop has the bytes of every file it records as local',
+    ])
   })
 
   test('a download left queued is recorded with its file', async () => {

@@ -12,6 +12,7 @@
 import { Command } from 'commander'
 import { registerAttestCommand, registerCiProgressCommand } from './commands/attest'
 import { registerDeviceCommands } from './commands/device'
+import { registerLiveCommands } from './commands/live'
 import { registerNetCommands } from './commands/net'
 import { registerObserveCommands } from './commands/observe'
 import { registerPhoneCommands } from './commands/phone'
@@ -47,6 +48,7 @@ registerDeviceCommands(ctx)
 registerObserveCommands(ctx)
 registerPhoneCommands(ctx)
 registerNetCommands(ctx)
+registerLiveCommands(ctx)
 registerScenarioCommands(ctx)
 registerAttestCommand(ctx)
 registerCiProgressCommand(ctx)

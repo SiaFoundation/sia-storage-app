@@ -20,7 +20,9 @@ import type * as SimSdkAuthModule from '../testMode/sdkAuth'
 
 function createSdkAuth(): MobileSdkAuth {
   if (__DEV__) {
-    if (simNetwork) {
+    // A live sim session keeps the real SDK, and the mock network only
+    // relays the harness's calls.
+    if (simNetwork && !simNetwork.live) {
       // A require rather than an import, so a release bundle leaves out test
       // mode and the mock network client with it.
       const { SimSdkAuth } = require('../testMode/sdkAuth') as typeof SimSdkAuthModule

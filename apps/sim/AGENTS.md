@@ -18,7 +18,7 @@ follows indexd's object API: events publish once a second at whole-second
 positions, and a pin or edit of a deleted object fails the way indexd fails it.
 Every device talks to it over HTTP, so it keeps one set of objects and one event
 stream for all of them, persisted under the session directory. Nothing touches a
-real account.
+real account, except phones in a live session, described below.
 
 The network is one account, and it holds sign-in too. A CLI or desktop device
 asks it for a connection, and registers the app key its recovery phrase derives,
@@ -165,6 +165,36 @@ Each checkout has its own session under `/tmp/sia-sim/<checkout>`, so parallel
 worktrees never share a network. `--session <name>` picks another. Sessions use
 shortened sync and upload timers. `bun sim up --real-timers` uses the production
 ones.
+
+### Live sessions
+
+`bun sim up --live --ios phone` and `bun sim run --live <filter>` sign phones
+into a test account on the real Sia network instead of the mock network, for a
+measurement the mock network cannot give, such as how long real hosts take to
+answer. The mock network still runs, as the relay sim drives each phone through,
+so the device, UI and observation commands work as usual. The `net` commands
+act on the mock network and do not touch the real one. A live session runs
+phones only, since CLI and desktop devices sign in through the mock network's
+account, so `up --live` starts none by default and refuses them, and
+`run --live` skips a scenario that has one.
+
+A live session starts from an empty account, as a mock one does. A new
+`up --live` session, and each scenario in a `run --live`, first deletes every
+file on the account and unpins its slabs, whatever earlier runs left. The
+account is shared, so live sessions run one at a time on a Mac. A live
+session's network does not start while another live session's is running, and
+`run --live` refuses `--jobs` above 1.
+
+The account is `SIM_LIVE_INDEXER_URL` and `SIM_LIVE_RECOVERY_PHRASE` in the
+checkout's `.env.sim-live`, which is gitignored. It is not `.env`, since bun
+loads that into every process it starts from the repo root. Use a test account,
+never a personal one, since every live session deletes all of its files. Signing in from a
+phrase needs the app approved in a browser, so `bun sim live login` does that
+once. It opens the approval page, registers the phrase, and writes the app key
+to `SIM_LIVE_APP_KEY`. A phone then connects with that key, as the app does at
+every launch. `bun sim live check` says whether the account still accepts it.
+Handing a live phone back to its pool deletes the app's data and, on iOS, empties
+the keychain, so an idle pooled phone holds no key to the account.
 
 The iOS simulator suspends a backgrounded app but never kills it for holding a
 database lock the way a phone does (0xdead10cc). Check the cause instead: once

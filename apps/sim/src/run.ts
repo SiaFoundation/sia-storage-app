@@ -33,7 +33,8 @@ import {
   type StepRecord,
 } from './scenario'
 import { type PhoneKind, REPO_ROOT, SIM_HOME, Session } from './session'
-import { recordStandardChecks } from './standard'
+import { MOCK_STORAGE_CHECKS, recordStandardChecks } from './standard'
+import { wipeAccount } from './live'
 import { type StartOutcome, unstartable } from './unstartable'
 import { AppTimeout } from './wait'
 
@@ -67,6 +68,8 @@ async function scenarioName(file: string): Promise<string> {
 type RunOptions = {
   keep?: boolean
   realTimers?: boolean
+  /** Phones sign into the real-network test account, and a scenario with other devices is skipped. */
+  live?: boolean
   /** Scenarios to run at once. Each has its own network, ports and data dirs. */
   jobs?: number
   /** The platform a scenario's `phone` devices run on. */
@@ -330,7 +333,7 @@ async function runOne(
   const checks: CheckRecord[] = []
   const steps: StepRecord[] = []
   const notes: string[] = []
-  const session = Session.create(sessionName, { fastTimers: !opts.realTimers })
+  const session = Session.create(sessionName, { fastTimers: !opts.realTimers, live: opts.live })
   const devices: Record<string, Device> = {}
   const entry: ActiveRun = { session, devices, controller: new AbortController() }
   active.add(entry)
@@ -346,6 +349,9 @@ async function runOne(
 
   try {
     scenario = (await import(file)).default as Scenario
+    if (opts.live && Object.values(scenario.devices).some((kind) => kind !== 'phone')) {
+      throw new Skipped('Live runs drive phones only, and this scenario has other devices')
+    }
     if (Object.values(scenario.devices).some(isDesktopKind)) {
       const unavailable = desktopUnavailable()
       if (unavailable) throw new Skipped(unavailable)
@@ -354,6 +360,10 @@ async function runOne(
     const why = cannotStart(needs)
     if (why) throw new GaveUp(why)
     await startNetwork(session)
+    if (opts.live) {
+      const deleted = await wipeAccount()
+      notes.push(`deleted ${deleted} file${deleted === 1 ? '' : 's'} from the test account`)
+    }
     for (const [name, kind] of Object.entries(scenario.devices)) {
       devices[name] = await addDevice(
         session,
@@ -388,7 +398,9 @@ async function runOne(
         devices,
         network: ctx.network,
         checks,
-        skip: scenario.skipStandardChecks,
+        skip: opts.live
+          ? { ...MOCK_STORAGE_CHECKS, ...scenario.skipStandardChecks }
+          : scenario.skipStandardChecks,
         signal: entry.controller.signal,
       }),
       5 * 60_000,

@@ -31,6 +31,19 @@ export type StandardCheck =
   | 'localBytes'
   | 'walJournal'
 
+const LIVE_REASON = 'A live session stores on the real network, which sim does not read'
+
+/**
+ * The checks that read what the mock network stores. A live session's phones
+ * upload to the real network, so the mock network holds nothing and these
+ * would fail on every file, or pass on none.
+ */
+export const MOCK_STORAGE_CHECKS: Partial<Record<StandardCheck, string>> = {
+  ownBytes: LIVE_REASON,
+  pinnedOnce: LIVE_REASON,
+  noStrayObjects: LIVE_REASON,
+}
+
 export async function recordStandardChecks(opts: {
   devices: Record<string, Device>
   network: NetworkControl

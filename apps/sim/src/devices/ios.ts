@@ -325,6 +325,12 @@ export class IosDevice extends PhoneDevice {
     }
   }
 
+  /** iOS keeps keychain items across an uninstall, so the keychain is emptied too. */
+  protected async forgetAccount(target: string): Promise<void> {
+    await simctl.uninstall(target, BUNDLE_ID, { check: true })
+    await simctl.resetKeychain(target, { check: true })
+  }
+
   /** Back to the pool, still booted unless emptying its photo library shut it down, so the next phone skips the boot. */
   protected release(target: string): void {
     if (this.shutDown) pool.releaseOff(target)

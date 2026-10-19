@@ -64,6 +64,13 @@ export type SessionState = {
   createdBy: number
   dir: string
   fastTimers: boolean
+  /**
+   * Phones sign into the real-network test account (live.ts) rather than the
+   * mock network, which then only relays sim's calls to them.
+   */
+  live?: boolean
+  /** Set once a live session's first wipe of the test account has finished. */
+  wiped?: boolean
   /** The session's mock network while it runs. */
   networkUrl?: string
   /**
@@ -122,7 +129,7 @@ export class Session {
     return new Session(JSON.parse(readFileSync(file, 'utf8')) as SessionState)
   }
 
-  static create(name: string, opts: { fastTimers: boolean }): Session {
+  static create(name: string, opts: { fastTimers: boolean; live?: boolean }): Session {
     const dir = sessionDir(name)
     mkdirSync(dir, { recursive: true })
     const session = new Session({
@@ -131,6 +138,7 @@ export class Session {
       createdBy: process.pid,
       dir,
       fastTimers: opts.fastTimers,
+      ...(opts.live ? { live: true } : {}),
       devices: {},
     })
     writeState(session.state)

@@ -433,12 +433,13 @@ async function runBrowserAuthFlow(indexerURL: string): Promise<Result<void, Auth
       CONNECTION_TIMEOUT_MS,
     )
 
-    // Test mode approves at once, and there is no page to open.
-    const [, approvalErr] = simNetwork
-      ? await app()
-          .auth.builder.waitForApproval()
-          .then(() => ok(undefined))
-      : await waitForUserApproval(responseUrl)
+    // The mock network approves at once, and there is no page to open.
+    const [, approvalErr] =
+      simNetwork && !simNetwork.live
+        ? await app()
+            .auth.builder.waitForApproval()
+            .then(() => ok(undefined))
+        : await waitForUserApproval(responseUrl)
     if (approvalErr) {
       if (approvalErr.type === 'cancelled') {
         logger.info('sdk', 'auth_cancelled')

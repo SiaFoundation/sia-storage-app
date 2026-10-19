@@ -12,6 +12,7 @@
     "test": "bun test test"
   },
   "dependencies": {
+    "@siastorage/core": "workspace:*",
     "@siastorage/mock-network": "workspace:*",
     "@siastorage/node-adapters": "workspace:*",
     "commander": "15.0.0"

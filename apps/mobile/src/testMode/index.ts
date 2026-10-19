@@ -18,9 +18,14 @@
 // oxlint-disable-next-line no-restricted-imports -- one small synchronous read at startup, debug builds only
 import { File, Paths } from 'expo-file-system'
 
-export type SimNetwork = { url: string; device: string }
+/**
+ * The session's mock network and this device's name in it. With `live`, the
+ * network only relays the harness's calls, and the app signs into the real
+ * network with the real SDK.
+ */
+export type SimNetwork = { url: string; device: string; live: boolean }
 
-type SimConfig = SimNetwork & { fastTimers?: boolean }
+type SimConfig = Omit<SimNetwork, 'live'> & { fastTimers?: boolean; live?: boolean }
 
 function readSimNetwork(): SimNetwork | null {
   if (!__DEV__) return null
@@ -32,7 +37,7 @@ function readSimNetwork(): SimNetwork | null {
   // module loads, so this only works because the app's entry imports this
   // module before anything that imports the core.
   if (config.fastTimers) process.env.EXPO_PUBLIC_SIM_FAST_TIMERS = '1'
-  return { url: config.url, device: config.device }
+  return { url: config.url, device: config.device, live: config.live === true }
 }
 
 export const simNetwork = readSimNetwork()
