@@ -69,6 +69,8 @@ jest.mock('../stores/files', () => ({
   getFileStatsLocal: (...args: unknown[]) => mockGetFileStatsLocal(...args),
 }))
 
+let mockActiveUploads: string[] = []
+
 jest.mock('../stores/sdk', () => ({}))
 
 jest.mock('react-native', () => ({
@@ -90,6 +92,9 @@ jest.mock('../stores/appService', () => ({
     },
     connection: {
       getState: () => ({ isConnected: true }),
+    },
+    uploads: {
+      getActiveIds: () => mockActiveUploads,
     },
   })),
 }))
@@ -136,6 +141,7 @@ describe('backgroundTasks', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     clearPendingDelays()
+    mockActiveUploads = []
     mockGetFileStatsLocal.mockReset()
     mockRunFsEvictionScanner.mockReset().mockResolvedValue(undefined)
     mockRegister.mockReset().mockResolvedValue(undefined)
@@ -321,6 +327,20 @@ describe('backgroundTasks', () => {
       expect(mockGetFileStatsLocal).toHaveBeenCalledWith({ localOnly: true })
       expect(mockGetFileStatsLocal).toHaveBeenCalledTimes(2)
       expect(getPendingDelayCount()).toBe(0)
+    })
+
+    it('keeps polling while the uploader holds a file that no longer counts as waiting', async () => {
+      // A newer copy with its name made it an old version, which the waiting count skips.
+      mockGetFileStatsLocal.mockResolvedValue({ count: 0, totalBytes: 0 })
+      mockActiveUploads = ['old-version']
+
+      const taskPromise = taskCallback('com.transistorsoft.fetch')
+      await flushPromises()
+      expect(getPendingDelayCount()).toBe(1)
+
+      mockActiveUploads = []
+      completeNextDelay()
+      await taskPromise
     })
 
     it('polls repeatedly while files are pending, exits when uploads complete', async () => {

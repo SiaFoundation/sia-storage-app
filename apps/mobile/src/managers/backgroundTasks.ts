@@ -394,7 +394,9 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       bytesRemaining: stats.totalBytes,
       elapsedMs: Date.now() - state.startTime,
     })
-    if (stats.count === 0) {
+    // The count covers current versions only, and a file the uploader holds
+    // stops being current when a newer one with its name lands in its folder.
+    if (stats.count === 0 && app().uploads.getActiveIds().length === 0) {
       log(
         'finished',
         buildSummaryData(
