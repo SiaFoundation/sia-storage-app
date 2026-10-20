@@ -118,9 +118,17 @@ async function requestNotifications(): Promise<boolean> {
   return result === PermissionsAndroid.RESULTS.GRANTED
 }
 
-/** Files and thumbnails waiting to upload, for deciding whether work is left. */
-async function pendingUploads(): Promise<number> {
-  return (await getFileStatsLocal({ localOnly: true })).count
+/**
+ * Files and thumbnails waiting to upload, and those the uploader already
+ * holds. The waiting count covers current versions only, and a file stops
+ * being current mid-upload when a newer one with its name arrives in its
+ * folder, so it would read as no work while the uploader is still sending it.
+ */
+async function pendingUploads(): Promise<{ waiting: number; uploading: number }> {
+  return {
+    waiting: (await getFileStatsLocal({ localOnly: true })).count,
+    uploading: app().uploads.getActiveIds().length,
+  }
 }
 
 /** The notification counts files only, as the rest of the app does. */
@@ -166,9 +174,13 @@ async function onUnmeteredNetwork(): Promise<boolean> {
   )
 }
 
-async function start(pending: number, importing: number): Promise<void> {
+async function start(work: {
+  waiting: number
+  uploading: number
+  importing: number
+}): Promise<void> {
   try {
-    startUploadService(await notificationContent(importing))
+    startUploadService(await notificationContent(work.importing))
   } catch (error) {
     if ((error as { code?: string }).code === START_NOT_ALLOWED) {
       state = 'waiting-for-foreground'
@@ -181,7 +193,7 @@ async function start(pending: number, importing: number): Promise<void> {
   state = 'running'
   lastProgress = await sampleProgress()
   lastProgressAt = Date.now()
-  logger.info('uploadService', 'started', { pending, importing })
+  logger.info('uploadService', 'started', work)
   await registerBackgroundTaskLifecycle(FGS_TASK_ID)
 }
 
@@ -235,8 +247,8 @@ async function runPoll(): Promise<void> {
       const progress = await sampleProgress()
       if (lastProgress && moved(lastProgress, progress)) lastProgressAt = now
       lastProgress = progress
-      const pending = await pendingUploads()
-      const outstanding = pending > 0 || progress.importing > 0
+      const { waiting, uploading } = await pendingUploads()
+      const outstanding = waiting > 0 || uploading > 0 || progress.importing > 0
       const quiet = now - lastProgressAt
       if (quiet >= STALL_MS) return await stop('stall')
       if (!outstanding && quiet >= LINGER_MS) return await stop('idle')
@@ -248,10 +260,10 @@ async function runPoll(): Promise<void> {
       if (getLifecycle() !== 'foreground') return
       if (!(await isBackgroundUploadsEnabled())) return
       if (!(await onUnmeteredNetwork())) return
-      const pending = await pendingUploads()
+      const { waiting, uploading } = await pendingUploads()
       const importing = await app().imports.countInFlight()
-      if (pending === 0 && importing === 0) return
-      await start(pending, importing)
+      if (waiting === 0 && uploading === 0 && importing === 0) return
+      await start({ waiting, uploading, importing })
     }
   } catch (error) {
     logger.warn('uploadService', 'tick_failed', { error: error as Error })

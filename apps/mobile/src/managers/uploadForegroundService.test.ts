@@ -56,6 +56,7 @@ const mockWorld = {
   enabled: true,
   network: { isConnected: true, type: 'wifi', details: { isConnectionExpensive: false } },
   pending: 0,
+  activeUploads: [] as string[],
   importing: 0,
   thumbs: 0,
   uploadedBytes: 0,
@@ -89,6 +90,7 @@ jest.mock('../stores/appService', () => ({
       allowedTypes: [],
       queryProgress: async () => ({ originals: 0, thumbs: mockWorld.thumbs }),
     },
+    uploads: { getActiveIds: () => mockWorld.activeUploads },
     imports: {
       countInFlight: async () => {
         if (mockWorld.importingGate) await mockWorld.importingGate
@@ -146,6 +148,7 @@ beforeEach(() => {
     enabled: true,
     network: { isConnected: true, type: 'wifi', details: { isConnectionExpensive: false } },
     pending: 0,
+    activeUploads: [],
     importing: 0,
     thumbs: 0,
     uploadedBytes: 0,
@@ -244,6 +247,14 @@ describe('starting', () => {
     await tick()
     expect(getUploadServiceState()).toBe('running')
   })
+
+  it('starts for a file the uploader is sending that no longer counts as waiting', async () => {
+    // A newer copy with its name made it an old version, which the waiting count skips.
+    mockWorld.activeUploads = ['old-version']
+    initUploadForegroundService()
+    await tick()
+    expect(getUploadServiceState()).toBe('running')
+  })
 })
 
 describe('staying up', () => {
@@ -304,6 +315,15 @@ describe('staying up', () => {
     await tick()
     expect(getUploadServiceState()).toBe('idle')
     expect(mockRelease).toHaveBeenCalledWith(FGS_TASK_ID)
+  })
+
+  it('stays up past the linger while the uploader holds a file that no longer counts as waiting', async () => {
+    await startRunning()
+    mockWorld.pending = 0
+    mockWorld.activeUploads = ['old-version']
+    advance(LINGER_MS + 1)
+    await tick()
+    expect(getUploadServiceState()).toBe('running')
   })
 
   it('lingers longer than the thumbnail scanner waits between scans', () => {
