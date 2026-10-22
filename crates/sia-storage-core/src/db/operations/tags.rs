@@ -286,19 +286,16 @@ impl Db {
                     tag_from_db_row,
                 )
                 .optional()?;
-            match created {
-                Some(tag) => Ok(Ok(tag)),
-                None => Ok(Err(TagError::AlreadyExists(trimmed))),
-            }
+            created.ok_or_else(|| TagError::AlreadyExists(trimmed))
         })
-        .await?
+        .await
     }
 
     /// Return the tag named `name`, creating it if absent, and bump its `usedAt` to now either
     /// way. Errors `EmptyName` on a blank name.
     pub async fn get_or_create_tag(&self, name: String) -> Result<Tag, TagError> {
-        self.transaction(move |c| Ok(get_or_create_tag_stmt(c, name)))
-            .await?
+        self.transaction(move |c| get_or_create_tag_stmt(c, name))
+            .await
     }
 
     /// Return a file's tags, ordered alphabetically by name.
@@ -436,15 +433,15 @@ impl Db {
             // Return before the dup-check: renaming a nonexistent id to a colliding name is
             // a silent no-op, not Err(AlreadyExists).
             let Some(tag) = read_tag_by_id(c, &tag_id)? else {
-                return Ok(Ok(()));
+                return Ok(());
             };
             if tag.system {
-                return Ok(Err(TagError::SystemRename));
+                return Err(TagError::SystemRename);
             }
             if let Some(dup) = read_tag_by_name(c, &trimmed)?
                 && dup.id != tag_id
             {
-                return Ok(Err(TagError::AlreadyExists(trimmed)));
+                return Err(TagError::AlreadyExists(trimmed));
             }
             let now = Utc::now().timestamp_millis();
             c.execute(
@@ -452,9 +449,9 @@ impl Db {
                 params![trimmed, tag_id],
             )?;
             touch_files_with_tag(c, &tag_id, now)?;
-            Ok(Ok(()))
+            Ok(())
         })
-        .await?
+        .await
     }
 
     /// Delete a user tag and its `file_tags` links, bumping `updatedAt` and flagging the
@@ -463,19 +460,19 @@ impl Db {
     pub async fn delete_tag(&self, tag_id: String) -> Result<(), TagError> {
         self.transaction(move |c| {
             let Some(tag) = read_tag_by_id(c, &tag_id)? else {
-                return Ok(Ok(()));
+                return Ok(());
             };
             if tag.system {
-                return Ok(Err(TagError::SystemDelete));
+                return Err(TagError::SystemDelete);
             }
             // Flag carriers before deleting the links: the flag reads them through the
             // file_tags subquery.
             touch_files_with_tag(c, &tag_id, Utc::now().timestamp_millis())?;
             c.execute("DELETE FROM file_tags WHERE tagId = ?", params![tag_id])?;
             c.execute("DELETE FROM tags WHERE id = ?", params![tag_id])?;
-            Ok(Ok(()))
+            Ok(())
         })
-        .await?
+        .await
     }
 
     /// Tag a file by name, creating the tag if needed, and bump its `updatedAt`.
@@ -493,10 +490,7 @@ impl Db {
             return Ok(());
         }
         self.transaction(move |c| {
-            let tag = match get_or_create_tag_stmt(c, tag_name) {
-                Ok(t) => t,
-                Err(e) => return Ok(Err(e)),
-            };
+            let tag = get_or_create_tag_stmt(c, tag_name)?;
             let mut stmt =
                 c.prepare("INSERT OR IGNORE INTO file_tags (fileId, tagId) VALUES (?, ?)")?;
             // Touch only files that gained a NEW link (execute returns rows changed), so re-tagging
@@ -508,9 +502,9 @@ impl Db {
                 }
             }
             touch_files(c, &linked)?;
-            Ok(Ok(()))
+            Ok(())
         })
-        .await?
+        .await
     }
 
     /// Unlink a tag from a file and bump the file's `updatedAt`.
@@ -565,10 +559,7 @@ impl Db {
                   )",
                 params![file_id],
             )?;
-            let tag_map = match ensure_tags_by_name(c, tag_names.iter().map(|s| s.as_str())) {
-                Ok(m) => m,
-                Err(e) => return Ok(Err(e)),
-            };
+            let tag_map = ensure_tags_by_name(c, tag_names.iter().map(|s| s.as_str()))?;
             let mut stmt =
                 c.prepare("INSERT OR IGNORE INTO file_tags (fileId, tagId) VALUES (?, ?)")?;
             for name in &tag_names {
@@ -576,9 +567,9 @@ impl Db {
                     stmt.execute(params![file_id, tag_id])?;
                 }
             }
-            Ok(Ok(()))
+            Ok(())
         })
-        .await?
+        .await
     }
 
     /// Reconcile `file_tags` to match the canonical per-file tag list from indexer metadata
@@ -593,8 +584,8 @@ impl Db {
         if entries.is_empty() {
             return Ok(());
         }
-        self.transaction(move |c| Ok(sync_tags_from_metadata_stmt(c, &entries)))
-            .await?
+        self.transaction(move |c| sync_tags_from_metadata_stmt(c, &entries))
+            .await
     }
 }
 
@@ -613,7 +604,7 @@ mod tests {
         let db = test_db().await;
         db.transaction(|c| {
             c.execute_batch("DELETE FROM file_tags; DELETE FROM tags;")?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -630,7 +621,7 @@ mod tests {
                  VALUES (?, 0, 0, '', 0, '', 0, '')",
                 params![id],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -653,7 +644,7 @@ mod tests {
                  VALUES (?, 0, ?, ?, ?, ?, 0, '', 0, '', 0, '')",
                 params![id, kind, current, trashed_at, deleted_at],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -669,28 +660,32 @@ mod tests {
                  VALUES (?, 'https://a.com', ?, '', '', '', '', '', '', 0, 0, 0)",
                 params![file_id, object_id],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
     }
 
     async fn tag_count(db: &Db) -> i64 {
-        db.transaction(|c| Ok(c.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))?))
-            .await
-            .unwrap()
+        db.transaction(|c| {
+            Ok::<_, DbError>(c.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))?)
+        })
+        .await
+        .unwrap()
     }
 
     async fn file_tag_count(db: &Db) -> i64 {
-        db.transaction(|c| Ok(c.query_row("SELECT COUNT(*) FROM file_tags", [], |r| r.get(0))?))
-            .await
-            .unwrap()
+        db.transaction(|c| {
+            Ok::<_, DbError>(c.query_row("SELECT COUNT(*) FROM file_tags", [], |r| r.get(0))?)
+        })
+        .await
+        .unwrap()
     }
 
     async fn file_updated_at(db: &Db, id: &str) -> i64 {
         let id = id.to_string();
         db.transaction(move |c| {
-            Ok(c.query_row(
+            Ok::<_, DbError>(c.query_row(
                 "SELECT updatedAt FROM files WHERE id = ?",
                 params![id],
                 |r| r.get(0),
@@ -703,7 +698,7 @@ mod tests {
     async fn needs_sync_up(db: &Db, object_id: &str) -> i64 {
         let object_id = object_id.to_string();
         db.transaction(move |c| {
-            Ok(c.query_row(
+            Ok::<_, DbError>(c.query_row(
                 "SELECT needsSyncUp FROM objects WHERE id = ?",
                 params![object_id],
                 |r| r.get(0),
@@ -716,11 +711,11 @@ mod tests {
     async fn tag_id_by_name(db: &Db, name: &str) -> String {
         let name = name.to_string();
         db.transaction(move |c| {
-            Ok(
-                c.query_row("SELECT id FROM tags WHERE name = ?", params![name], |r| {
-                    r.get(0)
-                })?,
-            )
+            Ok::<_, DbError>(c.query_row(
+                "SELECT id FROM tags WHERE name = ?",
+                params![name],
+                |r| r.get(0),
+            )?)
         })
         .await
         .unwrap()
@@ -729,11 +724,11 @@ mod tests {
     async fn tag_name_by_id(db: &Db, id: &str) -> String {
         let id = id.to_string();
         db.transaction(move |c| {
-            Ok(
-                c.query_row("SELECT name FROM tags WHERE id = ?", params![id], |r| {
-                    r.get(0)
-                })?,
-            )
+            Ok::<_, DbError>(c.query_row(
+                "SELECT name FROM tags WHERE id = ?",
+                params![id],
+                |r| r.get(0),
+            )?)
         })
         .await
         .unwrap()
@@ -742,7 +737,7 @@ mod tests {
     async fn link_count(db: &Db, file_id: &str, tag_id: &str) -> i64 {
         let (file_id, tag_id) = (file_id.to_string(), tag_id.to_string());
         db.transaction(move |c| {
-            Ok(c.query_row(
+            Ok::<_, DbError>(c.query_row(
                 "SELECT COUNT(*) FROM file_tags WHERE fileId = ? AND tagId = ?",
                 params![file_id, tag_id],
                 |r| r.get(0),
@@ -811,7 +806,7 @@ mod tests {
         // so a spurious touch would overwrite the sentinel with the current clock.
         db.transaction(|c| {
             c.execute("UPDATE files SET updatedAt = 999 WHERE id = 'f1'", [])?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -909,6 +904,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sync_tags_from_metadata_that_fails_partway_leaves_nothing_behind() {
+        let db = empty_tags_db().await;
+        // No file called "ghost" exists, so the tag link can't be inserted and the whole call
+        // fails.
+        let r = db
+            .sync_tags_from_metadata(vec![TagSyncEntry {
+                file_id: "ghost".into(),
+                tag_names: vec!["Trip".into()],
+            }])
+            .await;
+        assert!(r.is_err());
+        assert_eq!(tag_count(&db).await, 0);
+        assert_eq!(file_tag_count(&db).await, 0);
+    }
+
+    #[tokio::test]
     async fn sync_tags_from_metadata_reconciles_to_canonical_set() {
         // A pre-existing non-system link is dropped and the canonical names are added,
         // creating any missing tags. The Favorites link survives (system tags are kept).
@@ -996,7 +1007,7 @@ mod tests {
                 "UPDATE tags SET createdAt = 100, usedAt = 100 WHERE name = 'Travel'",
                 [],
             )?;
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -1049,7 +1060,7 @@ mod tests {
                     params![unique_id(), name, used],
                 )?;
             }
-            Ok(())
+            Ok::<_, DbError>(())
         })
         .await
         .unwrap();
@@ -1264,6 +1275,19 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[tokio::test]
+    async fn sync_tags_from_metadata_single_that_fails_partway_leaves_nothing_behind() {
+        let db = empty_tags_db().await;
+        // No file called "ghost" exists, so the tag link can't be inserted and the whole call
+        // fails.
+        let r = db
+            .sync_tags_from_metadata_single("ghost".to_string(), Some(vec!["Trip".into()]))
+            .await;
+        assert!(r.is_err());
+        assert_eq!(tag_count(&db).await, 0);
+        assert_eq!(file_tag_count(&db).await, 0);
     }
 
     #[tokio::test]
