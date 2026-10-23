@@ -2,6 +2,63 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.0-rc.2 (2026-10-23)
+
+### Features
+
+- On Android, turning on Upload in the background in the menu keeps uploads going on Wi-Fi with the app in the background or the phone locked, with a notification while they run. `UploadManager.shardBytes` reports bytes sent to hosts as a file uploads, and the suspension manager gains `suspendUnlessBusy`, which suspends only when no background task is running.
+- The app now needs iOS 16.4 or later.
+- While the app is holding the screen awake, the display now dims after a minute without a touch, instead of staying at full brightness the whole time. A tap brings it straight back.
+- Share link in a file's menu, in the selection bar and on the viewer's share button makes a link to one file or many that anyone can open on share.sia.storage, showing either the files' latest versions or the versions they have now, for a day, a week, 30 days or until revoked. Share Links in the menu lists every link on the account, where each can be copied, shared or revoked. This replaces Share link's one-day URL to a single file.
+
+### Fixes
+
+- VoiceOver and TalkBack read a name for the app's icon buttons and text fields, such as the Media, Files and Tags tabs, the viewer's Share and More buttons, and the search, folder, tag and indexer fields, and VoiceOver can reach the options in action sheets.
+- Fixes a crash that could close the app right after it opens on Android.
+- Background uploads keep going when a newer copy of a file with the same name arrives while that file is still uploading.
+- The app no longer crashes when it reopens its database while a query is still running, such as on a retry after a failed database update at startup.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- Downloads use less memory, since a large file is written straight to disk instead of passing through the app a piece at a time, and a download that is cancelled, as every download is when the app goes to the background, no longer leaves part of the file marked as on the phone. `DownloadLikeRef` gains an optional `writeToPath`, and `fileUriToPath` returns a path with a literal `%` as it is instead of throwing.
+- A file that finishes downloading while the file list refreshes no longer shows as cloud only or goes back to queued, and the Transfers count drops a download once it finishes.
+- Files no longer upload with another file's contents when other files in the same upload could not be read.
+- A file whose name contains `#` or `?` gets the type its extension names instead of a generic one.
+- Canon raw (CR3) photos are recognized from their contents, and a file Android reports with no type (`application/octet-stream`) takes its type from its name or contents instead.
+- An import copy that ends as cancelled outside a suspension is retried at once the first time and backs off if it happens again, instead of leaving it and the files after it waiting ten minutes.
+- Files being imported when the app goes to the background finish soon after it comes back, instead of waiting up to ten minutes.
+- A file whose content is not the format its filename claims now imports and uploads normally instead of landing under Unavailable files. An edited raw photo is stored as the rendered JPEG it actually is, and named to match. `nameForType` in `@siastorage/core/lib/fileTypes` gives a name the extension its type implies.
+- Picking an edited photo shows the format it will actually import as, rather than the format of the untouched original stored beside it.
+- The app fits both iPhone Duo screens: the photo grid adds columns on the inner screen, sheets keep their buttons clear of the side status bar, and menus close when the phone folds or unfolds. Text, JSON and markdown files no longer start under the viewer's header, and keep their text size in landscape.
+- Swiping left and right in a photo opened from Media moves only through the photos and videos the grid shows, and no longer stops on other files in the library such as `.xmp` sidecars.
+- Files with an extension such as `.constructor` or `.__proto__` are stored with an unknown file type instead of a bogus one.
+- Imports and syncs finish sooner on iPhone, and on Android file lists load sooner while one is running.
+- Upgraded react-native-sia to 0.15.3, which adds the sharing keys that share links are made with.
+- Reduces the chance of a change being lost while the library is syncing.
+- The database always uses write-ahead logging, and the journal mode setting under Advanced is removed.
+- A name with accents or other combined characters is stored the same way whichever app it came from, so a file saved in Finder and the same file added on a phone share one name and one version history. Names already stored are converted on the first launch after the update.
+- New photos in the camera roll import again on phones where the check for new photos kept timing out.
+- Clear local files in Advanced settings moves a file's local copy back under the right extension instead of deleting it, and never deletes a copy that a file in the library still points at.
+- Camera raw photos such as DNG, CR2, NEF and ARW keep their raw type on every device instead of being stored or renamed as TIFF.
+- Renaming a file from its details takes one tap on Rename instead of two.
+- Raw photos stored as TIFF, such as DNGs an iPhone relabelled, get their raw type back the next time the app starts and catches up with the network.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- Uploads and downloads move on from a stalled host within seconds, reach hosts that announce an IPv6 address, and no longer crash reading a file stored partly on a host the network stopped listing.
+- The app no longer crashes while signing in.
+- Small downloads, such as the photos in a folder you open, start right away instead of waiting for large downloads to finish. Eight downloads run at once by default, up from two, including on phones that had saved the old default, and `SlotPool` can limit the total weight of what runs as well as the count.
+- An imported photo carries the right format and filename from the moment it is picked, instead of correcting itself once the import finishes.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Files from your other devices now appear on a phone that went to the background while it was syncing them.
+- Tapping a file that was already queued to download in the background now always downloads it. Thumbnails dropped from a long download queue no longer stay listed as queued on the Transfers screen, and load again after scrolling away from them and back.
+- Thumbnails no longer stall while the app checks the photo library for new photos.
+- Uploads and downloads share a memory budget sized from what the device can spare, instead of each taking a tenth of its total memory, and downloads keep part of it however large an upload is. `AppServiceAdapters.readMemory` supplies the reading.
+- Trash in the menu lists deleted files with how long until they are deleted for good, and puts them back or deletes them now. `useTrashEntries`, `useTrashCount` and `@siastorage/core/lib/trashText` give any app the same list and words.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- A file added while the app is checking for new uploads no longer uploads twice.
+- Upload progress no longer counts files that can never upload, so it reaches complete once everything else has uploaded. `UploadCategoryStats.total` covers uploaded and remaining files only, and the new `unavailable` and `unavailableBytes` count files with no object on the indexer and no local copy, or marked lost. The phone's status sheet and `sia status` show those files separately.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+- Log video playback failures so they can be diagnosed instead of failing silently.
+- The download button in the file viewer is larger, and shows when a download is starting, waiting behind other downloads, in progress with how much has arrived, or failed.
+
 ## 1.15.0-rc.1 (2026-10-13)
 
 ### Features
