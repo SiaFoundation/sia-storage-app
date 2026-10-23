@@ -169,6 +169,8 @@ export class MobileSdkAdapter implements SdkAdapter {
   }
 
   async pruneSlabs(): Promise<void> {
-    await this.sdk.pruneSlabs()
+    // With no cutoff the indexer picks one that spares recently pinned slabs, so
+    // a slab an upload still in progress has pinned is not pruned under it.
+    await this.sdk.pruneSlabs(undefined)
   }
 }
