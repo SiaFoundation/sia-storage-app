@@ -226,6 +226,18 @@ describe('locator', () => {
     expect(locators({ label: 'Close' }, 'android')).toHaveLength(1)
   })
 
+  test('text on iOS is looked up in case first, so a sheet button wins over the keyboard key', () => {
+    const [inCase, anyCase] = locators({ text: 'Done' }, 'ios', true).map((l) => l.value)
+    expect(inCase).toStartWith('(label == "Done" OR value == "Done" OR ')
+    expect(anyCase).toStartWith('(label ==[c] "Done" OR ')
+    expect(locators({ contains: 'a.bin' }, 'ios')).toHaveLength(1)
+  })
+
+  test('the in-case iOS query keeps text that itself contains ==[c]', () => {
+    const [inCase] = locators({ text: 'report==[c].txt' }, 'ios').map((l) => l.value)
+    expect(inCase).toStartWith('label == "report==[c].txt" OR ')
+  })
+
   test('an id on iOS is an accessibility id unless the lookup wants a tappable one', () => {
     expect(locator({ id: 'x' }, 'ios')).toEqual({ using: 'accessibility id', value: 'x' })
     expect(locator({ id: 'x' }, 'ios', true).value).toStartWith('(name == "x") AND type IN')
