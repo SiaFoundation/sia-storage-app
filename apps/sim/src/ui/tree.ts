@@ -229,12 +229,14 @@ function escapeRegex(s: string): string {
  * attributes on iOS, a UiSelector on Android. JSON quoting is valid in both.
  * `tappable` narrows an iOS query to the visible elements of the types a
  * user can tap, as the tree's own match skips hidden ones. A tap on Android
- * goes to a point from the tree instead of through this query.
+ * goes to a point from the tree instead of through this query. `inCase`
+ * compares iOS text with case.
  */
 export function locator(
   sel: Selector,
   platform: PhoneKind,
   tappable = false,
+  inCase = false,
 ): { using: string; value: string } {
   const q = JSON.stringify
   if (platform === 'ios') {
@@ -244,7 +246,7 @@ export function locator(
     else if (sel.label !== undefined) match = `label == ${q(sel.label)}`
     else {
       const t = sel.text ?? sel.contains ?? ''
-      const op = sel.text !== undefined ? '==[c]' : 'CONTAINS[c]'
+      const op = sel.text === undefined ? 'CONTAINS[c]' : inCase ? '==' : '==[c]'
       match = `label ${op} ${q(t)} OR value ${op} ${q(t)} OR placeholderValue ${op} ${q(t)}`
     }
     const types = IOS_TAPPABLE_TYPES.map((t) => q(`XCUIElementType${t}`)).join(', ')
@@ -275,6 +277,11 @@ export function locator(
  * iOS predicate can ask for both at once. A UiSelector cannot, and an Android
  * row the app names with an accessibility label shows it as its content
  * description only, so a second query asks for that.
+ *
+ * On iOS, text is asked for in case before without it, since XCUITest returns
+ * the first match and the keyboard's "done" key matches "Done" without case.
+ * Asked without case alone, a tap on a sheet's Done while the keyboard is up
+ * closes only the keyboard.
  */
 export function locators(
   sel: Selector,
@@ -282,7 +289,11 @@ export function locators(
   tappable = false,
 ): Array<{ using: string; value: string }> {
   const first = locator(sel, platform, tappable)
-  if (platform === 'ios' || (sel.text === undefined && sel.contains === undefined)) return [first]
+  if (platform === 'ios') {
+    if (sel.text === undefined) return [first]
+    return [locator(sel, platform, tappable, true), first]
+  }
+  if (sel.text === undefined && sel.contains === undefined) return [first]
   const value = first.value.replace('.textMatches(', '.descriptionMatches(')
   return [first, { using: first.using, value }]
 }
