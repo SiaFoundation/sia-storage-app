@@ -80,6 +80,11 @@ export class IosDevice extends PhoneDevice {
       'appium:wdaStartupRetries': 1,
       'appium:wdaLocalPort': this.uiPorts.wda,
       'appium:mjpegServerPort': this.uiPorts.mjpeg,
+      // XCUITest otherwise waits up to 10 seconds for the app to go idle
+      // before every read and tap, which the log viewer, adding a line a
+      // second, never does. A back press there took three minutes. Taps wait
+      // for the tree to settle in ui/driver.ts instead.
+      'appium:waitForIdleTimeout': 0,
     }
   }
 

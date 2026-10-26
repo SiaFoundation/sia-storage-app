@@ -76,29 +76,20 @@ export default defineScenario({
       .map((style) => files.find((f) => f.style === style))
       .filter((f) => f !== undefined)
     for (const f of hardest) {
-      // The list may have scrolled past a name the last step looked for, so a
-      // search that reaches the end turns and looks back the other way.
       // A row's label is the name followed by its status, size and type.
       const row = { contains: `${f.name}, ` }
-      // `ui.scrollTo` throws "to the end without finding" once a swipe leaves
-      // the screen unchanged. Only that error is retried, scrolling down, and
-      // the name counts as missing only if the second scroll ends the same
-      // way. Any other error, such as Appium losing the emulator, is rethrown,
-      // because the list's position is then unknown.
+      // `ui.scrollTo` searches to both ends of the list and throws "to the
+      // end without finding" when the name is in neither direction. Any other
+      // error, such as Appium losing the emulator, is rethrown, because then
+      // nothing is known about the list.
       const reachedEnd = (e: unknown) => String(e).includes('to the end without finding')
-      const shown = await ui
-        .scrollTo(row)
-        .catch((e: unknown) => {
-          if (!reachedEnd(e)) throw e
-          return ui.scrollTo(row, 'down')
-        })
-        .then(
-          () => true,
-          (e: unknown) => {
-            if (reachedEnd(e)) return false
-            throw e
-          },
-        )
+      const shown = await ui.scrollTo(row).then(
+        () => true,
+        (e: unknown) => {
+          if (reachedEnd(e)) return false
+          throw e
+        },
+      )
       check(`the phone shows ${f.name} by name`, shown)
     }
   },

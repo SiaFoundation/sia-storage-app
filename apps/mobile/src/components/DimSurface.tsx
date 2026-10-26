@@ -11,6 +11,7 @@
 import type { ReactNode } from 'react'
 import { StyleSheet, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
+import { simHooks } from '../lib/simHooks'
 import { noteUserActivity } from '../managers/screenDim'
 import { DimOverlay } from './DimOverlay'
 
@@ -33,8 +34,13 @@ export function DimSurface({ children, style }: { children: ReactNode; style?: V
 }
 
 function captureActivity(): boolean {
-  noteUserActivity()
+  noteTouch()
   return false
+}
+
+function noteTouch(): void {
+  if (__DEV__) simHooks.touches++
+  noteUserActivity()
 }
 
 // Gesture-handler gestures, such as the carousel's swipe and a pinch to zoom,
@@ -44,7 +50,7 @@ function captureActivity(): boolean {
 const activityGesture = Gesture.Manual()
   .manualActivation(true)
   .runOnJS(true)
-  .onTouchesDown(() => noteUserActivity())
+  .onTouchesDown(() => noteTouch())
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },

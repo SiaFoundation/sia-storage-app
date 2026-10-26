@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.license        = { :type => 'MIT' }
   s.author         = { 'sia-storage-app' => 'noreply@sia.tech' }
   s.homepage       = 'https://github.com/SiaFoundation/sia-storage-app'
-  s.platforms      = { :ios => '15.1' }
+  s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.9'
   s.source         = { :path => '.' }
   s.static_framework = true

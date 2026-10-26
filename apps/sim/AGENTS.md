@@ -239,8 +239,11 @@ or without the test build installed, is a SKIP, which does not fail the run.
 A failed scenario keeps its session directory, with every device's database,
 log and a screenshot per phone, and the report names it. A phone's `ui.log`
 there lists each UI action the scenario took with how long it ran, which shows
-which tap or wait used a step's time. A launch whose app
-never connects leaves `launch-<n>.png` in the phone's device directory beside
+which tap or wait used a step's time. In test mode the app counts the touches
+it sees. A tap on the app's own views that the count shows never arrived is
+sent again, three taps at most, and `ui.log` gets a line for each lost one. A
+tap on a control the platform draws, such as an alert's button, is sent once.
+A launch whose app never connects leaves `launch-<n>.png` in the phone's device directory beside
 the system's log for that launch, logcat on Android and the simulator's log
 with any crash report on iOS, and the error quotes the first crash line found. A phone app that crashes
 while a scenario is setting it up is relaunched once, and the report and the

@@ -35,6 +35,11 @@ type Node = {
    * joined by ", ", so a label with a value reads "Status, Uploading".
    */
   labelJoined: boolean
+  /**
+   * Drawn by the platform rather than by React Native, such as an alert's
+   * button, so a touch on it never reaches the app's JavaScript.
+   */
+  native: boolean
   box: { x: number; y: number; w: number; h: number } | null
 }
 
@@ -66,7 +71,10 @@ const IOS_TAPPABLE_TYPES = [
 ]
 const IOS_TAPPABLE = new RegExp(`^<XCUIElementType(${IOS_TAPPABLE_TYPES.join('|')})\\b`)
 
-function iosNode(tag: string): Node {
+/** The names XCUITest gives UIKit's alerts and action sheets. */
+const IOS_SYSTEM_DIALOG = /^<XCUIElementType(Alert|Sheet)\b/
+
+function iosNode(tag: string, inDialog = false): Node {
   const a = attrs(tag)
   const [x, y, w, h] = [a.x, a.y, a.width, a.height].map(Number)
   return {
@@ -76,6 +84,8 @@ function iosNode(tag: string): Node {
     visible: a.visible !== 'false',
     clickable: IOS_TAPPABLE.test(tag),
     labelJoined: false,
+    // BackButton is UIKit's name for a navigation bar's back button.
+    native: inDialog || a.name === 'BackButton',
     box: [x, y, w, h].some(Number.isNaN) ? null : { x, y, w, h },
   }
 }
@@ -92,6 +102,9 @@ function androidNode(tag: string): Node {
     visible: a.displayed !== 'false',
     clickable: a.clickable === 'true',
     labelJoined: true,
+    // An alert's buttons are android:id/button1 and the like, and a
+    // permission dialog's come from the permission controller's package.
+    native: id.includes(':id/'),
     box: b ? { x: +b[1], y: +b[2], w: +b[3] - +b[1], h: +b[4] - +b[2] } : null,
   }
 }
@@ -112,9 +125,22 @@ function matches(node: Node, sel: Selector): boolean {
 type Box = NonNullable<Node['box']>
 
 function parse(xml: string, platform: PhoneKind): Node[] {
-  return (xml.match(/<[A-Za-z][^>]*>/g) ?? []).map((tag) =>
-    platform === 'ios' ? iosNode(tag) : androidNode(tag),
-  )
+  if (platform === 'android') return (xml.match(/<[A-Za-z][^>]*>/g) ?? []).map(androidNode)
+  // On iOS an alert's buttons carry nothing of their own that says they are
+  // UIKit's, only that they sit inside an Alert or Sheet, so the walk keeps,
+  // for each element still open, whether it is inside one.
+  const nodes: Node[] = []
+  const open: boolean[] = []
+  for (const [tag] of xml.matchAll(/<\/?[A-Za-z][^>]*>/g)) {
+    if (tag.startsWith('</')) {
+      open.pop()
+      continue
+    }
+    const inDialog = (open.at(-1) ?? false) || IOS_SYSTEM_DIALOG.test(tag)
+    nodes.push(iosNode(tag, inDialog))
+    if (!tag.endsWith('/>')) open.push(inDialog)
+  }
+  return nodes
 }
 
 /**
@@ -124,16 +150,16 @@ function parse(xml: string, platform: PhoneKind): Node[] {
  * case beats text matching only without it, so a row's "Developers" wins over
  * the section header "DEVELOPERS" above it.
  */
-function findBest(nodes: Node[], sel: Selector): Box | null {
-  let best: { score: number; box: Box } | null = null
+function findBest(nodes: Node[], sel: Selector): (Node & { box: Box }) | null {
+  let best: { score: number; node: Node & { box: Box } } | null = null
   for (const node of nodes) {
     if (!node.visible || !node.box || node.box.w <= 0 || node.box.h <= 0) continue
     if (!matches(node, sel)) continue
     const sameCase = sel.text !== undefined && (node.text === sel.text || node.label === sel.text)
     const score = (node.clickable ? 2 : 0) + (sameCase ? 1 : 0)
-    if (!best || score > best.score) best = { score, box: node.box }
+    if (!best || score > best.score) best = { score, node: node as Node & { box: Box } }
   }
-  return best?.box ?? null
+  return best?.node ?? null
 }
 
 function center(b: Box): [number, number] {
@@ -146,16 +172,26 @@ export function findCenter(
   sel: Selector,
   platform: PhoneKind,
 ): [number, number] | null {
-  const box = findBest(parse(xml, platform), sel)
-  return box ? center(box) : null
+  const best = findBest(parse(xml, platform), sel)
+  return best ? center(best.box) : null
+}
+
+/**
+ * Whether the best visible element matching `sel` is drawn by the platform,
+ * such as an alert's button or iOS's back button, rather than by the app.
+ * False when nothing matches.
+ */
+export function isNativeControl(xml: string, sel: Selector, platform: PhoneKind): boolean {
+  return findBest(parse(xml, platform), sel)?.native ?? false
 }
 
 /**
  * Where to tap the best element matching `sel`, or null when none matches.
  * That is its center, except on a backdrop spanning most of the screen, such
  * as a dropdown's "Close menu" or a bottom sheet's "Close sheet", whose center
- * lies under the menu or sheet it closes. A backdrop is tapped at a point that
- * no other control or labelled element contains. The tree's order says
+ * lies under the menu or sheet it closes. A bottom sheet's backdrop is tapped
+ * above the sheet. Any other backdrop is tapped at a point that no other
+ * control or labelled element contains. The tree's order says
  * nothing reliable about what is drawn over what on Android, where the screen
  * behind a sheet can come after the sheet, so every such element counts,
  * except full-screen layers, which pass touches through.
@@ -166,13 +202,24 @@ export function findTapPoint(
   platform: PhoneKind,
 ): [number, number] | null {
   const nodes = parse(xml, platform)
-  const box = findBest(nodes, sel)
+  const box = findBest(nodes, sel)?.box
   if (!box) return null
   const screen = nodes.reduce(
     (s, n) => (n.box ? Math.max(s, (n.box.x + n.box.w) * (n.box.y + n.box.h)) : s),
     0,
   )
   if (box.w * box.h < screen / 2) return center(box)
+  // Behind a bottom sheet the screens under the backdrop stay in the tree,
+  // such as the Files list behind a file viewer, and can cover every point
+  // above the sheet. The search below then finds no free point and falls back
+  // to the center, on the sheet's handle. The sheet library labels its sheet
+  // "Bottom Sheet", and
+  // everything above it on screen is under the backdrop, so the backdrop is
+  // tapped halfway between its top and the sheet's.
+  const sheet = nodes.find((n) => n.visible && n.box && n.label === 'Bottom Sheet')?.box
+  if (sheet && sheet.y > box.y) {
+    return [Math.round(box.x + box.w / 2), Math.round((box.y + sheet.y) / 2)]
+  }
   // Within 1% of the backdrop's edges: a screen's own content is often a
   // pixel short of it.
   const spans = (o: Box) =>

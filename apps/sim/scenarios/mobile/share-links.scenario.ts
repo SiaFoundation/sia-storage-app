@@ -103,7 +103,15 @@ export default defineScenario({
       }
       await ui.waitFor({ text: 'Create Link' })
     })
-    check('the sheet names both files', await ui.isVisible({ text: '2 files' }))
+    // The sheet loads its files after it opens, and until then its file
+    // section reads "0 files", so the check waits rather than reading once.
+    check(
+      'the sheet names both files',
+      await ui.waitFor({ text: '2 files' }).then(
+        () => true,
+        () => false,
+      ),
+    )
     await step('make a link to the files as they are now', async () => {
       await ui.tap({ contains: 'These versions' })
       await ui.tap({ text: 'Create Link' })

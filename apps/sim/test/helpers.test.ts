@@ -6,7 +6,7 @@ import { crc32, inflateSync } from 'node:zlib'
 import { diffLibraries } from '../src/converge'
 import type { LibraryEntry } from '../src/devices'
 import { parseSize, seedFiles, seedPhotos } from '../src/seed'
-import { findCenter, findTapPoint, locator, locators } from '../src/ui/tree'
+import { findCenter, findTapPoint, isNativeControl, locator, locators } from '../src/ui/tree'
 
 const entry = (id: string, overrides: Partial<LibraryEntry> = {}): LibraryEntry => ({
   id,
@@ -209,6 +209,39 @@ describe('findCenter', () => {
   })
 })
 
+describe('isNativeControl', () => {
+  const el = (type: string, attrs: string, children = '') =>
+    `<XCUIElementType${type} type="XCUIElementType${type}" ${attrs} x="0" y="0" width="10" height="10" visible="true">${children}</XCUIElementType${type}>`
+
+  test("on iOS an alert's button is native and the screen's buttons beside it are not", () => {
+    const xml = `<AppiumAUT>${el('Button', 'label="Menu"')}${el(
+      'Alert',
+      'label="Clear local files"',
+      el('Other', '', el('Button', 'label="Clear"')),
+    )}${el('Button', 'label="Files"')}</AppiumAUT>`
+    expect(isNativeControl(xml, { text: 'Clear' }, 'ios')).toBe(true)
+    expect(isNativeControl(xml, { label: 'Menu' }, 'ios')).toBe(false)
+    expect(isNativeControl(xml, { label: 'Files' }, 'ios')).toBe(false)
+  })
+
+  test("iOS's navigation back button is native", () => {
+    const xml = `<AppiumAUT>${el('Button', 'name="BackButton" label="Files"')}</AppiumAUT>`
+    expect(isNativeControl(xml, { id: 'BackButton' }, 'ios')).toBe(true)
+  })
+
+  test("on Android an alert's button is native and a view with a testID is not", () => {
+    const xml =
+      '<hierarchy>' +
+      '<node resource-id="android:id/button1" text="CLEAR" clickable="true" bounds="[0,0][10,10]" />' +
+      '<node resource-id="screen-dim" clickable="true" bounds="[0,0][10,10]" />' +
+      '<node content-desc="Menu" clickable="true" bounds="[0,0][10,10]" />' +
+      '</hierarchy>'
+    expect(isNativeControl(xml, { text: 'Clear' }, 'android')).toBe(true)
+    expect(isNativeControl(xml, { id: 'screen-dim' }, 'android')).toBe(false)
+    expect(isNativeControl(xml, { label: 'Menu' }, 'android')).toBe(false)
+  })
+})
+
 describe('locator', () => {
   test('a tap on iOS asks for a tappable element with the text', () => {
     const { using, value } = locator({ text: 'Developers' }, 'ios', true)
@@ -272,6 +305,24 @@ describe('findTapPoint', () => {
     const layer = node('content-desc="Preview not supported" clickable="true"', '[0,0][999,999]')
     const xml = `<root>${layer}${backdrop}${menu}</root>`
     expect(inMenu(findTapPoint(xml, { label: 'Close menu' }, 'android') ?? [500, 500])).toBe(false)
+  })
+
+  test('a bottom sheet backdrop is tapped above the sheet, not on its handle', () => {
+    // From a file viewer's More actions sheet on Android: the Files list rows
+    // behind the viewer stay in the tree and cover the screen above the sheet.
+    const rows = Array.from({ length: 14 }, (_, i) =>
+      node(
+        `content-desc="recipe-${i}.bin, 1.0 KB" clickable="true"`,
+        `[0,${i * 141}][1080,${(i + 1) * 141}]`,
+      ),
+    ).join('')
+    const sheetBackdrop = node('content-desc="Close sheet" clickable="true"', '[0,0][1080,2400]')
+    const sheet =
+      node('content-desc="Bottom Sheet" clickable="false"', '[0,1200][1080,2400]') +
+      node('content-desc="Bottom sheet handle" clickable="false"', '[0,1200][1080,1266]') +
+      node('content-desc="Move to trash" clickable="true"', '[42,2175][1038,2305]')
+    const xml = `<root>${sheetBackdrop}${rows}${sheet}</root>`
+    expect(findTapPoint(xml, { label: 'Close sheet' }, 'android')).toEqual([540, 600])
   })
 
   test('an element smaller than half the screen is tapped at its center', () => {

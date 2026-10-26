@@ -42,10 +42,13 @@ const startedDownloads: Array<{ settled: boolean; error?: string }> = []
 const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
   /** Where the app is: signed in or not, and whether startup has finished. */
   async 'sim.status'() {
+    const { isInitializing, steps } = app().init.getState()
+    const latest = Object.values(steps).sort((a, b) => b.startedAt - a.startedAt)[0]
     return {
       hasOnboarded: await app().settings.getHasOnboarded(),
-      isInitializing: app().init.getState().isInitializing,
+      isInitializing,
       isConnected: app().connection.getState().isConnected,
+      startupStep: latest ? `${latest.label}: ${latest.message}` : undefined,
     }
   },
 
@@ -209,6 +212,15 @@ const simSteps: Record<string, (...args: never[]) => Promise<unknown>> = {
   async 'sim.syncNewPhotosNow'() {
     await syncNewPhotos()
     return null
+  },
+
+  /**
+   * How many touches the app's surfaces have seen begin. A tap sim sends can
+   * return success without reaching the app, and only the app can say it
+   * arrived.
+   */
+  async 'sim.touches'() {
+    return simHooks.touches
   },
 
   /**
