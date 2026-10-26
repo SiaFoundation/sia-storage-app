@@ -46,6 +46,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     private let handoff: Handoff
     private let domain: NSFileProviderDomain
     private let handshake: Handshake
+    private let version: String
     private let availability = Availability(grace: FileProviderExtension.gracePeriod)
     /// Guards `changes` and `invalidated`, which the system's teardown thread,
     /// the stream's queue and the resubscribe timer all touch.
@@ -63,6 +64,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
         let version =
             (Bundle.main.infoDictionary?["SiaDaemonVersion"] as? String) ?? "unknown"
         self.rpc = rpc
+        self.version = version
         self.handoff = Handoff()
         let bundleURL = Bundle.main.bundleURL
         self.handshake = Handshake {
@@ -230,7 +232,38 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             // Checked again: teardown inside the grace window would otherwise
             // still reach the disconnect below.
             guard !self.withLifecycle({ self.invalidated }) else { return }
-            await self.apply(self.availability.settle(at: Self.now()))
+            // The change stream retries once a second, so a daemon that came
+            // back since the last retry has not been reported yet, and settling
+            // without asking would disconnect it while it is listening.
+            let action =
+                await self.daemonAnswers()
+                ? await self.availability.succeeded()
+                : await self.availability.settle(at: Self.now())
+            await self.apply(action)
+            // fileproviderd tears this process down once the domain is
+            // disconnected, so no later stream connect is left to reconnect it.
+            // The app's register at launch clears a disconnect, and it runs as
+            // soon as the new daemon listens. One that ran between the check
+            // above and the disconnect would leave the folder offline until the
+            // next launch, so the daemon is asked once more.
+            if action == .disconnect, await self.daemonAnswers() {
+                await self.apply(self.availability.succeeded())
+            }
+        }
+    }
+
+    /// Whether a daemon is listening on the socket now. A refused hello still
+    /// counts, because a version mismatch is not an outage. The next
+    /// callback's handshake reports it with its own banner.
+    private func daemonAnswers() async -> Bool {
+        do {
+            _ = try await rpc.call(
+                Channel.hello, [version], receiveTimeout: timeval(tv_sec: 2, tv_usec: 0))
+            return true
+        } catch RpcError.remote {
+            return true
+        } catch {
+            return false
         }
     }
 
