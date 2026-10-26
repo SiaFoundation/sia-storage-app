@@ -336,11 +336,13 @@ bun sim device expect phone --label Menu
 - When: the tray icon's status popover, the window's status view, the status
   line both share, the More menu and the sign-out dialogs.
 - Code: files `apps/desktop/src/main/tray.ts`,
+  `apps/desktop/src/main/windows.ts`,
   `apps/desktop/src/renderer/src/Status.tsx`,
   `apps/desktop/src/renderer/src/Details.tsx`,
   `apps/desktop/src/renderer/src/StatusLine.tsx`,
   `apps/desktop/src/renderer/src/model.ts`, `apps/desktop/src/main/menu.ts`
-- Tests: scenarios `desktop/status-popover-and-window`
+- Tests: scenarios `desktop/status-popover-and-window`,
+  `desktop/windows-reload-after-their-page-process-dies`
 - Desktop, the status popover, its More menu and the window:
 
 ```sh
