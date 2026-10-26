@@ -435,6 +435,21 @@ export class DesktopDevice extends CliDevice {
   }
 
   /**
+   * Kills the processes that run the app's window pages and leaves the app
+   * running, as a renderer crash would. Returns how many it killed.
+   */
+  killRenderers(): number {
+    const out = Bun.spawnSync([
+      'pgrep',
+      '-f',
+      `${this.identity.appPath}/Contents/Frameworks/.*--type=renderer`,
+    ])
+    const pids = out.stdout.toString().split('\n').filter(Boolean).map(Number)
+    for (const pid of pids) process.kill(pid, 'SIGKILL')
+    return pids.length
+  }
+
+  /**
    * Opens the app's main window the way launching the app again does, and
    * waits until it is on screen. An app started with an account shows no
    * window until asked, only its menu bar icon.

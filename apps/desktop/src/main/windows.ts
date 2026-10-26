@@ -40,6 +40,13 @@ const MAX_HEIGHT = 720
 const POPOVER_HEIGHT = 320
 /** Gap between the menu bar item and the popover's top edge. */
 const POPOVER_GAP = 6
+/**
+ * How many times one window reloads a dead page within `RELOAD_WINDOW_MS`.
+ * A page that kills its own renderer as it loads would otherwise reload in a
+ * loop.
+ */
+const MAX_RELOADS = 3
+const RELOAD_WINDOW_MS = 60_000
 
 let mainWindow: BrowserWindow | null = null
 /** Set once the renderer has reported the main window's size. Until then it is not shown. */
@@ -100,18 +107,33 @@ export function openExternally(url: string): { action: 'deny' } {
 }
 
 /**
- * Reports a window that came up empty.
+ * Reports a window that came up empty, and reloads one whose page died.
  *
  * A renderer that throws while loading still counts as a successful page load,
  * so the window opens, paints its background and shows nothing. Without these
  * the only trace is a line in the dev server's output.
  */
 function watchForFailure(window: BrowserWindow, which: string): void {
+  let reloads: number[] = []
   window.webContents.on('did-fail-load', (_event, code, description, url) => {
     log.error('window', 'load_failed', { window: which, url, description, code })
   })
+  // Electron keeps the window after its renderer dies, so it opens on an empty
+  // background until the app is quit. The renderer is a separate process
+  // that a crash, running out of memory or any `pkill` matching its command
+  // line can end while the app stays in the menu bar for weeks.
   window.webContents.on('render-process-gone', (_event, details) => {
     log.error('window', 'renderer_gone', { window: which, reason: details.reason })
+    if (details.reason === 'clean-exit' || window.isDestroyed()) return
+    const now = Date.now()
+    reloads = reloads.filter((at) => now - at < RELOAD_WINDOW_MS)
+    if (reloads.length >= MAX_RELOADS) {
+      log.error('window', 'gave_up_reloading', { window: which })
+      return
+    }
+    reloads.push(now)
+    log.info('window', 'reloading', { window: which })
+    window.webContents.reload()
   })
   window.webContents.on('preload-error', (_event, path, error) => {
     log.error('window', 'preload_failed', { window: which, path, error })
