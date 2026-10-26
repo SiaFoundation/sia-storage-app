@@ -76,6 +76,8 @@ export function adb(serial: string) {
       await run(['uninstall', pkg]).catch(() => {})
     },
     screencap: () => run(['exec-out', 'screencap', '-p']),
+    /** Restarts adbd as root, which emulator images other than Google Play allow. */
+    root: () => text(['root']),
     logcat: (args: string[]) => text(['logcat', ...args]),
   }
 }

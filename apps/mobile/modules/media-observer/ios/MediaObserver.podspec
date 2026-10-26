@@ -10,10 +10,11 @@ Pod::Spec.new do |s|
   s.license        = { :type => 'MIT' }
   s.author         = { 'sia-storage-app' => 'noreply@sia.tech' }
   s.homepage       = 'https://github.com/SiaFoundation/sia-storage-app'
-  # Must match the Podfile's declared target (15.1) or Expo autolinking skips the
-  # pod via supports_platform?; the ios-target-16 plugin forces the actual build
-  # to 16.0 in post_install, where the iOS 16 PhotoKit change-history APIs resolve.
-  s.platforms      = { :ios => '15.1' }
+  # Expo autolinking skips a pod whose minimum is above the Podfile's 16.4, and
+  # raises a module's library target to 16.4 but not its test targets. Declaring
+  # 16.4 here keeps the tests on it too, and the iOS 16 PhotoKit change-history
+  # APIs need at least 16.
+  s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.9'
   s.source         = { :path => '.' }
   s.static_framework = true

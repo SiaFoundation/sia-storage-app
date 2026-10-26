@@ -274,7 +274,6 @@
   },
   "trustedDependencies": [
     "electron",
-    "better-sqlite3",
   ],
   "patchedDependencies": {
     "react-native-fs@2.20.0": "patches/react-native-fs@2.20.0.patch",

@@ -251,7 +251,19 @@ export class AndroidDevice extends PhoneDevice {
       join(dir, `${prefix}-logcat.txt`),
       lines.length > 0 ? `${lines.join('\n')}\n` : `No lines about ${PACKAGE}\n`,
     )
-    writeFileSync(join(dir, `${prefix}-logcat-all.txt`), dump.split('\n').slice(-5000).join('\n'))
+    writeFileSync(join(dir, `${prefix}-logcat-all.txt`), dump)
+    // An app that hangs during startup leaves no crash and no log line saying
+    // where. Its threads' stacks name the call it is stuck in.
+    const pid = (await this.adb.shell(`pidof ${PACKAGE}`).catch(() => '')).trim().split(/\s+/)[0]
+    if (pid) {
+      // debuggerd needs root, so adbd restarts as root first. Only a failed
+      // start gets here, and run-as works the same under a root adbd.
+      const stacks = await this.adb
+        .root()
+        .then(() => this.adb.shell(`debuggerd -b ${pid}`))
+        .catch((e: unknown) => `debuggerd -b ${pid} failed: ${e instanceof Error ? e.message : e}`)
+      writeFileSync(join(dir, `${prefix}-stacks.txt`), stacks)
+    }
     return crash
   }
 

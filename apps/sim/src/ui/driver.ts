@@ -13,12 +13,27 @@
 import { waitFor, waitForApp } from '../wait'
 import { ensureAppium } from './server'
 import type { PhoneKind } from '../session'
-import { describeTree, findCenter, findTapPoint, locators, type Selector } from './tree'
+import { tapUntilReceived, type TapOutcome } from './touches'
+import {
+  describeTree,
+  findCenter,
+  findTapPoint,
+  isNativeControl,
+  locators,
+  type Selector,
+} from './tree'
 
 /** The name UIKit gives a navigation back button, wherever iOS draws it. */
 const BACK_BUTTON: Selector = { id: 'BackButton' }
 
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right'
+
+const OPPOSITE: Record<SwipeDirection, SwipeDirection> = {
+  up: 'down',
+  down: 'up',
+  left: 'right',
+  right: 'left',
+}
 
 /** Appium answered a request with an error status. */
 class AppiumError extends Error {}
@@ -52,8 +67,18 @@ export class UiDriver {
        * hears of the keyboard is handled as if there were none.
        */
       keyboardShown?: () => Promise<boolean>
+      /**
+       * How many touches the app has seen. Where given, a tap on the app's
+       * own views waits for it to rise and is sent again when it does not.
+       */
+      touches?: () => Promise<number>
+      /** Records what the driver did that a scenario did not ask for, such as a tap sent again. */
+      note?: (line: string) => void
     },
   ) {}
+
+  /** The last tap and what became of it, which a failed wait after it reports. */
+  private lastTap: { sel: Selector; outcome: TapOutcome } | null = null
 
   private async request(
     method: string,
@@ -163,7 +188,19 @@ export class UiDriver {
         async () => findCenter(await this.source(), sel, this.platform),
         { timeoutMs, intervalMs: 500 },
       ),
-    )
+    ).catch((e: unknown) => this.afterTap(e))
+  }
+
+  /**
+   * Rethrows a wait's failure, saying so when the app received the tap
+   * before it. The tap then reached the app and the screen did not respond,
+   * which is a different failure from a tap that never arrived.
+   */
+  private afterTap(e: unknown): never {
+    if (this.lastTap?.outcome === 'received' && e instanceof Error) {
+      e.message = `${e.message}. The app received the last tap, on ${JSON.stringify(this.lastTap.sel)}`
+    }
+    throw e
   }
 
   /**
@@ -182,6 +219,40 @@ export class UiDriver {
   }
 
   /**
+   * Taps the element and, where it is one of the app's own views, waits for
+   * the app to say it received the tap, sending it again when the app did
+   * not (see touches.ts). A control the platform draws, such as an alert's
+   * button or iOS's back button, never reaches the app's touch count, so a
+   * tap on one is sent once.
+   */
+  async tap(sel: Selector, timeoutMs?: number): Promise<void> {
+    // A tap on a screen still moving, such as a list still flinging, lands
+    // where the row was a moment before. The tree carries every element's
+    // bounds, so it stops changing only once nothing on screen is moving.
+    let tree = await this.settled()
+    if (!findCenter(tree, sel, this.platform)) {
+      await this.waitFor(sel, timeoutMs)
+      tree = await this.source()
+    }
+    const { touches, note } = this.hooks
+    const what = JSON.stringify(sel)
+    const tap: { sel: Selector; outcome: TapOutcome } = { sel, outcome: 'unknown' }
+    this.lastTap = tap
+    if (!touches || isNativeControl(tree, sel, this.platform)) {
+      await this.sendTap(sel, timeoutMs)
+      return
+    }
+    tap.outcome = await tapUntilReceived({
+      what,
+      send: () => this.sendTap(sel, timeoutMs),
+      count: () => touches().catch(() => null),
+      stillThere: async () => findCenter(await this.source(), sel, this.platform) !== null,
+      onLost: (attempt) =>
+        note?.(`tap ${what}: the app did not receive tap ${attempt}, tapping again`),
+    })
+  }
+
+  /**
    * Taps where the element can take it. The center of a full-screen backdrop
    * such as a dropdown's "Close menu" lies under the menu it closes. On iOS
    * the element is clicked, and XCUITest picks a point where it is hittable.
@@ -189,7 +260,7 @@ export class UiDriver {
    * the point findTapPoint picks, which moves off the center only for a
    * full-screen backdrop.
    */
-  async tap(sel: Selector, timeoutMs?: number): Promise<void> {
+  private async sendTap(sel: Selector, timeoutMs?: number): Promise<void> {
     if (this.platform === 'android') {
       await this.session()
       const [x, y] = await this.overReopen(() =>
@@ -376,33 +447,56 @@ export class UiDriver {
   }
 
   /**
-   * Swipes `direction` until an element matching `sel` is visible. Gives up
-   * once a swipe leaves the screen unchanged, which is the end of the list. A
-   * swipe moves a third of the screen, so 100 cover a list of several hundred
-   * rows.
+   * Swipes `direction` until an element matching `sel` is visible, and once
+   * the list ends, swipes back the opposite way to its other end. A screen
+   * still opening when the search starts can take the first swipe and carry
+   * the element past where the search begins, and a search in one direction
+   * never comes back to it.
    */
   async scrollTo(sel: Selector, direction: SwipeDirection = 'up'): Promise<void> {
+    if (await this.scrollToEnd(sel, direction)) return
+    const back = OPPOSITE[direction]
+    if (await this.scrollToEnd(sel, back)) return
+    throw new Error(
+      `Scrolled ${direction} to the end without finding ${JSON.stringify(sel)}, and ${back} to the other end`,
+    )
+  }
+
+  /**
+   * Swipes `direction` until an element matching `sel` is visible, true, or
+   * until a swipe leaves the screen unchanged at the end of the list, false.
+   * A swipe moves a third of the screen, so 100 cover a list of several
+   * hundred rows.
+   */
+  private async scrollToEnd(sel: Selector, direction: SwipeDirection): Promise<boolean> {
     let before = await this.source()
+    // On a loaded CI simulator a swipe can return without reaching the app, so
+    // one unchanged tree does not mean the list ended. Two in a row must.
+    let unchanged = 0
     for (let i = 0; i < 100; i++) {
-      if (findCenter(before, sel, this.platform)) return
+      if (findCenter(before, sel, this.platform)) return true
       await this.swipe(direction)
       const after = await this.settled()
-      if (after === before) break
+      unchanged = after === before ? unchanged + 1 : 0
+      if (unchanged === 2) break
       before = after
     }
-    if (findCenter(await this.source(), sel, this.platform)) return
-    throw new Error(`Scrolled ${direction} to the end without finding ${JSON.stringify(sel)}`)
+    return findCenter(await this.source(), sel, this.platform) !== null
   }
 
   /**
    * The tree once two reads 300ms apart match, up to 5 seconds. A swipe on
    * Android flings the list on after the finger lifts, so an element found
    * before it stops has moved by the time a tap reaches it, and the tap hits
-   * whatever scrolled under that point instead.
+   * whatever scrolled under that point instead. The 5 seconds are measured
+   * on the clock: on a screen that never stops changing, such as the log
+   * viewer, each read of a large tree takes seconds, and a count of reads let
+   * one back press take three minutes.
    */
   private async settled(): Promise<string> {
+    const deadline = Date.now() + 5_000
     let last = await this.source()
-    for (let i = 0; i < 16; i++) {
+    while (Date.now() < deadline) {
       await Bun.sleep(300)
       const next = await this.source()
       if (next === last) return next
@@ -447,7 +541,7 @@ export class UiDriver {
         async () => findCenter(await this.source(), sel, this.platform) === null,
         { timeoutMs, intervalMs: 500 },
       ),
-    )
+    ).catch((e: unknown) => this.afterTap(e))
   }
 
   get isClosed(): boolean {

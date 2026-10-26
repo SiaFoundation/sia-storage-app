@@ -20,7 +20,13 @@ import { Cancelled, waitFor, waitForApp } from '../wait'
 import { LIBRARY_QUERY, toLibrary } from './library'
 import type { Device, LibraryEntry } from './types'
 
-type Status = { hasOnboarded: boolean; isInitializing: boolean; isConnected: boolean }
+type Status = {
+  hasOnboarded: boolean
+  isInitializing: boolean
+  isConnected: boolean
+  /** The startup step that began last, with its message. */
+  startupStep?: string
+}
 
 /**
  * A phone that never got as far as the app connecting: its build is missing,
@@ -222,6 +228,10 @@ export abstract class PhoneDevice implements Device {
     if (this.disposed) throw new Error(`${this.name} has been handed back to its pool`)
     if (!this.driver || this.driver.isClosed) {
       const dir = this.session.deviceDir(this.name)
+      const write = (line: string) => {
+        mkdirSync(dir, { recursive: true })
+        appendFileSync(join(dir, 'ui.log'), line)
+      }
       this.driver = logActions(
         new UiDriver(this.kind, this.uiCapabilities(), {
           onOpen: () => this.foreground(),
@@ -229,14 +239,25 @@ export abstract class PhoneDevice implements Device {
             const k = await this.call<{ visible: boolean; height: number | null }>('sim.keyboard')
             return k.visible && (k.height ?? 0) > 0
           },
+          touches: () => this.call<number>('sim.touches'),
+          note: (line) => write(`${new Date().toISOString().slice(11, 23)} ${line}\n`),
         }),
-        (line) => {
-          mkdirSync(dir, { recursive: true })
-          appendFileSync(join(dir, 'ui.log'), line)
-        },
+        write,
       )
     }
     return this.driver
+  }
+
+  /**
+   * The screen's element tree, with every element's bounds. A screenshot shows
+   * what was on screen, and the tree shows where a tap could have landed.
+   * Taken only from a UI session already open, since opening one here would
+   * attach to the app in the middle of whatever failed.
+   */
+  async captureMore(dir: string): Promise<void> {
+    if (!this.driver || this.driver.isClosed) return
+    const xml = await this.driver.source().catch(() => null)
+    if (xml) writeFileSync(join(dir, 'tree.xml'), xml)
   }
 
   protected control() {
@@ -310,11 +331,19 @@ export abstract class PhoneDevice implements Device {
     // are polled rather than called once. Sign-in is called again only once
     // an earlier attempt has had half a minute to finish.
     let signInAt = 0
+    let lastStep: string | undefined
+    // Each step the app reports with when sim first saw it, so a timeout shows
+    // whether startup was still moving or stuck on one step.
+    const steps: string[] = []
     const connectedAt = new Date()
     await waitForApp(
       `${this.name} to finish starting`,
       async () => {
         const s = await this.call<Status>('sim.status')
+        lastStep = s.isInitializing ? s.startupStep : undefined
+        if (lastStep && !steps.at(-1)?.endsWith(` ${lastStep}`)) {
+          steps.push(`${new Date().toISOString()} ${lastStep}`)
+        }
         if (!s.hasOnboarded) {
           // The app runs initApp at launch and sim.signIn runs it again. Two
           // runs at once migrate the database together, and the app crashes
@@ -328,13 +357,19 @@ export abstract class PhoneDevice implements Device {
         }
         return !s.isInitializing && s.isConnected
       },
-      { timeoutMs: 180_000, intervalMs: 500 },
+      // A first launch on CI's x86_64 emulator runs the dev bundle slowly
+      // enough that startup has taken over 3 minutes while still moving
+      // through its migrations, so Android gets longer before it counts as stuck.
+      { timeoutMs: this.kind === 'android' ? 480_000 : 180_000, intervalMs: 500 },
     ).catch(async (e: unknown) => {
       // An app that connected and then crashed or stalled during startup has
       // the same missing reason as one that never connected.
       const dir = this.session.deviceDir(this.name)
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, `${tag}start-steps.txt`), `${steps.join('\n')}\n`)
       await this.screenshot(`${dir}/${tag}start.png`).catch(() => {})
       const crash = await this.saveSystemLog(dir, `${tag}start`, connectedAt).catch(() => undefined)
+      if (e instanceof Error && lastStep) e.message = `${e.message}, still at ${lastStep}`
       if (!crash || !(e instanceof Error)) throw e
       e.message = `${e.message}. The app crashed: ${crash}`
       throw withCrash(e, crash)
