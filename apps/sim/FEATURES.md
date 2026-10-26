@@ -318,6 +318,7 @@ bun sim device expect phone --label Menu
   `desktop/finder-save-reaches-peer`,
   `desktop/finder-rename-and-delete-reach-peer`, `desktop/file-types`,
   `desktop/finder-save-types`, `desktop/finder-save-unicode-names`,
+  `desktop/finder-folder-stays-online-when-the-app-reopens`,
   `finder/concurrent-opens`, `finder/stale-base-save`,
   `finder/edit-against-remote-trash`, `finder/offline-edit-not-stranded`,
   `finder/rename-and-edit-elsewhere`, `finder/same-name-create`,
