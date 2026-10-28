@@ -24,7 +24,11 @@ export function registerDownloadHandlers(handlers: IpcHandlerMap, app: CliApp): 
     // for, background downloads.
     await app.service.downloads.downloadFile(fileId, 'user')
 
-    const sourceUri = app.fsIO.uri(fileId, file.type)
+    // Through the service, which records the read against the cache's
+    // eviction clock. A copy served from the cache keeps its old use time
+    // otherwise, and the next pass removes a file the user just asked for.
+    const sourceUri = await app.service.fs.getFileUri({ id: fileId, type: file.type })
+    if (!sourceUri) throw new Error('The downloaded copy is missing')
     await fs.mkdir(path.dirname(output), { recursive: true })
     await fs.copyFile(sourceUri, output)
     return { name: file.name, path: output }
