@@ -66,6 +66,28 @@ export async function queryLiveFileTypes(
   return new Map(rows.map((r) => [r.id, r.type]))
 }
 
+/** One cached copy an eviction pass may remove. */
+export type EvictionRow = { fileId: string; size: number; type: string; usedAt: number }
+
+/**
+ * Where a pass stopped reading. A pass advances it past every row it tried,
+ * whether the removal succeeded or not, so a row whose removal keeps failing
+ * is read once per pass instead of on every batch.
+ */
+export type EvictionCursor = { usedAt: number; fileId: string }
+
+/** Keyset condition for rows ordered by (usedAt, fileId), with its parameters. */
+function afterCursor(after: EvictionCursor | null): {
+  clause: string
+  params: (string | number)[]
+} {
+  if (!after) return { clause: '', params: [] }
+  return {
+    clause: 'AND (fs.usedAt, fs.fileId) > (?, ?)',
+    params: [after.usedAt, after.fileId],
+  }
+}
+
 // LRU pass: only current originals. Thumbnails are never evicted by LRU —
 // regenerating a current thumb is wasted work and causes UI flicker. Non-
 // current and trashed rows are handled by the dedicated pre-passes.
@@ -79,10 +101,12 @@ export async function queryEvictionCandidates(
   db: DatabaseAdapter,
   indexerURL: string,
   thresholdUsedAt: number,
+  after: EvictionCursor | null,
   limit: number,
-): Promise<{ fileId: string; size: number; type: string }[]> {
-  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
-    `SELECT fs.fileId, fs.size, f.type FROM fs
+): Promise<EvictionRow[]> {
+  const cursor = afterCursor(after)
+  return db.getAllAsync<EvictionRow>(
+    `SELECT fs.fileId, fs.size, f.type, fs.usedAt FROM fs
      JOIN files f ON f.id = fs.fileId
      WHERE f.kind = 'file' AND f.current = 1
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
@@ -90,10 +114,12 @@ export async function queryEvictionCandidates(
        AND EXISTS (
          SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?
        )
+       ${cursor.clause}
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     thresholdUsedAt,
     indexerURL,
+    ...cursor.params,
     limit,
   )
 }
@@ -108,10 +134,12 @@ export async function queryEvictionCandidates(
 export async function queryNonCurrentCachedFiles(
   db: DatabaseAdapter,
   thresholdUsedAt: number,
+  after: EvictionCursor | null,
   limit: number,
-): Promise<{ fileId: string; size: number; type: string }[]> {
-  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
-    `SELECT fs.fileId, fs.size, f.type FROM fs
+): Promise<EvictionRow[]> {
+  const cursor = afterCursor(after)
+  return db.getAllAsync<EvictionRow>(
+    `SELECT fs.fileId, fs.size, f.type, fs.usedAt FROM fs
      JOIN files f ON f.id = fs.fileId
      WHERE f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND (
@@ -127,27 +155,34 @@ export async function queryNonCurrentCachedFiles(
        )
        AND fs.usedAt <= ?
        AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId)
+       ${cursor.clause}
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     thresholdUsedAt,
+    ...cursor.params,
     limit,
   )
 }
 
+/** Trashed pass. It has no age gate, and pages by (usedAt, fileId) like the other passes. */
 export async function queryTrashedCachedFiles(
   db: DatabaseAdapter,
   indexerURL: string,
+  after: EvictionCursor | null,
   limit: number,
-): Promise<{ fileId: string; size: number; type: string }[]> {
-  return db.getAllAsync<{ fileId: string; size: number; type: string }>(
-    `SELECT fs.fileId, fs.size, f.type FROM fs
+): Promise<EvictionRow[]> {
+  const cursor = afterCursor(after)
+  return db.getAllAsync<EvictionRow>(
+    `SELECT fs.fileId, fs.size, f.type, fs.usedAt FROM fs
      JOIN files f ON f.id = fs.fileId
      WHERE f.trashedAt IS NOT NULL
        AND f.deletedAt IS NULL
        AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?)
-     ORDER BY fs.fileId ASC
+       ${cursor.clause}
+     ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     indexerURL,
+    ...cursor.params,
     limit,
   )
 }

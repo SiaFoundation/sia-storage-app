@@ -6,6 +6,8 @@ import type {
   AppendToOpenImportResult,
   DirectoryWithCount,
   FileQueryOpts,
+  EvictionCursor,
+  EvictionRow,
   FinalizeResult,
   FsMetaRow,
   ImportFileRow,
@@ -564,22 +566,25 @@ export interface AppService {
     updateMetaUsedAt(fileId: string, usedAt?: number): Promise<void>
     /** Returns the total size in bytes of all tracked local files. */
     calcTotalSize(): Promise<number>
-    /** Returns files eligible for eviction, ordered by least recently used. */
+    /** Returns files eligible for eviction after `after`, ordered by least recently used. */
     evictionCandidates(
       indexerURL: string,
       thresholdUsedAt: number,
+      after: EvictionCursor | null,
       limit: number,
-    ): Promise<{ fileId: string; size: number; type: string }[]>
-    /** Returns cached superseded file versions (current=0) uploaded to any indexer. */
+    ): Promise<EvictionRow[]>
+    /** Returns cached superseded file versions (current=0) uploaded to any indexer, after `after`. */
     nonCurrentCachedFiles(
       thresholdUsedAt: number,
+      after: EvictionCursor | null,
       limit: number,
-    ): Promise<{ fileId: string; size: number; type: string }[]>
-    /** Returns cached trashed files (and their thumbs) uploaded to `indexerURL`. No age gate. */
+    ): Promise<EvictionRow[]>
+    /** Returns cached trashed files (and their thumbs) uploaded to `indexerURL`, after `after`. No age gate. */
     trashedCachedFiles(
       indexerURL: string,
+      after: EvictionCursor | null,
       limit: number,
-    ): Promise<{ fileId: string; size: number; type: string }[]>
+    ): Promise<EvictionRow[]>
     /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
     /** Stored type of each live file among `fileIds`; absent when tombstoned or gone. */

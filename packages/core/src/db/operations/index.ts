@@ -157,6 +157,8 @@ export {
   queryFsMetaTotalSize,
   deleteFsMeta,
   deleteManyFsMeta,
+  type EvictionCursor,
+  type EvictionRow,
   type FsMetaRow,
   queryEvictionCandidates,
   queryNonCurrentCachedFiles,
