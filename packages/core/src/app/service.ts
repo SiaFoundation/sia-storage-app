@@ -1167,6 +1167,13 @@ export interface AppService {
      * than starting a second one.
      */
     evict(): Promise<CacheEvictionResult | undefined>
+    /**
+     * Removes the local copy of every file already uploaded to the current
+     * indexer, however recently used and whatever the cap, as Clear local
+     * files does on mobile. Files not uploaded yet are kept. A scheduled pass
+     * running at the time finishes first.
+     */
+    clear(): Promise<CacheEvictionResult | undefined>
   }
   /** Share URL operations: resolve, preview, pin, and create share links. */
   shares: {

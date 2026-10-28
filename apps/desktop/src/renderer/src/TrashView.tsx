@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { PLAIN_BUTTON, SMALL_BUTTON } from './buttons'
 import { ROW, Section } from './Group'
 import { Trash } from './icons'
+import { useConfirm } from './useConfirm'
 
 /**
  * The time, moved on every minute. A window left open would otherwise keep
@@ -27,17 +28,6 @@ function useNow(): number {
     return () => clearInterval(timer)
   }, [])
   return now
-}
-
-/** A first click arms the action and a second within 3 seconds takes it. */
-function useConfirm(): [boolean, (armed: boolean) => void] {
-  const [armed, setArmed] = useState(false)
-  useEffect(() => {
-    if (!armed) return
-    const timer = setTimeout(() => setArmed(false), 3_000)
-    return () => clearTimeout(timer)
-  }, [armed])
-  return [armed, setArmed]
 }
 
 function EntryRow({

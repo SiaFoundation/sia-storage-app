@@ -76,6 +76,25 @@ describe('the on-request eviction pass', () => {
     expect(results[2]).toEqual(results[0])
   })
 
+  it('runs a clear requested during a pass once that pass has finished', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const calcTotalSize = app.service.fs.calcTotalSize
+    const spy = jest.spyOn(app.service.fs, 'calcTotalSize').mockImplementationOnce(async () => {
+      await held
+      return calcTotalSize()
+    })
+
+    const scheduled = app.internal.evictCache(new AbortController().signal)
+    const cleared = call('ds:cache:clear')
+    release()
+    await Promise.all([scheduled, cleared])
+
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
   it('starts a new pass once the previous one has finished', async () => {
     const spy = jest.spyOn(app.service.fs, 'calcTotalSize')
 

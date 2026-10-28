@@ -1,6 +1,12 @@
 import type { AppService } from '../app/service'
 import type { EvictionCursor, EvictionRow } from '../db/operations'
-import { runCacheEviction, singleFlightEviction } from './cacheEviction'
+import {
+  type CacheEvictionConfig,
+  type CacheEvictionResult,
+  EVICT_ALL_BACKED_UP,
+  evictionRunner,
+  runCacheEviction,
+} from './cacheEviction'
 
 /**
  * A facade with only what runCacheEviction touches. Rows sit in pass 3 alone,
@@ -151,13 +157,14 @@ describe('runCacheEviction', () => {
   })
 })
 
-describe('singleFlightEviction', () => {
+describe('evictionRunner stopping', () => {
   /** A pass that waits for its signal to abort, recording each signal it ran with. */
   function passUntilAborted() {
     const signals: AbortSignal[] = []
     const run = (signal: AbortSignal) => {
       signals.push(signal)
       return new Promise<undefined>((resolve) => {
+        if (signal.aborted) resolve(undefined)
         signal.addEventListener('abort', () => resolve(undefined), { once: true })
       })
     }
@@ -166,11 +173,14 @@ describe('singleFlightEviction', () => {
 
   it('stops a pass a socket request started when the scheduler joins it and then aborts', async () => {
     const pass = passUntilAborted()
-    const eviction = singleFlightEviction(pass.run)
-    const fromSocket = eviction.run()
+    const eviction = evictionRunner(
+      (_config, signal) => pass.run(signal),
+      async () => ({}),
+    )
+    const fromSocket = eviction.evict()
     const scheduler = new AbortController()
 
-    const joined = eviction.run(scheduler.signal)
+    const joined = eviction.evict(scheduler.signal)
     scheduler.abort()
     await Promise.all([fromSocket, joined])
 
@@ -180,21 +190,91 @@ describe('singleFlightEviction', () => {
 
   it('refuses a pass asked for after stop', async () => {
     const pass = passUntilAborted()
-    const eviction = singleFlightEviction(pass.run)
+    const eviction = evictionRunner(
+      (_config, signal) => pass.run(signal),
+      async () => ({}),
+    )
     await eviction.stop()
 
-    await expect(eviction.run()).resolves.toBeUndefined()
+    await expect(eviction.evict()).resolves.toBeUndefined()
     expect(pass.signals).toHaveLength(0)
   })
 
   it('stop aborts the running pass and resolves once it has ended', async () => {
     const pass = passUntilAborted()
-    const eviction = singleFlightEviction(pass.run)
-    const running = eviction.run()
+    const eviction = evictionRunner(
+      (_config, signal) => pass.run(signal),
+      async () => ({}),
+    )
+    const running = eviction.evict()
 
     await eviction.stop()
 
     expect(pass.signals[0].aborted).toBe(true)
     await expect(running).resolves.toBeUndefined()
+  })
+})
+
+describe('evictionRunner', () => {
+  const SCHEDULED: CacheEvictionConfig = { maxBytes: 4_000, minAge: 1_000 }
+
+  /** A pass that runs until released, recording the config it ran with. */
+  function heldPasses() {
+    const started: CacheEvictionConfig[] = []
+    const releases: Array<() => void> = []
+    const run = async (config: CacheEvictionConfig): Promise<CacheEvictionResult> => {
+      started.push(config)
+      await new Promise<void>((resolve) => releases.push(resolve))
+      return {
+        processedRows: 0,
+        evicted: started.length,
+        evictedFileIds: [],
+        bytesFreed: 0,
+        currentSize: 0,
+      }
+    }
+    const releaseNext = async () => {
+      while (releases.length === 0) await new Promise((r) => setTimeout(r, 1))
+      releases.shift()!()
+    }
+    return { run, started, releaseNext }
+  }
+
+  it("gives an evict during a clear that clear's result", async () => {
+    const passes = heldPasses()
+    const runner = evictionRunner(passes.run, async () => SCHEDULED)
+
+    const cleared = runner.clear()
+    const evicted = runner.evict()
+    await passes.releaseNext()
+
+    expect(await evicted).toBe(await cleared)
+    expect(passes.started).toEqual([EVICT_ALL_BACKED_UP])
+  })
+
+  it('runs a clear after a scheduled pass already running, with nothing spared', async () => {
+    const passes = heldPasses()
+    const runner = evictionRunner(passes.run, async () => SCHEDULED)
+
+    const scheduled = runner.evict()
+    const cleared = runner.clear()
+    await passes.releaseNext()
+    await scheduled
+    await passes.releaseNext()
+
+    expect((await cleared)?.evicted).toBe(2)
+    expect(passes.started).toEqual([SCHEDULED, EVICT_ALL_BACKED_UP])
+  })
+
+  it("gives a second clear the running clear's result", async () => {
+    const passes = heldPasses()
+    const runner = evictionRunner(passes.run, async () => SCHEDULED)
+
+    const first = runner.clear()
+    const second = runner.clear()
+    await passes.releaseNext()
+
+    expect(await second).toBe(await first)
+    expect(passes.started).toHaveLength(1)
   })
 })

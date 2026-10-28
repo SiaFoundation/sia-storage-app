@@ -32,6 +32,8 @@ export type CacheEvictionResult = {
   processedRows: number
   evicted: number
   evictedFileIds: string[]
+  /** Bytes of the copies this pass removed, by their `fs` row sizes. */
+  bytesFreed: number
   currentSize: number
 }
 
@@ -56,11 +58,14 @@ export async function configuredCacheEviction(app: AppService): Promise<CacheEvi
 }
 
 /**
- * Runs one eviction pass at a time. A call while a pass is in flight gets that
- * pass's result, so a pass requested over the socket during the scheduled one
- * does not start a second pass over the same rows.
+ * Runs one eviction pass at a time, for the scheduled pass, `cache.evict` and
+ * `cache.clear`. An `evict` while any pass runs gets that pass's result, so a
+ * pass requested over the socket during the scheduled one does not start a
+ * second pass over the same rows. A `clear` while a clear runs gets its
+ * result. A `clear` while an `evict` runs waits for it and then clears, since
+ * that pass keeps the recently used files a clear has to remove.
  *
- * The pass runs on a signal of its own, which any caller's signal aborts. A
+ * Each pass runs on a signal of its own, which any caller's signal aborts. A
  * caller that joined a pass someone else started still stops it, so the
  * scheduler's shutdown stops a pass a socket request started instead of
  * waiting for all of it. `stop` aborts the running pass, waits for it, and
@@ -68,41 +73,52 @@ export async function configuredCacheEviction(app: AppService): Promise<CacheEvi
  * database: a removal cut off between deleting a file and deleting its `fs`
  * row would leave a row for bytes that are gone.
  */
-export function singleFlightEviction(
-  run: (signal: AbortSignal) => Promise<CacheEvictionResult | undefined>,
+export function evictionRunner(
+  run: (
+    config: CacheEvictionConfig,
+    signal: AbortSignal,
+  ) => Promise<CacheEvictionResult | undefined>,
+  configured: () => Promise<CacheEvictionConfig>,
 ): {
-  run(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
+  evict(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
+  clear(): Promise<CacheEvictionResult | undefined>
   stop(): Promise<void>
 } {
-  let inFlight: {
+  type Pass = {
+    clearing: boolean
     done: Promise<CacheEvictionResult | undefined>
     controller: AbortController
-  } | null = null
+  }
+  let running: Pass | null = null
   let stopped = false
+  const start = (clearing: boolean): Pass => {
+    const controller = new AbortController()
+    const done: Promise<CacheEvictionResult | undefined> = (async () =>
+      run(clearing ? EVICT_ALL_BACKED_UP : await configured(), controller.signal))().finally(() => {
+      if (running?.done === done) running = null
+    })
+    running = { clearing, done, controller }
+    return running
+  }
+  const join = (pass: Pass, signal?: AbortSignal) => {
+    if (signal) {
+      const abort = () => pass.controller.abort()
+      if (signal.aborted) abort()
+      signal.addEventListener('abort', abort, { once: true })
+      void pass.done.finally(() => signal.removeEventListener('abort', abort)).catch(() => {})
+    }
+    return pass.done
+  }
   return {
-    run: async (signal) => {
+    evict: async (signal) => (stopped ? undefined : join(running ?? start(false), signal)),
+    clear: async () => {
+      while (running && !running.clearing) await running.done.catch(() => undefined)
       if (stopped) return undefined
-      if (!inFlight) {
-        const controller = new AbortController()
-        const done: Promise<CacheEvictionResult | undefined> = run(controller.signal).finally(
-          () => {
-            if (inFlight?.done === done) inFlight = null
-          },
-        )
-        inFlight = { done, controller }
-      }
-      const pass = inFlight
-      if (signal) {
-        const abort = () => pass.controller.abort()
-        if (signal.aborted) abort()
-        signal.addEventListener('abort', abort, { once: true })
-        void pass.done.finally(() => signal.removeEventListener('abort', abort)).catch(() => {})
-      }
-      return pass.done
+      return join(running ?? start(true))
     },
     stop: async () => {
       stopped = true
-      const pass = inFlight
+      const pass = running
       if (!pass) return
       pass.controller.abort()
       await pass.done.catch(() => undefined)
@@ -140,6 +156,7 @@ export async function runCacheEviction(
   let currentSize = totalSize
   let processedRows = 0
   let evicted = 0
+  let bytesFreed = 0
   const evictedFileIds: string[] = []
 
   async function evictBatch(
@@ -161,6 +178,7 @@ export async function runCacheEviction(
         // is skipped this pass rather than waited for.
         if (!(await app.fs.removeFile({ id: fileId, type }, { skipIfLocked: true }))) continue
         currentSize -= size
+        bytesFreed += size
         evicted++
         evictedFileIds.push(fileId)
       } catch (e) {
@@ -237,5 +255,5 @@ export async function runCacheEviction(
     currentSize,
     aborted: signal?.aborted ?? false,
   })
-  return { processedRows, evicted, evictedFileIds, currentSize }
+  return { processedRows, evicted, evictedFileIds, bytesFreed, currentSize }
 }
