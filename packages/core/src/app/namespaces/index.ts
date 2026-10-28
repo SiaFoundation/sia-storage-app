@@ -5,6 +5,7 @@ import type { ObjectsCursor, SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
+import { LocalCopyLock } from '../../services/localCopyLock'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { restampAllFiles } from '../../db/operations/providerChanges'
@@ -167,6 +168,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
   )
 
   const transferBudget = new TransferMemoryBudget(adapters.readMemory ?? (() => null))
+  const localCopyLock = new LocalCopyLock()
   const downloadsNamespace = buildDownloadsNamespace(
     adapters.db,
     adapters.fsIO,
@@ -175,6 +177,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     caches,
     () => sdkRef,
     transferBudget,
+    localCopyLock,
   )
 
   const settingsNamespace = buildSettingsNamespace(adapters.storage, caches, async () => {
@@ -196,6 +199,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       crypto: adapters.crypto,
       thumbnail: adapters.thumbnail,
       detectMimeType: adapters.detectMimeType,
+      localCopyLock,
     })
   const withTransaction: AppServiceInternal['withTransaction'] = async (fn) => {
     const invalidations: Array<() => void> = []
@@ -265,6 +269,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       getSdk: () => sdkRef,
       downloadObject: adapters.downloadObject,
       transferBudget,
+      localCopyLock,
     }),
     downloads: downloadsNamespace,
     cache: {

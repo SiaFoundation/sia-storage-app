@@ -1,8 +1,10 @@
 import * as nodeFs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { EVICT_ALL_BACKED_UP, runCacheEviction } from '@siastorage/core/services'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
+import { waitForCondition } from './utils'
 
 describe('Provider opens', () => {
   let app: TestApp
@@ -35,5 +37,35 @@ describe('Provider opens', () => {
     for (const file of files) {
       expect(nodeFs.statSync(path.join(handoffDir, file.id)).size).toBe(file.size)
     }
+  }, 60_000)
+
+  it('an eviction pass skips a file while Finder is opening it, and the open gets its bytes', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { sizeBytes: 4096 }))
+    await app.waitForNoActiveUploads()
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let opening = false
+    const getFileUri = app.app.fs.getFileUri.bind(app.app.fs)
+    // The open reads the file's uri, which records the use, right before it
+    // exports the copy. Holding it there keeps the open inside its locked step.
+    jest.spyOn(app.app.fs, 'getFileUri').mockImplementation(async (target) => {
+      if (target.id === file.id && !opening) {
+        opening = true
+        await held
+      }
+      return getFileUri(target)
+    })
+    const dest = path.join(handoffDir, file.id)
+    const open = app.app.provider.fetch(file.id, dest)
+    await waitForCondition(() => opening, { message: 'the open to reach its export' })
+
+    const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+    release()
+    await open
+
+    expect(result!.evictedFileIds).not.toContain(file.id)
+    expect(nodeFs.statSync(dest).size).toBe(file.size)
   }, 60_000)
 })

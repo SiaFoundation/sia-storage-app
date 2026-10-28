@@ -603,8 +603,14 @@ export interface AppService {
      *  the stat itself fails. A plain stat: unlike getFileUri it never drops
      *  the fs row, so probing for bytes can't destroy the row recording them. */
     sizeOnDisk(file: { id: string; type: string }): Promise<number | null>
-    /** Removes a local file from disk. */
-    removeFile(file: { id: string; type: string }): Promise<void>
+    /**
+     * Removes a local file from disk and its fs row. With `skipIfLocked`, leaves
+     * a file being downloaded or exported alone and resolves false.
+     */
+    removeFile(
+      file: { id: string; type: string },
+      opts?: { skipIfLocked?: boolean },
+    ): Promise<boolean>
     /** Removes a local file by its literal path (orphan-scanner temp sweep). */
     removeFileByPath(path: string): Promise<void>
     /** Copies a file from the source URI into managed storage; returns the

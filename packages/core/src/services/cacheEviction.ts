@@ -157,7 +157,9 @@ export async function runCacheEviction(
           const indexerURL = await app.settings.getIndexerURL()
           if ((await app.localObjects.countForFileOnIndexer(fileId, indexerURL)) === 0) continue
         }
-        await app.fs.removeFile({ id: fileId, type })
+        // A download or a Finder export holds the file. It is used now, so it
+        // is skipped this pass rather than waited for.
+        if (!(await app.fs.removeFile({ id: fileId, type }, { skipIfLocked: true }))) continue
         currentSize -= size
         evicted++
         evictedFileIds.push(fileId)
