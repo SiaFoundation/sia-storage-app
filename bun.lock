@@ -156,7 +156,7 @@
         "react-native-safe-area-context": "5.10.1",
         "react-native-screens": "4.28.0",
         "react-native-share": "12.3.1",
-        "react-native-sia": "0.16.1",
+        "react-native-sia": "0.16.2",
         "react-native-svg": "15.15.5",
         "react-native-view-shot": "6.1.1",
         "react-native-webview": "14.0.1",
@@ -622,6 +622,8 @@
     "@expo/spawn-async": ["@expo/spawn-async@1.8.0", "", { "dependencies": { "cross-spawn": "^7.0.6" } }, "sha512-eb9xxd/LbuEGSdua4NumCu/McVB9EM+F/JxB9pWgnERw4HQ9XyTNH1KapG6oqLWR8TuRK2LQfzJlmNi94CVobw=="],
 
     "@expo/sudo-prompt": ["@expo/sudo-prompt@9.3.2", "", {}, "sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw=="],
+
+    "@expo/ws-tunnel": ["@expo/ws-tunnel@2.0.1", "", { "peerDependencies": { "ws": "^8.0.0" } }, "sha512-mljsRffbOHzmSimYQbQu9h9NR3alwCCwEEouRGFL4QRTt8dNvsNtKEPa/5jHmtDLDtsh4xXsWKwzjN9BTpeXHQ=="],
 
     "@expo/xcpretty": ["@expo/xcpretty@4.4.6", "", { "dependencies": { "@babel/code-frame": "^7.20.0", "chalk": "^4.1.0", "js-yaml": "^4.1.0" }, "bin": { "excpretty": "build/cli.js" } }, "sha512-uRaZZ/IsX1WkFW69xxTZtMeRvI5ziD9yoian+FMqdhITkU6NGvIWd5uRMh2Gbo/6xstpQ4v0GtF1V5YatTwzDA=="],
 
@@ -1170,6 +1172,8 @@
     "@types/yargs": ["@types/yargs@17.0.35", "", { "dependencies": { "@types/yargs-parser": "*" } }, "sha512-qUHkeCyQFxMXg79wQfTtfndEC+N9ZZg76HJftDJp+qH2tV7Gj4OJi7l+PiWwJ+pWtW8GwSmqsDj/oymhrTWXjg=="],
 
     "@types/yargs-parser": ["@types/yargs-parser@21.0.3", "", {}, "sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ=="],
+
+    "@ubjs/core": ["@ubjs/core@0.31.0-6", "", {}, "sha512-pscv6Zj8mVmd5+ikb1Zr6XZ0yqYwKGeIV8HU8rf9sTvs7GW34OARAp03xFJ7rE9XE4R6LgwQhzYW9knAuz5yxA=="],
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.3.0", "", {}, "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g=="],
 
@@ -2283,7 +2287,7 @@
 
     "react-native-share": ["react-native-share@12.3.1", "", {}, "sha512-mRVRie0qKbtj+jWqJ2POPkeSd8SxnMp6aazFZVmq8ZbkUGtQLENR/L58ky8zH4VUEF/WYRmdBiBHWHVtzOewtQ=="],
 
-    "react-native-sia": ["react-native-sia@0.16.1", "", { "dependencies": { "uniffi-bindgen-react-native": "0.31.0-2" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-22Oe7jVNx2HY1nziDAmaw5lgtDUXHZxPpm5/4F5jBBeXvYzWQGgHf6oT/+5frJJQHkxkLZHZ5zmMUkhOQsjh7w=="],
+    "react-native-sia": ["react-native-sia@0.16.2", "", { "dependencies": { "@ubjs/core": "^0.31.0-5", "uniffi-bindgen-react-native": "0.31.0-5" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-kBlJk4pQ5l9PDf3GzKIOh9bl1N0fWcKj9U5r+M167QkuBs0XA/08LPYB2kSk9qwGWFwDgLtRRqp39m6Vnago0w=="],
 
     "react-native-svg": ["react-native-svg@15.15.5", "", { "dependencies": { "css-select": "^5.1.0", "css-tree": "^1.1.3" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-L4go5jA+GWutdJ/JucuN20cjAbMg1HmMtAP+wZ+3JLCf6Jd0bhXQHxciRP/AQm/FlrIEZwkMcHNZP+FXAiic0w=="],
 
@@ -2571,7 +2575,7 @@
 
     "unicode-property-aliases-ecmascript": ["unicode-property-aliases-ecmascript@2.2.0", "", {}, "sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ=="],
 
-    "uniffi-bindgen-react-native": ["uniffi-bindgen-react-native@0.31.0-2", "", { "bin": { "ubrn": "bin/cli.cjs", "uniffi-bindgen-react-native": "bin/cli.cjs" } }, "sha512-kcmW4/ayEEQH3mg4r3wJAgDoBd7Ix7Y/4E2npS51ydUKuHMzLsTU+lgzanZVAwC+yQsDduEK63TFXq54imJWsA=="],
+    "uniffi-bindgen-react-native": ["uniffi-bindgen-react-native@0.31.0-5", "", { "bin": { "ubrn": "bin/cli.cjs", "uniffi-bindgen-react-native": "bin/cli.cjs" } }, "sha512-YtL3gTe+RVXAQx/2P2Iuypic/CunRZC65Cs47v//YRfwWNYU4Ufd1jT3rqxSrH5b5QFCYblP89Nf/9ssZRvNgg=="],
 
     "unorm": ["unorm@1.6.0", "", {}, "sha512-b2/KCUlYZUeA7JFUuRJZPUtr4gZvBh7tavtv4fvk4+KV9pfGiR6CQAQAWl49ZpR3ts2dk4FYkP7EIgDJoiOLDA=="],
 
@@ -2791,8 +2795,6 @@
 
     "@electron/get/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
-    "@expo/cli/@expo/ws-tunnel": ["@expo/ws-tunnel@2.0.1", "", { "peerDependencies": { "ws": "^8.0.0" } }, "sha512-mljsRffbOHzmSimYQbQu9h9NR3alwCCwEEouRGFL4QRTt8dNvsNtKEPa/5jHmtDLDtsh4xXsWKwzjN9BTpeXHQ=="],
-
     "@expo/cli/@react-native/asset-utils": ["@react-native/asset-utils@0.88.0-rc.4", "", {}, "sha512-75ePgfFR7Ro0b/CuGOcdfz6CTVmMtyHwJsxLLwKvI2fVBV2FaoaN/763j/PzODQcaA3mGNrmw9vlIeYG0ypTHw=="],
 
     "@expo/cli/@react-native/js-polyfills": ["@react-native/js-polyfills@0.88.0-rc.4", "", {}, "sha512-PR4Kf/puenIiQXa77SOruGEDi04UIssq8L7lzqdoeJ5Yv6kTuD4A5/P34C2f9asN4BDFMEXn1+d6J1NCxjZpkw=="],
@@ -2838,6 +2840,8 @@
     "@expo/require-utils/@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
     "@expo/require-utils/@babel/core": ["@babel/core@7.29.0", "", { "dependencies": { "@babel/code-frame": "^7.29.0", "@babel/generator": "^7.29.0", "@babel/helper-compilation-targets": "^7.28.6", "@babel/helper-module-transforms": "^7.28.6", "@babel/helpers": "^7.28.6", "@babel/parser": "^7.29.0", "@babel/template": "^7.28.6", "@babel/traverse": "^7.29.0", "@babel/types": "^7.29.0", "@jridgewell/remapping": "^2.3.5", "convert-source-map": "^2.0.0", "debug": "^4.1.0", "gensync": "^1.0.0-beta.2", "json5": "^2.2.3", "semver": "^6.3.1" } }, "sha512-CGOfOJqWjg2qW/Mb6zNsDm+u5vFQ8DxXfbM09z69p5Z6+mE1ikP2jUXw+j42Pf1XTYED2Rni5f95npYeuwMDQA=="],
+
+    "@expo/ws-tunnel/ws": ["ws@8.21.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw=="],
 
     "@expo/xcpretty/@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
