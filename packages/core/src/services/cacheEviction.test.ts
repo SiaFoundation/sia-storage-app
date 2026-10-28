@@ -1,6 +1,6 @@
 import type { AppService } from '../app/service'
 import type { EvictionCursor, EvictionRow } from '../db/operations'
-import { runCacheEviction } from './cacheEviction'
+import { runCacheEviction, singleFlightEviction } from './cacheEviction'
 
 /**
  * A facade with only what runCacheEviction touches. Rows sit in pass 3 alone,
@@ -128,5 +128,53 @@ describe('runCacheEviction', () => {
     await runCacheEviction(app, { maxBytes: 1_550, minAge: 0 })
 
     expect(removed).toEqual(good.slice(0, 5).map((r) => r.fileId))
+  })
+})
+
+describe('singleFlightEviction', () => {
+  /** A pass that waits for its signal to abort, recording each signal it ran with. */
+  function passUntilAborted() {
+    const signals: AbortSignal[] = []
+    const run = (signal: AbortSignal) => {
+      signals.push(signal)
+      return new Promise<undefined>((resolve) => {
+        signal.addEventListener('abort', () => resolve(undefined), { once: true })
+      })
+    }
+    return { run, signals }
+  }
+
+  it('stops a pass a socket request started when the scheduler joins it and then aborts', async () => {
+    const pass = passUntilAborted()
+    const eviction = singleFlightEviction(pass.run)
+    const fromSocket = eviction.run()
+    const scheduler = new AbortController()
+
+    const joined = eviction.run(scheduler.signal)
+    scheduler.abort()
+    await Promise.all([fromSocket, joined])
+
+    expect(pass.signals).toHaveLength(1)
+    expect(pass.signals[0].aborted).toBe(true)
+  })
+
+  it('refuses a pass asked for after stop', async () => {
+    const pass = passUntilAborted()
+    const eviction = singleFlightEviction(pass.run)
+    await eviction.stop()
+
+    await expect(eviction.run()).resolves.toBeUndefined()
+    expect(pass.signals).toHaveLength(0)
+  })
+
+  it('stop aborts the running pass and resolves once it has ended', async () => {
+    const pass = passUntilAborted()
+    const eviction = singleFlightEviction(pass.run)
+    const running = eviction.run()
+
+    await eviction.stop()
+
+    expect(pass.signals[0].aborted).toBe(true)
+    await expect(running).resolves.toBeUndefined()
   })
 })

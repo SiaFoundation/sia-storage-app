@@ -8,6 +8,11 @@ import type { FsIOAdapter } from '../../services/fsFileUri'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { restampAllFiles } from '../../db/operations/providerChanges'
+import {
+  configuredCacheEviction,
+  runCacheEviction,
+  singleFlightEviction,
+} from '../../services/cacheEviction'
 import { swrCacheBy, swrFillableCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
 import { createLibraryVersionCache } from '../libraryVersionCache'
@@ -262,6 +267,9 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       transferBudget,
     }),
     downloads: downloadsNamespace,
+    cache: {
+      evict: () => eviction.run(),
+    },
     shares: sharesNamespace,
     connection: {
       getState: () => ({ ...connectionState }),
@@ -301,6 +309,10 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     caches,
   }
 
+  const eviction = singleFlightEviction(async (signal) =>
+    runCacheEviction(service, await configuredCacheEviction(service), signal),
+  )
+
   const internal: AppServiceInternal = {
     transferBudget,
     setSdk: (sdk) => {
@@ -315,6 +327,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     initUploader: () => initUploader(uploadManager, service, internal, adapters.uploader),
     withTransaction,
     events,
+    evictCache: (signal) => eviction.run(signal),
+    stopEviction: () => eviction.stop(),
   }
 
   return { service, internal, uploadManager }

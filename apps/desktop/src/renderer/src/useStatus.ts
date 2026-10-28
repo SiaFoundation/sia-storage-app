@@ -20,6 +20,7 @@ import useSWR from 'swr'
 import { sia } from './api'
 import {
   type DomainState,
+  type LocalCache,
   type Materializing,
   NO_UPLOADS,
   type Status,
@@ -172,6 +173,21 @@ function useFilesNotUploaded(): number {
     })
   })
   return data ?? 0
+}
+
+/**
+ * Bytes in the daemon's cache and the cap it is held to. Nothing invalidates a
+ * key when a download lands, so the size also refreshes on a timer.
+ */
+export function useLocalCache(): LocalCache {
+  const app = useApp()
+  const bytes = useSWR(app.caches.library.key('localCacheBytes'), () => app.fs.calcTotalSize(), {
+    refreshInterval: 30_000,
+  })
+  const maxBytes = useSWR(app.caches.settings.key('cacheMaxBytes'), () =>
+    app.settings.getCacheMaxBytes(),
+  )
+  return { bytes: bytes.data ?? null, maxBytes: maxBytes.data }
 }
 
 function useFolderCount(): number {

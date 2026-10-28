@@ -10,15 +10,14 @@ import {
 } from './fsEvictionScanner'
 
 jest.mock('@siastorage/core/config', () => {
-  const { daysInMs } = jest.requireActual('@siastorage/core')
   const actual = jest.requireActual('@siastorage/core/config')
-  return {
-    ...actual,
-    FS_MAX_BYTES: 1_000,
-    FS_EVICTION_FREQUENCY: 60_000,
-    FS_EVICTABLE_MIN_AGE: daysInMs(7),
-  }
+  return { ...actual, FS_EVICTION_FREQUENCY: 60_000 }
 })
+
+// Passed to each scan rather than mocked as the core's defaults: jest.setup
+// loads the app facade, and the eviction service with it, before this file's
+// mock is registered, so the service keeps the real FS_MAX_BYTES.
+const config = { maxBytes: 1_000, minAge: daysInMs(7) }
 
 const now = 1_000_000_000
 const indexerURL = 'https://indexer.com'
@@ -42,7 +41,7 @@ describe('fsEvictionScanner', () => {
       size: 200,
       usedAt: now - daysInMs(1000),
     })
-    const result = await runFsEvictionScanner()
+    const result = await runFsEvictionScanner({ config })
 
     expect(await app().fs.readMeta('file-1')).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
@@ -60,7 +59,7 @@ describe('fsEvictionScanner', () => {
       size: 400,
       usedAt: now - daysInMs(1000),
     })
-    const result = await runFsEvictionScanner()
+    const result = await runFsEvictionScanner({ config })
 
     expect(await app().fs.readMeta('file-2')).toBeDefined()
     expect(await app().fs.readMeta('file-3')).toBeDefined()
@@ -76,7 +75,7 @@ describe('fsEvictionScanner', () => {
     })
     await app().files.trash(['file-t'])
 
-    const result = await runFsEvictionScanner()
+    const result = await runFsEvictionScanner({ config })
 
     expect(result).toBeDefined()
     expect(result!.evictedFileIds).toContain('file-t')
@@ -91,10 +90,10 @@ describe('fsEvictionScanner', () => {
     })
     await app().storage.setItem('fsEvictionLastRun', String(now - 1_000))
 
-    const skipped = await runFsEvictionScanner()
+    const skipped = await runFsEvictionScanner({ config })
     expect(skipped).toBeUndefined()
 
-    const forced = await runFsEvictionScanner({ force: true })
+    const forced = await runFsEvictionScanner({ force: true, config })
     expect(forced).toBeDefined()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
   })
@@ -114,7 +113,7 @@ describe('fsEvictionScanner', () => {
       })
 
     try {
-      const result = await runFsEvictionScanner()
+      const result = await runFsEvictionScanner({ config })
       expect(result).toBeDefined()
       expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(0)
     } finally {
@@ -154,7 +153,7 @@ describe('fsEvictionScanner', () => {
       size: 400,
       usedAt: now - daysInMs(1),
     })
-    const result = await runFsEvictionScanner()
+    const result = await runFsEvictionScanner({ config })
 
     expect(result).toEqual(
       expect.objectContaining({

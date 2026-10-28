@@ -1,6 +1,7 @@
 export {
   type CacheEvictionConfig,
   type CacheEvictionResult,
+  configuredCacheEviction,
   EVICT_ALL_BACKED_UP,
   runCacheEviction,
 } from './cacheEviction'

@@ -46,6 +46,70 @@ function cursorAfter(rows: EvictionRow[]): EvictionCursor {
   return { usedAt: last.usedAt, fileId: last.fileId }
 }
 
+/** The cap and minimum age the user configured, for the scheduled pass. */
+export async function configuredCacheEviction(app: AppService): Promise<CacheEvictionConfig> {
+  const [maxBytes, minAge] = await Promise.all([
+    app.settings.getCacheMaxBytes(),
+    app.settings.getCacheMinAge(),
+  ])
+  return { maxBytes: maxBytes ?? Number.POSITIVE_INFINITY, minAge }
+}
+
+/**
+ * Runs one eviction pass at a time. A call while a pass is in flight gets that
+ * pass's result, so a pass requested over the socket during the scheduled one
+ * does not start a second pass over the same rows.
+ *
+ * The pass runs on a signal of its own, which any caller's signal aborts. A
+ * caller that joined a pass someone else started still stops it, so the
+ * scheduler's shutdown stops a pass a socket request started instead of
+ * waiting for all of it. `stop` aborts the running pass, waits for it, and
+ * refuses every pass asked for after it, for a shutdown about to close the
+ * database: a removal cut off between deleting a file and deleting its `fs`
+ * row would leave a row for bytes that are gone.
+ */
+export function singleFlightEviction(
+  run: (signal: AbortSignal) => Promise<CacheEvictionResult | undefined>,
+): {
+  run(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
+  stop(): Promise<void>
+} {
+  let inFlight: {
+    done: Promise<CacheEvictionResult | undefined>
+    controller: AbortController
+  } | null = null
+  let stopped = false
+  return {
+    run: async (signal) => {
+      if (stopped) return undefined
+      if (!inFlight) {
+        const controller = new AbortController()
+        const done: Promise<CacheEvictionResult | undefined> = run(controller.signal).finally(
+          () => {
+            if (inFlight?.done === done) inFlight = null
+          },
+        )
+        inFlight = { done, controller }
+      }
+      const pass = inFlight
+      if (signal) {
+        const abort = () => pass.controller.abort()
+        if (signal.aborted) abort()
+        signal.addEventListener('abort', abort, { once: true })
+        void pass.done.finally(() => signal.removeEventListener('abort', abort)).catch(() => {})
+      }
+      return pass.done
+    },
+    stop: async () => {
+      stopped = true
+      const pass = inFlight
+      if (!pass) return
+      pass.controller.abort()
+      await pass.done.catch(() => undefined)
+    },
+  }
+}
+
 /**
  * Evicts cached files in three passes:
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.

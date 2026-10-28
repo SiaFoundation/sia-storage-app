@@ -25,7 +25,12 @@ describe('daemon shutdown', () => {
             },
           },
         },
-        internal: { events: { dispose: () => steps.push('dispose events') } },
+        internal: {
+          events: { dispose: () => steps.push('dispose events') },
+          stopEviction: async () => {
+            steps.push('stop eviction')
+          },
+        },
         db: {
           finalize: async () => {
             steps.push('finalize database')
@@ -54,6 +59,7 @@ describe('daemon shutdown', () => {
         'dispose events',
         'stop scheduler',
         'close socket',
+        'stop eviction',
         'finalize database',
         'close database',
         'release lock',
