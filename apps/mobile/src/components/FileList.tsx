@@ -1,9 +1,8 @@
-import { type FileListParams, useFileList } from '@siastorage/core/stores'
+import { type FileListParams, useFileList, useLoadMore } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback } from 'react'
 import { ActivityIndicator, FlatList, type FlatListProps } from 'react-native'
-import { useFlatListControls } from '../hooks/useFlatListControls'
 import { useHeaderContentOffset } from '../styles/layout'
 import { FileListItem } from './FileListItem'
 
@@ -25,14 +24,9 @@ export function FileList({
   contentPaddingTop,
 }: Props) {
   const headerOffset = useHeaderContentOffset()
-  const { data: files, size, setSize, isValidating, hasMore } = useFileList(filters)
-  const { isLoadingMore, handleEndReached } = useFlatListControls({
-    data: files,
-    size,
-    setSize,
-    isValidating,
-    hasMore,
-  })
+  const list = useFileList(filters)
+  const files = list.data
+  const { loadMore, isLoadingMore } = useLoadMore(list)
 
   const renderItem = useCallback(
     ({ item }: { item: FileRecord }) => {
@@ -59,7 +53,7 @@ export function FileList({
       ListHeaderComponent={ListHeaderComponent ?? undefined}
       renderItem={renderItem}
       onEndReachedThreshold={0.9}
-      onEndReached={handleEndReached}
+      onEndReached={loadMore}
       initialNumToRender={36}
       windowSize={9}
       maxToRenderPerBatch={20}

@@ -1,4 +1,4 @@
-import { type FileListParams, useFileList } from '@siastorage/core/stores'
+import { type FileListParams, useFileList, useLoadMore } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import type React from 'react'
 import { useCallback, useRef, useState } from 'react'
@@ -10,7 +10,6 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native'
-import { useFlatListControls } from '../hooks/useFlatListControls'
 import { galleryColumns } from '../lib/galleryColumns'
 import { useHeaderContentOffset } from '../styles/layout'
 import { FileGalleryItem } from './FileGalleryItem'
@@ -32,14 +31,9 @@ export function FileGallery({
   contentPaddingTop,
   ListHeaderComponent,
 }: Props) {
-  const { data: files, size, setSize, isValidating, hasMore } = useFileList(filters)
-  const { isLoadingMore, handleEndReached } = useFlatListControls({
-    data: files,
-    size,
-    setSize,
-    isValidating,
-    hasMore,
-  })
+  const list = useFileList(filters)
+  const files = list.data
+  const { loadMore, isLoadingMore } = useLoadMore(list)
 
   const headerOffset = useHeaderContentOffset()
   const { width: windowWidth } = useWindowDimensions()
@@ -144,7 +138,7 @@ export function FileGallery({
       ListHeaderComponent={ListHeaderComponent ?? undefined}
       renderItem={renderItem}
       onEndReachedThreshold={0.95}
-      onEndReached={handleEndReached}
+      onEndReached={loadMore}
       initialNumToRender={36}
       windowSize={9}
       maxToRenderPerBatch={20}

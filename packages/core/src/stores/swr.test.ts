@@ -11,11 +11,50 @@ const mockMutate = mutate as jest.MockedFunction<typeof mutate>
 
 describe('swrCacheBy', () => {
   beforeEach(() => {
-    mockMutate.mockClear()
+    mockMutate.mockReset().mockResolvedValue(undefined)
     jest.useFakeTimers()
   })
   afterEach(() => {
     jest.useRealTimers()
+  })
+
+  describe('invalidateAll', () => {
+    it('runs one refresh at a time, with one more after it for calls made during it', async () => {
+      const finishRefresh: Array<() => void> = []
+      mockMutate.mockImplementation(
+        () => new Promise<undefined>((resolve) => finishRefresh.push(() => resolve(undefined))),
+      )
+      const cache = swrCacheBy()
+
+      const first = cache.invalidateAll()
+      const second = cache.invalidateAll()
+      const third = cache.invalidateAll()
+      expect(mockMutate).toHaveBeenCalledTimes(1)
+      expect(third).toBe(second)
+
+      let secondDone = false
+      void second.then(() => {
+        secondDone = true
+      })
+      finishRefresh[0]()
+      await first
+      // The calls made during the first refresh start a second one only now,
+      // so it reads every write made before them.
+      expect(mockMutate).toHaveBeenCalledTimes(2)
+      expect(secondDone).toBe(false)
+
+      finishRefresh[1]()
+      await second
+      expect(secondDone).toBe(true)
+      expect(mockMutate).toHaveBeenCalledTimes(2)
+    })
+
+    it('starts a new refresh for a call after the last one ended', async () => {
+      const cache = swrCacheBy()
+      await cache.invalidateAll()
+      await cache.invalidateAll()
+      expect(mockMutate).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('coalesced', () => {
