@@ -32,6 +32,7 @@ import {
 } from '../../types/provider'
 import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
+import type { LocalCopyLock } from '../../services/localCopyLock'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
@@ -57,6 +58,7 @@ export type ProviderNamespaceDeps = {
   getSdk: () => SdkAdapter | null
   downloadObject: DownloadObjectAdapter
   transferBudget: TransferMemoryBudget
+  localCopyLock: LocalCopyLock
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -630,29 +632,42 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
   }
 
   /** Resolves a file's bytes into managed storage, downloading them if absent. */
-  async function ensureLocal(fileId: string): Promise<{ id: string; type: string }> {
+  /**
+   * Copies a file's local copy to `dest`, downloading it first when it is not
+   * on this device.
+   *
+   * The completeness check and the export run under the file's local-copy
+   * lock, which cache eviction skips a held file for. Without it, a pass that
+   * read this file as a candidate could remove the copy between the check and
+   * the export, and the open in Finder would fail. A copy removed before the
+   * lock is taken is downloaded again, once.
+   */
+  async function exportLocal(fileId: string, dest: string): Promise<number> {
     const service = getService()
     const file = await service.files.getById(fileId)
     if (!file) throw new Error(`No file with id ${fileId}`)
     const target = { id: file.id, type: file.type }
-    // Complete, not merely present: a download creates the file with its
-    // first chunk, so existence alone serves a concurrent caller a partial.
-    if ((await fsIO.size(file.id, file.type)).value === file.size) {
-      // Through the service, which is what records the read against the
-      // cache's eviction clock. A size check alone leaves a file opened
-      // from Finder every day looking untouched.
-      await service.fs.getFileUri(target)
-      return target
+    for (let attempt = 0; attempt < 2; attempt++) {
+      // Complete, not merely present: a download creates the file with its
+      // first chunk, so existence alone serves a concurrent caller a partial.
+      if ((await fsIO.size(file.id, file.type)).value !== file.size) {
+        // At user priority. The background queue keeps only the newest
+        // MAX_BACKGROUND_DOWNLOADS_QUEUED waiters and drops older ones, so Finder
+        // opening a folder of files at once would lose its earliest opens.
+        await service.downloads.downloadFile(fileId, 'user')
+      }
+      const bytes = await deps.localCopyLock.run(fileId, async () => {
+        if ((await fsIO.size(file.id, file.type)).value !== file.size) return null
+        // Through the service, which is what records the read against the
+        // cache's eviction clock. A size check alone leaves a file opened
+        // from Finder every day looking untouched.
+        await service.fs.getFileUri(target)
+        return requireExport()(target, dest)
+      })
+      if (bytes !== null) return bytes
     }
-    // At user priority. The background queue keeps only the newest
-    // MAX_BACKGROUND_DOWNLOADS_QUEUED waiters and drops older ones, so Finder
-    // opening a folder of files at once would lose its earliest opens.
-    await service.downloads.downloadFile(fileId, 'user')
     const local = (await fsIO.size(file.id, file.type)).value
-    if (local !== file.size) {
-      throw new Error(`Local copy is ${local ?? 0} of ${file.size} bytes for ${fileId}`)
-    }
-    return target
+    throw new Error(`Local copy is ${local ?? 0} of ${file.size} bytes for ${fileId}`)
   }
 
   /** Reads one item. Hoisted because other verbs read back through it. */
@@ -798,11 +813,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async fetch(id, destPath) {
       const dest = requireHandoffPath(destPath)
-      const target = await ensureLocal((await currentRow(id)).id)
-      const bytes = await requireExport()(target, dest)
+      const fileId = (await currentRow(id)).id
+      const bytes = await exportLocal(fileId, dest)
       // A download can take minutes, and a newer version synced in meanwhile
       // would otherwise label these bytes, so the OS would keep them as it.
-      const fetched = await versionItem(target.id)
+      const fetched = await versionItem(fileId)
       if (!fetched) throw new Error(`No file with id ${id}`)
       return { bytes, item: fetched }
     },

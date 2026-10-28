@@ -295,6 +295,33 @@ describe('Downloads', () => {
     await holding
   })
 
+  it('a removal that skips held files leaves a file alone while it downloads', async () => {
+    const { file, stored } = await setupDownloadableFile(app, { startId: 3 })
+    let unblock!: () => void
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve
+    })
+    let transferring = false
+    const download = app.sdk.downloadByObjectId.bind(app.sdk)
+    jest.spyOn(app.sdk, 'downloadByObjectId').mockImplementation(async (objectId) => {
+      if (objectId === stored.id) {
+        transferring = true
+        await blocked
+      }
+      return download(objectId)
+    })
+    const downloading = app.app.downloads.downloadFile(file.id, 'user')
+    await waitForCondition(() => transferring, { message: 'the download to start its transfer' })
+
+    const removed = await app.app.fs.removeFile(file, { skipIfLocked: true })
+    unblock()
+    await downloading
+
+    expect(removed).toBe(false)
+    expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
+    expect(await app.app.fs.sizeOnDisk(file)).toBe(file.size)
+  })
+
   it('an upgraded install keeps a download count it chose, other than the old default', async () => {
     await app.app.storage.setItem('maxDownloads', '4')
 
@@ -430,14 +457,43 @@ describe('Download priority', () => {
     await waitForCondition(() => gates.length === 1)
     app.app.downloads.cancel(file.id)
     const second = app.app.downloads.downloadFile(file.id, 'user')
-    await waitForCondition(() => gates.length === 2)
+    await waitForCondition(() => app.app.downloads.getEntry(file.id)?.status === 'downloading')
 
+    // Both transfers write the same file, so the new download holds a slot but
+    // starts its transfer only once the cancelled one has stopped writing.
+    expect(gates).toHaveLength(1)
     gates[0]()
     await first
     expect(app.app.downloads.downloadFile(file.id, 'user')).toBe(second)
+    await waitForCondition(() => gates.length === 2)
 
     gates[1]()
     await second
+    expect(await app.app.fs.sizeOnDisk(file)).toBe(file.size)
+  })
+
+  it('a download cancelled while it waits for a cancelled one to stop never starts its transfer', async () => {
+    const { file, stored } = await setupDownloadableFile(app)
+    const gates: Array<() => void> = []
+    const download = app.sdk.downloadByObjectId.bind(app.sdk)
+    jest.spyOn(app.sdk, 'downloadByObjectId').mockImplementation(async (objectId) => {
+      if (objectId === stored.id) await new Promise<void>((resolve) => gates.push(resolve))
+      return download(objectId)
+    })
+
+    const first = app.app.downloads.downloadFile(file.id, 'user')
+    await waitForCondition(() => gates.length === 1)
+    app.app.downloads.cancel(file.id)
+    const second = app.app.downloads.downloadFile(file.id, 'user')
+    await waitForCondition(() => app.app.downloads.getEntry(file.id)?.status === 'downloading')
+    app.app.downloads.cancel(file.id)
+
+    gates[0]()
+    await Promise.allSettled([first, second])
+    // Long enough for a transfer the second download wrongly started to ask
+    // the SDK for its object.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(gates).toHaveLength(1)
   })
 })
 

@@ -57,7 +57,7 @@ describe('fsOrphanScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     listFilesSpy = jest.spyOn(app().fs, 'listFiles').mockResolvedValue([])
-    removeFileSpy = jest.spyOn(app().fs, 'removeFile').mockResolvedValue(undefined)
+    removeFileSpy = jest.spyOn(app().fs, 'removeFile').mockResolvedValue(true)
     removeByPathSpy = jest.spyOn(app().fs, 'removeFileByPath').mockResolvedValue(undefined)
     await initializeDB()
     await app().storage.setItem('fsOrphanLastRun', '0')

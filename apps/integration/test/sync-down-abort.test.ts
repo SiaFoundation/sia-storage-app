@@ -68,6 +68,7 @@ describe('Sync-down interrupted by suspension', () => {
     // delete is already in the database when sync-down stops.
     jest.spyOn(app.app.fs, 'removeFile').mockImplementationOnce(async () => {
       await app.suspend()
+      return true
     })
     const refreshed = jest.spyOn(app.app.caches.library, 'invalidateAll')
     app.sdk.injectDeleteEvent(stored.id)

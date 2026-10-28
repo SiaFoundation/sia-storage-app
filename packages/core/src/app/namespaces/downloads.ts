@@ -20,6 +20,7 @@ import {
 import { SlotPool } from '../../lib/slotPool'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
+import type { LocalCopyLock } from '../../services/localCopyLock'
 import type { AppCaches, AppService } from '../service'
 import type { DownloadPriority, DownloadsState } from '../stores'
 
@@ -79,6 +80,7 @@ export function buildDownloadsNamespace(
   caches: AppCaches,
   getSdk: () => SdkAdapter | null,
   budget: TransferMemoryBudget,
+  localCopyLock: LocalCopyLock,
 ): AppService['downloads'] {
   let state: DownloadsState = { downloads: {} }
   const controllers = new Map<string, AbortController>()
@@ -247,23 +249,32 @@ export function buildDownloadsNamespace(
       // Taken once the slot is held, right before the stream opens, so it
       // counts every transfer that started while this one waited.
       reservation = budget.reserveDownload({ user: priority === 'user' })
-      await downloadObject.download({
-        file: { id: fileId, type: file.type, size: file.size },
-        object: objects[0],
-        sdk,
-        onProgress: (progress) => update(fileId, { progress: Math.min(1, progress) }),
-        signal: controller.signal,
-        maxBufferedChunks: reservation.chunks,
+      const chunksAllowed = reservation.chunks
+      // Held from the first byte to the fs row, so cache eviction skips this
+      // file rather than unlinking bytes mid-write or leaving a row with none.
+      // Taken after the slot, so a download waiting its turn does not hold it.
+      const completed = await localCopyLock.run(fileId, async () => {
+        // Cancelled while it waited for the lock. The adapter opens the file
+        // for writing before it reads the signal, which would truncate it.
+        if (controller.signal.aborted) return false
+        await downloadObject.download({
+          file: { id: fileId, type: file.type, size: file.size },
+          object: objects[0],
+          sdk,
+          onProgress: (progress) => update(fileId, { progress: Math.min(1, progress) }),
+          signal: controller.signal,
+          maxBufferedChunks: chunksAllowed,
+        })
+        if (controller.signal.aborted) return false
+        await ops.upsertFsMeta(db, {
+          fileId,
+          size: file.size,
+          addedAt: Date.now(),
+          usedAt: Date.now(),
+        })
+        return true
       })
-
-      if (controller.signal.aborted) return
-
-      await ops.upsertFsMeta(db, {
-        fileId,
-        size: file.size,
-        addedAt: Date.now(),
-        usedAt: Date.now(),
-      })
+      if (!completed) return
       update(fileId, { status: 'done', progress: 1 })
     } catch (e) {
       if (isAbortError(e)) {

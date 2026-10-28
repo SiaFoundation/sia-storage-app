@@ -12,6 +12,7 @@ function fakeApp(opts: {
   objects: Record<string, string[]>
   indexer: () => string
   failing?: Set<string>
+  locked?: Set<string>
 }) {
   const removed: string[] = []
   const attempts: string[] = []
@@ -43,10 +44,12 @@ function fakeApp(opts: {
           .sort((a, b) => a.usedAt - b.usedAt || a.fileId.localeCompare(b.fileId))
           .slice(0, limit)
       },
-      removeFile: async (file: { id: string }) => {
+      removeFile: async (file: { id: string }, removeOpts?: { skipIfLocked?: boolean }) => {
         attempts.push(file.id)
         if (opts.failing?.has(file.id)) throw new Error('cannot delete')
+        if (removeOpts?.skipIfLocked && opts.locked?.has(file.id)) return false
         removed.push(file.id)
+        return true
       },
     },
     settings: { getIndexerURL: async () => opts.indexer() },
@@ -87,15 +90,32 @@ describe('runCacheEviction', () => {
       indexer: () => indexer,
     })
     const removeFile = app.fs.removeFile
-    app.fs.removeFile = async (file) => {
-      await removeFile(file)
+    app.fs.removeFile = async (file, removeOpts) => {
+      const removedNow = await removeFile(file, removeOpts)
       // The user switches indexer while the first batch is being removed.
       indexer = 'https://new.example.com'
+      return removedNow
     }
 
     await runCacheEviction(app, { maxBytes: 0, minAge: 0 })
 
     expect(removed).toEqual(['f000', 'f002'])
+  })
+
+  it('skips a file being downloaded or exported, and does not count it as freed', async () => {
+    const list = rows('f', 3, 1000)
+    const { app, removed } = fakeApp({
+      rows: list,
+      objects: onIndexer(list),
+      indexer: () => INDEXER,
+      locked: new Set(['f000']),
+    })
+
+    const result = await runCacheEviction(app, { maxBytes: 0, minAge: 0 })
+
+    expect(removed).toEqual(['f001', 'f002'])
+    expect(result?.evicted).toBe(2)
+    expect(result?.currentSize).toBe(10)
   })
 
   it('tries each candidate once per pass when every removal fails', async () => {

@@ -5,6 +5,7 @@ import * as ops from '../../db/operations'
 import { toContentHash } from '../../lib/contentHash'
 import { normalizeName, withNormalizedName } from '../../lib/names'
 import type { AdoptFileHashed, AdoptFilePlain, FsIOAdapter } from '../../services/fsFileUri'
+import type { LocalCopyLock } from '../../services/localCopyLock'
 import { getFsFileUri } from '../../services/fsFileUri'
 import type { FileMetadata } from '../../types/files'
 import { IMPORTS_CACHE_COALESCE_MS, TRASH_AUTO_PURGE_AGE } from '../../config'
@@ -43,6 +44,7 @@ export function buildDbNamespaces(
     crypto?: CryptoAdapter
     thumbnail?: ThumbnailAdapter
     detectMimeType?: (path: string, name?: string) => Promise<string | null>
+    localCopyLock?: LocalCopyLock
   },
 ): DatabaseNamespaces {
   // Runs after any copy's bytes land: records the cache row, then corrects
@@ -67,12 +69,24 @@ export function buildDbNamespaces(
     })
   }
 
-  async function removeFile(file: { id: string; type: string }) {
+  async function removeNow(file: { id: string; type: string }) {
     await fsIO.remove(file.id, file.type)
     await ops.deleteFsMeta(db, file.id)
     // Callers read on-device state from here, not from the fsMeta row, so a
     // stale entry hands out the path of a file that no longer exists.
     await caches.fsFileUri.set(null, file.id)
+  }
+
+  async function removeFile(
+    file: { id: string; type: string },
+    opts?: { skipIfLocked?: boolean },
+  ): Promise<boolean> {
+    const lock = adapters?.localCopyLock
+    if (!opts?.skipIfLocked || !lock) {
+      await removeNow(file)
+      return true
+    }
+    return (await lock.tryRun(file.id, () => removeNow(file))).ran
   }
 
   // Finds the stack a file belongs to and acts on it in one transaction, so a
