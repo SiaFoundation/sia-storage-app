@@ -7,9 +7,9 @@
  * that is Squirrel, which downloads the zip, rejects a bundle not signed to
  * this one's designated requirement, and stages it. Once it is staged the
  * tray and overflow menus, a card in the popover and the window, and a
- * notification say so, and Restart to Update quits, lets Squirrel swap the
- * bundle, and relaunches. A staged update the user never restarts for is
- * applied the next time the app starts.
+ * notification say so, and Restart to Update closes the windows, quits, lets
+ * Squirrel swap the bundle, and relaunches. A staged update the user never
+ * restarts for is applied the next time the app starts.
  *
  * Squirrel makes no version decision of its own. Its feed is a URL answering
  * 204 for no update or JSON naming a zip, and GitHub serves nothing of that
@@ -35,7 +35,7 @@ import { log } from './log'
 import { buildVariant } from './paths'
 import { type AvailableUpdate, type FeedRelease, pickUpdate } from './updateFeed'
 import { parseVersion } from './versions'
-import { beginQuit, cancelQuit } from './windows'
+import { beginQuit, cancelQuit, destroyAllWindows } from './windows'
 
 const FEED = 'https://api.github.com/repos/SiaFoundation/sia-storage-app/releases'
 /** Clear of startup, which spends its first seconds attaching the daemon and the mount. */
@@ -55,6 +55,13 @@ const MAX_PAGES = 3
  * until the app restarted.
  */
 const CHECK_TIMEOUT_MS = 60_000
+/**
+ * From Restart to the quit Squirrel asks for. Destroying the windows and
+ * writing Squirrel's one request file take well under a second, so an install
+ * still waiting after this has stalled. Without the bound a stall leaves
+ * Restart doing nothing until the app is quit by hand.
+ */
+const INSTALL_TIMEOUT_MS = 15_000
 
 export type UpdateState =
   | { status: 'idle' }
@@ -70,6 +77,7 @@ let state: UpdateState = { status: 'idle' }
 let settled: UpdateState = { status: 'idle' }
 let feedServer: Server | null = null
 let installing = false
+let installTimer: ReturnType<typeof setTimeout> | undefined
 /** Set while a check the user asked for downloads, so a failure is reported. */
 let reportDownloadFailure = false
 let announced: string | null = null
@@ -112,18 +120,12 @@ export function startUpdates(config: DesktopConfig, onChange: (state: UpdateStat
       void report('Could not download the update', 'Check the connection and try again.')
     }
     reportDownloadFailure = false
-    if (installing) {
-      // The quit Squirrel was to finish never came, and the windows it closed
-      // are rebuilt on the next click, so the app goes on as it was.
-      installing = false
-      cancelQuit()
-      void report(
-        `${appName} could not install the update`,
-        'Try again later. If the app is not in the Applications folder, move it there first.',
-      )
-    }
+    if (installing) abandonInstall()
     set(settled)
   })
+  // Squirrel asks the app to quit only after writing the request to install
+  // and relaunch, so from here the quit decides when the process exits.
+  app.on('before-quit', () => clearTimeout(installTimer))
 
   setTimeout(() => void checkForUpdates(false), FIRST_CHECK_MS)
   setInterval(() => void checkForUpdates(false), CHECK_EVERY_MS)
@@ -189,17 +191,50 @@ export async function checkForUpdates(manual: boolean): Promise<void> {
   }
 }
 
-/** Quits and lets Squirrel swap the bundle and relaunch. Nothing to do until one is staged. */
+/**
+ * Quits and lets Squirrel swap the bundle and relaunch. Nothing to do until one
+ * is staged.
+ *
+ * quitAndInstall hands the app to Squirrel only once Electron's window list is
+ * empty. Given open windows it closes them and waits for the list to empty,
+ * and a window opened during that wait keeps it from ever emptying, with no
+ * error. Clicking the update notification does exactly that: macOS also
+ * activates the app, and activating opens the main window. So the windows are
+ * destroyed here first, `beginQuit` stops any from opening, and quitAndInstall
+ * is called on an empty list, where it goes straight to Squirrel. `destroy`
+ * also skips the main window's close handler, which would hide the window
+ * rather than close it.
+ *
+ * The app's quit handler then hides the Finder folder and stops a daemon this
+ * app owns before the process exits.
+ */
 export function installUpdate(): void {
   if (state.status !== 'ready' || installing) return
-  log.info('updates', 'installing', { version: state.version })
+  const { version } = state
+  log.info('updates', 'installing', { version })
   installing = true
-  // quitAndInstall closes every window before it quits, and until a quit has
-  // begun the main window's close handler hides it instead, which would hold
-  // the install forever. The app's quit handler then hides the Finder folder
-  // and stops a daemon this app owns before the process exits.
   beginQuit()
-  autoUpdater.quitAndInstall()
+  installTimer = setTimeout(() => {
+    log.error('updates', 'install_stalled', { version })
+    abandonInstall()
+  }, INSTALL_TIMEOUT_MS)
+  void destroyAllWindows().then(() => {
+    if (installing) autoUpdater.quitAndInstall()
+  })
+}
+
+/**
+ * Puts the app back as it was before Restart, so Restart can be tried again.
+ * The windows destroyed for the install are built again on the next click.
+ */
+function abandonInstall(): void {
+  clearTimeout(installTimer)
+  installing = false
+  cancelQuit()
+  void report(
+    `${appName} could not install the update`,
+    'Try again later. If the app is not in the Applications folder, move it there first.',
+  )
 }
 
 /** The tray and overflow menus' update item, or nothing for a build that never updates. */

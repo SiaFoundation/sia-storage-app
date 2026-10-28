@@ -9,7 +9,7 @@
  * attaches to the daemon, brings the OS mount up, and relays calls.
  */
 
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, dialog } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
@@ -25,7 +25,7 @@ import { DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
 import { createTray, destroyTray } from './tray'
 import { startUpdates } from './updates'
-import { beginQuit, broadcast, createMainWindow, showMainWindow } from './windows'
+import { beginQuit, broadcast, showMainWindow } from './windows'
 
 /**
  * The daemon runtime and script sit beside the app directory the packaging
@@ -81,14 +81,9 @@ if (!app.requestSingleInstanceLock()) {
   // throws, so each waits rather than assuming the app is already up.
   app.on('second-instance', () => void app.whenReady().then(() => showMainWindow()))
 
-  app.on(
-    'activate',
-    () =>
-      void app.whenReady().then(() => {
-        if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
-        else showMainWindow()
-      }),
-  )
+  // Clicking one of the app's notifications sends this too, so it arrives
+  // right after the update notification's click has begun an install.
+  app.on('activate', () => void app.whenReady().then(() => showMainWindow()))
 
   // The tray is the app's home, so an empty window list is the resting state.
   // Present and empty on purpose: the default behaviour would quit.
