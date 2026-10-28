@@ -71,6 +71,10 @@ async function runShutdown(ctx: ShutdownContext): Promise<void> {
   ctx.app.internal.events.dispose()
   await ctx.scheduler.shutdown()
   ctx.ipcServer.close()
+  // A pass a socket request started is not one of the scheduler's. A
+  // connection still open can ask for another after the socket closes, so
+  // the stop also refuses those.
+  await ctx.app.internal.stopEviction()
   ctx.providerServer?.close()
   await ctx.app.db.finalize?.()
   ctx.app.db.close?.()

@@ -292,6 +292,18 @@ function run(argv) {
   })
 }`
 
+/**
+ * The environment `open` launches the app with. `open` hands the app the
+ * caller's environment, and a shell inside an Electron app, such as an
+ * editor's or an agent app's terminal, carries ELECTRON_RUN_AS_NODE=1. With it
+ * the app starts as plain Node and exits at once, with no window and no
+ * daemon, and the device times out waiting for its socket.
+ */
+function openEnv(): Record<string, string | undefined> {
+  const { ELECTRON_RUN_AS_NODE: _, ...env } = process.env
+  return env
+}
+
 /** SF_DATALESS in `stat -f %f`: the file is a placeholder whose bytes are still in the cloud. */
 const SF_DATALESS = 0x40000000
 
@@ -340,7 +352,7 @@ export class DesktopDevice extends CliDevice {
     })
     const env = { ...this.launchEnv(), SIA_SIM_DEBUG_PORT: String(debugPort) }
     const flags = Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`])
-    const opened = Bun.spawnSync(['open', ...flags, this.identity.appPath])
+    const opened = Bun.spawnSync(['open', ...flags, this.identity.appPath], { env: openEnv() })
     if (opened.exitCode !== 0) {
       throw new Error(`open ${this.identity.appName} failed: ${opened.stderr.toString().trim()}`)
     }
@@ -440,7 +452,7 @@ export class DesktopDevice extends CliDevice {
    * window until asked, only its menu bar icon.
    */
   async openWindow(): Promise<void> {
-    const opened = Bun.spawnSync(['open', this.identity.appPath])
+    const opened = Bun.spawnSync(['open', this.identity.appPath], { env: openEnv() })
     if (opened.exitCode !== 0) {
       throw new Error(`open ${this.identity.appName} failed: ${opened.stderr.toString().trim()}`)
     }
@@ -524,7 +536,7 @@ export class DesktopDevice extends CliDevice {
 
   /** Brings the app's windows forward and opens its Finder folder in a Finder window. */
   async show(): Promise<string> {
-    Bun.spawnSync(['open', this.identity.appPath])
+    Bun.spawnSync(['open', this.identity.appPath], { env: openEnv() })
     Bun.spawnSync(['open', this.finderPath()])
     return `${this.identity.appName} is in front, and its Finder folder is open in Finder.`
   }

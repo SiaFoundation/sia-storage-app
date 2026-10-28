@@ -9,7 +9,9 @@ import {
   awaitingFolderPass,
   connectionLabel,
   formatBitrate,
+  formatBytes,
   indexerLabel,
+  localCacheLabel,
   indicator,
   metadataLabel,
   mountLabel,
@@ -584,5 +586,24 @@ describe('the indexer the tray names', () => {
   // empty. Echoing the input on an empty host would put the password on screen.
   it('names a URL that parses to no host instead of echoing it', () => {
     expect(indexerLabel(status({ indexerUrl: 'user:pw@nowhere' }))).toBe('Custom indexer')
+  })
+})
+
+describe('localCacheLabel', () => {
+  it('shows what the cache holds against its limit', () => {
+    expect(localCacheLabel({ bytes: 1_200_000_000, maxBytes: 4_000_000_000 })).toBe(
+      `${formatBytes(1_200_000_000)} of ${formatBytes(4_000_000_000)}`,
+    )
+  })
+
+  it('says when there is no limit', () => {
+    expect(localCacheLabel({ bytes: 1_200_000_000, maxBytes: null })).toBe(
+      `${formatBytes(1_200_000_000)}, no limit`,
+    )
+  })
+
+  it('shows a dash until both values have loaded', () => {
+    expect(localCacheLabel({ bytes: null, maxBytes: 4_000_000_000 })).toBe('-')
+    expect(localCacheLabel({ bytes: 10, maxBytes: undefined })).toBe('-')
   })
 })

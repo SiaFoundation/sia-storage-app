@@ -29,6 +29,7 @@ import {
   formatBitrate,
   indexerLabel,
   librarySizeLabel,
+  localCacheLabel,
   metadataLabel,
   mountLabel,
   uploadsRow,
@@ -36,7 +37,7 @@ import {
 import { StatusLine } from './StatusLine'
 import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
-import { useStatus } from './useStatus'
+import { useLocalCache, useStatus } from './useStatus'
 
 export function Details({
   onShowLinks,
@@ -46,6 +47,7 @@ export function Details({
   onShowTrash: () => void
 }) {
   const status = useStatus()
+  const localCache = useLocalCache()
   const links = useShareLinks({ revalidateOnFocus: false })
   const trash = useTrashCount()
   const info = useAppInfo()
@@ -96,6 +98,12 @@ export function Details({
           <Row icon={<DocOnDoc />} label="Files" id="files" value={fileCountLabel(status)} />
           <Row icon={<Folder />} label="Folders" id="folders" value={folderCountLabel(status)} />
           <Row icon={<InternalDrive />} label="Size" id="size" value={librarySizeLabel(status)} />
+          <Row
+            icon={<InternalDrive />}
+            label="On this Mac"
+            id="on-this-mac"
+            value={localCacheLabel(localCache)}
+          />
           <button
             type="button"
             className={`${ROW} w-full cursor-default border-none bg-transparent text-left text-label [font-family:inherit] enabled:hover:bg-divider`}

@@ -125,6 +125,15 @@ export const folderCountLabel = (s: Status): string => s.folderCount.toLocaleStr
 export const librarySizeLabel = (s: Status): string =>
   s.libraryBytes > 0 ? formatBytes(s.libraryBytes) : '-'
 
+/** What the local cache holds against its limit. Null fields are still loading. */
+export type LocalCache = { bytes: number | null; maxBytes: number | null | undefined }
+
+export function localCacheLabel(cache: LocalCache): string {
+  if (cache.bytes === null || cache.maxBytes === undefined) return '-'
+  const held = formatBytes(cache.bytes)
+  return cache.maxBytes === null ? `${held}, no limit` : `${held} of ${formatBytes(cache.maxBytes)}`
+}
+
 // Host only, and never an echo when that fails: a custom indexer URL can carry
 // credentials and a path, and echoing is what would show them.
 function indexerHost(s: Status): string | null {

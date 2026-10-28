@@ -1,7 +1,15 @@
 import type { StorageAdapter } from '../../adapters/storage'
-import { DEFAULT_INDEXER_URL, DEFAULT_MAX_DOWNLOADS, MAX_DOWNLOADS_SETTING } from '../../config'
+import {
+  DEFAULT_INDEXER_URL,
+  DEFAULT_MAX_DOWNLOADS,
+  FS_EVICTABLE_MIN_AGE,
+  FS_MAX_BYTES,
+  MAX_DOWNLOADS_SETTING,
+} from '../../config'
 import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
+
+const CACHE_NO_LIMIT = 'off'
 
 /**
  * Builds the settings namespace: typed getters/setters backed by key-value storage.
@@ -79,6 +87,28 @@ export function buildSettingsNamespace(
       const clamped = Math.max(1, Math.floor(Number(v) || 1))
       await storage.setItem(MAX_DOWNLOADS_SETTING, String(clamped))
       caches.settings.invalidate(MAX_DOWNLOADS_SETTING)
+    },
+    // getNum falls back to its default for any non-number, so "no cap" has a
+    // stored form of its own rather than Infinity, which would read back as 4 GB.
+    getCacheMaxBytes: async () => {
+      const raw = await storage.getItem('cacheMaxBytes')
+      if (raw === CACHE_NO_LIMIT) return null
+      const n = raw ? Number(raw) : FS_MAX_BYTES
+      return Number.isFinite(n) ? n : FS_MAX_BYTES
+    },
+    setCacheMaxBytes: async (v) => {
+      if (v !== null && (!Number.isFinite(v) || v < 0)) {
+        throw new Error(`Cache limit must be a byte count of 0 or more, got ${v}`)
+      }
+      await storage.setItem('cacheMaxBytes', v === null ? CACHE_NO_LIMIT : String(Math.floor(v)))
+      caches.settings.invalidate('cacheMaxBytes')
+    },
+    getCacheMinAge: () => getNum('cacheMinAge', FS_EVICTABLE_MIN_AGE),
+    setCacheMinAge: async (v) => {
+      if (!Number.isFinite(v) || v < 0) {
+        throw new Error(`Cache minimum age must be milliseconds of 0 or more, got ${v}`)
+      }
+      await setNum('cacheMinAge', Math.floor(v))
     },
     getLogLevel: () => getStr('logLevel', 'debug'),
     setLogLevel: (v) => setStr('logLevel', v),
