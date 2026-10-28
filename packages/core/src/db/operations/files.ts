@@ -457,14 +457,7 @@ function buildFileRecordsQuery(
 
   const params: (string | number)[] = []
 
-  const whereClauses: string[] = [
-    buildRecordFilter(tableAlias, {
-      includeThumbnails,
-      includeOldVersions,
-      includeTrashed,
-      includeDeleted,
-    }),
-  ]
+  const whereClauses: string[] = []
 
   if (after) {
     if (order === 'ASC') {
@@ -503,7 +496,21 @@ function buildFileRecordsQuery(
     params.push(...excludeIds)
   }
 
-  const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
+  // Last, because SQLite checks these subquery terms in the order written,
+  // and with thumbnails included and old versions excluded this one looks up
+  // each thumbnail's original. The upload poll and the waiting-to-upload
+  // counts scan every row, and the object and local-copy checks above are
+  // single index lookups that rule out most rows first.
+  whereClauses.push(
+    buildRecordFilter(tableAlias, {
+      includeThumbnails,
+      includeOldVersions,
+      includeTrashed,
+      includeDeleted,
+    }),
+  )
+
+  const where = `WHERE ${whereClauses.join(' AND ')}`
 
   const orderExpr = `${tableAlias}.${sortColumn} ${order}, ${tableAlias}.id ${order}`
   const limitExpr = limit !== undefined && Number.isFinite(limit) ? ` LIMIT ${limit | 0}` : ''

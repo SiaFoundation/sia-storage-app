@@ -2,10 +2,12 @@ import { insertFile } from './files'
 import {
   buildLibraryQueryParts,
   buildRecordFilter,
+  type Category,
   queryDirectoryFileCount,
   queryFileCountWithFilters,
   queryFilePositionInSortedList,
   queryLibraryFileCount,
+  queryLibraryFiles,
   queryMediaFileCount,
   querySortedFileIds,
   queryTagFileCount,
@@ -654,6 +656,75 @@ describe('querySortedFileIds', () => {
 
     const ids = await querySortedFileIds(db(), { sortBy: 'NAME', sortDir: 'DESC' }, 5, 0)
     expect(ids).toEqual(['f20', 'f10', 'f3', 'f2', 'f1'])
+  })
+})
+
+describe('query plans over the whole library', () => {
+  // The SQL and parameters of the last read `run` makes, run under EXPLAIN
+  // QUERY PLAN. A plan with a temp B-tree sorts every visible file to return
+  // one page.
+  async function planOf(run: () => Promise<unknown>) {
+    const adapter = db()
+    const all = jest.spyOn(adapter, 'getAllAsync')
+    const first = jest.spyOn(adapter, 'getFirstAsync')
+    await run()
+    const calls = [...all.mock.calls, ...first.mock.calls]
+    const order = [...all.mock.invocationCallOrder, ...first.mock.invocationCallOrder]
+    const [sql, ...params] = calls[order.indexOf(Math.max(...order))] as [string, ...unknown[]]
+    all.mockRestore()
+    first.mockRestore()
+    const rows = await adapter.getAllAsync<{ detail: string }>(
+      `EXPLAIN QUERY PLAN ${sql}`,
+      ...(params as string[]),
+    )
+    return rows.map((r) => r.detail).join(' | ')
+  }
+
+  const sorts = [
+    ['DATE', 'idx_files_current_createdAt'],
+    ['ADDED', 'idx_files_current_addedAt'],
+    ['SIZE', 'idx_files_current_size'],
+    ['NAME', 'idx_files_current_nameSortKey'],
+  ] as const
+
+  test.each(sorts)('%s pages and viewer reads walk %s in order', async (sortBy, index) => {
+    await createTestFile('file-a', { name: 'a.jpg', createdAt: 1000, size: 10 })
+    await createTestFile('file-b', { name: 'b.jpg', createdAt: 2000, size: 20 })
+    for (const sortDir of ['ASC', 'DESC'] as const) {
+      const opts = { sortBy, sortDir, categories: ['Image', 'Video'] as Category[] }
+      const reads = [
+        () => queryLibraryFiles(db(), { ...opts, limit: 40, offset: 0 }),
+        () => querySortedFileIds(db(), opts, 201, 0),
+        () => queryFilePositionInSortedList(db(), 'file-b', opts),
+      ]
+      for (const read of reads) {
+        const plan = await planOf(read)
+        expect(plan).toContain(index)
+        expect(plan).not.toContain('TEMP B-TREE')
+      }
+    }
+  })
+
+  test('counts read the visible-files type index', async () => {
+    await createTestFile('file-a')
+    for (const read of [
+      () => queryLibraryFileCount(db()),
+      () => queryMediaFileCount(db()),
+      () => queryFileCountWithFilters(db(), { categories: ['Video'] }),
+    ]) {
+      expect(await planOf(read)).toContain('idx_files_current_type')
+    }
+  })
+
+  test('a folder view leaves the index to SQLite', async () => {
+    await db().runAsync(
+      "INSERT INTO directories (id, path, createdAt, nameSortKey) VALUES ('dir1', 'Folder', 1000, 'folder')",
+    )
+    await createTestFile('file-a', { directoryId: 'dir1' })
+    const plan = await planOf(() =>
+      queryLibraryFiles(db(), { sortBy: 'DATE', directoryId: 'dir1', limit: 40, offset: 0 }),
+    )
+    expect(plan).toContain('directoryId')
   })
 })
 
