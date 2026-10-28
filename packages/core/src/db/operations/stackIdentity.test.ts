@@ -77,11 +77,11 @@ async function ledger(): Promise<{ id: string; parentId: string; reason: string 
   return db().getAllAsync('SELECT id, parentId, reason FROM feed_departures ORDER BY feedSeq')
 }
 
-function object(fileId: string, id: string) {
+function object(fileId: string, id: string, indexerURL = 'https://idx.example.com') {
   const empty = new ArrayBuffer(2)
   return {
     fileId,
-    indexerURL: 'https://idx.example.com',
+    indexerURL,
     id,
     slabs: [],
     encryptedDataKey: empty,
@@ -201,6 +201,29 @@ describe('the upload-state triggers', () => {
     await deleteObject(db(), 'o1', 'https://idx.example.com')
     expect(await feedSeqOf('a')).toBe(both)
     await deleteObject(db(), 'o2', 'https://idx.example.com')
+    expect(await feedSeqOf('a')).toBeGreaterThan(both)
+  })
+
+  it('re-stamp a file on its first object on each indexer', async () => {
+    await file('a')
+    await insertObject(db(), object('a', 'o1', 'https://old.example.com'))
+    const onOld = await feedSeqOf('a')
+
+    await insertObject(db(), object('a', 'o2', 'https://new.example.com'))
+    const onNew = await feedSeqOf('a')
+    await insertObject(db(), object('a', 'o3', 'https://new.example.com'))
+
+    expect(onNew).toBeGreaterThan(onOld)
+    expect(await feedSeqOf('a')).toBe(onNew)
+  })
+
+  it('re-stamp a file when its last object on one indexer goes, though another holds one', async () => {
+    await file('a')
+    await insertObject(db(), object('a', 'o1', 'https://old.example.com'))
+    await insertObject(db(), object('a', 'o2', 'https://new.example.com'))
+    const both = await feedSeqOf('a')
+
+    await deleteObject(db(), 'o2', 'https://new.example.com')
     expect(await feedSeqOf('a')).toBeGreaterThan(both)
   })
 })

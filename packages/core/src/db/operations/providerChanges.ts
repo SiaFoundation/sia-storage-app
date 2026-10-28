@@ -20,6 +20,7 @@
  */
 import type { DatabaseAdapter } from '../../adapters/db'
 import type { FileRecordRow } from '../../types/files'
+import * as sql from '../sql'
 import { buildRecordFilter, UNFILED_DIRECTORY_ID } from './library'
 
 /** Where a reader stopped. `id` breaks the tie between rows sharing a sequence. */
@@ -323,6 +324,21 @@ export async function queryFeedMeta(
   )
   if (!row) throw new Error('feed_meta is missing; migrations have not run')
   return row
+}
+
+/**
+ * Stamps every file row with one new sequence, so the next working-set read
+ * re-reports all of them. Used when the meaning of a reported field changes for
+ * every file at once, as `uploaded` does when the current indexer changes. Rows
+ * sharing one sequence page correctly because the feed pages on (feedSeq, id).
+ */
+export async function restampAllFiles(db: DatabaseAdapter): Promise<void> {
+  await sql.transaction(db, async (tx) => {
+    await tx.runAsync('UPDATE feed_meta SET seq = seq + 1 WHERE id = 1')
+    await tx.runAsync(
+      `UPDATE files SET feedSeq = (SELECT seq FROM feed_meta WHERE id = 1) WHERE kind = 'file'`,
+    )
+  })
 }
 
 /**

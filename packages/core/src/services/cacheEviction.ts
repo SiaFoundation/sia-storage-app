@@ -39,7 +39,9 @@ export type CacheEvictionResult = {
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.
  *   2. Non-current pre-pass: superseded versions past `minAgeNonCurrent`.
  *   3. LRU loop: oldest uploaded files past `minAge`, only while over `maxBytes`.
- * Local-only files (no indexer object) are never evicted.
+ * A current or trashed file is evicted only while it has an object on the
+ * current indexer, read per batch and again before each removal. A superseded
+ * version needs an object on any indexer, since the uploader never sends one.
  *
  * Suspension signal policy: accepts AbortSignal. Each pass holds a sequence
  * of disk + DB writes; checks the signal between batches and between rows
@@ -66,12 +68,19 @@ export async function runCacheEviction(
 
   async function evictBatch(
     rows: { fileId: string; size: number; type: string }[],
-    options?: { stopWhenUnderCap?: boolean },
+    options?: { stopWhenUnderCap?: boolean; anyIndexer?: boolean },
   ): Promise<void> {
     for (const { fileId, size, type } of rows) {
       if (signal?.aborted) return
       if (options?.stopWhenUnderCap && currentSize <= maxBytes) return
       try {
+        // The batch was read against the indexer current at the time. After a
+        // switch since then, this file may have no object on the new one, and
+        // the uploader, which reads only local copies, could never send it there.
+        if (!options?.anyIndexer) {
+          const indexerURL = await app.settings.getIndexerURL()
+          if ((await app.localObjects.countForFileOnIndexer(fileId, indexerURL)) === 0) continue
+        }
         await app.fs.removeFile({ id: fileId, type })
         currentSize -= size
         evicted++
@@ -88,7 +97,7 @@ export async function runCacheEviction(
   // Pass 1: trashed uploaded files. User explicitly trashed them; evict on
   // the next pass with no age gate.
   while (!signal?.aborted) {
-    const trashed = await app.fs.trashedCachedFiles(batchSize)
+    const trashed = await app.fs.trashedCachedFiles(await app.settings.getIndexerURL(), batchSize)
     if (trashed.length === 0) break
     await evictBatch(trashed)
     processedRows += trashed.length
@@ -102,7 +111,7 @@ export async function runCacheEviction(
     const thresholdUsedAt = Date.now() - minAgeNonCurrent
     const nonCurrent = await app.fs.nonCurrentCachedFiles(thresholdUsedAt, batchSize)
     if (nonCurrent.length === 0) break
-    await evictBatch(nonCurrent)
+    await evictBatch(nonCurrent, { anyIndexer: true })
     processedRows += nonCurrent.length
     if (nonCurrent.length < batchSize) break
   }
@@ -110,7 +119,11 @@ export async function runCacheEviction(
   // Pass 3: LRU while over cap.
   while (!signal?.aborted && currentSize > maxBytes) {
     const thresholdUsedAt = Date.now() - minAge
-    const candidates = await app.fs.evictionCandidates(thresholdUsedAt, batchSize)
+    const candidates = await app.fs.evictionCandidates(
+      await app.settings.getIndexerURL(),
+      thresholdUsedAt,
+      batchSize,
+    )
     if (candidates.length === 0) break
     await evictBatch(candidates, { stopWhenUnderCap: true })
     processedRows += candidates.length

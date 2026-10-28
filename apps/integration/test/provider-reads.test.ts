@@ -1,7 +1,7 @@
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { directoryProviderId, WORKING_SET_ID } from '@siastorage/core/types'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
-import { assertFeedConverges, createNewerVersion, drainListing } from './utils'
+import { assertFeedConverges, createNewerVersion, drainListing, waitForCondition } from './utils'
 
 describe('Provider reads', () => {
   let app: TestApp
@@ -338,6 +338,33 @@ describe('Provider reads', () => {
       const item = await app.app.provider.item(file.id)
 
       expect(item?.uploaded).toBe(false)
+    })
+
+    it('reports a file whose only object is on a previous indexer as not uploaded', async () => {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 75 }))
+      await app.waitForNoActiveUploads()
+      expect((await app.app.provider.item(file.id))?.uploaded).toBe(true)
+
+      app.setConnected(false)
+      await app.app.settings.setIndexerURL('https://next.indexer')
+
+      expect((await app.app.provider.item(file.id))?.uploaded).toBe(false)
+    })
+
+    it('reports the file as uploaded again once it reaches the new indexer', async () => {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 76 }))
+      await app.waitForNoActiveUploads()
+      app.setConnected(false)
+      await app.app.settings.setIndexerURL('https://next.indexer')
+      app.setConnected(true)
+
+      await waitForCondition(
+        async () => (await app.app.provider.item(file.id))?.uploaded === true,
+        {
+          timeout: 30_000,
+          message: 'the file to read as uploaded on the new indexer',
+        },
+      )
     })
 
     it('reports a folder as carrying no transfer state', async () => {

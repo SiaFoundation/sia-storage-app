@@ -286,6 +286,19 @@ describe('Saving a file through the provider', () => {
       await waitForContent(B, id, Buffer.from('third'))
     })
 
+    it('frees a replaced version uploaded only to a previous indexer', async () => {
+      const { id } = await createUploaded('switched.txt')
+      A.setConnected(false)
+      await A.app.settings.setIndexerURL('https://next.indexer')
+
+      await save(id, v2)
+
+      // The uploader sends current versions only, so this copy could never
+      // reach the new indexer.
+      const [, replaced] = await A.app.files.getVersionHistory('switched.txt', null)
+      expect(await A.app.fs.getFileUri(replaced)).toBeNull()
+    })
+
     it('frees a replaced version once its upload finishes after a later save', async () => {
       const { id } = await createUploaded('late.txt')
       let release!: () => void

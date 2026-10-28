@@ -23,6 +23,32 @@ describe('Provider changes', () => {
     await app.shutdown()
   })
 
+  describe('an indexer switch', () => {
+    it('re-reports every file with its upload state on the new indexer', async () => {
+      const files = await app.addFiles(generateTestFiles(3, { startId: 90 }))
+      await app.waitForNoActiveUploads()
+      const anchor = await listedAnchor(app, WORKING_SET_ID)
+
+      app.setConnected(false)
+      await app.app.settings.setIndexerURL('https://next.indexer')
+      const page = await app.app.provider.changes(WORKING_SET_ID, anchor)
+
+      expect(page.items.map((item) => item.id).sort()).toEqual(files.map((f) => f.id).sort())
+      expect(page.items.every((item) => !item.uploaded)).toBe(true)
+    })
+
+    it('setting the same indexer again re-reports nothing', async () => {
+      await app.addFiles(generateTestFiles(2, { startId: 95 }))
+      await app.waitForNoActiveUploads()
+      const anchor = await listedAnchor(app, WORKING_SET_ID)
+
+      await app.app.settings.setIndexerURL(await app.app.settings.getIndexerURL())
+      const page = await app.app.provider.changes(WORKING_SET_ID, anchor)
+
+      expect(page.items).toEqual([])
+    })
+  })
+
   describe('the anchor', () => {
     it('an anchor from nowhere expires once, and the listing mints a real one', async () => {
       await app.addFiles(generateTestFiles(2, { startId: 80 }))

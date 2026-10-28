@@ -69,8 +69,15 @@ export async function queryLiveFileTypes(
 // LRU pass: only current originals. Thumbnails are never evicted by LRU —
 // regenerating a current thumb is wasted work and causes UI flicker. Non-
 // current and trashed rows are handled by the dedicated pre-passes.
+//
+// This query and the trashed pre-pass query below require an object on
+// `indexerURL`, the indexer the uploader targets. The uploader reads only local
+// copies, so a file whose objects are all on another indexer would never reach
+// the current one if its copy were evicted. A trashed file counts because a
+// restore makes it current again.
 export async function queryEvictionCandidates(
   db: DatabaseAdapter,
+  indexerURL: string,
   thresholdUsedAt: number,
   limit: number,
 ): Promise<{ fileId: string; size: number; type: string }[]> {
@@ -81,11 +88,12 @@ export async function queryEvictionCandidates(
        AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        AND fs.usedAt <= ?
        AND EXISTS (
-         SELECT 1 FROM objects o WHERE o.fileId = fs.fileId
+         SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?
        )
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     thresholdUsedAt,
+    indexerURL,
     limit,
   )
 }
@@ -93,6 +101,10 @@ export async function queryEvictionCandidates(
 // Non-current pass: superseded files (current=0) and the thumbnails that
 // belong to them (matched via thumbForId). Current files' thumbs are never
 // included here — only thumbs whose parent is itself non-current.
+//
+// An object on any indexer is enough. The uploader sends current versions
+// only, so a superseded version's copy never reaches a newer indexer, and
+// keeping it after an indexer switch would hold the space for good.
 export async function queryNonCurrentCachedFiles(
   db: DatabaseAdapter,
   thresholdUsedAt: number,
@@ -124,6 +136,7 @@ export async function queryNonCurrentCachedFiles(
 
 export async function queryTrashedCachedFiles(
   db: DatabaseAdapter,
+  indexerURL: string,
   limit: number,
 ): Promise<{ fileId: string; size: number; type: string }[]> {
   return db.getAllAsync<{ fileId: string; size: number; type: string }>(
@@ -131,9 +144,10 @@ export async function queryTrashedCachedFiles(
      JOIN files f ON f.id = fs.fileId
      WHERE f.trashedAt IS NOT NULL
        AND f.deletedAt IS NULL
-       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId)
+       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?)
      ORDER BY fs.fileId ASC
      LIMIT ?`,
+    indexerURL,
     limit,
   )
 }

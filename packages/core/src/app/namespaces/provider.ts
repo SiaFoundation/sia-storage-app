@@ -108,6 +108,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
    * a few thousand items would otherwise issue a few thousand round trips on
    * every enumeration. In-flight state comes from the upload and download
    * managers' in-memory maps, which cost nothing to read.
+   *
+   * Uploaded means an object on the current indexer. The OS evicts only items
+   * reporting uploaded, and the uploader works from local copies, so an object
+   * left on a previous indexer must not count.
    */
   async function transferFlags(fileIds: string[]): Promise<TransferFlags> {
     const service = getService()
@@ -130,9 +134,14 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       }
     }
 
-    const refs = await service.localObjects.getRefsForFiles(fileIds)
+    const [refs, indexerURL] = await Promise.all([
+      service.localObjects.getRefsForFiles(fileIds),
+      service.settings.getIndexerURL(),
+    ])
     return {
-      uploaded: new Set(fileIds.filter((id) => (refs[id]?.length ?? 0) > 0)),
+      uploaded: new Set(
+        fileIds.filter((id) => refs[id]?.some((ref) => ref.indexerURL === indexerURL) ?? false),
+      ),
       uploading,
       downloading,
     }
@@ -972,8 +981,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       await service.uploader.enqueueByIds([versionId])
 
       // Freed now rather than by the eviction pass, which leaves a superseded version's copy for an
-      // hour. One never uploaded keeps it: the uploader scans current versions, so that copy is the
-      // only one.
+      // hour. One never uploaded keeps it, since that copy is the only one. An object on any indexer
+      // is enough: the uploader sends current versions only, so this copy would never reach a newer
+      // indexer anyway.
       if ((await service.localObjects.countForFile(replaced.id)) > 0) {
         await service.fs.removeFile({ id: replaced.id, type: replaced.type })
       }
