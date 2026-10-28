@@ -149,7 +149,7 @@ function watchForFailure(window: BrowserWindow, which: string): void {
   })
 }
 
-export function createMainWindow(): BrowserWindow {
+function createMainWindow(): BrowserWindow {
   // A window the OS destroyed under us would otherwise be handed back and shown.
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
 
@@ -205,10 +205,36 @@ export function createMainWindow(): BrowserWindow {
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => openExternally(url))
+  // A destroyed window throws on every call, and a failed update install
+  // leaves the app running after destroying it. See `destroyAllWindows`.
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null
+  })
 
   load(window, 'main')
   mainWindow = window
   return window
+}
+
+/**
+ * Destroys every window and resolves once Electron has dropped them all from
+ * its window list. A window leaves that list just after its 'closed' handlers
+ * return, so the last one resolves on the following turn. `destroy` is
+ * guaranteed to emit 'closed' and never runs the close handler.
+ */
+export function destroyAllWindows(): Promise<void> {
+  const open = BrowserWindow.getAllWindows()
+  if (open.length === 0) return Promise.resolve()
+  return new Promise((resolve) => {
+    let left = open.length
+    for (const window of open) {
+      window.once('closed', () => {
+        left -= 1
+        if (left === 0) setImmediate(resolve)
+      })
+      window.destroy()
+    }
+  })
 }
 
 /**
@@ -220,6 +246,9 @@ export function hideMainWindow(): void {
 }
 
 export function showMainWindow(): void {
+  // An update installs only once no window is open, so none opens after a
+  // quit has begun. See `installUpdate`.
+  if (quitting) return
   const window = createMainWindow()
   if (process.platform === 'darwin') void app.dock?.show()
   if (window.isMinimized()) window.restore()
@@ -286,6 +315,10 @@ export function createPopover(): BrowserWindow {
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => openExternally(url))
+  // Dropped for the reason `createMainWindow` gives.
+  window.on('closed', () => {
+    if (popover === window) popover = null
+  })
 
   load(window, 'popover')
   popover = window
@@ -316,6 +349,8 @@ export function holdPopover(): () => void {
  * by which time it has moved and the window would chase it.
  */
 export function togglePopover(trayBounds: Rectangle): void {
+  // No window opens once a quit has begun. See `showMainWindow`.
+  if (quitting) return
   const window = createPopover()
   if (window.isVisible()) {
     window.hide()
