@@ -99,6 +99,26 @@ describe('useFileCarousel hook', () => {
     app().caches.libraryVersion.invalidate()
   }
 
+  test('turns swiping on once a failed window load succeeds on retry', async () => {
+    await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })
+    await createRecord({ id: 'file-2', name: 'b.jpg', createdAt: base + 10 })
+    const library = app().library
+    const filePosition = library.filePosition.bind(library)
+    const spy = jest
+      .spyOn(library, 'filePosition')
+      .mockRejectedValueOnce(new Error('Database is suspended for background transition'))
+      .mockImplementation(filePosition)
+
+    const file = (await app().files.getById('file-2'))!
+    const { result } = await renderHook(
+      () => useFileCarousel({ initialId: 'file-2', initialFile: file }),
+      { wrapper },
+    )
+
+    await waitFor(() => expect(result.current.totalCount).toBe(2), { timeout: 3_000 })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
   describe('sync event handling', () => {
     test('calls onDeleted when current file is deleted', async () => {
       await createRecord({ id: 'file-1', name: 'a.jpg', createdAt: base })

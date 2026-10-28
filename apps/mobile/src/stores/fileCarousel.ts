@@ -1,6 +1,7 @@
 import type { Category, SortBy, SortDir } from '@siastorage/core/db/operations'
 import { useOnLibraryListChange } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
+import { logger } from '@siastorage/logger'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fileRecordEqual } from '../lib/file'
 import { app } from './appService'
@@ -70,6 +71,12 @@ function windowIndices(center: number, count: number, radius: number): number[] 
 
 const ID_WINDOW_SIZE = 201
 const ID_WINDOW_HALF = Math.floor(ID_WINDOW_SIZE / 2)
+
+// Swiping stays off until the ID window loads, so a failed load is retried
+// rather than leaving the viewer on the one file it opened with. The wait
+// doubles per failure, so a load that keeps failing tries twice a minute.
+const INIT_RETRY_MS = 1_000
+const INIT_RETRY_MAX_MS = 30_000
 
 /**
  * Hook for file browsing in the carousel.
@@ -162,12 +169,15 @@ export function useFileCarousel({
   // Initialize: capture frozen ID window centered on the opened file
   useEffect(() => {
     let cancelled = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    let retryMs = INIT_RETRY_MS
 
     async function init() {
       if (!initialFileRef.current) {
         setIsLoading(true)
       }
 
+      let failed = false
       try {
         const position = await fetchFilePosition(initialId, queryParams)
         if (cancelled) return
@@ -210,17 +220,24 @@ export function useFileCarousel({
         setTotalCount(ids.length)
         _setCurrentIndex(relativePosition)
         setCacheVersion((v) => v + 1)
+      } catch (e) {
+        if (cancelled) return
+        failed = true
+        logger.warn('fileCarousel', 'window_load_failed', { error: e as Error })
+        retry = setTimeout(() => void init(), retryMs)
+        retryMs = Math.min(retryMs * 2, INIT_RETRY_MAX_MS)
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !failed) {
           setIsLoading(false)
         }
       }
     }
 
-    init()
+    void init()
 
     return () => {
       cancelled = true
+      clearTimeout(retry)
     }
   }, [initialId, queryParams, prefetchRadius, populateCaches])
 
